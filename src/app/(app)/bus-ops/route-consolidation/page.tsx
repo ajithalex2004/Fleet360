@@ -145,7 +145,7 @@ const recommendationColumns: DataGridColumn<Recommendation>[] = [
     ) },
   { key: 'timing', header: 'Timing', filter: false, sortable: false,
     render: r => (
-      <div className="text-xs text-slate-400">
+      <div className="text-xs text-[var(--text-muted)]">
         <div>{r.timeCompat.shift ?? '—'}</div>
         <div>{r.timeCompat.direction ?? '—'}</div>
       </div>
@@ -154,7 +154,7 @@ const recommendationColumns: DataGridColumn<Recommendation>[] = [
     render: r => (
       <div>
         <div>{r.demand.combined}</div>
-        <div className="text-[10px] text-slate-500">{r.demand.routeAEnrolled} + {r.demand.routeBEnrolled}</div>
+        <div className="text-[10px] text-[var(--text-faint)]">{r.demand.routeAEnrolled} + {r.demand.routeBEnrolled}</div>
       </div>
     ) },
   { key: 'savings', header: 'Savings/wk', accessor: r => r.estimatedSavings.weeklyAmount, align: 'right',
@@ -162,7 +162,7 @@ const recommendationColumns: DataGridColumn<Recommendation>[] = [
   { key: 'penalty', header: 'Penalty', accessor: r => r.components.pcePenalty, align: 'right',
     render: r => r.components.pcePenalty > 0
       ? <span className="text-violet-300">{r.components.pcePenalty}</span>
-      : <span className="text-slate-500">—</span> },
+      : <span className="text-[var(--text-faint)]">—</span> },
   { key: 'score', header: 'Score', accessor: r => r.operatorScore, align: 'right',
     render: r => <span className={`font-semibold ${r.operatorScore >= 50 ? 'text-emerald-300' : 'text-rose-300'}`}>{r.operatorScore}</span> },
 ];
@@ -224,7 +224,7 @@ function RouteConsolidationPageInner() {
         actions={
           <Link
             href="/bus-ops/planning-constraints"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/60 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 px-3 py-2 text-sm text-[var(--text-main)] hover:bg-[var(--bg-surface)]"
           >
             <Shield className="w-4 h-4" />
             Edit PCE rules
@@ -233,7 +233,7 @@ function RouteConsolidationPageInner() {
       />
 
       {/* Tabs — Recommendations (analyse + apply) | History (revert past applies) */}
-      <div className="flex items-center gap-1 border-b border-slate-800">
+      <div className="flex items-center gap-1 border-b border-[var(--border-subtle)]">
         {(['recommendations', 'history'] as const).map((t) => {
           const Icon = t === 'recommendations' ? GitMerge : History;
           const label = t === 'recommendations' ? 'Recommendations' : 'History';
@@ -243,8 +243,8 @@ function RouteConsolidationPageInner() {
               onClick={() => setTab(t)}
               className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm border-b-2 -mb-px transition-colors ${
                 tab === t
-                  ? 'border-violet-500 text-white font-medium'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
+                  ? 'border-violet-500 text-[var(--text-main)] font-medium'
+                  : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'
               }`}
             >
               <Icon className="w-4 h-4" />
@@ -276,13 +276,13 @@ function RouteConsolidationPageInner() {
         {/* Left — controls + summary */}
         <aside className="space-y-3">
           <SectionHeading>Analysis</SectionHeading>
-          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-4">
-            <details className="group rounded-lg border border-slate-800 bg-slate-900/60">
-              <summary className="cursor-pointer list-none px-3 py-2 text-xs uppercase tracking-wider text-slate-400 hover:text-slate-200 flex items-center justify-between">
+          <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-4 space-y-4">
+            <details className="group rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60">
+              <summary className="cursor-pointer list-none px-3 py-2 text-xs uppercase tracking-wider text-[var(--text-muted)] hover:text-[var(--text-main)] flex items-center justify-between">
                 <span>Objective &amp; thresholds</span>
                 <span className="text-[10px] font-normal opacity-60">optional</span>
               </summary>
-              <div className="border-t border-slate-800 p-3 space-y-3">
+              <div className="border-t border-[var(--border-subtle)] p-3 space-y-3">
                 <Field label="Penalty λ" hint="weight on PCE penalty (default 1)">
                   <input type="number" step="0.1" value={objective.penaltyLambda ?? ''}
                     onChange={(e) => setObjective({ ...objective, penaltyLambda: emptyToUndef(e.target.value) })}
@@ -298,8 +298,8 @@ function RouteConsolidationPageInner() {
                     onChange={(e) => setObjective({ ...objective, operatingDaysPerWeek: emptyToUndef(e.target.value) })}
                     placeholder="5" className={inputCls} />
                 </Field>
-                <div className="border-t border-slate-700 my-3 pt-3">
-                  <p className="text-xs uppercase tracking-wider text-slate-400 mb-3">Time Buffers</p>
+                <div className="border-t border-[var(--border-subtle)] my-3 pt-3">
+                  <p className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-3">Time Buffers</p>
                   <Field label="Max departure time diff (min)" hint="tenant default, else 60 — routes beyond this are skipped">
                     <input type="number" step="1" value={objective.maxDepartureTimeDiffMinutes ?? ''}
                       onChange={(e) => setObjective({ ...objective, maxDepartureTimeDiffMinutes: emptyToUndef(e.target.value) })}
@@ -311,8 +311,8 @@ function RouteConsolidationPageInner() {
                       placeholder="45" className={inputCls} />
                   </Field>
                 </div>
-                <div className="border-t border-slate-700 my-3 pt-3">
-                  <p className="text-xs uppercase tracking-wider text-slate-400 mb-3">Zone Fallback Thresholds</p>
+                <div className="border-t border-[var(--border-subtle)] my-3 pt-3">
+                  <p className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-3">Zone Fallback Thresholds</p>
                   <div className="grid grid-cols-2 gap-3">
                     <Field label="Pickup fallback km" hint="tenant default, else 3.0">
                       <input type="number" step="0.1" value={objective.fallbackKm?.pickup ?? ''}
@@ -326,7 +326,7 @@ function RouteConsolidationPageInner() {
                     </Field>
                   </div>
                 </div>
-                <p className="text-[11px] text-slate-500">
+                <p className="text-[11px] text-[var(--text-faint)]">
                   Zones from <code>spatial.places</code> take precedence over distance thresholds when available.
                 </p>
               </div>
@@ -342,8 +342,8 @@ function RouteConsolidationPageInner() {
           </div>
 
           {result && (
-            <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-              <div className="flex items-center gap-2 mb-3 text-xs text-slate-400">
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-4">
+              <div className="flex items-center gap-2 mb-3 text-xs text-[var(--text-muted)]">
                 <Info className="w-3.5 h-3.5" /> <span className="uppercase tracking-wider">Funnel</span>
               </div>
               <FunnelRow label="Routes analysed" value={result.totals.routesAnalysed} />
@@ -362,7 +362,7 @@ function RouteConsolidationPageInner() {
           <SectionHeading>
             <span className="mr-2">Recommendations</span>
             {winner && (
-              <span className="text-xs font-normal text-slate-400">
+              <span className="text-xs font-normal text-[var(--text-muted)]">
                 — top: <span className="font-semibold text-emerald-400">{winner.routeA.name}</span>
                 {' + '}
                 <span className="font-semibold text-emerald-400">{winner.routeB.name}</span>
@@ -372,15 +372,15 @@ function RouteConsolidationPageInner() {
           </SectionHeading>
 
           {!result ? (
-            <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-10 text-center text-slate-400">
-              <GitMerge className="mx-auto h-10 w-10 text-slate-600 mb-3" />
+            <div className="rounded-xl border border-dashed border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-10 text-center text-[var(--text-muted)]">
+              <GitMerge className="mx-auto h-10 w-10 text-[var(--text-faint)] mb-3" />
               <p>Click <b>Analyse routes</b> to generate consolidation recommendations.</p>
-              <p className="mt-1 text-xs text-slate-500">Pairs are filtered by shift/direction/zones before running through Planning Constraints.</p>
+              <p className="mt-1 text-xs text-[var(--text-faint)]">Pairs are filtered by shift/direction/zones before running through Planning Constraints.</p>
             </div>
           ) : result.recommendations.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-10 text-center text-slate-400">
+            <div className="rounded-xl border border-dashed border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-10 text-center text-[var(--text-muted)]">
               <p>No consolidation candidates survived the filters.</p>
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 text-xs text-[var(--text-faint)]">
                 {result.skipped.length > 0 ? `${result.skipped.length} pair${result.skipped.length === 1 ? '' : 's'} skipped — expand the breakdown below to see why.` : 'No pairs were even considered — check that you have ≥ 2 active routes in this tenant.'}
               </p>
             </div>
@@ -396,8 +396,8 @@ function RouteConsolidationPageInner() {
               numbered
               numberRender={(r, pos) => r === winner
                 ? <Trophy className="mx-auto h-4 w-4 text-emerald-400" />
-                : <span className="text-xs text-slate-500">{pos}</span>}
-              rowClassName={r => `text-slate-200 ${r === winner ? 'bg-emerald-500/5' : !r.feasible ? 'bg-slate-800/40 text-slate-400' : ''}`}
+                : <span className="text-xs text-[var(--text-faint)]">{pos}</span>}
+              rowClassName={r => `text-[var(--text-main)] ${r === winner ? 'bg-emerald-500/5' : !r.feasible ? 'bg-[var(--bg-surface)]/40 text-[var(--text-muted)]' : ''}`}
               expandable={r => (
                 <div className="space-y-3">
                   <PceVerdictPanel body={{
@@ -407,7 +407,7 @@ function RouteConsolidationPageInner() {
                   }} />
                   <RecMetadata rec={r} />
                   {r.feasible && (
-                    <div className="pt-3 border-t border-slate-800 flex items-center justify-end">
+                    <div className="pt-3 border-t border-[var(--border-subtle)] flex items-center justify-end">
                       <button
                         onClick={() => setApplyingRec({ rec: r, recommendationId: `${r.routeA.id}-${r.routeB.id}` })}
                         className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
@@ -424,23 +424,23 @@ function RouteConsolidationPageInner() {
 
           {/* Skipped pairs breakdown */}
           {result && result.skipped.length > 0 && (
-            <div className="rounded-xl border border-slate-800 bg-slate-900/40">
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40">
               <button
                 onClick={() => setShowSkipped((s) => !s)}
-                className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-slate-300 hover:bg-slate-800/40"
+                className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface)]/40"
               >
                 <span>Skipped pairs ({result.skipped.length})</span>
                 {showSkipped ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
               </button>
               {showSkipped && (
-                <div className="border-t border-slate-800 divide-y divide-slate-800">
+                <div className="border-t border-[var(--border-subtle)] divide-y divide-slate-800">
                   {groupSkipped(result.skipped).map(([reason, pairs]) => (
                     <div key={reason} className="px-4 py-3">
                       <div className="flex items-baseline justify-between">
-                        <div className="font-mono text-xs text-slate-300">{reason}</div>
-                        <div className="text-xs text-slate-500">{pairs.length} pair{pairs.length === 1 ? '' : 's'}</div>
+                        <div className="font-mono text-xs text-[var(--text-muted)]">{reason}</div>
+                        <div className="text-xs text-[var(--text-faint)]">{pairs.length} pair{pairs.length === 1 ? '' : 's'}</div>
                       </div>
-                      <div className="mt-1 text-xs text-slate-500">{describeSkipReason(reason as SkipReason)}</div>
+                      <div className="mt-1 text-xs text-[var(--text-faint)]">{describeSkipReason(reason as SkipReason)}</div>
                     </div>
                   ))}
                 </div>
@@ -479,7 +479,7 @@ function ZoneBadge({ side, compat }: { side: string; compat: ZoneCompatResult })
     : compat.kind === 'WITHIN_FALLBACK' ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
     : compat.kind === 'DIFFERENT_ZONES' ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
     : compat.kind === 'OUTSIDE_FALLBACK' ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-    : 'bg-slate-500/20 text-slate-300 border-slate-500/40';
+    : 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/40';
   const label =
     compat.kind === 'SAME_ZONE' ? 'ZONE'
     : compat.kind === 'WITHIN_FALLBACK' ? `${compat.distanceKm?.toFixed(1) ?? '?'}km`
@@ -488,7 +488,7 @@ function ZoneBadge({ side, compat }: { side: string; compat: ZoneCompatResult })
     : '—';
   return (
     <span className="inline-flex items-center gap-1 text-[10px]">
-      <span className="text-slate-500 w-12">{side}</span>
+      <span className="text-[var(--text-faint)] w-12">{side}</span>
       <span className={`inline-flex items-center rounded border px-1 py-0.5 font-semibold ${cls}`}>{label}</span>
     </span>
   );
@@ -503,10 +503,10 @@ function VerdictBadge({ verdict }: { verdict: 'PASS' | 'WARN' | 'BLOCK' }) {
 }
 
 function FunnelRow({ label, value, muted, accent }: { label: string; value: number; muted?: boolean; accent?: 'emerald' | 'rose' }) {
-  const colour = accent === 'emerald' ? 'text-emerald-300' : accent === 'rose' ? 'text-rose-300' : muted ? 'text-slate-500' : 'text-slate-200';
+  const colour = accent === 'emerald' ? 'text-emerald-300' : accent === 'rose' ? 'text-rose-300' : muted ? 'text-[var(--text-faint)]' : 'text-[var(--text-main)]';
   return (
     <div className="flex justify-between py-1 text-sm">
-      <span className="text-slate-400">{label}</span>
+      <span className="text-[var(--text-muted)]">{label}</span>
       <span className={`font-semibold ${colour}`}>{value}</span>
     </div>
   );
@@ -523,30 +523,30 @@ function FunnelRow({ label, value, muted, accent }: { label: string; value: numb
 function RecMetadata({ rec }: { rec: Recommendation }) {
   const { components: c, estimatedSavings: s } = rec;
   return (
-    <div className="mt-3 space-y-3 text-xs text-slate-400">
+    <div className="mt-3 space-y-3 text-xs text-[var(--text-muted)]">
       <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-        <div><span className="text-slate-500">Pickup zone:</span> {formatZone(rec.zoneCompat.pickup)}</div>
-        <div><span className="text-slate-500">Dropoff zone:</span> {formatZone(rec.zoneCompat.dropoff)}</div>
-        <div><span className="text-slate-500">Combined demand:</span> {rec.demand.combined} passengers</div>
-        <div><span className="text-slate-500">Overall rank score:</span> <span className={rec.operatorScore >= 50 ? 'text-emerald-300' : 'text-rose-300'}>{rec.operatorScore}/100</span></div>
+        <div><span className="text-[var(--text-faint)]">Pickup zone:</span> {formatZone(rec.zoneCompat.pickup)}</div>
+        <div><span className="text-[var(--text-faint)]">Dropoff zone:</span> {formatZone(rec.zoneCompat.dropoff)}</div>
+        <div><span className="text-[var(--text-faint)]">Combined demand:</span> {rec.demand.combined} passengers</div>
+        <div><span className="text-[var(--text-faint)]">Overall rank score:</span> <span className={rec.operatorScore >= 50 ? 'text-emerald-300' : 'text-rose-300'}>{rec.operatorScore}/100</span></div>
       </div>
-      <div className="border-t border-slate-800 pt-2 grid grid-cols-2 gap-x-6 gap-y-1">
-        <div><span className="text-slate-500">Route eliminated:</span> {c.resourceRelease.routeEliminated ? 'Yes' : 'No'}</div>
-        <div><span className="text-slate-500">Vehicle+driver released:</span> {c.resourceRelease.serviceResourceReleased ? 'Yes' : 'No'}</div>
-        <div><span className="text-slate-500">Released resource redeployable today:</span> {formatStatus(c.resourceRelease.redeploymentStatus)}</div>
-        <div><span className="text-slate-500">Surviving vehicle remaining-day slack:</span> {formatStatus(c.resourceRelease.survivingResourceSlackStatus)}</div>
+      <div className="border-t border-[var(--border-subtle)] pt-2 grid grid-cols-2 gap-x-6 gap-y-1">
+        <div><span className="text-[var(--text-faint)]">Route eliminated:</span> {c.resourceRelease.routeEliminated ? 'Yes' : 'No'}</div>
+        <div><span className="text-[var(--text-faint)]">Vehicle+driver released:</span> {c.resourceRelease.serviceResourceReleased ? 'Yes' : 'No'}</div>
+        <div><span className="text-[var(--text-faint)]">Released resource redeployable today:</span> {formatStatus(c.resourceRelease.redeploymentStatus)}</div>
+        <div><span className="text-[var(--text-faint)]">Surviving vehicle remaining-day slack:</span> {formatStatus(c.resourceRelease.survivingResourceSlackStatus)}</div>
       </div>
-      <div className="border-t border-slate-800 pt-2 grid grid-cols-2 gap-x-6 gap-y-1">
-        <div><span className="text-slate-500">Net distance saved/day:</span> {c.netDistanceSavedKm} km</div>
-        <div><span className="text-slate-500">Net time saved/day:</span> {c.netTimeSavedMinutes} min</div>
-        <div><span className="text-slate-500">Added passenger-minutes:</span> {Math.round(c.passengerImpactMinutes)}</div>
-        <div><span className="text-slate-500">Detour (added ride time):</span> {c.detourMinutes} min</div>
+      <div className="border-t border-[var(--border-subtle)] pt-2 grid grid-cols-2 gap-x-6 gap-y-1">
+        <div><span className="text-[var(--text-faint)]">Net distance saved/day:</span> {c.netDistanceSavedKm} km</div>
+        <div><span className="text-[var(--text-faint)]">Net time saved/day:</span> {c.netTimeSavedMinutes} min</div>
+        <div><span className="text-[var(--text-faint)]">Added passenger-minutes:</span> {Math.round(c.passengerImpactMinutes)}</div>
+        <div><span className="text-[var(--text-faint)]">Detour (added ride time):</span> {c.detourMinutes} min</div>
       </div>
-      <div className="border-t border-slate-800 pt-2 grid grid-cols-2 gap-x-6 gap-y-1">
-        <div><span className="text-slate-500">Estimated direct operating saving:</span> AED {fmtMoney(s.weeklyAmount)}/week</div>
-        <div><span className="text-slate-500">Fuel price used:</span> AED {s.fuelCostPerKm}/km ({s.fuelPriceSource === 'fleet-log' ? "fleet's fuel log" : 'default rate'})</div>
-        <div><span className="text-slate-500">Vehicle-days saved/week:</span> {s.vehicleDaysSavedPerWeek} of {s.operatingDaysPerWeek}</div>
-        <div><span className="text-slate-500">Calculation version:</span> {s.calculationVersion}</div>
+      <div className="border-t border-[var(--border-subtle)] pt-2 grid grid-cols-2 gap-x-6 gap-y-1">
+        <div><span className="text-[var(--text-faint)]">Estimated direct operating saving:</span> AED {fmtMoney(s.weeklyAmount)}/week</div>
+        <div><span className="text-[var(--text-faint)]">Fuel price used:</span> AED {s.fuelCostPerKm}/km ({s.fuelPriceSource === 'fleet-log' ? "fleet's fuel log" : 'default rate'})</div>
+        <div><span className="text-[var(--text-faint)]">Vehicle-days saved/week:</span> {s.vehicleDaysSavedPerWeek} of {s.operatingDaysPerWeek}</div>
+        <div><span className="text-[var(--text-faint)]">Calculation version:</span> {s.calculationVersion}</div>
       </div>
     </div>
   );
@@ -556,18 +556,18 @@ function formatStatus(status: string): string {
   return status.charAt(0) + status.slice(1).toLowerCase().replace(/_/g, ' ');
 }
 
-const inputCls = 'w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500';
+const inputCls = 'w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 px-3 py-2 text-sm text-[var(--text-main)] placeholder:text-[var(--text-faint)] focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500';
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
-  return <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300">{children}</h3>;
+  return <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)]">{children}</h3>;
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block">
       <div className="mb-1 flex items-baseline justify-between">
-        <span className="text-xs font-medium uppercase tracking-wider text-slate-400">{label}</span>
-        {hint && <span className="text-[10px] text-slate-500">{hint}</span>}
+        <span className="text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">{label}</span>
+        {hint && <span className="text-[10px] text-[var(--text-faint)]">{hint}</span>}
       </div>
       {children}
     </label>

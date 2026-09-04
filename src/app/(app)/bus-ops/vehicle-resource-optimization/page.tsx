@@ -85,15 +85,15 @@ const opportunityColumns: DataGridColumn<VehicleReuseOpportunity>[] = [
   { key: 'routeA', header: 'Route A', accessor: o => o.firstRouteName,
     render: o => <span className="font-medium">{o.firstRouteName}</span> },
   { key: 'arrives', header: 'Arrives', accessor: o => o.firstArrivalTime,
-    render: o => <span className="text-xs text-slate-400">{o.firstArrivalTime}</span> },
+    render: o => <span className="text-xs text-[var(--text-muted)]">{o.firstArrivalTime}</span> },
   { key: 'routeB', header: 'Route B', accessor: o => o.secondRouteName,
     render: o => <span className="font-medium">{o.secondRouteName}</span> },
   { key: 'departs', header: 'Departs', accessor: o => o.secondDepartureTime,
-    render: o => <span className="text-xs text-slate-400">{o.secondDepartureTime}</span> },
+    render: o => <span className="text-xs text-[var(--text-muted)]">{o.secondDepartureTime}</span> },
   { key: 'gap', header: 'Gap', accessor: o => o.availableGapMinutes, align: 'right',
     render: o => `${o.availableGapMinutes}m` },
   { key: 'reposition', header: 'Reposition', accessor: o => o.repositionDurationMinutes, align: 'right',
-    render: o => <span className="text-xs text-slate-400">{o.repositionDurationMinutes}m</span> },
+    render: o => <span className="text-xs text-[var(--text-muted)]">{o.repositionDurationMinutes}m</span> },
   { key: 'slack', header: 'Usable Slack', accessor: o => o.remainingSlackMinutes, align: 'right',
     render: o => (
       <span className={`font-semibold ${o.remainingSlackMinutes >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
@@ -157,7 +157,7 @@ function VehicleResourceOptimizationPageInner() {
         actions={
           <Link
             href="/bus-ops/route-consolidation"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/60 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 px-3 py-2 text-sm text-[var(--text-main)] hover:bg-[var(--bg-surface)]"
           >
             <GitMerge className="w-4 h-4" />
             Open Route Consolidation
@@ -182,7 +182,7 @@ function VehicleResourceOptimizationPageInner() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <aside className="space-y-3">
           <SectionHeading>Analysis</SectionHeading>
-          <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-4">
+          <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-4 space-y-4">
             <button onClick={onAnalyse} disabled={analysing}
               className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50">
               {analysing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Repeat className="w-4 h-4" />}
@@ -191,14 +191,14 @@ function VehicleResourceOptimizationPageInner() {
           </div>
 
           {result && (
-            <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4">
-              <div className="flex items-center gap-2 mb-3 text-xs text-slate-400">
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-4">
+              <div className="flex items-center gap-2 mb-3 text-xs text-[var(--text-muted)]">
                 <Info className="w-3.5 h-3.5" /> <span className="uppercase tracking-wider">Funnel</span>
               </div>
               <FunnelRow label="Routes analysed" value={result.totals.routesAnalysed} />
               <FunnelRow label="Ordered pairs considered" value={result.totals.orderedPairsConsidered} />
               <FunnelRow label="Opportunities found" value={result.totals.opportunitiesFound} accent="emerald" />
-              <div className="mt-3 pt-3 border-t border-slate-800 text-[11px] text-slate-500 space-y-0.5">
+              <div className="mt-3 pt-3 border-t border-[var(--border-subtle)] text-[11px] text-[var(--text-faint)] space-y-0.5">
                 <div>Min turnaround: {result.policy.minimumTurnaroundMinutes} min</div>
                 <div>Max reuse window: {result.policy.maxReuseWindowMinutes} min</div>
               </div>
@@ -210,15 +210,15 @@ function VehicleResourceOptimizationPageInner() {
           <SectionHeading>Vehicle/Resource Optimization Opportunities</SectionHeading>
 
           {!result ? (
-            <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-10 text-center text-slate-400">
-              <Repeat className="mx-auto h-10 w-10 text-slate-600 mb-3" />
+            <div className="rounded-xl border border-dashed border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-10 text-center text-[var(--text-muted)]">
+              <Repeat className="mx-auto h-10 w-10 text-[var(--text-faint)] mb-3" />
               <p>Click <b>Find reuse opportunities</b> to look for sequential trips the same vehicle could serve.</p>
-              <p className="mt-1 text-xs text-slate-500">Checked in both directions — A finishing in time for B, and B finishing in time for A.</p>
+              <p className="mt-1 text-xs text-[var(--text-faint)]">Checked in both directions — A finishing in time for B, and B finishing in time for A.</p>
             </div>
           ) : result.opportunities.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-10 text-center text-slate-400">
+            <div className="rounded-xl border border-dashed border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-10 text-center text-[var(--text-muted)]">
               <p>No reuse opportunities found.</p>
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 text-xs text-[var(--text-faint)]">
                 {result.skipped.length > 0 ? `${result.skipped.length} pair${result.skipped.length === 1 ? '' : 's'} skipped — expand the breakdown below to see why.` : 'No pairs were even considered — check that you have ≥ 2 active routes in this tenant.'}
               </p>
             </div>
@@ -238,23 +238,23 @@ function VehicleResourceOptimizationPageInner() {
           )}
 
           {result && result.skipped.length > 0 && (
-            <div className="rounded-xl border border-slate-800 bg-slate-900/40">
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40">
               <button
                 onClick={() => setShowSkipped((s) => !s)}
-                className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-slate-300 hover:bg-slate-800/40"
+                className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface)]/40"
               >
                 <span>Skipped pairs ({result.skipped.length})</span>
                 {showSkipped ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
               </button>
               {showSkipped && (
-                <div className="border-t border-slate-800 divide-y divide-slate-800">
+                <div className="border-t border-[var(--border-subtle)] divide-y divide-slate-800">
                   {groupSkippedReuse(result.skipped).map(([reason, pairs]) => (
                     <div key={reason} className="px-4 py-3">
                       <div className="flex items-baseline justify-between">
-                        <div className="font-mono text-xs text-slate-300">{reason}</div>
-                        <div className="text-xs text-slate-500">{pairs.length} pair{pairs.length === 1 ? '' : 's'}</div>
+                        <div className="font-mono text-xs text-[var(--text-muted)]">{reason}</div>
+                        <div className="text-xs text-[var(--text-faint)]">{pairs.length} pair{pairs.length === 1 ? '' : 's'}</div>
                       </div>
-                      <div className="mt-1 text-xs text-slate-500">{describeReuseSkipReason(reason as VehicleReuseSkipReason)}</div>
+                      <div className="mt-1 text-xs text-[var(--text-faint)]">{describeReuseSkipReason(reason as VehicleReuseSkipReason)}</div>
                     </div>
                   ))}
                 </div>
@@ -271,21 +271,21 @@ function VehicleResourceOptimizationPageInner() {
 
 function ReuseOpportunityDetail({ o }: { o: VehicleReuseOpportunity }) {
   return (
-    <div className="space-y-3 text-xs text-slate-400">
+    <div className="space-y-3 text-xs text-[var(--text-muted)]">
       <div className="grid grid-cols-2 gap-x-6 gap-y-1">
-        <div><span className="text-slate-500">Available gap:</span> {o.availableGapMinutes} min</div>
-        <div><span className="text-slate-500">Minimum turnaround:</span> {o.minimumTurnaroundMinutes} min</div>
-        <div><span className="text-slate-500">Reposition:</span> {(o.repositionDistanceMeters / 1000).toFixed(2)} km, {o.repositionDurationMinutes} min</div>
-        <div><span className="text-slate-500">Required gap:</span> {o.requiredGapMinutes} min (turnaround + reposition)</div>
-        <div><span className="text-slate-500">Usable slack:</span> <span className={o.remainingSlackMinutes >= 0 ? 'text-emerald-300' : 'text-rose-300'}>{o.remainingSlackMinutes >= 0 ? '+' : ''}{o.remainingSlackMinutes} min</span></div>
-        <div><span className="text-slate-500">Dropoff → pickup zone:</span> {formatZone(o.dropoffPickupZoneCompatibility)}</div>
+        <div><span className="text-[var(--text-faint)]">Available gap:</span> {o.availableGapMinutes} min</div>
+        <div><span className="text-[var(--text-faint)]">Minimum turnaround:</span> {o.minimumTurnaroundMinutes} min</div>
+        <div><span className="text-[var(--text-faint)]">Reposition:</span> {(o.repositionDistanceMeters / 1000).toFixed(2)} km, {o.repositionDurationMinutes} min</div>
+        <div><span className="text-[var(--text-faint)]">Required gap:</span> {o.requiredGapMinutes} min (turnaround + reposition)</div>
+        <div><span className="text-[var(--text-faint)]">Usable slack:</span> <span className={o.remainingSlackMinutes >= 0 ? 'text-emerald-300' : 'text-rose-300'}>{o.remainingSlackMinutes >= 0 ? '+' : ''}{o.remainingSlackMinutes} min</span></div>
+        <div><span className="text-[var(--text-faint)]">Dropoff → pickup zone:</span> {formatZone(o.dropoffPickupZoneCompatibility)}</div>
       </div>
-      <div className="border-t border-slate-800 pt-2 grid grid-cols-2 gap-x-6 gap-y-1">
-        <div><span className="text-slate-500">Vehicle assignment:</span> <AssignmentStatusLabel status={o.vehicleAssignmentStatus} /></div>
-        <div><span className="text-slate-500">Driver assignment:</span> <AssignmentStatusLabel status={o.driverAssignmentStatus} /></div>
+      <div className="border-t border-[var(--border-subtle)] pt-2 grid grid-cols-2 gap-x-6 gap-y-1">
+        <div><span className="text-[var(--text-faint)]">Vehicle assignment:</span> <AssignmentStatusLabel status={o.vehicleAssignmentStatus} /></div>
+        <div><span className="text-[var(--text-faint)]">Driver assignment:</span> <AssignmentStatusLabel status={o.driverAssignmentStatus} /></div>
       </div>
       {o.warnings.length > 0 && (
-        <div className="border-t border-slate-800 pt-2 space-y-1">
+        <div className="border-t border-[var(--border-subtle)] pt-2 space-y-1">
           {o.warnings.map((w, i) => (
             <div key={i} className="flex items-start gap-1.5 text-amber-300">
               <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
@@ -294,8 +294,8 @@ function ReuseOpportunityDetail({ o }: { o: VehicleReuseOpportunity }) {
           ))}
         </div>
       )}
-      <div className="border-t border-slate-800 pt-2 text-slate-500">
-        Advisory only — assign this vehicle/driver manually on the <Link href="/bus-ops/schedules" className="underline hover:text-slate-300">Schedules</Link> screen.
+      <div className="border-t border-[var(--border-subtle)] pt-2 text-[var(--text-faint)]">
+        Advisory only — assign this vehicle/driver manually on the <Link href="/bus-ops/schedules" className="underline hover:text-[var(--text-muted)]">Schedules</Link> screen.
       </div>
     </div>
   );
@@ -313,7 +313,7 @@ function FeasibilityBadge({ feasibility }: { feasibility: VehicleReuseFeasibilit
 function AssignmentStatusLabel({ status }: { status: AssignmentComparisonStatus }) {
   if (status === 'SAME') return <span className="text-emerald-300">same</span>;
   if (status === 'DIFFERENT') return <span className="text-amber-300">differ</span>;
-  return <span className="text-slate-500">unassigned</span>;
+  return <span className="text-[var(--text-faint)]">unassigned</span>;
 }
 
 function groupSkippedReuse(skipped: SkippedReusePair[]): Array<[string, SkippedReusePair[]]> {
@@ -338,17 +338,17 @@ function describeReuseSkipReason(reason: VehicleReuseSkipReason): string {
 }
 
 function FunnelRow({ label, value, muted, accent }: { label: string; value: number; muted?: boolean; accent?: 'emerald' | 'rose' }) {
-  const colour = accent === 'emerald' ? 'text-emerald-300' : accent === 'rose' ? 'text-rose-300' : muted ? 'text-slate-500' : 'text-slate-200';
+  const colour = accent === 'emerald' ? 'text-emerald-300' : accent === 'rose' ? 'text-rose-300' : muted ? 'text-[var(--text-faint)]' : 'text-[var(--text-main)]';
   return (
     <div className="flex justify-between py-1 text-sm">
-      <span className="text-slate-400">{label}</span>
+      <span className="text-[var(--text-muted)]">{label}</span>
       <span className={`font-semibold ${colour}`}>{value}</span>
     </div>
   );
 }
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
-  return <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300">{children}</h3>;
+  return <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)]">{children}</h3>;
 }
 
 /** The backend already produces a well-formed human-readable reason per kind (zone-compat.ts) — reuse it directly rather than reconstructing our own formatting from distanceKm. */

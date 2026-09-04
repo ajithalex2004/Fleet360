@@ -21,7 +21,7 @@ const GeofenceMap = dynamic(() => import('@/components/bus-ops/GeofenceMap'), { 
 
 const TYPES: { value: GeofenceType; label: string; color: string }[] = [
   { value: 'STOP',               label: 'Stop',                color: 'bg-violet-500/20 text-violet-300 border-violet-500/40' },
-  { value: 'GARAGE',             label: 'Garage',              color: 'bg-slate-500/20 text-slate-200 border-slate-500/40' },
+  { value: 'GARAGE',             label: 'Garage',              color: 'bg-slate-500/20 text-[var(--text-main)] border-slate-500/40' },
   { value: 'ORIGIN_DESTINATION', label: 'Origin / Destination', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' },
   { value: 'BASE_CAMP',          label: 'Base Camp',           color: 'bg-amber-500/20 text-amber-300 border-amber-500/40' },
   { value: 'ACCOMMODATION',      label: 'Accommodation',        color: 'bg-sky-500/20 text-sky-300 border-sky-500/40' },
@@ -169,8 +169,8 @@ export default function GeofencesPage() {
               onClick={() => beginNew('CIRCLE')}
               className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold border transition-colors ${
                 drawMode === 'CIRCLE'
-                  ? 'bg-violet-600 border-violet-500 text-white'
-                  : 'bg-slate-800 border-white/10 text-slate-200 hover:border-violet-500/40 hover:text-white'
+                  ? 'bg-violet-600 border-violet-500 text-[var(--text-main)]'
+                  : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-main)] hover:border-violet-500/40 hover:text-[var(--text-main)]'
               }`}>
               <CircleIcon className="w-4 h-4" /> Draw Circle
             </button>
@@ -178,14 +178,14 @@ export default function GeofencesPage() {
               onClick={() => beginNew('POLYGON')}
               className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold border transition-colors ${
                 drawMode === 'POLYGON'
-                  ? 'bg-violet-600 border-violet-500 text-white'
-                  : 'bg-slate-800 border-white/10 text-slate-200 hover:border-violet-500/40 hover:text-white'
+                  ? 'bg-violet-600 border-violet-500 text-[var(--text-main)]'
+                  : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-main)] hover:border-violet-500/40 hover:text-[var(--text-main)]'
               }`}>
               <Hexagon className="w-4 h-4" /> Draw Polygon
             </button>
             {drawMode && (
               <button onClick={() => setDrawMode(null)}
-                className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm text-slate-300 border border-white/10 hover:border-white/20 hover:bg-white/5">
+                className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm text-[var(--text-muted)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] hover:bg-[var(--bg-surface-hover)]">
                 <X className="w-4 h-4" /> Cancel
               </button>
             )}
@@ -201,25 +201,25 @@ export default function GeofencesPage() {
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setTypeFilter('ALL')}
-              className={`text-xs px-2.5 py-1 rounded-full border ${typeFilter === 'ALL' ? 'bg-violet-600 border-violet-500 text-white' : 'bg-slate-800/50 border-white/10 text-slate-300'}`}>
+              className={`text-xs px-2.5 py-1 rounded-full border ${typeFilter === 'ALL' ? 'bg-violet-600 border-violet-500 text-[var(--text-main)]' : 'bg-[var(--bg-surface)]/50 border-[var(--border-subtle)] text-[var(--text-muted)]'}`}>
               All ({geofences.length})
             </button>
             {TYPES.map(t => {
               const count = geofences.filter(g => g.type === t.value).length;
               return (
                 <button key={t.value} onClick={() => setTypeFilter(t.value)}
-                  className={`text-xs px-2.5 py-1 rounded-full border ${typeFilter === t.value ? 'bg-violet-600 border-violet-500 text-white' : `${t.color}`}`}>
+                  className={`text-xs px-2.5 py-1 rounded-full border ${typeFilter === t.value ? 'bg-violet-600 border-violet-500 text-[var(--text-main)]' : `${t.color}`}`}>
                   {t.label} ({count})
                 </button>
               );
             })}
           </div>
 
-          <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-hidden">
+          <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
             {loading ? (
-              <div className="p-8 text-center text-slate-400 text-sm animate-pulse">Loading…</div>
+              <div className="p-8 text-center text-[var(--text-muted)] text-sm animate-pulse">Loading…</div>
             ) : visible.length === 0 ? (
-              <div className="p-8 text-center text-slate-400 text-sm">
+              <div className="p-8 text-center text-[var(--text-muted)] text-sm">
                 {geofences.length === 0
                   ? <>No geofences yet. Click <strong className="text-violet-300">Draw Circle</strong> or <strong className="text-violet-300">Draw Polygon</strong> to start.</>
                   : 'No geofences match this filter.'}
@@ -229,25 +229,25 @@ export default function GeofencesPage() {
                 {visible.map(g => (
                   <li key={g.id}
                     onClick={() => { setSelectedId(g.id); }}
-                    className={`px-4 py-3 cursor-pointer transition-colors ${selectedId === g.id ? 'bg-violet-500/10' : 'hover:bg-white/5'}`}>
+                    className={`px-4 py-3 cursor-pointer transition-colors ${selectedId === g.id ? 'bg-violet-500/10' : 'hover:bg-[var(--bg-surface-hover)]'}`}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <div className="text-sm font-medium text-white truncate">{g.name}</div>
+                        <div className="text-sm font-medium text-[var(--text-main)] truncate">{g.name}</div>
                         <div className="flex items-center gap-1.5 mt-1">
                           <span className={`text-[10px] px-1.5 py-0.5 rounded border ${TYPE_PILL[g.type]}`}>{TYPE_LABEL[g.type]}</span>
-                          <span className="text-[10px] text-slate-400">
+                          <span className="text-[10px] text-[var(--text-muted)]">
                             {g.shape === 'CIRCLE' ? `● ${g.radiusM ?? '?'} m` : `⬡ ${g.polygon?.length ?? 0} vertices`}
                           </span>
-                          {!g.active && <span className="text-[10px] text-slate-500 italic">inactive</span>}
+                          {!g.active && <span className="text-[10px] text-[var(--text-faint)] italic">inactive</span>}
                         </div>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <button onClick={e => { e.stopPropagation(); openEditor(g.id); }}
-                          className="text-xs px-2 py-1 rounded border border-white/10 text-slate-300 hover:border-violet-500/40 hover:text-white">
+                          className="text-xs px-2 py-1 rounded border border-[var(--border-subtle)] text-[var(--text-muted)] hover:border-violet-500/40 hover:text-[var(--text-main)]">
                           Edit
                         </button>
                         <button onClick={e => { e.stopPropagation(); remove(g.id); }}
-                          className="p-1 rounded border border-white/10 text-rose-400 hover:border-rose-500/40 hover:bg-rose-500/10">
+                          className="p-1 rounded border border-[var(--border-subtle)] text-rose-400 hover:border-rose-500/40 hover:bg-rose-500/10">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -282,51 +282,51 @@ export default function GeofencesPage() {
       {/* Editor modal — used for both new-after-draw and edit-existing. */}
       {edit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-lg bg-slate-800/95 border border-white/10 rounded-2xl p-6">
+          <div className="w-full max-w-lg bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-white">{edit.id ? 'Edit Geofence' : 'New Geofence'}</h2>
-              <button onClick={closeEditor} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
+              <h2 className="text-xl font-bold text-[var(--text-main)]">{edit.id ? 'Edit Geofence' : 'New Geofence'}</h2>
+              <button onClick={closeEditor} className="text-[var(--text-muted)] hover:text-[var(--text-main)]"><X className="w-5 h-5" /></button>
             </div>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Name *</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Name *</label>
                 <input type="text" value={edit.name} onChange={e => setEdit({ ...edit, name: e.target.value })}
                   placeholder="e.g. Musaffah Bus Stop 3, ICAD Base Camp"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Type *</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Type *</label>
                 <select value={edit.type} onChange={e => setEdit({ ...edit, type: e.target.value as GeofenceType })}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
                   {TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
               </div>
 
-              <div className="text-xs text-slate-400 bg-slate-900/40 rounded-lg px-3 py-2 border border-white/5">
+              <div className="text-xs text-[var(--text-muted)] bg-[var(--bg-surface)]/40 rounded-lg px-3 py-2 border border-[var(--border-subtle)]">
                 {edit.shape === 'CIRCLE' ? (
                   <>Circle · centre {edit.centerLat?.toFixed(5)}, {edit.centerLng?.toFixed(5)} · radius {edit.radiusM} m</>
                 ) : (
                   <>Polygon · {edit.polygon?.length ?? 0} vertices</>
                 )}
-                <span className="ml-2 text-slate-500">(re-draw on the map to change shape)</span>
+                <span className="ml-2 text-[var(--text-faint)]">(re-draw on the map to change shape)</span>
               </div>
 
               {edit.shape === 'CIRCLE' && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1.5">Radius (metres)</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Radius (metres)</label>
                   <input type="number" min={10} step={10} value={edit.radiusM ?? 0}
                     onChange={e => setEdit({ ...edit, radiusM: Number(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none" />
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none" />
                 </div>
               )}
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Notes</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Notes</label>
                 <textarea value={edit.notes} onChange={e => setEdit({ ...edit, notes: e.target.value })} rows={2}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none" />
               </div>
 
-              <label className="flex items-center gap-2 text-sm text-slate-300">
+              <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
                 <input type="checkbox" checked={edit.active} onChange={e => setEdit({ ...edit, active: e.target.checked })}
                   className="w-4 h-4 accent-violet-500" />
                 Active (unchecked = paused — hidden from downstream lookups)
@@ -334,7 +334,7 @@ export default function GeofencesPage() {
 
               <div className="flex justify-end gap-2 pt-2">
                 <button onClick={closeEditor}
-                  className="px-4 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5">Cancel</button>
+                  className="px-4 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]">Cancel</button>
                 <button onClick={save} disabled={saving}
                   className="px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 disabled:opacity-50">
                   {saving ? 'Saving…' : edit.id ? 'Save' : 'Create'}

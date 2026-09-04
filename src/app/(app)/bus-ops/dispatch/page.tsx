@@ -92,26 +92,26 @@ function AssignModal({ schedule, onClose, onDone }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-slate-900 border border-white/15 rounded-2xl w-full max-w-sm">
-        <div className="border-b border-white/10 px-5 py-4 flex items-center justify-between">
-          <h2 className="font-semibold text-white">Assign Vehicle & Driver</h2>
-          <button onClick={onClose} className="text-slate-500 hover:text-white">✕</button>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-sm">
+        <div className="border-b border-[var(--border-subtle)] px-5 py-4 flex items-center justify-between">
+          <h2 className="font-semibold text-[var(--text-main)]">Assign Vehicle & Driver</h2>
+          <button onClick={onClose} className="text-[var(--text-faint)] hover:text-[var(--text-main)]">✕</button>
         </div>
         <div className="p-5 space-y-4">
-          <p className="text-sm text-slate-400">{schedule.route?.name ?? '—'} · {new Date(schedule.departureTime).toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit' })}</p>
+          <p className="text-sm text-[var(--text-muted)]">{schedule.route?.name ?? '—'} · {new Date(schedule.departureTime).toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit' })}</p>
           <div className="space-y-3">
             <div>
-              <label className="text-xs text-slate-500 block mb-1.5">Vehicle</label>
+              <label className="text-xs text-[var(--text-faint)] block mb-1.5">Vehicle</label>
               <select value={vehicleId} onChange={e => setVehicleId(e.target.value)}
-                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-purple-500/40">
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] focus:outline-none focus:border-purple-500/40">
                 <option value="">-- Select vehicle --</option>
                 {vehicles.map(v => <option key={v.id} value={v.id}>{vehicleName(v)}</option>)}
               </select>
             </div>
             <div>
-              <label className="text-xs text-slate-500 block mb-1.5">Driver</label>
+              <label className="text-xs text-[var(--text-faint)] block mb-1.5">Driver</label>
               <select value={driverId} onChange={e => setDriverId(e.target.value)}
-                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-purple-500/40">
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] focus:outline-none focus:border-purple-500/40">
                 <option value="">-- Select driver --</option>
                 {drivers.map(d => <option key={d.id} value={d.id}>{d.firstName} {d.lastName}</option>)}
               </select>
@@ -119,7 +119,7 @@ function AssignModal({ schedule, onClose, onDone }: {
           </div>
           {error && <p className="text-red-400 text-xs">{error}</p>}
           <button onClick={save} disabled={saving}
-            className="w-full bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">
+            className="w-full bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-[var(--text-main)] font-semibold py-2.5 rounded-xl text-sm transition-colors">
             {saving ? 'Saving…' : 'Assign'}
           </button>
         </div>
@@ -145,19 +145,19 @@ function TripCard({ schedule, onTransition, onAssign, isMoving }: {
   const isLate    = schedule.status === 'SCHEDULED' && depTime < new Date();
 
   return (
-    <div className={`rounded-xl border p-3 space-y-2.5 ${stage.bg} border-white/5`}>
+    <div className={`rounded-xl border p-3 space-y-2.5 ${stage.bg} border-[var(--border-subtle)]`}>
       {/* Trip number + shift */}
       <div className="flex items-start justify-between gap-1.5">
         <div>
-          <p className="font-mono text-xs font-bold text-white">{schedule.tripNumber ?? schedule.id.slice(0, 8)}</p>
-          <p className="text-xs text-slate-400 mt-0.5">{schedule.route?.name ?? '—'}</p>
+          <p className="font-mono text-xs font-bold text-[var(--text-main)]">{schedule.tripNumber ?? schedule.id.slice(0, 8)}</p>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">{schedule.route?.name ?? '—'}</p>
         </div>
         <div className="text-right flex-shrink-0">
           {schedule.shiftType && (
             <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
               schedule.shiftType === 'MORNING' ? 'bg-amber-500/20 text-amber-400'
               : schedule.shiftType === 'EVENING' ? 'bg-indigo-500/20 text-indigo-400'
-              : 'bg-slate-500/20 text-slate-400'
+              : 'bg-slate-500/20 text-[var(--text-muted)]'
             }`}>{schedule.shiftType}</span>
           )}
           {isLate && schedule.status === 'SCHEDULED' && (
@@ -167,7 +167,7 @@ function TripCard({ schedule, onTransition, onAssign, isMoving }: {
       </div>
 
       {/* Route */}
-      <div className="text-xs text-slate-500 leading-relaxed">
+      <div className="text-xs text-[var(--text-faint)] leading-relaxed">
         <p className="text-emerald-400 truncate">↑ {schedule.route?.origin ?? '—'}</p>
         <p className="text-red-400 truncate">↓ {schedule.route?.destination ?? '—'}</p>
       </div>
@@ -182,19 +182,19 @@ function TripCard({ schedule, onTransition, onAssign, isMoving }: {
 
       {/* Departure time */}
       <div className="flex items-center justify-between text-xs">
-        <span className="text-slate-500">
+        <span className="text-[var(--text-faint)]">
           {depTime.toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit' })}
           {schedule.arrivalTime && (
-            <span className="text-slate-700"> → {new Date(schedule.arrivalTime).toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit' })}</span>
+            <span className="text-[var(--text-faint)]"> → {new Date(schedule.arrivalTime).toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit' })}</span>
           )}
         </span>
-        <span className={`${fillPct >= 90 ? 'text-red-400' : fillPct >= 70 ? 'text-amber-400' : 'text-slate-400'}`}>
+        <span className={`${fillPct >= 90 ? 'text-red-400' : fillPct >= 70 ? 'text-amber-400' : 'text-[var(--text-muted)]'}`}>
           👥 {occupied}/{cap}
         </span>
       </div>
 
       {/* Passenger fill bar */}
-      <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+      <div className="h-1 bg-[var(--bg-surface)] rounded-full overflow-hidden">
         <div className={`h-full rounded-full transition-all ${fillPct >= 90 ? 'bg-red-500' : fillPct >= 70 ? 'bg-amber-500' : 'bg-purple-500'}`}
           style={{ width: `${fillPct}%` }} />
       </div>
@@ -217,10 +217,10 @@ function TripCard({ schedule, onTransition, onAssign, isMoving }: {
         {schedule.status !== 'CANCELLED' && schedule.status !== 'COMPLETED' && (
           <button disabled={isMoving}
             onClick={() => onTransition(schedule.id, 'CANCELLED')}
-            className="text-xs text-slate-600 hover:text-red-400 px-1.5 transition-colors">✕</button>
+            className="text-xs text-[var(--text-faint)] hover:text-red-400 px-1.5 transition-colors">✕</button>
         )}
         <Link href={`/bus-ops/schedules`}
-          className="text-xs text-slate-600 hover:text-slate-400 px-1.5 transition-colors" title="View details">⏱</Link>
+          className="text-xs text-[var(--text-faint)] hover:text-[var(--text-muted)] px-1.5 transition-colors" title="View details">⏱</Link>
       </div>
     </div>
   );
@@ -371,10 +371,10 @@ export default function BusOpsDispatchPage() {
               )}
               <input
                 type="date" value={dateFilter} onChange={e => setDateFilter(e.target.value)}
-                className="bg-slate-800 border border-white/10 rounded-xl px-3 py-1.5 text-sm text-white focus:outline-none focus:border-violet-500/40"
+                className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-1.5 text-sm text-[var(--text-main)] focus:outline-none focus:border-violet-500/40"
               />
               <button onClick={load}
-                className="inline-flex items-center gap-1.5 text-xs text-slate-300 border border-white/10 px-3 py-1.5 rounded-lg hover:border-white/20 hover:bg-white/5 transition-colors">
+                className="inline-flex items-center gap-1.5 text-xs text-[var(--text-muted)] border border-[var(--border-subtle)] px-3 py-1.5 rounded-lg hover:border-[var(--border-strong)] hover:bg-[var(--bg-surface-hover)] transition-colors">
                 <RefreshCw className="w-3.5 h-3.5" /> Refresh
               </button>
               <Link href="/bus-ops/schedules"
@@ -393,9 +393,9 @@ export default function BusOpsDispatchPage() {
             { label: 'Completed',  value: completed,   color: 'text-emerald-400' },
             { label: 'Passengers', value: totalPax,    color: 'text-purple-400' },
           ].map(k => (
-            <div key={k.label} className="bg-slate-900/60 border border-white/10 rounded-xl px-4 py-3 text-center">
+            <div key={k.label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl px-4 py-3 text-center">
               <p className={`text-xl font-bold ${k.color}`}>{k.value}</p>
-              <p className="text-xs text-slate-500 mt-0.5">{k.label}</p>
+              <p className="text-xs text-[var(--text-faint)] mt-0.5">{k.label}</p>
             </div>
           ))}
         </div>
@@ -404,19 +404,19 @@ export default function BusOpsDispatchPage() {
             Shift chips sit below; clear-all button appears when >=1 filter active. */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
           <select value={routeFilter} onChange={e => setRouteFilter(e.target.value)}
-            className="bg-slate-800 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-violet-500/40">
+            className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-1.5 text-sm text-[var(--text-main)] focus:outline-none focus:border-violet-500/40">
             <option value="">All Routes</option>
             {routes.map(r => (
               <option key={r.id} value={r.id}>{r.name}{r.code ? ` [${r.code}]` : ''}</option>
             ))}
           </select>
           <select value={driverFilter} onChange={e => setDriverFilter(e.target.value)}
-            className="bg-slate-800 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-violet-500/40">
+            className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-1.5 text-sm text-[var(--text-main)] focus:outline-none focus:border-violet-500/40">
             <option value="">All Drivers</option>
             {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
           <select value={vehicleFilter} onChange={e => setVehicleFilter(e.target.value)}
-            className="bg-slate-800 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-violet-500/40">
+            className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-1.5 text-sm text-[var(--text-main)] focus:outline-none focus:border-violet-500/40">
             <option value="">All Vehicles</option>
             {vehicles.map(v => {
               const label = [v.licensePlate, [v.make, v.model].filter(Boolean).join(' ')].filter(Boolean).join(' — ') || v.id.slice(0,8);
@@ -425,11 +425,11 @@ export default function BusOpsDispatchPage() {
           </select>
           {activeFilterCount > 0 ? (
             <button onClick={clearAllFilters}
-              className="bg-slate-800 border border-amber-500/40 text-amber-200 rounded-lg px-3 py-1.5 text-sm hover:bg-amber-500/10">
+              className="bg-[var(--bg-surface)] border border-amber-500/40 text-amber-200 rounded-lg px-3 py-1.5 text-sm hover:bg-amber-500/10">
               Clear {activeFilterCount} filter{activeFilterCount > 1 ? 's' : ''}
             </button>
           ) : (
-            <div className="text-xs text-slate-500 self-center pl-2">
+            <div className="text-xs text-[var(--text-faint)] self-center pl-2">
               Showing {displayed.length} of {schedules.length}
             </div>
           )}
@@ -442,7 +442,7 @@ export default function BusOpsDispatchPage() {
               className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                 shiftFilter === s
                   ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
-                  : 'text-slate-400 border-white/10 hover:border-white/20 hover:text-white'
+                  : 'text-[var(--text-muted)] border-[var(--border-subtle)] hover:border-[var(--border-strong)] hover:text-[var(--text-main)]'
               }`}>
               {s === 'ALL' ? 'All Shifts' : s}
               {s !== 'ALL' && <span className="ml-1.5 opacity-60">{displayed.filter(d => d.shiftType === s).length}</span>}
@@ -458,8 +458,8 @@ export default function BusOpsDispatchPage() {
           <div className="flex gap-4 overflow-x-auto pb-2">
             {[...Array(4)].map((_, i) => (
               <div key={i} className="flex-shrink-0 w-52 space-y-3">
-                <div className="h-8 bg-slate-800/60 rounded-xl animate-pulse" />
-                {[...Array(2)].map((__, j) => <div key={j} className="h-32 bg-slate-800/60 rounded-xl animate-pulse" />)}
+                <div className="h-8 bg-[var(--bg-surface)]/60 rounded-xl animate-pulse" />
+                {[...Array(2)].map((__, j) => <div key={j} className="h-32 bg-[var(--bg-surface)]/60 rounded-xl animate-pulse" />)}
               </div>
             ))}
           </div>
@@ -475,8 +475,8 @@ export default function BusOpsDispatchPage() {
                 {/* Cards */}
                 <div className="space-y-2.5">
                   {col.items.length === 0 ? (
-                    <div className="h-16 border border-dashed border-white/10 rounded-xl flex items-center justify-center">
-                      <span className="text-xs text-slate-700">No trips</span>
+                    <div className="h-16 border border-dashed border-[var(--border-subtle)] rounded-xl flex items-center justify-center">
+                      <span className="text-xs text-[var(--text-faint)]">No trips</span>
                     </div>
                   ) : (
                     col.items.map(s => (
@@ -494,8 +494,8 @@ export default function BusOpsDispatchPage() {
         )}
 
         {/* Legend */}
-        <div className="flex items-center gap-4 text-xs text-slate-600 border-t border-white/5 pt-3 flex-wrap">
-          <span className="font-medium text-slate-500">Tip:</span>
+        <div className="flex items-center gap-4 text-xs text-[var(--text-faint)] border-t border-[var(--border-subtle)] pt-3 flex-wrap">
+          <span className="font-medium text-[var(--text-faint)]">Tip:</span>
           <span>Click stage buttons to advance trip status</span>
           <span>·</span>
           <span>🔑 Assign vehicle and driver before departure</span>

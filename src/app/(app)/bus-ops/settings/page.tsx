@@ -111,15 +111,15 @@ export default function BusOpsTelemetrySettingsPage() {
   };
 
   const inputCls =
-    'w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white placeholder:text-slate-600 focus:border-violet-500/50 focus:outline-none';
-  const labelCls = 'block text-xs font-medium text-slate-400 mb-1.5';
+    'w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-main)] placeholder:text-[var(--text-faint)] focus:border-violet-500/50 focus:outline-none';
+  const labelCls = 'block text-xs font-medium text-[var(--text-muted)] mb-1.5';
 
   return (
     <div className="space-y-6 max-w-3xl">
       <div className="flex items-center gap-3">
         <Link
           href="/bus-ops"
-          className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-white"
+          className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)]"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Bus Ops
         </Link>
@@ -152,12 +152,12 @@ export default function BusOpsTelemetrySettingsPage() {
       )}
 
       {loading ? (
-        <p className="text-slate-500 text-sm">Loading…</p>
+        <p className="text-[var(--text-faint)] text-sm">Loading…</p>
       ) : (
         <div className="space-y-6">
           {/* Mode */}
-          <section className="rounded-2xl border border-white/10 bg-slate-900/50 p-5 space-y-4">
-            <h2 className="text-sm font-semibold text-white">Rollout mode</h2>
+          <section className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 p-5 space-y-4">
+            <h2 className="text-sm font-semibold text-[var(--text-main)]">Rollout mode</h2>
             <div className="grid gap-3 sm:grid-cols-3">
               {(
                 [
@@ -173,36 +173,36 @@ export default function BusOpsTelemetrySettingsPage() {
                   className={`text-left rounded-xl border px-4 py-3 transition-colors ${
                     form.mode === opt.id
                       ? 'border-violet-500/50 bg-violet-500/15'
-                      : 'border-white/10 hover:border-white/20'
+                      : 'border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
                   }`}
                 >
-                  <div className="text-sm font-medium text-white">{opt.title}</div>
-                  <div className="text-xs text-slate-400 mt-1">{opt.desc}</div>
+                  <div className="text-sm font-medium text-[var(--text-main)]">{opt.title}</div>
+                  <div className="text-xs text-[var(--text-muted)] mt-1">{opt.desc}</div>
                 </button>
               ))}
             </div>
           </section>
 
           {/* Formulas */}
-          <section className="rounded-2xl border border-white/10 bg-slate-900/50 p-5 space-y-4">
+          <section className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 p-5 space-y-4">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="text-sm font-semibold text-white">Hysteresis &amp; dwell</h2>
-              <label className="inline-flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+              <h2 className="text-sm font-semibold text-[var(--text-main)]">Hysteresis &amp; dwell</h2>
+              <label className="inline-flex items-center gap-2 text-xs text-[var(--text-muted)] cursor-pointer">
                 <input
                   type="checkbox"
                   checked={form.useFormulas}
                   onChange={(e) => setForm((p) => ({ ...p, useFormulas: e.target.checked }))}
-                  className="rounded border-slate-600"
+                  className="rounded border-[var(--border-strong)]"
                 />
                 Use formulas when field is empty
               </label>
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-[var(--text-faint)]">
               Leave a number empty to use the formula (if enabled) or engine default. Filling a number
               forces that fixed value for this tenant.
             </p>
             {formulas.hysteresis && (
-              <pre className="text-[10px] text-slate-500 bg-black/30 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">
+              <pre className="text-[10px] text-[var(--text-faint)] bg-black/30 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">
                 {formulas.hysteresis}
                 {'\n'}
                 {formulas.startDwell}
@@ -285,7 +285,7 @@ export default function BusOpsTelemetrySettingsPage() {
           </section>
 
           <div className="flex items-center justify-between gap-3">
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-[var(--text-faint)]">
               {form.updatedAt
                 ? `Last saved ${new Date(form.updatedAt).toLocaleString()}${
                     form.updatedBy ? ` · ${form.updatedBy}` : ''
@@ -296,7 +296,7 @@ export default function BusOpsTelemetrySettingsPage() {
               type="button"
               onClick={() => void save()}
               disabled={saving}
-              className="inline-flex items-center gap-2 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 px-4 py-2 text-sm font-medium text-white"
+              className="inline-flex items-center gap-2 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 px-4 py-2 text-sm font-medium text-[var(--text-main)]"
             >
               <Save className="h-4 w-4" />
               {saving ? 'Saving…' : 'Save settings'}

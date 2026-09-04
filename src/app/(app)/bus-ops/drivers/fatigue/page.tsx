@@ -107,18 +107,18 @@ export default function DriverFatigueDashboard() {
   }, [data, statusFilter, searchQuery]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-6 space-y-6">
+    <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-main)] p-6 space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[var(--border-subtle)] pb-5">
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">
               🛡️ HOS Safety Guard
             </span>
-            <span className="text-xs text-slate-400">Mandatory 8h Rest & Fatigue Prevention</span>
+            <span className="text-xs text-[var(--text-muted)]">Mandatory 8h Rest & Fatigue Prevention</span>
           </div>
-          <h1 className="text-2xl font-bold text-white mt-1">Driver Fatigue & Rest Monitor</h1>
-          <p className="text-sm text-slate-400">
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mt-1">Driver Fatigue & Rest Monitor</h1>
+          <p className="text-sm text-[var(--text-muted)]">
             Real-time split-shift rest tracking, 4.5h continuous driving limits, and automated assignment lockout.
           </p>
         </div>
@@ -126,7 +126,7 @@ export default function DriverFatigueDashboard() {
         <button
           onClick={() => fetchFatigueStatus(true)}
           disabled={refreshing || loading}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 border border-slate-700 hover:bg-slate-800 text-sm font-medium transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:bg-[var(--bg-surface)] text-sm font-medium transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-rose-400' : ''}`} />
           Refresh Rest Matrix
@@ -150,10 +150,10 @@ export default function DriverFatigueDashboard() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1">
-          <div className="text-xs text-slate-400 font-medium">Total Monitored Drivers</div>
-          <div className="text-2xl font-bold text-white">{data?.totalDrivers ?? '—'}</div>
-          <div className="text-[11px] text-slate-500">Active roster drivers</div>
+        <div className="p-4 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] space-y-1">
+          <div className="text-xs text-[var(--text-muted)] font-medium">Total Monitored Drivers</div>
+          <div className="text-2xl font-bold text-[var(--text-main)]">{data?.totalDrivers ?? '—'}</div>
+          <div className="text-[11px] text-[var(--text-faint)]">Active roster drivers</div>
         </div>
 
         <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-500/20 space-y-1">
@@ -182,13 +182,13 @@ export default function DriverFatigueDashboard() {
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-2 w-full sm:w-auto">
               <div className="relative flex-1 sm:w-64">
-                <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                <Search className="w-4 h-4 absolute left-3 top-2.5 text-[var(--text-muted)]" />
                 <input
                   type="text"
                   placeholder="Search driver name..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-rose-500/50"
+                  className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg pl-9 pr-3 py-2 text-xs text-[var(--text-main)] focus:outline-none focus:border-rose-500/50"
                 />
               </div>
             </div>
@@ -200,8 +200,8 @@ export default function DriverFatigueDashboard() {
                   onClick={() => setStatusFilter(st)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                     statusFilter === st
-                      ? 'bg-rose-600 text-white'
-                      : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                      ? 'bg-rose-600 text-[var(--text-main)]'
+                      : 'bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--text-main)] border border-[var(--border-subtle)]'
                   }`}
                 >
                   {st === 'ALL' ? 'All Drivers' : st === 'PASS' ? 'Rested' : st === 'WARN' ? 'At-Risk' : 'Blocked'}
@@ -210,19 +210,19 @@ export default function DriverFatigueDashboard() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
+          <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 overflow-hidden">
             {loading ? (
-              <div className="p-12 text-center text-slate-400 text-xs animate-pulse">
+              <div className="p-12 text-center text-[var(--text-muted)] text-xs animate-pulse">
                 Evaluating driver rest cycles and HOS telemetry...
               </div>
             ) : filteredEvaluations.length === 0 ? (
-              <div className="p-12 text-center text-slate-500 text-xs">
+              <div className="p-12 text-center text-[var(--text-faint)] text-xs">
                 No drivers match the selected status filter.
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-900/90 text-slate-400 border-b border-slate-800 uppercase tracking-wider text-[10px]">
+                  <thead className="bg-[var(--bg-surface)]/90 text-[var(--text-muted)] border-b border-[var(--border-subtle)] uppercase tracking-wider text-[10px]">
                     <tr>
                       <th className="p-3">Driver</th>
                       <th className="p-3">Last Shift End</th>
@@ -239,12 +239,12 @@ export default function DriverFatigueDashboard() {
                       const isWarn = item.severity === 'WARN';
 
                       return (
-                        <tr key={item.driverId} className="hover:bg-slate-800/30 transition-colors">
+                        <tr key={item.driverId} className="hover:bg-[var(--bg-surface)]/30 transition-colors">
                           <td className="p-3">
-                            <div className="font-semibold text-white">{item.driverName}</div>
-                            <div className="text-[10px] text-slate-500">ID: {item.driverId.slice(0, 8)}</div>
+                            <div className="font-semibold text-[var(--text-main)]">{item.driverName}</div>
+                            <div className="text-[10px] text-[var(--text-faint)]">ID: {item.driverId.slice(0, 8)}</div>
                           </td>
-                          <td className="p-3 text-slate-300">
+                          <td className="p-3 text-[var(--text-muted)]">
                             {item.metrics.lastTripEndAt
                               ? new Date(item.metrics.lastTripEndAt).toLocaleTimeString([], {
                                   hour: '2-digit',
@@ -257,7 +257,7 @@ export default function DriverFatigueDashboard() {
                           <td className="p-3">
                             {restHours !== null ? (
                               <div className="flex items-center gap-1.5">
-                                <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                <Clock className="w-3.5 h-3.5 text-[var(--text-muted)]" />
                                 <span
                                   className={`font-semibold ${
                                     restHours >= 8
@@ -271,10 +271,10 @@ export default function DriverFatigueDashboard() {
                                 </span>
                               </div>
                             ) : (
-                              <span className="text-slate-500">Fully rested</span>
+                              <span className="text-[var(--text-faint)]">Fully rested</span>
                             )}
                           </td>
-                          <td className="p-3 text-slate-300">
+                          <td className="p-3 text-[var(--text-muted)]">
                             <span className={item.metrics.rolling24hDriveHours > 8.5 ? 'text-amber-400 font-semibold' : ''}>
                               {item.metrics.rolling24hDriveHours} hrs / 10h
                             </span>
@@ -326,22 +326,22 @@ export default function DriverFatigueDashboard() {
         </div>
 
         {/* Right Col: Interactive Pre-Assignment Fatigue Simulator */}
-        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-5 space-y-4">
-          <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 p-5 space-y-4">
+          <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] pb-3">
             <Zap className="w-4 h-4 text-amber-400" />
-            <h3 className="font-semibold text-sm text-white">Pre-Assignment Simulator</h3>
+            <h3 className="font-semibold text-sm text-[var(--text-main)]">Pre-Assignment Simulator</h3>
           </div>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-[var(--text-muted)]">
             Test a proposed trip departure time before dispatching to verify whether the driver meets the mandatory 8-hour rest requirement.
           </p>
 
           <div className="space-y-3 text-xs">
             <div>
-              <label className="block text-slate-400 mb-1">Select Driver</label>
+              <label className="block text-[var(--text-muted)] mb-1">Select Driver</label>
               <select
                 value={simDriverId}
                 onChange={(e) => setSimDriverId(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-rose-500"
+                className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg p-2.5 text-[var(--text-main)] focus:outline-none focus:border-rose-500"
               >
                 {data?.evaluations.map((d) => (
                   <option key={d.driverId} value={d.driverId}>
@@ -352,32 +352,32 @@ export default function DriverFatigueDashboard() {
             </div>
 
             <div>
-              <label className="block text-slate-400 mb-1">Proposed Departure Timestamp</label>
+              <label className="block text-[var(--text-muted)] mb-1">Proposed Departure Timestamp</label>
               <input
                 type="datetime-local"
                 value={simDeparture}
                 onChange={(e) => setSimDeparture(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-rose-500"
+                className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg p-2.5 text-[var(--text-main)] focus:outline-none focus:border-rose-500"
               >
               </input>
             </div>
 
             <div>
-              <label className="block text-slate-400 mb-1">Estimated Trip Duration (Minutes)</label>
+              <label className="block text-[var(--text-muted)] mb-1">Estimated Trip Duration (Minutes)</label>
               <input
                 type="number"
                 min={15}
                 max={480}
                 value={simDuration}
                 onChange={(e) => setSimDuration(Number(e.target.value))}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-white focus:outline-none focus:border-rose-500"
+                className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg p-2.5 text-[var(--text-main)] focus:outline-none focus:border-rose-500"
               />
             </div>
 
             <button
               onClick={handleRunSimulator}
               disabled={simRunning || !simDriverId || !simDeparture}
-              className="w-full py-2.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-semibold transition-colors disabled:opacity-50 mt-2"
+              className="w-full py-2.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-[var(--text-main)] font-semibold transition-colors disabled:opacity-50 mt-2"
             >
               {simRunning ? 'Evaluating Rest Telemetry...' : 'Evaluate Driver Assignment'}
             </button>
@@ -401,10 +401,10 @@ export default function DriverFatigueDashboard() {
               <div className="text-[11px] leading-relaxed">{simResult.recommendation}</div>
 
               {simResult.violations.length > 0 && (
-                <div className="pt-2 border-t border-white/10 space-y-1 text-[11px]">
+                <div className="pt-2 border-t border-[var(--border-subtle)] space-y-1 text-[11px]">
                   <div className="font-semibold">Safety Violations Detected:</div>
                   {simResult.violations.map((v, i) => (
-                    <div key={i} className="flex items-start gap-1.5 text-slate-300">
+                    <div key={i} className="flex items-start gap-1.5 text-[var(--text-muted)]">
                       <span>•</span>
                       <span>{v.message}</span>
                     </div>

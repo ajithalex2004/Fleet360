@@ -324,8 +324,8 @@ function RoutePlannerInner() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Route Optimization</h1>
-          <p className="text-slate-400 text-sm mt-0.5">
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Route Optimization</h1>
+          <p className="text-[var(--text-muted)] text-sm mt-0.5">
             {mode === 'fleet'
               ? 'Whole-fleet VRPTW solve — reassign passengers across vehicles to minimise total distance.'
               : editId && editingRouteName
@@ -339,14 +339,14 @@ function RoutePlannerInner() {
       </div>
 
       {/* Mode toggle — Single Route (TSP + Mapbox) vs Fleet Planner (VRPTW + Google) */}
-      <div className="inline-flex rounded-xl bg-slate-800/60 border border-white/10 p-1">
+      <div className="inline-flex rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] p-1">
         <button
           type="button"
           onClick={() => switchMode('single')}
           className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
             mode === 'single'
               ? 'bg-violet-500/20 text-violet-100 border border-violet-500/40'
-              : 'text-slate-400 hover:text-white'
+              : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
           }`}
         >
           <RouteIcon className="w-4 h-4" /> Single Route
@@ -357,7 +357,7 @@ function RoutePlannerInner() {
           className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
             mode === 'fleet'
               ? 'bg-violet-500/20 text-violet-100 border border-violet-500/40'
-              : 'text-slate-400 hover:text-white'
+              : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
           }`}
         >
           <Users className="w-4 h-4" /> Fleet Planner
@@ -387,7 +387,7 @@ function RoutePlannerInner() {
       )}
 
       {loadingRoute ? (
-        <div className="rounded-2xl bg-slate-800/60 border border-white/10 p-12 text-center text-slate-500 text-sm animate-pulse">
+        <div className="rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] p-12 text-center text-[var(--text-faint)] text-sm animate-pulse">
           Loading route…
         </div>
       ) : (
@@ -397,8 +397,8 @@ function RoutePlannerInner() {
               "Pick existing" select on the right. Choosing an existing route
               switches the URL to ?edit=<id> so the load effect (fetch +
               stops→waypoints + PATCH on save) kicks in. */}
-          <div className="rounded-2xl bg-slate-800/60 border border-white/10 p-4 space-y-2">
-            <label className="block text-xs text-slate-400 uppercase tracking-wider font-medium">
+          <div className="rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] p-4 space-y-2">
+            <label className="block text-xs text-[var(--text-muted)] uppercase tracking-wider font-medium">
               Route name <span className="text-rose-400">*</span>
             </label>
             <div className="flex gap-2">
@@ -408,7 +408,7 @@ function RoutePlannerInner() {
                 value={routeName}
                 onChange={e => { setRouteName(e.target.value); setRouteNameManuallyEdited(true); }}
                 placeholder="Type a new name or pick from existing…"
-                className="flex-1 px-4 py-2.5 rounded-xl bg-slate-900/60 border border-white/10 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-violet-500"
+                className="flex-1 px-4 py-2.5 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] text-sm placeholder-[var(--text-faint)] focus:outline-none focus:border-violet-500"
               />
               <datalist id="rp-existing-routes">
                 {routeOptions.map(r => <option key={r.id} value={r.name} />)}
@@ -420,7 +420,7 @@ function RoutePlannerInner() {
                   router.push(id ? `/bus-ops/route-planner?edit=${id}` : '/bus-ops/route-planner');
                 }}
                 title="Load an existing route to optimize"
-                className="w-56 px-3 py-2.5 rounded-xl bg-slate-900/60 border border-white/10 text-white text-sm focus:outline-none focus:border-violet-500"
+                className="w-56 px-3 py-2.5 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:outline-none focus:border-violet-500"
               >
                 <option value="">— Pick existing route —</option>
                 {routeOptions.map(r => (
@@ -430,7 +430,7 @@ function RoutePlannerInner() {
                 ))}
               </select>
             </div>
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[11px] text-[var(--text-faint)]">
               Auto-suggested from origin and destination. Pick from the dropdown to load an existing route's stops.
             </p>
           </div>
@@ -470,7 +470,7 @@ export default function StaffRoutePlannerPage() {
   // Suspense boundary — useSearchParams needs one at the tree boundary in
   // Next.js 15 or hydration warnings fire.
   return (
-    <Suspense fallback={<div className="text-slate-500 text-sm">Loading…</div>}>
+    <Suspense fallback={<div className="text-[var(--text-faint)] text-sm">Loading…</div>}>
       <RoutePlannerInner />
     </Suspense>
   );

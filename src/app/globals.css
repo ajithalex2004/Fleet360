@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* Binds Tailwind's dark: variant to the app's own html.dark toggle (set by
+   ThemeProvider from localStorage) instead of Tailwind v4's default, which
+   is the OS-level prefers-color-scheme media query. Without this, any
+   dark:* utility class flips on the visitor's OS setting and desyncs from
+   the in-app Light/Dark switch. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ════════════════════════════════════════════════════════════════════════════
    LINEAR / VERCEL MODERN ENTERPRISE DESIGN SYSTEM
    ════════════════════════════════════════════════════════════════════════════ */

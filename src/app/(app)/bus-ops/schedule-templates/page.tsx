@@ -85,7 +85,7 @@ const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 const STATUS_PILL: Record<Status, string> = {
   ACTIVE:   'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
-  INACTIVE: 'bg-slate-500/20 text-slate-400 border-slate-500/40',
+  INACTIVE: 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/40',
 };
 
 const EMPTY_EDIT: EditState = {
@@ -306,9 +306,9 @@ export default function ScheduleTemplatesPage() {
 
       <div className="flex gap-3 items-end">
         <div>
-          <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Status</label>
+          <label className="block text-[10px] uppercase tracking-wider text-[var(--text-faint)] mb-1">Status</label>
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as 'ALL' | Status)}
-            className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+            className="px-4 py-2 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
             <option value="ALL">All</option>
             <option value="ACTIVE">Active</option>
             <option value="INACTIVE">Inactive</option>
@@ -317,19 +317,19 @@ export default function ScheduleTemplatesPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 overflow-x-auto">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 overflow-x-auto">
         {loading ? (
-          <div className="text-center text-slate-400 py-10 animate-pulse">Loading…</div>
+          <div className="text-center text-[var(--text-muted)] py-10 animate-pulse">Loading…</div>
         ) : templates.length === 0 ? (
-          <div className="text-center text-slate-400 py-10">
+          <div className="text-center text-[var(--text-muted)] py-10">
             No templates yet. Click <strong className="text-violet-300">New Schedule Template</strong> to define one.
           </div>
         ) : (
           <table className="w-full">
             <thead>
-              <tr className="border-b border-white/5">
+              <tr className="border-b border-[var(--border-subtle)]">
                 {['Name', 'Route', 'Vehicle', 'Driver', 'Days', 'Session', 'Departure', 'Direction', 'From', 'To', 'Status', 'Actions'].map(h => (
-                  <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-slate-400 whitespace-nowrap">{h}</th>
+                  <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-[var(--text-muted)] whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -340,35 +340,35 @@ export default function ScheduleTemplatesPage() {
                 const d = t.driverId  ? drvById.get(t.driverId)  : null;
                 const daysStr = t.activeDays.map(x => DAY_LABELS[x]).join(' ');
                 return (
-                  <tr key={t.id} className="border-b border-white/5 hover:bg-white/5">
-                    <td className="px-3 py-3 text-sm text-white font-medium">{t.name}</td>
-                    <td className="px-3 py-3 text-sm text-slate-200">
-                      {r?.name ?? <span className="text-slate-500 italic">(deleted)</span>}
-                      {r?.code && <span className="ml-1 text-[10px] font-mono text-slate-500">[{r.code}]</span>}
+                  <tr key={t.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]">
+                    <td className="px-3 py-3 text-sm text-[var(--text-main)] font-medium">{t.name}</td>
+                    <td className="px-3 py-3 text-sm text-[var(--text-main)]">
+                      {r?.name ?? <span className="text-[var(--text-faint)] italic">(deleted)</span>}
+                      {r?.code && <span className="ml-1 text-[10px] font-mono text-[var(--text-faint)]">[{r.code}]</span>}
                     </td>
-                    <td className="px-3 py-3 text-sm text-slate-200">{v?.licensePlate ?? '—'}</td>
-                    <td className="px-3 py-3 text-sm text-slate-200">{d?.name ?? '—'}</td>
-                    <td className="px-3 py-3 text-xs text-slate-300 whitespace-nowrap">{daysStr}</td>
-                    <td className="px-3 py-3 text-xs text-slate-300">{t.session}</td>
-                    <td className="px-3 py-3 text-xs font-mono text-slate-200">{t.departureTime}{t.arrivalTime ? `→${t.arrivalTime}` : ''}</td>
-                    <td className="px-3 py-3 text-xs text-slate-300">{t.direction}</td>
-                    <td className="px-3 py-3 text-xs text-slate-300 whitespace-nowrap">{fmtDate(t.effectiveFrom)}</td>
-                    <td className="px-3 py-3 text-xs text-slate-300 whitespace-nowrap">{t.effectiveTo ? fmtDate(t.effectiveTo) : <span className="text-slate-500">open</span>}</td>
+                    <td className="px-3 py-3 text-sm text-[var(--text-main)]">{v?.licensePlate ?? '—'}</td>
+                    <td className="px-3 py-3 text-sm text-[var(--text-main)]">{d?.name ?? '—'}</td>
+                    <td className="px-3 py-3 text-xs text-[var(--text-muted)] whitespace-nowrap">{daysStr}</td>
+                    <td className="px-3 py-3 text-xs text-[var(--text-muted)]">{t.session}</td>
+                    <td className="px-3 py-3 text-xs font-mono text-[var(--text-main)]">{t.departureTime}{t.arrivalTime ? `→${t.arrivalTime}` : ''}</td>
+                    <td className="px-3 py-3 text-xs text-[var(--text-muted)]">{t.direction}</td>
+                    <td className="px-3 py-3 text-xs text-[var(--text-muted)] whitespace-nowrap">{fmtDate(t.effectiveFrom)}</td>
+                    <td className="px-3 py-3 text-xs text-[var(--text-muted)] whitespace-nowrap">{t.effectiveTo ? fmtDate(t.effectiveTo) : <span className="text-[var(--text-faint)]">open</span>}</td>
                     <td className="px-3 py-3">
                       <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_PILL[t.status]}`}>{t.status}</span>
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex gap-1">
                         <button onClick={() => openGenerate(t.id)} title="Generate trips"
-                          className="p-1.5 rounded border border-white/10 text-emerald-300 hover:border-emerald-500/40 hover:bg-emerald-500/10">
+                          className="p-1.5 rounded border border-[var(--border-subtle)] text-emerald-300 hover:border-emerald-500/40 hover:bg-emerald-500/10">
                           <Play className="w-3.5 h-3.5" />
                         </button>
                         <button onClick={() => openEdit(t)} title="Edit"
-                          className="p-1.5 rounded border border-white/10 text-slate-300 hover:border-violet-500/40 hover:text-white">
+                          className="p-1.5 rounded border border-[var(--border-subtle)] text-[var(--text-muted)] hover:border-violet-500/40 hover:text-[var(--text-main)]">
                           <Edit className="w-3.5 h-3.5" />
                         </button>
                         <button onClick={() => remove(t.id)} title="Delete"
-                          className="p-1.5 rounded border border-white/10 text-rose-400 hover:border-rose-500/40 hover:bg-rose-500/10">
+                          className="p-1.5 rounded border border-[var(--border-subtle)] text-rose-400 hover:border-rose-500/40 hover:bg-rose-500/10">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -384,40 +384,40 @@ export default function ScheduleTemplatesPage() {
       {/* Editor modal */}
       {edit && (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="w-full max-w-3xl bg-slate-800/95 border border-white/10 rounded-2xl p-6 my-8">
+          <div className="w-full max-w-3xl bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl p-6 my-8">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-white">{edit.id ? 'Edit Schedule Template' : 'New Schedule Template'}</h2>
-              <button onClick={closeEditor} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
+              <h2 className="text-xl font-bold text-[var(--text-main)]">{edit.id ? 'Edit Schedule Template' : 'New Schedule Template'}</h2>
+              <button onClick={closeEditor} className="text-[var(--text-muted)] hover:text-[var(--text-main)]"><X className="w-5 h-5" /></button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Schedule Name *</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Schedule Name *</label>
                 <input type="text" value={edit.name} onChange={e => setEdit({ ...edit, name: e.target.value })}
                   placeholder="e.g. Marina MORNING SUN-THU Pickup"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none" />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Route *</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Route *</label>
                 <select value={edit.routeId} onChange={e => setEdit({ ...edit, routeId: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
                   <option value="">— Select route —</option>
                   {routes.map(r => <option key={r.id} value={r.id}>{r.name}{r.code ? ` [${r.code}]` : ''}</option>)}
                 </select>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Route Code</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Route Code</label>
                 <input type="text" readOnly value={selectedRoute?.code ?? ''}
                   placeholder="Auto-filled from Route"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900/60 border border-white/10 text-slate-300 placeholder-slate-600 cursor-not-allowed" />
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-[var(--text-muted)] placeholder-[var(--text-faint)] cursor-not-allowed" />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Vehicle Plate</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Vehicle Plate</label>
                 <select value={edit.vehicleId} onChange={e => setEdit({ ...edit, vehicleId: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
                   <option value="">— Assign per trip —</option>
                   {vehicles.map(v => {
                     const label = [v.licensePlate, [v.make, v.model].filter(Boolean).join(' ')].filter(Boolean).join(' — ') || v.id.slice(0, 8);
@@ -427,45 +427,45 @@ export default function ScheduleTemplatesPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Driver</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Driver</label>
                 <select value={edit.driverId} onChange={e => setEdit({ ...edit, driverId: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
                   <option value="">— Assign per trip —</option>
                   {drivers.map(d => <option key={d.id} value={d.id}>{d.name}{d.licenseType ? ` (${d.licenseType})` : ''}</option>)}
                 </select>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Status</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Status</label>
                 <select value={edit.status} onChange={e => setEdit({ ...edit, status: e.target.value as Status })}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
                   <option value="ACTIVE">Active</option>
                   <option value="INACTIVE">Inactive</option>
                 </select>
               </div>
 
-              <div className="md:col-span-2 pt-2 border-t border-white/5">
-                <p className="text-[10px] uppercase tracking-wider font-semibold text-slate-500 mb-2">UAE Week Cycle</p>
+              <div className="md:col-span-2 pt-2 border-t border-[var(--border-subtle)]">
+                <p className="text-[10px] uppercase tracking-wider font-semibold text-[var(--text-faint)] mb-2">UAE Week Cycle</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Week Type</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Week Type</label>
                 <select value={edit.weekType} onChange={e => applyWeekType(e.target.value as WeekType)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
                   {WEEK_TYPES.map(w => <option key={w.value} value={w.value}>{w.label}</option>)}
                 </select>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Session</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Session</label>
                 <select value={edit.session} onChange={e => setEdit({ ...edit, session: e.target.value as Session })}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
                   {(['MORNING', 'EVENING', 'NIGHT', 'SPLIT'] as Session[]).map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Active Days</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Active Days</label>
                 <div className="flex flex-wrap gap-2">
                   {DAY_LABELS.map((lbl, dow) => {
                     const on = edit.activeDays.includes(dow);
@@ -474,7 +474,7 @@ export default function ScheduleTemplatesPage() {
                         className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
                           on
                             ? 'bg-amber-500/25 text-amber-200 border-amber-500/40'
-                            : 'bg-slate-700/50 text-slate-400 border-white/10 hover:border-white/20'
+                            : 'bg-[var(--bg-surface-hover)]/50 text-[var(--text-muted)] border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
                         }`}>
                         {lbl}
                       </button>
@@ -483,67 +483,67 @@ export default function ScheduleTemplatesPage() {
                 </div>
               </div>
 
-              <div className="md:col-span-2 pt-2 border-t border-white/5">
-                <p className="text-[10px] uppercase tracking-wider font-semibold text-slate-500 mb-2">Timing &amp; Direction</p>
+              <div className="md:col-span-2 pt-2 border-t border-[var(--border-subtle)]">
+                <p className="text-[10px] uppercase tracking-wider font-semibold text-[var(--text-faint)] mb-2">Timing &amp; Direction</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Departure Time *</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Departure Time *</label>
                 <input type="time" value={edit.departureTime} onChange={e => setEdit({ ...edit, departureTime: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none" />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Arrival Time
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Arrival Time
                   {selectedRoute?.estimatedDurationMins ? <span className="ml-2 text-[10px] font-normal text-violet-300">auto-filled from route duration</span> : null}
                 </label>
                 <input type="time" value={edit.arrivalTime} onChange={e => setEdit({ ...edit, arrivalTime: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none" />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Direction</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Direction</label>
                 <select value={edit.direction} onChange={e => setEdit({ ...edit, direction: e.target.value as Direction })}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
                   <option value="PICKUP">PICKUP</option>
                   <option value="DROPOFF">DROPOFF</option>
                 </select>
               </div>
 
-              <div className="md:col-span-2 pt-2 border-t border-white/5">
-                <p className="text-[10px] uppercase tracking-wider font-semibold text-slate-500 mb-2">Validity Period</p>
+              <div className="md:col-span-2 pt-2 border-t border-[var(--border-subtle)]">
+                <p className="text-[10px] uppercase tracking-wider font-semibold text-[var(--text-faint)] mb-2">Validity Period</p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Effective From *</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Effective From *</label>
                 <input type="date" value={edit.effectiveFrom} onChange={e => setEdit({ ...edit, effectiveFrom: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none" />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Effective To <span className="text-slate-500 font-normal">(blank = open-ended)</span></label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Effective To <span className="text-[var(--text-faint)] font-normal">(blank = open-ended)</span></label>
                 <input type="date" value={edit.effectiveTo} onChange={e => setEdit({ ...edit, effectiveTo: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none" />
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Exception Dates <span className="text-slate-500 font-normal">(comma-separated YYYY-MM-DD, e.g. holidays)</span></label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Exception Dates <span className="text-[var(--text-faint)] font-normal">(comma-separated YYYY-MM-DD, e.g. holidays)</span></label>
                 <input type="text" value={edit.exceptionDatesInput}
                   onChange={e => setEdit({ ...edit, exceptionDatesInput: e.target.value })}
                   placeholder="2026-09-16, 2026-12-02"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none" />
               </div>
 
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Notes</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Notes</label>
                 <textarea value={edit.notes} onChange={e => setEdit({ ...edit, notes: e.target.value })} rows={2}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none" />
               </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-5">
               <button onClick={closeEditor}
-                className="px-4 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5">Cancel</button>
+                className="px-4 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]">Cancel</button>
               <button onClick={save} disabled={saving}
                 className="px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 disabled:opacity-50">
                 {saving ? 'Saving…' : edit.id ? 'Save' : 'Create Template'}
@@ -556,24 +556,24 @@ export default function ScheduleTemplatesPage() {
       {/* Generate modal */}
       {genTemplateId && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-slate-800/95 border border-emerald-500/30 rounded-2xl p-6">
+          <div className="w-full max-w-md bg-[var(--bg-surface)]/95 border border-emerald-500/30 rounded-2xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-white">Generate Trips</h2>
-              <button onClick={() => setGenTemplateId(null)} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
+              <h2 className="text-lg font-bold text-[var(--text-main)]">Generate Trips</h2>
+              <button onClick={() => setGenTemplateId(null)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]"><X className="w-5 h-5" /></button>
             </div>
-            <p className="text-xs text-slate-400 mb-4">
+            <p className="text-xs text-[var(--text-muted)] mb-4">
               Creates TripSchedule instances from this template for the chosen window. Idempotent — safe to re-run.
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">From *</label>
+                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">From *</label>
                 <input type="date" value={genFrom} onChange={e => setGenFrom(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-emerald-500 focus:outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-emerald-500 focus:outline-none" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">To *</label>
+                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">To *</label>
                 <input type="date" value={genTo} onChange={e => setGenTo(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-emerald-500 focus:outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-emerald-500 focus:outline-none" />
               </div>
             </div>
             {genResult && (
@@ -583,7 +583,7 @@ export default function ScheduleTemplatesPage() {
             )}
             <div className="flex justify-end gap-2 pt-4">
               <button onClick={() => setGenTemplateId(null)}
-                className="px-4 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5 text-sm">Close</button>
+                className="px-4 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm">Close</button>
               <button onClick={runGenerate} disabled={generating}
                 className="px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:opacity-90 disabled:opacity-50 text-sm inline-flex items-center gap-1.5">
                 <Play className="w-4 h-4" />

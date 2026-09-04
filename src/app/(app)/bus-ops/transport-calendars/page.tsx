@@ -104,7 +104,7 @@ export default function TransportCalendarsPage() {
 
   const entryColumns: DataGridColumn<Entry>[] = [
     { key: 'entryDate', header: 'Date', accessor: e => e.entryDate,
-      render: e => <span className="text-white whitespace-nowrap">{fmtDate(e.entryDate)}</span> },
+      render: e => <span className="text-[var(--text-main)] whitespace-nowrap">{fmtDate(e.entryDate)}</span> },
     { key: 'kind', header: 'Kind', accessor: e => e.kind, filter: 'select',
       render: e => (
         <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium border ${KIND_PILL[e.kind]}`}>
@@ -112,11 +112,11 @@ export default function TransportCalendarsPage() {
         </span>
       ) },
     { key: 'note', header: 'Note', accessor: e => e.note,
-      render: e => <span className="text-slate-300 truncate max-w-md block">{e.note ?? '—'}</span> },
+      render: e => <span className="text-[var(--text-muted)] truncate max-w-md block">{e.note ?? '—'}</span> },
     { key: 'actions', header: 'Actions', align: 'right', filter: false, sortable: false,
       render: e => (
         <button onClick={() => deleteEntry(e.id)}
-          className="p-1 rounded border border-white/10 text-rose-400 hover:border-rose-500/40 hover:bg-rose-500/10">
+          className="p-1 rounded border border-[var(--border-subtle)] text-rose-400 hover:border-rose-500/40 hover:bg-rose-500/10">
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       ) },
@@ -143,9 +143,9 @@ export default function TransportCalendarsPage() {
         {/* Left: calendar list */}
         <div className="lg:col-span-1 space-y-2">
           {loading ? (
-            <div className="text-slate-400 text-sm animate-pulse py-6 text-center">Loading…</div>
+            <div className="text-[var(--text-muted)] text-sm animate-pulse py-6 text-center">Loading…</div>
           ) : calendars.length === 0 ? (
-            <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 text-center text-slate-400 text-sm">
+            <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 text-center text-[var(--text-muted)] text-sm">
               No calendars yet. Click <strong className="text-violet-300">New Calendar</strong>.
             </div>
           ) : (
@@ -154,20 +154,20 @@ export default function TransportCalendarsPage() {
                 className={`w-full text-left rounded-xl border p-3 transition-colors ${
                   selectedId === c.id
                     ? 'bg-violet-500/10 border-violet-500/40'
-                    : 'bg-slate-800/50 border-white/10 hover:border-white/20'
+                    : 'bg-[var(--bg-surface)]/50 border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
                 }`}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="text-sm font-semibold text-white truncate">{c.name}</div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">
+                    <div className="text-sm font-semibold text-[var(--text-main)] truncate">{c.name}</div>
+                    <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
                       {fmtDate(c.effectiveFrom)} → {c.effectiveTo ? fmtDate(c.effectiveTo) : 'open'}
                       <span className="ml-2">· {c.entries.length} entries</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
-                    {!c.isActive && <span className="text-[10px] text-slate-500 italic">inactive</span>}
+                    {!c.isActive && <span className="text-[10px] text-[var(--text-faint)] italic">inactive</span>}
                     <button onClick={e => { e.stopPropagation(); deleteCalendar(c.id); }}
-                      className="p-1 rounded border border-white/10 text-rose-400 hover:border-rose-500/40 hover:bg-rose-500/10">
+                      className="p-1 rounded border border-[var(--border-subtle)] text-rose-400 hover:border-rose-500/40 hover:bg-rose-500/10">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -200,7 +200,7 @@ export default function TransportCalendarsPage() {
                       <span className="inline-flex items-center gap-2 text-xs text-violet-300">
                         {selectedIds.size} selected
                         <button type="button" onClick={() => setSelectedIds(new Set())}
-                          className="text-slate-400 hover:text-white underline underline-offset-2">
+                          className="text-[var(--text-muted)] hover:text-[var(--text-main)] underline underline-offset-2">
                           Clear
                         </button>
                       </span>
@@ -214,7 +214,7 @@ export default function TransportCalendarsPage() {
               }}
             />
           ) : (
-            <div className="bg-slate-800/30 border border-white/5 rounded-2xl p-10 text-center text-slate-500 text-sm">
+            <div className="bg-[var(--bg-surface)]/30 border border-[var(--border-subtle)] rounded-2xl p-10 text-center text-[var(--text-faint)] text-sm">
               Select a calendar on the left to see its entries.
             </div>
           )}
@@ -272,39 +272,39 @@ function NewCalendarModal({ onClose, onCreated }: { onClose: () => void; onCreat
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md bg-slate-800/95 border border-white/10 rounded-2xl p-6">
+      <div className="w-full max-w-md bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-white">New Calendar</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
+          <h2 className="text-lg font-bold text-[var(--text-main)]">New Calendar</h2>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)]"><X className="w-5 h-5" /></button>
         </div>
         {err && <div className="mb-3 bg-rose-500/15 border border-rose-500/40 rounded-lg px-3 py-2 text-rose-200 text-xs">{err}</div>}
         <div className="space-y-3">
           <div>
-            <label className="block text-xs text-slate-300 mb-1">Name *</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Name *</label>
             <input type="text" value={name} onChange={e => setName(e.target.value)}
               placeholder="e.g. UAE Public Holidays 2026"
-              className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
+              className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-slate-300 mb-1">Effective From *</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Effective From *</label>
               <input type="date" value={effectiveFrom} onChange={e => setEffectiveFrom(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none" />
+                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none" />
             </div>
             <div>
-              <label className="block text-xs text-slate-300 mb-1">Effective To</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Effective To</label>
               <input type="date" value={effectiveTo} onChange={e => setEffectiveTo(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none" />
+                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none" />
             </div>
           </div>
           <div>
-            <label className="block text-xs text-slate-300 mb-1">Notes</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Notes</label>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
-              className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none" />
+              className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none" />
           </div>
         </div>
         <div className="flex justify-end gap-2 pt-4">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5 text-sm">Cancel</button>
+          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm">Cancel</button>
           <button onClick={save} disabled={saving} className="px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 disabled:opacity-50 text-sm">
             {saving ? 'Creating…' : 'Create'}
           </button>
@@ -341,22 +341,22 @@ function NewEntryModal({ calendarId, onClose, onCreated }: { calendarId: string;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md bg-slate-800/95 border border-white/10 rounded-2xl p-6">
+      <div className="w-full max-w-md bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-white">New Entry</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
+          <h2 className="text-lg font-bold text-[var(--text-main)]">New Entry</h2>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)]"><X className="w-5 h-5" /></button>
         </div>
         {err && <div className="mb-3 bg-rose-500/15 border border-rose-500/40 rounded-lg px-3 py-2 text-rose-200 text-xs">{err}</div>}
         <div className="space-y-3">
           <div>
-            <label className="block text-xs text-slate-300 mb-1">Date *</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Date *</label>
             <input type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none" />
+              className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none" />
           </div>
           <div>
-            <label className="block text-xs text-slate-300 mb-1">Kind *</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Kind *</label>
             <select value={kind} onChange={e => setKind(e.target.value as EntryKind)}
-              className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+              className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
               <option value="HOLIDAY">Holiday — skip generation</option>
               <option value="WORKING_OVERRIDE">Working override — force generation</option>
               <option value="HALF_DAY">Half day — informational</option>
@@ -364,14 +364,14 @@ function NewEntryModal({ calendarId, onClose, onCreated }: { calendarId: string;
             </select>
           </div>
           <div>
-            <label className="block text-xs text-slate-300 mb-1">Note</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Note</label>
             <input type="text" value={note} onChange={e => setNote(e.target.value)}
               placeholder="e.g. Eid al Fitr"
-              className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
+              className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none" />
           </div>
         </div>
         <div className="flex justify-end gap-2 pt-4">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5 text-sm">Cancel</button>
+          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm">Cancel</button>
           <button onClick={save} disabled={saving} className="px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 disabled:opacity-50 text-sm">
             {saving ? 'Adding…' : 'Add Entry'}
           </button>

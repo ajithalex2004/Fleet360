@@ -61,7 +61,7 @@ const RISK_PILL: Record<string, string> = {
 const CONF_PILL: Record<string, string> = {
   HIGH:   'bg-emerald-900/40 text-emerald-300 border-emerald-700',
   MEDIUM: 'bg-amber-900/40 text-amber-300 border-amber-700',
-  LOW:    'bg-slate-700/40 text-slate-400 border-slate-600',
+  LOW:    'bg-[var(--bg-surface-hover)]/40 text-[var(--text-muted)] border-[var(--border-strong)]',
 };
 
 export default function DemandForecastPage() {
@@ -177,7 +177,7 @@ export default function DemandForecastPage() {
     router.push(`/bus-ops/planning-engine?${params.toString()}`);
   };
 
-  if (loading && !data) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading forecast...</div></div>;
+  if (loading && !data) return <div className="flex items-center justify-center h-full"><div className="text-[var(--text-muted)] animate-pulse">Loading forecast...</div></div>;
 
   return (
     <div className="space-y-8">
@@ -190,14 +190,14 @@ export default function DemandForecastPage() {
         accent="violet"
         actions={
           <>
-            <label className="text-xs text-slate-400 flex items-center gap-2">
+            <label className="text-xs text-[var(--text-muted)] flex items-center gap-2">
               History:
               <select value={weeks} onChange={e => setWeeks(Number(e.target.value))}
-                className="px-3 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none">
+                className="px-3 py-2 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-violet-500 focus:outline-none">
                 {[2, 4, 6, 8, 12].map(w => <option key={w} value={w}>{w} weeks</option>)}
               </select>
             </label>
-            <label className="text-xs text-slate-400 flex items-center gap-2">
+            <label className="text-xs text-[var(--text-muted)] flex items-center gap-2">
               <input type="checkbox" checked={aiOn} onChange={e => setAiOn(e.target.checked)} className="w-4 h-4 accent-violet-500" />
               AI rationale
             </label>
@@ -213,24 +213,24 @@ export default function DemandForecastPage() {
       )}
       {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">{error}</div>}
 
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
         {!data || data.rows.length === 0 ? (
-          <div className="text-center text-slate-400 py-12">
+          <div className="text-center text-[var(--text-muted)] py-12">
             No forecast yet. Need at least one trip with passengers in the history window.
           </div>
         ) : (
           <table className="w-full">
             <thead>
-              <tr className="border-b border-white/5">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Route</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Shift</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Day</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Forecast</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Trend</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Capacity</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Risk %</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">AI</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Actions</th>
+              <tr className="border-b border-[var(--border-subtle)]">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Route</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Shift</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Day</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)]">Forecast</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)]">Trend</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)]">Capacity</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)]">Risk %</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">AI</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)]">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -238,27 +238,27 @@ export default function DemandForecastPage() {
                 const pct = r.capacityRiskPct ?? 0;
                 const pctClass = pct >= 95 ? 'text-rose-400 font-bold' : pct >= 80 ? 'text-amber-400' : pct <= 55 ? 'text-amber-400' : 'text-emerald-400';
                 return (
-                  <tr key={`${r.routeId}-${r.shiftType}-${r.dayOfWeek}-${i}`} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                    <td className="px-4 py-3 text-sm font-medium text-white">{r.routeName}</td>
-                    <td className="px-4 py-3 text-sm text-white uppercase">{r.shiftType}</td>
-                    <td className="px-4 py-3 text-sm text-white">{DAYS[r.dayOfWeek]}</td>
-                    <td className="px-4 py-3 text-sm text-right text-white font-mono">{r.baseline + r.trendDelta}</td>
+                  <tr key={`${r.routeId}-${r.shiftType}-${r.dayOfWeek}-${i}`} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
+                    <td className="px-4 py-3 text-sm font-medium text-[var(--text-main)]">{r.routeName}</td>
+                    <td className="px-4 py-3 text-sm text-[var(--text-main)] uppercase">{r.shiftType}</td>
+                    <td className="px-4 py-3 text-sm text-[var(--text-main)]">{DAYS[r.dayOfWeek]}</td>
+                    <td className="px-4 py-3 text-sm text-right text-[var(--text-main)] font-mono">{r.baseline + r.trendDelta}</td>
                     <td className="px-4 py-3 text-sm text-right">
-                      <span className={r.trendDelta > 0 ? 'text-emerald-400' : r.trendDelta < 0 ? 'text-rose-400' : 'text-slate-300'}>
+                      <span className={r.trendDelta > 0 ? 'text-emerald-400' : r.trendDelta < 0 ? 'text-rose-400' : 'text-[var(--text-muted)]'}>
                         {r.trendDelta > 0 ? '+' : ''}{r.trendDelta}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-right text-white">{r.capacity ?? '—'}</td>
+                    <td className="px-4 py-3 text-sm text-right text-[var(--text-main)]">{r.capacity ?? '—'}</td>
                     <td className={`px-4 py-3 text-sm text-right ${pctClass}`}>{r.capacityRiskPct != null ? `${r.capacityRiskPct}%` : '—'}</td>
                     <td className="px-4 py-3">
                       {r.aiAnnotation ? (
                         <div className="flex items-start gap-1.5 max-w-md">
                           <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium border ${RISK_PILL[r.aiAnnotation.risk]}`}>{r.aiAnnotation.risk}</span>
                           <span className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-medium border ${CONF_PILL[r.aiAnnotation.confidence]}`}>{r.aiAnnotation.confidence}</span>
-                          <span className="text-xs text-slate-300 truncate">{r.aiAnnotation.rationale}</span>
+                          <span className="text-xs text-[var(--text-muted)] truncate">{r.aiAnnotation.rationale}</span>
                         </div>
                       ) : (
-                        <span className="text-xs text-slate-300">—</span>
+                        <span className="text-xs text-[var(--text-muted)]">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -294,7 +294,7 @@ export default function DemandForecastPage() {
                                 Draft plan
                               </button>
                             </div>
-                            {msg && <div className="text-[10px] text-slate-400 max-w-[16rem] text-right truncate" title={msg}>{msg}</div>}
+                            {msg && <div className="text-[10px] text-[var(--text-muted)] max-w-[16rem] text-right truncate" title={msg}>{msg}</div>}
                           </div>
                         );
                       })()}

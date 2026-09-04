@@ -113,9 +113,9 @@ export default function TripDetailPage() {
 
   const passengerColumns: DataGridColumn<Passenger>[] = [
     { key: 'employeeId', header: 'Emp ID', accessor: p => p.employeeId,
-      render: p => <span className="font-mono text-white">{p.employeeId ?? '—'}</span> },
+      render: p => <span className="font-mono text-[var(--text-main)]">{p.employeeId ?? '—'}</span> },
     { key: 'employeeName', header: 'Employee', accessor: p => p.employeeName,
-      render: p => <span className="text-white">{p.employeeName ?? '—'}</span> },
+      render: p => <span className="text-[var(--text-main)]">{p.employeeName ?? '—'}</span> },
     { key: 'boardingStopName', header: 'Pickup', accessor: p => p.boardingStopName },
     { key: 'alightingStopName', header: 'Drop-off', accessor: p => p.alightingStopName },
     { key: 'status', header: 'Status', accessor: p => p.status ?? 'CONFIRMED', filter: 'select',
@@ -125,7 +125,7 @@ export default function TripDetailPage() {
       } },
     { key: 'boardedAt', header: 'Boarded at', accessor: p => p.boardedAt,
       render: p => (
-        <span className="text-xs text-slate-400 whitespace-nowrap">
+        <span className="text-xs text-[var(--text-muted)] whitespace-nowrap">
           {p.boardedAt ? new Date(p.boardedAt).toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit' }) : '—'}
         </span>
       ) },
@@ -134,7 +134,7 @@ export default function TripDetailPage() {
         const status = (p.status ?? 'CONFIRMED') as PassengerStatus;
         const actions = nextActionsFor(status);
         return actions.length === 0 ? (
-          <span className="text-[10px] text-slate-500 italic">terminal</span>
+          <span className="text-[10px] text-[var(--text-faint)] italic">terminal</span>
         ) : (
           <div className="flex gap-1 justify-end">
             {actions.map(nxt => (
@@ -143,7 +143,7 @@ export default function TripDetailPage() {
                   nxt === 'BOARDED'  ? 'border-emerald-500/40 text-emerald-200 bg-emerald-500/10 hover:bg-emerald-500/20'  :
                   nxt === 'ABSENT'   ? 'border-rose-500/40    text-rose-200    bg-rose-500/10    hover:bg-rose-500/20'    :
                   nxt === 'ALIGHTED' ? 'border-cyan-500/40    text-cyan-200    bg-cyan-500/10    hover:bg-cyan-500/20'    :
-                  'border-slate-500/40 text-slate-200 bg-slate-500/10 hover:bg-slate-500/20'
+                  'border-slate-500/40 text-[var(--text-main)] bg-slate-500/10 hover:bg-slate-500/20'
                 }`}>
                 {rowBusy === p.id ? '…' : nxt}
               </button>
@@ -167,11 +167,11 @@ export default function TripDetailPage() {
         actions={
           <>
             <Link href="/bus-ops/dispatch"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 border border-white/10 px-3 py-2 text-sm text-slate-200 hover:border-violet-500/40">
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-main)] hover:border-violet-500/40">
               <ArrowLeft className="w-4 h-4" /> Trip Monitor
             </Link>
             <button onClick={load}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 border border-white/10 px-3 py-2 text-sm text-slate-200 hover:border-violet-500/40">
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-main)] hover:border-violet-500/40">
               <RefreshCw className="w-4 h-4" /> Refresh
             </button>
           </>
@@ -181,32 +181,32 @@ export default function TripDetailPage() {
       {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-300 text-sm">{error}</div>}
 
       {loading && !trip ? (
-        <div className="text-slate-400 text-sm animate-pulse py-10 text-center">Loading trip…</div>
+        <div className="text-[var(--text-muted)] text-sm animate-pulse py-10 text-center">Loading trip…</div>
       ) : !trip ? (
-        <div className="text-slate-400 text-sm py-10 text-center">Trip not found.</div>
+        <div className="text-[var(--text-muted)] text-sm py-10 text-center">Trip not found.</div>
       ) : (
         <>
           {/* Status + KPIs */}
           <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
-            <div className="col-span-2 md:col-span-1 bg-slate-800/60 border border-white/5 rounded-xl p-3">
-              <p className="text-xs text-slate-500 mb-1">Trip status</p>
+            <div className="col-span-2 md:col-span-1 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-3">
+              <p className="text-xs text-[var(--text-faint)] mb-1">Trip status</p>
               <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium border ${TRIP_PILL[(trip.status ?? 'SCHEDULED') as TripStatus]}`}>
                 {trip.status ?? 'SCHEDULED'}
               </span>
             </div>
             {(['CONFIRMED','BOARDED','ALIGHTED','ABSENT','WAITLISTED'] as PassengerStatus[]).map(s => (
-              <div key={s} className="bg-slate-800/60 border border-white/5 rounded-xl p-3 text-center">
-                <p className="text-lg font-bold text-white">{counts[s]}</p>
-                <p className="text-[10px] text-slate-500 uppercase mt-0.5">{s}</p>
+              <div key={s} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-3 text-center">
+                <p className="text-lg font-bold text-[var(--text-main)]">{counts[s]}</p>
+                <p className="text-[10px] text-[var(--text-faint)] uppercase mt-0.5">{s}</p>
               </div>
             ))}
           </div>
 
           {/* Passenger manifest */}
           <div>
-            <div className="px-1 pb-2 text-sm text-slate-300">
+            <div className="px-1 pb-2 text-sm text-[var(--text-muted)]">
               Passenger manifest ({trip.passengers.length})
-              {trip.capacity != null && <span className="text-slate-500"> of {trip.capacity}</span>}
+              {trip.capacity != null && <span className="text-[var(--text-faint)]"> of {trip.capacity}</span>}
             </div>
             <FleetDataGrid
               gridName="PassengerManifest"
@@ -226,7 +226,7 @@ export default function TripDetailPage() {
                   <span className="inline-flex items-center gap-2 text-xs text-violet-300">
                     {selectedIds.size} selected
                     <button type="button" onClick={() => setSelectedIds(new Set())}
-                      className="text-slate-400 hover:text-white underline underline-offset-2">
+                      className="text-[var(--text-muted)] hover:text-[var(--text-main)] underline underline-offset-2">
                       Clear
                     </button>
                   </span>

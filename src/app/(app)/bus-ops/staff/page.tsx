@@ -70,21 +70,21 @@ export default function StaffPage() {
 
   const staffColumns: DataGridColumn<StaffMember>[] = [
     { key: 'employeeId', header: 'Emp ID', accessor: m => m.employeeId,
-      render: m => <span className="font-mono text-white">{m.employeeId ?? '-'}</span> },
+      render: m => <span className="font-mono text-[var(--text-main)]">{m.employeeId ?? '-'}</span> },
     { key: 'name', header: 'Name', accessor: m => m.name,
-      render: m => <span className="font-medium text-white">{m.name}</span> },
+      render: m => <span className="font-medium text-[var(--text-main)]">{m.name}</span> },
     { key: 'department', header: 'Dept / Role', accessor: m => m.department, filter: 'select',
       render: m => (
         <div>
           <div>{m.department ?? '-'}</div>
-          <div className="text-xs text-slate-300">{m.designation ?? ''}</div>
+          <div className="text-xs text-[var(--text-muted)]">{m.designation ?? ''}</div>
         </div>
       ) },
     { key: 'contact', header: 'Contact', accessor: m => m.contactNumber,
       render: m => (
         <div>
           <div>{m.contactNumber ?? '-'}</div>
-          <div className="text-xs text-slate-300">{m.email ?? ''}</div>
+          <div className="text-xs text-[var(--text-muted)]">{m.email ?? ''}</div>
         </div>
       ) },
     { key: 'residenceArea', header: 'Residence', accessor: m => m.residenceArea },
@@ -92,32 +92,32 @@ export default function StaffPage() {
       render: m => (
         <div>
           <div>{m.defaultRouteId ? (routes.find(r=>r.id===m.defaultRouteId)?.name ?? m.defaultRouteId.slice(0,8)) : '-'}</div>
-          {m.defaultStopName && <div className="text-xs text-slate-300">{m.defaultStopName}</div>}
+          {m.defaultStopName && <div className="text-xs text-[var(--text-muted)]">{m.defaultStopName}</div>}
         </div>
       ) },
     { key: 'shiftType', header: 'Shift', accessor: m => m.shiftType, filter: 'select' },
     { key: 'transportType', header: 'Transport', accessor: m => m.transportType, filter: 'select',
       render: m => (
-        <span className={`px-2 py-0.5 rounded text-xs font-medium ${m.transportType==='BUS' ? 'bg-emerald-500/20 text-emerald-400' : m.transportType==='TAXI' ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-500/20 text-slate-200'}`}>
+        <span className={`px-2 py-0.5 rounded text-xs font-medium ${m.transportType==='BUS' ? 'bg-emerald-500/20 text-emerald-400' : m.transportType==='TAXI' ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-500/20 text-[var(--text-main)]'}`}>
           {m.transportType ?? 'BUS'}
         </span>
       ) },
     { key: 'isActive', header: 'Status', accessor: m => m.isActive ? 'Active' : 'Inactive', filter: 'select',
       render: m => m.isActive
         ? <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Active</span>
-        : <span className="px-2 py-0.5 rounded-full text-xs bg-slate-500/20 text-slate-200 border border-slate-500/30">Inactive</span> },
+        : <span className="px-2 py-0.5 rounded-full text-xs bg-slate-500/20 text-[var(--text-main)] border border-slate-500/30">Inactive</span> },
     { key: 'actions', header: 'Actions', filter: false, sortable: false,
       render: m => (
         <div className="flex gap-2">
           <button onClick={()=>openEdit(m)} className="text-xs px-2 py-1 rounded bg-violet-500/20 text-violet-400 border border-violet-500/30 hover:bg-violet-500/30">Edit</button>
-          <button onClick={()=>toggleActive(m)} className="text-xs px-2 py-1 rounded bg-slate-700 text-white border border-white/10 hover:bg-slate-600">
+          <button onClick={()=>toggleActive(m)} className="text-xs px-2 py-1 rounded bg-[var(--bg-surface-hover)] text-[var(--text-main)] border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]">
             {m.isActive ? 'Suspend' : 'Activate'}
           </button>
         </div>
       ) },
   ];
 
-  if (loading) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading staff...</div></div>;
+  if (loading) return <div className="flex items-center justify-center h-full"><div className="text-[var(--text-muted)] animate-pulse">Loading staff...</div></div>;
 
   return (
     <div className="space-y-8">
@@ -153,7 +153,7 @@ export default function StaffPage() {
             <span className="inline-flex items-center gap-2 text-xs text-violet-300">
               {selectedIds.size} selected
               <button type="button" onClick={() => setSelectedIds(new Set())}
-                className="text-slate-400 hover:text-white underline underline-offset-2">
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] underline underline-offset-2">
                 Clear
               </button>
             </span>
@@ -163,10 +163,10 @@ export default function StaffPage() {
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-800/95 border border-white/10 rounded-2xl p-8">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl p-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">{editMember ? 'Edit Staff' : 'Register Staff'}</h2>
-              <button onClick={()=>setShowModal(false)} className="text-slate-400 hover:text-white">✕</button>
+              <h2 className="text-2xl font-bold text-[var(--text-main)]">{editMember ? 'Edit Staff' : 'Register Staff'}</h2>
+              <button onClick={()=>setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">✕</button>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -181,40 +181,40 @@ export default function StaffPage() {
                   {label:'Default Stop',key:'defaultStopName',type:'text',ph:'Marina Walk Bus Stop'},
                 ].map(({label,key,type,ph,required})=>(
                   <div key={key}>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">{label}</label>
+                    <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">{label}</label>
                     <input type={type} value={(formData as any)[key]} onChange={e=>setFormData(p=>({...p,[key]:e.target.value}))} placeholder={ph} required={required}
-                      className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
+                      className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none" />
                   </div>
                 ))}
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Default Route</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Default Route</label>
                   <select value={formData.defaultRouteId} onChange={e=>setFormData(p=>({...p,defaultRouteId:e.target.value}))}
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
                     <option value="">None</option>
                     {routes.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Shift</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Shift</label>
                   <select value={formData.shiftType} onChange={e=>setFormData(p=>({...p,shiftType:e.target.value}))}
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
                     {SHIFT_TYPES.map(s=><option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Transport Type</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Transport Type</label>
                   <select value={formData.transportType} onChange={e=>setFormData(p=>({...p,transportType:e.target.value}))}
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
                     {TRANSPORT_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
                 <div className="flex items-center gap-3">
-                  <input type="checkbox" id="isActive" checked={formData.isActive as boolean} onChange={e=>setFormData(p=>({...p,isActive:e.target.checked}))} className="w-4 h-4 accent-violet-500 text-white" />
-                  <label htmlFor="isActive" className="text-sm text-white">Active on Transport</label>
+                  <input type="checkbox" id="isActive" checked={formData.isActive as boolean} onChange={e=>setFormData(p=>({...p,isActive:e.target.checked}))} className="w-4 h-4 accent-violet-500 text-[var(--text-main)]" />
+                  <label htmlFor="isActive" className="text-sm text-[var(--text-main)]">Active on Transport</label>
                 </div>
               </div>
               <div className="flex gap-4 justify-end pt-4">
-                <button type="button" onClick={()=>setShowModal(false)} className="px-6 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5">Cancel</button>
+                <button type="button" onClick={()=>setShowModal(false)} className="px-6 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]">Cancel</button>
                 <button type="submit" disabled={saving} className="px-6 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 disabled:opacity-50">
                   {saving ? 'Saving...' : editMember ? 'Update' : 'Register'}
                 </button>

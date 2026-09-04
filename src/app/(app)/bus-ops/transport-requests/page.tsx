@@ -142,7 +142,7 @@ export default function TransportRequestsPage() {
 
   if (loading) return (
     <div className="flex items-center justify-center h-full">
-      <div className="text-slate-400 animate-pulse">Loading transport requests...</div>
+      <div className="text-[var(--text-muted)] animate-pulse">Loading transport requests...</div>
     </div>
   );
 
@@ -174,7 +174,7 @@ export default function TransportRequestsPage() {
         <select
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value)}
-          className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-blue-500 focus:outline-none"
+          className="px-4 py-2 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none"
         >
           <option value="All">All Statuses</option>
           {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -182,41 +182,41 @@ export default function TransportRequestsPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
         {requests.length === 0 ? (
-          <div className="text-center text-slate-400 py-12">No transport requests found</div>
+          <div className="text-center text-[var(--text-muted)] py-12">No transport requests found</div>
         ) : (
           <table className="w-full">
             <thead>
-              <tr className="border-b border-white/5">
+              <tr className="border-b border-[var(--border-subtle)]">
                 {['Req No.', 'Staff', 'Type', 'Trip Date', 'Pickup', 'Drop-off', 'Reason', 'Status', 'Actions'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-400">{h}</th>
+                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {requests.map(req => (
-                <tr key={req.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                  <td className="px-4 py-3 text-sm font-medium text-white font-mono">
+                <tr key={req.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
+                  <td className="px-4 py-3 text-sm font-medium text-[var(--text-main)] font-mono">
                     {req.requestNo ?? '—'}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="text-sm text-white">{req.staffMember?.name ?? '—'}</div>
-                    <div className="text-xs text-slate-400">{req.staffMember?.employeeId}</div>
+                    <div className="text-sm text-[var(--text-main)]">{req.staffMember?.name ?? '—'}</div>
+                    <div className="text-xs text-[var(--text-muted)]">{req.staffMember?.employeeId}</div>
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-200">
+                  <td className="px-4 py-3 text-sm text-[var(--text-main)]">
                     {TYPE_LABELS[req.requestType] ?? req.requestType}
                   </td>
-                  <td className="px-4 py-3 text-sm text-slate-200">
+                  <td className="px-4 py-3 text-sm text-[var(--text-main)]">
                     {new Date(req.tripDate).toLocaleDateString()}
                   </td>
-                  <td className="px-4 py-3 text-sm text-white max-w-[140px] truncate">
+                  <td className="px-4 py-3 text-sm text-[var(--text-main)] max-w-[140px] truncate">
                     {req.pickupLocation ?? '—'}
                   </td>
-                  <td className="px-4 py-3 text-sm text-white max-w-[140px] truncate">
+                  <td className="px-4 py-3 text-sm text-[var(--text-main)] max-w-[140px] truncate">
                     {req.dropLocation ?? '—'}
                   </td>
-                  <td className="px-4 py-3 text-sm text-white max-w-[160px] truncate">
+                  <td className="px-4 py-3 text-sm text-[var(--text-main)] max-w-[160px] truncate">
                     {req.reason ?? '—'}
                   </td>
                   <td className="px-4 py-3">
@@ -229,14 +229,14 @@ export default function TransportRequestsPage() {
                       <select
                         value={req.status ?? 'PENDING'}
                         onChange={e => updateStatus(req.id, e.target.value)}
-                        className="text-xs px-2 py-1 rounded bg-slate-700 border border-white/10 text-white focus:outline-none"
+                        className="text-xs px-2 py-1 rounded bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none"
                       >
                         {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                       {req.status === 'PENDING' && (
                         <button
                           onClick={() => deleteRequest(req.id)}
-                          className="p-1 rounded text-slate-400 hover:text-rose-400 transition-colors"
+                          className="p-1 rounded text-[var(--text-muted)] hover:text-rose-400 transition-colors"
                           title="Delete"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -254,21 +254,21 @@ export default function TransportRequestsPage() {
       {/* New Request Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto bg-slate-800/95 border border-white/10 rounded-2xl p-8">
+          <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl p-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">New Transport Request</h2>
-              <button onClick={() => { setShowModal(false); setFormData(emptyForm); }} className="text-slate-400 hover:text-white">✕</button>
+              <h2 className="text-2xl font-bold text-[var(--text-main)]">New Transport Request</h2>
+              <button onClick={() => { setShowModal(false); setFormData(emptyForm); }} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">✕</button>
             </div>
             <form onSubmit={handleCreate} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
 
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Staff Member *</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Staff Member *</label>
                   <select
                     value={formData.staffMemberId}
                     onChange={e => setFormData(p => ({ ...p, staffMemberId: e.target.value }))}
                     required
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none"
                   >
                     <option value="">— Select staff member —</option>
                     {staff.map(s => (
@@ -280,68 +280,68 @@ export default function TransportRequestsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Request Type *</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Request Type *</label>
                   <select
                     value={formData.requestType}
                     onChange={e => setFormData(p => ({ ...p, requestType: e.target.value }))}
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none"
                   >
                     {REQUEST_TYPES.map(t => <option key={t} value={t}>{TYPE_LABELS[t]}</option>)}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Trip Date *</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Trip Date *</label>
                   <input
                     type="date"
                     value={formData.tripDate}
                     onChange={e => setFormData(p => ({ ...p, tripDate: e.target.value }))}
                     required
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Pickup Location</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Pickup Location</label>
                   <input
                     type="text"
                     value={formData.pickupLocation}
                     onChange={e => setFormData(p => ({ ...p, pickupLocation: e.target.value }))}
                     placeholder="e.g., Dubai Marina"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Drop-off Location</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Drop-off Location</label>
                   <input
                     type="text"
                     value={formData.dropLocation}
                     onChange={e => setFormData(p => ({ ...p, dropLocation: e.target.value }))}
                     placeholder="e.g., Office — Al Quoz"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Reason</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Reason</label>
                   <textarea
                     value={formData.reason}
                     onChange={e => setFormData(p => ({ ...p, reason: e.target.value }))}
                     rows={2}
                     placeholder="Why is this transport needed?"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Notes</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Notes</label>
                   <textarea
                     value={formData.notes}
                     onChange={e => setFormData(p => ({ ...p, notes: e.target.value }))}
                     rows={2}
                     placeholder="Additional notes for the dispatcher..."
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
@@ -353,7 +353,7 @@ export default function TransportRequestsPage() {
                 <button
                   type="button"
                   onClick={() => { setShowModal(false); setFormData(emptyForm); }}
-                  className="px-6 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5"
+                  className="px-6 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]"
                 >
                   Cancel
                 </button>

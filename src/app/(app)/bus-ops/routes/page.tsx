@@ -510,7 +510,7 @@ export default function RoutesPage() {
               {r.code}
             </span>
           )}
-          <span className="font-medium text-white">{r.name}</span>
+          <span className="font-medium text-[var(--text-main)]">{r.name}</span>
         </div>
       ),
       width: '240px',
@@ -526,7 +526,7 @@ export default function RoutesPage() {
       filter: 'select', width: '100px',
       render: r => r.isActive
         ? <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Active</span>
-        : <span className="px-2 py-0.5 rounded-full text-xs bg-slate-500/20 text-slate-400 border border-slate-500/30">Inactive</span>,
+        : <span className="px-2 py-0.5 rounded-full text-xs bg-slate-500/20 text-[var(--text-muted)] border border-slate-500/30">Inactive</span>,
     },
     { key: 'origin',      header: 'Origin',      accessor: r => r.origin },
     { key: 'destination', header: 'Destination', accessor: r => r.destination },
@@ -587,7 +587,7 @@ export default function RoutesPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowImport(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/60 px-3 py-2 text-sm font-semibold text-slate-100 hover:bg-slate-700"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 px-3 py-2 text-sm font-semibold text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]"
             >
               <Upload className="w-4 h-4" /> Import
             </button>
@@ -624,7 +624,7 @@ export default function RoutesPage() {
             <span className="inline-flex items-center gap-2 text-xs text-violet-300">
               {selectedIds.size} selected
               <button type="button" onClick={() => setSelectedIds(new Set())}
-                className="text-slate-400 hover:text-white underline underline-offset-2">
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] underline underline-offset-2">
                 Clear
               </button>
             </span>
@@ -647,46 +647,46 @@ export default function RoutesPage() {
           }}
         >
           <div
-            className="w-full max-w-3xl max-h-[92vh] overflow-y-auto bg-slate-900/95 border border-white/10 rounded-2xl shadow-2xl"
+            className="w-full max-w-3xl max-h-[92vh] overflow-y-auto bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl shadow-2xl"
             onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 sticky top-0 bg-slate-900/95 backdrop-blur">
-              <h2 className="text-xl font-bold text-white">{editingRouteId ? 'Edit Route' : 'New Route'}</h2>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)] sticky top-0 bg-[var(--bg-surface)]/95 backdrop-blur">
+              <h2 className="text-xl font-bold text-[var(--text-main)]">{editingRouteId ? 'Edit Route' : 'New Route'}</h2>
               <button type="button" onClick={() => setShowNewRoute(false)} disabled={creating}
-                className="text-slate-400 hover:text-white p-1 -m-1" aria-label="Close">✕</button>
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 -m-1" aria-label="Close">✕</button>
             </div>
 
             <form onSubmit={submitNewRoute} className="px-6 py-5 space-y-5">
               {/* Row 1: name + code */}
               <div className="grid grid-cols-2 gap-4">
                 <label className="block">
-                  <div className="text-xs uppercase tracking-wider text-slate-400 mb-1.5">Route Name *</div>
+                  <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-1.5">Route Name *</div>
                   <input required value={newRoute.name} onChange={e => setNewRoute(p => ({ ...p, name: e.target.value }))}
                     placeholder="e.g. Marina Morning Pickup"
-                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white placeholder-slate-500 text-sm focus:border-violet-500 focus:outline-none" />
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:border-violet-500 focus:outline-none" />
                 </label>
                 <label className="block">
-                  <div className="text-xs uppercase tracking-wider text-slate-400 mb-1.5">Route Code</div>
+                  <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-1.5">Route Code</div>
                   <input value={newRoute.code} onChange={e => setNewRoute(p => ({ ...p, code: e.target.value }))}
                     placeholder="e.g. RTE-001 (auto-allocated when empty)"
-                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white placeholder-slate-500 text-sm focus:border-violet-500 focus:outline-none" />
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:border-violet-500 focus:outline-none" />
                 </label>
               </div>
 
               {/* Row 2: direction + shift + route type */}
               <div className="grid grid-cols-3 gap-4">
                 <label className="block">
-                  <div className="text-xs uppercase tracking-wider text-slate-400 mb-1.5">Direction</div>
+                  <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-1.5">Direction</div>
                   <select value={newRoute.direction} onChange={e => setNewRoute(p => ({ ...p, direction: e.target.value as NewRouteForm['direction'] }))}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none">
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-violet-500 focus:outline-none">
                     <option value="INBOUND">Inbound</option>
                     <option value="OUTBOUND">Outbound</option>
                   </select>
                 </label>
                 <label className="block">
-                  <div className="text-xs uppercase tracking-wider text-slate-400 mb-1.5">Shift Type</div>
+                  <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-1.5">Shift Type</div>
                   <select value={newRoute.shiftType} onChange={e => setNewRoute(p => ({ ...p, shiftType: e.target.value as NewRouteForm['shiftType'] }))}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none">
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-violet-500 focus:outline-none">
                     <option value="MORNING">Morning</option>
                     <option value="EVENING">Evening</option>
                     <option value="NIGHT">Night</option>
@@ -694,9 +694,9 @@ export default function RoutesPage() {
                   </select>
                 </label>
                 <label className="block">
-                  <div className="text-xs uppercase tracking-wider text-slate-400 mb-1.5">Route Type</div>
+                  <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-1.5">Route Type</div>
                   <select value={newRoute.routeType} onChange={e => setNewRoute(p => ({ ...p, routeType: e.target.value as NewRouteForm['routeType'] }))}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none">
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-violet-500 focus:outline-none">
                     <option value="STAFF">Staff</option>
                     <option value="SCHOOL">School</option>
                     <option value="BOTH">Both</option>
@@ -707,24 +707,24 @@ export default function RoutesPage() {
               {/* Row 3: departure + arrival + capacity + status */}
               <div className="grid grid-cols-4 gap-4">
                 <label className="block">
-                  <div className="text-xs uppercase tracking-wider text-slate-400 mb-1.5">Departure Time</div>
+                  <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-1.5">Departure Time</div>
                   <input type="time" value={newRoute.departureTime} onChange={e => setNewRoute(p => ({ ...p, departureTime: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none" />
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-violet-500 focus:outline-none" />
                 </label>
                 <label className="block">
-                  <div className="text-xs uppercase tracking-wider text-slate-400 mb-1.5">Expected Arrival</div>
+                  <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-1.5">Expected Arrival</div>
                   <input type="time" value={newRoute.expectedArrivalTime} onChange={e => setNewRoute(p => ({ ...p, expectedArrivalTime: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none" />
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-violet-500 focus:outline-none" />
                 </label>
                 <label className="block">
-                  <div className="text-xs uppercase tracking-wider text-slate-400 mb-1.5">Seat Capacity</div>
+                  <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-1.5">Seat Capacity</div>
                   <input type="number" min={1} value={newRoute.capacity} onChange={e => setNewRoute(p => ({ ...p, capacity: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none" />
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-violet-500 focus:outline-none" />
                 </label>
                 <label className="block">
-                  <div className="text-xs uppercase tracking-wider text-slate-400 mb-1.5">Status</div>
+                  <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-1.5">Status</div>
                   <select value={newRoute.isActive ? 'active' : 'inactive'} onChange={e => setNewRoute(p => ({ ...p, isActive: e.target.value === 'active' }))}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none">
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-violet-500 focus:outline-none">
                     <option value="active">🟢 Active</option>
                     <option value="inactive">⚪ Inactive</option>
                   </select>
@@ -732,12 +732,12 @@ export default function RoutesPage() {
               </div>
 
               {/* Resource Assignment */}
-              <fieldset className="rounded-xl border border-white/10 bg-slate-950/40 px-4 py-4">
-                <legend className="px-2 text-xs uppercase tracking-wider text-slate-400 font-semibold">Resource Assignment</legend>
+              <fieldset className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)]/40 px-4 py-4">
+                <legend className="px-2 text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Resource Assignment</legend>
                 <div className="grid grid-cols-3 gap-4">
                   <label className="block">
                     <div className="flex items-center justify-between mb-1.5">
-                      <div className="text-xs uppercase tracking-wider text-slate-400">Vehicle</div>
+                      <div className="text-xs uppercase tracking-wider text-[var(--text-muted)]">Vehicle</div>
                       {(() => {
                         // Vehicles filtered by seat capacity — count is a helpful
                         // signal that the dropdown was pruned, not empty because
@@ -746,14 +746,14 @@ export default function RoutesPage() {
                         if (!Number.isFinite(need) || need <= 0) return null;
                         const fits = vehicles.filter(v => v.seatingCapacity != null && v.seatingCapacity >= need).length;
                         return (
-                          <span className="text-[10px] text-slate-500">
+                          <span className="text-[10px] text-[var(--text-faint)]">
                             {fits} of {vehicles.length} ≥ {need} seats
                           </span>
                         );
                       })()}
                     </div>
                     <select value={newRoute.assignedVehicleId} onChange={e => setNewRoute(p => ({ ...p, assignedVehicleId: e.target.value }))}
-                      className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none">
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-violet-500 focus:outline-none">
                       <option value="">— Not assigned —</option>
                       {(() => {
                         // Filter: only vehicles whose seatingCapacity meets the
@@ -787,9 +787,9 @@ export default function RoutesPage() {
                     </select>
                   </label>
                   <label className="block">
-                    <div className="text-xs uppercase tracking-wider text-slate-400 mb-1.5">Driver</div>
+                    <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-1.5">Driver</div>
                     <select value={newRoute.assignedDriverId} onChange={e => setNewRoute(p => ({ ...p, assignedDriverId: e.target.value }))}
-                      className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none">
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-violet-500 focus:outline-none">
                       <option value="">— Not assigned —</option>
                       {drivers.map(d => (
                         <option key={d.id} value={d.id}>
@@ -799,9 +799,9 @@ export default function RoutesPage() {
                     </select>
                   </label>
                   <label className="block">
-                    <div className="text-xs uppercase tracking-wider text-slate-400 mb-1.5">Zone</div>
+                    <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-1.5">Zone</div>
                     <select value={newRoute.zoneId} onChange={e => setNewRoute(p => ({ ...p, zoneId: e.target.value }))}
-                      className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none">
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-violet-500 focus:outline-none">
                       <option value="">— unassigned —</option>
                       {zoneOptions.map(z => (
                         <option key={z.id} value={z.id}>{z.name}</option>
@@ -829,8 +829,8 @@ export default function RoutesPage() {
               />
 
               {/* Stop Sequence Engine */}
-              <fieldset className="rounded-xl border border-white/10 bg-slate-950/40 px-4 py-4">
-                <legend className="px-2 text-xs uppercase tracking-wider text-slate-400 font-semibold">Stop Sequence Engine · Intermediate</legend>
+              <fieldset className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)]/40 px-4 py-4">
+                <legend className="px-2 text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Stop Sequence Engine · Intermediate</legend>
 
                 {/* Added-stops list. Numbered chips + coords indicator so the
                     operator can see at a glance which stops have GPS pins vs
@@ -838,14 +838,14 @@ export default function RoutesPage() {
                     the Route Planner). */}
                 <div className="space-y-2 mb-3">
                   {newRouteStops.length === 0 && (
-                    <div className="text-xs text-slate-500 py-2">No stops yet. Pick from existing, plot on the map, or type below.</div>
+                    <div className="text-xs text-[var(--text-faint)] py-2">No stops yet. Pick from existing, plot on the map, or type below.</div>
                   )}
                   {newRouteStops.map((s, i) => (
-                    <div key={i} className="flex items-center gap-2 bg-slate-800/50 border border-white/5 rounded-lg px-3 py-2">
+                    <div key={i} className="flex items-center gap-2 bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-lg px-3 py-2">
                       <span className="w-6 h-6 rounded-full bg-violet-500/20 text-violet-300 text-xs font-bold flex items-center justify-center">{i + 1}</span>
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm text-slate-200 truncate">{s.stopName}</div>
-                        {s.landmark && <div className="text-[10px] text-slate-500 truncate">{s.landmark}</div>}
+                        <div className="text-sm text-[var(--text-main)] truncate">{s.stopName}</div>
+                        {s.landmark && <div className="text-[10px] text-[var(--text-faint)] truncate">{s.landmark}</div>}
                       </div>
                       {s.gpsLat != null && s.gpsLng != null && (
                         <span title={`${s.gpsLat.toFixed(5)}, ${s.gpsLng.toFixed(5)}`}
@@ -853,7 +853,7 @@ export default function RoutesPage() {
                           <MapPin className="w-3 h-3" /> pinned
                         </span>
                       )}
-                      {s.time && <span className="text-xs text-slate-400 inline-flex items-center gap-1"><Clock className="w-3 h-3" />{s.time}</span>}
+                      {s.time && <span className="text-xs text-[var(--text-muted)] inline-flex items-center gap-1"><Clock className="w-3 h-3" />{s.time}</span>}
                       <button type="button" onClick={() => removeNewRouteStop(i)}
                         className="text-rose-400 hover:text-rose-300 text-xs px-1">✕</button>
                     </div>
@@ -866,13 +866,13 @@ export default function RoutesPage() {
                     clicks Add so they can set the time first. */}
                 {existingStops.length > 0 && (
                   <div className="mb-3">
-                    <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">
+                    <div className="text-[10px] uppercase tracking-wider text-[var(--text-faint)] font-medium mb-1">
                       Pick from existing ({existingStops.length})
                     </div>
                     <select
                       value=""
                       onChange={e => { pickExistingFor('stop', e.target.value); e.currentTarget.selectedIndex = 0; }}
-                      className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none"
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-violet-500 focus:outline-none"
                     >
                       <option value="">— Pick a stop already used on another route —</option>
                       {existingStops.map(s => {
@@ -895,7 +895,7 @@ export default function RoutesPage() {
                     <input value={newStopDraft.stopName} onChange={e => setNewStopDraft(p => ({ ...p, stopName: e.target.value, gpsLat: undefined, gpsLng: undefined, landmark: undefined }))}
                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addNewRouteStop(); } }}
                       placeholder="Stop name…"
-                      className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white placeholder-slate-500 text-sm focus:border-violet-500 focus:outline-none pr-16" />
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:border-violet-500 focus:outline-none pr-16" />
                     {newStopDraft.gpsLat != null && newStopDraft.gpsLng != null && (
                       <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-emerald-300 inline-flex items-center gap-0.5 pointer-events-none">
                         <MapPin className="w-3 h-3" /> pinned
@@ -903,10 +903,10 @@ export default function RoutesPage() {
                     )}
                   </div>
                   <input type="time" value={newStopDraft.time} onChange={e => setNewStopDraft(p => ({ ...p, time: e.target.value }))}
-                    className="w-32 px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none" />
+                    className="w-32 px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-violet-500 focus:outline-none" />
                   <button type="button" onClick={() => setMapPickerFor('stop')}
                     title="Plot this stop on the map"
-                    className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-sm text-slate-200 hover:bg-slate-700">
+                    className="inline-flex items-center gap-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]">
                     <MapPin className="w-3.5 h-3.5" /> Map
                   </button>
                   <button type="button" onClick={addNewRouteStop}
@@ -931,9 +931,9 @@ export default function RoutesPage() {
                 <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{error}</div>
               )}
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/10">
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border-subtle)]">
                 <button type="button" onClick={() => setShowNewRoute(false)} disabled={creating}
-                  className="px-4 py-2 rounded-xl border border-white/10 text-slate-300 hover:bg-white/5 text-sm font-medium disabled:opacity-50">
+                  className="px-4 py-2 rounded-xl border border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] text-sm font-medium disabled:opacity-50">
                   Cancel
                 </button>
                 <button type="submit" disabled={creating || !newRoute.name.trim()}
@@ -987,22 +987,22 @@ export default function RoutesPage() {
           onClick={() => { setDeletingId(null); setDeleteConfirm(null); }}
         >
           <div
-            className="w-full max-w-md bg-slate-800/95 border border-rose-500/40 rounded-2xl shadow-2xl overflow-hidden"
+            className="w-full max-w-md bg-[var(--bg-surface)]/95 border border-rose-500/40 rounded-2xl shadow-2xl overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
-            <div className="px-6 py-5 border-b border-white/10 flex items-start gap-3">
+            <div className="px-6 py-5 border-b border-[var(--border-subtle)] flex items-start gap-3">
               <div className="w-10 h-10 rounded-full bg-rose-500/15 border border-rose-500/40 flex items-center justify-center shrink-0">
                 <span className="text-lg" aria-hidden="true">⚠</span>
               </div>
               <div className="min-w-0 flex-1">
-                <h3 className="text-lg font-bold text-white">Delete route?</h3>
-                <p className="text-sm text-slate-400 mt-0.5 truncate">{deleteConfirm.name}</p>
+                <h3 className="text-lg font-bold text-[var(--text-main)]">Delete route?</h3>
+                <p className="text-sm text-[var(--text-muted)] mt-0.5 truncate">{deleteConfirm.name}</p>
               </div>
-              <button type="button" onClick={() => setDeleteConfirm(null)} className="text-slate-400 hover:text-white p-1 -m-1" aria-label="Close">✕</button>
+              <button type="button" onClick={() => setDeleteConfirm(null)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1 -m-1" aria-label="Close">✕</button>
             </div>
 
             <div className="px-6 py-4 space-y-3 text-sm">
-              <p className="text-slate-300">
+              <p className="text-[var(--text-muted)]">
                 This route will be soft-deleted — it disappears from the list and can't be undone from the UI.
               </p>
               {(deleteConfirm.schedules?.length ?? 0) > 0 && (
@@ -1011,23 +1011,23 @@ export default function RoutesPage() {
                   The server will refuse the delete if any are still live — cancel or reassign them first.
                 </div>
               )}
-              <div className="rounded-lg bg-slate-900/50 border border-white/5 px-3 py-2 text-xs text-slate-400">
-                <div className="text-[10px] uppercase tracking-wider text-slate-500 mb-1">Route</div>
-                <div className="font-medium text-slate-200">{deleteConfirm.name}</div>
-                <div className="text-slate-400 mt-0.5">{deleteConfirm.origin} → {deleteConfirm.destination}</div>
+              <div className="rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] px-3 py-2 text-xs text-[var(--text-muted)]">
+                <div className="text-[10px] uppercase tracking-wider text-[var(--text-faint)] mb-1">Route</div>
+                <div className="font-medium text-[var(--text-main)]">{deleteConfirm.name}</div>
+                <div className="text-[var(--text-muted)] mt-0.5">{deleteConfirm.origin} → {deleteConfirm.destination}</div>
                 {deleteConfirm.stops && deleteConfirm.stops.length > 0 && (
-                  <div className="text-slate-500 mt-1">{deleteConfirm.stops.length} stop{deleteConfirm.stops.length === 1 ? '' : 's'}</div>
+                  <div className="text-[var(--text-faint)] mt-1">{deleteConfirm.stops.length} stop{deleteConfirm.stops.length === 1 ? '' : 's'}</div>
                 )}
               </div>
             </div>
 
-            <div className="px-6 py-4 border-t border-white/10 flex items-center justify-end gap-2">
+            <div className="px-6 py-4 border-t border-[var(--border-subtle)] flex items-center justify-end gap-2">
               <button type="button" onClick={() => setDeleteConfirm(null)} disabled={deletingId === deleteConfirm.id}
-                className="px-4 py-2 rounded-lg border border-white/10 text-slate-300 hover:bg-white/5 text-sm font-medium disabled:opacity-50">
+                className="px-4 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] text-sm font-medium disabled:opacity-50">
                 Cancel
               </button>
               <button type="button" onClick={confirmDelete} disabled={deletingId === deleteConfirm.id}
-                className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center gap-1.5">
+                className="px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-[var(--text-main)] text-sm font-semibold disabled:opacity-50 inline-flex items-center gap-1.5">
                 {deletingId === deleteConfirm.id ? 'Deleting…' : 'Delete route'}
               </button>
             </div>
@@ -1038,24 +1038,24 @@ export default function RoutesPage() {
       {/* Stops Manager Modal */}
       {showStops && selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-slate-800/95 border border-white/10 rounded-2xl p-8">
+          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl p-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">Stops — {selected.name}</h2>
-              <button onClick={()=>setShowStops(false)} className="text-slate-400 hover:text-white">✕</button>
+              <h2 className="text-2xl font-bold text-[var(--text-main)]">Stops — {selected.name}</h2>
+              <button onClick={()=>setShowStops(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">✕</button>
             </div>
             <div className="space-y-2 mb-4">
-              {stops.length === 0 && <div className="text-slate-400 text-sm text-center py-4">No stops yet</div>}
+              {stops.length === 0 && <div className="text-[var(--text-muted)] text-sm text-center py-4">No stops yet</div>}
               {stops.map((s,i)=>(
-                <div key={i} className="flex items-center gap-3 bg-slate-700/50 rounded-xl px-4 py-3">
+                <div key={i} className="flex items-center gap-3 bg-[var(--bg-surface-hover)]/50 rounded-xl px-4 py-3">
                   <div className="w-7 h-7 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-bold">{i+1}</div>
                   <div className="flex-1">
-                    <div className="text-sm font-medium text-white">{s.stopName}</div>
-                    {s.landmark && <div className="text-xs text-slate-400">{s.landmark}</div>}
+                    <div className="text-sm font-medium text-[var(--text-main)]">{s.stopName}</div>
+                    {s.landmark && <div className="text-xs text-[var(--text-muted)]">{s.landmark}</div>}
                   </div>
-                  {s.estimatedArrivalMins && <span className="text-xs text-slate-400">+{s.estimatedArrivalMins} min</span>}
+                  {s.estimatedArrivalMins && <span className="text-xs text-[var(--text-muted)]">+{s.estimatedArrivalMins} min</span>}
                   <div className="flex gap-1">
-                    <button onClick={()=>moveStop(i,-1)} disabled={i===0} className="text-slate-400 hover:text-white disabled:opacity-30 text-xs px-1">↑</button>
-                    <button onClick={()=>moveStop(i,1)} disabled={i===stops.length-1} className="text-slate-400 hover:text-white disabled:opacity-30 text-xs px-1">↓</button>
+                    <button onClick={()=>moveStop(i,-1)} disabled={i===0} className="text-[var(--text-muted)] hover:text-[var(--text-main)] disabled:opacity-30 text-xs px-1">↑</button>
+                    <button onClick={()=>moveStop(i,1)} disabled={i===stops.length-1} className="text-[var(--text-muted)] hover:text-[var(--text-main)] disabled:opacity-30 text-xs px-1">↓</button>
                     <button onClick={()=>removeStop(i)} className="text-rose-400 hover:text-rose-300 text-xs px-1">✕</button>
                   </div>
                 </div>
@@ -1066,11 +1066,11 @@ export default function RoutesPage() {
                 <input type="text" value={newStop.stopName}
                   onChange={e=>setNewStop(p=>({...p,stopName:e.target.value, gpsLat:undefined, gpsLng:undefined}))}
                   placeholder="New stop name"
-                  className="flex-1 px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white text-sm placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
+                  className="flex-1 px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none" />
                 <input type="text" value={newStop.landmark} onChange={e=>setNewStop(p=>({...p,landmark:e.target.value}))} placeholder="Landmark"
-                  className="w-28 px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white text-sm placeholder-slate-500 focus:outline-none" />
+                  className="w-28 px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm placeholder-[var(--text-faint)] focus:outline-none" />
                 <input type="number" value={newStop.estimatedArrivalMins} onChange={e=>setNewStop(p=>({...p,estimatedArrivalMins:e.target.value}))} placeholder="Min"
-                  className="w-16 px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white text-sm focus:outline-none" />
+                  className="w-16 px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:outline-none" />
                 {/* This form had no map. A stop added without coordinates is
                     invisible to the optimiser, so the picker is offered here
                     the same way the new-route wizard offers it. */}
@@ -1095,7 +1095,7 @@ export default function RoutesPage() {
               )}
             </div>
             <div className="flex gap-4 justify-end">
-              <button onClick={()=>setShowStops(false)} className="px-6 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5">Cancel</button>
+              <button onClick={()=>setShowStops(false)} className="px-6 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]">Cancel</button>
               <button onClick={saveStops} disabled={saving} className="px-6 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 disabled:opacity-50">
                 {saving ? 'Saving...' : 'Save Stops'}
               </button>
@@ -1132,18 +1132,18 @@ function EndpointField({
   onOpenMap: () => void;
 }) {
   return (
-    <fieldset className="rounded-xl border border-white/10 bg-slate-950/40 px-4 py-4">
-      <legend className="px-2 text-xs uppercase tracking-wider text-slate-400 font-semibold">{label}</legend>
+    <fieldset className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)]/40 px-4 py-4">
+      <legend className="px-2 text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">{label}</legend>
 
       {existingStops.length > 0 && (
         <div className="mb-3">
-          <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium mb-1">
+          <div className="text-[10px] uppercase tracking-wider text-[var(--text-faint)] font-medium mb-1">
             Pick from existing ({existingStops.length})
           </div>
           <select
             value=""
             onChange={e => { onPickExisting(e.target.value); e.currentTarget.selectedIndex = 0; }}
-            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none"
+            className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-violet-500 focus:outline-none"
           >
             <option value="">— Pick a location already used on another route —</option>
             {existingStops.map(s => {
@@ -1164,7 +1164,7 @@ function EndpointField({
             value={value.name}
             onChange={e => onChange({ ...value, name: e.target.value, gpsLat: undefined, gpsLng: undefined, landmark: undefined })}
             placeholder={target === 'origin' ? 'e.g. AGT HQ' : 'e.g. Sheikh Khalifa Medical City'}
-            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white placeholder-slate-500 text-sm focus:border-violet-500 focus:outline-none pr-16"
+            className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:border-violet-500 focus:outline-none pr-16"
           />
           {value.gpsLat != null && value.gpsLng != null && (
             <span
@@ -1179,14 +1179,14 @@ function EndpointField({
           type="button"
           onClick={onOpenMap}
           title={`Plot the ${target} on the map`}
-          className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-sm text-slate-200 hover:bg-slate-700"
+          className="inline-flex items-center gap-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]"
         >
           <MapPin className="w-3.5 h-3.5" /> Map
         </button>
       </div>
 
       {value.landmark && (
-        <div className="mt-2 text-[11px] text-slate-500">Landmark: {value.landmark}</div>
+        <div className="mt-2 text-[11px] text-[var(--text-faint)]">Landmark: {value.landmark}</div>
       )}
     </fieldset>
   );

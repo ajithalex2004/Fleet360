@@ -142,9 +142,9 @@ export default function ShiftSlaMonitorPage() {
   }, [data?.trips, selectedFilter, searchQuery]);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-6 space-y-6">
+    <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-main)] p-6 space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[var(--border-subtle)] pb-5">
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
@@ -154,31 +154,31 @@ export default function ShiftSlaMonitorPage() {
               <Radio className="w-3.5 h-3.5 animate-pulse" /> Live Telemetry
             </span>
           </div>
-          <h1 className="text-2xl font-bold text-white mt-1">Shift Arrival SLA Monitor</h1>
-          <p className="text-sm text-slate-400">
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mt-1">Shift Arrival SLA Monitor</h1>
+          <p className="text-sm text-[var(--text-muted)]">
             Real-time workplace destination ETA tracking and proactive delay warning system for corporate shift shuttles.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5">
+          <div className="flex items-center gap-2 text-xs text-[var(--text-muted)] bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-1.5">
             <span>Refresh:</span>
             <select
               value={autoRefreshInterval}
               onChange={(e) => setAutoRefreshInterval(Number(e.target.value))}
-              className="bg-transparent text-slate-200 border-none outline-none cursor-pointer"
+              className="bg-transparent text-[var(--text-main)] border-none outline-none cursor-pointer"
             >
-              <option value={15} className="bg-slate-900">15s</option>
-              <option value={30} className="bg-slate-900">30s</option>
-              <option value={60} className="bg-slate-900">60s</option>
-              <option value={0} className="bg-slate-900">Manual</option>
+              <option value={15} className="bg-[var(--bg-surface)]">15s</option>
+              <option value={30} className="bg-[var(--bg-surface)]">30s</option>
+              <option value={60} className="bg-[var(--bg-surface)]">60s</option>
+              <option value={0} className="bg-[var(--bg-surface)]">Manual</option>
             </select>
           </div>
 
           <button
             onClick={() => fetchSlaData()}
             disabled={refreshing}
-            className="flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium text-slate-200 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg transition"
+            className="flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium text-[var(--text-main)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg transition"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-indigo-400' : ''}`} />
             Refresh
@@ -187,7 +187,7 @@ export default function ShiftSlaMonitorPage() {
           <button
             onClick={triggerSlaSweep}
             disabled={sweeping}
-            className="flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-sm transition"
+            className="flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium text-[var(--text-main)] bg-indigo-600 hover:bg-indigo-500 rounded-lg shadow-sm transition"
           >
             <ShieldAlert className={`w-3.5 h-3.5 ${sweeping ? 'animate-spin' : ''}`} />
             Run SLA Sweep
@@ -197,16 +197,16 @@ export default function ShiftSlaMonitorPage() {
 
       {/* KPI Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-4">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]/80 rounded-xl p-4">
+          <div className="flex items-center justify-between text-[var(--text-muted)] mb-2">
             <span className="text-xs font-medium uppercase tracking-wider">On-Time Rate</span>
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-white">{data ? `${data.onTimeRatePercent}%` : '—'}</span>
+            <span className="text-2xl font-bold text-[var(--text-main)]">{data ? `${data.onTimeRatePercent}%` : '—'}</span>
             <span className="text-xs text-emerald-400 font-medium">SLA Target &gt;95%</span>
           </div>
-          <div className="mt-2 w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+          <div className="mt-2 w-full bg-[var(--bg-surface)] rounded-full h-1.5 overflow-hidden">
             <div
               className="bg-emerald-500 h-full rounded-full transition-all duration-500"
               style={{ width: `${data?.onTimeRatePercent || 0}%` }}
@@ -214,32 +214,32 @@ export default function ShiftSlaMonitorPage() {
           </div>
         </div>
 
-        <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-4">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]/80 rounded-xl p-4">
+          <div className="flex items-center justify-between text-[var(--text-muted)] mb-2">
             <span className="text-xs font-medium uppercase tracking-wider">Active Commutes</span>
             <Bus className="w-4 h-4 text-indigo-400" />
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-white">{data?.totalActiveTrips ?? '—'}</span>
-            <span className="text-xs text-slate-400">running / scheduled</span>
+            <span className="text-2xl font-bold text-[var(--text-main)]">{data?.totalActiveTrips ?? '—'}</span>
+            <span className="text-xs text-[var(--text-muted)]">running / scheduled</span>
           </div>
-          <p className="text-[11px] text-slate-500 mt-2">In transit to work sites</p>
+          <p className="text-[11px] text-[var(--text-faint)] mt-2">In transit to work sites</p>
         </div>
 
-        <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-4">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]/80 rounded-xl p-4">
+          <div className="flex items-center justify-between text-[var(--text-muted)] mb-2">
             <span className="text-xs font-medium uppercase tracking-wider">At-Risk Trips</span>
             <Clock className="w-4 h-4 text-amber-400" />
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-bold text-amber-400">{data?.atRiskCount ?? '—'}</span>
-            <span className="text-xs text-slate-400">5–15 min delay</span>
+            <span className="text-xs text-[var(--text-muted)]">5–15 min delay</span>
           </div>
-          <p className="text-[11px] text-slate-500 mt-2">Predicted before shift start</p>
+          <p className="text-[11px] text-[var(--text-faint)] mt-2">Predicted before shift start</p>
         </div>
 
-        <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-4">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]/80 rounded-xl p-4">
+          <div className="flex items-center justify-between text-[var(--text-muted)] mb-2">
             <span className="text-xs font-medium uppercase tracking-wider">Critical Breaches</span>
             <Flame className="w-4 h-4 text-red-400" />
           </div>
@@ -247,31 +247,31 @@ export default function ShiftSlaMonitorPage() {
             <span className="text-2xl font-bold text-red-400">{data?.breachCount ?? '—'}</span>
             <span className="text-xs text-red-400 font-medium">&gt;15m or past SLA</span>
           </div>
-          <p className="text-[11px] text-slate-500 mt-2">Requires immediate dispatch action</p>
+          <p className="text-[11px] text-[var(--text-faint)] mt-2">Requires immediate dispatch action</p>
         </div>
 
-        <div className="bg-slate-900/60 border border-slate-800/80 rounded-xl p-4">
-          <div className="flex items-center justify-between text-slate-400 mb-2">
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]/80 rounded-xl p-4">
+          <div className="flex items-center justify-between text-[var(--text-muted)] mb-2">
             <span className="text-xs font-medium uppercase tracking-wider">Impacted Staff</span>
             <Users className="w-4 h-4 text-orange-400" />
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-white">{data?.totalImpactedPassengers ?? 0}</span>
+            <span className="text-2xl font-bold text-[var(--text-main)]">{data?.totalImpactedPassengers ?? 0}</span>
             <span className="text-xs text-orange-400">passengers affected</span>
           </div>
-          <p className="text-[11px] text-slate-500 mt-2">In at-risk or delayed buses</p>
+          <p className="text-[11px] text-[var(--text-faint)] mt-2">In at-risk or delayed buses</p>
         </div>
       </div>
 
       {/* Filter & Search Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/40 p-3 rounded-xl border border-slate-800">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[var(--bg-surface)]/40 p-3 rounded-xl border border-[var(--border-subtle)]">
         <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
           <button
             onClick={() => setSelectedFilter('ALL')}
             className={`px-3 py-1.5 text-xs font-medium rounded-lg transition whitespace-nowrap ${
               selectedFilter === 'ALL'
-                ? 'bg-slate-800 text-white shadow'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                ? 'bg-[var(--bg-surface)] text-[var(--text-main)] shadow'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface)]/50'
             }`}
           >
             All Trips ({data?.totalActiveTrips ?? 0})
@@ -281,7 +281,7 @@ export default function ShiftSlaMonitorPage() {
             className={`px-3 py-1.5 text-xs font-medium rounded-lg transition whitespace-nowrap flex items-center gap-1.5 ${
               selectedFilter === 'SLA_BREACH'
                 ? 'bg-red-500/20 text-red-300 border border-red-500/30'
-                : 'text-slate-400 hover:text-red-300 hover:bg-slate-800/50'
+                : 'text-[var(--text-muted)] hover:text-red-300 hover:bg-[var(--bg-surface)]/50'
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-red-400" />
@@ -292,7 +292,7 @@ export default function ShiftSlaMonitorPage() {
             className={`px-3 py-1.5 text-xs font-medium rounded-lg transition whitespace-nowrap flex items-center gap-1.5 ${
               selectedFilter === 'AT_RISK'
                 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                : 'text-slate-400 hover:text-amber-300 hover:bg-slate-800/50'
+                : 'text-[var(--text-muted)] hover:text-amber-300 hover:bg-[var(--bg-surface)]/50'
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-amber-400" />
@@ -303,7 +303,7 @@ export default function ShiftSlaMonitorPage() {
             className={`px-3 py-1.5 text-xs font-medium rounded-lg transition whitespace-nowrap flex items-center gap-1.5 ${
               selectedFilter === 'ON_TIME'
                 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                : 'text-slate-400 hover:text-emerald-300 hover:bg-slate-800/50'
+                : 'text-[var(--text-muted)] hover:text-emerald-300 hover:bg-[var(--bg-surface)]/50'
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-emerald-400" />
@@ -312,22 +312,22 @@ export default function ShiftSlaMonitorPage() {
         </div>
 
         <div className="relative min-w-[240px]">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
           <input
             type="text"
             placeholder="Search route, vehicle, driver..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+            className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg pl-9 pr-3 py-1.5 text-xs text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-indigo-500"
           />
         </div>
       </div>
 
       {/* Trips Table */}
-      <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden shadow-sm">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-slate-900/90 text-slate-400 font-semibold border-b border-slate-800">
+          <table className="w-full text-left text-xs text-[var(--text-muted)]">
+            <thead className="bg-[var(--bg-surface)]/90 text-[var(--text-muted)] font-semibold border-b border-[var(--border-subtle)]">
               <tr>
                 <th className="py-3 px-4">Route & Trip</th>
                 <th className="py-3 px-4">Shift / Direction</th>
@@ -344,14 +344,14 @@ export default function ShiftSlaMonitorPage() {
             <tbody className="divide-y divide-slate-800/60">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-500">
+                  <td colSpan={10} className="py-12 text-center text-[var(--text-faint)]">
                     <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-400" />
                     Evaluating live shift arrivals & telematics...
                   </td>
                 </tr>
               ) : filteredTrips.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-500">
+                  <td colSpan={10} className="py-12 text-center text-[var(--text-faint)]">
                     No active shift trips matching the selected criteria.
                   </td>
                 </tr>
@@ -363,52 +363,52 @@ export default function ShiftSlaMonitorPage() {
                   return (
                     <tr
                       key={t.tripId}
-                      className={`hover:bg-slate-800/40 transition ${
+                      className={`hover:bg-[var(--bg-surface)]/40 transition ${
                         isBreach ? 'bg-red-950/10' : isRisk ? 'bg-amber-950/10' : ''
                       }`}
                     >
                       <td className="py-3.5 px-4">
-                        <div className="font-semibold text-slate-100 flex items-center gap-1.5">
+                        <div className="font-semibold text-[var(--text-main)] flex items-center gap-1.5">
                           {t.routeName}
                           {t.tripNumber && (
-                            <span className="text-[10px] text-slate-400 font-mono px-1.5 py-0.5 rounded bg-slate-800">
+                            <span className="text-[10px] text-[var(--text-muted)] font-mono px-1.5 py-0.5 rounded bg-[var(--bg-surface)]">
                               #{t.tripNumber}
                             </span>
                           )}
                         </div>
-                        <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                        <div className="text-[11px] text-[var(--text-muted)] flex items-center gap-1 mt-0.5">
                           <span>{t.origin}</span>
-                          <ArrowRight className="w-2.5 h-2.5 text-slate-600" />
-                          <span className="text-slate-300 font-medium">{t.destination}</span>
+                          <ArrowRight className="w-2.5 h-2.5 text-[var(--text-faint)]" />
+                          <span className="text-[var(--text-muted)] font-medium">{t.destination}</span>
                         </div>
                       </td>
 
                       <td className="py-3.5 px-4">
                         <div className="flex flex-col gap-1">
-                          <span className="inline-flex text-[10px] font-semibold text-slate-300 px-2 py-0.5 rounded bg-slate-800 w-fit">
+                          <span className="inline-flex text-[10px] font-semibold text-[var(--text-muted)] px-2 py-0.5 rounded bg-[var(--bg-surface)] w-fit">
                             {t.shiftType || 'GENERAL'}
                           </span>
-                          <span className="text-[10px] text-slate-400">
+                          <span className="text-[10px] text-[var(--text-muted)]">
                             {t.direction === 'OUTBOUND' ? 'Drop-Off' : 'Pick-Up (Inbound)'}
                           </span>
                         </div>
                       </td>
 
                       <td className="py-3.5 px-4">
-                        <div className="font-medium text-slate-200">{t.vehicleCode || 'Unassigned'}</div>
-                        <div className="text-[11px] text-slate-400">{t.driverName || 'No Driver'}</div>
+                        <div className="font-medium text-[var(--text-main)]">{t.vehicleCode || 'Unassigned'}</div>
+                        <div className="text-[11px] text-[var(--text-muted)]">{t.driverName || 'No Driver'}</div>
                       </td>
 
-                      <td className="py-3.5 px-4 font-mono text-slate-300">
+                      <td className="py-3.5 px-4 font-mono text-[var(--text-muted)]">
                         {formatTime(t.departureTime)}
                       </td>
 
-                      <td className="py-3.5 px-4 font-mono text-slate-400">
+                      <td className="py-3.5 px-4 font-mono text-[var(--text-muted)]">
                         {formatTime(t.plannedArrivalTime)}
                       </td>
 
                       <td className="py-3.5 px-4">
-                        <div className="font-mono font-semibold text-slate-200">
+                        <div className="font-mono font-semibold text-[var(--text-main)]">
                           {formatTime(t.predictedArrivalTime)}
                         </div>
                         {t.delayMinutes > 0 && (
@@ -420,9 +420,9 @@ export default function ShiftSlaMonitorPage() {
 
                       <td className="py-3.5 px-4 font-mono">
                         {t.latestArrivalTime ? (
-                          <span className="text-slate-200 font-medium">{formatTime(t.latestArrivalTime)}</span>
+                          <span className="text-[var(--text-main)] font-medium">{formatTime(t.latestArrivalTime)}</span>
                         ) : (
-                          <span className="text-slate-500 italic">No hard SLA</span>
+                          <span className="text-[var(--text-faint)] italic">No hard SLA</span>
                         )}
                       </td>
 
@@ -443,11 +443,11 @@ export default function ShiftSlaMonitorPage() {
                       </td>
 
                       <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-1 text-slate-300 font-medium">
-                          <Users className="w-3.5 h-3.5 text-slate-400" />
+                        <div className="flex items-center gap-1 text-[var(--text-muted)] font-medium">
+                          <Users className="w-3.5 h-3.5 text-[var(--text-muted)]" />
                           <span>{t.totalPassengers}</span>
                         </div>
-                        <div className="text-[10px] text-slate-500">
+                        <div className="text-[10px] text-[var(--text-faint)]">
                           {t.boardedPassengers} boarded
                         </div>
                       </td>
@@ -467,7 +467,7 @@ export default function ShiftSlaMonitorPage() {
                             Send Notice
                           </button>
                         ) : (
-                          <span className="text-slate-500 text-xs">—</span>
+                          <span className="text-[var(--text-faint)] text-xs">—</span>
                         )}
                       </td>
                     </tr>
@@ -482,56 +482,56 @@ export default function ShiftSlaMonitorPage() {
       {/* Early Warning Broadcast Modal */}
       {broadcastTrip && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
             <div className="flex items-start justify-between">
               <div>
                 <span className="text-xs font-semibold uppercase tracking-wider text-orange-400">
                   Early Warning Dispatch
                 </span>
-                <h3 className="text-lg font-bold text-white mt-1">Broadcast Shift Delay Notice</h3>
+                <h3 className="text-lg font-bold text-[var(--text-main)] mt-1">Broadcast Shift Delay Notice</h3>
               </div>
               <button
                 onClick={() => setBroadcastTrip(null)}
-                className="text-slate-500 hover:text-slate-300 text-lg leading-none"
+                className="text-[var(--text-faint)] hover:text-[var(--text-muted)] text-lg leading-none"
               >
                 ✕
               </button>
             </div>
 
-            <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs space-y-1.5">
-              <div className="flex justify-between text-slate-400">
+            <div className="bg-[var(--bg-canvas)] p-3 rounded-xl border border-[var(--border-subtle)] text-xs space-y-1.5">
+              <div className="flex justify-between text-[var(--text-muted)]">
                 <span>Route:</span>
-                <span className="font-semibold text-slate-200">{broadcastTrip.routeName}</span>
+                <span className="font-semibold text-[var(--text-main)]">{broadcastTrip.routeName}</span>
               </div>
-              <div className="flex justify-between text-slate-400">
+              <div className="flex justify-between text-[var(--text-muted)]">
                 <span>Destination:</span>
-                <span className="text-slate-200">{broadcastTrip.destination}</span>
+                <span className="text-[var(--text-main)]">{broadcastTrip.destination}</span>
               </div>
-              <div className="flex justify-between text-slate-400">
+              <div className="flex justify-between text-[var(--text-muted)]">
                 <span>Estimated Delay:</span>
                 <span className="font-bold text-red-400">+{broadcastTrip.delayMinutes} minutes</span>
               </div>
-              <div className="flex justify-between text-slate-400">
+              <div className="flex justify-between text-[var(--text-muted)]">
                 <span>New Arrival ETA:</span>
                 <span className="font-bold text-indigo-400">{formatTime(broadcastTrip.predictedArrivalTime)}</span>
               </div>
-              <div className="flex justify-between text-slate-400">
+              <div className="flex justify-between text-[var(--text-muted)]">
                 <span>Target Recipients:</span>
-                <span className="text-slate-200 font-medium">
+                <span className="text-[var(--text-main)] font-medium">
                   {broadcastTrip.totalPassengers} Passengers + Shift Supervisors
                 </span>
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1.5">
+              <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">
                 Notification Message (WhatsApp & In-App):
               </label>
               <textarea
                 value={broadcastMessage}
                 onChange={(e) => setBroadcastMessage(e.target.value)}
                 rows={4}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-xl p-3 text-xs text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-indigo-500"
               />
             </div>
 
@@ -546,7 +546,7 @@ export default function ShiftSlaMonitorPage() {
                 type="button"
                 onClick={() => setBroadcastTrip(null)}
                 disabled={broadcasting}
-                className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-slate-200 transition"
+                className="px-4 py-2 text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text-main)] transition"
               >
                 Cancel
               </button>
@@ -554,7 +554,7 @@ export default function ShiftSlaMonitorPage() {
                 type="button"
                 onClick={handleBroadcast}
                 disabled={broadcasting || Boolean(broadcastSuccess)}
-                className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow transition disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 text-xs font-semibold text-[var(--text-main)] bg-indigo-600 hover:bg-indigo-500 rounded-xl shadow transition disabled:opacity-50"
               >
                 <Send className={`w-3.5 h-3.5 ${broadcasting ? 'animate-spin' : ''}`} />
                 {broadcasting ? 'Broadcasting...' : 'Send Broadcast'}

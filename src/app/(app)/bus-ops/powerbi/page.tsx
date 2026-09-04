@@ -131,57 +131,57 @@ export default function PowerBiPage() {
         accent="cyan"
         actions={
           <a href="https://powerbi.microsoft.com/" target="_blank" rel="noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-slate-800/60 hover:bg-slate-700 px-4 py-2.5 text-sm text-slate-200">
+            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 hover:bg-[var(--bg-surface-hover)] px-4 py-2.5 text-sm text-[var(--text-main)]">
             <ExternalLink className="w-3.5 h-3.5" /> Open Power BI
           </a>
         }
       />
 
       {/* Setup steps */}
-      <div className="rounded-2xl bg-slate-800/50 border border-white/10 p-5">
-        <h3 className="text-base font-bold text-white mb-3 flex items-center gap-2">
+      <div className="rounded-2xl bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] p-5">
+        <h3 className="text-base font-bold text-[var(--text-main)] mb-3 flex items-center gap-2">
           <Database className="w-4 h-4 text-cyan-400" /> Setup (3 steps)
         </h3>
-        <ol className="text-sm text-slate-200 space-y-2 list-decimal list-inside">
+        <ol className="text-sm text-[var(--text-main)] space-y-2 list-decimal list-inside">
           <li>In Power BI Desktop, choose <strong>Get Data → Web</strong>.</li>
           <li>
             Paste an endpoint URL (see table below). The connector <strong>must</strong> send
-            the <code className="text-xs bg-slate-900 px-1 py-0.5 rounded">Cookie: xl-session=…</code> header —
+            the <code className="text-xs bg-[var(--bg-surface)] px-1 py-0.5 rounded">Cookie: xl-session=…</code> header —
             requests without a valid session are rejected with 401 by the tenant middleware.
             Anonymous access is not supported; use a service-account session for automation.
           </li>
-          <li>Power BI flattens the <code className="text-xs bg-slate-900 px-1 py-0.5 rounded">value</code> array into a table automatically. Filter by <code className="text-xs bg-slate-900 px-1 py-0.5 rounded">?from=…&to=…</code> to scope the time window.</li>
+          <li>Power BI flattens the <code className="text-xs bg-[var(--bg-surface)] px-1 py-0.5 rounded">value</code> array into a table automatically. Filter by <code className="text-xs bg-[var(--bg-surface)] px-1 py-0.5 rounded">?from=…&to=…</code> to scope the time window.</li>
         </ol>
       </div>
 
       {/* Endpoints table */}
-      <div className="rounded-2xl bg-slate-800/50 border border-white/10 p-5">
-        <h3 className="text-base font-bold text-white mb-3">Endpoints</h3>
+      <div className="rounded-2xl bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] p-5">
+        <h3 className="text-base font-bold text-[var(--text-main)] mb-3">Endpoints</h3>
         <div className="space-y-4">
           {ENDPOINTS.map((ep) => (
-            <div key={ep.id} className="rounded-xl border border-white/10 bg-slate-900/40 p-4">
+            <div key={ep.id} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-4">
               <div className="flex items-start justify-between gap-3 mb-2">
                 <div className="min-w-0">
-                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                  <h4 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
                     <FileJson className="w-3.5 h-3.5 text-cyan-400" /> {ep.label}
                   </h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5">{ep.description}</p>
+                  <p className="text-[11px] text-[var(--text-muted)] mt-0.5">{ep.description}</p>
                 </div>
                 <button onClick={() => copy(`${BASE}/api/powerbi/${ep.id}`, `url-${ep.id}`)}
-                  className="flex-shrink-0 inline-flex items-center gap-1.5 text-[10px] bg-slate-800 hover:bg-slate-700 text-white px-2 py-1 rounded border border-white/10">
+                  className="flex-shrink-0 inline-flex items-center gap-1.5 text-[10px] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] px-2 py-1 rounded border border-[var(--border-subtle)]">
                   {copied === `url-${ep.id}` ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                   Copy URL
                 </button>
               </div>
-              <code className="block text-[11px] font-mono text-cyan-300 bg-slate-950 border border-white/5 rounded px-3 py-1.5 mb-3 break-all">
+              <code className="block text-[11px] font-mono text-cyan-300 bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded px-3 py-1.5 mb-3 break-all">
                 GET {BASE}/api/powerbi/{ep.id}?from=2026-08-01&to=2026-08-31
               </code>
               <details className="text-[11px]">
-                <summary className="cursor-pointer text-slate-300 font-semibold mb-1">Schema ({ep.fields.length} fields)</summary>
+                <summary className="cursor-pointer text-[var(--text-muted)] font-semibold mb-1">Schema ({ep.fields.length} fields)</summary>
                 <div className="overflow-x-auto mt-2">
                   <table className="w-full text-[10px]">
                     <thead>
-                      <tr className="text-slate-400 border-b border-white/10">
+                      <tr className="text-[var(--text-muted)] border-b border-[var(--border-subtle)]">
                         <th className="text-left py-1 px-2">Field</th>
                         <th className="text-left py-1 px-2">Type</th>
                         <th className="text-left py-1 px-2">Note</th>
@@ -189,18 +189,18 @@ export default function PowerBiPage() {
                     </thead>
                     <tbody>
                       {ep.fields.map((f) => (
-                        <tr key={f.name} className="border-b border-white/5">
+                        <tr key={f.name} className="border-b border-[var(--border-subtle)]">
                           <td className="py-1 px-2 text-cyan-300 font-mono">{f.name}</td>
-                          <td className="py-1 px-2 text-slate-300 font-mono">{f.type}</td>
-                          <td className="py-1 px-2 text-slate-500 italic">{f.note ?? ''}</td>
+                          <td className="py-1 px-2 text-[var(--text-muted)] font-mono">{f.type}</td>
+                          <td className="py-1 px-2 text-[var(--text-faint)] italic">{f.note ?? ''}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
                 <details className="mt-2">
-                  <summary className="cursor-pointer text-slate-300 font-semibold">Example row</summary>
-                  <pre className="text-[10px] font-mono text-slate-300 bg-slate-950 border border-white/5 rounded p-2 mt-1 overflow-x-auto">
+                  <summary className="cursor-pointer text-[var(--text-muted)] font-semibold">Example row</summary>
+                  <pre className="text-[10px] font-mono text-[var(--text-muted)] bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded p-2 mt-1 overflow-x-auto">
 {JSON.stringify(ep.exampleRow, null, 2)}
                   </pre>
                 </details>
@@ -211,17 +211,17 @@ export default function PowerBiPage() {
       </div>
 
       {/* Authentication */}
-      <div className="rounded-2xl bg-slate-800/50 border border-white/10 p-5">
-        <h3 className="text-base font-bold text-white mb-3 flex items-center gap-2">
+      <div className="rounded-2xl bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] p-5">
+        <h3 className="text-base font-bold text-[var(--text-main)] mb-3 flex items-center gap-2">
           <Code2 className="w-4 h-4 text-cyan-400" /> Authentication
         </h3>
-        <p className="text-sm text-slate-200 mb-3">
-          All endpoints read the <code className="text-xs bg-slate-900 px-1 py-0.5 rounded">xl-session</code> cookie set by the Fleet360 login. Power BI's Web connector supports custom headers — set:
+        <p className="text-sm text-[var(--text-main)] mb-3">
+          All endpoints read the <code className="text-xs bg-[var(--bg-surface)] px-1 py-0.5 rounded">xl-session</code> cookie set by the Fleet360 login. Power BI's Web connector supports custom headers — set:
         </p>
-        <pre className="text-xs font-mono text-cyan-300 bg-slate-950 border border-white/5 rounded px-3 py-2 mb-3">
+        <pre className="text-xs font-mono text-cyan-300 bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded px-3 py-2 mb-3">
 {`Cookie: xl-session=<your-session-cookie-value>`}
         </pre>
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-[var(--text-muted)]">
           For production deployments, ask the Fleet360 team to provision a <em>Power BI service account</em> with an
           API key, so the connector doesn't depend on a browser session. (See TENANT_ISOLATION_STANDARD.md for the
           wider auth model.)

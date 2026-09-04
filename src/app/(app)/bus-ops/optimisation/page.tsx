@@ -59,7 +59,7 @@ export default function OptimisationPage() {
     router.push(`/bus-ops/route-planner?edit=${row.routeId}&optimize=1`);
   };
 
-  if (loading && !data) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading optimisation preview...</div></div>;
+  if (loading && !data) return <div className="flex items-center justify-center h-full"><div className="text-[var(--text-muted)] animate-pulse">Loading optimisation preview...</div></div>;
 
   return (
     <div className="space-y-8">
@@ -80,62 +80,62 @@ export default function OptimisationPage() {
 
       {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">{error}</div>}
 
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
         {!data || data.rows.length === 0 ? (
-          <div className="text-center text-slate-400 py-12">
+          <div className="text-center text-[var(--text-muted)] py-12">
             No active staff routes found. Build one in <Link href="/bus-ops/route-planner" className="text-violet-400 underline">Route Planner</Link> first.
           </div>
         ) : (
           <table className="w-full">
             <thead>
-              <tr className="border-b border-white/5">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Route</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Stops</th>
+              <tr className="border-b border-[var(--border-subtle)]">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Route</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Stops</th>
                 {/* "driving" is load-bearing, not decoration: these used to be
                     straight-line kilometres while the Route Planner one click
                     away showed road kilometres for the same route — a ~54%
                     disagreement with nothing on screen to explain it. */}
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Current km<span className="block font-normal text-slate-500">driving</span></th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">After km<span className="block font-normal text-slate-500">driving</span></th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Saving</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Action</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)]">Current km<span className="block font-normal text-[var(--text-faint)]">driving</span></th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)]">After km<span className="block font-normal text-[var(--text-faint)]">driving</span></th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)]">Saving</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)]">Action</th>
               </tr>
             </thead>
             <tbody>
               {data.rows.map(row => {
                 const tier = row.distanceSavedPct >= 10 ? 'high' : row.distanceSavedPct >= 5 ? 'mid' : 'low';
                 return (
-                  <tr key={row.routeId} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                  <tr key={row.routeId} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
                     <td className="px-4 py-3 text-sm">
-                      <div className="font-medium text-white">{row.routeName}</div>
+                      <div className="font-medium text-[var(--text-main)]">{row.routeName}</div>
                       {/* Route code, not the id. The id prefix meant nothing to
                           an operator — it can't be searched for, quoted, or
                           matched against the Routes grid. Falls back to the
                           truncated id only when a route genuinely has no code,
                           so the row stays identifiable either way. */}
-                      <div className="text-xs font-mono text-slate-300">
+                      <div className="text-xs font-mono text-[var(--text-muted)]">
                         {row.routeCode ?? row.routeId.slice(0, 8)}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm text-white">
+                    <td className="px-4 py-3 text-sm text-[var(--text-main)]">
                       {row.geoStopCount}/{row.stopCount}
-                      <div className="text-xs text-slate-300">geocoded</div>
+                      <div className="text-xs text-[var(--text-muted)]">geocoded</div>
                     </td>
                     {row.skipped ? (
-                      <td colSpan={4} className="px-4 py-3 text-xs italic text-slate-400">{row.skipReason}</td>
+                      <td colSpan={4} className="px-4 py-3 text-xs italic text-[var(--text-muted)]">{row.skipReason}</td>
                     ) : (
                       <>
-                        <td className="px-4 py-3 text-sm text-right text-white">{row.originalDistanceKm.toFixed(1)}</td>
-                        <td className="px-4 py-3 text-sm text-right text-white">{row.optimisedDistanceKm.toFixed(1)}</td>
+                        <td className="px-4 py-3 text-sm text-right text-[var(--text-main)]">{row.originalDistanceKm.toFixed(1)}</td>
+                        <td className="px-4 py-3 text-sm text-right text-[var(--text-main)]">{row.optimisedDistanceKm.toFixed(1)}</td>
                         <td className="px-4 py-3 text-sm text-right">
                           <div className={`font-semibold ${
                             tier === 'high' ? 'text-emerald-400' :
                             tier === 'mid'  ? 'text-amber-400' :
-                            'text-slate-400'
+                            'text-[var(--text-muted)]'
                           }`}>
                             {row.distanceSavedKm.toFixed(1)} km
                           </div>
-                          <div className="text-xs text-slate-300">{row.distanceSavedPct.toFixed(1)}%</div>
+                          <div className="text-xs text-[var(--text-muted)]">{row.distanceSavedPct.toFixed(1)}%</div>
                         </td>
                         <td className="px-4 py-3 text-right">
                           <button
@@ -144,7 +144,7 @@ export default function OptimisationPage() {
                             className={`text-xs px-2 py-1 rounded border disabled:opacity-40 ${
                               tier === 'high' ? 'bg-violet-500/20 text-violet-400 border-violet-500/30 hover:bg-violet-500/30' :
                               tier === 'mid'  ? 'bg-amber-500/20 text-amber-400 border-amber-500/30 hover:bg-amber-500/30' :
-                              'bg-slate-700 text-slate-200 border-white/10 hover:bg-slate-600'
+                              'bg-[var(--bg-surface-hover)] text-[var(--text-main)] border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]'
                             }`}
                           >
                             Review &amp; Optimise →

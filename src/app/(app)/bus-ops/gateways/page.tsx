@@ -31,7 +31,7 @@ interface RotateResult {
 const HEALTH_PILL: Record<string, string> = {
   ONLINE:     'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
   OFFLINE:    'bg-rose-500/20 text-rose-300 border-rose-500/40',
-  DISABLED:   'bg-slate-500/20 text-slate-400 border-slate-500/40',
+  DISABLED:   'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/40',
   NEVER_SEEN: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
 };
 
@@ -106,16 +106,16 @@ export default function GatewaysAdminPage() {
 
   const gatewayColumns: DataGridColumn<Gateway>[] = [
     { key: 'gatewayId', header: 'Gateway ID', accessor: g => g.gatewayId,
-      render: g => <span className="font-mono text-white">{g.gatewayId}</span> },
+      render: g => <span className="font-mono text-[var(--text-main)]">{g.gatewayId}</span> },
     { key: 'vehicleId', header: 'Vehicle', accessor: g => g.vehicleId,
-      render: g => <span className="font-mono text-white">{g.vehicleId.slice(0, 8)}</span> },
+      render: g => <span className="font-mono text-[var(--text-main)]">{g.vehicleId.slice(0, 8)}</span> },
     { key: 'model', header: 'Model', accessor: g => g.model },
     { key: 'rssi', header: 'RSSI / Grace', accessor: g => g.rssiThresholdDbm, filter: false,
-      render: g => <span className="text-white">{g.rssiThresholdDbm} dBm · {g.presenceGraceSeconds}s</span> },
+      render: g => <span className="text-[var(--text-main)]">{g.rssiThresholdDbm} dBm · {g.presenceGraceSeconds}s</span> },
     { key: 'lastSeen', header: 'Last heartbeat', accessor: g => g.lastSeenSecondsAgo,
-      render: g => <span className="text-white">{fmtSecondsAgo(g.lastSeenSecondsAgo)}</span> },
+      render: g => <span className="text-[var(--text-main)]">{fmtSecondsAgo(g.lastSeenSecondsAgo)}</span> },
     { key: 'lastEvent', header: 'Last event', accessor: g => g.lastEventSecondsAgo,
-      render: g => <span className="text-white">{fmtSecondsAgo(g.lastEventSecondsAgo)}</span> },
+      render: g => <span className="text-[var(--text-main)]">{fmtSecondsAgo(g.lastEventSecondsAgo)}</span> },
     { key: 'health', header: 'Health', accessor: g => g.health, filter: 'select',
       render: g => (
         <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${HEALTH_PILL[g.health]}`}>
@@ -137,7 +137,7 @@ export default function GatewaysAdminPage() {
       ) },
   ];
 
-  if (loading && gateways.length === 0) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading gateways...</div></div>;
+  if (loading && gateways.length === 0) return <div className="flex items-center justify-center h-full"><div className="text-[var(--text-muted)] animate-pulse">Loading gateways...</div></div>;
 
   return (
     <div className="space-y-8">
@@ -177,7 +177,7 @@ export default function GatewaysAdminPage() {
             <span className="inline-flex items-center gap-2 text-xs text-violet-300">
               {selectedIds.size} selected
               <button type="button" onClick={() => setSelectedIds(new Set())}
-                className="text-slate-400 hover:text-white underline underline-offset-2">
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] underline underline-offset-2">
                 Clear
               </button>
             </span>
@@ -188,13 +188,13 @@ export default function GatewaysAdminPage() {
       {/* One-time reveal modal for rotate result */}
       {rotateResult && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg bg-slate-800/95 border border-violet-500/40 rounded-2xl p-6">
+          <div className="w-full max-w-lg bg-[var(--bg-surface)]/95 border border-violet-500/40 rounded-2xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              <h2 className="text-lg font-bold text-[var(--text-main)] flex items-center gap-2">
                 <Key className="w-5 h-5 text-violet-300" />
                 New secret for {rotateResult.gatewayId}
               </h2>
-              <button onClick={() => setRotateResult(null)} className="text-slate-400 hover:text-white">
+              <button onClick={() => setRotateResult(null)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -204,17 +204,17 @@ export default function GatewaysAdminPage() {
               stopped working the moment this rotation ran.
             </div>
             <div className="mb-4">
-              <label className="block text-xs text-slate-400 mb-1">HMAC secret</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">HMAC secret</label>
               <div className="flex gap-2">
                 <input readOnly value={rotateResult.secret}
-                  className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-white/10 text-white font-mono text-xs" />
+                  className="flex-1 px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] font-mono text-xs" />
                 <button onClick={copySecret}
                   className="inline-flex items-center gap-1 rounded-lg bg-violet-500/20 border border-violet-500/40 px-3 py-2 text-xs text-violet-200 hover:bg-violet-500/30 whitespace-nowrap">
                   {copied ? <><Check className="w-3.5 h-3.5" /> Copied</> : <><Copy className="w-3.5 h-3.5" /> Copy</>}
                 </button>
               </div>
             </div>
-            <div className="text-[11px] text-slate-500">
+            <div className="text-[11px] text-[var(--text-faint)]">
               Rotated at {new Date(rotateResult.rotatedAt).toLocaleString('en-AE')}. Paste into
               your gateway's <code>BLE_HMAC_SECRET</code> config and restart it.
             </div>
@@ -228,13 +228,13 @@ export default function GatewaysAdminPage() {
         </div>
       )}
 
-      <div className="bg-slate-800/30 border border-white/5 rounded-2xl p-5 text-xs text-slate-400 space-y-2">
-        <h3 className="text-white font-semibold">Integration contract</h3>
-        <p>POST <code className="text-slate-300">/api/bus-ops/gateway/events</code> with:</p>
+      <div className="bg-[var(--bg-surface)]/30 border border-[var(--border-subtle)] rounded-2xl p-5 text-xs text-[var(--text-muted)] space-y-2">
+        <h3 className="text-[var(--text-main)] font-semibold">Integration contract</h3>
+        <p>POST <code className="text-[var(--text-muted)]">/api/bus-ops/gateway/events</code> with:</p>
         <ul className="list-disc pl-5 space-y-1">
-          <li>Header <code className="text-slate-300">x-gateway-signature</code> = HMAC-SHA256 hex of raw body using <code>BLE_GATEWAY_SHARED_SECRET</code></li>
-          <li>Body shape A (preferred): <code className="text-slate-300">{'{ gatewayId, events:[{kind:BOARD|ALIGHT, tagId, occurredAt, rssiDbm?}] }'}</code></li>
-          <li>Body shape B (fallback): <code className="text-slate-300">{'{ gatewayId, scanWindow:{startedAt, endedAt, observations:[...]} }'}</code> — server runs hysteresis</li>
+          <li>Header <code className="text-[var(--text-muted)]">x-gateway-signature</code> = HMAC-SHA256 hex of raw body using <code>BLE_GATEWAY_SHARED_SECRET</code></li>
+          <li>Body shape A (preferred): <code className="text-[var(--text-muted)]">{'{ gatewayId, events:[{kind:BOARD|ALIGHT, tagId, occurredAt, rssiDbm?}] }'}</code></li>
+          <li>Body shape B (fallback): <code className="text-[var(--text-muted)]">{'{ gatewayId, scanWindow:{startedAt, endedAt, observations:[...]} }'}</code> — server runs hysteresis</li>
           <li>Idempotent on (scheduleId, passengerId, occurredAt ±5s, direction)</li>
           <li>Active trip auto-resolved as the SCHEDULED|STARTED|EN_ROUTE trip on the gateway's vehicle within ±2h</li>
         </ul>

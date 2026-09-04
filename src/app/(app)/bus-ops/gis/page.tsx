@@ -123,8 +123,8 @@ export default function GisPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         {/* Layer panel */}
-        <div className="rounded-2xl bg-slate-800/50 border border-white/10 p-4 lg:col-span-1">
-          <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+        <div className="rounded-2xl bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] p-4 lg:col-span-1">
+          <h3 className="text-sm font-bold text-[var(--text-main)] mb-3 flex items-center gap-2">
             <Layers className="w-4 h-4 text-cyan-400" /> Layers
           </h3>
           <div className="space-y-2">
@@ -133,23 +133,23 @@ export default function GisPage() {
               return (
                 <button key={l.id} onClick={() => toggle(l.id)}
                   className={`w-full text-left p-2.5 rounded-lg border transition-all ${
-                    isOn ? 'bg-slate-900/60 border-cyan-500/40' : 'bg-slate-900/30 border-white/5 hover:border-white/15'
+                    isOn ? 'bg-[var(--bg-surface)]/60 border-cyan-500/40' : 'bg-[var(--bg-surface)]/30 border-[var(--border-subtle)] hover:border-[var(--border-subtle)]'
                   }`}>
                   <div className="flex items-center justify-between mb-1">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: l.color }} />
-                      <span className={`text-xs font-semibold truncate ${isOn ? 'text-white' : 'text-slate-400'}`}>{l.label}</span>
+                      <span className={`text-xs font-semibold truncate ${isOn ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)]'}`}>{l.label}</span>
                     </div>
-                    {isOn ? <Eye className="w-3.5 h-3.5 text-cyan-300 flex-shrink-0" /> : <EyeOff className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />}
+                    {isOn ? <Eye className="w-3.5 h-3.5 text-cyan-300 flex-shrink-0" /> : <EyeOff className="w-3.5 h-3.5 text-[var(--text-faint)] flex-shrink-0" />}
                   </div>
-                  <p className="text-[10px] text-slate-500">{l.description}</p>
+                  <p className="text-[10px] text-[var(--text-faint)]">{l.description}</p>
                 </button>
               );
             })}
           </div>
           {legendOpen && (
-            <div className="mt-4 pt-3 border-t border-white/10">
-              <p className="text-[10px] text-slate-400 font-semibold mb-2">Density legend</p>
+            <div className="mt-4 pt-3 border-t border-[var(--border-subtle)]">
+              <p className="text-[10px] text-[var(--text-muted)] font-semibold mb-2">Density legend</p>
               <div className="space-y-1">
                 {[
                   { l: 'Low (0-25)',  c: '#6366f1' },
@@ -157,7 +157,7 @@ export default function GisPage() {
                   { l: 'High (50-75)',   c: '#ec4899' },
                   { l: 'Very high (75-100)', c: '#f43f5e' },
                 ].map((x) => (
-                  <div key={x.l} className="flex items-center gap-2 text-[10px] text-slate-300">
+                  <div key={x.l} className="flex items-center gap-2 text-[10px] text-[var(--text-muted)]">
                     <span className="w-3 h-3 rounded" style={{ backgroundColor: x.c }} />
                     {x.l}
                   </div>
@@ -168,9 +168,9 @@ export default function GisPage() {
         </div>
 
         {/* Map + details */}
-        <div className="rounded-2xl bg-slate-800/50 border border-white/10 p-4 lg:col-span-3 relative">
-          <div className="rounded-xl overflow-hidden border border-white/10">
-            <svg viewBox={`0 0 ${W} ${H}`} className="w-full bg-slate-950" style={{ maxHeight: 600 }}>
+        <div className="rounded-2xl bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] p-4 lg:col-span-3 relative">
+          <div className="rounded-xl overflow-hidden border border-[var(--border-subtle)]">
+            <svg viewBox={`0 0 ${W} ${H}`} className="w-full bg-[var(--bg-canvas)]" style={{ maxHeight: 600 }}>
               {/* Subtle grid */}
               <defs>
                 <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
@@ -295,22 +295,22 @@ export default function GisPage() {
                   <h4 className="text-sm font-bold text-amber-200 flex items-center gap-2">
                     <MapPin className="w-4 h-4" /> {selectedRoute.name}
                   </h4>
-                  <p className="text-[11px] text-slate-400">{selectedRoute.origin} → {selectedRoute.destination} · {routeStops.length} stops on this route</p>
+                  <p className="text-[11px] text-[var(--text-muted)]">{selectedRoute.origin} → {selectedRoute.destination} · {routeStops.length} stops on this route</p>
                 </div>
-                <button onClick={() => setSelectedRoute(null)} className="text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
+                <button onClick={() => setSelectedRoute(null)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]"><X className="w-4 h-4" /></button>
               </div>
               {routeStops.length > 0 ? (
-                <ol className="text-[11px] text-slate-300 grid grid-cols-1 md:grid-cols-2 gap-1">
+                <ol className="text-[11px] text-[var(--text-muted)] grid grid-cols-1 md:grid-cols-2 gap-1">
                   {routeStops.map((s, i) => (
                     <li key={s.id} className="flex items-center gap-2">
                       <span className="text-amber-300 font-mono w-4 text-right">{i + 1}.</span>
-                      <span className="text-slate-200">{s.name}</span>
-                      <span className="text-slate-500 text-[10px] ml-auto">{s.lat.toFixed(3)}, {s.lng.toFixed(3)}</span>
+                      <span className="text-[var(--text-main)]">{s.name}</span>
+                      <span className="text-[var(--text-faint)] text-[10px] ml-auto">{s.lat.toFixed(3)}, {s.lng.toFixed(3)}</span>
                     </li>
                   ))}
                 </ol>
               ) : (
-                <p className="text-[11px] text-slate-500 italic">No demo stops on this route.</p>
+                <p className="text-[11px] text-[var(--text-faint)] italic">No demo stops on this route.</p>
               )}
             </div>
           )}
@@ -330,9 +330,9 @@ export default function GisPage() {
 
 function Mini({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="rounded-lg bg-slate-900/50 border border-white/10 px-3 py-2">
-      <p className="text-[10px] text-slate-400 uppercase tracking-wider">{label}</p>
-      <p className="text-lg font-bold text-white mt-0.5">{value}</p>
+    <div className="rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] px-3 py-2">
+      <p className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">{label}</p>
+      <p className="text-lg font-bold text-[var(--text-main)] mt-0.5">{value}</p>
     </div>
   );
 }

@@ -17,7 +17,7 @@ const TYPES     = ['ACCIDENT','BREAKDOWN','DELAY','MEDICAL','PASSENGER_COMPLAINT
 const SEVERITIES = ['LOW','MEDIUM','HIGH','CRITICAL'];
 
 const SEV_COLORS: Record<string,string> = {
-  LOW:      'bg-slate-500/20 text-slate-400 border-slate-500/30',
+  LOW:      'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30',
   MEDIUM:   'bg-amber-500/20 text-amber-400 border-amber-500/30',
   HIGH:     'bg-orange-500/20 text-orange-400 border-orange-500/30',
   CRITICAL: 'bg-red-500/20 text-red-400 border-red-500/30',
@@ -26,7 +26,7 @@ const STATUS_COLORS: Record<string,string> = {
   OPEN:          'bg-rose-500/20 text-rose-400 border-rose-500/30',
   INVESTIGATING: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
   RESOLVED:      'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-  CLOSED:        'bg-slate-500/20 text-slate-400 border-slate-500/30',
+  CLOSED:        'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30',
 };
 
 export default function IncidentsPage() {
@@ -104,7 +104,7 @@ export default function IncidentsPage() {
   const openCount = incidents.filter(i=>i.status==='OPEN').length;
   const critCount = incidents.filter(i=>i.severity==='CRITICAL').length;
 
-  if (loading) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading incidents...</div></div>;
+  if (loading) return <div className="flex items-center justify-center h-full"><div className="text-[var(--text-muted)] animate-pulse">Loading incidents...</div></div>;
 
   return (
     <div className="space-y-8">
@@ -124,46 +124,46 @@ export default function IncidentsPage() {
 
       <div className="flex gap-4 flex-wrap">
         <select value={statusFilter} onChange={e=>setStatus(e.target.value)}
-          className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+          className="px-4 py-2 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
           {['All','OPEN','INVESTIGATING','RESOLVED','CLOSED'].map(s=><option key={s} value={s}>{s}</option>)}
         </select>
         <select value={sevFilter} onChange={e=>setSev(e.target.value)}
-          className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+          className="px-4 py-2 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
           <option value="All">All Severities</option>
           {SEVERITIES.map(s=><option key={s} value={s}>{s}</option>)}
         </select>
       </div>
 
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
         {incidents.length === 0 ? (
-          <div className="text-center text-slate-400 py-12">No incidents found</div>
+          <div className="text-center text-[var(--text-muted)] py-12">No incidents found</div>
         ) : (
           <table className="w-full">
             <thead>
-              <tr className="border-b border-white/5">
+              <tr className="border-b border-[var(--border-subtle)]">
                 {['Incident No.','Date','Type','Severity','Location','Description','Injuries','Status','Actions'].map(h=>(
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-400">{h}</th>
+                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {incidents.map(inc=>(
-                <tr key={inc.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                  <td className="px-4 py-3 text-sm font-medium text-white">{inc.incidentNo}</td>
-                  <td className="px-4 py-3 text-sm text-slate-200">{new Date(inc.incidentDate).toLocaleDateString()}</td>
-                  <td className="px-4 py-3 text-sm text-white">{inc.incidentType}</td>
+                <tr key={inc.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
+                  <td className="px-4 py-3 text-sm font-medium text-[var(--text-main)]">{inc.incidentNo}</td>
+                  <td className="px-4 py-3 text-sm text-[var(--text-main)]">{new Date(inc.incidentDate).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-sm text-[var(--text-main)]">{inc.incidentType}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${SEV_COLORS[inc.severity ?? 'LOW']}`}>{inc.severity ?? 'LOW'}</span>
                   </td>
-                  <td className="px-4 py-3 text-sm text-white">{inc.location ?? '-'}</td>
-                  <td className="px-4 py-3 text-sm text-white max-w-xs truncate">{inc.description ?? '-'}</td>
-                  <td className="px-4 py-3 text-sm">{inc.injuriesReported ? <span className="text-rose-400">Yes</span> : <span className="text-slate-300">No</span>}</td>
+                  <td className="px-4 py-3 text-sm text-[var(--text-main)]">{inc.location ?? '-'}</td>
+                  <td className="px-4 py-3 text-sm text-[var(--text-main)] max-w-xs truncate">{inc.description ?? '-'}</td>
+                  <td className="px-4 py-3 text-sm">{inc.injuriesReported ? <span className="text-rose-400">Yes</span> : <span className="text-[var(--text-muted)]">No</span>}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_COLORS[inc.status ?? 'OPEN']}`}>{inc.status ?? 'OPEN'}</span>
                   </td>
                   <td className="px-4 py-3">
                     <select value={inc.status ?? 'OPEN'} onChange={e=>updateStatus(inc.id, e.target.value)}
-                      className="text-xs px-2 py-1 rounded bg-slate-700 border border-white/10 text-white focus:outline-none">
+                      className="text-xs px-2 py-1 rounded bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none">
                       <option value="OPEN">OPEN</option>
                       <option value="INVESTIGATING">INVESTIGATING</option>
                       <option value="RESOLVED">RESOLVED</option>
@@ -179,41 +179,41 @@ export default function IncidentsPage() {
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-800/95 border border-white/10 rounded-2xl p-8">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl p-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">Log Incident</h2>
-              <button onClick={()=>setShowModal(false)} className="text-slate-400 hover:text-white">✕</button>
+              <h2 className="text-2xl font-bold text-[var(--text-main)]">Log Incident</h2>
+              <button onClick={()=>setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">✕</button>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Incident Date & Time *</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Incident Date & Time *</label>
                   <input type="datetime-local" value={formData.incidentDate} onChange={e=>setFormData(p=>({...p,incidentDate:e.target.value}))} required
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none" />
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Incident Type *</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Incident Type *</label>
                   <select value={formData.incidentType} onChange={e=>setFormData(p=>({...p,incidentType:e.target.value}))} required
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
                     {TYPES.map(t=><option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Severity</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Severity</label>
                   <select value={formData.severity} onChange={e=>setFormData(p=>({...p,severity:e.target.value}))}
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
                     {SEVERITIES.map(s=><option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Location</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Location</label>
                   <input type="text" value={formData.location} onChange={e=>setFormData(p=>({...p,location:e.target.value}))} placeholder="e.g., Sheikh Zayed Road near Exit 43"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Vehicle</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Vehicle</label>
                   <select value={formData.vehicleId} onChange={e=>setFormData(p=>({...p,vehicleId:e.target.value}))}
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
                     <option value="">— Not linked —</option>
                     {vehicles.map(v => {
                       const label = [v.licensePlate, [v.make, v.model].filter(Boolean).join(' ')].filter(Boolean).join(' — ') || v.id.slice(0,8);
@@ -222,9 +222,9 @@ export default function IncidentsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Driver</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Driver</label>
                   <select value={formData.driverId} onChange={e=>setFormData(p=>({...p,driverId:e.target.value}))}
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
                     <option value="">— Not linked —</option>
                     {drivers.map(d => (
                       <option key={d.id} value={d.id}>
@@ -234,35 +234,35 @@ export default function IncidentsPage() {
                   </select>
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Description *</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Description *</label>
                   <textarea value={formData.description} onChange={e=>setFormData(p=>({...p,description:e.target.value}))} required rows={3} placeholder="Describe what happened..."
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none" />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Action Taken</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Action Taken</label>
                   <textarea value={formData.actionTaken} onChange={e=>setFormData(p=>({...p,actionTaken:e.target.value}))} rows={2} placeholder="Immediate actions taken..."
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none" />
                 </div>
                 <div className="flex gap-6 col-span-2">
-                  <label className="flex items-center gap-2 text-sm text-slate-300">
-                    <input type="checkbox" checked={formData.injuriesReported} onChange={e=>setFormData(p=>({...p,injuriesReported:e.target.checked}))} className="accent-rose-500 text-white" />
+                  <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+                    <input type="checkbox" checked={formData.injuriesReported} onChange={e=>setFormData(p=>({...p,injuriesReported:e.target.checked}))} className="accent-rose-500 text-[var(--text-main)]" />
                     Injuries Reported
                   </label>
-                  <label className="flex items-center gap-2 text-sm text-slate-300">
-                    <input type="checkbox" checked={formData.policeReport} onChange={e=>setFormData(p=>({...p,policeReport:e.target.checked}))} className="accent-amber-500 text-white" />
+                  <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+                    <input type="checkbox" checked={formData.policeReport} onChange={e=>setFormData(p=>({...p,policeReport:e.target.checked}))} className="accent-amber-500 text-[var(--text-main)]" />
                     Police Report Filed
                   </label>
                 </div>
                 {formData.policeReport && (
                   <div className="col-span-2">
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Police Report No.</label>
+                    <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Police Report No.</label>
                     <input type="text" value={formData.policeReportNo} onChange={e=>setFormData(p=>({...p,policeReportNo:e.target.value}))} placeholder="Report number"
-                      className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
+                      className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none" />
                   </div>
                 )}
               </div>
               <div className="flex gap-4 justify-end pt-4">
-                <button type="button" onClick={()=>setShowModal(false)} className="px-6 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5">Cancel</button>
+                <button type="button" onClick={()=>setShowModal(false)} className="px-6 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]">Cancel</button>
                 <button type="submit" disabled={saving} className="px-6 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 disabled:opacity-50">
                   {saving ? 'Logging...' : 'Log Incident'}
                 </button>

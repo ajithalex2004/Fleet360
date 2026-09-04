@@ -187,10 +187,10 @@ function BulkImportModal({ onClose, onDone }: { onClose: () => void; onDone: () 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="w-full max-w-3xl max-h-[85vh] bg-slate-800/95 border border-white/10 rounded-2xl flex flex-col">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
-          <h2 className="text-lg font-bold text-white">Bulk Import Passengers</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
+      <div className="w-full max-w-3xl max-h-[85vh] bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl flex flex-col">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border-subtle)]">
+          <h2 className="text-lg font-bold text-[var(--text-main)]">Bulk Import Passengers</h2>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)]"><X className="w-5 h-5" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
@@ -199,37 +199,37 @@ function BulkImportModal({ onClose, onDone }: { onClose: () => void; onDone: () 
           {!result && (
             <>
               <div>
-                <label className="block text-sm text-slate-300 mb-2">CSV file</label>
+                <label className="block text-sm text-[var(--text-muted)] mb-2">CSV file</label>
                 <input type="file" accept=".csv,text/csv"
                   onChange={e => onFile(e.target.files?.[0] ?? null)}
-                  className="block w-full text-sm text-slate-300 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border file:border-white/10 file:bg-slate-700 file:text-white file:text-xs file:hover:border-violet-500/40" />
+                  className="block w-full text-sm text-[var(--text-muted)] file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border file:border-[var(--border-subtle)] file:bg-[var(--bg-surface-hover)] file:text-[var(--text-main)] file:text-xs file:hover:border-violet-500/40" />
                 <button onClick={downloadTemplate}
                   className="mt-2 inline-flex items-center gap-1 text-[11px] text-violet-300 hover:text-violet-200">
                   <FileDown className="w-3 h-3" /> Download CSV template
                 </button>
               </div>
-              <div className="text-[11px] text-slate-400 bg-slate-900/60 rounded-lg p-3 border border-white/5">
-                <strong className="text-slate-200">Columns:</strong>{' '}
+              <div className="text-[11px] text-[var(--text-muted)] bg-[var(--bg-surface)]/60 rounded-lg p-3 border border-[var(--border-subtle)]">
+                <strong className="text-[var(--text-main)]">Columns:</strong>{' '}
                 <code>employee_id</code> (business ID), <code>route_name</code> or <code>route_code</code>,
                 {' '}<code>pickup_stop</code>, <code>dropoff_stop</code>, <code>pickup_time</code> (HH:MM),
                 {' '}<code>dropoff_time</code>, <code>effective_from</code> (YYYY-MM-DD),
                 {' '}<code>effective_to</code> (optional), <code>notes</code>. Header is required, order flexible.
               </div>
               {preview.length > 0 && (
-                <div className="bg-slate-900/60 border border-white/5 rounded-lg p-3">
-                  <p className="text-xs text-slate-400 mb-2">Preview — {preview.length} row{preview.length === 1 ? '' : 's'}</p>
+                <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg p-3">
+                  <p className="text-xs text-[var(--text-muted)] mb-2">Preview — {preview.length} row{preview.length === 1 ? '' : 's'}</p>
                   <div className="overflow-x-auto max-h-48">
                     <table className="text-xs">
-                      <thead className="text-slate-500 text-[10px]">
+                      <thead className="text-[var(--text-faint)] text-[10px]">
                         <tr>{Object.keys(preview[0]).map(k => <th key={k} className="px-2 py-1 text-left whitespace-nowrap">{k}</th>)}</tr>
                       </thead>
-                      <tbody className="text-slate-300 font-mono">
+                      <tbody className="text-[var(--text-muted)] font-mono">
                         {preview.slice(0, 10).map((r, i) => (
                           <tr key={i}>{Object.keys(preview[0]).map(k => <td key={k} className="px-2 py-1 whitespace-nowrap">{r[k]}</td>)}</tr>
                         ))}
                       </tbody>
                     </table>
-                    {preview.length > 10 && <p className="text-[10px] text-slate-500 pt-2">+{preview.length - 10} more…</p>}
+                    {preview.length > 10 && <p className="text-[10px] text-[var(--text-faint)] pt-2">+{preview.length - 10} more…</p>}
                   </div>
                 </div>
               )}
@@ -239,9 +239,9 @@ function BulkImportModal({ onClose, onDone }: { onClose: () => void; onDone: () 
           {result && (
             <div className="space-y-3">
               <div className="grid grid-cols-4 gap-2">
-                <div className="bg-slate-900/60 border border-white/10 rounded-xl p-3 text-center">
-                  <p className="text-2xl font-bold text-white">{result.total}</p>
-                  <p className="text-[10px] text-slate-500 uppercase mt-0.5">Total</p>
+                <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-3 text-center">
+                  <p className="text-2xl font-bold text-[var(--text-main)]">{result.total}</p>
+                  <p className="text-[10px] text-[var(--text-faint)] uppercase mt-0.5">Total</p>
                 </div>
                 <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 text-center">
                   <p className="text-2xl font-bold text-emerald-300">{result.created}</p>
@@ -261,8 +261,8 @@ function BulkImportModal({ onClose, onDone }: { onClose: () => void; onDone: () 
                   <p className="text-xs text-rose-300 font-medium mb-2">Errors ({result.errors.length})</p>
                   <ul className="space-y-1 text-[11px]">
                     {result.errors.map((e, i) => (
-                      <li key={i} className="text-slate-300">
-                        <span className="text-slate-500">row {e.row}:</span> {e.error}
+                      <li key={i} className="text-[var(--text-muted)]">
+                        <span className="text-[var(--text-faint)]">row {e.row}:</span> {e.error}
                       </li>
                     ))}
                   </ul>
@@ -272,8 +272,8 @@ function BulkImportModal({ onClose, onDone }: { onClose: () => void; onDone: () 
           )}
         </div>
 
-        <div className="flex justify-end gap-2 px-5 py-4 border-t border-white/5">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5 text-sm">
+        <div className="flex justify-end gap-2 px-5 py-4 border-t border-[var(--border-subtle)]">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm">
             {result ? 'Close' : 'Cancel'}
           </button>
           {!result && (
@@ -296,7 +296,7 @@ function BulkImportModal({ onClose, onDone }: { onClose: () => void; onDone: () 
 
 const STATUS_PILL: Record<string, string> = {
   ACTIVE:   'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
-  INACTIVE: 'bg-slate-500/20 text-slate-400 border-slate-500/40',
+  INACTIVE: 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/40',
 };
 
 function fmtDate(iso: string | null): string {
@@ -510,7 +510,7 @@ export default function PassengersPage() {
         actions={
           <>
             <button onClick={() => setShowImport(true)}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 border border-white/10 px-3 py-2 text-sm text-slate-200 hover:border-violet-500/40 hover:text-white">
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-main)] hover:border-violet-500/40 hover:text-[var(--text-main)]">
               <Upload className="w-4 h-4" /> Bulk Import
             </button>
             <button onClick={openNew}
@@ -526,17 +526,17 @@ export default function PassengersPage() {
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
         <div>
-          <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Route</label>
+          <label className="block text-[10px] uppercase tracking-wider text-[var(--text-faint)] mb-1">Route</label>
           <select value={routeFilter} onChange={e => setRouteFilter(e.target.value)}
-            className="min-w-64 px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+            className="min-w-64 px-4 py-2 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
             <option value="">All Routes</option>
             {routes.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-[10px] uppercase tracking-wider text-slate-500 mb-1">Status</label>
+          <label className="block text-[10px] uppercase tracking-wider text-[var(--text-faint)] mb-1">Status</label>
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as 'ALL' | 'ACTIVE' | 'INACTIVE')}
-            className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+            className="px-4 py-2 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
             <option value="ALL">All</option>
             <option value="ACTIVE">Active</option>
             <option value="INACTIVE">Inactive</option>
@@ -545,19 +545,19 @@ export default function PassengersPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
         {loading ? (
-          <div className="text-center text-slate-400 py-12 animate-pulse">Loading…</div>
+          <div className="text-center text-[var(--text-muted)] py-12 animate-pulse">Loading…</div>
         ) : rows.length === 0 ? (
-          <div className="text-center text-slate-400 py-12">
+          <div className="text-center text-[var(--text-muted)] py-12">
             No passengers on the {routeFilter ? 'selected route' : 'roster'} yet. Click <strong className="text-violet-300">Add Passenger</strong> to register one.
           </div>
         ) : (
           <table className="w-full">
             <thead>
-              <tr className="border-b border-white/5">
+              <tr className="border-b border-[var(--border-subtle)]">
                 {['Emp ID', 'Employee Name', 'Route', 'Pickup Point', 'Pickup Time', 'Drop-off Point', 'Drop-off Time', 'Effective From', 'Effective To', 'Status', 'Actions'].map(h => (
-                  <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-slate-400 whitespace-nowrap">{h}</th>
+                  <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-[var(--text-muted)] whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
@@ -569,27 +569,27 @@ export default function PassengersPage() {
                 const pickup  = stops.find(s => s.id === rp.pickupStopId);
                 const dropoff = stops.find(s => s.id === rp.dropoffStopId);
                 return (
-                  <tr key={rp.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                    <td className="px-3 py-3 text-sm font-mono text-white whitespace-nowrap">{emp?.employeeId ?? '—'}</td>
-                    <td className="px-3 py-3 text-sm text-white">{emp?.name ?? <span className="text-slate-500 italic">(deleted)</span>}</td>
-                    <td className="px-3 py-3 text-sm text-slate-200">{route?.name ?? <span className="text-slate-500 italic">(deleted)</span>}</td>
-                    <td className="px-3 py-3 text-sm text-white">{pickup?.stopName ?? <span className="text-slate-500">—</span>}</td>
-                    <td className="px-3 py-3 text-sm text-slate-300 font-mono">{rp.pickupTime ?? '—'}</td>
-                    <td className="px-3 py-3 text-sm text-white">{dropoff?.stopName ?? <span className="text-slate-500">—</span>}</td>
-                    <td className="px-3 py-3 text-sm text-slate-300 font-mono">{rp.dropoffTime ?? '—'}</td>
-                    <td className="px-3 py-3 text-sm text-slate-300 whitespace-nowrap">{fmtDate(rp.effectiveFrom)}</td>
-                    <td className="px-3 py-3 text-sm text-slate-300 whitespace-nowrap">{rp.effectiveTo ? fmtDate(rp.effectiveTo) : <span className="text-slate-500">open</span>}</td>
+                  <tr key={rp.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
+                    <td className="px-3 py-3 text-sm font-mono text-[var(--text-main)] whitespace-nowrap">{emp?.employeeId ?? '—'}</td>
+                    <td className="px-3 py-3 text-sm text-[var(--text-main)]">{emp?.name ?? <span className="text-[var(--text-faint)] italic">(deleted)</span>}</td>
+                    <td className="px-3 py-3 text-sm text-[var(--text-main)]">{route?.name ?? <span className="text-[var(--text-faint)] italic">(deleted)</span>}</td>
+                    <td className="px-3 py-3 text-sm text-[var(--text-main)]">{pickup?.stopName ?? <span className="text-[var(--text-faint)]">—</span>}</td>
+                    <td className="px-3 py-3 text-sm text-[var(--text-muted)] font-mono">{rp.pickupTime ?? '—'}</td>
+                    <td className="px-3 py-3 text-sm text-[var(--text-main)]">{dropoff?.stopName ?? <span className="text-[var(--text-faint)]">—</span>}</td>
+                    <td className="px-3 py-3 text-sm text-[var(--text-muted)] font-mono">{rp.dropoffTime ?? '—'}</td>
+                    <td className="px-3 py-3 text-sm text-[var(--text-muted)] whitespace-nowrap">{fmtDate(rp.effectiveFrom)}</td>
+                    <td className="px-3 py-3 text-sm text-[var(--text-muted)] whitespace-nowrap">{rp.effectiveTo ? fmtDate(rp.effectiveTo) : <span className="text-[var(--text-faint)]">open</span>}</td>
                     <td className="px-3 py-3">
                       <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_PILL[rp.status]}`}>{rp.status}</span>
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex gap-1">
                         <button onClick={() => openEdit(rp)} title="Edit"
-                          className="p-1.5 rounded border border-white/10 text-slate-300 hover:border-violet-500/40 hover:text-white">
+                          className="p-1.5 rounded border border-[var(--border-subtle)] text-[var(--text-muted)] hover:border-violet-500/40 hover:text-[var(--text-main)]">
                           <Edit className="w-3.5 h-3.5" />
                         </button>
                         <button onClick={() => remove(rp.id)} title="Remove"
-                          className="p-1.5 rounded border border-white/10 text-rose-400 hover:border-rose-500/40 hover:bg-rose-500/10">
+                          className="p-1.5 rounded border border-[var(--border-subtle)] text-rose-400 hover:border-rose-500/40 hover:bg-rose-500/10">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -612,10 +612,10 @@ export default function PassengersPage() {
           lives on the Staff page. */}
       {empDraft && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-slate-800/95 border border-violet-500/30 rounded-2xl p-6">
+          <div className="w-full max-w-md bg-[var(--bg-surface)]/95 border border-violet-500/30 rounded-2xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-white">New Employee</h2>
-              <button onClick={() => { setEmpDraft(null); setEmpError(''); }} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
+              <h2 className="text-lg font-bold text-[var(--text-main)]">New Employee</h2>
+              <button onClick={() => { setEmpDraft(null); setEmpError(''); }} className="text-[var(--text-muted)] hover:text-[var(--text-main)]"><X className="w-5 h-5" /></button>
             </div>
             {empError && (
               <div className="mb-3 bg-rose-500/15 border border-rose-500/40 rounded-lg px-3 py-2 text-rose-200 text-xs">
@@ -625,15 +625,15 @@ export default function PassengersPage() {
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Employee ID *</label>
+                  <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Employee ID *</label>
                   <input type="text" value={empDraft.employeeId} onChange={e => setEmpDraft({ ...empDraft, employeeId: e.target.value })}
                     placeholder="EMP-001"
-                    className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Shift</label>
+                  <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Shift</label>
                   <select value={empDraft.shiftType} onChange={e => setEmpDraft({ ...empDraft, shiftType: e.target.value as EmpDraft['shiftType'] })}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
                     <option value="">—</option>
                     <option value="MORNING">Morning</option>
                     <option value="EVENING">Evening</option>
@@ -642,35 +642,35 @@ export default function PassengersPage() {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Full Name *</label>
+                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Full Name *</label>
                 <input type="text" value={empDraft.name} onChange={e => setEmpDraft({ ...empDraft, name: e.target.value })}
                   placeholder="Ahmed Al Mansouri"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Department</label>
+                  <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Department</label>
                   <input type="text" value={empDraft.department} onChange={e => setEmpDraft({ ...empDraft, department: e.target.value })}
                     placeholder="Operations"
-                    className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">Contact</label>
+                  <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Contact</label>
                   <input type="tel" value={empDraft.contactNumber} onChange={e => setEmpDraft({ ...empDraft, contactNumber: e.target.value })}
                     placeholder="+971 50 …"
-                    className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none" />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Email</label>
+                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Email</label>
                 <input type="email" value={empDraft.email} onChange={e => setEmpDraft({ ...empDraft, email: e.target.value })}
                   placeholder="ahmed@company.ae"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none" />
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-4">
               <button onClick={() => { setEmpDraft(null); setEmpError(''); }}
-                className="px-4 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5 text-sm">Cancel</button>
+                className="px-4 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm">Cancel</button>
               <button onClick={saveEmployee} disabled={savingEmp}
                 className="px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 disabled:opacity-50 text-sm">
                 {savingEmp ? 'Creating…' : 'Create Employee'}
@@ -683,10 +683,10 @@ export default function PassengersPage() {
       {/* Editor Modal — new + edit share the same form */}
       {edit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="w-full max-w-2xl bg-slate-800/95 border border-white/10 rounded-2xl p-6 my-8">
+          <div className="w-full max-w-2xl bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl p-6 my-8">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-white">{edit.id ? 'Edit Passenger Roster' : 'Add Passenger to Route'}</h2>
-              <button onClick={closeEditor} className="text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
+              <h2 className="text-xl font-bold text-[var(--text-main)]">{edit.id ? 'Edit Passenger Roster' : 'Add Passenger to Route'}</h2>
+              <button onClick={closeEditor} className="text-[var(--text-muted)] hover:text-[var(--text-main)]"><X className="w-5 h-5" /></button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -694,17 +694,17 @@ export default function PassengersPage() {
                   button opens a sub-modal so an operator can create the employee
                   inline when the target person isn't in the Staff registry yet. */}
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Employee ID *</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Employee ID *</label>
                 <div className="flex gap-2">
                   <select value={edit.staffMemberId} onChange={e => setEdit({ ...edit, staffMemberId: e.target.value })}
-                    className="flex-1 px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+                    className="flex-1 px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
                     <option value="">— Select employee —</option>
                     {staffWithEmpId.map(s => (
                       <option key={s.id} value={s.id}>{s.employeeId} · {s.name}</option>
                     ))}
                   </select>
                   <button type="button" onClick={() => setEmpDraft({ ...EMPTY_EMP })}
-                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-slate-200 hover:border-violet-500/40 hover:text-white text-sm whitespace-nowrap">
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] hover:border-violet-500/40 hover:text-[var(--text-main)] text-sm whitespace-nowrap">
                     <UserPlus className="w-4 h-4" /> New
                   </button>
                 </div>
@@ -712,18 +712,18 @@ export default function PassengersPage() {
 
               {/* Employee Name — read-only, auto-filled from the selection */}
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Employee Name</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Employee Name</label>
                 <input type="text" readOnly
                   value={staffById.get(edit.staffMemberId)?.name ?? ''}
                   placeholder="Auto-filled once an Employee ID is chosen"
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900/60 border border-white/10 text-slate-300 placeholder-slate-600 cursor-not-allowed" />
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-[var(--text-muted)] placeholder-[var(--text-faint)] cursor-not-allowed" />
               </div>
 
               {/* Route */}
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Route *</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Route *</label>
                 <select value={edit.routeId} onChange={e => setEdit({ ...edit, routeId: e.target.value, pickupStopId: '', dropoffStopId: '' })}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
                   <option value="">— Select route —</option>
                   {routes.map(r => (
                     <option key={r.id} value={r.id}>{r.name} ({r.origin} → {r.destination})</option>
@@ -733,10 +733,10 @@ export default function PassengersPage() {
 
               {/* Pickup Point + Time */}
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Pickup Point</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Pickup Point</label>
                 <select value={edit.pickupStopId} onChange={e => setEdit({ ...edit, pickupStopId: e.target.value })}
                   disabled={!edit.routeId}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed">
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed">
                   <option value="">{edit.routeId ? '— Select stop —' : 'Select route first'}</option>
                   {editRouteStops.map(s => (
                     <option key={s.id} value={s.id}>#{s.sequence} · {s.stopName}</option>
@@ -744,17 +744,17 @@ export default function PassengersPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Pickup Time</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Pickup Time</label>
                 <input type="time" value={edit.pickupTime} onChange={e => setEdit({ ...edit, pickupTime: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none" />
               </div>
 
               {/* Drop-off Point + Time */}
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Drop-off Point</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Drop-off Point</label>
                 <select value={edit.dropoffStopId} onChange={e => setEdit({ ...edit, dropoffStopId: e.target.value })}
                   disabled={!edit.routeId}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed">
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed">
                   <option value="">{edit.routeId ? '— Select stop —' : 'Select route first'}</option>
                   {editRouteStops.map(s => (
                     <option key={s.id} value={s.id}>#{s.sequence} · {s.stopName}</option>
@@ -762,28 +762,28 @@ export default function PassengersPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Drop-off Time</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Drop-off Time</label>
                 <input type="time" value={edit.dropoffTime} onChange={e => setEdit({ ...edit, dropoffTime: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none" />
               </div>
 
               {/* Validity window */}
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Effective From *</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Effective From *</label>
                 <input type="date" value={edit.effectiveFrom} onChange={e => setEdit({ ...edit, effectiveFrom: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Effective To <span className="text-slate-500 font-normal">(blank = open-ended)</span></label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Effective To <span className="text-[var(--text-faint)] font-normal">(blank = open-ended)</span></label>
                 <input type="date" value={edit.effectiveTo} onChange={e => setEdit({ ...edit, effectiveTo: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none" />
               </div>
 
               {/* Status */}
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Status</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Status</label>
                 <select value={edit.status} onChange={e => setEdit({ ...edit, status: e.target.value as 'ACTIVE' | 'INACTIVE' })}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-violet-500 focus:outline-none">
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none">
                   <option value="ACTIVE">Active</option>
                   <option value="INACTIVE">Inactive</option>
                 </select>
@@ -791,16 +791,16 @@ export default function PassengersPage() {
 
               {/* Notes */}
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-300 mb-1.5">Notes</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Notes</label>
                 <textarea value={edit.notes} onChange={e => setEdit({ ...edit, notes: e.target.value })} rows={2}
                   placeholder="Contract details, temporary variation, etc."
-                  className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none" />
               </div>
             </div>
 
             <div className="flex justify-end gap-2 pt-5">
               <button onClick={closeEditor}
-                className="px-4 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5">Cancel</button>
+                className="px-4 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]">Cancel</button>
               <button onClick={save} disabled={saving}
                 className="px-4 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 disabled:opacity-50">
                 {saving ? 'Saving…' : edit.id ? 'Save' : 'Add Passenger'}

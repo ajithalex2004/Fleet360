@@ -84,37 +84,37 @@ export default function EsgCarbonDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-6 space-y-6">
+    <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-main)] p-6 space-y-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[var(--border-subtle)] pb-5">
         <div>
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
               🌱 Scope-3 GHG Accounting
             </span>
-            <span className="text-xs text-slate-400">DEFRA & GHG Protocol Standards</span>
+            <span className="text-xs text-[var(--text-muted)]">DEFRA & GHG Protocol Standards</span>
           </div>
-          <h1 className="text-2xl font-bold text-white mt-1">Departmental ESG Carbon Attribution</h1>
-          <p className="text-sm text-slate-400">
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mt-1">Departmental ESG Carbon Attribution</h1>
+          <p className="text-sm text-[var(--text-muted)]">
             Prorated corporate emissions, passenger-km carbon intensity, and avoided commuter footprints.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-300">
-            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+          <div className="flex items-center gap-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-1.5 text-xs text-[var(--text-muted)]">
+            <Calendar className="w-3.5 h-3.5 text-[var(--text-muted)]" />
             <input
               type="month"
               value={period}
               onChange={(e) => setPeriod(e.target.value)}
-              className="bg-transparent text-white focus:outline-none cursor-pointer"
+              className="bg-transparent text-[var(--text-main)] focus:outline-none cursor-pointer"
             />
           </div>
 
           <button
             onClick={() => fetchReport(true)}
             disabled={refreshing || loading}
-            className="p-2 rounded-xl bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-300 transition-colors disabled:opacity-50"
+            className="p-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:bg-[var(--bg-surface)] text-[var(--text-muted)] transition-colors disabled:opacity-50"
             title="Refresh"
           >
             <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin text-emerald-400' : ''}`} />
@@ -123,7 +123,7 @@ export default function EsgCarbonDashboard() {
           <button
             onClick={handleExportCsv}
             disabled={!data?.departments?.length}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-[var(--text-main)] text-xs font-semibold transition-colors disabled:opacity-50"
           >
             <Download className="w-3.5 h-3.5" />
             Export ESG Statement (CSV)
@@ -139,7 +139,7 @@ export default function EsgCarbonDashboard() {
             <Award className="w-5 h-5 text-emerald-400" />
           </div>
           <div>
-            <div className="text-4xl font-extrabold text-white">
+            <div className="text-4xl font-extrabold text-[var(--text-main)]">
               {data?.greenCommuteScore ?? '—'}
               <span className="text-lg text-emerald-400 font-normal"> / 100</span>
             </div>
@@ -147,7 +147,7 @@ export default function EsgCarbonDashboard() {
               {data ? `${data.overallSavingsPercentage}% lower emissions than private cars` : 'Calculating score...'}
             </p>
           </div>
-          <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+          <div className="w-full bg-[var(--bg-surface)] h-2 rounded-full overflow-hidden">
             <div
               className="bg-emerald-400 h-full rounded-full transition-all duration-500"
               style={{ width: `${Math.min(100, data?.greenCommuteScore ?? 0)}%` }}
@@ -155,42 +155,42 @@ export default function EsgCarbonDashboard() {
           </div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between text-xs text-slate-400">
+        <div className="p-5 rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] space-y-2">
+          <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
             <span>Net Carbon Avoided</span>
             <TrendingDown className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="text-2xl font-bold text-emerald-400">
             {data ? `${data.totalCarbonSavedKg.toLocaleString()} kg` : '—'}
           </div>
-          <div className="text-[11px] text-slate-400 flex items-center gap-1">
+          <div className="text-[11px] text-[var(--text-muted)] flex items-center gap-1">
             <span>GHG Scope-3 savings vs private driving</span>
           </div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between text-xs text-slate-400">
+        <div className="p-5 rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] space-y-2">
+          <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
             <span>Actual Fleet Emissions</span>
             <Bus className="w-4 h-4 text-cyan-400" />
           </div>
-          <div className="text-2xl font-bold text-white">
+          <div className="text-2xl font-bold text-[var(--text-main)]">
             {data ? `${data.totalFleetCo2Kg.toLocaleString()} kg` : '—'}
           </div>
-          <div className="text-[11px] text-slate-400">
+          <div className="text-[11px] text-[var(--text-muted)]">
             Total Scope-1 / Scope-3 bus fleet footprint
           </div>
         </div>
 
-        <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-2">
-          <div className="flex items-center justify-between text-xs text-slate-400">
+        <div className="p-5 rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] space-y-2">
+          <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
             <span>Carbon Intensity</span>
             <Compass className="w-4 h-4 text-amber-400" />
           </div>
           <div className="text-2xl font-bold text-amber-300">
             {data ? `${data.fleetCarbonIntensityGPerPkm} g` : '—'}
-            <span className="text-xs text-slate-400 font-normal"> / p-km</span>
+            <span className="text-xs text-[var(--text-muted)] font-normal"> / p-km</span>
           </div>
-          <div className="text-[11px] text-slate-400">
+          <div className="text-[11px] text-[var(--text-muted)]">
             vs 171 g/p-km private car commuter baseline
           </div>
         </div>
@@ -200,27 +200,27 @@ export default function EsgCarbonDashboard() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Building2 className="w-4 h-4 text-slate-400" />
-            <h2 className="font-semibold text-sm text-white">Departmental Scope-3 Recharges & Savings Matrix</h2>
+            <Building2 className="w-4 h-4 text-[var(--text-muted)]" />
+            <h2 className="font-semibold text-sm text-[var(--text-main)]">Departmental Scope-3 Recharges & Savings Matrix</h2>
           </div>
-          <div className="text-xs text-slate-400">
+          <div className="text-xs text-[var(--text-muted)]">
             Period: <span className="font-semibold text-emerald-400">{period}</span>
           </div>
         </div>
 
-        <div className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
+        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 overflow-hidden">
           {loading ? (
-            <div className="p-12 text-center text-slate-400 text-xs animate-pulse">
+            <div className="p-12 text-center text-[var(--text-muted)] text-xs animate-pulse">
               Aggregating vehicle telemetry, route passenger manifests, and calculating GHG emissions...
             </div>
           ) : !data?.departments?.length ? (
-            <div className="p-12 text-center text-slate-500 text-xs">
+            <div className="p-12 text-center text-[var(--text-faint)] text-xs">
               No completed trips recorded for period {period}.
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-900/90 text-slate-400 border-b border-slate-800 uppercase tracking-wider text-[10px]">
+                <thead className="bg-[var(--bg-surface)]/90 text-[var(--text-muted)] border-b border-[var(--border-subtle)] uppercase tracking-wider text-[10px]">
                   <tr>
                     <th className="p-3">Department</th>
                     <th className="p-3">Commuters</th>
@@ -234,16 +234,16 @@ export default function EsgCarbonDashboard() {
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {data.departments.map((dept) => (
-                    <tr key={dept.department} className="hover:bg-slate-800/30 transition-colors">
-                      <td className="p-3 font-semibold text-white flex items-center gap-2">
+                    <tr key={dept.department} className="hover:bg-[var(--bg-surface)]/30 transition-colors">
+                      <td className="p-3 font-semibold text-[var(--text-main)] flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-emerald-400" />
                         {dept.department}
                       </td>
-                      <td className="p-3 text-slate-300">{dept.totalPassengers}</td>
-                      <td className="p-3 text-slate-300">{dept.totalPassengerKm.toLocaleString()} km</td>
-                      <td className="p-3 text-white font-medium">{dept.allocatedCo2Kg.toLocaleString()} kg</td>
+                      <td className="p-3 text-[var(--text-muted)]">{dept.totalPassengers}</td>
+                      <td className="p-3 text-[var(--text-muted)]">{dept.totalPassengerKm.toLocaleString()} km</td>
+                      <td className="p-3 text-[var(--text-main)] font-medium">{dept.allocatedCo2Kg.toLocaleString()} kg</td>
                       <td className="p-3 text-amber-300">{dept.carbonIntensityGPerPkm} g</td>
-                      <td className="p-3 text-slate-400">{dept.baselinePrivateCarCo2Kg.toLocaleString()} kg</td>
+                      <td className="p-3 text-[var(--text-muted)]">{dept.baselinePrivateCarCo2Kg.toLocaleString()} kg</td>
                       <td className="p-3 text-emerald-400 font-bold">
                         -{dept.carbonSavedKg.toLocaleString()} kg
                       </td>

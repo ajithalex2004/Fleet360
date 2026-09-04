@@ -41,8 +41,8 @@ const REFRESH_MS = 15_000;
 const STATUS_CONFIG: Record<string, { color: string; bg: string; border: string; dot: string; label: string }> = {
   EN_ROUTE:  { color: 'text-green-400',  bg: 'bg-green-500/15',  border: 'border-green-500/30',  dot: 'bg-green-400',  label: 'En Route'  },
   AT_STOP:   { color: 'text-blue-400',   bg: 'bg-blue-500/15',   border: 'border-blue-500/30',   dot: 'bg-blue-400',   label: 'At Stop'   },
-  IDLE:      { color: 'text-slate-400',  bg: 'bg-slate-500/15',  border: 'border-slate-500/30',  dot: 'bg-slate-400',  label: 'Idle'      },
-  OFFLINE:   { color: 'text-slate-500',  bg: 'bg-slate-800/50',  border: 'border-slate-700',     dot: 'bg-slate-600',  label: 'Offline'   },
+  IDLE:      { color: 'text-[var(--text-muted)]',  bg: 'bg-slate-500/15',  border: 'border-slate-500/30',  dot: 'bg-slate-400',  label: 'Idle'      },
+  OFFLINE:   { color: 'text-[var(--text-faint)]',  bg: 'bg-[var(--bg-surface)]/50',  border: 'border-[var(--border-subtle)]',     dot: 'bg-[var(--bg-surface-hover)]',  label: 'Offline'   },
   BREAKDOWN: { color: 'text-red-400',    bg: 'bg-red-500/15',    border: 'border-red-500/30',    dot: 'bg-red-400',    label: 'Breakdown' },
 };
 
@@ -53,7 +53,7 @@ import { TRIP_STATUS_META, pillClass } from '@/lib/bus-ops/status-meta';
 function TripStatusPill({ status }: { status: string | null }) {
   if (!status) return null;
   const meta = TRIP_STATUS_META[status as keyof typeof TRIP_STATUS_META]
-    ?? { text: 'text-slate-300', bg: 'bg-slate-700/40', border: 'border-slate-600', dot: 'bg-slate-500', label: status };
+    ?? { text: 'text-[var(--text-muted)]', bg: 'bg-[var(--bg-surface-hover)]/40', border: 'border-[var(--border-strong)]', dot: 'bg-slate-500', label: status };
   return (
     <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-medium ${pillClass(meta)}`}
       title="Trip status (workflow) — the trip's lifecycle stage from Trip Monitor">
@@ -102,11 +102,11 @@ function VehicleCard({ v, selected, onSelect }: { v: VehiclePositionFull; select
     <button
       onClick={onSelect}
       className={`w-full text-left px-3 py-3 rounded-lg border transition-all ${
-        selected ? `${cfg.bg} ${cfg.border}` : 'bg-slate-900/70 border-white/10 hover:bg-slate-800/70'
+        selected ? `${cfg.bg} ${cfg.border}` : 'bg-[var(--bg-surface)]/70 border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]/70'
       }`}
     >
       <div className="flex items-center justify-between mb-1.5 gap-2">
-        <span className="text-sm font-semibold text-white truncate">{v.vehicle_plate ?? v.vehicle_id}</span>
+        <span className="text-sm font-semibold text-[var(--text-main)] truncate">{v.vehicle_plate ?? v.vehicle_id}</span>
         <span className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border shrink-0 ${cfg.bg} ${cfg.color} ${cfg.border}`}>
           <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
           {cfg.label}
@@ -115,16 +115,16 @@ function VehicleCard({ v, selected, onSelect }: { v: VehiclePositionFull; select
       {v.trip_status && (
         <div className="mb-1"><TripStatusPill status={v.trip_status} /></div>
       )}
-      {v.route_name && <p className="text-xs text-slate-300 mb-1 truncate">🗺️ {v.route_name}</p>}
-      <div className="flex flex-wrap gap-3 text-[11px] text-slate-400">
+      {v.route_name && <p className="text-xs text-[var(--text-muted)] mb-1 truncate">🗺️ {v.route_name}</p>}
+      <div className="flex flex-wrap gap-3 text-[11px] text-[var(--text-muted)]">
         <span>👨‍✈️ {v.driver_name ?? 'No driver'}</span>
         <span>👥 {v.passengers_onboard} aboard</span>
         <span>⚡ {Math.round(v.speed_kmh)} km/h</span>
       </div>
       {v.next_stop_name && (
-        <p className="mt-1 text-[11px] text-slate-400">→ {v.next_stop_name} · ETA {fmtTime(v.next_stop_eta)}</p>
+        <p className="mt-1 text-[11px] text-[var(--text-muted)]">→ {v.next_stop_name} · ETA {fmtTime(v.next_stop_eta)}</p>
       )}
-      <p className="mt-0.5 text-[10px] text-slate-500">{sinceStr(v.seconds_since_ping)}</p>
+      <p className="mt-0.5 text-[10px] text-[var(--text-faint)]">{sinceStr(v.seconds_since_ping)}</p>
     </button>
   );
 }
@@ -133,11 +133,11 @@ function VehicleCard({ v, selected, onSelect }: { v: VehiclePositionFull; select
 function DetailPanel({ v, onClose }: { v: VehiclePositionFull; onClose: () => void }) {
   const cfg = STATUS_CONFIG[v.status] ?? STATUS_CONFIG.IDLE;
   return (
-    <div className="bg-slate-900/80 border border-white/10 rounded-2xl p-4 space-y-3">
+    <div className="bg-[var(--bg-surface)]/80 border border-[var(--border-subtle)] rounded-2xl p-4 space-y-3">
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="text-base font-bold text-white">{v.vehicle_plate ?? v.vehicle_id}</h3>
-          {v.trip_number && <p className="text-[11px] text-slate-500 font-mono">{v.trip_number}</p>}
+          <h3 className="text-base font-bold text-[var(--text-main)]">{v.vehicle_plate ?? v.vehicle_id}</h3>
+          {v.trip_number && <p className="text-[11px] text-[var(--text-faint)] font-mono">{v.trip_number}</p>}
           <div className="flex flex-wrap items-center gap-1.5 mt-1">
             <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.color} border ${cfg.border}`}
               title="Vehicle status (motion) — derived from GPS + trip context">
@@ -146,44 +146,44 @@ function DetailPanel({ v, onClose }: { v: VehiclePositionFull; onClose: () => vo
             <TripStatusPill status={v.trip_status} />
           </div>
         </div>
-        <button onClick={onClose} className="text-slate-500 hover:text-white text-xl leading-none">×</button>
+        <button onClick={onClose} className="text-[var(--text-faint)] hover:text-[var(--text-main)] text-xl leading-none">×</button>
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-sm">
-        <div className="bg-slate-800/60 rounded-lg p-2">
-          <p className="text-slate-500 text-xs mb-0.5">Route</p>
-          <p className="text-white font-medium truncate">{v.route_name ?? '—'}</p>
+        <div className="bg-[var(--bg-surface)]/60 rounded-lg p-2">
+          <p className="text-[var(--text-faint)] text-xs mb-0.5">Route</p>
+          <p className="text-[var(--text-main)] font-medium truncate">{v.route_name ?? '—'}</p>
         </div>
-        <div className="bg-slate-800/60 rounded-lg p-2">
-          <p className="text-slate-500 text-xs mb-0.5">Speed</p>
-          <p className="text-white font-medium">{Math.round(v.speed_kmh)} km/h</p>
+        <div className="bg-[var(--bg-surface)]/60 rounded-lg p-2">
+          <p className="text-[var(--text-faint)] text-xs mb-0.5">Speed</p>
+          <p className="text-[var(--text-main)] font-medium">{Math.round(v.speed_kmh)} km/h</p>
         </div>
-        <div className="bg-slate-800/60 rounded-lg p-2">
-          <p className="text-slate-500 text-xs mb-0.5">Passengers</p>
-          <p className="text-white font-medium">{v.passengers_onboard}</p>
+        <div className="bg-[var(--bg-surface)]/60 rounded-lg p-2">
+          <p className="text-[var(--text-faint)] text-xs mb-0.5">Passengers</p>
+          <p className="text-[var(--text-main)] font-medium">{v.passengers_onboard}</p>
         </div>
-        <div className="bg-slate-800/60 rounded-lg p-2">
-          <p className="text-slate-500 text-xs mb-0.5">Heading</p>
-          <p className="text-white font-medium">{v.heading_deg}°</p>
+        <div className="bg-[var(--bg-surface)]/60 rounded-lg p-2">
+          <p className="text-[var(--text-faint)] text-xs mb-0.5">Heading</p>
+          <p className="text-[var(--text-main)] font-medium">{v.heading_deg}°</p>
         </div>
-        <div className="bg-slate-800/60 rounded-lg p-2 col-span-2">
-          <p className="text-slate-500 text-xs mb-0.5">GPS · Last Ping</p>
-          <p className="text-white font-mono text-xs">{v.lat.toFixed(5)}, {v.lng.toFixed(5)}</p>
-          <p className="text-slate-400 text-xs">{sinceStr(v.seconds_since_ping)}</p>
+        <div className="bg-[var(--bg-surface)]/60 rounded-lg p-2 col-span-2">
+          <p className="text-[var(--text-faint)] text-xs mb-0.5">GPS · Last Ping</p>
+          <p className="text-[var(--text-main)] font-mono text-xs">{v.lat.toFixed(5)}, {v.lng.toFixed(5)}</p>
+          <p className="text-[var(--text-muted)] text-xs">{sinceStr(v.seconds_since_ping)}</p>
         </div>
       </div>
 
       {v.next_stop_name && (
         <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-2">
           <p className="text-xs text-blue-400 mb-0.5">Next Stop</p>
-          <p className="text-sm text-white font-medium">{v.next_stop_name}</p>
+          <p className="text-sm text-[var(--text-main)] font-medium">{v.next_stop_name}</p>
           <p className="text-xs text-blue-300">ETA {fmtTime(v.next_stop_eta)}</p>
         </div>
       )}
 
       <div className="space-y-1.5 text-sm">
-        <div className="flex justify-between text-slate-400">
-          <span>👨‍✈️ Driver</span><span className="text-white">{v.driver_name ?? 'Unassigned'}</span>
+        <div className="flex justify-between text-[var(--text-muted)]">
+          <span>👨‍✈️ Driver</span><span className="text-[var(--text-main)]">{v.driver_name ?? 'Unassigned'}</span>
         </div>
       </div>
 
@@ -264,7 +264,7 @@ export default function LiveFleetMapPage() {
               LIVE
             </span>
             <button onClick={fetchPositions}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 border border-white/10 px-3 py-2 text-sm text-slate-200 hover:border-violet-500/40 hover:text-white">
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-main)] hover:border-violet-500/40 hover:text-[var(--text-main)]">
               <RefreshCw className="w-4 h-4" /> Refresh
             </button>
           </>
@@ -275,17 +275,17 @@ export default function LiveFleetMapPage() {
       {summary && (
         <div className="grid grid-cols-3 md:grid-cols-7 gap-2">
           {[
-            { label: 'Total',     val: summary.total,     color: 'text-white',       bg: 'bg-slate-800/60' },
+            { label: 'Total',     val: summary.total,     color: 'text-[var(--text-main)]',       bg: 'bg-[var(--bg-surface)]/60' },
             { label: 'Online',    val: summary.online,    color: 'text-green-400',   bg: 'bg-green-500/10' },
             { label: 'En Route',  val: summary.enRoute,   color: 'text-green-400',   bg: 'bg-green-500/10' },
             { label: 'At Stop',   val: summary.atStop,    color: 'text-blue-400',    bg: 'bg-blue-500/10' },
-            { label: 'Idle',      val: summary.idle,      color: 'text-slate-400',   bg: 'bg-slate-700/50' },
-            { label: 'Offline',   val: summary.offline,   color: 'text-slate-500',   bg: 'bg-slate-800/50' },
+            { label: 'Idle',      val: summary.idle,      color: 'text-[var(--text-muted)]',   bg: 'bg-[var(--bg-surface-hover)]/50' },
+            { label: 'Offline',   val: summary.offline,   color: 'text-[var(--text-faint)]',   bg: 'bg-[var(--bg-surface)]/50' },
             { label: 'Breakdown', val: summary.breakdown, color: 'text-red-400',     bg: 'bg-red-500/10' },
           ].map(k => (
-            <div key={k.label} className={`${k.bg} border border-white/5 rounded-xl p-3 text-center`}>
+            <div key={k.label} className={`${k.bg} border border-[var(--border-subtle)] rounded-xl p-3 text-center`}>
               <p className={`text-2xl font-bold ${k.color}`}>{k.val}</p>
-              <p className="text-xs text-slate-500 mt-0.5">{k.label}</p>
+              <p className="text-xs text-[var(--text-faint)] mt-0.5">{k.label}</p>
             </div>
           ))}
         </div>
@@ -306,10 +306,10 @@ export default function LiveFleetMapPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
           {loading ? (
-            <div className="h-[65vh] min-h-[420px] bg-slate-900 rounded-2xl border border-white/10 flex items-center justify-center">
+            <div className="h-[65vh] min-h-[420px] bg-[var(--bg-surface)] rounded-2xl border border-[var(--border-subtle)] flex items-center justify-center">
               <div className="text-center">
                 <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-                <p className="text-slate-400 text-sm">Loading fleet positions…</p>
+                <p className="text-[var(--text-muted)] text-sm">Loading fleet positions…</p>
               </div>
             </div>
           ) : (
@@ -330,7 +330,7 @@ export default function LiveFleetMapPage() {
                 className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
                   filterStatus === s
                     ? 'bg-violet-500/20 text-violet-200 border-violet-500/40'
-                    : 'bg-slate-800/50 text-slate-400 border-white/10 hover:border-white/20'
+                    : 'bg-[var(--bg-surface)]/50 text-[var(--text-muted)] border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
                 }`}>
                 {s === '' ? 'All' : STATUS_CONFIG[s]?.label ?? s}
               </button>
@@ -344,11 +344,11 @@ export default function LiveFleetMapPage() {
           <div className="space-y-2">
             {loading ? (
               Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="h-20 bg-slate-800/60 rounded-lg animate-pulse" />
+                <div key={i} className="h-20 bg-[var(--bg-surface)]/60 rounded-lg animate-pulse" />
               ))
             ) : visiblePositions.length === 0 ? (
-              <div className="bg-slate-900/70 border border-white/10 rounded-xl p-6 text-center">
-                <p className="text-slate-500 text-sm">No vehicles match the current filter.</p>
+              <div className="bg-[var(--bg-surface)]/70 border border-[var(--border-subtle)] rounded-xl p-6 text-center">
+                <p className="text-[var(--text-faint)] text-sm">No vehicles match the current filter.</p>
               </div>
             ) : (
               visiblePositions.map(v => (
@@ -364,9 +364,9 @@ export default function LiveFleetMapPage() {
         </div>
       </div>
 
-      <div className="bg-slate-800/40 border border-white/5 rounded-xl p-3 text-xs text-slate-500">
-        <span className="font-semibold text-slate-400">Ingest:</span> real driver-app GPS pings flow through
-        <code className="mx-1 bg-slate-700 px-1 rounded">POST /api/bus-ops/vehicles/[id]/location</code>
+      <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-xl p-3 text-xs text-[var(--text-faint)]">
+        <span className="font-semibold text-[var(--text-muted)]">Ingest:</span> real driver-app GPS pings flow through
+        <code className="mx-1 bg-[var(--bg-surface-hover)] px-1 rounded">POST /api/bus-ops/vehicles/[id]/location</code>
         and land on this map within one refresh cycle. Positions are treated as offline after 5 minutes without a ping.
       </div>
     </div>
