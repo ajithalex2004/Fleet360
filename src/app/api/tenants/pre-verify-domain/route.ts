@@ -34,39 +34,9 @@ function genId(): string    { return crypto.randomUUID(); }
 function genToken(): string { return crypto.randomBytes(20).toString('hex'); }
 function genOtp(): string   { return String(Math.floor(100000 + Math.random() * 900000)); }
 
-/**
- * Ensure the temp table exists.
- * All columns that would need DB extensions use explicit defaults from JS instead.
- * The CREATE TABLE uses no gen_random_uuid() — id is always passed explicitly.
- */
-async function ensureTable(): Promise<void> {
-  try {
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS domain_pre_verifications (
-        id              TEXT PRIMARY KEY,
-        domain          TEXT NOT NULL,
-        token           TEXT NOT NULL,
-        otp             TEXT,
-        otp_email       TEXT,
-        otp_expires_at  TIMESTAMPTZ,
-        verified        BOOLEAN NOT NULL DEFAULT false,
-        verified_method TEXT,
-        created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        expires_at      TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '24 hours')
-      )
-    `);
-  } catch (e) {
-    // Log but do not throw — the table may already exist or CREATE TABLE
-    // may fail due to permissions. Subsequent DML will surface the real e.
-    console.warn('[pre-verify-domain] ensureTable warning:', e);
-  }
-}
-
 // ── POST — all actions ────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
-  await ensureTable();
-
   const url    = request.nextUrl;
   const action = url.searchParams.get('action');
 

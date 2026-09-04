@@ -6,47 +6,6 @@ import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 // ---------------------------------------------------------------------------
-// Table bootstrap
-// ---------------------------------------------------------------------------
-async function ensureTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS tenant_module_subscriptions (
-      id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      created_at        TIMESTAMPTZ DEFAULT NOW(),
-      updated_at        TIMESTAMPTZ DEFAULT NOW(),
-      tenant_id         TEXT NOT NULL,
-      module_code       TEXT NOT NULL,
-      plan_tier         TEXT DEFAULT 'STANDARD',
-      billing_cycle     TEXT DEFAULT 'MONTHLY',
-      base_price        NUMERIC(10,2) NOT NULL,
-      currency          TEXT DEFAULT 'AED',
-      max_vehicles      INTEGER DEFAULT 50,
-      max_users         INTEGER DEFAULT 5,
-      max_students      INTEGER DEFAULT 0,
-      setup_fee         NUMERIC(10,2) DEFAULT 0,
-      setup_fee_paid    BOOLEAN DEFAULT FALSE,
-      status            TEXT DEFAULT 'ACTIVE',
-      trial_end_date    DATE,
-      start_date        DATE NOT NULL,
-      next_billing_date DATE NOT NULL,
-      last_billed_date  DATE,
-      notes             TEXT,
-      UNIQUE(tenant_id, module_code)
-    )
-  `).catch(() => {});
-
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_tms_tenant_id   ON tenant_module_subscriptions(tenant_id)
-  `).catch(() => {});
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_tms_status       ON tenant_module_subscriptions(status)
-  `).catch(() => {});
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_tms_next_billing ON tenant_module_subscriptions(next_billing_date)
-  `).catch(() => {});
-}
-
-// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 type Row = Record<string, unknown>;
@@ -117,8 +76,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await ensureTable();
-
       const { searchParams } = new URL(req.url);
       const tenantId   = searchParams.get('tenantId')   ?? '';
       const status     = searchParams.get('status')     ?? '';
@@ -200,8 +157,6 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await ensureTable();
-
       try {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
@@ -337,8 +292,6 @@ export async function PATCH(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await ensureTable();
-
       try {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);

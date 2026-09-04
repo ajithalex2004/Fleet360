@@ -24,42 +24,6 @@ function serialize(rows: Row[]): Row[] {
   });
 }
 
-async function ensureTable() {
-  const exec = (sql: string) => prisma.$executeRawUnsafe(sql).catch(() => {});
-
-  await exec(`
-    CREATE TABLE IF NOT EXISTS school_bus_attendants (
-      id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-      tenant_id           TEXT        NOT NULL DEFAULT 'default',
-      employee_id         TEXT        NOT NULL,
-      first_name          TEXT        NOT NULL,
-      last_name           TEXT        NOT NULL,
-      gender              TEXT        NOT NULL DEFAULT 'Female',
-      nationality         TEXT,
-      phone               TEXT,
-      email               TEXT,
-      emirates_id         TEXT,
-      emirates_id_expiry  DATE,
-      certification_no    TEXT,
-      certification_expiry DATE,
-      photo_url           TEXT,
-      route_id            UUID,
-      route_name          TEXT,
-      assigned_vehicle_id TEXT,
-      status              TEXT        NOT NULL DEFAULT 'ACTIVE',
-      joining_date        DATE,
-      notes               TEXT,
-      is_active           BOOLEAN     NOT NULL DEFAULT true,
-      created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
-  await exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_sba_emp_id ON school_bus_attendants(employee_id, tenant_id)`);
-  await exec(`CREATE INDEX IF NOT EXISTS idx_sba_tenant ON school_bus_attendants(tenant_id, is_active)`);
-  await exec(`CREATE INDEX IF NOT EXISTS idx_sba_route ON school_bus_attendants(route_id)`);
-}
-
 export async function GET(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -70,8 +34,6 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
-
         const sp       = new URL(req.url).searchParams;
         const tenantId = sp.get('tenantId') ?? '';
         const status   = sp.get('status')   ?? '';
@@ -129,8 +91,6 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
-
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const {

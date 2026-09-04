@@ -31,58 +31,6 @@ import { prisma } from '@/lib/prisma';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
-async function ensureTable() {
-  const exec = (sql: string) => prisma.$executeRawUnsafe(sql).catch(() => {});
-
-  await exec(`
-    CREATE TABLE IF NOT EXISTS school_bus_driver_scores (
-      id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-      tenant_id           TEXT        NOT NULL DEFAULT 'default',
-      driver_id           TEXT,
-      driver_name         TEXT        NOT NULL,
-      period              TEXT        NOT NULL,
-      -- Format: YYYY-MM (e.g. 2025-03)
-
-      -- Trip metrics
-      trips_total         INT         NOT NULL DEFAULT 0,
-      trips_completed     INT         NOT NULL DEFAULT 0,
-      total_distance_km   DOUBLE PRECISION NOT NULL DEFAULT 0,
-      total_students      INT         NOT NULL DEFAULT 0,
-
-      -- Safety deductions
-      speeding_events     INT         NOT NULL DEFAULT 0,
-      harsh_braking       INT         NOT NULL DEFAULT 0,
-      geofence_exits      INT         NOT NULL DEFAULT 0,
-      incidents           INT         NOT NULL DEFAULT 0,
-      late_departures     INT         NOT NULL DEFAULT 0,
-
-      -- Calculated score (0–100)
-      raw_score           INT         NOT NULL DEFAULT 100,
-      rag_status          TEXT        NOT NULL DEFAULT 'GREEN',
-      -- RED | AMBER | GREEN
-
-      -- Trend vs previous period
-      prev_score          INT,
-      score_delta         INT,
-      -- positive = improved
-
-      -- Manual override
-      manual_override     BOOLEAN     NOT NULL DEFAULT false,
-      override_reason     TEXT,
-      override_by         TEXT,
-
-      notes               TEXT,
-      computed_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
-  await exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_sbds_driver_period ON school_bus_driver_scores(driver_id, period, tenant_id) WHERE driver_id IS NOT NULL`);
-  await exec(`CREATE INDEX IF NOT EXISTS idx_sbds_tenant ON school_bus_driver_scores(tenant_id, period)`);
-  await exec(`CREATE INDEX IF NOT EXISTS idx_sbds_rag ON school_bus_driver_scores(rag_status, period)`);
-}
-
 function calcRAG(score: number): string {
   if (score >= 80) return 'GREEN';
   if (score >= 60) return 'AMBER';
@@ -125,8 +73,6 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
-
         const sp       = new URL(req.url).searchParams;
         const tenantId = sp.get('tenantId') ?? 'default';
         const period   = sp.get('period')   ?? new Date().toISOString().slice(0, 7);
@@ -242,7 +188,6 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const {

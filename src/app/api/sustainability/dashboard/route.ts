@@ -65,65 +65,6 @@ function co2PerKm(fuelType: string, vehicleClass: string): number {
   return tbl[vc] ?? tbl.DEFAULT ?? 0.200;
 }
 
-// ── Bootstrap tables ──────────────────────────────────────────────────────────
-async function ensureTables() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS sustainability_settings (
-      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      created_at      TIMESTAMPTZ DEFAULT NOW(),
-      updated_at      TIMESTAMPTZ DEFAULT NOW(),
-      tenant_id       TEXT UNIQUE,
-      baseline_pct    NUMERIC(5,2)  DEFAULT 20.0,
-      reporting_std   TEXT          DEFAULT 'GHG_PROTOCOL',
-      base_year       INTEGER       DEFAULT 2024,
-      grid_factor     NUMERIC(10,6) DEFAULT 0.457,
-      notes           TEXT
-    )
-  `).catch(() => {});
-
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS sustainability_snapshots (
-      id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      created_at               TIMESTAMPTZ DEFAULT NOW(),
-      tenant_id                TEXT,
-      period_year              INTEGER NOT NULL,
-      period_month             INTEGER NOT NULL,
-      -- CO2 (kg)
-      co2_actual_kg            NUMERIC(15,4) DEFAULT 0,
-      co2_baseline_kg          NUMERIC(15,4) DEFAULT 0,
-      co2_avoided_kg           NUMERIC(15,4) DEFAULT 0,
-      scope1_kg                NUMERIC(15,4) DEFAULT 0,
-      scope2_kg                NUMERIC(15,4) DEFAULT 0,
-      scope3_kg                NUMERIC(15,4) DEFAULT 0,
-      -- Fuel
-      fuel_litres              NUMERIC(15,4) DEFAULT 0,
-      fuel_saved_litres        NUMERIC(15,4) DEFAULT 0,
-      -- Distance
-      km_actual                NUMERIC(15,4) DEFAULT 0,
-      km_baseline              NUMERIC(15,4) DEFAULT 0,
-      -- EV
-      ev_km                    NUMERIC(15,4) DEFAULT 0,
-      ev_fleet_count           INTEGER       DEFAULT 0,
-      total_fleet_count        INTEGER       DEFAULT 0,
-      -- Utilisation
-      utilisation_pct          NUMERIC(5,2)  DEFAULT 0,
-      -- Modal shift
-      trips_consolidated       INTEGER       DEFAULT 0,
-      car_equiv_removed        INTEGER       DEFAULT 0,
-      -- School bus
-      bus_occupancy_pct        NUMERIC(5,2)  DEFAULT 0,
-      -- Paperless
-      digital_docs             INTEGER       DEFAULT 0,
-      paper_docs               INTEGER       DEFAULT 0,
-      paperless_pct            NUMERIC(5,2)  DEFAULT 0,
-      -- Module breakdown JSONB
-      module_breakdown         JSONB         DEFAULT '{}',
-      computed_at              TIMESTAMPTZ   DEFAULT NOW(),
-      UNIQUE(tenant_id, period_year, period_month)
-    )
-  `).catch(() => {});
-}
-
 // ── Main GET handler ──────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
 
@@ -134,8 +75,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await ensureTables();
-
       const { searchParams } = new URL(req.url);
       const tenantId  = searchParams.get('tenantId') ?? '';
       const months    = Math.min(parseInt(searchParams.get('months') ?? '12'), 24);

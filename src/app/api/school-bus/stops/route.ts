@@ -23,36 +23,6 @@ function serialize(rows: Row[]): Row[] {
   });
 }
 
-async function ensureTable() {
-  const exec = (sql: string) => prisma.$executeRawUnsafe(sql).catch(() => {});
-
-  await exec(`
-    CREATE TABLE IF NOT EXISTS school_bus_stops (
-      id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-      tenant_id        TEXT        NOT NULL DEFAULT 'default',
-      stop_code        TEXT        NOT NULL,
-      stop_name        TEXT        NOT NULL,
-      emirate          TEXT        NOT NULL DEFAULT 'Dubai',
-      city             TEXT,
-      area             TEXT,
-      neighbourhood    TEXT,
-      landmark         TEXT,
-      lat              DECIMAL(10,8),
-      lng              DECIMAL(11,8),
-      geofence_radius_m INT        NOT NULL DEFAULT 100,
-      route_ids        JSONB       NOT NULL DEFAULT '[]',
-      is_active        BOOLEAN     NOT NULL DEFAULT true,
-      notes            TEXT,
-      created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
-  await exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_sbs_code ON school_bus_stops(stop_code)`);
-  await exec(`CREATE INDEX IF NOT EXISTS idx_sbs_tenant ON school_bus_stops(tenant_id, is_active)`);
-  await exec(`CREATE INDEX IF NOT EXISTS idx_sbs_emirate ON school_bus_stops(emirate, city, area)`);
-}
-
 export async function GET(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -63,8 +33,6 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
-
         const sp         = new URL(req.url).searchParams;
         const tenantId   = sp.get('tenantId')  ?? '';
         const emirate    = sp.get('emirate')   ?? '';
@@ -115,8 +83,6 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
-
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const {

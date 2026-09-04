@@ -11,42 +11,6 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
  * POST /api/school-bus/students          — enroll new student
  */
 
-async function ensureTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS school_bus_students (
-      id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-      student_code  TEXT        NOT NULL,
-      first_name    TEXT        NOT NULL,
-      last_name     TEXT        NOT NULL,
-      date_of_birth DATE,
-      grade         TEXT,
-      section       TEXT,
-      school_name   TEXT,
-      route_id      UUID        REFERENCES bus_routes(id) ON DELETE SET NULL,
-      pickup_stop   TEXT,
-      dropoff_stop  TEXT,
-      rfid_card     TEXT,
-      guardian1_name  TEXT,
-      guardian1_phone TEXT,
-      guardian1_email TEXT,
-      guardian2_name  TEXT,
-      guardian2_phone TEXT,
-      guardian2_email TEXT,
-      medical_notes   TEXT,
-      photo_url       TEXT,
-      is_active       BOOLEAN     NOT NULL DEFAULT true,
-      enrollment_date DATE        NOT NULL DEFAULT CURRENT_DATE,
-      created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      deleted_at    TIMESTAMPTZ
-    )
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_school_bus_students_code
-      ON school_bus_students(student_code) WHERE deleted_at IS NULL
-  `);
-}
-
 export async function GET(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -57,7 +21,6 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const { searchParams } = new URL(req.url);
         const q       = searchParams.get('q')?.trim() ?? '';
         const routeId = searchParams.get('routeId') ?? '';
@@ -142,7 +105,6 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const {
@@ -167,14 +129,14 @@ export async function POST(req: NextRequest) {
         type NewStudent = { id: string; student_code: string };
         const [student] = await tx.$queryRawUnsafe<NewStudent[]>(
           `INSERT INTO school_bus_students
-             (student_code, first_name, last_name, date_of_birth, grade, section, school_name,
+             (tenant_id, student_code, first_name, last_name, date_of_birth, grade, section, school_name,
               route_id, pickup_stop, dropoff_stop, rfid_card,
               guardian1_name, guardian1_phone, guardian1_email,
               guardian2_name, guardian2_phone, guardian2_email,
               medical_notes, enrollment_date)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
            RETURNING id, student_code`,
-          studentCode, firstName.trim(), lastName.trim(),
+          tenantId, studentCode, firstName.trim(), lastName.trim(),
           dateOfBirth || null, grade || null, section || null, schoolName || null,
           routeId || null, pickupStop || null, dropoffStop || null, rfidCard || null,
           guardian1Name || null, guardian1Phone || null, guardian1Email || null,

@@ -5,23 +5,6 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-const INIT_TABLE = `
-  CREATE TABLE IF NOT EXISTS whatsapp_templates (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    template_name TEXT UNIQUE NOT NULL,
-    display_name TEXT NOT NULL,
-    category TEXT NOT NULL,
-    language TEXT DEFAULT 'en',
-    body_en TEXT NOT NULL,
-    body_ar TEXT,
-    variables JSONB DEFAULT '[]',
-    is_active BOOLEAN DEFAULT true,
-    usage_count INT DEFAULT 0
-  );
-`;
-
 const DEFAULT_TEMPLATES = [
   {
     template_name: 'booking_confirmation_en',
@@ -70,9 +53,7 @@ const DEFAULT_TEMPLATES = [
   },
 ];
 
-async function ensureTableAndSeed() {
-  await prisma.$executeRawUnsafe(INIT_TABLE).catch(() => {});
-
+async function seedDefaultTemplates() {
   // Check if table is empty
   const rows = await prisma.$queryRawUnsafe<{ count: string }[]>(
     `SELECT COUNT(*)::text AS count FROM whatsapp_templates`
@@ -107,7 +88,7 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTableAndSeed();
+        await seedDefaultTemplates();
         const templates = await tx.$queryRawUnsafe<Record<string, unknown>[]>(
           `SELECT * FROM whatsapp_templates ORDER BY category, language, created_at`
         );
@@ -130,7 +111,7 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTableAndSeed();
+        await seedDefaultTemplates();
         const bodyRaw = await req.json() as {
           template_name: string;
           display_name: string;

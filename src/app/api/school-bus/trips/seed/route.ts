@@ -32,70 +32,6 @@ function rnd(a: number, b: number) {
   return Math.floor(Math.random() * (b - a + 1)) + a;
 }
 
-/* ── ensure tables ───────────────────────────────────────── */
-async function ensureTables() {
-  await exec(`CREATE TABLE IF NOT EXISTS school_bus_trips (
-    id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id        TEXT        NOT NULL DEFAULT 'default',
-    trip_code        TEXT,
-    route_id         UUID,
-    route_name       TEXT,
-    route_code       TEXT,
-    vehicle_id       TEXT,
-    vehicle_plate    TEXT,
-    driver_id        TEXT,
-    driver_name      TEXT,
-    attendant_id     UUID,
-    attendant_name   TEXT,
-    direction        TEXT        NOT NULL DEFAULT 'PICKUP',
-    session          TEXT        NOT NULL DEFAULT 'MORNING',
-    scheduled_date   DATE        NOT NULL DEFAULT CURRENT_DATE,
-    scheduled_start  TIME,
-    actual_start     TIMESTAMPTZ,
-    actual_end       TIMESTAMPTZ,
-    status           TEXT        NOT NULL DEFAULT 'SCHEDULED',
-    students_total   INT         NOT NULL DEFAULT 0,
-    students_boarded INT         NOT NULL DEFAULT 0,
-    students_dropped INT         NOT NULL DEFAULT 0,
-    stops_total      INT         NOT NULL DEFAULT 0,
-    stops_completed  INT         NOT NULL DEFAULT 0,
-    distance_km      DOUBLE PRECISION,
-    duration_min     INT,
-    avg_speed_kmh    DOUBLE PRECISION,
-    max_speed_kmh    DOUBLE PRECISION,
-    speeding_events  INT         NOT NULL DEFAULT 0,
-    harsh_braking    INT         NOT NULL DEFAULT 0,
-    geofence_exits   INT         NOT NULL DEFAULT 0,
-    notes            TEXT,
-    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`);
-  await exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_sbt2_code ON school_bus_trips(trip_code, tenant_id) WHERE trip_code IS NOT NULL`);
-  await exec(`CREATE INDEX IF NOT EXISTS idx_sbt2_tenant ON school_bus_trips(tenant_id, status)`);
-  await exec(`CREATE INDEX IF NOT EXISTS idx_sbt2_date   ON school_bus_trips(scheduled_date)`);
-
-  await exec(`CREATE TABLE IF NOT EXISTS school_bus_trip_events (
-    id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id     TEXT        NOT NULL DEFAULT 'default',
-    trip_id       UUID        NOT NULL,
-    event_type    TEXT        NOT NULL,
-    event_time    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    lat           DOUBLE PRECISION,
-    lng           DOUBLE PRECISION,
-    speed_kmh     DOUBLE PRECISION,
-    stop_id       UUID,
-    stop_name     TEXT,
-    student_id    UUID,
-    student_name  TEXT,
-    students_count INT,
-    description   TEXT,
-    metadata      JSONB       NOT NULL DEFAULT '{}',
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`);
-  await exec(`CREATE INDEX IF NOT EXISTS idx_sbte_trip   ON school_bus_trip_events(trip_id, event_time)`);
-  await exec(`CREATE INDEX IF NOT EXISTS idx_sbte_tenant ON school_bus_trip_events(tenant_id, event_time)`);
-}
-
 /* ── seed data ───────────────────────────────────────────── */
 const ROUTES = [
   { name: 'Marina Morning Pickup',    code: 'RTE-001', session: 'MORNING',   direction: 'PICKUP',  plate: 'DXB A 12345', driver: 'Ahmed Al Mansouri',  attendant: 'Fatima Al Zaabi',   stops: ['Marina Walk', 'JBR Tower 5', 'Media City', 'Knowledge Village', 'Al Quoz School'], students: 28 },
@@ -228,8 +164,6 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   try {
-    await ensureTables();
-
     let tripCount   = 0;
     let eventCount  = 0;
     let skipped     = 0;

@@ -22,68 +22,6 @@ import { prisma } from '@/lib/prisma';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
-async function ensureTable() {
-  const exec = (sql: string) => prisma.$executeRawUnsafe(sql).catch(() => {});
-
-  await exec(`
-    CREATE TABLE IF NOT EXISTS school_bus_allocations (
-      id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-      tenant_id           TEXT        NOT NULL DEFAULT 'default',
-      allocation_no       TEXT        NOT NULL,
-      -- Auto-generated: ALLOC-0001
-
-      -- Student
-      student_id          UUID,
-      student_name        TEXT        NOT NULL,
-      student_grade       TEXT,
-      student_section     TEXT,
-      student_emirates_id TEXT,
-      parent_name         TEXT,
-      parent_phone        TEXT,
-      parent_email        TEXT,
-
-      -- Route assignment
-      route_id            UUID,
-      route_name          TEXT,
-      pickup_stop_id      UUID,
-      pickup_stop_name    TEXT,
-      pickup_stop_time    TIME,
-      drop_stop_id        UUID,
-      drop_stop_name      TEXT,
-      drop_stop_time      TIME,
-
-      -- Bus mode
-      bus_mode            TEXT        NOT NULL DEFAULT 'TWO_WAY',
-      -- ONE_WAY_PICKUP | ONE_WAY_DROP | TWO_WAY
-      seat_number         INT,
-      -- null = auto-assigned on day of trip
-
-      -- Temporal
-      effective_from      DATE        NOT NULL DEFAULT CURRENT_DATE,
-      effective_to        DATE,
-      -- null = open-ended, set on withdrawal
-
-      -- Status
-      status              TEXT        NOT NULL DEFAULT 'ACTIVE',
-      -- ACTIVE | SUSPENDED | WITHDRAWN | PENDING_APPROVAL
-      suspension_reason   TEXT,
-      withdrawal_reason   TEXT,
-      approved_by         TEXT,
-      approved_at         TIMESTAMPTZ,
-      notes               TEXT,
-
-      created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
-  await exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_sba_alloc_no ON school_bus_allocations(allocation_no, tenant_id)`);
-  await exec(`CREATE INDEX IF NOT EXISTS idx_sba_student  ON school_bus_allocations(student_id)`);
-  await exec(`CREATE INDEX IF NOT EXISTS idx_sba_route    ON school_bus_allocations(route_id)`);
-  await exec(`CREATE INDEX IF NOT EXISTS idx_sba_status   ON school_bus_allocations(tenant_id, status)`);
-  await exec(`CREATE INDEX IF NOT EXISTS idx_sba_stop_pu  ON school_bus_allocations(pickup_stop_id)`);
-}
-
 function serialize(rows: Row[]): Row[] {
   return rows.map(r => {
     const out: Row = {};
@@ -104,8 +42,6 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
-
         const sp        = new URL(req.url).searchParams;
         const tenantId  = sp.get('tenantId')  ?? 'default';
         const routeId   = sp.get('routeId')   ?? '';
@@ -171,8 +107,6 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
-
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const {

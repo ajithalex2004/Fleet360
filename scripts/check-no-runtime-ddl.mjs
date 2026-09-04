@@ -38,43 +38,15 @@ import { exit } from 'node:process';
 
 // ── Allowlist — every path that already has a runtime-DDL function ──────────
 // Frozen on 2026-08-10.  Remove entries as each file is migrated.
-const KNOWN_VIOLATIONS = new Set([
-  'src/app/api/admin/dispatch-stats/route.ts',
-  'src/app/api/admin/nav-permissions/route.ts',
-  'src/app/api/admin/platform-settings/route.ts',
-  'src/app/api/ambulance/calls/route.ts',
-  'src/app/api/branch-staff/route.ts',
-  'src/app/api/carrier-portal/app/loads/[id]/documents/route.ts',
-  'src/app/api/esign/send/route.ts',
-  'src/app/api/finance/deposits/route.ts',
-  'src/app/api/finance/recurring-invoices/route.ts',
-  'src/app/api/incidents/[id]/notes/route.ts',
-  'src/app/api/leasing/amendments/route.ts',
-  'src/app/api/leasing/handover/route.ts',
-  'src/app/api/leasing/transfers/route.ts',
-  'src/app/api/logistics/quotes/route.ts',
-  'src/app/api/logistics/shipments/[id]/documents/route.ts',
-  'src/app/api/logistics/shipments/[id]/documents/[docId]/route.ts',
-  'src/app/api/logistics/shipments/[id]/manifest/route.ts',
-  'src/app/api/rental/branches/route.ts',
-  'src/app/api/rental/documents/route.ts',
-  'src/app/api/rental/insurance/route.ts',
-  'src/app/api/rental/transfers/route.ts',
-  'src/app/api/school-bus/allocations/route.ts',
-  'src/app/api/school-bus/attendance/route.ts',
-  'src/app/api/school-bus/attendants/route.ts',
-  'src/app/api/school-bus/driver-scores/route.ts',
-  'src/app/api/school-bus/fleet-positions/route.ts',
-  'src/app/api/school-bus/schedules/route.ts',
-  'src/app/api/school-bus/stops/route.ts',
-  'src/app/api/school-bus/students/route.ts',
-  'src/app/api/school-bus/trips/seed/route.ts',
-  'src/app/api/sustainability/dashboard/route.ts',
-  'src/app/api/sustainability/settings/route.ts',
-  'src/app/api/tenant-subscriptions/route.ts',
-  'src/app/api/tenants/pre-verify-domain/route.ts',
-  'src/app/api/whatsapp/templates/route.ts',
-]);
+//
+// The 35 files that were here before were all migrated together on
+// 2026-09-04: their CREATE TABLE / ALTER TABLE / CREATE INDEX statements
+// moved into prisma/migrations/20260910000013 through .../20260910000021,
+// and every table that carries (or now carries) a tenant_id column got a
+// tenant_isolation RLS policy. See those migration files for the full
+// rationale, including how the school_bus_trips / school_bus_students /
+// sustainability_settings schema-race conflicts were resolved.
+const KNOWN_VIOLATIONS = new Set([]);
 
 // ── Detection patterns ────────────────────────────────────────────────────────
 // Matches lines declaring runtime-DDL functions anywhere in src/.

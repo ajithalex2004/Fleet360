@@ -5,31 +5,6 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-// Bootstrap the settings table (same as in dashboard route)
-async function ensureTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS sustainability_settings (
-      id                                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      tenant_id                         TEXT NOT NULL DEFAULT 'default',
-      org_name                          TEXT DEFAULT '',
-      baseline_year                     INTEGER DEFAULT 2023,
-      baseline_routing_improvement      NUMERIC(5,4) DEFAULT 0.20,
-      private_car_km_assumption         NUMERIC(6,2) DEFAULT 18.0,
-      private_car_ef_kg_per_km          NUMERIC(8,4) DEFAULT 0.1700,
-      diesel_ef_kg_per_litre            NUMERIC(8,4) DEFAULT 2.6800,
-      petrol_ef_kg_per_litre            NUMERIC(8,4) DEFAULT 2.3100,
-      uae_grid_ef_kg_per_kwh            NUMERIC(8,4) DEFAULT 0.4570,
-      ev_km_per_kwh                     NUMERIC(6,2) DEFAULT 6.50,
-      school_bus_avg_occupancy_target   NUMERIC(5,2) DEFAULT 75.0,
-      reporting_currency                TEXT DEFAULT 'AED',
-      vat_rate                          NUMERIC(5,4) DEFAULT 0.05,
-      created_at                        TIMESTAMPTZ DEFAULT NOW(),
-      updated_at                        TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE(tenant_id)
-    )
-  `).catch(() => {});
-}
-
 type Row = Record<string, unknown>;
 
 function serializeRow(row: Row): Row {
@@ -63,8 +38,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await ensureTable();
-
       const { searchParams } = new URL(req.url);
       const tenantId = searchParams.get('tenantId') ?? 'default';
 
@@ -107,8 +80,6 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await ensureTable();
-
       try {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);

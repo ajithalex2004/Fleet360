@@ -14,48 +14,6 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
  * status:      PRESENT | ABSENT | LATE | EXCUSED
  */
 
-async function ensureTable() {
-  // Ensure students table exists first
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS school_bus_students (
-      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      student_code TEXT NOT NULL, first_name TEXT NOT NULL, last_name TEXT NOT NULL,
-      date_of_birth DATE, grade TEXT, section TEXT, school_name TEXT,
-      route_id UUID, pickup_stop TEXT, dropoff_stop TEXT, rfid_card TEXT,
-      guardian1_name TEXT, guardian1_phone TEXT, guardian1_email TEXT,
-      guardian2_name TEXT, guardian2_phone TEXT, guardian2_email TEXT,
-      medical_notes TEXT, photo_url TEXT, is_active BOOLEAN NOT NULL DEFAULT true,
-      enrollment_date DATE NOT NULL DEFAULT CURRENT_DATE,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      deleted_at TIMESTAMPTZ
-    )
-  `);
-
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS school_bus_attendance (
-      id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-      student_id   UUID        NOT NULL REFERENCES school_bus_students(id) ON DELETE CASCADE,
-      date         DATE        NOT NULL DEFAULT CURRENT_DATE,
-      session_type TEXT        NOT NULL DEFAULT 'MORNING',  -- MORNING | AFTERNOON
-      status       TEXT        NOT NULL DEFAULT 'ABSENT',   -- PRESENT | ABSENT | LATE | EXCUSED
-      scanned_at   TIMESTAMPTZ,
-      boarded_at   TIMESTAMPTZ,
-      dropped_at   TIMESTAMPTZ,
-      trip_id      UUID,
-      marked_by    TEXT,
-      notes        TEXT,
-      notified_at  TIMESTAMPTZ,
-      created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      UNIQUE (student_id, date, session_type)
-    )
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS idx_sba_date_route ON school_bus_attendance(date)
-  `);
-}
-
 export async function GET(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -66,7 +24,6 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const { searchParams } = new URL(req.url);
         const date        = searchParams.get('date')        ?? new Date().toISOString().slice(0, 10);
         const routeId     = searchParams.get('routeId')     ?? '';
@@ -159,7 +116,6 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const { action } = body;
@@ -174,15 +130,15 @@ export async function POST(req: NextRequest) {
 
           type AttRow = { id: string };
           const [att] = await tx.$queryRawUnsafe<AttRow[]>(
-            `INSERT INTO school_bus_attendance (student_id, date, session_type, status, notes, boarded_at, dropped_at, scanned_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+            `INSERT INTO school_bus_attendance (tenant_id, student_id, date, session_type, status, notes, boarded_at, dropped_at, scanned_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
              ON CONFLICT (student_id, date, session_type)
              DO UPDATE SET status = EXCLUDED.status, notes = EXCLUDED.notes,
                boarded_at = COALESCE(EXCLUDED.boarded_at, school_bus_attendance.boarded_at),
                dropped_at = COALESCE(EXCLUDED.dropped_at, school_bus_attendance.dropped_at),
                scanned_at = NOW(), updated_at = NOW()
              RETURNING id`,
-            studentId, date, sessionType, status, notes || null, boardedAt || null, droppedAt || null
+            tenantId, studentId, date, sessionType, status, notes || null, boardedAt || null, droppedAt || null
           );
           return NextResponse.json({ id: att.id, ok: true });
         }
@@ -196,11 +152,11 @@ export async function POST(req: NextRequest) {
           let count = 0;
           for (const sid of studentIds) {
             await tx.$executeRawUnsafe(
-              `INSERT INTO school_bus_attendance (student_id, date, session_type, status, scanned_at)
-               VALUES ($1, $2, $3, $4, NOW())
+              `INSERT INTO school_bus_attendance (tenant_id, student_id, date, session_type, status, scanned_at)
+               VALUES ($1, $2, $3, $4, $5, NOW())
                ON CONFLICT (student_id, date, session_type)
                DO UPDATE SET status = EXCLUDED.status, scanned_at = NOW(), updated_at = NOW()`,
-              sid, date, sessionType, status
+              tenantId, sid, date, sessionType, status
             ).catch(() => {});
             count++;
           }

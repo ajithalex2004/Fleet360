@@ -19,62 +19,6 @@ import { prisma } from '@/lib/prisma';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
-async function ensureTable() {
-  const exec = (sql: string) => prisma.$executeRawUnsafe(sql).catch(() => {});
-
-  await exec(`
-    CREATE TABLE IF NOT EXISTS school_bus_schedules (
-      id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-      tenant_id           TEXT        NOT NULL DEFAULT 'default',
-      schedule_name       TEXT        NOT NULL,
-      route_id            UUID,
-      route_name          TEXT,
-      route_code          TEXT,
-      vehicle_id          TEXT,
-      vehicle_plate       TEXT,
-      driver_id           TEXT,
-      driver_name         TEXT,
-      attendant_id        UUID,
-      attendant_name      TEXT,
-
-      -- Timing
-      week_type           TEXT        NOT NULL DEFAULT 'MON_THU',
-      -- MON_THU = Sunday–Thursday, FRI = Friday only, DAILY = all days, CUSTOM = see active_days
-      active_days         JSONB       NOT NULL DEFAULT '["SUN","MON","TUE","WED","THU"]',
-      -- e.g. ["SUN","MON","TUE","WED","THU"] for UAE school week
-      session             TEXT        NOT NULL DEFAULT 'MORNING',
-      -- MORNING | AFTERNOON | BOTH
-      direction           TEXT        NOT NULL DEFAULT 'PICKUP',
-      -- PICKUP | DROPOFF | BOTH
-      departure_time      TIME        NOT NULL,
-      arrival_time        TIME,
-
-      -- Validity
-      effective_from      DATE        NOT NULL DEFAULT CURRENT_DATE,
-      effective_to        DATE,
-      -- null = open-ended
-
-      -- Exceptions: dates when schedule does NOT run (holidays, Eid, etc.)
-      exception_dates     JSONB       NOT NULL DEFAULT '[]',
-      -- e.g. ["2025-12-25","2026-01-01"]
-
-      -- Override: different timing on specific dates (Ramadan, exam period)
-      override_dates      JSONB       NOT NULL DEFAULT '[]',
-      -- e.g. [{"date":"2025-03-10","departure_time":"09:00","arrival_time":"11:30"}]
-
-      status              TEXT        NOT NULL DEFAULT 'ACTIVE',
-      -- ACTIVE | SUSPENDED | EXPIRED | DRAFT
-      notes               TEXT,
-      created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-
-  await exec(`CREATE INDEX IF NOT EXISTS idx_sbsch_tenant ON school_bus_schedules(tenant_id, status)`);
-  await exec(`CREATE INDEX IF NOT EXISTS idx_sbsch_route  ON school_bus_schedules(route_id)`);
-  await exec(`CREATE INDEX IF NOT EXISTS idx_sbsch_week   ON school_bus_schedules(week_type, session)`);
-}
-
 function serialize(rows: Row[]): Row[] {
   return rows.map(r => {
     const out: Row = {};
@@ -95,8 +39,6 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
-
         const sp       = new URL(req.url).searchParams;
         const tenantId = sp.get('tenantId')  ?? 'default';
         const routeId  = sp.get('routeId')   ?? '';
@@ -147,8 +89,6 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        await ensureTable();
-
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const {
