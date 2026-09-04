@@ -40,6 +40,8 @@ function AuthSlot() {
   );
 }
 
+import { Bot, ArrowLeft } from 'lucide-react';
+
 export default function PlatformHomeBar({
   moduleName,
   moduleIcon = 'M',
@@ -50,24 +52,24 @@ export default function PlatformHomeBar({
   const isAgentsPage = pathname?.startsWith('/agents');
 
   return (
-    <div className="flex items-center justify-between px-4 py-2 bg-slate-950/90 border-b border-white/5 z-50 backdrop-blur-sm flex-shrink-0">
+    <div className="flex items-center justify-between px-4 py-2.5 bg-slate-950/85 dark:bg-slate-950/85 bg-white/90 border-b border-white/10 dark:border-white/10 border-slate-200/80 z-50 backdrop-blur-xl flex-shrink-0 transition-colors">
       {/* Left: back to platform home + AI Agents quick link */}
       <div className="flex items-center gap-2">
         <Link
           href="/platform"
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-slate-300 hover:text-white text-sm font-semibold transition-all group min-w-0"
+          className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 dark:bg-white/5 bg-slate-100 border border-white/10 dark:border-white/10 border-slate-200/90 text-slate-200 dark:text-slate-200 text-slate-700 hover:text-white dark:hover:text-white hover:text-slate-950 text-xs font-bold tracking-wider transition-all group min-w-0 shadow-sm"
         >
-          <span className="flex-shrink-0 text-xs group-hover:-translate-x-0.5 transition-transform">&#8592;</span>
-          <span className="hidden lg:inline whitespace-nowrap tracking-wide">FLEET360 HOME</span>
-          <span className="lg:hidden text-xs">HOME</span>
+          <ArrowLeft className="w-3.5 h-3.5 flex-shrink-0 group-hover:-translate-x-0.5 transition-transform" />
+          <span className="hidden lg:inline whitespace-nowrap">FLEET360 HOME</span>
+          <span className="lg:hidden">HOME</span>
         </Link>
         {/* AI Agents quick-access — visible on every module page except /agents itself */}
         {!isAgentsPage && (
           <Link
             href="/agents"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 hover:border-violet-400/50 text-violet-400 hover:text-violet-300 text-xs font-semibold transition-all"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 hover:border-violet-400/50 text-violet-400 dark:text-violet-400 text-violet-600 text-xs font-semibold transition-all shadow-sm"
           >
-            <span>🤖</span>
+            <Bot className="w-3.5 h-3.5" />
             <span className="whitespace-nowrap">AI Agents</span>
           </Link>
         )}
@@ -76,16 +78,16 @@ export default function PlatformHomeBar({
       {/* Centre: current module breadcrumb */}
       <div className="flex items-center gap-2 mx-4">
         <div
-          className={`w-5 h-5 rounded bg-gradient-to-br ${accentColor} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}
+          className={`w-6 h-6 rounded-lg bg-gradient-to-br ${accentColor} flex items-center justify-center text-white text-xs font-extrabold flex-shrink-0 shadow-md`}
         >
           {moduleIcon}
         </div>
-        <span className="text-slate-500 text-xs">/</span>
-        <span className="text-white text-sm font-medium whitespace-nowrap">{moduleName}</span>
+        <span className="text-slate-500 dark:text-slate-500 text-slate-400 text-xs">/</span>
+        <span className="text-white dark:text-white text-slate-900 text-sm font-bold tracking-tight whitespace-nowrap">{moduleName}</span>
         {tenant && (
           <>
-            <span className="text-slate-600 text-xs hidden md:inline">/</span>
-            <span className="text-slate-500 text-xs hidden md:inline truncate max-w-32">{tenant.name}</span>
+            <span className="text-slate-600 dark:text-slate-600 text-slate-400 text-xs hidden md:inline">/</span>
+            <span className="text-slate-400 dark:text-slate-400 text-slate-500 text-xs font-medium hidden md:inline truncate max-w-32">{tenant.name}</span>
           </>
         )}
       </div>

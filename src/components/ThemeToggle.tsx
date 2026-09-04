@@ -13,7 +13,7 @@ const OPTIONS: Array<{ key: ThemeChoice; label: string; mark: string }> = [
 export default function ThemeToggle() {
   const { choice, setChoice } = useTheme();
   return (
-    <div className="inline-flex items-center rounded-lg border border-white/10 bg-white/5 p-0.5" role="group" aria-label="Theme">
+    <div className="inline-flex items-center rounded-xl border border-white/10 dark:border-white/10 border-slate-200/90 bg-slate-900/60 dark:bg-slate-900/60 bg-slate-100 p-1 shadow-inner" role="group" aria-label="Theme">
       {OPTIONS.map(({ key, label, mark }) => {
         const active = choice === key;
         return (
@@ -24,11 +24,13 @@ export default function ThemeToggle() {
             title={`${label} theme`}
             aria-label={`${label} theme`}
             aria-pressed={active}
-            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
-              active ? 'bg-white/15 text-white' : 'text-slate-400 hover:text-white'
+            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition-all ${
+              active
+                ? 'bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-600 text-white shadow-md shadow-cyan-500/25 scale-[1.02]'
+                : 'text-slate-400 dark:text-slate-400 text-slate-600 hover:text-white dark:hover:text-white hover:text-slate-950'
             }`}
           >
-            <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-[10px] font-bold leading-none">
+            <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full text-[10px] font-black leading-none">
               {mark}
             </span>
             <span className="hidden xl:inline">{label}</span>

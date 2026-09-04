@@ -298,9 +298,13 @@ export default function Sidebar({ onTabsFull }: Props) {
                       <button
                         type="button"
                         onClick={() => navigate(m.id, { label: sp.label, href: sp.href, icon: ActiveIcon })}
-                        className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] ${isActive ? 'bg-amber-500/10 text-amber-200' : 'text-slate-200 hover:bg-white/5'}`}
+                        className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors ${
+                          isActive
+                            ? 'bg-cyan-500/15 text-cyan-300 font-bold border-l-2 border-cyan-400'
+                            : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                        }`}
                       >
-                        <ActiveIcon className="h-3.5 w-3.5 flex-shrink-0 text-slate-400" />
+                        <ActiveIcon className={`h-3.5 w-3.5 flex-shrink-0 ${isActive ? 'text-cyan-400' : 'text-slate-400'}`} />
                         <span className="truncate">{sp.label}</span>
                       </button>
                     </li>
@@ -329,10 +333,6 @@ function NavRow({
 
   const Icon = m.icon;
   const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
-    // <Link> already does the navigation. We only need to add the tab-store
-    // side-effect and surface WorkspaceTabsFullError to the shell toast.
-    // If openTab throws, prevent the navigation so we don't end up on a
-    // page the user can't keep open in their workspace.
     try {
       onTabOpen({ key: m.href, label: m.label, moduleId, iconName: m.icon.displayName ?? 'Circle' });
     } catch (err) {
@@ -371,15 +371,19 @@ function NavRow({
           onHover(e.currentTarget);
         }}
         title={collapsed ? m.label : undefined}
-        className={`flex w-full items-center gap-2.5 rounded-md text-left transition-colors ${
-          collapsed ? 'justify-center py-2' : 'px-2 py-1.5'
-        } ${active ? 'bg-amber-500/15 text-amber-200' : 'text-slate-300 hover:bg-white/5 hover:text-white'}`}
+        className={`flex w-full items-center gap-2.5 rounded-xl text-left transition-all ${
+          collapsed ? 'justify-center py-2.5' : 'px-2.5 py-2'
+        } ${
+          active
+            ? 'bg-cyan-500/15 text-cyan-300 font-bold border-l-2 border-cyan-400 shadow-sm shadow-cyan-500/10'
+            : 'text-slate-300 hover:bg-white/5 hover:text-white'
+        }`}
       >
-        <Icon className={`h-4 w-4 flex-shrink-0 ${active ? 'text-amber-300' : 'text-slate-400'}`} />
+        <Icon className={`h-4 w-4 flex-shrink-0 ${active ? 'text-cyan-400' : 'text-slate-400'}`} />
         {!collapsed && <span className="flex-1 truncate text-[13px]">{m.label}</span>}
         {!collapsed && m.subPages && m.subPages.length > 0 && (
           active
-            ? <ChevronLeft className="h-3.5 w-3.5 rotate-[-90deg] text-slate-500" />
+            ? <ChevronLeft className="h-3.5 w-3.5 rotate-[-90deg] text-cyan-400" />
             : <ChevronRight className="h-3.5 w-3.5 text-slate-600" />
         )}
       </Link>
@@ -387,7 +391,7 @@ function NavRow({
       {/* Context menu */}
       {showContextMenu && (
         <div
-          className="fixed z-[100] min-w-[160px] rounded-lg border border-white/10 bg-slate-900 py-1 shadow-2xl"
+          className="fixed z-[100] min-w-[160px] rounded-xl border border-white/10 bg-slate-900/95 backdrop-blur-xl py-1 shadow-2xl"
           style={{ left: contextMenuPos.x, top: contextMenuPos.y }}
         >
           <button
@@ -435,11 +439,13 @@ function SubRow({
       prefetch
       onClick={handleClick}
       onMouseEnter={() => prefetchHref(page.href)}
-      className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[12px] ${
-        active ? 'bg-amber-500/10 text-amber-200' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+      className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] transition-colors ${
+        active
+          ? 'bg-cyan-500/10 text-cyan-300 font-bold'
+          : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
       }`}
     >
-      <Icon className={`h-3 w-3 flex-shrink-0 ${active ? 'text-amber-300' : 'text-slate-500'}`} />
+      <Icon className={`h-3 w-3 flex-shrink-0 ${active ? 'text-cyan-400' : 'text-slate-500'}`} />
       <span className="truncate">{page.label}</span>
     </Link>
   );

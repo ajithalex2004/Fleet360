@@ -198,20 +198,23 @@ export default function PlatformPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0c1a3e] text-white">
+    <div className="min-h-screen bg-[#080b11] dark:bg-[#080b11] bg-slate-50 text-white dark:text-white text-slate-900 transition-colors">
       {/* Top nav */}
-      <nav className="border-b border-white/10 bg-slate-900/95 backdrop-blur-xl sticky top-0 z-50">
+      <nav className="border-b border-white/10 dark:border-white/10 border-slate-200/90 bg-slate-950/85 dark:bg-slate-950/85 bg-white/90 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center font-bold text-white text-base shadow-lg shadow-blue-500/30">
-              XL
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 via-blue-500 to-indigo-600 flex items-center justify-center font-extrabold text-white text-base shadow-lg shadow-cyan-500/25">
+              F360
             </div>
-            <span className="text-white font-bold text-lg">Fleet360</span>
+            <div>
+              <span className="text-white dark:text-white text-slate-900 font-extrabold text-lg tracking-tight">Fleet360</span>
+              <span className="hidden sm:inline-block ml-2 text-[10px] font-mono font-bold bg-cyan-500/15 text-cyan-300 dark:text-cyan-300 text-blue-700 px-2 py-0.5 rounded-full border border-cyan-500/30">ENTERPRISE</span>
+            </div>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3">
             <ThemeToggle />
-            <Link href="/approvals" className="rounded-lg bg-violet-600/20 border border-violet-500/30 px-4 py-1.5 text-sm font-medium text-violet-400 hover:bg-violet-600/30 transition-all">Approvals</Link>
-            <Link href="/admin" className="rounded-lg bg-red-600/20 border border-red-500/30 px-4 py-1.5 text-sm font-medium text-red-400 hover:bg-red-600/30 transition-all">Admin</Link>
+            <Link href="/approvals" className="rounded-xl bg-violet-600/20 border border-violet-500/30 px-4 py-1.5 text-xs font-bold text-violet-400 hover:bg-violet-600/30 transition-all shadow-sm">Approvals</Link>
+            <Link href="/admin" className="rounded-xl bg-red-600/20 border border-red-500/30 px-4 py-1.5 text-xs font-bold text-red-400 hover:bg-red-600/30 transition-all shadow-sm">Admin</Link>
             <PlatformSessionSlot />
           </div>
         </div>
@@ -220,22 +223,22 @@ export default function PlatformPage() {
       <div className="max-w-7xl mx-auto px-6 py-10 space-y-10">
         {/* Hero */}
         <div className="text-center">
-          <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/30 bg-blue-500/10 px-4 py-1.5 mb-6">
+          <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-4 py-1.5 mb-6 shadow-sm">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-blue-300 text-xs font-medium">All Systems Operational</span>
+            <span className="text-cyan-300 dark:text-cyan-300 text-blue-700 text-xs font-bold tracking-wider">UNIFIED TRANSPORT ECOSYSTEM</span>
           </div>
-          <h1 className="text-5xl font-bold text-white mb-4 tracking-tight">
-            <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">Fleet360</span>
+          <h1 className="text-5xl font-black text-white dark:text-white text-slate-900 mb-4 tracking-tight">
+            <span className="bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500 bg-clip-text text-transparent">Fleet360 Platform</span>
           </h1>
-          <p className="text-slate-400 text-lg max-w-2xl mx-auto">
-            Unified transport management — maintenance, leasing, rentals, staff buses, logistics, incidents, ESG sustainability and analytics in one platform.
+          <p className="text-slate-400 dark:text-slate-400 text-slate-600 text-base max-w-2xl mx-auto leading-relaxed">
+            Autonomous fleet intelligence, multi-modal transport bookings, maintenance lifecycle, staff dispatch, and ESG sustainability in one high-performance system.
           </p>
           <div className="mt-8 max-w-md mx-auto relative">
-            <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
             </svg>
             <input type="text" placeholder="Module search is available inside each module" readOnly
-              className="w-full bg-slate-800/60 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500/50 transition-colors" />
+              className="w-full bg-slate-900/80 dark:bg-slate-900/80 bg-white border border-white/10 dark:border-white/10 border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-white dark:text-white text-slate-900 placeholder-slate-400 text-sm focus:outline-none focus:border-cyan-400 transition-colors shadow-inner" />
           </div>
 
           {/* Quick-Launch Flagship Bar */}
@@ -320,34 +323,34 @@ export default function PlatformPage() {
 
               return (
                 <Link key={mod.id} href={mod.href}
-                  className={`group relative bg-slate-800/50 border ${mod.border} rounded-2xl p-6 hover:bg-slate-800/80 transition-all duration-200 hover:shadow-xl ${mod.glow} hover:scale-[1.01] cursor-pointer block`}>
+                  className="group relative bg-slate-900/60 dark:bg-slate-900/60 bg-white border border-white/10 dark:border-white/10 border-slate-200/90 rounded-2xl p-6 hover:border-cyan-400/60 dark:hover:border-cyan-400/60 hover:border-blue-500/60 transition-all duration-200 hover:shadow-2xl hover:shadow-cyan-500/10 hover:scale-[1.01] cursor-pointer block backdrop-blur-xl shadow-lg">
                   <div className="absolute top-4 right-4 flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    <span className="text-emerald-400 text-[10px] font-medium">LIVE</span>
+                    <span className="text-emerald-400 text-[10px] font-bold">LIVE</span>
                   </div>
                   <div className="flex items-start gap-4 mb-4">
                     <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${mod.gradient} flex items-center justify-center flex-shrink-0 shadow-lg`}>
-                      <span className="text-white text-sm font-bold tracking-tight">{mod.icon}</span>
+                      <span className="text-white text-sm font-black tracking-tight">{mod.icon}</span>
                     </div>
                     <div>
-                      <h3 className="text-white font-semibold text-base group-hover:text-blue-300 transition-colors">{mod.title}</h3>
-                      <p className="text-slate-400 text-xs mt-1 leading-relaxed line-clamp-2">{mod.description}</p>
+                      <h3 className="text-white dark:text-white text-slate-900 font-extrabold text-base group-hover:text-cyan-400 dark:group-hover:text-cyan-400 group-hover:text-blue-600 transition-colors">{mod.title}</h3>
+                      <p className="text-slate-400 dark:text-slate-400 text-slate-600 text-xs mt-1 leading-relaxed line-clamp-2">{mod.description}</p>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-1.5 mb-4">
                     {mod.tags.map(tag => (
-                      <span key={tag} className="text-[10px] bg-white/5 border border-white/10 rounded-full px-2 py-0.5 text-slate-400">{tag}</span>
+                      <span key={tag} className="text-[10px] font-medium bg-white/5 dark:bg-white/5 bg-slate-100 border border-white/10 dark:border-white/10 border-slate-200 rounded-full px-2 py-0.5 text-slate-400 dark:text-slate-400 text-slate-600">{tag}</span>
                     ))}
                   </div>
-                  <div className="grid grid-cols-2 gap-3 border-t border-white/5 pt-4">
+                  <div className="grid grid-cols-2 gap-3 border-t border-white/5 dark:border-white/5 border-slate-100 pt-4">
                     {stats.map(s => (
                       <div key={s.label}>
-                        <p className="text-slate-500 text-[10px]">{s.label}</p>
-                        <p className="text-white text-sm font-semibold">{s.value}</p>
+                        <p className="text-slate-500 dark:text-slate-500 text-slate-400 text-[10px] uppercase font-semibold">{s.label}</p>
+                        <p className="text-white dark:text-white text-slate-900 text-sm font-bold font-mono">{s.value}</p>
                       </div>
                     ))}
                   </div>
-                  <div className="absolute bottom-5 right-5 text-slate-600 group-hover:text-slate-300 transition-colors">
+                  <div className="absolute bottom-5 right-5 text-slate-600 dark:text-slate-600 text-slate-400 group-hover:text-cyan-400 dark:group-hover:text-cyan-400 group-hover:text-blue-600 transition-colors">
                     <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
                     </svg>
