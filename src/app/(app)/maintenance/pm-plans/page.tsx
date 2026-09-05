@@ -157,8 +157,8 @@ export default function PMPlansPage() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-white">PM Plans</h1>
-                    <p className="text-xs mt-1 text-slate-500">Define preventive maintenance rules with odometer, calendar, and hours triggers</p>
+                    <h1 className="text-2xl font-bold text-[var(--text-main)]">PM Plans</h1>
+                    <p className="text-xs mt-1 text-[var(--text-faint)]">Define preventive maintenance rules with odometer, calendar, and hours triggers</p>
                 </div>
                 <button
                     onClick={openCreate}
@@ -171,13 +171,13 @@ export default function PMPlansPage() {
             {/* KPI strip */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
-                    { label: 'Total plans',    value: plans.length,                              color: 'text-white' },
+                    { label: 'Total plans',    value: plans.length,                              color: 'text-[var(--text-main)]' },
                     { label: 'Active',         value: plans.filter(p => p.isActive).length,      color: 'text-emerald-400' },
-                    { label: 'Inactive',       value: plans.filter(p => !p.isActive).length,     color: 'text-slate-500' },
+                    { label: 'Inactive',       value: plans.filter(p => !p.isActive).length,     color: 'text-[var(--text-faint)]' },
                     { label: 'Triggers total', value: totalTriggers,                              color: 'text-blue-400' },
                 ].map(kpi => (
-                    <div key={kpi.label} className="rounded-xl border border-white/10 bg-slate-900 p-5">
-                        <p className="text-xs text-slate-500 uppercase tracking-wide">{kpi.label}</p>
+                    <div key={kpi.label} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
+                        <p className="text-xs text-[var(--text-faint)] uppercase tracking-wide">{kpi.label}</p>
                         <p className={`text-2xl font-bold mt-1 ${kpi.color}`}>{kpi.value}</p>
                     </div>
                 ))}
@@ -188,13 +188,13 @@ export default function PMPlansPage() {
                 {plans.map(plan => (
                     <div
                         key={plan.id}
-                        className={`rounded-xl border p-5 transition-opacity ${plan.isActive ? 'border-white/10 bg-slate-900' : 'border-white/5 bg-slate-900/50 opacity-60'}`}
+                        className={`rounded-xl border p-5 transition-opacity ${plan.isActive ? 'border-[var(--border-subtle)] bg-[var(--bg-surface)]' : 'border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 opacity-60'}`}
                     >
                         <div className="flex items-start justify-between gap-4">
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-3 flex-wrap">
-                                    <h3 className="text-base font-bold text-white">{plan.name}</h3>
-                                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium border ${plan.isActive ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : 'bg-slate-700/40 text-slate-500 border-slate-600/40'}`}>
+                                    <h3 className="text-base font-bold text-[var(--text-main)]">{plan.name}</h3>
+                                    <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium border ${plan.isActive ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : 'bg-[var(--bg-surface-hover)]/40 text-[var(--text-faint)] border-[var(--border-strong)]/40'}`}>
                                         {plan.isActive ? 'Active' : 'Inactive'}
                                     </span>
                                     <span className="inline-flex rounded-full bg-blue-500/15 px-2.5 py-0.5 text-xs font-medium text-blue-400 border border-blue-500/30">
@@ -202,34 +202,34 @@ export default function PMPlansPage() {
                                     </span>
                                 </div>
                                 {plan.description && (
-                                    <p className="text-sm text-slate-500 mt-1">{plan.description}</p>
+                                    <p className="text-sm text-[var(--text-faint)] mt-1">{plan.description}</p>
                                 )}
                                 <div className="flex flex-wrap gap-2 mt-3">
                                     {plan.triggers.map((t, i) => (
-                                        <span key={i} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 border border-white/10 px-3 py-1 text-xs text-slate-300">
+                                        <span key={i} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-3 py-1 text-xs text-[var(--text-muted)]">
                                             {TRIGGER_LABELS[t.triggerType]} — every {t.intervalValue.toLocaleString()} {t.intervalUnit}
                                         </span>
                                     ))}
                                     {plan.triggers.length === 0 && (
-                                        <span className="text-xs text-slate-600 italic">No triggers defined</span>
+                                        <span className="text-xs text-[var(--text-faint)] italic">No triggers defined</span>
                                     )}
                                 </div>
-                                <div className="flex flex-wrap gap-4 mt-3 text-xs text-slate-500">
-                                    <span>Grace: <strong className="text-slate-400">{plan.gracePeriodDays}d</strong></span>
-                                    <span>Early window: <strong className="text-slate-400">{plan.earlyWindowDays}d / {plan.earlyWindowKm.toLocaleString()} km</strong></span>
-                                    <span>Notify: <strong className="text-slate-400">{plan.notifyDaysBefore}d before</strong></span>
+                                <div className="flex flex-wrap gap-4 mt-3 text-xs text-[var(--text-faint)]">
+                                    <span>Grace: <strong className="text-[var(--text-muted)]">{plan.gracePeriodDays}d</strong></span>
+                                    <span>Early window: <strong className="text-[var(--text-muted)]">{plan.earlyWindowDays}d / {plan.earlyWindowKm.toLocaleString()} km</strong></span>
+                                    <span>Notify: <strong className="text-[var(--text-muted)]">{plan.notifyDaysBefore}d before</strong></span>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
                                 <button
                                     onClick={() => toggleActive(plan.id)}
-                                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-400 hover:bg-white/5 border border-white/10 transition-colors"
+                                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] transition-colors"
                                 >
                                     {plan.isActive ? 'Deactivate' : 'Activate'}
                                 </button>
                                 <button
                                     onClick={() => openEdit(plan)}
-                                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-white/5 border border-white/10 transition-colors"
+                                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] transition-colors"
                                 >
                                     Edit
                                 </button>
@@ -244,8 +244,8 @@ export default function PMPlansPage() {
                     </div>
                 ))}
                 {plans.length === 0 && (
-                    <div className="rounded-xl border border-white/10 bg-slate-900 p-12 text-center">
-                        <p className="text-slate-500 text-sm">No PM plans yet. Create one to start tracking preventive maintenance.</p>
+                    <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-12 text-center">
+                        <p className="text-[var(--text-faint)] text-sm">No PM plans yet. Create one to start tracking preventive maintenance.</p>
                         <button onClick={openCreate} className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
                             + New plan
                         </button>
@@ -256,40 +256,40 @@ export default function PMPlansPage() {
             {/* Create / Edit modal */}
             {showModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-                    <div className="bg-slate-900 rounded-2xl w-full max-w-2xl shadow-2xl border border-white/10 max-h-[90vh] flex flex-col">
-                        <div className="p-6 border-b border-white/10 flex items-center justify-between shrink-0">
-                            <h3 className="text-lg font-bold text-white">{editingId ? 'Edit plan' : 'New PM plan'}</h3>
-                            <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-300 transition-colors">
+                    <div className="bg-[var(--bg-surface)] rounded-2xl w-full max-w-2xl shadow-2xl border border-[var(--border-subtle)] max-h-[90vh] flex flex-col">
+                        <div className="p-6 border-b border-[var(--border-subtle)] flex items-center justify-between shrink-0">
+                            <h3 className="text-lg font-bold text-[var(--text-main)]">{editingId ? 'Edit plan' : 'New PM plan'}</h3>
+                            <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-muted)] transition-colors">
                                 <XIcon />
                             </button>
                         </div>
                         <div className="p-6 space-y-5 overflow-y-auto flex-1">
                             <div>
-                                <label className="block text-xs font-medium text-slate-400 mb-1.5">Plan name *</label>
+                                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Plan name *</label>
                                 <input
                                     type="text"
                                     value={form.name}
                                     onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                                     placeholder="e.g. Engine Oil Service"
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-800 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)] text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-slate-400 mb-1.5">Description</label>
+                                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Description</label>
                                 <input
                                     type="text"
                                     value={form.description ?? ''}
                                     onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                                     placeholder="Brief description of the service"
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-800 text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)] text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-slate-400 mb-1.5">Type</label>
+                                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Type</label>
                                 <select
                                     value={form.maintenanceType}
                                     onChange={e => setForm(f => ({ ...f, maintenanceType: e.target.value }))}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-800 text-white text-sm focus:outline-none"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)] text-sm focus:outline-none"
                                 >
                                     <option value="PREVENTIVE">Preventive</option>
                                     <option value="INSPECTION">Inspection</option>
@@ -297,8 +297,8 @@ export default function PMPlansPage() {
                             </div>
                             <div>
                                 <div className="flex items-center justify-between mb-2">
-                                    <label className="text-xs font-medium text-slate-400">
-                                        Triggers <span className="text-slate-600 font-normal">(whichever comes first)</span>
+                                    <label className="text-xs font-medium text-[var(--text-muted)]">
+                                        Triggers <span className="text-[var(--text-faint)] font-normal">(whichever comes first)</span>
                                     </label>
                                     <button onClick={addTrigger} className="text-xs text-blue-400 hover:text-blue-300 font-medium transition-colors">
                                         + Add trigger
@@ -306,37 +306,37 @@ export default function PMPlansPage() {
                                 </div>
                                 <div className="space-y-2">
                                     {form.triggers.map((t, i) => (
-                                        <div key={i} className="flex items-center gap-2 rounded-lg bg-slate-800 border border-white/10 p-3">
+                                        <div key={i} className="flex items-center gap-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-3">
                                             <select
                                                 value={t.triggerType}
                                                 onChange={e => updateTrigger(i, { triggerType: e.target.value as PMTriggerType })}
-                                                className="flex-1 rounded-md border border-white/10 px-2 py-1.5 bg-slate-700 text-white text-xs focus:outline-none"
+                                                className="flex-1 rounded-md border border-[var(--border-subtle)] px-2 py-1.5 bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-xs focus:outline-none"
                                             >
                                                 {Object.values(PMTriggerType).map(type => (
                                                     <option key={type} value={type}>{TRIGGER_LABELS[type]}</option>
                                                 ))}
                                             </select>
-                                            <span className="text-slate-500 text-xs shrink-0">every</span>
+                                            <span className="text-[var(--text-faint)] text-xs shrink-0">every</span>
                                             <input
                                                 type="number"
                                                 min={1}
                                                 value={t.intervalValue}
                                                 onChange={e => updateTrigger(i, { intervalValue: Number(e.target.value) })}
-                                                className="w-24 rounded-md border border-white/10 px-2 py-1.5 bg-slate-700 text-white text-xs focus:outline-none"
+                                                className="w-24 rounded-md border border-[var(--border-subtle)] px-2 py-1.5 bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-xs focus:outline-none"
                                             />
-                                            <span className="text-slate-400 text-xs w-10 shrink-0">{t.intervalUnit}</span>
+                                            <span className="text-[var(--text-muted)] text-xs w-10 shrink-0">{t.intervalUnit}</span>
                                             <button onClick={() => removeTrigger(i)} className="text-red-400 hover:text-red-300 shrink-0 transition-colors">
                                                 <XIcon />
                                             </button>
                                         </div>
                                     ))}
                                     {form.triggers.length === 0 && (
-                                        <p className="text-xs text-slate-600 italic py-1">No triggers — add at least one to enable due calculation</p>
+                                        <p className="text-xs text-[var(--text-faint)] italic py-1">No triggers — add at least one to enable due calculation</p>
                                     )}
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-slate-400 mb-2">Service windows</label>
+                                <label className="block text-xs font-medium text-[var(--text-muted)] mb-2">Service windows</label>
                                 <div className="grid grid-cols-3 gap-3">
                                     {([
                                         { key: 'gracePeriodDays', label: 'Grace period (days)' },
@@ -344,13 +344,13 @@ export default function PMPlansPage() {
                                         { key: 'earlyWindowKm',   label: 'Early window (km)'   },
                                     ] as { key: string; label: string }[]).map(({ key, label }) => (
                                         <div key={key}>
-                                            <label className="block text-xs text-slate-500 mb-1">{label}</label>
+                                            <label className="block text-xs text-[var(--text-faint)] mb-1">{label}</label>
                                             <input
                                                 type="number"
                                                 min={0}
                                                 value={(form as Record<string, unknown>)[key] as number}
                                                 onChange={e => setForm(f => ({ ...f, [key]: Number(e.target.value) }))}
-                                                className="w-full rounded-md border border-white/10 px-2 py-1.5 bg-slate-800 text-white text-sm focus:outline-none"
+                                                className="w-full rounded-md border border-[var(--border-subtle)] px-2 py-1.5 bg-[var(--bg-surface)] text-[var(--text-main)] text-sm focus:outline-none"
                                             />
                                         </div>
                                     ))}
@@ -358,13 +358,13 @@ export default function PMPlansPage() {
                             </div>
                             <div className="flex items-end gap-6">
                                 <div>
-                                    <label className="block text-xs text-slate-500 mb-1">Notify days before</label>
+                                    <label className="block text-xs text-[var(--text-faint)] mb-1">Notify days before</label>
                                     <input
                                         type="number"
                                         min={0}
                                         value={form.notifyDaysBefore}
                                         onChange={e => setForm(f => ({ ...f, notifyDaysBefore: Number(e.target.value) }))}
-                                        className="w-32 rounded-md border border-white/10 px-2 py-1.5 bg-slate-800 text-white text-sm focus:outline-none"
+                                        className="w-32 rounded-md border border-[var(--border-subtle)] px-2 py-1.5 bg-[var(--bg-surface)] text-[var(--text-main)] text-sm focus:outline-none"
                                     />
                                 </div>
                                 <label className="flex items-center gap-2 cursor-pointer pb-1.5">
@@ -374,14 +374,14 @@ export default function PMPlansPage() {
                                         onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))}
                                         className="h-4 w-4 rounded accent-blue-600"
                                     />
-                                    <span className="text-sm text-slate-300">Active</span>
+                                    <span className="text-sm text-[var(--text-muted)]">Active</span>
                                 </label>
                             </div>
                         </div>
-                        <div className="p-6 border-t border-white/10 flex justify-end gap-3 shrink-0">
+                        <div className="p-6 border-t border-[var(--border-subtle)] flex justify-end gap-3 shrink-0">
                             <button
                                 onClick={() => setShowModal(false)}
-                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 transition-colors"
+                                className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] transition-colors"
                             >
                                 Cancel
                             </button>
@@ -400,15 +400,15 @@ export default function PMPlansPage() {
             {/* Delete confirmation modal */}
             {deleteConfirm && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-                    <div className="bg-slate-900 rounded-2xl w-full max-w-sm shadow-2xl border border-white/10 p-6">
-                        <h3 className="text-base font-bold text-white mb-2">Delete this plan?</h3>
-                        <p className="text-sm text-slate-500 mb-5">
+                    <div className="bg-[var(--bg-surface)] rounded-2xl w-full max-w-sm shadow-2xl border border-[var(--border-subtle)] p-6">
+                        <h3 className="text-base font-bold text-[var(--text-main)] mb-2">Delete this plan?</h3>
+                        <p className="text-sm text-[var(--text-faint)] mb-5">
                             All associated schedule items will stop being tracked. This cannot be undone.
                         </p>
                         <div className="flex justify-end gap-3">
                             <button
                                 onClick={() => setDeleteConfirm(null)}
-                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/5 transition-colors"
+                                className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] transition-colors"
                             >
                                 Cancel
                             </button>

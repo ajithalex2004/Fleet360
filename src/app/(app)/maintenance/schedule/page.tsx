@@ -59,7 +59,7 @@ const MOCK_ITEMS: MockDueItem[] = [
 const STATUS_CONFIG = {
     [PMItemStatus.OVERDUE]:  { label: 'Overdue',  dot: 'bg-red-500',     badge: 'bg-red-500/15 text-red-400 border-red-500/30',     tab: 'border-red-500 text-red-400' },
     [PMItemStatus.DUE]:      { label: 'Due',       dot: 'bg-amber-400',   badge: 'bg-amber-400/15 text-amber-300 border-amber-400/30', tab: 'border-amber-400 text-amber-300' },
-    [PMItemStatus.UPCOMING]: { label: 'Upcoming',  dot: 'bg-slate-500',   badge: 'bg-slate-700/60 text-slate-400 border-slate-600/40', tab: 'border-slate-500 text-slate-400' },
+    [PMItemStatus.UPCOMING]: { label: 'Upcoming',  dot: 'bg-slate-500',   badge: 'bg-[var(--bg-surface-hover)]/60 text-[var(--text-muted)] border-[var(--border-strong)]/40', tab: 'border-slate-500 text-[var(--text-muted)]' },
     [PMItemStatus.COMPLETED]:{ label: 'Completed', dot: 'bg-emerald-500', badge: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30', tab: 'border-emerald-500 text-emerald-400' },
     [PMItemStatus.SNOOZED]:  { label: 'Snoozed',  dot: 'bg-purple-400',  badge: 'bg-purple-500/15 text-purple-400 border-purple-500/30', tab: 'border-purple-500 text-purple-400' },
 };
@@ -115,8 +115,8 @@ export default function PMSchedulePage() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-white">PM Schedule</h1>
-                    <p className="text-xs mt-1 text-slate-500">Due items across all active maintenance plans — whichever trigger comes first</p>
+                    <h1 className="text-2xl font-bold text-[var(--text-main)]">PM Schedule</h1>
+                    <p className="text-xs mt-1 text-[var(--text-faint)]">Due items across all active maintenance plans — whichever trigger comes first</p>
                 </div>
                 <button
                     onClick={handleGenerateRequests}
@@ -150,18 +150,18 @@ export default function PMSchedulePage() {
                 {[
                     { label: 'Overdue',        value: counts[PMItemStatus.OVERDUE],  color: 'text-red-400' },
                     { label: 'Due soon',        value: counts[PMItemStatus.DUE],      color: 'text-amber-300' },
-                    { label: 'Upcoming',        value: counts[PMItemStatus.UPCOMING], color: 'text-slate-400' },
-                    { label: 'Total tracked',   value: items.length,                  color: 'text-white' },
+                    { label: 'Upcoming',        value: counts[PMItemStatus.UPCOMING], color: 'text-[var(--text-muted)]' },
+                    { label: 'Total tracked',   value: items.length,                  color: 'text-[var(--text-main)]' },
                 ].map(kpi => (
-                    <div key={kpi.label} className="rounded-xl border border-white/10 bg-slate-900 p-5">
-                        <p className="text-xs text-slate-500 uppercase tracking-wide">{kpi.label}</p>
+                    <div key={kpi.label} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
+                        <p className="text-xs text-[var(--text-faint)] uppercase tracking-wide">{kpi.label}</p>
                         <p className={`text-2xl font-bold mt-1 ${kpi.color}`}>{kpi.value}</p>
                     </div>
                 ))}
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-0 border-b border-white/10">
+            <div className="flex gap-0 border-b border-[var(--border-subtle)]">
                 {TABS.map(tab => {
                     const cfg = STATUS_CONFIG[tab];
                     const active = activeTab === tab;
@@ -169,11 +169,11 @@ export default function PMSchedulePage() {
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
-                            className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${active ? cfg.tab : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+                            className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${active ? cfg.tab : 'border-transparent text-[var(--text-faint)] hover:text-[var(--text-muted)]'}`}
                         >
                             {cfg.label}
                             {counts[tab] > 0 && (
-                                <span className={`ml-2 inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs ${active ? cfg.badge : 'bg-slate-800 text-slate-500 border border-white/10'}`}>
+                                <span className={`ml-2 inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs ${active ? cfg.badge : 'bg-[var(--bg-surface)] text-[var(--text-faint)] border border-[var(--border-subtle)]'}`}>
                                     {counts[tab]}
                                 </span>
                             )}
@@ -187,30 +187,30 @@ export default function PMSchedulePage() {
                 {visibleItems.map(item => {
                     const cfg = STATUS_CONFIG[item.status];
                     return (
-                        <div key={item.id} className="rounded-xl border border-white/10 bg-slate-900 p-5">
+                        <div key={item.id} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
                             <div className="flex items-start justify-between gap-4">
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-3 flex-wrap">
                                         <span className={`inline-block h-2 w-2 rounded-full ${cfg.dot} shrink-0`} />
-                                        <span className="text-base font-bold text-white">{item.vehiclePlate}</span>
-                                        <span className="text-slate-500 text-sm">{item.vehicleModel}</span>
+                                        <span className="text-base font-bold text-[var(--text-main)]">{item.vehiclePlate}</span>
+                                        <span className="text-[var(--text-faint)] text-sm">{item.vehicleModel}</span>
                                         <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium border ${cfg.badge}`}>
                                             {cfg.label}
                                         </span>
                                     </div>
                                     <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm">
-                                        <span className="text-slate-500">Plan: <strong className="text-slate-300">{item.planName}</strong></span>
-                                        <span className={`font-medium ${item.status === PMItemStatus.OVERDUE ? 'text-red-400' : item.status === PMItemStatus.DUE ? 'text-amber-300' : 'text-slate-400'}`}>
+                                        <span className="text-[var(--text-faint)]">Plan: <strong className="text-[var(--text-muted)]">{item.planName}</strong></span>
+                                        <span className={`font-medium ${item.status === PMItemStatus.OVERDUE ? 'text-red-400' : item.status === PMItemStatus.DUE ? 'text-amber-300' : 'text-[var(--text-muted)]'}`}>
                                             {dueLabel(item)}
                                         </span>
                                         {item.triggeringFactor !== 'NONE' && (
-                                            <span className="text-slate-600 text-xs self-center">
+                                            <span className="text-[var(--text-faint)] text-xs self-center">
                                                 triggered by {item.triggeringFactor.toLowerCase()}
                                             </span>
                                         )}
                                     </div>
                                     {(item.lastServiceDate || item.lastOdometerKm) && (
-                                        <div className="mt-1.5 flex flex-wrap gap-x-4 text-xs text-slate-600">
+                                        <div className="mt-1.5 flex flex-wrap gap-x-4 text-xs text-[var(--text-faint)]">
                                             {item.lastServiceDate && <span>Last service: {new Date(item.lastServiceDate).toLocaleDateString('en-GB')}</span>}
                                             {item.lastOdometerKm && <span>At: {item.lastOdometerKm.toLocaleString()} km</span>}
                                         </div>
@@ -219,12 +219,12 @@ export default function PMSchedulePage() {
                                 <div className="flex items-center gap-3 shrink-0">
                                     {/* Urgency score */}
                                     <div className="text-right">
-                                        <p className="text-xs text-slate-600 mb-0.5">Urgency</p>
-                                        <p className={`text-lg font-bold ${item.urgencyScore >= 70 ? 'text-red-400' : item.urgencyScore >= 40 ? 'text-amber-300' : 'text-slate-500'}`}>
+                                        <p className="text-xs text-[var(--text-faint)] mb-0.5">Urgency</p>
+                                        <p className={`text-lg font-bold ${item.urgencyScore >= 70 ? 'text-red-400' : item.urgencyScore >= 40 ? 'text-amber-300' : 'text-[var(--text-faint)]'}`}>
                                             {item.urgencyScore}
                                         </p>
                                     </div>
-                                    <button className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-white/5 border border-white/10 transition-colors">
+                                    <button className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] transition-colors">
                                         Create request
                                     </button>
                                 </div>
@@ -233,8 +233,8 @@ export default function PMSchedulePage() {
                     );
                 })}
                 {visibleItems.length === 0 && (
-                    <div className="rounded-xl border border-white/10 bg-slate-900 p-12 text-center">
-                        <p className="text-slate-500 text-sm">No {STATUS_CONFIG[activeTab].label.toLowerCase()} items.</p>
+                    <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-12 text-center">
+                        <p className="text-[var(--text-faint)] text-sm">No {STATUS_CONFIG[activeTab].label.toLowerCase()} items.</p>
                     </div>
                 )}
             </div>

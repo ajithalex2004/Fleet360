@@ -192,8 +192,8 @@ export default function InvoiceEntryPage() {
         router.push(`/maintenance/requests/${request!.id}`);
     };
 
-    if (loading) return <div className="p-8 text-center text-slate-500">Loading...</div>;
-    if (!request) return <div className="p-8 text-center text-slate-500">Request not found</div>;
+    if (loading) return <div className="p-8 text-center text-[var(--text-faint)]">Loading...</div>;
+    if (!request) return <div className="p-8 text-center text-[var(--text-faint)]">Request not found</div>;
 
     const totals = calculateTotals();
 
@@ -201,58 +201,58 @@ export default function InvoiceEntryPage() {
         <div className="space-y-6">
             {/* Header */}
             <div>
-                <h1 className="text-2xl font-bold text-white">Invoice Entry</h1>
-                <p className="text-xs mt-1 text-slate-500">Request #{request.id.toUpperCase()}</p>
+                <h1 className="text-2xl font-bold text-[var(--text-main)]">Invoice Entry</h1>
+                <p className="text-xs mt-1 text-[var(--text-faint)]">Request #{request.id.toUpperCase()}</p>
             </div>
 
             {/* Invoice Details */}
-            <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                <h3 className="text-lg font-bold text-white mb-4">Invoice Information</h3>
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">Invoice Information</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">Invoice Number</label>
+                        <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Invoice Number</label>
                         <input
                             type="text"
                             value={invoiceNumber}
                             onChange={(e) => setInvoiceNumber(e.target.value)}
-                            className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                            className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">Invoice Date</label>
+                        <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Invoice Date</label>
                         <input
                             type="date"
                             value={invoiceDate}
                             onChange={(e) => setInvoiceDate(e.target.value)}
-                            className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                            className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">Due Date</label>
+                        <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Due Date</label>
                         <input
                             type="date"
                             value={dueDate}
                             onChange={(e) => setDueDate(e.target.value)}
-                            className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                            className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">Tax Rate (%)</label>
+                        <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Tax Rate (%)</label>
                         <input
                             type="number"
                             value={taxRate * 100}
                             onChange={(e) => setTaxRate(Number(e.target.value) / 100)}
                             step="0.1"
-                            className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                            className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                         />
                     </div>
                 </div>
             </div>
 
             {/* Line Items */}
-            <div className="rounded-xl border border-white/10 bg-slate-900 shadow-sm">
-                <div className="p-6 border-b border-white/10 flex items-center justify-between">
-                    <h3 className="text-lg font-bold text-white">Line Items ({lineItems.length})</h3>
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-sm">
+                <div className="p-6 border-b border-[var(--border-subtle)] flex items-center justify-between">
+                    <h3 className="text-lg font-bold text-[var(--text-main)]">Line Items ({lineItems.length})</h3>
                     <button
                         onClick={() => {
                             resetItemForm();
@@ -265,26 +265,26 @@ export default function InvoiceEntryPage() {
                 </div>
 
                 {lineItems.length === 0 ? (
-                    <div className="p-12 text-center text-slate-500">
+                    <div className="p-12 text-center text-[var(--text-faint)]">
                         <p className="font-medium">No line items added</p>
-                        <p className="text-sm text-slate-400 mt-1">Click "Add Line Item" to get started</p>
+                        <p className="text-sm text-[var(--text-muted)] mt-1">Click "Add Line Item" to get started</p>
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-white/10">
-                            <thead className="bg-slate-800/50">
+                            <thead className="bg-[var(--bg-surface)]/50">
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Type</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Description</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Quantity</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Unit Price</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Total</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Actions</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">Type</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">Description</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">Quantity</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">Unit Price</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">Total</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-white/10 bg-slate-900">
+                            <tbody className="divide-y divide-white/10 bg-[var(--bg-surface)]">
                                 {lineItems.map((item, index) => (
-                                    <tr key={item.id} className="hover:bg-white/5">
+                                    <tr key={item.id} className="hover:bg-[var(--bg-surface-hover)]">
                                         <td className="whitespace-nowrap px-6 py-4">
                                             <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${item.type === 'PART' ? 'bg-blue-500/20 text-blue-700 border-blue-300' :
                                                     item.type === 'LABOR' ? 'bg-emerald-500/20 text-green-700 border-green-300' :
@@ -294,22 +294,22 @@ export default function InvoiceEntryPage() {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <div className="text-sm text-white">{item.description}</div>
+                                            <div className="text-sm text-[var(--text-main)]">{item.description}</div>
                                             {item.partNumber && (
-                                                <div className="text-xs text-slate-300">Part #: {item.partNumber}</div>
+                                                <div className="text-xs text-[var(--text-muted)]">Part #: {item.partNumber}</div>
                                             )}
                                             {item.technicianName && (
-                                                <div className="text-xs text-slate-300">Tech: {item.technicianName}</div>
+                                                <div className="text-xs text-[var(--text-muted)]">Tech: {item.technicianName}</div>
                                             )}
                                         </td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-white">
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-[var(--text-main)]">
                                             {item.quantity}
-                                            {item.laborHours && <span className="text-slate-300"> ({item.laborHours}h)</span>}
+                                            {item.laborHours && <span className="text-[var(--text-muted)]"> ({item.laborHours}h)</span>}
                                         </td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-white">
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-[var(--text-main)]">
                                             {formatCurrency(item.unitPrice)}
                                         </td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-white">
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-[var(--text-main)]">
                                             {formatCurrency(item.totalPrice)}
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4">
@@ -337,31 +337,31 @@ export default function InvoiceEntryPage() {
             </div>
 
             {/* Totals Summary */}
-            <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                <h3 className="text-lg font-bold text-white mb-4">Invoice Summary</h3>
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">Invoice Summary</h3>
                 <div className="space-y-3">
                     <div className="flex justify-between text-sm">
-                        <span className="text-slate-600">Parts Total:</span>
-                        <span className="font-medium text-white">{formatCurrency(totals.partsTotal)}</span>
+                        <span className="text-[var(--text-faint)]">Parts Total:</span>
+                        <span className="font-medium text-[var(--text-main)]">{formatCurrency(totals.partsTotal)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                        <span className="text-slate-600">Labor Total:</span>
-                        <span className="font-medium text-white">{formatCurrency(totals.laborTotal)}</span>
+                        <span className="text-[var(--text-faint)]">Labor Total:</span>
+                        <span className="font-medium text-[var(--text-main)]">{formatCurrency(totals.laborTotal)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                        <span className="text-slate-600">Other Charges:</span>
-                        <span className="font-medium text-white">{formatCurrency(totals.otherCharges)}</span>
+                        <span className="text-[var(--text-faint)]">Other Charges:</span>
+                        <span className="font-medium text-[var(--text-main)]">{formatCurrency(totals.otherCharges)}</span>
                     </div>
-                    <div className="flex justify-between text-sm pt-3 border-t border-white/10">
-                        <span className="text-slate-600">Subtotal:</span>
-                        <span className="font-medium text-white">{formatCurrency(totals.subtotal)}</span>
+                    <div className="flex justify-between text-sm pt-3 border-t border-[var(--border-subtle)]">
+                        <span className="text-[var(--text-faint)]">Subtotal:</span>
+                        <span className="font-medium text-[var(--text-main)]">{formatCurrency(totals.subtotal)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                        <span className="text-slate-600">Tax ({(taxRate * 100).toFixed(1)}%):</span>
-                        <span className="font-medium text-white">{formatCurrency(totals.taxAmount)}</span>
+                        <span className="text-[var(--text-faint)]">Tax ({(taxRate * 100).toFixed(1)}%):</span>
+                        <span className="font-medium text-[var(--text-main)]">{formatCurrency(totals.taxAmount)}</span>
                     </div>
-                    <div className="flex justify-between text-lg font-bold pt-3 border-t-2 border-white/15">
-                        <span className="text-white">Grand Total:</span>
+                    <div className="flex justify-between text-lg font-bold pt-3 border-t-2 border-[var(--border-subtle)]">
+                        <span className="text-[var(--text-main)]">Grand Total:</span>
                         <span className="text-blue-600">{formatCurrency(totals.grandTotal)}</span>
                     </div>
                 </div>
@@ -371,7 +371,7 @@ export default function InvoiceEntryPage() {
             <div className="flex justify-end gap-3">
                 <button
                     onClick={() => router.back()}
-                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
+                    className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
                 >
                     Cancel
                 </button>
@@ -387,17 +387,17 @@ export default function InvoiceEntryPage() {
             {/* Add/Edit Line Item Modal */}
             {showAddItemModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-slate-900 rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
-                        <div className="p-6 border-b border-white/10 sticky top-0 bg-slate-900">
+                    <div className="bg-[var(--bg-surface)] rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+                        <div className="p-6 border-b border-[var(--border-subtle)] sticky top-0 bg-[var(--bg-surface)]">
                             <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-bold text-white">
+                                <h3 className="text-lg font-bold text-[var(--text-main)]">
                                     {editingItemIndex !== null ? 'Edit' : 'Add'} Line Item
                                 </h3>
                                 <button onClick={() => {
                                     setShowAddItemModal(false);
                                     setEditingItemIndex(null);
                                     resetItemForm();
-                                }} className="text-slate-400 hover:text-slate-300">
+                                }} className="text-[var(--text-muted)] hover:text-[var(--text-muted)]">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                                     </svg>
@@ -407,11 +407,11 @@ export default function InvoiceEntryPage() {
 
                         <div className="p-6 space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-2">Item Type</label>
+                                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Item Type</label>
                                 <select
                                     value={itemForm.type}
                                     onChange={(e) => setItemForm({ ...itemForm, type: e.target.value as any })}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                 >
                                     <option value="PART">Part</option>
                                     <option value="LABOR">Labor</option>
@@ -420,36 +420,36 @@ export default function InvoiceEntryPage() {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-2">Description *</label>
+                                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Description *</label>
                                 <input
                                     type="text"
                                     value={itemForm.description}
                                     onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                     placeholder="Enter item description..."
                                 />
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-300 mb-2">Quantity *</label>
+                                    <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Quantity *</label>
                                     <input
                                         type="number"
                                         value={itemForm.quantity}
                                         onChange={(e) => setItemForm({ ...itemForm, quantity: Number(e.target.value) })}
                                         min="1"
-                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                                        className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-300 mb-2">Unit Price (AED) *</label>
+                                    <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Unit Price (AED) *</label>
                                     <input
                                         type="number"
                                         value={itemForm.unitPrice}
                                         onChange={(e) => setItemForm({ ...itemForm, unitPrice: Number(e.target.value) })}
                                         min="0"
                                         step="0.01"
-                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                                        className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                     />
                                 </div>
                             </div>
@@ -457,21 +457,21 @@ export default function InvoiceEntryPage() {
                             {itemForm.type === 'PART' && (
                                 <>
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-300 mb-2">Part Number</label>
+                                        <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Part Number</label>
                                         <input
                                             type="text"
                                             value={itemForm.partNumber}
                                             onChange={(e) => setItemForm({ ...itemForm, partNumber: e.target.value })}
-                                            className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                                            className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                             placeholder="Enter part number..."
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-300 mb-2">Part Source</label>
+                                        <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Part Source</label>
                                         <select
                                             value={itemForm.partSource}
                                             onChange={(e) => setItemForm({ ...itemForm, partSource: e.target.value as PartSource })}
-                                            className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                                            className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                         >
                                             <option value="STOCK">Stock</option>
                                             <option value="ORDERED">Ordered</option>
@@ -484,23 +484,23 @@ export default function InvoiceEntryPage() {
                             {itemForm.type === 'LABOR' && (
                                 <>
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-300 mb-2">Labor Hours</label>
+                                        <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Labor Hours</label>
                                         <input
                                             type="number"
                                             value={itemForm.laborHours}
                                             onChange={(e) => setItemForm({ ...itemForm, laborHours: Number(e.target.value) })}
                                             min="0"
                                             step="0.5"
-                                            className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                                            className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-300 mb-2">Technician Name</label>
+                                        <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Technician Name</label>
                                         <input
                                             type="text"
                                             value={itemForm.technicianName}
                                             onChange={(e) => setItemForm({ ...itemForm, technicianName: e.target.value })}
-                                            className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                                            className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                             placeholder="Enter technician name..."
                                         />
                                     </div>
@@ -517,14 +517,14 @@ export default function InvoiceEntryPage() {
                             </div>
                         </div>
 
-                        <div className="p-6 border-t border-white/10 flex justify-end gap-3 sticky bottom-0 bg-slate-900">
+                        <div className="p-6 border-t border-[var(--border-subtle)] flex justify-end gap-3 sticky bottom-0 bg-[var(--bg-surface)]">
                             <button
                                 onClick={() => {
                                     setShowAddItemModal(false);
                                     setEditingItemIndex(null);
                                     resetItemForm();
                                 }}
-                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
+                                className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
                             >
                                 Cancel
                             </button>

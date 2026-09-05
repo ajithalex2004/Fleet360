@@ -45,15 +45,15 @@ function FactorBar({ f }: { f: RiskFactor }) {
 
     return (
         <div className="grid grid-cols-[9rem_1fr_4rem] gap-3 items-center text-xs">
-            <span className="text-slate-300 truncate">{f.label}</span>
-            <div className="bg-slate-700 rounded-full h-1.5">
+            <span className="text-[var(--text-muted)] truncate">{f.label}</span>
+            <div className="bg-[var(--bg-surface-hover)] rounded-full h-1.5">
                 <div
                     className={`${color} h-1.5 rounded-full transition-all duration-500`}
                     style={{ width: `${pct}%` }}
                 />
             </div>
-            <span className="text-right text-slate-400">
-                {f.score}<span className="text-slate-600">/{f.maxScore}</span>
+            <span className="text-right text-[var(--text-muted)]">
+                {f.score}<span className="text-[var(--text-faint)]">/{f.maxScore}</span>
             </span>
         </div>
     );
@@ -80,23 +80,23 @@ function RiskRow({ rs, rank }: { rs: MaintenanceRiskScore; rank: number }) {
         <>
             {/* Main row */}
             <tr
-                className="border-b border-white/5 hover:bg-white/[.03] transition-colors cursor-pointer"
+                className="border-b border-[var(--border-subtle)] hover:bg-white/[.03] transition-colors cursor-pointer"
                 onClick={() => setOpen(o => !o)}
             >
-                <td className="px-4 py-3 text-slate-500 text-sm w-10 text-center">{rank}</td>
+                <td className="px-4 py-3 text-[var(--text-faint)] text-sm w-10 text-center">{rank}</td>
                 <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                         {open
-                            ? <ChevronDown className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                            : <ChevronRight className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                            ? <ChevronDown className="w-3.5 h-3.5 text-[var(--text-faint)] shrink-0" />
+                            : <ChevronRight className="w-3.5 h-3.5 text-[var(--text-faint)] shrink-0" />
                         }
-                        <span className="text-white font-medium">{rs.vehicleCode}</span>
+                        <span className="text-[var(--text-main)] font-medium">{rs.vehicleCode}</span>
                         {rs.licensePlate !== '—' && (
-                            <span className="text-slate-500 text-xs">{rs.licensePlate}</span>
+                            <span className="text-[var(--text-faint)] text-xs">{rs.licensePlate}</span>
                         )}
                     </div>
                 </td>
-                <td className="px-4 py-3 text-slate-400 text-sm hidden sm:table-cell">
+                <td className="px-4 py-3 text-[var(--text-muted)] text-sm hidden sm:table-cell">
                     {[rs.make, rs.model].filter(Boolean).join(' ') || '—'}
                 </td>
                 <td className="px-4 py-3">
@@ -120,7 +120,7 @@ function RiskRow({ rs, rank }: { rs: MaintenanceRiskScore; rank: number }) {
                                         pct >= 0.8 ? 'bg-red-500' :
                                         pct >= 0.5 ? 'bg-orange-500' :
                                         pct >= 0.25 ? 'bg-amber-400' :
-                                        'bg-slate-600'
+                                        'bg-[var(--bg-surface-hover)]'
                                     }`}
                                 />
                             );
@@ -131,16 +131,16 @@ function RiskRow({ rs, rank }: { rs: MaintenanceRiskScore; rank: number }) {
 
             {/* Expanded factor panel */}
             {open && (
-                <tr className="bg-slate-900/60 border-b border-white/5">
+                <tr className="bg-[var(--bg-surface)]/60 border-b border-[var(--border-subtle)]">
                     <td colSpan={6} className="px-6 py-4">
                         <div className="space-y-2.5 max-w-2xl">
-                            <p className="text-xs text-slate-500 mb-3">
+                            <p className="text-xs text-[var(--text-faint)] mb-3">
                                 Computed {new Date(rs.computedAt).toLocaleString()}
                             </p>
                             {rs.factors.map(f => (
                                 <div key={f.key}>
                                     <FactorBar f={f} />
-                                    <p className="text-xs text-slate-600 ml-[9.5rem] mt-0.5">
+                                    <p className="text-xs text-[var(--text-faint)] ml-[9.5rem] mt-0.5">
                                         {f.description}
                                     </p>
                                 </div>
@@ -183,7 +183,7 @@ export default function RiskScorePage() {
         return (
             <div className="flex items-center justify-center h-full min-h-[200px]">
                 <div className="animate-spin">
-                    <div className="w-12 h-12 border-4 border-slate-700 border-t-orange-500 rounded-full" />
+                    <div className="w-12 h-12 border-4 border-[var(--border-subtle)] border-t-orange-500 rounded-full" />
                 </div>
             </div>
         );
@@ -213,9 +213,9 @@ export default function RiskScorePage() {
             </div>
 
             {/* Table card */}
-            <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-hidden">
+            <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
                 {/* Toolbar */}
-                <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-white/10">
+                <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-[var(--border-subtle)]">
                     {/* Band tabs */}
                     <div className="flex gap-1 flex-wrap">
                         {BAND_TABS.map(t => (
@@ -225,17 +225,17 @@ export default function RiskScorePage() {
                                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                                     bandFilter === t.key
                                         ? 'bg-orange-500 text-white'
-                                        : 'text-slate-400 hover:bg-white/5'
+                                        : 'text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]'
                                 }`}
                             >
                                 {t.emoji} {t.label}
                                 {t.key !== 'ALL' && (
-                                    <span className="ml-1 text-slate-500">
+                                    <span className="ml-1 text-[var(--text-faint)]">
                                         ({all.filter(r => r.band === t.key).length})
                                     </span>
                                 )}
                                 {t.key === 'ALL' && (
-                                    <span className="ml-1 text-slate-500">({all.length})</span>
+                                    <span className="ml-1 text-[var(--text-faint)]">({all.length})</span>
                                 )}
                             </button>
                         ))}
@@ -243,7 +243,7 @@ export default function RiskScorePage() {
 
                     <button
                         onClick={() => refresh()}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:bg-white/5 transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] transition-colors"
                     >
                         <RefreshCw className="w-3.5 h-3.5" />
                         Refresh
@@ -253,7 +253,7 @@ export default function RiskScorePage() {
                 {filtered.length === 0 ? (
                     <div className="text-center py-16">
                         <div className="text-4xl mb-3">🚗</div>
-                        <p className="text-slate-400">
+                        <p className="text-[var(--text-muted)]">
                             {all.length === 0 ? 'No vehicle data available.' : 'No vehicles in this band.'}
                         </p>
                     </div>
@@ -261,7 +261,7 @@ export default function RiskScorePage() {
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead>
-                                <tr className="border-b border-white/5 text-xs font-semibold text-slate-400">
+                                <tr className="border-b border-[var(--border-subtle)] text-xs font-semibold text-[var(--text-muted)]">
                                     <th className="px-4 py-3 text-center w-10">#</th>
                                     <th className="px-4 py-3 text-left">Vehicle</th>
                                     <th className="px-4 py-3 text-left hidden sm:table-cell">Make / Model</th>
@@ -281,7 +281,7 @@ export default function RiskScorePage() {
             </div>
 
             {/* Legend */}
-            <div className="flex flex-wrap gap-4 text-xs text-slate-500 px-1">
+            <div className="flex flex-wrap gap-4 text-xs text-[var(--text-faint)] px-1">
                 {(Object.keys(BAND_CFG) as RiskBand[]).map(band => {
                     const cfg = BAND_CFG[band];
                     const range =

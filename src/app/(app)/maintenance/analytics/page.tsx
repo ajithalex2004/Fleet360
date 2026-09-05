@@ -83,13 +83,13 @@ export default function AnalyticsPage() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-white">Fleet Analytics</h1>
-                    <p className="text-xs mt-1 text-slate-500">Comprehensive fleet performance insights</p>
+                    <h1 className="text-2xl font-bold text-[var(--text-main)]">Fleet Analytics</h1>
+                    <p className="text-xs mt-1 text-[var(--text-faint)]">Comprehensive fleet performance insights</p>
                 </div>
                 <select
                     value={selectedPeriod}
                     onChange={(e) => setSelectedPeriod(e.target.value)}
-                    className="rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                    className="rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                 >
                     <option value="2024-Q4">Q4 2024</option>
                     <option value="2024-Q3">Q3 2024</option>
@@ -99,42 +99,42 @@ export default function AnalyticsPage() {
 
             {/* Fleet Overview */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                    <p className="text-sm text-slate-500">Total Vehicles</p>
-                    <p className="text-3xl font-bold text-white">{fleetStats.totalVehicles}</p>
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                    <p className="text-sm text-[var(--text-faint)]">Total Vehicles</p>
+                    <p className="text-3xl font-bold text-[var(--text-main)]">{fleetStats.totalVehicles}</p>
                     <p className="text-xs text-green-600 mt-1">↑ {fleetStats.activeVehicles} active</p>
                 </div>
-                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                    <p className="text-sm text-slate-500">Avg Health Score</p>
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                    <p className="text-sm text-[var(--text-faint)]">Avg Health Score</p>
                     <p className="text-3xl font-bold text-green-600">{fleetStats.avgHealthScore}</p>
-                    <p className="text-xs text-slate-500 mt-1">Out of 100</p>
+                    <p className="text-xs text-[var(--text-faint)] mt-1">Out of 100</p>
                 </div>
-                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                    <p className="text-sm text-slate-500">Total Cost (6mo)</p>
-                    <p className="text-3xl font-bold text-white">AED {(fleetStats.totalMaintenanceCost / 1000).toFixed(0)}K</p>
-                    <p className="text-xs text-slate-500 mt-1">AED {fleetStats.avgCostPerVehicle}/vehicle</p>
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                    <p className="text-sm text-[var(--text-faint)]">Total Cost (6mo)</p>
+                    <p className="text-3xl font-bold text-[var(--text-main)]">AED {(fleetStats.totalMaintenanceCost / 1000).toFixed(0)}K</p>
+                    <p className="text-xs text-[var(--text-faint)] mt-1">AED {fleetStats.avgCostPerVehicle}/vehicle</p>
                 </div>
-                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                    <p className="text-sm text-slate-500">Total Downtime</p>
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                    <p className="text-sm text-[var(--text-faint)]">Total Downtime</p>
                     <p className="text-3xl font-bold text-orange-600">{fleetStats.totalDowntimeDays}</p>
-                    <p className="text-xs text-slate-500 mt-1">days</p>
+                    <p className="text-xs text-[var(--text-faint)] mt-1">days</p>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Cost Trends */}
-                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                    <h3 className="text-lg font-bold text-white mb-4">Cost Trends (Last 6 Months)</h3>
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                    <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">Cost Trends (Last 6 Months)</h3>
                     <div className="space-y-3">
                         {costTrends.map(trend => (
                             <div key={trend.month} className="flex items-center gap-3">
-                                <span className="text-sm font-medium text-slate-300 w-12">{trend.month}</span>
+                                <span className="text-sm font-medium text-[var(--text-muted)] w-12">{trend.month}</span>
                                 <div className="flex-1 bg-slate-200 rounded-full h-8 relative">
                                     <div
                                         className="bg-blue-600 h-8 rounded-full flex items-center justify-end pr-3"
                                         style={{ width: `${(trend.cost / maxCost) * 100}%` }}
                                     >
-                                        <span className="text-xs font-medium text-white">AED {(trend.cost / 1000).toFixed(1)}K</span>
+                                        <span className="text-xs font-medium text-[var(--text-main)]">AED {(trend.cost / 1000).toFixed(1)}K</span>
                                     </div>
                                 </div>
                             </div>
@@ -143,8 +143,8 @@ export default function AnalyticsPage() {
                 </div>
 
                 {/* Preventive vs Corrective */}
-                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                    <h3 className="text-lg font-bold text-white mb-4">Maintenance Type Distribution</h3>
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                    <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">Maintenance Type Distribution</h3>
                     <div className="flex items-center justify-center h-48">
                         <div className="relative w-48 h-48">
                             <svg viewBox="0 0 100 100" className="transform -rotate-90">
@@ -162,7 +162,7 @@ export default function AnalyticsPage() {
                             <div className="absolute inset-0 flex items-center justify-center">
                                 <div className="text-center">
                                     <p className="text-3xl font-bold text-blue-600">{fleetStats.preventiveVsCorrective.preventive}%</p>
-                                    <p className="text-xs text-slate-500">Preventive</p>
+                                    <p className="text-xs text-[var(--text-faint)]">Preventive</p>
                                 </div>
                             </div>
                         </div>
@@ -171,39 +171,39 @@ export default function AnalyticsPage() {
                         <div className="text-center">
                             <div className="flex items-center justify-center gap-2">
                                 <div className="w-3 h-3 rounded-full bg-blue-600" />
-                                <span className="text-sm text-slate-300">Preventive</span>
+                                <span className="text-sm text-[var(--text-muted)]">Preventive</span>
                             </div>
-                            <p className="text-lg font-bold text-white mt-1">{fleetStats.preventiveVsCorrective.preventive}%</p>
+                            <p className="text-lg font-bold text-[var(--text-main)] mt-1">{fleetStats.preventiveVsCorrective.preventive}%</p>
                         </div>
                         <div className="text-center">
                             <div className="flex items-center justify-center gap-2">
                                 <div className="w-3 h-3 rounded-full bg-slate-300" />
-                                <span className="text-sm text-slate-300">Corrective</span>
+                                <span className="text-sm text-[var(--text-muted)]">Corrective</span>
                             </div>
-                            <p className="text-lg font-bold text-white mt-1">{fleetStats.preventiveVsCorrective.corrective}%</p>
+                            <p className="text-lg font-bold text-[var(--text-main)] mt-1">{fleetStats.preventiveVsCorrective.corrective}%</p>
                         </div>
                     </div>
                 </div>
 
                 {/* Top Issues */}
-                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm lg:col-span-2">
-                    <h3 className="text-lg font-bold text-white mb-4">Top Maintenance Issues</h3>
-                    <div className="overflow-hidden rounded-lg border border-white/10">
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm lg:col-span-2">
+                    <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">Top Maintenance Issues</h3>
+                    <div className="overflow-hidden rounded-lg border border-[var(--border-subtle)]">
                         <table className="min-w-full divide-y divide-white/10">
-                            <thead className="bg-slate-800/50">
+                            <thead className="bg-[var(--bg-surface)]/50">
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Issue</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Occurrences</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Avg Cost</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Total Impact</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--text-faint)] uppercase">Issue</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--text-faint)] uppercase">Occurrences</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--text-faint)] uppercase">Avg Cost</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--text-faint)] uppercase">Total Impact</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-white/10 bg-slate-900">
+                            <tbody className="divide-y divide-white/10 bg-[var(--bg-surface)]">
                                 {topIssues.map((issue, idx) => (
                                     <tr key={idx}>
-                                        <td className="px-6 py-4 text-sm font-medium text-white">{issue.issue}</td>
-                                        <td className="px-6 py-4 text-sm text-slate-300">{issue.occurrences}</td>
-                                        <td className="px-6 py-4 text-sm text-slate-300">AED {issue.avgCost}</td>
+                                        <td className="px-6 py-4 text-sm font-medium text-[var(--text-main)]">{issue.issue}</td>
+                                        <td className="px-6 py-4 text-sm text-[var(--text-muted)]">{issue.occurrences}</td>
+                                        <td className="px-6 py-4 text-sm text-[var(--text-muted)]">AED {issue.avgCost}</td>
                                         <td className="px-6 py-4 text-sm font-medium text-red-600">
                                             AED {(issue.occurrences * issue.avgCost).toLocaleString()}
                                         </td>

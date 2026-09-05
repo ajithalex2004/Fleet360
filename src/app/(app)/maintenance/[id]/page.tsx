@@ -80,39 +80,39 @@ export default function RequestDetailsPage({ params }: { params: Promise<{ id: s
             <div className="flex items-center justify-between">
                 <div>
                     <div className="flex items-center gap-3">
-                        <h1 className="text-2xl font-bold text-white">Request #{request.id.toUpperCase()}</h1>
+                        <h1 className="text-2xl font-bold text-[var(--text-main)]">Request #{request.id.toUpperCase()}</h1>
                         <StatusBadge status={request.status} />
                     </div>
-                    <p className="mt-1 text-slate-500">Created on {new Date(request.requestDate).toLocaleDateString()}</p>
+                    <p className="mt-1 text-[var(--text-faint)]">Created on {new Date(request.requestDate).toLocaleDateString()}</p>
                 </div>
                 <button
                     onClick={() => router.back()}
-                    className="text-sm font-medium text-slate-500 hover:text-white"
+                    className="text-sm font-medium text-[var(--text-faint)] hover:text-[var(--text-main)]"
                 >
                     ← Back to Requests
                 </button>
             </div>
 
-            <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                <h2 className="mb-4 text-lg font-semibold text-white">Workflow Progress</h2>
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                <h2 className="mb-4 text-lg font-semibold text-[var(--text-main)]">Workflow Progress</h2>
                 <WorkflowStepper currentStatus={request.status} statusTimeline={request.statusTimeline} />
             </div>
 
             <div className="grid gap-6 md:grid-cols-3">
                 <div className="md:col-span-2 space-y-6">
-                    <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                        <h2 className="mb-4 text-lg font-semibold text-white">Issue Details</h2>
+                    <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                        <h2 className="mb-4 text-lg font-semibold text-[var(--text-main)]">Issue Details</h2>
 
                         {/* Request Meta Info */}
-                        <div className="mb-6 grid grid-cols-2 gap-4 rounded-lg bg-slate-800/50 p-4">
+                        <div className="mb-6 grid grid-cols-2 gap-4 rounded-lg bg-[var(--bg-surface)]/50 p-4">
                             <div>
-                                <p className="text-sm font-medium text-slate-500">Requested By</p>
-                                <p className="font-medium text-white">{driver ? driver.name : 'Unknown'}</p>
-                                {driver && <p className="text-xs text-slate-500">{driver.contactNumber}</p>}
+                                <p className="text-sm font-medium text-[var(--text-faint)]">Requested By</p>
+                                <p className="font-medium text-[var(--text-main)]">{driver ? driver.name : 'Unknown'}</p>
+                                {driver && <p className="text-xs text-[var(--text-faint)]">{driver.contactNumber}</p>}
                             </div>
                             <div>
-                                <p className="text-sm font-medium text-slate-500">Requested On</p>
-                                <p className="font-medium text-white">
+                                <p className="text-sm font-medium text-[var(--text-faint)]">Requested On</p>
+                                <p className="font-medium text-[var(--text-main)]">
                                     {new Date(request.requestDate).toLocaleDateString(undefined, {
                                         weekday: 'long',
                                         year: 'numeric',
@@ -120,41 +120,41 @@ export default function RequestDetailsPage({ params }: { params: Promise<{ id: s
                                         day: 'numeric',
                                     })}
                                 </p>
-                                <p className="text-xs text-slate-500">
+                                <p className="text-xs text-[var(--text-faint)]">
                                     {new Date(request.requestDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </p>
                             </div>
                         </div>
 
-                        <p className="text-slate-300 mb-6">
-                            <span className="block text-sm font-medium text-slate-500 mb-1">Description</span>
+                        <p className="text-[var(--text-muted)] mb-6">
+                            <span className="block text-sm font-medium text-[var(--text-faint)] mb-1">Description</span>
                             {request.description}
                         </p>
 
                         {request.estimatedCost && (
-                            <div className="mt-6 rounded-lg bg-slate-800/50 p-4">
-                                <p className="text-sm font-medium text-slate-500">Estimated Cost</p>
-                                <p className="text-2xl font-bold text-white">${request.estimatedCost}</p>
+                            <div className="mt-6 rounded-lg bg-[var(--bg-surface)]/50 p-4">
+                                <p className="text-sm font-medium text-[var(--text-faint)]">Estimated Cost</p>
+                                <p className="text-2xl font-bold text-[var(--text-main)]">${request.estimatedCost}</p>
                             </div>
                         )}
 
                         {/* Garage Assignment Display */}
                         {currentGarage && (
-                            <div className="mt-6 rounded-lg bg-slate-800/50 p-4">
-                                <p className="text-sm font-medium text-slate-500">Assigned Garage</p>
-                                <p className="text-lg font-bold text-white">{currentGarage.name}</p>
-                                <p className="text-sm text-slate-500">{currentGarage.location}</p>
+                            <div className="mt-6 rounded-lg bg-[var(--bg-surface)]/50 p-4">
+                                <p className="text-sm font-medium text-[var(--text-faint)]">Assigned Garage</p>
+                                <p className="text-lg font-bold text-[var(--text-main)]">{currentGarage.name}</p>
+                                <p className="text-sm text-[var(--text-faint)]">{currentGarage.location}</p>
                             </div>
                         )}
                     </div>
 
                     {/* Action Buttons based on Status */}
-                    <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                        <h2 className="mb-4 text-lg font-semibold text-white">Actions</h2>
+                    <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                        <h2 className="mb-4 text-lg font-semibold text-[var(--text-main)]">Actions</h2>
                         <div className="flex flex-col gap-4">
                             {request.status === MaintenanceStatus.UNDER_ESTIMATION && (
                                 <div className="w-full">
-                                    <label className="block text-sm font-medium text-slate-300 mb-2">Select Garages for Estimation</label>
+                                    <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Select Garages for Estimation</label>
 
                                     {/* Search Input */}
                                     <div className="mb-3">
@@ -164,16 +164,16 @@ export default function RequestDetailsPage({ params }: { params: Promise<{ id: s
                                                 placeholder="Search garages by name or location..."
                                                 value={garageSearchQuery}
                                                 onChange={(e) => setGarageSearchQuery(e.target.value)}
-                                                className="w-full rounded-lg border border-white/15 px-3 py-2 pl-10 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
+                                                className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 pl-10 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-[var(--text-main)]"
                                             />
-                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="absolute left-3 top-2.5 h-5 w-5 text-slate-400">
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="absolute left-3 top-2.5 h-5 w-5 text-[var(--text-muted)]">
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
                                             </svg>
                                         </div>
                                     </div>
 
                                     {/* Garage List */}
-                                    <div className="max-h-64 overflow-y-auto rounded-lg border border-white/10 bg-slate-800/50 p-2">
+                                    <div className="max-h-64 overflow-y-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 p-2">
                                         {garages
                                             .filter(g =>
                                                 g.name.toLowerCase().includes(garageSearchQuery.toLowerCase()) ||
@@ -185,12 +185,12 @@ export default function RequestDetailsPage({ params }: { params: Promise<{ id: s
                                                     key={g.id}
                                                     className={`flex items-center space-x-3 p-3 rounded-lg cursor-pointer transition-all border mb-2 ${selectedGarages.includes(g.id)
                                                         ? 'bg-blue-500/10 border-blue-200 shadow-sm'
-                                                        : 'bg-slate-900 border-transparent hover:bg-slate-900/5 hover:border-white/10'
+                                                        : 'bg-[var(--bg-surface)] border-transparent hover:bg-[var(--bg-surface)]/5 hover:border-[var(--border-subtle)]'
                                                         }`}
                                                 >
                                                     <input
                                                         type="checkbox"
-                                                        className="h-4 w-4 rounded border-white/15 text-blue-600 focus:ring-blue-500"
+                                                        className="h-4 w-4 rounded border-[var(--border-subtle)] text-blue-600 focus:ring-blue-500"
                                                         checked={selectedGarages.includes(g.id)}
                                                         onChange={(e) => {
                                                             if (e.target.checked) {
@@ -202,20 +202,20 @@ export default function RequestDetailsPage({ params }: { params: Promise<{ id: s
                                                     />
                                                     <div className="flex-1">
                                                         <div className="flex items-center justify-between">
-                                                            <span className="font-medium text-white">{g.name}</span>
+                                                            <span className="font-medium text-[var(--text-main)]">{g.name}</span>
                                                             {g.isInternal && (
                                                                 <span className="text-xs bg-emerald-500/20 text-green-700 px-2 py-0.5 rounded-full">Internal</span>
                                                             )}
                                                         </div>
-                                                        <p className="text-xs text-slate-500 mt-0.5">{g.location}</p>
+                                                        <p className="text-xs text-[var(--text-faint)] mt-0.5">{g.location}</p>
                                                         <div className="flex flex-wrap gap-1 mt-1">
                                                             {g.specialties.slice(0, 3).map(specialty => (
-                                                                <span key={specialty} className="text-xs bg-slate-700/40 text-slate-600 px-1.5 py-0.5 rounded">
+                                                                <span key={specialty} className="text-xs bg-[var(--bg-surface-hover)]/40 text-[var(--text-faint)] px-1.5 py-0.5 rounded">
                                                                     {specialty}
                                                                 </span>
                                                             ))}
                                                             {g.specialties.length > 3 && (
-                                                                <span className="text-xs text-slate-400">+{g.specialties.length - 3} more</span>
+                                                                <span className="text-xs text-[var(--text-muted)]">+{g.specialties.length - 3} more</span>
                                                             )}
                                                         </div>
                                                     </div>
@@ -225,7 +225,7 @@ export default function RequestDetailsPage({ params }: { params: Promise<{ id: s
                                             g.name.toLowerCase().includes(garageSearchQuery.toLowerCase()) ||
                                             g.location.toLowerCase().includes(garageSearchQuery.toLowerCase())
                                         ).length === 0 && (
-                                                <div className="text-center py-8 text-slate-500">
+                                                <div className="text-center py-8 text-[var(--text-faint)]">
                                                     <p className="text-sm">No garages found</p>
                                                     <p className="text-xs mt-1">Try a different search term</p>
                                                 </div>
@@ -234,7 +234,7 @@ export default function RequestDetailsPage({ params }: { params: Promise<{ id: s
 
                                     {/* Selected Count */}
                                     <div className="mt-2 flex items-center justify-between text-sm">
-                                        <span className="text-slate-600">
+                                        <span className="text-[var(--text-faint)]">
                                             {selectedGarages.length} garage{selectedGarages.length !== 1 ? 's' : ''} selected
                                         </span>
                                         {selectedGarages.length > 0 && (
@@ -310,7 +310,7 @@ export default function RequestDetailsPage({ params }: { params: Promise<{ id: s
                                 {request.status === MaintenanceStatus.UNDER_MAINTENANCE && (
                                     <button
                                         onClick={() => handleStatusUpdate(MaintenanceStatus.MAINTENANCE_COMPLETED)}
-                                        className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                                        className="rounded-lg bg-[var(--bg-surface)] px-4 py-2 text-sm font-medium text-[var(--text-main)] hover:bg-[var(--bg-surface)]"
                                     >
                                         Complete Job
                                     </button>
@@ -329,13 +329,13 @@ export default function RequestDetailsPage({ params }: { params: Promise<{ id: s
                                 {request.status === MaintenanceStatus.INVOICE_SUBMITTED && (
                                     <button
                                         onClick={() => handleStatusUpdate(MaintenanceStatus.CLOSED)}
-                                        className="rounded-lg bg-gray-600 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700"
+                                        className="rounded-lg bg-[var(--bg-surface-hover)] px-4 py-2 text-sm font-medium text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]"
                                     >
                                         Close Request
                                     </button>
                                 )}
                                 {request.status === MaintenanceStatus.CLOSED && (
-                                    <p className="text-sm text-gray-600 font-medium">Request Closed</p>
+                                    <p className="text-sm text-[var(--text-faint)] font-medium">Request Closed</p>
                                 )}
                             </div>
                         </div>
@@ -343,38 +343,38 @@ export default function RequestDetailsPage({ params }: { params: Promise<{ id: s
                 </div>
 
                 <div className="space-y-6">
-                    <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                        <h2 className="mb-4 text-lg font-semibold text-white">Vehicle Info</h2>
+                    <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                        <h2 className="mb-4 text-lg font-semibold text-[var(--text-main)]">Vehicle Info</h2>
                         {vehicle ? (
                             <div className="space-y-3">
                                 <div>
-                                    <p className="text-sm text-slate-500">Vehicle</p>
-                                    <p className="font-medium text-white">{vehicle.make} {vehicle.model}</p>
+                                    <p className="text-sm text-[var(--text-faint)]">Vehicle</p>
+                                    <p className="font-medium text-[var(--text-main)]">{vehicle.make} {vehicle.model}</p>
                                 </div>
                                 <div>
-                                    <p className="text-sm text-slate-500">License Plate</p>
-                                    <p className="font-medium text-white">{vehicle.licensePlate}</p>
+                                    <p className="text-sm text-[var(--text-faint)]">License Plate</p>
+                                    <p className="font-medium text-[var(--text-main)]">{vehicle.licensePlate}</p>
                                 </div>
                                 <div>
-                                    <p className="text-sm text-slate-500">Mileage</p>
-                                    <p className="font-medium text-white">{vehicle.currentMileage.toLocaleString()} km</p>
+                                    <p className="text-sm text-[var(--text-faint)]">Mileage</p>
+                                    <p className="font-medium text-[var(--text-main)]">{vehicle.currentMileage.toLocaleString()} km</p>
                                 </div>
                                 <div>
-                                    <p className="text-sm text-slate-500">VIN</p>
-                                    <p className="font-medium text-white">{vehicle.vin}</p>
+                                    <p className="text-sm text-[var(--text-faint)]">VIN</p>
+                                    <p className="font-medium text-[var(--text-main)]">{vehicle.vin}</p>
                                 </div>
                             </div>
                         ) : (
-                            <p className="text-slate-500">Loading vehicle info...</p>
+                            <p className="text-[var(--text-faint)]">Loading vehicle info...</p>
                         )}
                     </div>
 
 
 
                     {/* Attachments Section */}
-                    <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                    <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
                         <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-lg font-semibold text-white">Attachments</h2>
+                            <h2 className="text-lg font-semibold text-[var(--text-main)]">Attachments</h2>
                             <button
                                 onClick={() => setShowAttachmentModal(true)}
                                 className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
@@ -386,7 +386,7 @@ export default function RequestDetailsPage({ params }: { params: Promise<{ id: s
                         {request.attachments && request.attachments.length > 0 ? (
                             <div className="space-y-3">
                                 {request.attachments.map((att) => (
-                                    <div key={att.id} className="flex items-center justify-between rounded-lg border border-white/5 bg-slate-800/50 p-3">
+                                    <div key={att.id} className="flex items-center justify-between rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 p-3">
                                         <div className="flex items-center gap-3">
                                             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500/20 text-blue-600">
                                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-5 w-5">
@@ -394,8 +394,8 @@ export default function RequestDetailsPage({ params }: { params: Promise<{ id: s
                                                 </svg>
                                             </div>
                                             <div>
-                                                <p className="text-sm font-medium text-white">{att.fileName}</p>
-                                                <p className="text-xs text-slate-500">{att.type} • {new Date(att.uploadedAt).toLocaleDateString()}</p>
+                                                <p className="text-sm font-medium text-[var(--text-main)]">{att.fileName}</p>
+                                                <p className="text-xs text-[var(--text-faint)]">{att.type} • {new Date(att.uploadedAt).toLocaleDateString()}</p>
                                             </div>
                                         </div>
                                         <a href={att.url} target="_blank" rel="noreferrer" className="text-sm font-medium text-blue-600 hover:underline">
@@ -405,8 +405,8 @@ export default function RequestDetailsPage({ params }: { params: Promise<{ id: s
                                 ))}
                             </div>
                         ) : (
-                            <div className="rounded-lg border border-dashed border-white/10 p-8 text-center text-slate-500">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="mx-auto h-12 w-12 text-slate-300 mb-2">
+                            <div className="rounded-lg border border-dashed border-[var(--border-subtle)] p-8 text-center text-[var(--text-faint)]">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="mx-auto h-12 w-12 text-[var(--text-muted)] mb-2">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
                                 </svg>
                                 <p className="text-sm">No attachments yet</p>
@@ -421,32 +421,32 @@ export default function RequestDetailsPage({ params }: { params: Promise<{ id: s
             {
                 showAttachmentModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-                        <div className="w-full max-w-md rounded-xl bg-slate-900 p-6 shadow-2xl">
-                            <h3 className="text-lg font-bold text-white">Add Attachment</h3>
-                            <p className="mt-1 text-sm text-slate-500">Select the attachment type and upload a file</p>
+                        <div className="w-full max-w-md rounded-xl bg-[var(--bg-surface)] p-6 shadow-2xl">
+                            <h3 className="text-lg font-bold text-[var(--text-main)]">Add Attachment</h3>
+                            <p className="mt-1 text-sm text-[var(--text-faint)]">Select the attachment type and upload a file</p>
 
                             <div className="mt-4 space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-300 mb-2">Attachment Type</label>
+                                    <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Attachment Type</label>
                                     <select
                                         value={selectedAttachmentType}
                                         onChange={(e) => setSelectedAttachmentType(e.target.value as AttachmentType)}
-                                        className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-900 text-white"
+                                        className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                     >
                                         {Object.values(AttachmentType).map((type) => (
-                                            <option key={type} value={type} className="text-white">
+                                            <option key={type} value={type} className="text-[var(--text-main)]">
                                                 {type}
                                             </option>
                                         ))}
                                     </select>
                                 </div>
 
-                                <div className="rounded-lg border-2 border-dashed border-white/15 p-6 text-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="mx-auto h-12 w-12 text-slate-400">
+                                <div className="rounded-lg border-2 border-dashed border-[var(--border-subtle)] p-6 text-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="mx-auto h-12 w-12 text-[var(--text-muted)]">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
                                     </svg>
-                                    <p className="mt-2 text-sm text-slate-600">Click below to select a file</p>
-                                    <p className="text-xs text-slate-500 mt-1">PDF, JPG, PNG, DOC, DOCX, XLS, XLSX</p>
+                                    <p className="mt-2 text-sm text-[var(--text-faint)]">Click below to select a file</p>
+                                    <p className="text-xs text-[var(--text-faint)] mt-1">PDF, JPG, PNG, DOC, DOCX, XLS, XLSX</p>
                                 </div>
                             </div>
 
@@ -456,7 +456,7 @@ export default function RequestDetailsPage({ params }: { params: Promise<{ id: s
                                         setShowAttachmentModal(false);
                                         setSelectedAttachmentType(AttachmentType.INVOICE);
                                     }}
-                                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-900/10"
+                                    className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface)]/10"
                                 >
                                     Cancel
                                 </button>

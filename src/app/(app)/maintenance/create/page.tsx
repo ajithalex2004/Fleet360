@@ -309,45 +309,45 @@ export default function CreateRequestPage() {
         <div className="space-y-6">
             {/* Header */}
             <div>
-                <h1 className="text-2xl font-bold text-white">Create Maintenance Request</h1>
-                <p className="text-xs mt-1 text-slate-500">Submit a new maintenance request for your vehicle</p>
+                <h1 className="text-2xl font-bold text-[var(--text-main)]">Create Maintenance Request</h1>
+                <p className="text-xs mt-1 text-[var(--text-faint)]">Submit a new maintenance request for your vehicle</p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-8 rounded-xl border border-white/10 bg-slate-900 p-8 shadow-sm">
+            <form onSubmit={handleSubmit} className="space-y-8 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-8 shadow-sm">
                 {/* Section 1: Vehicle Information */}
                 <div>
-                    <h3 className="mb-4 text-lg font-semibold text-white">Vehicle Information</h3>
+                    <h3 className="mb-4 text-lg font-semibold text-[var(--text-main)]">Vehicle Information</h3>
                     <div className="grid gap-6 md:grid-cols-3">
                         <div>
-                            <label className="block text-sm font-medium text-slate-300">Vehicle ID *</label>
+                            <label className="block text-sm font-medium text-[var(--text-muted)]">Vehicle ID *</label>
                             <select
                                 required
-                                className="mt-1 block w-full rounded-lg border border-white/15 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
+                                className="mt-1 block w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-[var(--text-main)]"
                                 value={formData.vehicleId}
                                 onChange={(e) => handleVehicleChange(e.target.value)}
                             >
-                                <option value="" className="text-white bg-slate-900">Select Vehicle</option>
+                                <option value="" className="text-[var(--text-main)] bg-[var(--bg-surface)]">Select Vehicle</option>
                                 {vehicles.map((v) => (
-                                    <option key={v.id} value={v.id} className="text-white bg-slate-900">{v.licensePlate} - {v.make} {v.model}</option>
+                                    <option key={v.id} value={v.id} className="text-[var(--text-main)] bg-[var(--bg-surface)]">{v.licensePlate} - {v.make} {v.model}</option>
                                 ))}
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-300">Vehicle Type</label>
+                            <label className="block text-sm font-medium text-[var(--text-muted)]">Vehicle Type</label>
                             <input
                                 type="text"
                                 disabled
-                                className="mt-1 block w-full rounded-lg border border-white/15 bg-slate-800/50 px-3 py-2 text-white shadow-sm"
+                                className="mt-1 block w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 px-3 py-2 text-[var(--text-main)] shadow-sm"
                                 value={formData.vehicleType}
                                 placeholder="Auto-populated"
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-300">Odometer (km) *</label>
+                            <label className="block text-sm font-medium text-[var(--text-muted)]">Odometer (km) *</label>
                             <input
                                 type="number"
                                 required
-                                className="mt-1 block w-full rounded-lg border border-white/15 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
+                                className="mt-1 block w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-[var(--text-main)]"
                                 value={formData.odometer}
                                 onChange={(e) => setFormData({ ...formData, odometer: e.target.value })}
                             />
@@ -355,32 +355,32 @@ export default function CreateRequestPage() {
                     </div>
                 </div>
 
-                <hr className="border-white/10" />
+                <hr className="border-[var(--border-subtle)]" />
 
                 {/* Section 2: Maintenance Details */}
                 <div>
-                    <h3 className="mb-4 text-lg font-semibold text-white">Maintenance Details</h3>
+                    <h3 className="mb-4 text-lg font-semibold text-[var(--text-main)]">Maintenance Details</h3>
                     <div className="grid gap-6 md:grid-cols-2">
                         <div>
-                            <label className="block text-sm font-medium text-slate-300">Maintenance Type *</label>
+                            <label className="block text-sm font-medium text-[var(--text-muted)]">Maintenance Type *</label>
                             <select
                                 required
-                                className="mt-1 block w-full rounded-lg border border-white/15 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
+                                className="mt-1 block w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-[var(--text-main)]"
                                 value={formData.maintenanceType}
                                 onChange={(e) => handleMaintenanceTypeChange(e.target.value)}
                             >
-                                <option value="" className="text-white bg-slate-900">Select Type</option>
+                                <option value="" className="text-[var(--text-main)] bg-[var(--bg-surface)]">Select Type</option>
                                 {Object.values(MaintenanceType).map((t) => (
-                                    <option key={t} value={t} className="text-white bg-slate-900">{t}</option>
+                                    <option key={t} value={t} className="text-[var(--text-main)] bg-[var(--bg-surface)]">{t}</option>
                                 ))}
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-300">Priority</label>
+                            <label className="block text-sm font-medium text-[var(--text-muted)]">Priority</label>
                             <input
                                 type="text"
                                 disabled
-                                className="mt-1 block w-full rounded-lg border border-white/15 bg-slate-800/50 px-3 py-2 text-white shadow-sm"
+                                className="mt-1 block w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 px-3 py-2 text-[var(--text-main)] shadow-sm"
                                 value={formData.priority}
                                 placeholder="Auto-populated"
                             />
@@ -390,9 +390,9 @@ export default function CreateRequestPage() {
                     {/* Maintenance Jobs - Moved here and enhanced */}
                     {formData.maintenanceType && (
                         <div className="mt-6">
-                            <label className="block text-sm font-medium text-slate-300 mb-2">
+                            <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
                                 Maintenance Jobs *
-                                <span className="ml-2 text-xs text-slate-500">({getMaintenanceJobs(formData.maintenanceType).length} available)</span>
+                                <span className="ml-2 text-xs text-[var(--text-faint)]">({getMaintenanceJobs(formData.maintenanceType).length} available)</span>
                             </label>
 
                             {/* Search Box */}
@@ -402,30 +402,30 @@ export default function CreateRequestPage() {
                                     placeholder="Search maintenance jobs..."
                                     value={jobSearch}
                                     onChange={(e) => setJobSearch(e.target.value)}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-[var(--text-main)]"
                                 />
                             </div>
 
                             {/* Jobs Grid with Scroll */}
-                            <div className="max-h-60 overflow-y-auto rounded-lg border border-white/15 p-3 bg-slate-800/50">
+                            <div className="max-h-60 overflow-y-auto rounded-lg border border-[var(--border-subtle)] p-3 bg-[var(--bg-surface)]/50">
                                 <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
                                     {getFilteredJobs().map((job) => (
-                                        <label key={job} className="flex items-center space-x-2 rounded-lg border border-white/10 bg-slate-900 p-2 hover:bg-blue-500/10 cursor-pointer transition-colors">
+                                        <label key={job} className="flex items-center space-x-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-2 hover:bg-blue-500/10 cursor-pointer transition-colors">
                                             <input
                                                 type="checkbox"
-                                                className="h-4 w-4 rounded border-white/15 text-blue-600 focus:ring-blue-500"
+                                                className="h-4 w-4 rounded border-[var(--border-subtle)] text-blue-600 focus:ring-blue-500"
                                                 checked={formData.maintenanceJobs.includes(job)}
                                                 onChange={() => handleJobToggle(job)}
                                             />
-                                            <span className="text-xs text-slate-300">{job}</span>
+                                            <span className="text-xs text-[var(--text-muted)]">{job}</span>
                                         </label>
                                     ))}
                                 </div>
                                 {getFilteredJobs().length === 0 && (
-                                    <p className="text-center text-sm text-slate-500 py-4">No jobs found matching "{jobSearch}"</p>
+                                    <p className="text-center text-sm text-[var(--text-faint)] py-4">No jobs found matching "{jobSearch}"</p>
                                 )}
                             </div>
-                            <p className="mt-2 text-xs text-slate-500">
+                            <p className="mt-2 text-xs text-[var(--text-faint)]">
                                 Selected: {formData.maintenanceJobs.length} job(s)
                             </p>
                         </div>
@@ -434,9 +434,9 @@ export default function CreateRequestPage() {
                     {/* Candidate Garages - Enhanced with filtering */}
                     {formData.maintenanceJobs.length > 0 && (
                         <div className="mt-6">
-                            <label className="block text-sm font-medium text-slate-300 mb-2">
+                            <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
                                 Candidate Garages (for RFQ)
-                                <span className="ml-2 text-xs text-slate-500">({getFilteredGarages().length} matching)</span>
+                                <span className="ml-2 text-xs text-[var(--text-faint)]">({getFilteredGarages().length} matching)</span>
                             </label>
 
                             {/* Search Box */}
@@ -446,23 +446,23 @@ export default function CreateRequestPage() {
                                     placeholder="Search garages..."
                                     value={garageSearch}
                                     onChange={(e) => setGarageSearch(e.target.value)}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-[var(--text-main)]"
                                 />
                             </div>
 
                             {/* Garages List */}
-                            <div className="max-h-48 overflow-y-auto rounded-lg border border-white/15 p-2 bg-slate-900">
+                            <div className="max-h-48 overflow-y-auto rounded-lg border border-[var(--border-subtle)] p-2 bg-[var(--bg-surface)]">
                                 {getFilteredGarages().map((g) => (
-                                    <label key={g.id} className="flex items-start space-x-3 p-3 hover:bg-white/5 rounded cursor-pointer border-b border-white/5 last:border-0">
+                                    <label key={g.id} className="flex items-start space-x-3 p-3 hover:bg-[var(--bg-surface-hover)] rounded cursor-pointer border-b border-[var(--border-subtle)] last:border-0">
                                         <input
                                             type="checkbox"
-                                            className="h-4 w-4 mt-0.5 rounded border-white/15 text-blue-600 focus:ring-blue-500"
+                                            className="h-4 w-4 mt-0.5 rounded border-[var(--border-subtle)] text-blue-600 focus:ring-blue-500"
                                             checked={formData.candidateGarageIds.includes(g.id)}
                                             onChange={() => handleGarageToggle(g.id)}
                                         />
                                         <div className="flex-1">
-                                            <span className="font-medium text-white text-sm block">{g.name}</span>
-                                            <span className="text-slate-500 text-xs block mt-0.5">{g.location}</span>
+                                            <span className="font-medium text-[var(--text-main)] text-sm block">{g.name}</span>
+                                            <span className="text-[var(--text-faint)] text-xs block mt-0.5">{g.location}</span>
                                             <div className="flex flex-wrap gap-1 mt-1">
                                                 {(g.specialties || []).map((spec, idx) => (
                                                     <span key={idx} className="inline-flex items-center rounded bg-blue-500/10 px-1.5 py-0.5 text-xs text-blue-700">
@@ -474,55 +474,55 @@ export default function CreateRequestPage() {
                                     </label>
                                 ))}
                                 {getFilteredGarages().length === 0 && (
-                                    <p className="text-center text-sm text-slate-500 py-4">No garages found matching your criteria</p>
+                                    <p className="text-center text-sm text-[var(--text-faint)] py-4">No garages found matching your criteria</p>
                                 )}
                             </div>
-                            <p className="mt-2 text-xs text-slate-500">
+                            <p className="mt-2 text-xs text-[var(--text-faint)]">
                                 Select multiple garages to request quotations. Selected: {formData.candidateGarageIds.length}
                             </p>
                         </div>
                     )}
 
                     <div className="mt-6">
-                        <label className="block text-sm font-medium text-slate-300">Work Order No.</label>
+                        <label className="block text-sm font-medium text-[var(--text-muted)]">Work Order No.</label>
                         <input
                             type="text"
-                            className="mt-1 block w-full rounded-lg border border-white/15 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
+                            className="mt-1 block w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-[var(--text-main)]"
                             value={formData.workOrderNo}
                             onChange={(e) => setFormData({ ...formData, workOrderNo: e.target.value })}
                         />
                     </div>
                 </div>
 
-                <hr className="border-white/10" />
+                <hr className="border-[var(--border-subtle)]" />
 
                 {/* Section 3: Schedule & Driver */}
                 <div>
-                    <h3 className="mb-4 text-lg font-semibold text-white">Schedule & Assignment</h3>
+                    <h3 className="mb-4 text-lg font-semibold text-[var(--text-main)]">Schedule & Assignment</h3>
                     <div className="grid gap-6 md:grid-cols-3">
                         <div>
-                            <label className="block text-sm font-medium text-slate-300">Start Date *</label>
+                            <label className="block text-sm font-medium text-[var(--text-muted)]">Start Date *</label>
                             <input
                                 type="date"
                                 required
-                                className="mt-1 block w-full rounded-lg border border-white/15 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
+                                className="mt-1 block w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-[var(--text-main)]"
                                 value={formData.startDate}
                                 onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-300">Expected End Date</label>
+                            <label className="block text-sm font-medium text-[var(--text-muted)]">Expected End Date</label>
                             <input
                                 type="date"
-                                className="mt-1 block w-full rounded-lg border border-white/15 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
+                                className="mt-1 block w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-[var(--text-main)]"
                                 value={formData.expectedEndDate}
                                 onChange={(e) => setFormData({ ...formData, expectedEndDate: e.target.value })}
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-300">Driver</label>
+                            <label className="block text-sm font-medium text-[var(--text-muted)]">Driver</label>
                             <select
-                                className="mt-1 block w-full rounded-lg border border-white/15 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
+                                className="mt-1 block w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-[var(--text-main)]"
                                 value={formData.driverId}
                                 onChange={(e) => setFormData({ ...formData, driverId: e.target.value })}
                             >
@@ -535,16 +535,16 @@ export default function CreateRequestPage() {
                     </div>
                 </div>
 
-                <hr className="border-white/10" />
+                <hr className="border-[var(--border-subtle)]" />
 
                 {/* Section 4: Additional Details */}
                 <div>
-                    <h3 className="mb-4 text-lg font-semibold text-white">Additional Details</h3>
+                    <h3 className="mb-4 text-lg font-semibold text-[var(--text-main)]">Additional Details</h3>
                     <div>
-                        <label className="block text-sm font-medium text-slate-300">Description / Remarks</label>
+                        <label className="block text-sm font-medium text-[var(--text-muted)]">Description / Remarks</label>
                         <textarea
                             rows={4}
-                            className="mt-1 block w-full rounded-lg border border-white/15 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
+                            className="mt-1 block w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-[var(--text-main)]"
                             value={formData.description}
                             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                             placeholder="Describe the issue or maintenance requirements..."
@@ -552,18 +552,18 @@ export default function CreateRequestPage() {
                     </div>
                 </div>
 
-                <hr className="border-white/10" />
+                <hr className="border-[var(--border-subtle)]" />
 
                 {/* Section 5: Attachments */}
                 <div>
-                    <h3 className="mb-4 text-lg font-semibold text-white">Attachments</h3>
+                    <h3 className="mb-4 text-lg font-semibold text-[var(--text-main)]">Attachments</h3>
                     <div className="space-y-4">
                         {attachments.map((att, index) => (
                             <div key={index} className="flex items-end gap-4">
                                 <div className="flex-1">
-                                    <label className="block text-sm font-medium text-slate-300">Type</label>
+                                    <label className="block text-sm font-medium text-[var(--text-muted)]">Type</label>
                                     <select
-                                        className="mt-1 block w-full rounded-lg border border-white/15 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
+                                        className="mt-1 block w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-[var(--text-main)]"
                                         value={att.type}
                                         onChange={(e) => {
                                             const newAtts = [...attachments];
@@ -577,7 +577,7 @@ export default function CreateRequestPage() {
                                     </select>
                                 </div>
                                 <div className="flex-[2]">
-                                    <label className="block text-sm font-medium text-slate-300">File</label>
+                                    <label className="block text-sm font-medium text-[var(--text-muted)]">File</label>
                                     <input
                                         type="file"
                                         className="mt-1 block w-full text-sm text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-500/10 file:text-blue-700 hover:file:bg-blue-500/20"
@@ -617,14 +617,14 @@ export default function CreateRequestPage() {
                     </div>
                 </div>
 
-                <hr className="border-white/10" />
+                <hr className="border-[var(--border-subtle)]" />
 
                 {/* Submit Buttons */}
-                <div className="flex justify-end gap-3 pt-6 border-t border-white/10">
+                <div className="flex justify-end gap-3 pt-6 border-t border-[var(--border-subtle)]">
                     <button
                         type="button"
                         onClick={() => router.back()}
-                        className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
+                        className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
                     >
                         Cancel
                     </button>

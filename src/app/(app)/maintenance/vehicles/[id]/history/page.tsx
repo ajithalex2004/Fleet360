@@ -123,8 +123,8 @@ export default function VehicleHistoryPage() {
         return 'text-red-600';
     };
 
-    if (loading) return <div className="p-8 text-center text-slate-500">Loading vehicle history...</div>;
-    if (!vehicle || !history) return <div className="p-8 text-center text-slate-500">Vehicle not found.</div>;
+    if (loading) return <div className="p-8 text-center text-[var(--text-faint)]">Loading vehicle history...</div>;
+    if (!vehicle || !history) return <div className="p-8 text-center text-[var(--text-faint)]">Vehicle not found.</div>;
 
     return (
         <div className="mx-auto max-w-7xl pb-12 space-y-8">
@@ -132,19 +132,19 @@ export default function VehicleHistoryPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <div className="flex items-center gap-3 mb-1">
-                        <Link href="/maintenance/vehicles" className="text-slate-400 hover:text-slate-300">
+                        <Link href="/maintenance/vehicles" className="text-[var(--text-muted)] hover:text-[var(--text-muted)]">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
                             </svg>
                         </Link>
-                        <h1 className="text-2xl font-bold text-white">Vehicle History</h1>
+                        <h1 className="text-2xl font-bold text-[var(--text-main)]">Vehicle History</h1>
                     </div>
-                    <p className="text-xs text-slate-500 ml-8">
+                    <p className="text-xs text-[var(--text-faint)] ml-8">
                         {vehicle.make} {vehicle.model} ({vehicle.licensePlate}) • {vehicle.year}
                     </p>
                 </div>
                 <div className="text-right">
-                    <p className="text-sm text-slate-500">Health Score</p>
+                    <p className="text-sm text-[var(--text-faint)]">Health Score</p>
                     <p className={`text-4xl font-bold ${getHealthScoreColor(history.healthScore)}`}>
                         {history.healthScore}
                     </p>
@@ -153,28 +153,28 @@ export default function VehicleHistoryPage() {
 
             {/* Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                    <p className="text-sm text-slate-500">Total Services</p>
-                    <p className="text-2xl font-bold text-white">{history.totalMaintenanceRequests}</p>
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                    <p className="text-sm text-[var(--text-faint)]">Total Services</p>
+                    <p className="text-2xl font-bold text-[var(--text-main)]">{history.totalMaintenanceRequests}</p>
                 </div>
-                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                    <p className="text-sm text-slate-500">Total Cost</p>
-                    <p className="text-2xl font-bold text-white">${history.totalCost.toLocaleString()}</p>
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                    <p className="text-sm text-[var(--text-faint)]">Total Cost</p>
+                    <p className="text-2xl font-bold text-[var(--text-main)]">${history.totalCost.toLocaleString()}</p>
                 </div>
-                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                    <p className="text-sm text-slate-500">Avg Cost/Service</p>
-                    <p className="text-2xl font-bold text-white">${Math.round(history.averageCostPerService).toLocaleString()}</p>
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                    <p className="text-sm text-[var(--text-faint)]">Avg Cost/Service</p>
+                    <p className="text-2xl font-bold text-[var(--text-main)]">${Math.round(history.averageCostPerService).toLocaleString()}</p>
                 </div>
-                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                    <p className="text-sm text-slate-500">Total Downtime</p>
-                    <p className="text-2xl font-bold text-white">{Math.round(history.totalDowntimeDays)} days</p>
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                    <p className="text-sm text-[var(--text-faint)]">Total Downtime</p>
+                    <p className="text-2xl font-bold text-[var(--text-main)]">{Math.round(history.totalDowntimeDays)} days</p>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Service History Timeline */}
-                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                    <h3 className="text-lg font-bold text-white mb-4">Service History</h3>
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                    <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">Service History</h3>
                     <div className="space-y-4 max-h-96 overflow-y-auto">
                         {requests.map(req => (
                             <div key={req.id} className="border-l-4 border-blue-500 pl-4 py-2">
@@ -183,13 +183,13 @@ export default function VehicleHistoryPage() {
                                         <Link href={`/maintenance/requests/${encodeURIComponent(req.id)}`} className="text-sm font-medium text-blue-600 hover:underline">
                                             #{req.id.toUpperCase()}
                                         </Link>
-                                        <p className="text-xs text-slate-500 mt-1">
+                                        <p className="text-xs text-[var(--text-faint)] mt-1">
                                             {new Date(req.requestDate).toLocaleDateString()} • {req.maintenanceType}
                                         </p>
-                                        <p className="text-sm text-slate-300 mt-1">{req.description}</p>
+                                        <p className="text-sm text-[var(--text-muted)] mt-1">{req.description}</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-sm font-medium text-white">
+                                        <p className="text-sm font-medium text-[var(--text-main)]">
                                             ${(req.actualCost || req.estimatedCost || 0).toLocaleString()}
                                         </p>
                                     </div>
@@ -200,8 +200,8 @@ export default function VehicleHistoryPage() {
                 </div>
 
                 {/* Recurring Issues */}
-                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                    <h3 className="text-lg font-bold text-white mb-4">Recurring Issues</h3>
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                    <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">Recurring Issues</h3>
                     {history.recurringIssues.length > 0 ? (
                         <div className="space-y-3">
                             {history.recurringIssues.map((issue, idx) => (
@@ -227,17 +227,17 @@ export default function VehicleHistoryPage() {
                             ))}
                         </div>
                     ) : (
-                        <p className="text-sm text-slate-500 text-center py-8">No recurring issues detected</p>
+                        <p className="text-sm text-[var(--text-faint)] text-center py-8">No recurring issues detected</p>
                     )}
                 </div>
 
                 {/* Services by Type */}
-                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                    <h3 className="text-lg font-bold text-white mb-4">Services by Type</h3>
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                    <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">Services by Type</h3>
                     <div className="space-y-3">
                         {Object.entries(history.servicesByType).map(([type, count]) => (
                             <div key={type} className="flex items-center justify-between">
-                                <span className="text-sm text-slate-300">{type}</span>
+                                <span className="text-sm text-[var(--text-muted)]">{type}</span>
                                 <div className="flex items-center gap-3">
                                     <div className="w-32 bg-slate-200 rounded-full h-2">
                                         <div
@@ -245,7 +245,7 @@ export default function VehicleHistoryPage() {
                                             style={{ width: `${(count / history.totalMaintenanceRequests) * 100}%` }}
                                         />
                                     </div>
-                                    <span className="text-sm font-medium text-white w-8 text-right">{count}</span>
+                                    <span className="text-sm font-medium text-[var(--text-main)] w-8 text-right">{count}</span>
                                 </div>
                             </div>
                         ))}
@@ -253,13 +253,13 @@ export default function VehicleHistoryPage() {
                 </div>
 
                 {/* Cost by Year */}
-                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                    <h3 className="text-lg font-bold text-white mb-4">Cost by Year</h3>
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                    <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">Cost by Year</h3>
                     <div className="space-y-3">
                         {Object.entries(history.costByYear).sort((a, b) => b[0].localeCompare(a[0])).map(([year, cost]) => (
                             <div key={year} className="flex items-center justify-between">
-                                <span className="text-sm font-medium text-slate-300">{year}</span>
-                                <span className="text-sm font-bold text-white">${cost.toLocaleString()}</span>
+                                <span className="text-sm font-medium text-[var(--text-muted)]">{year}</span>
+                                <span className="text-sm font-bold text-[var(--text-main)]">${cost.toLocaleString()}</span>
                             </div>
                         ))}
                     </div>

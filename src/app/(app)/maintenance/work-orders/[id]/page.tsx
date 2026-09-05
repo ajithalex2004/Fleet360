@@ -793,7 +793,7 @@ export default function WorkOrderPage() {
     const getStatusColor = (status: WorkOrderStatus) => {
         switch (status) {
             case WorkOrderStatus.NOT_STARTED:
-                return 'bg-slate-700/40 text-slate-300 border-white/15';
+                return 'bg-[var(--bg-surface-hover)]/40 text-[var(--text-muted)] border-[var(--border-subtle)]';
             case WorkOrderStatus.IN_PROGRESS:
                 return 'bg-blue-500/20 text-blue-700 border-blue-300';
             case WorkOrderStatus.ON_HOLD:
@@ -805,7 +805,7 @@ export default function WorkOrderPage() {
             case WorkOrderStatus.SUBMIT_INVOICE:
                 return 'bg-indigo-100 text-indigo-700 border-indigo-300';
             default:
-                return 'bg-slate-700/40 text-slate-300 border-white/15';
+                return 'bg-[var(--bg-surface-hover)]/40 text-[var(--text-muted)] border-[var(--border-subtle)]';
         }
     };
 
@@ -933,8 +933,8 @@ export default function WorkOrderPage() {
         );
     };
 
-    if (loading) return <div className="p-8 text-center text-slate-500">Loading work order...</div>;
-    if (!workOrder) return <div className="p-8 text-center text-slate-500">Work order not found.</div>;
+    if (loading) return <div className="p-8 text-center text-[var(--text-faint)]">Loading work order...</div>;
+    if (!workOrder) return <div className="p-8 text-center text-[var(--text-faint)]">Work order not found.</div>;
 
     const progress = calculateProgress();
     const estimatedCosts = getEstimatedCosts();
@@ -943,15 +943,15 @@ export default function WorkOrderPage() {
     return (
         <div className="mx-auto max-w-7xl pb-12 space-y-8">
             {/* Print Header */}
-            <div className="hidden print:block mb-8 border-b-2 border-slate-900 pb-4">
+            <div className="hidden print:block mb-8 border-b-2 border-[var(--border-subtle)] pb-4">
                 <div className="flex justify-between items-start">
                     <div>
-                        <h1 className="text-2xl font-bold text-white uppercase tracking-wider">Work Order Details</h1>
-                        <p className="text-xs text-slate-600 mt-1">ID: <span className="font-mono font-bold">{workOrder.id.toUpperCase()}</span></p>
+                        <h1 className="text-2xl font-bold text-[var(--text-main)] uppercase tracking-wider">Work Order Details</h1>
+                        <p className="text-xs text-[var(--text-faint)] mt-1">ID: <span className="font-mono font-bold">{workOrder.id.toUpperCase()}</span></p>
                     </div>
                     <div className="text-right">
-                        <p className="text-sm font-bold text-white">{garage?.name}</p>
-                        <p className="text-xs text-slate-500">Date: {new Date().toLocaleDateString()}</p>
+                        <p className="text-sm font-bold text-[var(--text-main)]">{garage?.name}</p>
+                        <p className="text-xs text-[var(--text-faint)]">Date: {new Date().toLocaleDateString()}</p>
                     </div>
                 </div>
             </div>
@@ -960,24 +960,24 @@ export default function WorkOrderPage() {
             <div className="flex items-center justify-between print:hidden">
                 <div>
                     <div className="flex items-center gap-3 mb-1">
-                        <Link href="/maintenance/work-orders" className="text-slate-400 hover:text-slate-300">
+                        <Link href="/maintenance/work-orders" className="text-[var(--text-muted)] hover:text-[var(--text-muted)]">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
                             </svg>
                         </Link>
-                        <h1 className="text-lg font-bold text-white">Work Order #{workOrder.id.toUpperCase()}</h1>
+                        <h1 className="text-lg font-bold text-[var(--text-main)]">Work Order #{workOrder.id.toUpperCase()}</h1>
                         <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium border ${getStatusColor(workOrder.status)}`}>
                             {workOrder.status}
                         </span>
                     </div>
-                    <p className="text-slate-500 ml-8">
+                    <p className="text-[var(--text-faint)] ml-8">
                         {vehicle?.make} {vehicle?.model} ({vehicle?.licensePlate}) • {garage?.name}
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
                     <button
                         onClick={handleSaveProgress}
-                        className="rounded-lg bg-slate-900 border border-white/15 px-4 py-2 text-xs font-medium text-slate-300 hover:bg-white/5 shadow-sm transition-colors"
+                        className="rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-4 py-2 text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] shadow-sm transition-colors"
                     >
                         Save Progress
                     </button>
@@ -1007,17 +1007,17 @@ export default function WorkOrderPage() {
                         </button>
                     )}
                     {/* View Mode Toggle (Dev Only) */}
-                    <div className="flex items-center bg-slate-700/40 rounded-lg p-1 mr-2">
+                    <div className="flex items-center bg-[var(--bg-surface-hover)]/40 rounded-lg p-1 mr-2">
                         <button
                             onClick={() => setViewMode('MAINTENANCE')}
-                            className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'MAINTENANCE' ? 'bg-slate-900 shadow text-white' : 'text-slate-500 hover:text-slate-300'
+                            className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'MAINTENANCE' ? 'bg-[var(--bg-surface)] shadow text-[var(--text-main)]' : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'
                                 }`}
                         >
                             Maintenance
                         </button>
                         <button
                             onClick={() => setViewMode('GARAGE')}
-                            className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'GARAGE' ? 'bg-slate-900 shadow text-white' : 'text-slate-500 hover:text-slate-300'
+                            className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'GARAGE' ? 'bg-[var(--bg-surface)] shadow text-[var(--text-main)]' : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'
                                 }`}
                         >
                             Garage
@@ -1027,7 +1027,7 @@ export default function WorkOrderPage() {
                         value={workOrder.status}
                         onChange={(e) => updateWorkOrderStatus(e.target.value as WorkOrderStatus)}
                         disabled={viewMode !== 'GARAGE'}
-                        className={`rounded-lg border border-white/15 px-3 py-2 text-sm bg-slate-900 text-white ${viewMode !== 'GARAGE' ? 'opacity-50 cursor-not-allowed bg-slate-700/40' : ''}`}
+                        className={`rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm bg-[var(--bg-surface)] text-[var(--text-main)] ${viewMode !== 'GARAGE' ? 'opacity-50 cursor-not-allowed bg-[var(--bg-surface-hover)]/40' : ''}`}
                     >
                         <option value={workOrder.status}>{workOrder.status}</option>
                         {allowedTransitions[workOrder.status]?.map(status => (
@@ -1036,7 +1036,7 @@ export default function WorkOrderPage() {
                     </select>
                     <button
                         onClick={() => window.print()}
-                        className="flex items-center gap-2 rounded-lg border border-white/15 bg-slate-900 px-4 py-2 text-xs font-medium text-slate-300 hover:bg-white/5 print:hidden"
+                        className="flex items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-4 py-2 text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] print:hidden"
                     >
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0 0 21 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 0 0-1.913-.247M6.34 18H5.25A2.25 2.25 0 0 1 3 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 0 1 1.913-.247m10.5 0a48.536 48.536 0 0 0-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5Zm-3 0h.008v.008H15V10.5Z" />
@@ -1157,9 +1157,9 @@ export default function WorkOrderPage() {
             `}</style>
 
             {/* Progress Bar */}
-            <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm print:hidden">
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm print:hidden">
                 <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-slate-300">Overall Progress</span>
+                    <span className="text-sm font-medium text-[var(--text-muted)]">Overall Progress</span>
                     <span className="text-sm font-bold text-blue-600">{progress}%</span>
                 </div>
                 <div className="w-full bg-slate-200 rounded-full h-3">
@@ -1171,9 +1171,9 @@ export default function WorkOrderPage() {
             </div>
 
             {/* Work Order Details */}
-            <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-bold text-white">Work Order Details</h3>
+                    <h3 className="text-lg font-bold text-[var(--text-main)]">Work Order Details</h3>
                     {viewMode === 'GARAGE' && !isEditingDetails && (
                         <button
                             onClick={() => setIsEditingDetails(true)}
@@ -1187,23 +1187,23 @@ export default function WorkOrderPage() {
                     {/* Left Column: Vehicle & WO Info */}
                     <div className="space-y-4">
                         <div>
-                            <label className="block text-xs text-slate-500">Work Order Number</label>
-                            <p className="text-sm font-medium text-white">{workOrder.id.toUpperCase()}</p>
+                            <label className="block text-xs text-[var(--text-faint)]">Work Order Number</label>
+                            <p className="text-sm font-medium text-[var(--text-main)]">{workOrder.id.toUpperCase()}</p>
                         </div>
                         <div>
-                            <label className="block text-xs text-slate-500">Vehicle</label>
-                            <p className="text-sm font-medium text-white">
+                            <label className="block text-xs text-[var(--text-faint)]">Vehicle</label>
+                            <p className="text-sm font-medium text-[var(--text-main)]">
                                 {vehicle?.make} {vehicle?.model} ({vehicle?.year})
                             </p>
-                            <p className="text-xs text-slate-500">{vehicle?.licensePlate} • VIN: {vehicle?.vin}</p>
+                            <p className="text-xs text-[var(--text-faint)]">{vehicle?.licensePlate} • VIN: {vehicle?.vin}</p>
                         </div>
                         <div>
-                            <label className="block text-xs text-slate-500">Current Mileage</label>
-                            <p className="text-sm font-medium text-white">{vehicle?.currentMileage.toLocaleString()} km</p>
+                            <label className="block text-xs text-[var(--text-faint)]">Current Mileage</label>
+                            <p className="text-sm font-medium text-[var(--text-main)]">{vehicle?.currentMileage.toLocaleString()} km</p>
                         </div>
                         <div>
-                            <label className="block text-xs text-slate-500">Estimation Approved By</label>
-                            <p className="text-sm font-medium text-white">
+                            <label className="block text-xs text-[var(--text-faint)]">Estimation Approved By</label>
+                            <p className="text-sm font-medium text-[var(--text-main)]">
                                 {request?.estimateApproval?.approvedByName || 'N/A'}
                             </p>
                         </div>
@@ -1212,12 +1212,12 @@ export default function WorkOrderPage() {
                     {/* Right Column: Maintenance Info */}
                     <div className="space-y-4">
                         <div>
-                            <label className="block text-xs text-slate-500 mb-1">Maintenance Type</label>
+                            <label className="block text-xs text-[var(--text-faint)] mb-1">Maintenance Type</label>
                             {isEditingDetails ? (
                                 <select
                                     value={detailsForm.maintenanceType}
                                     onChange={(e) => setDetailsForm({ ...detailsForm, maintenanceType: e.target.value as MaintenanceType })}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm bg-slate-900 text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm bg-[var(--bg-surface)] text-[var(--text-main)]"
                                 >
                                     {MaintenanceType && Object.values(MaintenanceType).map(type => (
                                         <option key={type} value={type}>{type}</option>
@@ -1230,23 +1230,23 @@ export default function WorkOrderPage() {
                             )}
                         </div>
                         <div>
-                            <label className="block text-xs text-slate-500 mb-1">Maintenance Jobs</label>
+                            <label className="block text-xs text-[var(--text-faint)] mb-1">Maintenance Jobs</label>
                             {isEditingDetails ? (
                                 <textarea
                                     value={detailsForm.maintenanceJobs.join('\n')}
                                     onChange={(e) => setDetailsForm({ ...detailsForm, maintenanceJobs: e.target.value.split('\n') })}
                                     rows={4}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm bg-slate-900 text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm bg-[var(--bg-surface)] text-[var(--text-main)]"
                                     placeholder="Enter jobs (one per line)"
                                 />
                             ) : (
-                                <ul className="list-disc list-inside text-sm text-slate-300 space-y-1">
+                                <ul className="list-disc list-inside text-sm text-[var(--text-muted)] space-y-1">
                                     {request?.maintenanceJobs?.length ? (
                                         request.maintenanceJobs.map((job, idx) => (
                                             <li key={idx}>{job}</li>
                                         ))
                                     ) : (
-                                        <li className="text-slate-400 italic">No jobs listed</li>
+                                        <li className="text-[var(--text-muted)] italic">No jobs listed</li>
                                     )}
                                 </ul>
                             )}
@@ -1268,7 +1268,7 @@ export default function WorkOrderPage() {
                                             }
                                         }
                                     }}
-                                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-slate-300 hover:bg-white/10"
+                                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
                                 >
                                     Cancel
                                 </button>
@@ -1329,9 +1329,9 @@ export default function WorkOrderPage() {
                 {/* Main Content */}
                 <div className="lg:col-span-2 space-y-8">
                     {/* Work Log */}
-                    <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                    <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-bold text-white">Work Log</h3>
+                            <h3 className="text-lg font-bold text-[var(--text-main)]">Work Log</h3>
                             <button
                                 onClick={() => setShowAddLogModal(true)}
                                 disabled={viewMode !== 'GARAGE'}
@@ -1347,11 +1347,11 @@ export default function WorkOrderPage() {
                                     <div className="flex items-start justify-between">
                                         <div className="flex-1">
                                             <div className="flex justify-between items-start">
-                                                <p className="text-sm font-medium text-white">{log.activity}</p>
+                                                <p className="text-sm font-medium text-[var(--text-main)]">{log.activity}</p>
                                                 {viewMode === 'GARAGE' && (
                                                     <button
                                                         onClick={() => handleEditLog(log)}
-                                                        className="text-slate-400 hover:text-blue-600"
+                                                        className="text-[var(--text-muted)] hover:text-blue-600"
                                                     >
                                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                                                             <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
@@ -1359,11 +1359,11 @@ export default function WorkOrderPage() {
                                                     </button>
                                                 )}
                                             </div>
-                                            <p className="text-xs text-slate-500 mt-1">
+                                            <p className="text-xs text-[var(--text-faint)] mt-1">
                                                 {log.technicianName} • {new Date(log.timestamp).toLocaleString()} • {log.hoursSpent}h
                                             </p>
                                             {log.notes && (
-                                                <p className="text-sm text-slate-300 mt-2 bg-slate-800/50 p-2 rounded">{log.notes}</p>
+                                                <p className="text-sm text-[var(--text-muted)] mt-2 bg-[var(--bg-surface)]/50 p-2 rounded">{log.notes}</p>
                                             )}
                                         </div>
                                     </div>
@@ -1371,18 +1371,18 @@ export default function WorkOrderPage() {
                             ))}
                         </div>
 
-                        <div className="mt-4 pt-4 border-t border-white/10">
+                        <div className="mt-4 pt-4 border-t border-[var(--border-subtle)]">
                             <div className="flex justify-between text-sm">
-                                <span className="text-slate-600">Total Labor Hours:</span>
-                                <span className="font-bold text-white">{workOrder.totalLaborHours}h</span>
+                                <span className="text-[var(--text-faint)]">Total Labor Hours:</span>
+                                <span className="font-bold text-[var(--text-main)]">{workOrder.totalLaborHours}h</span>
                             </div>
                         </div>
                     </div>
 
                     {/* Parts Used */}
-                    <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                    <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-bold text-white">Parts Used</h3>
+                            <h3 className="text-lg font-bold text-[var(--text-main)]">Parts Used</h3>
                             <button
                                 onClick={() => setShowAddPartModal(true)}
                                 disabled={viewMode !== 'GARAGE'}
@@ -1393,33 +1393,33 @@ export default function WorkOrderPage() {
                         </div>
 
                         {workOrder.partsUsed.length > 0 ? (
-                            <div className="overflow-hidden rounded-lg border border-white/10">
+                            <div className="overflow-hidden rounded-lg border border-[var(--border-subtle)]">
                                 <table className="min-w-full divide-y divide-white/10">
-                                    <thead className="bg-slate-800/50">
+                                    <thead className="bg-[var(--bg-surface)]/50">
                                         <tr>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Part Name</th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Part #</th>
-                                            <th className="px-4 py-3 text-right text-xs font-medium text-slate-500">Qty</th>
-                                            <th className="px-4 py-3 text-right text-xs font-medium text-slate-500">Unit Cost</th>
-                                            <th className="px-4 py-3 text-right text-xs font-medium text-slate-500">Total</th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-slate-500">Source</th>
-                                            {viewMode === 'GARAGE' && <th className="px-4 py-3 text-right text-xs font-medium text-slate-500">Actions</th>}
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-[var(--text-faint)]">Part Name</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-[var(--text-faint)]">Part #</th>
+                                            <th className="px-4 py-3 text-right text-xs font-medium text-[var(--text-faint)]">Qty</th>
+                                            <th className="px-4 py-3 text-right text-xs font-medium text-[var(--text-faint)]">Unit Cost</th>
+                                            <th className="px-4 py-3 text-right text-xs font-medium text-[var(--text-faint)]">Total</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-[var(--text-faint)]">Source</th>
+                                            {viewMode === 'GARAGE' && <th className="px-4 py-3 text-right text-xs font-medium text-[var(--text-faint)]">Actions</th>}
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-white/10 bg-slate-900">
+                                    <tbody className="divide-y divide-white/10 bg-[var(--bg-surface)]">
                                         {workOrder.partsUsed.map(part => (
                                             <tr key={part.id}>
-                                                <td className="px-4 py-3 text-sm text-white">{part.partName}</td>
-                                                <td className="px-4 py-3 text-sm text-slate-300">{part.partNumber || '-'}</td>
-                                                <td className="px-4 py-3 text-sm text-white text-right">{part.quantityUsed}</td>
-                                                <td className="px-4 py-3 text-sm text-white text-right">{formatCurrency(part.unitCost)}</td>
-                                                <td className="px-4 py-3 text-sm font-medium text-white text-right">{formatCurrency(part.totalCost)}</td>
-                                                <td className="px-4 py-3 text-sm text-slate-300">{part.source}</td>
+                                                <td className="px-4 py-3 text-sm text-[var(--text-main)]">{part.partName}</td>
+                                                <td className="px-4 py-3 text-sm text-[var(--text-muted)]">{part.partNumber || '-'}</td>
+                                                <td className="px-4 py-3 text-sm text-[var(--text-main)] text-right">{part.quantityUsed}</td>
+                                                <td className="px-4 py-3 text-sm text-[var(--text-main)] text-right">{formatCurrency(part.unitCost)}</td>
+                                                <td className="px-4 py-3 text-sm font-medium text-[var(--text-main)] text-right">{formatCurrency(part.totalCost)}</td>
+                                                <td className="px-4 py-3 text-sm text-[var(--text-muted)]">{part.source}</td>
                                                 {viewMode === 'GARAGE' && (
                                                     <td className="px-4 py-3 text-sm text-right">
                                                         <button
                                                             onClick={() => handleEditPart(part)}
-                                                            className="text-slate-200 hover:text-blue-600"
+                                                            className="text-[var(--text-main)] hover:text-blue-600"
                                                         >
                                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 inline-block">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
@@ -1433,25 +1433,25 @@ export default function WorkOrderPage() {
                                 </table>
                             </div>
                         ) : (
-                            <p className="text-sm text-slate-500 text-center py-8">No parts used yet</p>
+                            <p className="text-sm text-[var(--text-faint)] text-center py-8">No parts used yet</p>
                         )}
 
-                        <div className="mt-4 pt-4 border-t border-white/10">
+                        <div className="mt-4 pt-4 border-t border-[var(--border-subtle)]">
                             <div className="flex justify-between text-sm">
-                                <span className="text-slate-600">Total Parts Cost:</span>
-                                <span className="font-bold text-white">{formatCurrency(calculateTotalPartsCost())}</span>
+                                <span className="text-[var(--text-faint)]">Total Parts Cost:</span>
+                                <span className="font-bold text-[var(--text-main)]">{formatCurrency(calculateTotalPartsCost())}</span>
                             </div>
                         </div>
                     </div>
 
                     {/* Invoice & Attachments */}
-                    <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                    <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-bold text-white">Invoices & Attachments</h3>
+                            <h3 className="text-lg font-bold text-[var(--text-main)]">Invoices & Attachments</h3>
                             {viewMode === 'GARAGE' && (
                                 <label className="cursor-pointer rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
                                     + Upload Invoice
-                                    <input type="file" className="hidden text-white" accept=".pdf,.png,.jpg,.jpeg" onChange={handleFileUpload} />
+                                    <input type="file" className="hidden text-[var(--text-main)]" accept=".pdf,.png,.jpg,.jpeg" onChange={handleFileUpload} />
                                 </label>
                             )}
                         </div>
@@ -1459,7 +1459,7 @@ export default function WorkOrderPage() {
                         {workOrder.invoiceAttachments && workOrder.invoiceAttachments.length > 0 ? (
                             <div className="space-y-3">
                                 {workOrder.invoiceAttachments.map(att => (
-                                    <div key={att.id} className="flex items-center justify-between rounded-lg border border-white/10 p-3">
+                                    <div key={att.id} className="flex items-center justify-between rounded-lg border border-[var(--border-subtle)] p-3">
                                         <div className="flex items-center gap-3">
                                             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-500/10 text-red-600">
                                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
@@ -1467,14 +1467,14 @@ export default function WorkOrderPage() {
                                                 </svg>
                                             </div>
                                             <div>
-                                                <p className="text-sm font-medium text-white">{att.fileName}</p>
-                                                <p className="text-xs text-slate-500">{new Date(att.uploadedAt).toLocaleDateString()}</p>
+                                                <p className="text-sm font-medium text-[var(--text-main)]">{att.fileName}</p>
+                                                <p className="text-xs text-[var(--text-faint)]">{new Date(att.uploadedAt).toLocaleDateString()}</p>
                                             </div>
                                         </div>
                                         {viewMode === 'GARAGE' && (
                                             <button
                                                 onClick={() => removeAttachment(att.id)}
-                                                className="text-slate-400 hover:text-red-600"
+                                                className="text-[var(--text-muted)] hover:text-red-600"
                                             >
                                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
@@ -1485,22 +1485,22 @@ export default function WorkOrderPage() {
                                 ))}
                             </div>
                         ) : (
-                            <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-white/10 py-8">
-                                <div className="rounded-full bg-slate-800/50 p-3 mb-3">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-slate-400">
+                            <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-[var(--border-subtle)] py-8">
+                                <div className="rounded-full bg-[var(--bg-surface)]/50 p-3 mb-3">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-[var(--text-muted)]">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
                                     </svg>
                                 </div>
-                                <p className="text-sm font-medium text-white">No invoices attached</p>
-                                <p className="text-xs text-slate-500 mt-1">Upload the final invoice to complete the work order</p>
+                                <p className="text-sm font-medium text-[var(--text-main)]">No invoices attached</p>
+                                <p className="text-xs text-[var(--text-faint)] mt-1">Upload the final invoice to complete the work order</p>
                             </div>
                         )}
                     </div>
 
                     {/* Phase C: Job Cards */}
-                    <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                    <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-bold text-white">Job Cards</h3>
+                            <h3 className="text-lg font-bold text-[var(--text-main)]">Job Cards</h3>
                             <button
                                 onClick={() => { setEditingJobCardId(null); setJobCardForm(DEFAULT_JOB_CARD_FORM); setShowJobCardModal(true); }}
                                 className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
@@ -1510,7 +1510,7 @@ export default function WorkOrderPage() {
                         </div>
 
                         {jobCards.length === 0 ? (
-                            <p className="text-sm text-slate-500 text-center py-8">
+                            <p className="text-sm text-[var(--text-faint)] text-center py-8">
                                 No job cards yet — break the work order into assignable cards
                             </p>
                         ) : (
@@ -1518,25 +1518,25 @@ export default function WorkOrderPage() {
                                 {jobCards.map(card => {
                                     const doneCount = card.tasks.filter(t => t.completed).length;
                                     return (
-                                        <div key={card.id} className="rounded-lg border border-white/10 bg-slate-800/50 p-4">
+                                        <div key={card.id} className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 p-4">
                                             <div className="flex items-start justify-between gap-2 mb-2">
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center gap-2 flex-wrap">
-                                                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${card.status === 'COMPLETED' ? 'bg-emerald-500/20 text-emerald-400' : card.status === 'IN_PROGRESS' ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-500/20 text-slate-400'}`}>
+                                                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${card.status === 'COMPLETED' ? 'bg-emerald-500/20 text-emerald-400' : card.status === 'IN_PROGRESS' ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-500/20 text-[var(--text-muted)]'}`}>
                                                             {card.status.replace('_', ' ')}
                                                         </span>
-                                                        <span className="text-sm font-medium text-white truncate">{card.title}</span>
+                                                        <span className="text-sm font-medium text-[var(--text-main)] truncate">{card.title}</span>
                                                     </div>
                                                     {card.description && (
-                                                        <p className="text-xs text-slate-400 mt-1">{card.description}</p>
+                                                        <p className="text-xs text-[var(--text-muted)] mt-1">{card.description}</p>
                                                     )}
                                                     {card.technicianName && (
-                                                        <p className="text-xs text-slate-500 mt-1">👷 {card.technicianName}</p>
+                                                        <p className="text-xs text-[var(--text-faint)] mt-1">👷 {card.technicianName}</p>
                                                     )}
                                                 </div>
                                                 <div className="flex items-center gap-2 shrink-0">
                                                     {card.estimatedHours != null && (
-                                                        <span className="text-xs text-slate-500">{card.estimatedHours}h est.</span>
+                                                        <span className="text-xs text-[var(--text-faint)]">{card.estimatedHours}h est.</span>
                                                     )}
                                                     <button
                                                         onClick={() => {
@@ -1544,28 +1544,28 @@ export default function WorkOrderPage() {
                                                             setJobCardForm({ title: card.title, description: card.description ?? '', technicianId: card.technicianId ?? '', technicianName: card.technicianName ?? '', estimatedHours: card.estimatedHours ?? 0, status: card.status, newTaskDesc: '' });
                                                             setShowJobCardModal(true);
                                                         }}
-                                                        className="text-xs text-slate-400 hover:text-blue-400"
+                                                        className="text-xs text-[var(--text-muted)] hover:text-blue-400"
                                                     >Edit</button>
                                                     <button
                                                         onClick={() => setJobCards(prev => prev.filter(c => c.id !== card.id))}
-                                                        className="text-xs text-slate-400 hover:text-red-400"
+                                                        className="text-xs text-[var(--text-muted)] hover:text-red-400"
                                                     >Delete</button>
                                                 </div>
                                             </div>
 
                                             {/* Tasks */}
                                             {card.tasks.length > 0 && (
-                                                <div className="mt-2 space-y-1 border-t border-white/5 pt-2">
-                                                    <p className="text-xs text-slate-500 mb-1">{doneCount}/{card.tasks.length} tasks done</p>
+                                                <div className="mt-2 space-y-1 border-t border-[var(--border-subtle)] pt-2">
+                                                    <p className="text-xs text-[var(--text-faint)] mb-1">{doneCount}/{card.tasks.length} tasks done</p>
                                                     {card.tasks.map(task => (
                                                         <div key={task.id} className="flex items-center gap-2">
                                                             <input
                                                                 type="checkbox"
                                                                 checked={task.completed}
                                                                 onChange={() => handleToggleJobTask(card.id, task.id)}
-                                                                className="h-3 w-3 rounded border-white/20 text-blue-600"
+                                                                className="h-3 w-3 rounded border-[var(--border-strong)] text-blue-600"
                                                             />
-                                                            <span className={`text-xs ${task.completed ? 'text-slate-500 line-through' : 'text-slate-300'}`}>
+                                                            <span className={`text-xs ${task.completed ? 'text-[var(--text-faint)] line-through' : 'text-[var(--text-muted)]'}`}>
                                                                 {task.description}
                                                             </span>
                                                         </div>
@@ -1586,38 +1586,38 @@ export default function WorkOrderPage() {
                 {/* Sidebar */}
                 <div className="space-y-8">
                     {/* Timeline */}
-                    <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                        <h3 className="text-sm font-bold text-white uppercase mb-4">Timeline</h3>
+                    <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                        <h3 className="text-sm font-bold text-[var(--text-main)] uppercase mb-4">Timeline</h3>
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs text-slate-500">Start Date</label>
-                                <p className="text-sm font-medium text-white">{new Date(workOrder.startDate).toLocaleDateString()}</p>
+                                <label className="block text-xs text-[var(--text-faint)]">Start Date</label>
+                                <p className="text-sm font-medium text-[var(--text-main)]">{new Date(workOrder.startDate).toLocaleDateString()}</p>
                             </div>
                             <div>
-                                <label className="block text-xs text-slate-500">Est. Completion</label>
+                                <label className="block text-xs text-[var(--text-faint)]">Est. Completion</label>
                                 {isEditingDetails ? (
                                     <input
                                         type="date"
                                         value={detailsForm.estimatedCompletionDate}
                                         onChange={(e) => setDetailsForm({ ...detailsForm, estimatedCompletionDate: e.target.value })}
-                                        className="w-full rounded-lg border border-white/15 px-2 py-1 text-sm bg-slate-900 text-white"
+                                        className="w-full rounded-lg border border-[var(--border-subtle)] px-2 py-1 text-sm bg-[var(--bg-surface)] text-[var(--text-main)]"
                                     />
                                 ) : (
-                                    <p className="text-sm font-medium text-white">{new Date(workOrder.estimatedCompletionDate).toLocaleDateString()}</p>
+                                    <p className="text-sm font-medium text-[var(--text-main)]">{new Date(workOrder.estimatedCompletionDate).toLocaleDateString()}</p>
                                 )}
                             </div>
                             {workOrder.actualCompletionDate && (
                                 <div>
-                                    <label className="block text-xs text-slate-500">Actual Completion</label>
-                                    <p className="text-sm font-medium text-white">{new Date(workOrder.actualCompletionDate).toLocaleDateString()}</p>
+                                    <label className="block text-xs text-[var(--text-faint)]">Actual Completion</label>
+                                    <p className="text-sm font-medium text-[var(--text-main)]">{new Date(workOrder.actualCompletionDate).toLocaleDateString()}</p>
                                 </div>
                             )}
                         </div>
                     </div>
 
                     {/* Checklist */}
-                    <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                        <h3 className="text-sm font-bold text-white uppercase mb-4">Checklist</h3>
+                    <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                        <h3 className="text-sm font-bold text-[var(--text-main)] uppercase mb-4">Checklist</h3>
                         <div className="space-y-3">
                             {workOrder.checklistItems.map(item => (
                                 <div key={item.id} className="flex items-start gap-3">
@@ -1626,14 +1626,14 @@ export default function WorkOrderPage() {
                                         checked={item.completed}
                                         onChange={() => toggleChecklistItem(item.id)}
                                         disabled={viewMode !== 'GARAGE'}
-                                        className="mt-1 h-4 w-4 rounded border-white/15 text-blue-600 focus:ring-blue-500"
+                                        className="mt-1 h-4 w-4 rounded border-[var(--border-subtle)] text-blue-600 focus:ring-blue-500"
                                     />
                                     <div>
-                                        <p className={`text-sm ${item.completed ? 'text-slate-500 line-through' : 'text-white'}`}>
+                                        <p className={`text-sm ${item.completed ? 'text-[var(--text-faint)] line-through' : 'text-[var(--text-main)]'}`}>
                                             {item.task}
                                         </p>
                                         {item.completed && (
-                                            <p className="text-xs text-slate-400">
+                                            <p className="text-xs text-[var(--text-muted)]">
                                                 {item.completedBy} • {item.completedAt ? new Date(item.completedAt).toLocaleDateString() : ''}
                                             </p>
                                         )}
@@ -1644,9 +1644,9 @@ export default function WorkOrderPage() {
                     </div>
 
                     {/* Phase C: Quality Inspection */}
-                    <div className="rounded-xl border border-purple-500/30 bg-slate-900 p-6 shadow-sm">
+                    <div className="rounded-xl border border-purple-500/30 bg-[var(--bg-surface)] p-6 shadow-sm">
                         <div className="flex items-center justify-between mb-3">
-                            <h3 className="text-sm font-bold text-white uppercase">Quality Inspection</h3>
+                            <h3 className="text-sm font-bold text-[var(--text-main)] uppercase">Quality Inspection</h3>
                             <button
                                 onClick={() => { setQCForm({ inspectorName: '', notes: '', checklist: DEFAULT_QC_CHECKLIST }); setShowQCModal(true); }}
                                 className="text-xs font-medium text-purple-400 hover:text-purple-300"
@@ -1656,24 +1656,24 @@ export default function WorkOrderPage() {
                         </div>
 
                         {qcResult ? (
-                            <div className={`rounded-lg p-3 border ${qcResult.overallResult === 'PASS' ? 'bg-emerald-500/10 border-emerald-500/30' : qcResult.overallResult === 'FAIL' ? 'bg-red-500/10 border-red-500/30' : 'bg-slate-800/50 border-white/10'}`}>
+                            <div className={`rounded-lg p-3 border ${qcResult.overallResult === 'PASS' ? 'bg-emerald-500/10 border-emerald-500/30' : qcResult.overallResult === 'FAIL' ? 'bg-red-500/10 border-red-500/30' : 'bg-[var(--bg-surface)]/50 border-[var(--border-subtle)]'}`}>
                                 <div className="flex items-center justify-between mb-1">
-                                    <span className="text-xs text-slate-400">Result</span>
-                                    <span className={`text-sm font-bold ${qcResult.overallResult === 'PASS' ? 'text-emerald-400' : qcResult.overallResult === 'FAIL' ? 'text-red-400' : 'text-slate-400'}`}>
+                                    <span className="text-xs text-[var(--text-muted)]">Result</span>
+                                    <span className={`text-sm font-bold ${qcResult.overallResult === 'PASS' ? 'text-emerald-400' : qcResult.overallResult === 'FAIL' ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>
                                         {qcResult.overallResult}
                                     </span>
                                 </div>
                                 {qcResult.inspectorName && (
-                                    <p className="text-xs text-slate-500">Inspector: {qcResult.inspectorName}</p>
+                                    <p className="text-xs text-[var(--text-faint)]">Inspector: {qcResult.inspectorName}</p>
                                 )}
                                 {qcResult.notes && (
-                                    <p className="text-xs text-slate-400 mt-1 italic">{qcResult.notes}</p>
+                                    <p className="text-xs text-[var(--text-muted)] mt-1 italic">{qcResult.notes}</p>
                                 )}
-                                <div className="mt-2 space-y-1 border-t border-white/5 pt-2">
+                                <div className="mt-2 space-y-1 border-t border-[var(--border-subtle)] pt-2">
                                     {qcResult.checklist.map((item) => (
                                         <div key={item.id} className="flex justify-between text-xs">
-                                            <span className="text-slate-400">{item.item}</span>
-                                            <span className={item.result === 'PASS' ? 'text-emerald-400' : item.result === 'FAIL' ? 'text-red-400' : 'text-slate-500'}>
+                                            <span className="text-[var(--text-muted)]">{item.item}</span>
+                                            <span className={item.result === 'PASS' ? 'text-emerald-400' : item.result === 'FAIL' ? 'text-red-400' : 'text-[var(--text-faint)]'}>
                                                 {item.result}
                                             </span>
                                         </div>
@@ -1681,14 +1681,14 @@ export default function WorkOrderPage() {
                                 </div>
                             </div>
                         ) : (
-                            <p className="text-xs text-slate-500 italic">No inspection run yet. Trigger once the work order reaches Quality Check.</p>
+                            <p className="text-xs text-[var(--text-faint)] italic">No inspection run yet. Trigger once the work order reaches Quality Check.</p>
                         )}
                     </div>
 
                     {/* Assigned Technicians */}
-                    <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                    <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-sm font-bold text-white uppercase">Technicians</h3>
+                            <h3 className="text-sm font-bold text-[var(--text-main)] uppercase">Technicians</h3>
                             {viewMode === 'GARAGE' && (
                                 <button
                                     onClick={() => setShowAddTechnicianModal(true)}
@@ -1702,17 +1702,17 @@ export default function WorkOrderPage() {
                             {workOrder.assignedTechnicians.length > 0 ? (
                                 workOrder.assignedTechnicians.map(tech => (
                                     <div key={tech.id} className="flex items-center gap-3">
-                                        <div className="h-8 w-8 rounded-full bg-slate-700/40 flex items-center justify-center text-xs font-bold text-slate-600">
+                                        <div className="h-8 w-8 rounded-full bg-[var(--bg-surface-hover)]/40 flex items-center justify-center text-xs font-bold text-[var(--text-faint)]">
                                             {tech.name.charAt(0)}
                                         </div>
                                         <div>
-                                            <p className="text-sm font-medium text-white">{tech.name}</p>
-                                            <p className="text-xs text-slate-500">{tech.specialization.join(', ')}</p>
+                                            <p className="text-sm font-medium text-[var(--text-main)]">{tech.name}</p>
+                                            <p className="text-xs text-[var(--text-faint)]">{tech.specialization.join(', ')}</p>
                                         </div>
                                     </div>
                                 ))
                             ) : (
-                                <p className="text-sm text-slate-500 italic">No technicians assigned</p>
+                                <p className="text-sm text-[var(--text-faint)] italic">No technicians assigned</p>
                             )}
                         </div>
                     </div>
@@ -1722,15 +1722,15 @@ export default function WorkOrderPage() {
             {/* Modals */}
             {showAddLogModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="w-full max-w-md rounded-xl bg-slate-900 p-6 shadow-xl">
-                        <h3 className="text-lg font-bold text-white mb-4">{editingLogId ? 'Edit Work Log Entry' : 'Add Work Log Entry'}</h3>
+                    <div className="w-full max-w-md rounded-xl bg-[var(--bg-surface)] p-6 shadow-xl">
+                        <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">{editingLogId ? 'Edit Work Log Entry' : 'Add Work Log Entry'}</h3>
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-medium text-slate-300 mb-1">Technician</label>
+                                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Technician</label>
                                 <select
                                     value={logForm.technicianId}
                                     onChange={(e) => setLogForm({ ...logForm, technicianId: e.target.value })}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-main)]"
                                 >
                                     <option value="">Select Technician</option>
                                     {availableTechnicians.map(tech => (
@@ -1739,31 +1739,31 @@ export default function WorkOrderPage() {
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-slate-300 mb-1">Activity</label>
+                                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Activity</label>
                                 <input
                                     type="text"
                                     value={logForm.activity}
                                     onChange={(e) => setLogForm({ ...logForm, activity: e.target.value })}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-main)]"
                                     placeholder="e.g. Replaced brake pads"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-slate-300 mb-1">Hours Spent</label>
+                                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Hours Spent</label>
                                 <input
                                     type="number"
                                     value={isNaN(logForm.hoursSpent) ? '' : logForm.hoursSpent}
                                     onChange={(e) => setLogForm({ ...logForm, hoursSpent: parseFloat(e.target.value) })}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-main)]"
                                     step="0.5"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-slate-300 mb-1">Notes</label>
+                                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Notes</label>
                                 <textarea
                                     value={logForm.notes}
                                     onChange={(e) => setLogForm({ ...logForm, notes: e.target.value })}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-main)]"
                                     rows={3}
                                 />
                             </div>
@@ -1774,7 +1774,7 @@ export default function WorkOrderPage() {
                                         setEditingLogId(null);
                                         setLogForm({ technicianId: '', technicianName: '', activity: '', hoursSpent: 0, notes: '' });
                                     }}
-                                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
+                                    className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
                                 >
                                     Cancel
                                 </button>
@@ -1792,58 +1792,58 @@ export default function WorkOrderPage() {
 
             {showAddPartModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="w-full max-w-md rounded-xl bg-slate-900 p-6 shadow-xl">
-                        <h3 className="text-lg font-bold text-white mb-4">{editingPartId ? 'Edit Part Usage' : 'Add Part Usage'}</h3>
+                    <div className="w-full max-w-md rounded-xl bg-[var(--bg-surface)] p-6 shadow-xl">
+                        <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">{editingPartId ? 'Edit Part Usage' : 'Add Part Usage'}</h3>
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-medium text-slate-300 mb-1">Part Name</label>
+                                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Part Name</label>
                                 <input
                                     type="text"
                                     value={partForm.partName}
                                     onChange={(e) => setPartForm({ ...partForm, partName: e.target.value })}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-main)]"
                                     placeholder="e.g. Oil Filter"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-slate-300 mb-1">Part Number</label>
+                                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Part Number</label>
                                 <input
                                     type="text"
                                     value={partForm.partNumber}
                                     onChange={(e) => setPartForm({ ...partForm, partNumber: e.target.value })}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-main)]"
                                     placeholder="Optional"
                                 />
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-300 mb-1">Quantity</label>
+                                    <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Quantity</label>
                                     <input
                                         type="number"
                                         value={isNaN(partForm.quantityUsed) ? '' : partForm.quantityUsed}
                                         onChange={(e) => setPartForm({ ...partForm, quantityUsed: parseInt(e.target.value) })}
-                                        className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
+                                        className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-main)]"
                                         min="1"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-300 mb-1">Unit Cost</label>
+                                    <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Unit Cost</label>
                                     <input
                                         type="number"
                                         value={isNaN(partForm.unitCost) ? '' : partForm.unitCost}
                                         onChange={(e) => setPartForm({ ...partForm, unitCost: parseFloat(e.target.value) })}
-                                        className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
+                                        className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-main)]"
                                         min="0"
                                         step="0.01"
                                     />
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-slate-300 mb-1">Source</label>
+                                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Source</label>
                                 <select
                                     value={partForm.source}
                                     onChange={(e) => setPartForm({ ...partForm, source: e.target.value as PartSource })}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-main)]"
                                 >
                                     {Object.values(PartSource).map(source => (
                                         <option key={source} value={source}>{source}</option>
@@ -1857,7 +1857,7 @@ export default function WorkOrderPage() {
                                         setEditingPartId(null);
                                         setPartForm({ partName: '', partNumber: '', quantityUsed: 1, unitCost: 0, source: PartSource.STOCK });
                                     }}
-                                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
+                                    className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
                                 >
                                     Cancel
                                 </button>
@@ -1876,44 +1876,44 @@ export default function WorkOrderPage() {
             {/* Cost Entry Modal */}
             {showCostEntryModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="w-full max-w-md rounded-xl bg-slate-900 p-6 shadow-xl">
-                        <h3 className="text-lg font-bold text-white mb-4">Enter Actual Costs</h3>
+                    <div className="w-full max-w-md rounded-xl bg-[var(--bg-surface)] p-6 shadow-xl">
+                        <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">Enter Actual Costs</h3>
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-medium text-slate-300 mb-1">Actual Parts Cost</label>
+                                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Actual Parts Cost</label>
                                 <input
                                     type="number"
                                     value={isNaN(costForm.actualPartsCost) ? '' : costForm.actualPartsCost}
                                     onChange={(e) => setCostForm({ ...costForm, actualPartsCost: parseFloat(e.target.value) })}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-main)]"
                                     min="0"
                                     step="0.01"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-slate-300 mb-1">Actual Labor Cost</label>
+                                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Actual Labor Cost</label>
                                 <input
                                     type="number"
                                     value={isNaN(costForm.actualLaborCost) ? '' : costForm.actualLaborCost}
                                     onChange={(e) => setCostForm({ ...costForm, actualLaborCost: parseFloat(e.target.value) })}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-main)]"
                                     min="0"
                                     step="0.01"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-slate-300 mb-1">Other Charges</label>
+                                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Other Charges</label>
                                 <input
                                     type="number"
                                     value={isNaN(costForm.actualOtherCharges) ? '' : costForm.actualOtherCharges}
                                     onChange={(e) => setCostForm({ ...costForm, actualOtherCharges: parseFloat(e.target.value) })}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-main)]"
                                     min="0"
                                     step="0.01"
                                 />
                             </div>
-                            <div className="bg-slate-800/50 p-3 rounded-lg">
-                                <div className="flex justify-between text-sm font-bold text-white">
+                            <div className="bg-[var(--bg-surface)]/50 p-3 rounded-lg">
+                                <div className="flex justify-between text-sm font-bold text-[var(--text-main)]">
                                     <span>Total Actual Cost:</span>
                                     <span>{formatCurrency(costForm.actualPartsCost + costForm.actualLaborCost + costForm.actualOtherCharges)}</span>
                                 </div>
@@ -1921,7 +1921,7 @@ export default function WorkOrderPage() {
                             <div className="flex justify-end gap-3 mt-6">
                                 <button
                                     onClick={() => setShowCostEntryModal(false)}
-                                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
+                                    className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
                                 >
                                     Cancel
                                 </button>
@@ -1940,8 +1940,8 @@ export default function WorkOrderPage() {
             {/* Completion Modal */}
             {showCompletionModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="w-full max-w-lg rounded-xl bg-slate-900 p-6 shadow-xl">
-                        <h3 className="text-lg font-bold text-white mb-4">Complete Work Order</h3>
+                    <div className="w-full max-w-lg rounded-xl bg-[var(--bg-surface)] p-6 shadow-xl">
+                        <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">Complete Work Order</h3>
                         <div className="space-y-4">
                             <div className="bg-amber-500/10 p-4 rounded-lg border border-yellow-200">
                                 <h4 className="text-sm font-bold text-amber-300 mb-2">Summary</h4>
@@ -1953,11 +1953,11 @@ export default function WorkOrderPage() {
                             </div>
 
                             <div>
-                                <label className="block text-xs font-medium text-slate-300 mb-1">Completion Notes</label>
+                                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Completion Notes</label>
                                 <textarea
                                     value={completionForm.completionNotes}
                                     onChange={(e) => setCompletionForm({ ...completionForm, completionNotes: e.target.value })}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-main)]"
                                     rows={3}
                                     placeholder="Enter any final notes or observations..."
                                 />
@@ -1969,25 +1969,25 @@ export default function WorkOrderPage() {
                                         type="checkbox"
                                         checked={completionForm.qualityCheckPassed}
                                         onChange={(e) => setCompletionForm({ ...completionForm, qualityCheckPassed: e.target.checked })}
-                                        className="h-4 w-4 rounded border-white/15 text-blue-600 focus:ring-blue-500"
+                                        className="h-4 w-4 rounded border-[var(--border-subtle)] text-blue-600 focus:ring-blue-500"
                                     />
-                                    <span className="text-sm text-slate-300">Quality check passed</span>
+                                    <span className="text-sm text-[var(--text-muted)]">Quality check passed</span>
                                 </label>
                                 <label className="flex items-center gap-2">
                                     <input
                                         type="checkbox"
                                         checked={completionForm.customerNotified}
                                         onChange={(e) => setCompletionForm({ ...completionForm, customerNotified: e.target.checked })}
-                                        className="h-4 w-4 rounded border-white/15 text-blue-600 focus:ring-blue-500"
+                                        className="h-4 w-4 rounded border-[var(--border-subtle)] text-blue-600 focus:ring-blue-500"
                                     />
-                                    <span className="text-sm text-slate-300">Customer notified (if applicable)</span>
+                                    <span className="text-sm text-[var(--text-muted)]">Customer notified (if applicable)</span>
                                 </label>
                             </div>
 
                             <div className="flex justify-end gap-3 mt-6">
                                 <button
                                     onClick={() => setShowCompletionModal(false)}
-                                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
+                                    className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
                                 >
                                     Cancel
                                 </button>
@@ -2006,33 +2006,33 @@ export default function WorkOrderPage() {
             {/* Add Technician Modal */}
             {showAddTechnicianModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="w-full max-w-md rounded-xl bg-slate-900 p-6 shadow-xl">
-                        <h3 className="text-lg font-bold text-white mb-4">Add New Technician</h3>
+                    <div className="w-full max-w-md rounded-xl bg-[var(--bg-surface)] p-6 shadow-xl">
+                        <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">Add New Technician</h3>
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-medium text-slate-300 mb-1">Name</label>
+                                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Name</label>
                                 <input
                                     type="text"
                                     value={newTechnicianForm.name}
                                     onChange={(e) => setNewTechnicianForm({ ...newTechnicianForm, name: e.target.value })}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-main)]"
                                     placeholder="Technician Name"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-slate-300 mb-1">Specialization</label>
+                                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Specialization</label>
                                 <input
                                     type="text"
                                     value={newTechnicianForm.specialization}
                                     onChange={(e) => setNewTechnicianForm({ ...newTechnicianForm, specialization: e.target.value })}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-main)]"
                                     placeholder="e.g. Engine, Brakes (comma separated)"
                                 />
                             </div>
                             <div className="flex justify-end gap-3 mt-6">
                                 <button
                                     onClick={() => setShowAddTechnicianModal(false)}
-                                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
+                                    className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
                                 >
                                     Cancel
                                 </button>
@@ -2051,41 +2051,41 @@ export default function WorkOrderPage() {
             {/* Phase C: Job Card Modal */}
             {showJobCardModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="w-full max-w-md rounded-xl bg-slate-900 p-6 shadow-xl">
-                        <h3 className="text-lg font-bold text-white mb-4">
+                    <div className="w-full max-w-md rounded-xl bg-[var(--bg-surface)] p-6 shadow-xl">
+                        <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">
                             {editingJobCardId ? 'Edit Job Card' : 'New Job Card'}
                         </h3>
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-medium text-slate-300 mb-1">Title *</label>
+                                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Title *</label>
                                 <input
                                     type="text"
                                     value={jobCardForm.title}
                                     onChange={(e) => setJobCardForm({ ...jobCardForm, title: e.target.value })}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm bg-slate-800 text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm bg-[var(--bg-surface)] text-[var(--text-main)]"
                                     placeholder="e.g. Engine oil change"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-slate-300 mb-1">Description</label>
+                                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Description</label>
                                 <textarea
                                     value={jobCardForm.description}
                                     onChange={(e) => setJobCardForm({ ...jobCardForm, description: e.target.value })}
                                     rows={2}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm bg-slate-800 text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm bg-[var(--bg-surface)] text-[var(--text-main)]"
                                     placeholder="Optional details"
                                 />
                             </div>
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-300 mb-1">Assigned Technician</label>
+                                    <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Assigned Technician</label>
                                     <select
                                         value={jobCardForm.technicianId}
                                         onChange={(e) => {
                                             const tech = availableTechnicians.find(t => t.id === e.target.value);
                                             setJobCardForm({ ...jobCardForm, technicianId: e.target.value, technicianName: tech?.name ?? '' });
                                         }}
-                                        className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm bg-slate-800 text-white"
+                                        className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm bg-[var(--bg-surface)] text-[var(--text-main)]"
                                     >
                                         <option value="">— Unassigned —</option>
                                         {availableTechnicians.map(t => (
@@ -2094,23 +2094,23 @@ export default function WorkOrderPage() {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-300 mb-1">Est. Hours</label>
+                                    <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Est. Hours</label>
                                     <input
                                         type="number"
                                         min={0}
                                         step={0.5}
                                         value={jobCardForm.estimatedHours}
                                         onChange={(e) => setJobCardForm({ ...jobCardForm, estimatedHours: parseFloat(e.target.value) || 0 })}
-                                        className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm bg-slate-800 text-white"
+                                        className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm bg-[var(--bg-surface)] text-[var(--text-main)]"
                                     />
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-slate-300 mb-1">Status</label>
+                                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Status</label>
                                 <select
                                     value={jobCardForm.status}
                                     onChange={(e) => setJobCardForm({ ...jobCardForm, status: e.target.value as JobCardStatus })}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm bg-slate-800 text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm bg-[var(--bg-surface)] text-[var(--text-main)]"
                                 >
                                     <option value="PENDING">Pending</option>
                                     <option value="IN_PROGRESS">In Progress</option>
@@ -2119,12 +2119,12 @@ export default function WorkOrderPage() {
                             </div>
                             {!editingJobCardId && (
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-300 mb-1">First Task (optional)</label>
+                                    <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">First Task (optional)</label>
                                     <input
                                         type="text"
                                         value={jobCardForm.newTaskDesc}
                                         onChange={(e) => setJobCardForm({ ...jobCardForm, newTaskDesc: e.target.value })}
-                                        className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm bg-slate-800 text-white"
+                                        className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm bg-[var(--bg-surface)] text-[var(--text-main)]"
                                         placeholder="e.g. Drain old oil"
                                     />
                                 </div>
@@ -2133,7 +2133,7 @@ export default function WorkOrderPage() {
                         <div className="flex justify-end gap-3 mt-6">
                             <button
                                 onClick={() => { setShowJobCardModal(false); setEditingJobCardId(null); }}
-                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
+                                className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
                             >
                                 Cancel
                             </button>
@@ -2151,27 +2151,27 @@ export default function WorkOrderPage() {
             {/* Phase C: Quality Inspection Modal */}
             {showQCModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="w-full max-w-lg rounded-xl bg-slate-900 p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-                        <h3 className="text-lg font-bold text-white mb-4">Quality Inspection</h3>
+                    <div className="w-full max-w-lg rounded-xl bg-[var(--bg-surface)] p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+                        <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">Quality Inspection</h3>
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-medium text-slate-300 mb-1">Inspector Name</label>
+                                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Inspector Name</label>
                                 <input
                                     type="text"
                                     value={qcForm.inspectorName}
                                     onChange={(e) => setQCForm({ ...qcForm, inspectorName: e.target.value })}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm bg-slate-800 text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm bg-[var(--bg-surface)] text-[var(--text-main)]"
                                     placeholder="Enter inspector name"
                                 />
                             </div>
 
                             {/* Checklist */}
                             <div>
-                                <label className="block text-xs font-medium text-slate-300 mb-2">Inspection Checklist</label>
+                                <label className="block text-xs font-medium text-[var(--text-muted)] mb-2">Inspection Checklist</label>
                                 <div className="space-y-2">
                                     {qcForm.checklist.map((item) => (
-                                        <div key={item.id} className="flex items-center justify-between rounded-lg border border-white/10 bg-slate-800/50 px-3 py-2">
-                                            <span className="text-sm text-slate-300">{item.item}</span>
+                                        <div key={item.id} className="flex items-center justify-between rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 px-3 py-2">
+                                            <span className="text-sm text-[var(--text-muted)]">{item.item}</span>
                                             <div className="flex gap-1">
                                                 {(['PASS', 'FAIL', 'NA'] as QCItemResult[]).map((r) => (
                                                     <button
@@ -2182,8 +2182,8 @@ export default function WorkOrderPage() {
                                                         })}
                                                         className={`rounded px-2 py-0.5 text-xs font-medium transition-colors ${
                                                             item.result === r
-                                                                ? r === 'PASS' ? 'bg-emerald-600 text-white' : r === 'FAIL' ? 'bg-red-600 text-white' : 'bg-slate-600 text-white'
-                                                                : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                                                                ? r === 'PASS' ? 'bg-emerald-600 text-white' : r === 'FAIL' ? 'bg-red-600 text-white' : 'bg-[var(--bg-surface-hover)] text-[var(--text-main)]'
+                                                                : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]'
                                                         }`}
                                                     >
                                                         {r}
@@ -2199,12 +2199,12 @@ export default function WorkOrderPage() {
                             </div>
 
                             <div>
-                                <label className="block text-xs font-medium text-slate-300 mb-1">Notes / Remarks</label>
+                                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Notes / Remarks</label>
                                 <textarea
                                     value={qcForm.notes}
                                     onChange={(e) => setQCForm({ ...qcForm, notes: e.target.value })}
                                     rows={3}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm bg-slate-800 text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm bg-[var(--bg-surface)] text-[var(--text-main)]"
                                     placeholder="Any observations or remarks..."
                                 />
                             </div>
@@ -2213,7 +2213,7 @@ export default function WorkOrderPage() {
                         <div className="flex justify-end gap-3 mt-6">
                             <button
                                 onClick={() => setShowQCModal(false)}
-                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
+                                className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
                             >
                                 Cancel
                             </button>
@@ -2244,7 +2244,7 @@ function QuickAddTask({ cardId, onAdd }: { cardId: string; onAdd: (cardId: strin
                 value={desc}
                 onChange={(e) => setDesc(e.target.value)}
                 placeholder="+ Add task…"
-                className="flex-1 rounded border border-white/10 bg-transparent px-2 py-1 text-xs text-slate-400 placeholder:text-slate-600 focus:outline-none focus:border-blue-500"
+                className="flex-1 rounded border border-[var(--border-subtle)] bg-transparent px-2 py-1 text-xs text-[var(--text-muted)] placeholder:text-[var(--text-faint)] focus:outline-none focus:border-blue-500"
             />
             {desc.trim() && (
                 <button type="submit" className="text-xs text-blue-400 hover:text-blue-300">Add</button>

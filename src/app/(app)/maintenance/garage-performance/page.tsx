@@ -77,32 +77,32 @@ export default function GaragePerformancePage() {
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-2xl font-bold text-white">Garage Performance Metrics</h1>
-                <p className="text-xs mt-1 text-slate-500">Compare and analyze garage performance across key metrics</p>
+                <h1 className="text-2xl font-bold text-[var(--text-main)]">Garage Performance Metrics</h1>
+                <p className="text-xs mt-1 text-[var(--text-faint)]">Compare and analyze garage performance across key metrics</p>
             </div>
 
             {/* Rankings */}
-            <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                <h3 className="text-lg font-bold text-white mb-4">Overall Rankings</h3>
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">Overall Rankings</h3>
                 <div className="space-y-3">
                     {rankedGarages.map((garage, idx) => {
                         const overallScore = Math.round((garage.qualityScore + garage.onTimeDeliveryRate + (garage.customerSatisfaction * 20)) / 3);
                         return (
-                            <div key={garage.garageId} className="flex items-center gap-4 p-4 rounded-lg border border-white/10 bg-slate-800/50">
+                            <div key={garage.garageId} className="flex items-center gap-4 p-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50">
                                 <div className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg ${idx === 0 ? 'bg-amber-500/20 text-yellow-700' :
-                                        idx === 1 ? 'bg-slate-200 text-slate-300' :
+                                        idx === 1 ? 'bg-slate-200 text-[var(--text-muted)]' :
                                             idx === 2 ? 'bg-orange-500/20 text-orange-700' :
-                                                'bg-slate-700/40 text-slate-600'
+                                                'bg-[var(--bg-surface-hover)]/40 text-[var(--text-faint)]'
                                     }`}>
                                     #{idx + 1}
                                 </div>
                                 <div className="flex-1">
-                                    <h4 className="text-base font-bold text-white">{garage.garageName}</h4>
-                                    <p className="text-sm text-slate-500">{garage.completedJobs} jobs completed</p>
+                                    <h4 className="text-base font-bold text-[var(--text-main)]">{garage.garageName}</h4>
+                                    <p className="text-sm text-[var(--text-faint)]">{garage.completedJobs} jobs completed</p>
                                 </div>
                                 <div className="text-right">
                                     <p className={`text-2xl font-bold ${getScoreColor(overallScore)}`}>{overallScore}</p>
-                                    <p className="text-xs text-slate-500">Overall Score</p>
+                                    <p className="text-xs text-[var(--text-faint)]">Overall Score</p>
                                 </div>
                             </div>
                         );
@@ -116,11 +116,11 @@ export default function GaragePerformancePage() {
                     const overallScore = Math.round((garage.qualityScore + garage.onTimeDeliveryRate + (garage.customerSatisfaction * 20)) / 3);
 
                     return (
-                        <div key={garage.garageId} className="rounded-xl border border-white/10 bg-slate-900 shadow-sm">
-                            <div className="p-6 border-b border-white/10 flex items-center justify-between">
+                        <div key={garage.garageId} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-sm">
+                            <div className="p-6 border-b border-[var(--border-subtle)] flex items-center justify-between">
                                 <div>
-                                    <h3 className="text-lg font-bold text-white">{garage.garageName}</h3>
-                                    <p className="text-sm text-slate-500">{garage.period}</p>
+                                    <h3 className="text-lg font-bold text-[var(--text-main)]">{garage.garageName}</h3>
+                                    <p className="text-sm text-[var(--text-faint)]">{garage.period}</p>
                                 </div>
                                 <div className={`rounded-full px-4 py-2 border ${getScoreBg(overallScore)}`}>
                                     <p className={`text-2xl font-bold ${getScoreColor(overallScore)}`}>{overallScore}</p>
@@ -130,33 +130,33 @@ export default function GaragePerformancePage() {
                             <div className="p-6">
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-6">
                                     <div>
-                                        <p className="text-sm text-slate-500">Total Jobs</p>
-                                        <p className="text-2xl font-bold text-white">{garage.totalJobs}</p>
+                                        <p className="text-sm text-[var(--text-faint)]">Total Jobs</p>
+                                        <p className="text-2xl font-bold text-[var(--text-main)]">{garage.totalJobs}</p>
                                         <p className="text-xs text-green-600">{garage.completedJobs} completed</p>
                                     </div>
                                     <div>
-                                        <p className="text-sm text-slate-500">Avg Completion</p>
-                                        <p className="text-2xl font-bold text-white">{garage.averageCompletionTime}d</p>
-                                        <p className="text-xs text-slate-500">days</p>
+                                        <p className="text-sm text-[var(--text-faint)]">Avg Completion</p>
+                                        <p className="text-2xl font-bold text-[var(--text-main)]">{garage.averageCompletionTime}d</p>
+                                        <p className="text-xs text-[var(--text-faint)]">days</p>
                                     </div>
                                     <div>
-                                        <p className="text-sm text-slate-500">Avg Cost</p>
-                                        <p className="text-2xl font-bold text-white">${garage.averageCost}</p>
+                                        <p className="text-sm text-[var(--text-faint)]">Avg Cost</p>
+                                        <p className="text-2xl font-bold text-[var(--text-main)]">${garage.averageCost}</p>
                                         <p className={`text-xs ${garage.costVariance < 0 ? 'text-green-600' : 'text-red-600'}`}>
                                             {garage.costVariance > 0 ? '+' : ''}{garage.costVariance}% variance
                                         </p>
                                     </div>
                                     <div>
-                                        <p className="text-sm text-slate-500">Response Time</p>
-                                        <p className="text-2xl font-bold text-white">{garage.responseTime}h</p>
-                                        <p className="text-xs text-slate-500">hours</p>
+                                        <p className="text-sm text-[var(--text-faint)]">Response Time</p>
+                                        <p className="text-2xl font-bold text-[var(--text-main)]">{garage.responseTime}h</p>
+                                        <p className="text-xs text-[var(--text-faint)]">hours</p>
                                     </div>
                                 </div>
 
                                 <div className="space-y-4">
                                     <div>
                                         <div className="flex items-center justify-between mb-2">
-                                            <span className="text-sm font-medium text-slate-300">Quality Score</span>
+                                            <span className="text-sm font-medium text-[var(--text-muted)]">Quality Score</span>
                                             <span className={`text-sm font-bold ${getScoreColor(garage.qualityScore)}`}>{garage.qualityScore}%</span>
                                         </div>
                                         <div className="w-full bg-slate-200 rounded-full h-3">
@@ -169,7 +169,7 @@ export default function GaragePerformancePage() {
 
                                     <div>
                                         <div className="flex items-center justify-between mb-2">
-                                            <span className="text-sm font-medium text-slate-300">On-Time Delivery</span>
+                                            <span className="text-sm font-medium text-[var(--text-muted)]">On-Time Delivery</span>
                                             <span className={`text-sm font-bold ${getScoreColor(garage.onTimeDeliveryRate)}`}>{garage.onTimeDeliveryRate}%</span>
                                         </div>
                                         <div className="w-full bg-slate-200 rounded-full h-3">
@@ -182,8 +182,8 @@ export default function GaragePerformancePage() {
 
                                     <div>
                                         <div className="flex items-center justify-between mb-2">
-                                            <span className="text-sm font-medium text-slate-300">Customer Satisfaction</span>
-                                            <span className="text-sm font-bold text-white">{garage.customerSatisfaction}/5.0 ⭐</span>
+                                            <span className="text-sm font-medium text-[var(--text-muted)]">Customer Satisfaction</span>
+                                            <span className="text-sm font-bold text-[var(--text-main)]">{garage.customerSatisfaction}/5.0 ⭐</span>
                                         </div>
                                         <div className="w-full bg-slate-200 rounded-full h-3">
                                             <div
@@ -200,49 +200,49 @@ export default function GaragePerformancePage() {
             </div>
 
             {/* Comparison Table */}
-            <div className="rounded-xl border border-white/10 bg-slate-900 shadow-sm">
-                <div className="p-6 border-b border-white/10">
-                    <h3 className="text-lg font-bold text-white">Side-by-Side Comparison</h3>
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-sm">
+                <div className="p-6 border-b border-[var(--border-subtle)]">
+                    <h3 className="text-lg font-bold text-[var(--text-main)]">Side-by-Side Comparison</h3>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-white/10">
-                        <thead className="bg-slate-800/50">
+                        <thead className="bg-[var(--bg-surface)]/50">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Metric</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-[var(--text-faint)] uppercase">Metric</th>
                                 {garagePerformance.map(g => (
-                                    <th key={g.garageId} className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">{g.garageName}</th>
+                                    <th key={g.garageId} className="px-6 py-3 text-left text-xs font-medium text-[var(--text-faint)] uppercase">{g.garageName}</th>
                                 ))}
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-white/10 bg-slate-900">
+                        <tbody className="divide-y divide-white/10 bg-[var(--bg-surface)]">
                             <tr>
-                                <td className="px-6 py-4 text-sm font-medium text-white">Quality Score</td>
+                                <td className="px-6 py-4 text-sm font-medium text-[var(--text-main)]">Quality Score</td>
                                 {garagePerformance.map(g => (
                                     <td key={g.garageId} className={`px-6 py-4 text-sm font-bold ${getScoreColor(g.qualityScore)}`}>{g.qualityScore}%</td>
                                 ))}
                             </tr>
                             <tr>
-                                <td className="px-6 py-4 text-sm font-medium text-white">On-Time Delivery</td>
+                                <td className="px-6 py-4 text-sm font-medium text-[var(--text-main)]">On-Time Delivery</td>
                                 {garagePerformance.map(g => (
                                     <td key={g.garageId} className={`px-6 py-4 text-sm font-bold ${getScoreColor(g.onTimeDeliveryRate)}`}>{g.onTimeDeliveryRate}%</td>
                                 ))}
                             </tr>
                             <tr>
-                                <td className="px-6 py-4 text-sm font-medium text-white">Satisfaction</td>
+                                <td className="px-6 py-4 text-sm font-medium text-[var(--text-main)]">Satisfaction</td>
                                 {garagePerformance.map(g => (
-                                    <td key={g.garageId} className="px-6 py-4 text-sm font-bold text-white">{g.customerSatisfaction}/5.0</td>
+                                    <td key={g.garageId} className="px-6 py-4 text-sm font-bold text-[var(--text-main)]">{g.customerSatisfaction}/5.0</td>
                                 ))}
                             </tr>
                             <tr>
-                                <td className="px-6 py-4 text-sm font-medium text-white">Avg Cost</td>
+                                <td className="px-6 py-4 text-sm font-medium text-[var(--text-main)]">Avg Cost</td>
                                 {garagePerformance.map(g => (
-                                    <td key={g.garageId} className="px-6 py-4 text-sm font-bold text-white">${g.averageCost}</td>
+                                    <td key={g.garageId} className="px-6 py-4 text-sm font-bold text-[var(--text-main)]">${g.averageCost}</td>
                                 ))}
                             </tr>
                             <tr>
-                                <td className="px-6 py-4 text-sm font-medium text-white">Response Time</td>
+                                <td className="px-6 py-4 text-sm font-medium text-[var(--text-main)]">Response Time</td>
                                 {garagePerformance.map(g => (
-                                    <td key={g.garageId} className="px-6 py-4 text-sm font-bold text-white">{g.responseTime}h</td>
+                                    <td key={g.garageId} className="px-6 py-4 text-sm font-bold text-[var(--text-main)]">{g.responseTime}h</td>
                                 ))}
                             </tr>
                         </tbody>

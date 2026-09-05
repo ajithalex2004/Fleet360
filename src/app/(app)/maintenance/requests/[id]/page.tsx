@@ -945,11 +945,11 @@ export default function RequestDetailsPage() {
     };
 
     if (loading) {
-        return <div className="p-8 text-center text-slate-500">Loading details...</div>;
+        return <div className="p-8 text-center text-[var(--text-faint)]">Loading details...</div>;
     }
 
     if (!request) {
-        return <div className="p-8 text-center text-slate-500">Request not found.</div>;
+        return <div className="p-8 text-center text-[var(--text-faint)]">Request not found.</div>;
     }
 
     const nextStatuses = getNextStatuses(request.status);
@@ -960,29 +960,29 @@ export default function RequestDetailsPage() {
                 <div className="flex items-center justify-between">
                     <div>
                         <div className="flex items-center gap-3 mb-1">
-                            <Link href="/maintenance/requests" className="text-slate-400 hover:text-slate-300">
+                            <Link href="/maintenance/requests" className="text-[var(--text-muted)] hover:text-[var(--text-muted)]">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
                                 </svg>
                             </Link>
-                            <h1 className="text-2xl font-bold text-white">Request #{request.id.toUpperCase()}</h1>
+                            <h1 className="text-2xl font-bold text-[var(--text-main)]">Request #{request.id.toUpperCase()}</h1>
                             <StatusBadge status={request.status} />
                         </div>
-                        <p className="text-slate-500 ml-8">Created on {new Date(request.requestDate).toLocaleDateString()}</p>
+                        <p className="text-[var(--text-faint)] ml-8">Created on {new Date(request.requestDate).toLocaleDateString()}</p>
                     </div>
                     <div className="flex items-center gap-3">
                         {/* View Mode Toggle Removed */}
 
                         <select
-                            className="rounded-lg border border-white/15 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-900 text-white"
+                            className="rounded-lg border border-[var(--border-subtle)] px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-[var(--bg-surface)] text-[var(--text-main)]"
                             value={request.status}
                             onChange={(e) => handleStatusUpdate(e.target.value as MaintenanceStatus)}
                         >
-                            <option key={request.status} value={request.status} className="text-white">
+                            <option key={request.status} value={request.status} className="text-[var(--text-main)]">
                                 {request.status} (Current)
                             </option>
                             {nextStatuses.map((status) => (
-                                <option key={status} value={status} className="text-white">
+                                <option key={status} value={status} className="text-[var(--text-main)]">
                                     {status}
                                 </option>
                             ))}
@@ -994,9 +994,9 @@ export default function RequestDetailsPage() {
                     {/* Main Info */}
                     <div className="lg:col-span-2 space-y-8">
                         {/* Request Details */}
-                        <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
                             <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-lg font-bold text-white">Request Details</h3>
+                                <h3 className="text-lg font-bold text-[var(--text-main)]">Request Details</h3>
                                 {!isEditMode ? (
                                     <button
                                         onClick={handleEditMode}
@@ -1011,7 +1011,7 @@ export default function RequestDetailsPage() {
                                     <div className="flex items-center gap-3">
                                         <button
                                             onClick={handleCancelEdit}
-                                            className="text-sm font-medium text-slate-500 hover:text-slate-300"
+                                            className="text-sm font-medium text-[var(--text-faint)] hover:text-[var(--text-muted)]"
                                         >
                                             Cancel
                                         </button>
@@ -1027,69 +1027,69 @@ export default function RequestDetailsPage() {
 
                             <div className="grid grid-cols-2 gap-6">
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-500 uppercase">Vehicle</label>
+                                    <label className="block text-xs font-medium text-[var(--text-faint)] uppercase">Vehicle</label>
                                     <div className="mt-1 flex items-center gap-3">
-                                        <div className="h-10 w-10 rounded-full bg-slate-700/40 flex items-center justify-center text-slate-500">
+                                        <div className="h-10 w-10 rounded-full bg-[var(--bg-surface-hover)]/40 flex items-center justify-center text-[var(--text-faint)]">
                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 0 0-10.026 0 1.106 1.106 0 0 0-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
                                             </svg>
                                         </div>
                                         <div>
-                                            <p className="text-sm font-medium text-white">{vehicle?.make} {vehicle?.model}</p>
-                                            <p className="text-xs text-slate-500">{vehicle?.licensePlate} • {vehicle?.year}</p>
+                                            <p className="text-sm font-medium text-[var(--text-main)]">{vehicle?.make} {vehicle?.model}</p>
+                                            <p className="text-xs text-[var(--text-faint)]">{vehicle?.licensePlate} • {vehicle?.year}</p>
                                         </div>
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-500 uppercase">Driver</label>
+                                    <label className="block text-xs font-medium text-[var(--text-faint)] uppercase">Driver</label>
                                     <div className="mt-1 flex items-center gap-3">
-                                        <div className="h-10 w-10 rounded-full bg-slate-700/40 flex items-center justify-center text-slate-500">
+                                        <div className="h-10 w-10 rounded-full bg-[var(--bg-surface-hover)]/40 flex items-center justify-center text-[var(--text-faint)]">
                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
                                             </svg>
                                         </div>
                                         <div>
-                                            <p className="text-sm font-medium text-white">{request.driverId}</p>
-                                            <p className="text-xs text-slate-500">ID: {request.driverId}</p>
+                                            <p className="text-sm font-medium text-[var(--text-main)]">{request.driverId}</p>
+                                            <p className="text-xs text-[var(--text-faint)]">ID: {request.driverId}</p>
                                         </div>
                                     </div>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-500 uppercase">Odometer</label>
+                                    <label className="block text-xs font-medium text-[var(--text-faint)] uppercase">Odometer</label>
                                     {isEditMode ? (
                                         <input
                                             type="number"
                                             value={editedFields.odometer || ''}
                                             onChange={(e) => handleFieldChange('odometer', parseInt(e.target.value))}
-                                            className="mt-1 block w-full rounded-md border border-white/15 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-white"
+                                            className="mt-1 block w-full rounded-md border border-[var(--border-subtle)] px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-[var(--text-main)]"
                                         />
                                     ) : (
-                                        <p className="mt-1 text-sm font-medium text-white">{request.odometer?.toLocaleString()} km</p>
+                                        <p className="mt-1 text-sm font-medium text-[var(--text-main)]">{request.odometer?.toLocaleString()} km</p>
                                     )}
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-500 uppercase">Priority</label>
+                                    <label className="block text-xs font-medium text-[var(--text-faint)] uppercase">Priority</label>
                                     {isEditMode ? (
                                         <select
                                             value={editedFields.priority}
                                             onChange={(e) => handleFieldChange('priority', e.target.value)}
-                                            className="mt-1 block w-full rounded-md border border-white/15 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-900 text-white"
+                                            className="mt-1 block w-full rounded-md border border-[var(--border-subtle)] px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                         >
                                             {Object.values(MaintenancePriority).map(p => (
                                                 <option key={p} value={p}>{p}</option>
                                             ))}
                                         </select>
                                     ) : (
-                                        <p className="mt-1 text-sm font-medium text-white capitalize">{request.priority}</p>
+                                        <p className="mt-1 text-sm font-medium text-[var(--text-main)] capitalize">{request.priority}</p>
                                     )}
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium text-slate-500 uppercase">Maintenance Type</label>
+                                    <label className="block text-xs font-medium text-[var(--text-faint)] uppercase">Maintenance Type</label>
                                     {isEditMode ? (
                                         <select
                                             value={editedFields.maintenanceType}
                                             onChange={(e) => handleFieldChange('maintenanceType', e.target.value)}
-                                            className="mt-1 block w-full rounded-md border border-white/15 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-slate-900 text-white"
+                                            className="mt-1 block w-full rounded-md border border-[var(--border-subtle)] px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                         >
                                             <option value="">Select Type</option>
                                             {Object.values(MaintenanceType).map(t => (
@@ -1097,31 +1097,31 @@ export default function RequestDetailsPage() {
                                             ))}
                                         </select>
                                     ) : (
-                                        <p className="mt-1 text-sm font-medium text-white capitalize">{request.maintenanceType}</p>
+                                        <p className="mt-1 text-sm font-medium text-[var(--text-main)] capitalize">{request.maintenanceType}</p>
                                     )}
                                 </div>
                                 <div className="col-span-2">
-                                    <label className="block text-xs font-medium text-slate-500 uppercase">Description</label>
+                                    <label className="block text-xs font-medium text-[var(--text-faint)] uppercase">Description</label>
                                     {isEditMode ? (
                                         <textarea
                                             rows={3}
                                             value={editedFields.description || ''}
                                             onChange={(e) => handleFieldChange('description', e.target.value)}
-                                            className="mt-1 block w-full rounded-md border border-white/15 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
+                                            className="mt-1 block w-full rounded-md border border-[var(--border-subtle)] px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-[var(--text-main)]"
                                             placeholder="Enter description"
                                         />
                                     ) : (
-                                        <p className="mt-1 text-sm text-slate-300 bg-slate-800/50 p-3 rounded-lg border border-white/5">
+                                        <p className="mt-1 text-sm text-[var(--text-muted)] bg-[var(--bg-surface)]/50 p-3 rounded-lg border border-[var(--border-subtle)]">
                                             {request.description}
                                         </p>
                                     )}
                                 </div>
                                 {/* Maintenance Jobs Section */}
                                 <div className="col-span-2">
-                                    <label className="block text-xs font-medium text-slate-500 uppercase">
+                                    <label className="block text-xs font-medium text-[var(--text-faint)] uppercase">
                                         Maintenance Jobs
                                         {isEditMode && editedFields.maintenanceType && (
-                                            <span className="ml-2 text-xs font-normal text-slate-400">
+                                            <span className="ml-2 text-xs font-normal text-[var(--text-muted)]">
                                                 ({(editedFields.maintenanceJobs || []).length} selected)
                                             </span>
                                         )}
@@ -1132,7 +1132,7 @@ export default function RequestDetailsPage() {
                                                 {/* Search Input with Icon */}
                                                 <div className="relative">
                                                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                                                        <svg className="h-4 w-4 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                                                        <svg className="h-4 w-4 text-[var(--text-muted)]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
                                                             <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
                                                         </svg>
                                                     </div>
@@ -1141,12 +1141,12 @@ export default function RequestDetailsPage() {
                                                         value={jobSearchQuery}
                                                         onChange={(e) => setJobSearchQuery(e.target.value)}
                                                         placeholder="Search jobs..."
-                                                        className="block w-full rounded-md border border-white/15 pl-10 pr-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                        className="block w-full rounded-md border border-[var(--border-subtle)] pl-10 pr-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                                     />
                                                 </div>
                                                 {/* Jobs List with Enhanced Scrollbar */}
                                                 <div
-                                                    className="max-h-60 overflow-y-auto rounded-lg border-2 border-white/15 bg-slate-900 p-3 shadow-inner"
+                                                    className="max-h-60 overflow-y-auto rounded-lg border-2 border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 shadow-inner"
                                                     style={{
                                                         scrollbarWidth: 'thin',
                                                         scrollbarColor: '#94a3b8 #e2e8f0'
@@ -1172,19 +1172,19 @@ export default function RequestDetailsPage() {
                                                         {getFilteredJobs().map((job) => (
                                                             <label
                                                                 key={job}
-                                                                className="flex items-center gap-3 cursor-pointer hover:bg-white/5 rounded-md p-2 transition-colors border border-transparent hover:border-white/10"
+                                                                className="flex items-center gap-3 cursor-pointer hover:bg-[var(--bg-surface-hover)] rounded-md p-2 transition-colors border border-transparent hover:border-[var(--border-subtle)]"
                                                             >
                                                                 <input
                                                                     type="checkbox"
                                                                     checked={(editedFields.maintenanceJobs || []).includes(job)}
                                                                     onChange={() => handleJobToggle(job)}
-                                                                    className="h-4 w-4 rounded border-white/15 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
+                                                                    className="h-4 w-4 rounded border-[var(--border-subtle)] text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
                                                                 />
-                                                                <span className="text-sm text-slate-300 font-medium">{job}</span>
+                                                                <span className="text-sm text-[var(--text-muted)] font-medium">{job}</span>
                                                             </label>
                                                         ))}
                                                         {getFilteredJobs().length === 0 && (
-                                                            <p className="text-sm text-slate-500 text-center py-8">
+                                                            <p className="text-sm text-[var(--text-faint)] text-center py-8">
                                                                 No jobs found matching &quot;{jobSearchQuery}&quot;
                                                             </p>
                                                         )}
@@ -1192,7 +1192,7 @@ export default function RequestDetailsPage() {
                                                 </div>
                                             </div>
                                         ) : (
-                                            <p className="mt-2 text-sm text-slate-500 italic">
+                                            <p className="mt-2 text-sm text-[var(--text-faint)] italic">
                                                 Select a maintenance type to see available jobs
                                             </p>
                                         )
@@ -1206,7 +1206,7 @@ export default function RequestDetailsPage() {
                                                 ))}
                                             </div>
                                         ) : (
-                                            <p className="mt-2 text-sm text-slate-500">No jobs specified</p>
+                                            <p className="mt-2 text-sm text-[var(--text-faint)]">No jobs specified</p>
                                         )
                                     )}
                                 </div>
@@ -1214,10 +1214,10 @@ export default function RequestDetailsPage() {
                         </div>
 
                         {/* Send RFQ Section */}
-                        <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
                             <div className="flex items-center justify-between mb-4">
                                 <div className="flex items-center gap-3">
-                                    <h3 className="text-lg font-bold text-white">Candidate Garages</h3>
+                                    <h3 className="text-lg font-bold text-[var(--text-main)]">Candidate Garages</h3>
                                     <button
                                         onClick={() => setShowGaragePicker(true)}
                                         className="text-xs bg-blue-500/10 text-blue-600 border border-blue-200 hover:bg-blue-500/20 px-2 py-1 rounded-md transition-colors flex items-center gap-1"
@@ -1237,7 +1237,7 @@ export default function RequestDetailsPage() {
                                             request.status !== MaintenanceStatus.ACCEPTED) ||
                                         candidateGarageIds.length === 0
                                     }
-                                    className={`rounded-lg px-4 py-2 text-sm font-medium text-white shadow-sm ${(request.status === MaintenanceStatus.UNDER_ESTIMATION ||
+                                    className={`rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-main)] shadow-sm ${(request.status === MaintenanceStatus.UNDER_ESTIMATION ||
                                         request.status === MaintenanceStatus.REQUESTED ||
                                         request.status === MaintenanceStatus.ACCEPTED)
                                         ? 'bg-blue-600 hover:bg-blue-700'
@@ -1249,8 +1249,8 @@ export default function RequestDetailsPage() {
                             </div>
 
                             {candidateGarageIds.length === 0 && (
-                                <div className="text-center py-8 bg-slate-800/50 rounded-lg border border-dashed border-white/15">
-                                    <p className="text-slate-500">No garages selected based on criteria.</p>
+                                <div className="text-center py-8 bg-[var(--bg-surface)]/50 rounded-lg border border-dashed border-[var(--border-subtle)]">
+                                    <p className="text-[var(--text-faint)]">No garages selected based on criteria.</p>
                                     <button onClick={() => setShowGaragePicker(true)} className="mt-2 text-blue-600 text-sm font-medium hover:underline">
                                         Add a garage manually
                                     </button>
@@ -1270,21 +1270,21 @@ export default function RequestDetailsPage() {
                                                     type="checkbox"
                                                     checked={true}
                                                     onChange={() => { }}
-                                                    className="h-4 w-4 rounded border-white/15 text-blue-600 focus:ring-blue-600"
+                                                    className="h-4 w-4 rounded border-[var(--border-subtle)] text-blue-600 focus:ring-blue-600"
                                                 />
                                             </div>
                                             <div className="flex-1">
                                                 <div className="flex items-center justify-between">
-                                                    <h4 className="font-medium text-white">{garage.name}</h4>
+                                                    <h4 className="font-medium text-[var(--text-main)]">{garage.name}</h4>
                                                     {candidateGarageIds.includes(garage.id) && (
                                                         <span className="inline-flex items-center rounded-md bg-blue-500/20 px-2 py-1 text-xs font-medium text-blue-700">
                                                             Selected
                                                         </span>
                                                     )}
                                                 </div>
-                                                <p className="text-xs text-slate-500">{garage.location}</p>
+                                                <p className="text-xs text-[var(--text-faint)]">{garage.location}</p>
                                                 <div className="mt-2 flex items-center gap-1">
-                                                    <span className="text-xs text-slate-500">Rating:</span>
+                                                    <span className="text-xs text-[var(--text-faint)]">Rating:</span>
                                                     <span className="text-xs font-medium text-amber-500">★ {(garage as unknown as EnhancedGarage).rating || 'N/A'}</span>
                                                 </div>
                                             </div>
@@ -1302,9 +1302,9 @@ export default function RequestDetailsPage() {
                                 request.status === MaintenanceStatus.MAINTENANCE_COMPLETED ||
                                 request.status === MaintenanceStatus.PENDING_INVOICE ||
                                 request.status === MaintenanceStatus.CLOSED) && (
-                                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
                                     <div className="flex items-center justify-between mb-4">
-                                        <h3 className="text-lg font-bold text-white">
+                                        <h3 className="text-lg font-bold text-[var(--text-main)]">
                                             {(request.status === MaintenanceStatus.UNDER_MAINTENANCE ||
                                                 request.status === MaintenanceStatus.MAINTENANCE_COMPLETED ||
                                                 request.status === MaintenanceStatus.PENDING_INVOICE ||
@@ -1321,7 +1321,7 @@ export default function RequestDetailsPage() {
                                                 <button
                                                     onClick={handleSendForApproval}
                                                     disabled={request.status !== MaintenanceStatus.UNDER_ESTIMATION}
-                                                    className={`rounded-lg px-4 py-2 text-sm font-medium text-white shadow-sm ${request.status === MaintenanceStatus.UNDER_ESTIMATION
+                                                    className={`rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-main)] shadow-sm ${request.status === MaintenanceStatus.UNDER_ESTIMATION
                                                         ? 'bg-green-600 hover:bg-green-700'
                                                         : 'bg-slate-400 cursor-not-allowed'
                                                         }`}
@@ -1333,17 +1333,17 @@ export default function RequestDetailsPage() {
 
                                     <div className="overflow-x-auto">
                                         <table className="min-w-full divide-y divide-white/10">
-                                            <thead className="bg-slate-800/50">
+                                            <thead className="bg-[var(--bg-surface)]/50">
                                                 <tr>
-                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Garage</th>
-                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Parts Est (AED)</th>
-                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Labor Est (AED)</th>
-                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Est. Completion Date</th>
-                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Attachment</th>
-                                                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Actions</th>
+                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-[var(--text-faint)] uppercase tracking-wider">Garage</th>
+                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-[var(--text-faint)] uppercase tracking-wider">Parts Est (AED)</th>
+                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-[var(--text-faint)] uppercase tracking-wider">Labor Est (AED)</th>
+                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-[var(--text-faint)] uppercase tracking-wider">Est. Completion Date</th>
+                                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-[var(--text-faint)] uppercase tracking-wider">Attachment</th>
+                                                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-[var(--text-faint)] uppercase tracking-wider">Actions</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="bg-slate-900 divide-y divide-white/10">
+                                            <tbody className="bg-[var(--bg-surface)] divide-y divide-white/10">
                                                 {candidateGarageIds.filter(garageId => {
                                                     if (request.status === MaintenanceStatus.UNDER_MAINTENANCE ||
                                                         request.status === MaintenanceStatus.PENDING_INVOICE ||
@@ -1387,7 +1387,7 @@ export default function RequestDetailsPage() {
                                                     const quote = displayQuote;
                                                     return (
                                                         <tr key={garageId}>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-[var(--text-main)]">
                                                                 <div>{garage?.name}</div>
                                                                 {request.quotations?.some(q => q.garageId === garageId) && (
                                                                     <span className="inline-flex items-center rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-300 mt-1">
@@ -1395,39 +1395,39 @@ export default function RequestDetailsPage() {
                                                                     </span>
                                                                 )}
                                                             </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--text-muted)]">
                                                                 <input
                                                                     type="number"
                                                                     min="0"
                                                                     value={quote.partsCost || ''}
                                                                     onChange={(e) => handleQuotationChange(garageId, 'partsCost', parseFloat(e.target.value))}
                                                                     placeholder="0.00"
-                                                                    className="block w-24 rounded-md border border-white/15 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                                    className="block w-24 rounded-md border border-[var(--border-subtle)] px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                                                                     disabled={request.status !== MaintenanceStatus.UNDER_ESTIMATION}
                                                                 />
                                                             </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--text-muted)]">
                                                                 <input
                                                                     type="number"
                                                                     min="0"
                                                                     value={quote.laborCost || ''}
                                                                     onChange={(e) => handleQuotationChange(garageId, 'laborCost', parseFloat(e.target.value))}
                                                                     placeholder="0.00"
-                                                                    className="block w-24 rounded-md border border-white/15 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                                    className="block w-24 rounded-md border border-[var(--border-subtle)] px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                                                                     disabled={request.status !== MaintenanceStatus.UNDER_ESTIMATION}
                                                                 />
                                                             </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--text-muted)]">
                                                                 <input
                                                                     type="date"
                                                                     min={new Date().toISOString().split('T')[0]}
                                                                     value={quote.estimatedDate || ''}
                                                                     onChange={(e) => handleQuotationChange(garageId, 'estimatedDate', e.target.value)}
-                                                                    className="block w-full rounded-md border border-white/15 px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-white"
+                                                                    className="block w-full rounded-md border border-[var(--border-subtle)] px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-[var(--text-main)]"
                                                                     disabled={request.status !== MaintenanceStatus.UNDER_ESTIMATION}
                                                                 />
                                                             </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--text-muted)]">
                                                                 <div className="flex items-center gap-2">
                                                                     {quote.attachmentUrl ? (
                                                                         <div className="flex items-center gap-2">
@@ -1459,7 +1459,7 @@ export default function RequestDetailsPage() {
                                                                             <input
                                                                                 type="file"
                                                                                 id={`file-${garageId}`}
-                                                                                className="hidden text-white"
+                                                                                className="hidden text-[var(--text-main)]"
                                                                                 accept=".pdf,.png,.jpg,.jpeg"
                                                                                 onChange={(e) => {
                                                                                     const file = e.target.files?.[0];
@@ -1473,9 +1473,9 @@ export default function RequestDetailsPage() {
                                                                             />
                                                                             <label
                                                                                 htmlFor={`file-${garageId}`}
-                                                                                className={`cursor-pointer inline-flex items-center rounded-md border border-white/15 bg-slate-900 px-3 py-1.5 text-sm font-medium text-slate-300 hover:bg-white/5 ${request.status !== MaintenanceStatus.UNDER_ESTIMATION ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                                                className={`cursor-pointer inline-flex items-center rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] ${request.status !== MaintenanceStatus.UNDER_ESTIMATION ? 'opacity-50 cursor-not-allowed' : ''}`}
                                                                             >
-                                                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 mr-2 text-slate-300">
+                                                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 mr-2 text-[var(--text-muted)]">
                                                                                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
                                                                                 </svg>
                                                                             </label>
@@ -1486,7 +1486,7 @@ export default function RequestDetailsPage() {
                                                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                                                 <button
                                                                     onClick={() => handleViewHistory(garageId)}
-                                                                    className="text-slate-200 hover:text-slate-300"
+                                                                    className="text-[var(--text-main)] hover:text-[var(--text-muted)]"
                                                                     title="View History"
                                                                 >
                                                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
@@ -1505,25 +1505,25 @@ export default function RequestDetailsPage() {
                         }
 
                         {/* Timeline */}
-                        <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                            <h3 className="text-sm font-bold text-white uppercase mb-4">Timeline</h3>
+                        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                            <h3 className="text-sm font-bold text-[var(--text-main)] uppercase mb-4">Timeline</h3>
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-xs text-slate-500">Requested Date</label>
-                                    <p className="text-sm font-medium text-white">{new Date(request.requestDate).toLocaleDateString()}</p>
+                                    <label className="block text-xs text-[var(--text-faint)]">Requested Date</label>
+                                    <p className="text-sm font-medium text-[var(--text-main)]">{new Date(request.requestDate).toLocaleDateString()}</p>
                                 </div>
                                 <div>
-                                    <label className="block text-xs text-slate-500">Estimated Completion Date</label>
+                                    <label className="block text-xs text-[var(--text-faint)]">Estimated Completion Date</label>
                                     {isEditMode ? (
                                         <input
                                             type="date"
                                             min={new Date().toISOString().split('T')[0]}
                                             value={editedFields.expectedEndDate || ''}
                                             onChange={(e) => handleFieldChange('expectedEndDate', e.target.value)}
-                                            className="mt-1 block w-full rounded-md border border-white/15 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-white"
+                                            className="mt-1 block w-full rounded-md border border-[var(--border-subtle)] px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-[var(--text-main)]"
                                         />
                                     ) : (
-                                        <p className="text-sm font-medium text-white">{request.expectedEndDate ? new Date(request.expectedEndDate).toLocaleDateString() : 'Not set'}</p>
+                                        <p className="text-sm font-medium text-[var(--text-main)]">{request.expectedEndDate ? new Date(request.expectedEndDate).toLocaleDateString() : 'Not set'}</p>
                                     )}
                                 </div>
                             </div>
@@ -1533,29 +1533,29 @@ export default function RequestDetailsPage() {
                         {
                             (request.status === MaintenanceStatus.CLOSED ||
                                 request.status === MaintenanceStatus.MAINTENANCE_COMPLETED) && (
-                                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                                    <h3 className="text-sm font-bold text-white uppercase mb-4">Cost Summary</h3>
+                                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                                    <h3 className="text-sm font-bold text-[var(--text-main)] uppercase mb-4">Cost Summary</h3>
                                     <div className="space-y-3">
                                         <div className="flex justify-between text-sm">
-                                            <span className="text-slate-500">Parts:</span>
-                                            <span className="font-medium text-white">
+                                            <span className="text-[var(--text-faint)]">Parts:</span>
+                                            <span className="font-medium text-[var(--text-main)]">
                                                 AED {(request.actualPartsCost || 0).toFixed(2)}
                                             </span>
                                         </div>
                                         <div className="flex justify-between text-sm">
-                                            <span className="text-slate-500">Labor:</span>
-                                            <span className="font-medium text-white">
+                                            <span className="text-[var(--text-faint)]">Labor:</span>
+                                            <span className="font-medium text-[var(--text-main)]">
                                                 AED {(request.actualLaborCost || 0).toFixed(2)}
                                             </span>
                                         </div>
                                         <div className="flex justify-between text-sm">
-                                            <span className="text-slate-500">Other:</span>
-                                            <span className="font-medium text-white">
+                                            <span className="text-[var(--text-faint)]">Other:</span>
+                                            <span className="font-medium text-[var(--text-main)]">
                                                 AED {(request.actualOtherCost || 0).toFixed(2)}
                                             </span>
                                         </div>
-                                        <div className="flex justify-between text-sm font-bold border-t border-white/10 pt-2">
-                                            <span className="text-white">Total:</span>
+                                        <div className="flex justify-between text-sm font-bold border-t border-[var(--border-subtle)] pt-2">
+                                            <span className="text-[var(--text-main)]">Total:</span>
                                             <span className="text-blue-600">
                                                 AED {(request.actualCost || 0).toFixed(2)}
                                             </span>
@@ -1572,51 +1572,51 @@ export default function RequestDetailsPage() {
                                 request.status === MaintenanceStatus.MAINTENANCE_COMPLETED ||
                                 request.status === MaintenanceStatus.CLOSED ||
                                 request.status === MaintenanceStatus.ESTIMATION_APPROVED) && request.workOrderNo && (
-                                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                                    <h3 className="text-sm font-bold text-white uppercase mb-6">Work Order Details</h3>
+                                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                                    <h3 className="text-sm font-bold text-[var(--text-main)] uppercase mb-6">Work Order Details</h3>
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                         <div className="space-y-6">
                                             <div>
-                                                <label className="block text-xs text-slate-500">Work Order Number</label>
+                                                <label className="block text-xs text-[var(--text-faint)]">Work Order Number</label>
                                                 <p className="text-lg font-bold text-blue-600">{request.workOrderNo}</p>
                                             </div>
                                             <div>
-                                                <label className="block text-xs text-slate-500">Vehicle</label>
-                                                <p className="text-sm font-medium text-white">{vehicle?.make} {vehicle?.model} ({vehicle?.year})</p>
-                                                <p className="text-xs text-slate-500">{vehicle?.licensePlate} • VIN: {vehicle?.vin}</p>
+                                                <label className="block text-xs text-[var(--text-faint)]">Vehicle</label>
+                                                <p className="text-sm font-medium text-[var(--text-main)]">{vehicle?.make} {vehicle?.model} ({vehicle?.year})</p>
+                                                <p className="text-xs text-[var(--text-faint)]">{vehicle?.licensePlate} • VIN: {vehicle?.vin}</p>
                                             </div>
                                             <div>
-                                                <label className="block text-xs text-slate-500">Current Mileage</label>
-                                                <p className="text-sm font-medium text-white">{request.odometer?.toLocaleString()} km</p>
+                                                <label className="block text-xs text-[var(--text-faint)]">Current Mileage</label>
+                                                <p className="text-sm font-medium text-[var(--text-main)]">{request.odometer?.toLocaleString()} km</p>
                                             </div>
                                             <div>
-                                                <label className="block text-xs text-slate-500">Estimation Approved By</label>
-                                                <p className="text-sm font-medium text-white">Maintenance Manager</p>
-                                                {/* <p className="text-sm font-medium text-white">{request.estimateApproval?.approvedByName || 'N/A'}</p> */}
+                                                <label className="block text-xs text-[var(--text-faint)]">Estimation Approved By</label>
+                                                <p className="text-sm font-medium text-[var(--text-main)]">Maintenance Manager</p>
+                                                {/* <p className="text-sm font-medium text-[var(--text-main)]">{request.estimateApproval?.approvedByName || 'N/A'}</p> */}
                                                 {/* {request.estimateApproval?.approvedAt && (
-                                                    <p className="text-xs text-slate-500">{new Date(request.estimateApproval.approvedAt).toLocaleDateString()}</p>
+                                                    <p className="text-xs text-[var(--text-faint)]">{new Date(request.estimateApproval.approvedAt).toLocaleDateString()}</p>
                                                 )} */}
                                             </div>
                                         </div>
 
                                         <div className="space-y-6">
                                             <div>
-                                                <label className="block text-xs text-slate-500">Maintenance Type</label>
+                                                <label className="block text-xs text-[var(--text-faint)]">Maintenance Type</label>
                                                 <span className="inline-flex items-center rounded-md bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10 mt-1">
                                                     {request.maintenanceType || 'N/A'}
                                                 </span>
                                             </div>
                                             <div>
-                                                <label className="block text-xs text-slate-500 mb-2">Maintenance Jobs</label>
+                                                <label className="block text-xs text-[var(--text-faint)] mb-2">Maintenance Jobs</label>
                                                 {request.maintenanceJobs && request.maintenanceJobs.length > 0 ? (
                                                     <ul className="list-disc pl-4 space-y-1">
                                                         {request.maintenanceJobs.map((job) => (
-                                                            <li key={job} className="text-sm text-slate-300">{job}</li>
+                                                            <li key={job} className="text-sm text-[var(--text-muted)]">{job}</li>
                                                         ))}
                                                     </ul>
                                                 ) : (
-                                                    <p className="text-sm text-slate-400 italic">No jobs listed</p>
+                                                    <p className="text-sm text-[var(--text-muted)] italic">No jobs listed</p>
                                                 )}
                                             </div>
                                         </div>
@@ -1626,9 +1626,9 @@ export default function RequestDetailsPage() {
                         }
 
                         {/* Attachments */}
-                        <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
+                        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
                             <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-sm font-bold text-white uppercase">Attachments</h3>
+                                <h3 className="text-sm font-bold text-[var(--text-main)] uppercase">Attachments</h3>
                                 {request.status !== MaintenanceStatus.MAINTENANCE_COMPLETED && (
                                     <button
                                         onClick={handleAddAttachment}
@@ -1644,16 +1644,16 @@ export default function RequestDetailsPage() {
                             {request.attachments && request.attachments.length > 0 ? (
                                 <ul className="space-y-2">
                                     {request.attachments.map(att => (
-                                        <li key={att.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-slate-800/50 border border-white/5">
+                                        <li key={att.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)]">
                                             <div className="flex items-center gap-2 flex-1 min-w-0">
-                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-slate-400 flex-shrink-0">
+                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-[var(--text-muted)] flex-shrink-0">
                                                     <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
                                                 </svg>
                                                 <div className="flex-1 min-w-0">
                                                     <a href={att.url} target="_blank" rel="noreferrer" className="text-xs font-medium text-blue-600 hover:underline truncate block">
                                                         {att.fileName}
                                                     </a>
-                                                    <p className="text-xs text-slate-500">{att.type}</p>
+                                                    <p className="text-xs text-[var(--text-faint)]">{att.type}</p>
                                                 </div>
                                             </div>
                                             <button
@@ -1668,7 +1668,7 @@ export default function RequestDetailsPage() {
                                     ))}
                                 </ul>
                             ) : (
-                                <p className="text-xs text-slate-500 italic text-center py-4">No attachments yet</p>
+                                <p className="text-xs text-[var(--text-faint)] italic text-center py-4">No attachments yet</p>
                             )}
                         </div>
                     </div>
@@ -1679,31 +1679,31 @@ export default function RequestDetailsPage() {
             {
                 showAttachmentModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                        <div className="w-full max-w-md rounded-xl bg-slate-900 p-6 shadow-xl">
-                            <h3 className="text-lg font-bold text-white mb-4">Upload Attachment</h3>
+                        <div className="w-full max-w-md rounded-xl bg-[var(--bg-surface)] p-6 shadow-xl">
+                            <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">Upload Attachment</h3>
 
                             <div className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-300 mb-2">Attachment Type</label>
+                                    <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Attachment Type</label>
                                     <select
                                         value={selectedAttachmentType}
                                         onChange={(e) => setSelectedAttachmentType(e.target.value as AttachmentType)}
-                                        className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-slate-900 text-white"
+                                        className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                     >
                                         {Object.values(AttachmentType).map((type) => (
-                                            <option key={type} value={type} className="text-white">
+                                            <option key={type} value={type} className="text-[var(--text-main)]">
                                                 {type}
                                             </option>
                                         ))}
                                     </select>
                                 </div>
 
-                                <div className="rounded-lg border-2 border-dashed border-white/15 p-6 text-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="mx-auto h-12 w-12 text-slate-400">
+                                <div className="rounded-lg border-2 border-dashed border-[var(--border-subtle)] p-6 text-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="mx-auto h-12 w-12 text-[var(--text-muted)]">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
                                     </svg>
-                                    <p className="mt-2 text-sm text-slate-600">Click below to select a file</p>
-                                    <p className="text-xs text-slate-500 mt-1">PDF, JPG, PNG, DOC, DOCX, XLS, XLSX</p>
+                                    <p className="mt-2 text-sm text-[var(--text-faint)]">Click below to select a file</p>
+                                    <p className="text-xs text-[var(--text-faint)] mt-1">PDF, JPG, PNG, DOC, DOCX, XLS, XLSX</p>
                                 </div>
                             </div>
 
@@ -1713,7 +1713,7 @@ export default function RequestDetailsPage() {
                                         setShowAttachmentModal(false);
                                         setSelectedAttachmentType(AttachmentType.INVOICE);
                                     }}
-                                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
+                                    className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
                                 >
                                     Cancel
                                 </button>
@@ -1733,47 +1733,47 @@ export default function RequestDetailsPage() {
             {
                 showReviewModal && selectedGarageForApproval && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                        <div className="w-full max-w-lg rounded-xl bg-slate-900 p-6 shadow-xl">
-                            <h3 className="text-lg font-bold text-white mb-4">Review Estimation</h3>
+                        <div className="w-full max-w-lg rounded-xl bg-[var(--bg-surface)] p-6 shadow-xl">
+                            <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">Review Estimation</h3>
 
                             <div className="space-y-4">
-                                <div className="rounded-lg bg-slate-800/50 p-4 border border-white/5">
-                                    <h4 className="text-sm font-medium text-white mb-3">Quotation Summary</h4>
+                                <div className="rounded-lg bg-[var(--bg-surface)]/50 p-4 border border-[var(--border-subtle)]">
+                                    <h4 className="text-sm font-medium text-[var(--text-main)] mb-3">Quotation Summary</h4>
                                     <dl className="space-y-2 text-sm">
                                         <div className="flex justify-between">
-                                            <dt className="text-slate-500">Garage:</dt>
-                                            <dd className="font-medium text-white">
+                                            <dt className="text-[var(--text-faint)]">Garage:</dt>
+                                            <dd className="font-medium text-[var(--text-main)]">
                                                 {garages.find(g => g.id === selectedGarageForApproval)?.name}
                                             </dd>
                                         </div>
                                         <div className="flex justify-between">
-                                            <dt className="text-slate-500">Parts Cost:</dt>
-                                            <dd className="font-medium text-white">
+                                            <dt className="text-[var(--text-faint)]">Parts Cost:</dt>
+                                            <dd className="font-medium text-[var(--text-main)]">
                                                 AED {(quotations[selectedGarageForApproval]?.partsCost || 0).toFixed(2)}
                                             </dd>
                                         </div>
                                         <div className="flex justify-between">
-                                            <dt className="text-slate-500">Labor Cost:</dt>
-                                            <dd className="font-medium text-white">
+                                            <dt className="text-[var(--text-faint)]">Labor Cost:</dt>
+                                            <dd className="font-medium text-[var(--text-main)]">
                                                 AED {(quotations[selectedGarageForApproval]?.laborCost || 0).toFixed(2)}
                                             </dd>
                                         </div>
-                                        <div className="flex justify-between border-t border-white/10 pt-1 mt-1">
-                                            <dt className="text-slate-300 font-bold">Total Cost:</dt>
+                                        <div className="flex justify-between border-t border-[var(--border-subtle)] pt-1 mt-1">
+                                            <dt className="text-[var(--text-muted)] font-bold">Total Cost:</dt>
                                             <dd className="font-bold text-blue-600">
                                                 AED {(quotations[selectedGarageForApproval]?.totalCost || quotations[selectedGarageForApproval]?.amount || 0).toFixed(2)}
                                             </dd>
                                         </div>
                                         <div className="flex justify-between">
-                                            <dt className="text-slate-500">Est. Completion:</dt>
-                                            <dd className="font-medium text-white">
+                                            <dt className="text-[var(--text-faint)]">Est. Completion:</dt>
+                                            <dd className="font-medium text-[var(--text-main)]">
                                                 {quotations[selectedGarageForApproval]?.estimatedDate
                                                     ? new Date(quotations[selectedGarageForApproval]?.estimatedDate).toLocaleDateString()
                                                     : 'N/A'}
                                             </dd>
                                         </div>
-                                        <div className="flex justify-between items-center pt-2 border-t border-white/10 mt-2">
-                                            <dt className="text-slate-500">Attachment:</dt>
+                                        <div className="flex justify-between items-center pt-2 border-t border-[var(--border-subtle)] mt-2">
+                                            <dt className="text-[var(--text-faint)]">Attachment:</dt>
                                             <dd>
                                                 {quotations[selectedGarageForApproval]?.attachmentUrl ? (
                                                     <a
@@ -1788,7 +1788,7 @@ export default function RequestDetailsPage() {
                                                         View File
                                                     </a>
                                                 ) : (
-                                                    <span className="text-slate-400 italic">No attachment</span>
+                                                    <span className="text-[var(--text-muted)] italic">No attachment</span>
                                                 )}
                                             </dd>
                                         </div>
@@ -1805,7 +1805,7 @@ export default function RequestDetailsPage() {
                             <div className="mt-6 flex justify-end gap-3">
                                 <button
                                     onClick={() => setShowReviewModal(false)}
-                                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
+                                    className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
                                 >
                                     Cancel
                                 </button>
@@ -1837,12 +1837,12 @@ export default function RequestDetailsPage() {
             {
                 showHistoryModal && historyGarageId && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                        <div className="w-full max-w-2xl rounded-2xl bg-slate-900 p-6 shadow-xl">
+                        <div className="w-full max-w-2xl rounded-2xl bg-[var(--bg-surface)] p-6 shadow-xl">
                             <div className="flex justify-between items-center mb-4">
-                                <h2 className="text-xl font-bold text-white">
+                                <h2 className="text-xl font-bold text-[var(--text-main)]">
                                     Quotation History - {garages.find(g => g.id === historyGarageId)?.name}
                                 </h2>
-                                <button onClick={() => setShowHistoryModal(false)} className="text-slate-400 hover:text-slate-300">
+                                <button onClick={() => setShowHistoryModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-muted)]">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                                     </svg>
@@ -1854,9 +1854,9 @@ export default function RequestDetailsPage() {
                                     ?.filter(q => q.garageId === historyGarageId)
                                     .sort((a, b) => new Date(b.quotationDate).getTime() - new Date(a.quotationDate).getTime())
                                     .map((quote, index) => (
-                                        <div key={quote.id} className="p-4 rounded-lg border border-white/10 bg-slate-800/50">
+                                        <div key={quote.id} className="p-4 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50">
                                             <div className="flex justify-between items-center mb-2">
-                                                <span className="text-xs font-medium text-slate-500">
+                                                <span className="text-xs font-medium text-[var(--text-faint)]">
                                                     {new Date(quote.quotationDate).toLocaleString()}
                                                 </span>
                                                 {index === 0 && (
@@ -1867,22 +1867,22 @@ export default function RequestDetailsPage() {
                                             </div>
                                             <div className="grid grid-cols-2 gap-4 text-sm">
                                                 <div>
-                                                    <span className="text-slate-500">Total Cost:</span>
+                                                    <span className="text-[var(--text-faint)]">Total Cost:</span>
                                                     <div className="font-medium">AED {Number(quote.totalCost ?? 0).toFixed(2)}</div>
                                                 </div>
                                                 <div>
-                                                    <span className="text-slate-500">Estimated Completion:</span>
+                                                    <span className="text-[var(--text-faint)]">Estimated Completion:</span>
                                                     <div className="font-medium">{quote.estimatedCompletionDate ? new Date(quote.estimatedCompletionDate).toLocaleDateString() : 'N/A'}</div>
                                                 </div>
                                                 <div className="col-span-2">
-                                                    <span className="text-slate-500">Attachment:</span>
+                                                    <span className="text-[var(--text-faint)]">Attachment:</span>
                                                     <div>
                                                         {quote.attachments && quote.attachments.length > 0 ? (
                                                             <a href={quote.attachments[0].url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
                                                                 {quote.attachments[0].fileName || 'View Attachment'}
                                                             </a>
                                                         ) : (
-                                                            <span className="text-slate-400">No attachment</span>
+                                                            <span className="text-[var(--text-muted)]">No attachment</span>
                                                         )}
                                                     </div>
                                                 </div>
@@ -1891,14 +1891,14 @@ export default function RequestDetailsPage() {
                                     ))
                                 }
                                 {(!request?.quotations?.some(q => q.garageId === historyGarageId)) && (
-                                    <p className="text-center text-slate-500 py-4">No history available.</p>
+                                    <p className="text-center text-[var(--text-faint)] py-4">No history available.</p>
                                 )}
                             </div>
 
                             <div className="mt-6 flex justify-end">
                                 <button
                                     onClick={() => setShowHistoryModal(false)}
-                                    className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                                    className="rounded-lg bg-[var(--bg-surface)] px-4 py-2 text-sm font-medium text-[var(--text-main)] hover:bg-[var(--bg-surface)]"
                                 >
                                     Close
                                 </button>
@@ -1908,21 +1908,21 @@ export default function RequestDetailsPage() {
                 )
             }
             {showGaragePicker && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm p-4">
-                    <div className="w-full max-w-lg bg-slate-900 rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
-                        <div className="bg-slate-800/50 px-6 py-4 border-b border-white/5 flex justify-between items-center">
-                            <h3 className="font-bold text-lg text-slate-200">Add Garage from Master</h3>
-                            <button onClick={() => setShowGaragePicker(false)} className="text-slate-400 hover:text-slate-300">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--bg-surface)]/50 backdrop-blur-sm p-4">
+                    <div className="w-full max-w-lg bg-[var(--bg-surface)] rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+                        <div className="bg-[var(--bg-surface)]/50 px-6 py-4 border-b border-[var(--border-subtle)] flex justify-between items-center">
+                            <h3 className="font-bold text-lg text-[var(--text-main)]">Add Garage from Master</h3>
+                            <button onClick={() => setShowGaragePicker(false)} className="text-[var(--text-muted)] hover:text-[var(--text-muted)]">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                                 </svg>
                             </button>
                         </div>
-                        <div className="p-4 border-b border-white/5">
+                        <div className="p-4 border-b border-[var(--border-subtle)]">
                             <input
                                 type="text"
                                 placeholder="Search garage name..."
-                                className="w-full rounded-lg border-white/15 focus:border-blue-500 focus:ring-blue-500 text-white"
+                                className="w-full rounded-lg border-[var(--border-subtle)] focus:border-blue-500 focus:ring-blue-500 text-[var(--text-main)]"
                                 value={garageSearchTerm}
                                 onChange={(e) => setGarageSearchTerm(e.target.value)}
                                 autoFocus
@@ -1933,10 +1933,10 @@ export default function RequestDetailsPage() {
                                 .filter(g => !candidateGarageIds.includes(g.id))
                                 .filter(g => g.name.toLowerCase().includes(garageSearchTerm.toLowerCase()))
                                 .map(garage => (
-                                    <div key={garage.id} className="flex items-center justify-between p-3 rounded-lg border border-white/10 hover:bg-white/5 transition-colors">
+                                    <div key={garage.id} className="flex items-center justify-between p-3 rounded-lg border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
                                         <div>
-                                            <h4 className="font-medium text-white">{garage.name}</h4>
-                                            <div className="flex gap-2 text-xs text-slate-500">
+                                            <h4 className="font-medium text-[var(--text-main)]">{garage.name}</h4>
+                                            <div className="flex gap-2 text-xs text-[var(--text-faint)]">
                                                 <span>{garage.location}</span>
                                                 <span>•</span>
                                                 <span>•</span>
@@ -1953,8 +1953,8 @@ export default function RequestDetailsPage() {
                             }
                             {garages.filter(g => !candidateGarageIds.includes(g.id) && g.name.toLowerCase().includes(garageSearchTerm.toLowerCase())).length === 0 && (
                                 <div className="text-center py-8">
-                                    <p className="text-slate-500">No matching garages found.</p>
-                                    <p className="text-xs text-slate-400 mt-1">Try adjusting your search terms.</p>
+                                    <p className="text-[var(--text-faint)]">No matching garages found.</p>
+                                    <p className="text-xs text-[var(--text-muted)] mt-1">Try adjusting your search terms.</p>
                                 </div>
                             )}
                         </div>

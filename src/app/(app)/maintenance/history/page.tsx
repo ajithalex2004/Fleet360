@@ -123,7 +123,7 @@ export default function MaintenanceHistoryPage() {
             case 'Rejected':
                 return 'bg-red-500/20 text-red-600 border-red-500/50';
             default:
-                return 'bg-slate-500/20 text-slate-500 border-slate-500/50';
+                return 'bg-slate-500/20 text-[var(--text-faint)] border-slate-500/50';
         }
     };
 
@@ -162,15 +162,15 @@ export default function MaintenanceHistoryPage() {
                         <div className="flex items-center gap-2 mb-1">
                             <button
                                 onClick={() => router.back()}
-                                className="text-slate-400 hover:text-slate-300 transition-colors"
+                                className="text-[var(--text-muted)] hover:text-[var(--text-muted)] transition-colors"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
                                 </svg>
                             </button>
-                            <h1 className="text-2xl font-bold text-white tracking-tight">History</h1>
+                            <h1 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">History</h1>
                         </div>
-                        <p className="text-xs mt-1 text-slate-500 ml-7">View closed and rejected requests (Service & Maintenance).</p>
+                        <p className="text-xs mt-1 text-[var(--text-faint)] ml-7">View closed and rejected requests (Service & Maintenance).</p>
                     </div>
                 </div>
 
@@ -188,7 +188,7 @@ export default function MaintenanceHistoryPage() {
 
                 <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {filteredRequests.length === 0 ? (
-                        <div className="col-span-full text-center py-12 text-slate-500 bg-slate-800/50 rounded-lg border border-dashed border-white/15">
+                        <div className="col-span-full text-center py-12 text-[var(--text-faint)] bg-[var(--bg-surface)]/50 rounded-lg border border-dashed border-[var(--border-subtle)]">
                             No history found.
                         </div>
                     ) : (
@@ -202,11 +202,11 @@ export default function MaintenanceHistoryPage() {
                             const driver = drivers.find(d => d.id === driverId);
 
                             return (
-                                <div key={request.id} className="bg-slate-800/50 rounded-lg p-4 relative overflow-hidden border border-white/10 hover:shadow-md transition-all flex flex-col min-h-[200px]">
+                                <div key={request.id} className="bg-[var(--bg-surface)]/50 rounded-lg p-4 relative overflow-hidden border border-[var(--border-subtle)] hover:shadow-md transition-all flex flex-col min-h-[200px]">
                                     <div className="relative z-10 flex-1 flex flex-col">
                                         <div className="flex justify-between items-start mb-3">
                                             <div className="flex flex-col">
-                                                <span className="text-[10px] font-mono text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded border border-white/10">{request.id}</span>
+                                                <span className="text-[10px] font-mono text-[var(--text-faint)] bg-[var(--bg-surface)] px-1.5 py-0.5 rounded border border-[var(--border-subtle)]">{request.id}</span>
                                                 {isSR && <span className="text-[9px] text-blue-600 mt-0.5">Service Request</span>}
                                             </div>
                                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${getStatusColor(request.status)}`}>
@@ -214,33 +214,33 @@ export default function MaintenanceHistoryPage() {
                                             </span>
                                         </div>
 
-                                        <h4 className="text-sm font-bold text-slate-300 mb-1 line-clamp-1" title={request.description}>
+                                        <h4 className="text-sm font-bold text-[var(--text-muted)] mb-1 line-clamp-1" title={request.description}>
                                             {isSR ? request.serviceType : 'Maintenance Request'}
                                         </h4>
-                                        <p className="text-xs text-slate-500 line-clamp-2 mb-2">{request.description}</p>
+                                        <p className="text-xs text-[var(--text-faint)] line-clamp-2 mb-2">{request.description}</p>
 
-                                        <div className="space-y-1.5 text-xs border-t border-white/10 pt-3 mt-2">
+                                        <div className="space-y-1.5 text-xs border-t border-[var(--border-subtle)] pt-3 mt-2">
                                             <div className="flex justify-between">
-                                                <span className="text-slate-500">Vehicle:</span>
-                                                <span className="text-slate-300 font-medium truncate max-w-[100px]">{vehicle ? `${vehicle.make} ${vehicle.model}` : 'N/A'}</span>
+                                                <span className="text-[var(--text-faint)]">Vehicle:</span>
+                                                <span className="text-[var(--text-muted)] font-medium truncate max-w-[100px]">{vehicle ? `${vehicle.make} ${vehicle.model}` : 'N/A'}</span>
                                             </div>
                                             <div className="flex justify-between">
-                                                <span className="text-slate-500">Driver/User:</span>
-                                                <span className="text-slate-300 truncate max-w-[100px]">{driver ? driver.name : (driverId || 'Unknown')}</span>
+                                                <span className="text-[var(--text-faint)]">Driver/User:</span>
+                                                <span className="text-[var(--text-muted)] truncate max-w-[100px]">{driver ? driver.name : (driverId || 'Unknown')}</span>
                                             </div>
                                             <div className="flex justify-between">
-                                                <span className="text-slate-500">Date:</span>
-                                                <span className="text-slate-300 font-medium">{new Date(date).toLocaleDateString()}</span>
+                                                <span className="text-[var(--text-faint)]">Date:</span>
+                                                <span className="text-[var(--text-muted)] font-medium">{new Date(date).toLocaleDateString()}</span>
                                             </div>
                                             {!isSR && request.workOrderNo && (
                                                 <div className="flex justify-between">
-                                                    <span className="text-slate-500">Work Order:</span>
-                                                    <span className="text-slate-300 font-mono">{request.workOrderNo}</span>
+                                                    <span className="text-[var(--text-faint)]">Work Order:</span>
+                                                    <span className="text-[var(--text-muted)] font-mono">{request.workOrderNo}</span>
                                                 </div>
                                             )}
                                         </div>
 
-                                        <div className="mt-auto pt-3 border-t border-white/10">
+                                        <div className="mt-auto pt-3 border-t border-[var(--border-subtle)]">
                                             <button
                                                 onClick={() => handleViewTimeline(request)}
                                                 className="w-full rounded-lg bg-blue-600 border border-transparent px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 shadow-sm transition-all flex items-center justify-center gap-2"

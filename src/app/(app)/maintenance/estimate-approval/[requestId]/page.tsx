@@ -209,8 +209,8 @@ export default function EstimateApprovalPage() {
         );
     }
 
-    if (loading) return <div className="p-8 text-center text-slate-500">Loading...</div>;
-    if (!request) return <div className="p-8 text-center text-slate-500">Request not found</div>;
+    if (loading) return <div className="p-8 text-center text-[var(--text-faint)]">Loading...</div>;
+    if (!request) return <div className="p-8 text-center text-[var(--text-faint)]">Request not found</div>;
 
     const selectedQuotation = quotations.find(q => q.id === selectedQuotationId);
     const lowestQuotation = quotations.reduce((min, q) => q.totalCost < min.totalCost ? q : min, quotations[0]);
@@ -220,8 +220,8 @@ export default function EstimateApprovalPage() {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-white">Estimate Approval</h1>
-                    <p className="text-xs mt-1 text-slate-500">
+                    <h1 className="text-2xl font-bold text-[var(--text-main)]">Estimate Approval</h1>
+                    <p className="text-xs mt-1 text-[var(--text-faint)]">
                         Request #{request.id.toUpperCase()}
                         {isEmailApproval && <span className="ml-2 text-blue-600">• Email Approval</span>}
                     </p>
@@ -244,55 +244,55 @@ export default function EstimateApprovalPage() {
             </div>
 
             {/* Request Summary */}
-            <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                <h3 className="text-lg font-bold text-white mb-4">Request Details</h3>
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">Request Details</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                     <div>
-                        <span className="text-slate-500">Vehicle:</span>
-                        <span className="ml-2 font-medium text-white">
+                        <span className="text-[var(--text-faint)]">Vehicle:</span>
+                        <span className="ml-2 font-medium text-[var(--text-main)]">
                             {vehicle?.make} {vehicle?.model} ({vehicle?.licensePlate})
                         </span>
                     </div>
                     <div>
-                        <span className="text-slate-500">Maintenance Type:</span>
-                        <span className="ml-2 font-medium text-white">{request.maintenanceType || 'N/A'}</span>
+                        <span className="text-[var(--text-faint)]">Maintenance Type:</span>
+                        <span className="ml-2 font-medium text-[var(--text-main)]">{request.maintenanceType || 'N/A'}</span>
                     </div>
                     <div>
-                        <span className="text-slate-500">Priority:</span>
-                        <span className="ml-2 font-medium text-white">{request.priority || 'Medium'}</span>
+                        <span className="text-[var(--text-faint)]">Priority:</span>
+                        <span className="ml-2 font-medium text-[var(--text-main)]">{request.priority || 'Medium'}</span>
                     </div>
                     <div>
-                        <span className="text-slate-500">Quotations:</span>
-                        <span className="ml-2 font-medium text-white">{quotations.length}</span>
+                        <span className="text-[var(--text-faint)]">Quotations:</span>
+                        <span className="ml-2 font-medium text-[var(--text-main)]">{quotations.length}</span>
                     </div>
                 </div>
-                <div className="mt-3 pt-3 border-t border-white/10">
-                    <p className="text-xs text-slate-500">Description</p>
-                    <p className="text-sm text-white mt-1">{request.description}</p>
+                <div className="mt-3 pt-3 border-t border-[var(--border-subtle)]">
+                    <p className="text-xs text-[var(--text-faint)]">Description</p>
+                    <p className="text-sm text-[var(--text-main)] mt-1">{request.description}</p>
                 </div>
             </div>
 
             {/* Quotation Comparison */}
-            <div className="rounded-xl border border-white/10 bg-slate-900 shadow-sm">
-                <div className="p-6 border-b border-white/10">
-                    <h3 className="text-lg font-bold text-white">Quotation Comparison</h3>
-                    <p className="text-sm text-slate-500">Select a quotation to approve</p>
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-sm">
+                <div className="p-6 border-b border-[var(--border-subtle)]">
+                    <h3 className="text-lg font-bold text-[var(--text-main)]">Quotation Comparison</h3>
+                    <p className="text-sm text-[var(--text-faint)]">Select a quotation to approve</p>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-white/10">
-                        <thead className="bg-slate-800/50">
+                        <thead className="bg-[var(--bg-surface)]/50">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Select</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Garage</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Parts</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Labor</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Other</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Total</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Duration</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Valid Until</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">Select</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">Garage</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">Parts</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">Labor</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">Other</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">Total</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">Duration</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">Valid Until</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-white/10 bg-slate-900">
+                        <tbody className="divide-y divide-white/10 bg-[var(--bg-surface)]">
                             {quotations.map(quot => {
                                 const isSelected = selectedQuotationId === quot.id;
                                 const isLowest = quot.id === lowestQuotation?.id;
@@ -300,7 +300,7 @@ export default function EstimateApprovalPage() {
                                 return (
                                     <tr
                                         key={quot.id}
-                                        className={`hover:bg-white/5 cursor-pointer ${isSelected ? 'bg-blue-500/10' : ''}`}
+                                        className={`hover:bg-[var(--bg-surface-hover)] cursor-pointer ${isSelected ? 'bg-blue-500/10' : ''}`}
                                         onClick={() => setSelectedQuotationId(quot.id)}
                                     >
                                         <td className="whitespace-nowrap px-6 py-4">
@@ -312,22 +312,22 @@ export default function EstimateApprovalPage() {
                                             />
                                         </td>
                                         <td className="whitespace-nowrap px-6 py-4">
-                                            <div className="text-sm font-medium text-white">{quot.garageName}</div>
-                                            <div className="text-xs text-slate-300">Submitted {new Date(quot.submittedAt).toLocaleDateString()}</div>
+                                            <div className="text-sm font-medium text-[var(--text-main)]">{quot.garageName}</div>
+                                            <div className="text-xs text-[var(--text-muted)]">Submitted {new Date(quot.submittedAt).toLocaleDateString()}</div>
                                             {isLowest && (
                                                 <span className="inline-flex items-center rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-green-700 border border-green-300 mt-1">
                                                     Lowest Cost
                                                 </span>
                                             )}
                                         </td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-white">{formatCurrency(quot.partsCost)}</td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-white">{formatCurrency(quot.laborCost)}</td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-white">{formatCurrency(quot.otherCharges)}</td>
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-[var(--text-main)]">{formatCurrency(quot.partsCost)}</td>
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-[var(--text-main)]">{formatCurrency(quot.laborCost)}</td>
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-[var(--text-main)]">{formatCurrency(quot.otherCharges)}</td>
                                         <td className="whitespace-nowrap px-6 py-4">
                                             <div className="text-sm font-bold text-blue-600">{formatCurrency(quot.totalCost)}</div>
                                         </td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-white">{quot.estimatedDuration} days</td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-white">
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-[var(--text-main)]">{quot.estimatedDuration} days</td>
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-[var(--text-main)]">
                                             {new Date(quot.validUntil).toLocaleDateString()}
                                         </td>
                                     </tr>
@@ -372,13 +372,13 @@ export default function EstimateApprovalPage() {
             {/* Approval Modal */}
             {showApprovalModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-slate-900 rounded-2xl w-full max-w-2xl shadow-2xl">
-                        <div className="p-6 border-b border-white/10">
+                    <div className="bg-[var(--bg-surface)] rounded-2xl w-full max-w-2xl shadow-2xl">
+                        <div className="p-6 border-b border-[var(--border-subtle)]">
                             <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-bold text-white">
+                                <h3 className="text-lg font-bold text-[var(--text-main)]">
                                     {approvalAction === 'approve' ? 'Approve Estimate' : 'Reject All Estimates'}
                                 </h3>
-                                <button onClick={() => setShowApprovalModal(false)} className="text-slate-400 hover:text-slate-300">
+                                <button onClick={() => setShowApprovalModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-muted)]">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                                     </svg>
@@ -396,12 +396,12 @@ export default function EstimateApprovalPage() {
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-300 mb-2">Comments (Optional)</label>
+                                        <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Comments (Optional)</label>
                                         <textarea
                                             rows={3}
                                             value={approvalComments}
                                             onChange={(e) => setApprovalComments(e.target.value)}
-                                            className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                                            className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                             placeholder="Add any approval notes..."
                                         />
                                     </div>
@@ -420,14 +420,14 @@ export default function EstimateApprovalPage() {
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-slate-300 mb-2">
+                                        <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
                                             Rejection Reason <span className="text-red-600">*</span>
                                         </label>
                                         <textarea
                                             rows={3}
                                             value={rejectionReason}
                                             onChange={(e) => setRejectionReason(e.target.value)}
-                                            className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                                            className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                             placeholder="Required: Provide reason for rejection..."
                                         />
                                     </div>
@@ -435,17 +435,17 @@ export default function EstimateApprovalPage() {
                             )}
                         </div>
 
-                        <div className="p-6 border-t border-white/10 flex justify-end gap-3">
+                        <div className="p-6 border-t border-[var(--border-subtle)] flex justify-end gap-3">
                             <button
                                 onClick={() => setShowApprovalModal(false)}
-                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
+                                className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={approvalAction === 'approve' ? handleApproveEstimate : handleRejectEstimate}
                                 disabled={approvalAction === 'reject' && !rejectionReason.trim()}
-                                className={`rounded-lg px-6 py-2 text-sm font-medium text-white ${approvalAction === 'approve'
+                                className={`rounded-lg px-6 py-2 text-sm font-medium text-[var(--text-main)] ${approvalAction === 'approve'
                                     ? 'bg-green-600 hover:bg-green-700'
                                     : 'bg-red-600 hover:bg-red-700 disabled:bg-red-300'
                                     } disabled:cursor-not-allowed`}

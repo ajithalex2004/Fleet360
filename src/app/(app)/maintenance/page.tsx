@@ -36,11 +36,11 @@ export default function MaintenanceDashboard() {
       </div>
 
       <Panel title="Recent activity" subtitle="Service requests and work-order events" icon={Activity} accent="blue">
-        <div className="h-56 flex items-center justify-center rounded-xl border border-dashed border-white/10 bg-black/20">
+        <div className="h-56 flex items-center justify-center rounded-xl border border-dashed border-[var(--border-subtle)] bg-[var(--bg-canvas)]/40">
           <div className="text-center">
-            <Activity className="w-10 h-10 text-slate-600 mx-auto mb-2" />
-            <p className="text-slate-500 text-sm font-medium">Activity feed</p>
-            <p className="text-xs text-slate-600 mt-1">Data will populate here</p>
+            <Activity className="w-10 h-10 text-[var(--text-faint)] mx-auto mb-2" />
+            <p className="text-[var(--text-faint)] text-sm font-medium">Activity feed</p>
+            <p className="text-xs text-[var(--text-faint)] mt-1">Data will populate here</p>
           </div>
         </div>
       </Panel>

@@ -87,8 +87,8 @@ export default function JobClosurePage() {
         }
     };
 
-    if (loading) return <div className="p-8 text-center text-slate-500">Loading...</div>;
-    if (!request) return <div className="p-8 text-center text-slate-500">Request not found</div>;
+    if (loading) return <div className="p-8 text-center text-[var(--text-faint)]">Loading...</div>;
+    if (!request) return <div className="p-8 text-center text-[var(--text-faint)]">Request not found</div>;
 
     const downtime = calculateDowntime();
     const invoice = request.enhancedInvoice;
@@ -97,15 +97,15 @@ export default function JobClosurePage() {
         <div className="space-y-6">
             {/* Header */}
             <div>
-                <h1 className="text-2xl font-bold text-white">Job Closure</h1>
-                <p className="text-xs mt-1 text-slate-500">Request #{request.id.toUpperCase()}</p>
+                <h1 className="text-2xl font-bold text-[var(--text-main)]">Job Closure</h1>
+                <p className="text-xs mt-1 text-[var(--text-faint)]">Request #{request.id.toUpperCase()}</p>
             </div>
 
             {/* Completion Summary */}
             <div className="rounded-xl border border-green-200 bg-emerald-500/10 p-6 shadow-sm">
                 <div className="flex items-center gap-3 mb-4">
                     <div className="rounded-full bg-green-600 p-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 text-white">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6 text-[var(--text-main)]">
                             <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                         </svg>
                     </div>
@@ -139,52 +139,52 @@ export default function JobClosurePage() {
             </div>
 
             {/* Request Details */}
-            <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                <h3 className="text-lg font-bold text-white mb-4">Request Details</h3>
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">Request Details</h3>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
-                        <span className="text-slate-500">Vehicle:</span>
-                        <span className="ml-2 font-medium text-white">
+                        <span className="text-[var(--text-faint)]">Vehicle:</span>
+                        <span className="ml-2 font-medium text-[var(--text-main)]">
                             {vehicle ? `${vehicle.make} ${vehicle.model} (${vehicle.licensePlate})` : 'N/A'}
                         </span>
                     </div>
                     <div>
-                        <span className="text-slate-500">Driver:</span>
-                        <span className="ml-2 font-medium text-white">{driver?.name || 'N/A'}</span>
+                        <span className="text-[var(--text-faint)]">Driver:</span>
+                        <span className="ml-2 font-medium text-[var(--text-main)]">{driver?.name || 'N/A'}</span>
                     </div>
                     <div>
-                        <span className="text-slate-500">Maintenance Type:</span>
-                        <span className="ml-2 font-medium text-white">{request.maintenanceType || 'N/A'}</span>
+                        <span className="text-[var(--text-faint)]">Maintenance Type:</span>
+                        <span className="ml-2 font-medium text-[var(--text-main)]">{request.maintenanceType || 'N/A'}</span>
                     </div>
                     <div>
-                        <span className="text-slate-500">Priority:</span>
-                        <span className="ml-2 font-medium text-white">{request.priority || 'Medium'}</span>
+                        <span className="text-[var(--text-faint)]">Priority:</span>
+                        <span className="ml-2 font-medium text-[var(--text-main)]">{request.priority || 'Medium'}</span>
                     </div>
                     <div className="col-span-2">
-                        <span className="text-slate-500">Description:</span>
-                        <p className="text-white mt-1">{request.description}</p>
+                        <span className="text-[var(--text-faint)]">Description:</span>
+                        <p className="text-[var(--text-main)] mt-1">{request.description}</p>
                     </div>
                 </div>
             </div>
 
             {/* Workflow Timeline */}
             {request.statusTransitions && request.statusTransitions.length > 0 && (
-                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                    <h3 className="text-lg font-bold text-white mb-4">Workflow Timeline</h3>
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                    <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">Workflow Timeline</h3>
                     <div className="space-y-3">
                         {request.statusTransitions.map((transition, index) => (
                             <div key={index} className="flex items-start gap-4">
-                                <div className="flex-shrink-0 w-24 text-xs text-slate-500">
+                                <div className="flex-shrink-0 w-24 text-xs text-[var(--text-faint)]">
                                     {new Date(transition.transitionedAt).toLocaleDateString()}
                                 </div>
                                 <div className="flex-shrink-0">
                                     <div className="w-2 h-2 rounded-full bg-blue-600 mt-1.5"></div>
                                 </div>
                                 <div className="flex-1">
-                                    <p className="text-sm font-medium text-white">
+                                    <p className="text-sm font-medium text-[var(--text-main)]">
                                         {transition.from} → {transition.to}
                                     </p>
-                                    <p className="text-xs text-slate-500">
+                                    <p className="text-xs text-[var(--text-faint)]">
                                         by {transition.transitionedByName}
                                         {transition.comments && ` - ${transition.comments}`}
                                     </p>
@@ -197,39 +197,39 @@ export default function JobClosurePage() {
 
             {/* Invoice Summary */}
             {invoice && (
-                <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                    <h3 className="text-lg font-bold text-white mb-4">Invoice Summary</h3>
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                    <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">Invoice Summary</h3>
                     <div className="space-y-3">
                         <div className="flex justify-between text-sm">
-                            <span className="text-slate-600">Invoice Number:</span>
-                            <span className="font-medium text-white">{invoice.invoiceNumber}</span>
+                            <span className="text-[var(--text-faint)]">Invoice Number:</span>
+                            <span className="font-medium text-[var(--text-main)]">{invoice.invoiceNumber}</span>
                         </div>
                         <div className="flex justify-between text-sm">
-                            <span className="text-slate-600">Parts Total:</span>
-                            <span className="font-medium text-white">{formatCurrency(invoice.partsTotal)}</span>
+                            <span className="text-[var(--text-faint)]">Parts Total:</span>
+                            <span className="font-medium text-[var(--text-main)]">{formatCurrency(invoice.partsTotal)}</span>
                         </div>
                         <div className="flex justify-between text-sm">
-                            <span className="text-slate-600">Labor Total:</span>
-                            <span className="font-medium text-white">{formatCurrency(invoice.laborTotal)}</span>
+                            <span className="text-[var(--text-faint)]">Labor Total:</span>
+                            <span className="font-medium text-[var(--text-main)]">{formatCurrency(invoice.laborTotal)}</span>
                         </div>
                         <div className="flex justify-between text-sm">
-                            <span className="text-slate-600">Other Charges:</span>
-                            <span className="font-medium text-white">{formatCurrency(invoice.otherCharges)}</span>
+                            <span className="text-[var(--text-faint)]">Other Charges:</span>
+                            <span className="font-medium text-[var(--text-main)]">{formatCurrency(invoice.otherCharges)}</span>
                         </div>
-                        <div className="flex justify-between text-sm pt-3 border-t border-white/10">
-                            <span className="text-slate-600">Subtotal:</span>
-                            <span className="font-medium text-white">{formatCurrency(invoice.subtotal)}</span>
+                        <div className="flex justify-between text-sm pt-3 border-t border-[var(--border-subtle)]">
+                            <span className="text-[var(--text-faint)]">Subtotal:</span>
+                            <span className="font-medium text-[var(--text-main)]">{formatCurrency(invoice.subtotal)}</span>
                         </div>
                         <div className="flex justify-between text-sm">
-                            <span className="text-slate-600">Tax ({(invoice.taxRate * 100).toFixed(1)}%):</span>
-                            <span className="font-medium text-white">{formatCurrency(invoice.taxAmount)}</span>
+                            <span className="text-[var(--text-faint)]">Tax ({(invoice.taxRate * 100).toFixed(1)}%):</span>
+                            <span className="font-medium text-[var(--text-main)]">{formatCurrency(invoice.taxAmount)}</span>
                         </div>
-                        <div className="flex justify-between text-lg font-bold pt-3 border-t-2 border-white/15">
-                            <span className="text-white">Grand Total:</span>
+                        <div className="flex justify-between text-lg font-bold pt-3 border-t-2 border-[var(--border-subtle)]">
+                            <span className="text-[var(--text-main)]">Grand Total:</span>
                             <span className="text-blue-600">{formatCurrency(invoice.grandTotal)}</span>
                         </div>
-                        <div className="flex justify-between text-sm pt-3 border-t border-white/10">
-                            <span className="text-slate-600">Payment Status:</span>
+                        <div className="flex justify-between text-sm pt-3 border-t border-[var(--border-subtle)]">
+                            <span className="text-[var(--text-faint)]">Payment Status:</span>
                             <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${invoice.paymentStatus === 'Paid' ? 'bg-emerald-500/20 text-green-700 border-green-300' :
                                     invoice.paymentStatus === 'Partially Paid' ? 'bg-amber-500/20 text-yellow-700 border-yellow-300' :
                                         'bg-red-500/20 text-red-700 border-red-300'
@@ -242,13 +242,13 @@ export default function JobClosurePage() {
             )}
 
             {/* Closure Notes */}
-            <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                <h3 className="text-lg font-bold text-white mb-4">Closure Notes (Optional)</h3>
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">Closure Notes (Optional)</h3>
                 <textarea
                     rows={4}
                     value={closureNotes}
                     onChange={(e) => setClosureNotes(e.target.value)}
-                    className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                     placeholder="Add any final notes or comments about this job..."
                 />
             </div>
@@ -275,7 +275,7 @@ export default function JobClosurePage() {
             <div className="flex justify-end gap-3">
                 <button
                     onClick={() => router.back()}
-                    className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
+                    className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
                 >
                     Cancel
                 </button>

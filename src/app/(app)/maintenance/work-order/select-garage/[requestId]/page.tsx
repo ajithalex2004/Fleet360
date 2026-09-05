@@ -148,49 +148,49 @@ export default function SelectGaragePage() {
         await handleSendWorkOrder();
     };
 
-    if (loading) return <div className="p-8 text-center text-slate-500">Loading...</div>;
-    if (!request) return <div className="p-8 text-center text-slate-500">Request not found</div>;
+    if (loading) return <div className="p-8 text-center text-[var(--text-faint)]">Loading...</div>;
+    if (!request) return <div className="p-8 text-center text-[var(--text-faint)]">Request not found</div>;
 
     return (
         <div className="space-y-6">
             {/* Header */}
             <div>
-                <h1 className="text-2xl font-bold text-white">Select Garage & Send Work Order</h1>
-                <p className="text-xs mt-1 text-slate-500">Request #{request.id.toUpperCase()}</p>
+                <h1 className="text-2xl font-bold text-[var(--text-main)]">Select Garage & Send Work Order</h1>
+                <p className="text-xs mt-1 text-[var(--text-faint)]">Request #{request.id.toUpperCase()}</p>
             </div>
 
             {/* Request Summary */}
-            <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                <h3 className="text-lg font-bold text-white mb-4">Request Details</h3>
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">Request Details</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                     <div>
-                        <span className="text-slate-500">Maintenance Type:</span>
-                        <span className="ml-2 font-medium text-white">{request.maintenanceType || 'N/A'}</span>
+                        <span className="text-[var(--text-faint)]">Maintenance Type:</span>
+                        <span className="ml-2 font-medium text-[var(--text-main)]">{request.maintenanceType || 'N/A'}</span>
                     </div>
                     <div>
-                        <span className="text-slate-500">Priority:</span>
-                        <span className="ml-2 font-medium text-white">{request.priority || 'Medium'}</span>
+                        <span className="text-[var(--text-faint)]">Priority:</span>
+                        <span className="ml-2 font-medium text-[var(--text-main)]">{request.priority || 'Medium'}</span>
                     </div>
                     <div>
-                        <span className="text-slate-500">Status:</span>
-                        <span className="ml-2 font-medium text-white">{request.status}</span>
+                        <span className="text-[var(--text-faint)]">Status:</span>
+                        <span className="ml-2 font-medium text-[var(--text-main)]">{request.status}</span>
                     </div>
                     <div>
-                        <span className="text-slate-500">Approved Estimates:</span>
-                        <span className="ml-2 font-medium text-white">{estimates.length}</span>
+                        <span className="text-[var(--text-faint)]">Approved Estimates:</span>
+                        <span className="ml-2 font-medium text-[var(--text-main)]">{estimates.length}</span>
                     </div>
                 </div>
             </div>
 
             {/* Approved Estimates */}
             {estimates.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-white/15 bg-slate-800/50 p-12 text-center">
-                    <p className="text-slate-500 font-medium">No approved estimates</p>
-                    <p className="text-sm text-slate-400 mt-1">Please approve an estimate before proceeding</p>
+                <div className="rounded-xl border border-dashed border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 p-12 text-center">
+                    <p className="text-[var(--text-faint)] font-medium">No approved estimates</p>
+                    <p className="text-sm text-[var(--text-muted)] mt-1">Please approve an estimate before proceeding</p>
                 </div>
             ) : (
                 <div className="space-y-4">
-                    <h3 className="text-lg font-bold text-white">Select Approved Estimate</h3>
+                    <h3 className="text-lg font-bold text-[var(--text-main)]">Select Approved Estimate</h3>
                     {estimates.map(estimate => {
                         const garage = garages[estimate.garageId];
                         const isSelected = selectedEstimateId === estimate.id;
@@ -201,7 +201,7 @@ export default function SelectGaragePage() {
                                 onClick={() => setSelectedEstimateId(estimate.id)}
                                 className={`rounded-xl border-2 p-6 cursor-pointer transition-all ${isSelected
                                     ? 'border-blue-500 bg-blue-500/10 shadow-lg'
-                                    : 'border-white/10 bg-slate-900 hover:border-blue-300 hover:shadow-md'
+                                    : 'border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-blue-300 hover:shadow-md'
                                     }`}
                             >
                                 <div className="flex items-start justify-between mb-4">
@@ -213,8 +213,8 @@ export default function SelectGaragePage() {
                                             className="h-5 w-5 text-blue-600"
                                         />
                                         <div>
-                                            <h4 className="text-lg font-bold text-white">{estimate.garageName}</h4>
-                                            <p className="text-sm text-slate-500">
+                                            <h4 className="text-lg font-bold text-[var(--text-main)]">{estimate.garageName}</h4>
+                                            <p className="text-sm text-[var(--text-faint)]">
                                                 {garage?.isExternal ? 'External Garage' : 'Internal Garage'}
                                                 {garage?.isExternal && ' - Driver assignment required'}
                                             </p>
@@ -222,29 +222,29 @@ export default function SelectGaragePage() {
                                     </div>
                                     <div className="text-right">
                                         <p className="text-2xl font-bold text-blue-600">{formatCurrency(estimate.estimatedCost)}</p>
-                                        <p className="text-xs text-slate-500">Total Estimate</p>
+                                        <p className="text-xs text-[var(--text-faint)]">Total Estimate</p>
                                     </div>
                                 </div>
 
                                 <div className="grid grid-cols-3 gap-4 text-sm">
-                                    <div className="rounded-lg bg-slate-700/40 p-3">
-                                        <p className="text-xs text-slate-500">Parts</p>
-                                        <p className="text-base font-medium text-white">{formatCurrency(estimate.breakdown.parts)}</p>
+                                    <div className="rounded-lg bg-[var(--bg-surface-hover)]/40 p-3">
+                                        <p className="text-xs text-[var(--text-faint)]">Parts</p>
+                                        <p className="text-base font-medium text-[var(--text-main)]">{formatCurrency(estimate.breakdown.parts)}</p>
                                     </div>
-                                    <div className="rounded-lg bg-slate-700/40 p-3">
-                                        <p className="text-xs text-slate-500">Labor</p>
-                                        <p className="text-base font-medium text-white">{formatCurrency(estimate.breakdown.labor)}</p>
+                                    <div className="rounded-lg bg-[var(--bg-surface-hover)]/40 p-3">
+                                        <p className="text-xs text-[var(--text-faint)]">Labor</p>
+                                        <p className="text-base font-medium text-[var(--text-main)]">{formatCurrency(estimate.breakdown.labor)}</p>
                                     </div>
-                                    <div className="rounded-lg bg-slate-700/40 p-3">
-                                        <p className="text-xs text-slate-500">Other</p>
-                                        <p className="text-base font-medium text-white">{formatCurrency(estimate.breakdown.other)}</p>
+                                    <div className="rounded-lg bg-[var(--bg-surface-hover)]/40 p-3">
+                                        <p className="text-xs text-[var(--text-faint)]">Other</p>
+                                        <p className="text-base font-medium text-[var(--text-main)]">{formatCurrency(estimate.breakdown.other)}</p>
                                     </div>
                                 </div>
 
                                 {estimate.notes && (
-                                    <div className="mt-4 pt-4 border-t border-white/10">
-                                        <p className="text-xs text-slate-500">Notes</p>
-                                        <p className="text-sm text-slate-300 mt-1">{estimate.notes}</p>
+                                    <div className="mt-4 pt-4 border-t border-[var(--border-subtle)]">
+                                        <p className="text-xs text-[var(--text-faint)]">Notes</p>
+                                        <p className="text-sm text-[var(--text-muted)] mt-1">{estimate.notes}</p>
                                     </div>
                                 )}
 
@@ -266,7 +266,7 @@ export default function SelectGaragePage() {
                 <div className="flex justify-end gap-3">
                     <button
                         onClick={() => router.back()}
-                        className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
+                        className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
                     >
                         Cancel
                     </button>
@@ -283,11 +283,11 @@ export default function SelectGaragePage() {
             {/* Driver Assignment Modal */}
             {showDriverModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-slate-900 rounded-2xl w-full max-w-2xl shadow-2xl">
-                        <div className="p-6 border-b border-white/10">
+                    <div className="bg-[var(--bg-surface)] rounded-2xl w-full max-w-2xl shadow-2xl">
+                        <div className="p-6 border-b border-[var(--border-subtle)]">
                             <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-bold text-white">Assign Driver</h3>
-                                <button onClick={() => setShowDriverModal(false)} className="text-slate-400 hover:text-slate-300">
+                                <h3 className="text-lg font-bold text-[var(--text-main)]">Assign Driver</h3>
+                                <button onClick={() => setShowDriverModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-muted)]">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                                     </svg>
@@ -303,11 +303,11 @@ export default function SelectGaragePage() {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-2">Select Driver</label>
+                                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Select Driver</label>
                                 <select
                                     value={selectedDriverId}
                                     onChange={(e) => setSelectedDriverId(e.target.value)}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                 >
                                     <option value="">Select a driver...</option>
                                     {drivers.filter(d => d.availability === 'AVAILABLE').map(driver => (
@@ -319,25 +319,25 @@ export default function SelectGaragePage() {
                             </div>
 
                             {selectedDriverId && (
-                                <div className="rounded-lg border border-white/10 bg-slate-800/50 p-4">
+                                <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 p-4">
                                     {(() => {
                                         const driver = drivers.find(d => d.id === selectedDriverId);
                                         return driver ? (
                                             <div className="grid grid-cols-2 gap-4 text-sm">
                                                 <div>
-                                                    <span className="text-slate-500">Name:</span>
-                                                    <span className="ml-2 font-medium text-white">{driver.name}</span>
+                                                    <span className="text-[var(--text-faint)]">Name:</span>
+                                                    <span className="ml-2 font-medium text-[var(--text-main)]">{driver.name}</span>
                                                 </div>
                                                 <div>
-                                                    <span className="text-slate-500">License:</span>
-                                                    <span className="ml-2 font-medium text-white">{driver.licenseNumber}</span>
+                                                    <span className="text-[var(--text-faint)]">License:</span>
+                                                    <span className="ml-2 font-medium text-[var(--text-main)]">{driver.licenseNumber}</span>
                                                 </div>
                                                 <div>
-                                                    <span className="text-slate-500">Contact:</span>
-                                                    <span className="ml-2 font-medium text-white">{driver.contactNumber}</span>
+                                                    <span className="text-[var(--text-faint)]">Contact:</span>
+                                                    <span className="ml-2 font-medium text-[var(--text-main)]">{driver.contactNumber}</span>
                                                 </div>
                                                 <div>
-                                                    <span className="text-slate-500">Status:</span>
+                                                    <span className="text-[var(--text-faint)]">Status:</span>
                                                     <span className="ml-2 font-medium text-green-600">{driver.availability}</span>
                                                 </div>
                                             </div>
@@ -347,21 +347,21 @@ export default function SelectGaragePage() {
                             )}
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-2">Notes (Optional)</label>
+                                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Notes (Optional)</label>
                                 <textarea
                                     rows={3}
                                     value={driverNotes}
                                     onChange={(e) => setDriverNotes(e.target.value)}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                     placeholder="Add any special instructions for the driver..."
                                 />
                             </div>
                         </div>
 
-                        <div className="p-6 border-t border-white/10 flex justify-end gap-3">
+                        <div className="p-6 border-t border-[var(--border-subtle)] flex justify-end gap-3">
                             <button
                                 onClick={() => setShowDriverModal(false)}
-                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
+                                className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
                             >
                                 Cancel
                             </button>

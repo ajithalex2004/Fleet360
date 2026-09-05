@@ -253,16 +253,16 @@ export default function EstimationPage() {
         garage.matchedSpecialties.some(spec => spec.toLowerCase().includes(garageSearch.toLowerCase()))
     );
 
-    if (loading) return <div className="p-8 text-center text-slate-500">Loading...</div>;
-    if (!request) return <div className="p-8 text-center text-slate-500">Request not found</div>;
+    if (loading) return <div className="p-8 text-center text-[var(--text-faint)]">Loading...</div>;
+    if (!request) return <div className="p-8 text-center text-[var(--text-faint)]">Request not found</div>;
 
     return (
         <div className="space-y-6">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-white">Estimation Management</h1>
-                    <p className="text-xs mt-1 text-slate-500">Request #{request.id.toUpperCase()} - {request.status}</p>
+                    <h1 className="text-2xl font-bold text-[var(--text-main)]">Estimation Management</h1>
+                    <p className="text-xs mt-1 text-[var(--text-faint)]">Request #{request.id.toUpperCase()} - {request.status}</p>
                 </div>
                 <div className="flex gap-3">
                     {selectedGarages.size > 0 && canSendRFQ && (
@@ -286,68 +286,68 @@ export default function EstimationPage() {
             </div>
 
             {/* Request Summary */}
-            <div className="rounded-xl border border-white/10 bg-slate-900 p-6 shadow-sm">
-                <h3 className="text-lg font-bold text-white mb-4">Request Details</h3>
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
+                <h3 className="text-lg font-bold text-[var(--text-main)] mb-4">Request Details</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                     <div>
-                        <span className="text-slate-500">Maintenance Type:</span>
-                        <span className="ml-2 font-medium text-white">{request.maintenanceType || 'N/A'}</span>
+                        <span className="text-[var(--text-faint)]">Maintenance Type:</span>
+                        <span className="ml-2 font-medium text-[var(--text-main)]">{request.maintenanceType || 'N/A'}</span>
                     </div>
                     <div>
-                        <span className="text-slate-500">Priority:</span>
-                        <span className="ml-2 font-medium text-white">{request.priority || 'Medium'}</span>
+                        <span className="text-[var(--text-faint)]">Priority:</span>
+                        <span className="ml-2 font-medium text-[var(--text-main)]">{request.priority || 'Medium'}</span>
                     </div>
                     <div>
-                        <span className="text-slate-500">RFQ Sent:</span>
-                        <span className="ml-2 font-medium text-white">
+                        <span className="text-[var(--text-faint)]">RFQ Sent:</span>
+                        <span className="ml-2 font-medium text-[var(--text-main)]">
                             {request.rfqSentAt ? new Date(request.rfqSentAt).toLocaleDateString() : 'Not sent'}
                         </span>
                     </div>
                     <div>
-                        <span className="text-slate-500">Quotations Received:</span>
-                        <span className="ml-2 font-medium text-white">{quotations.length}</span>
+                        <span className="text-[var(--text-faint)]">Quotations Received:</span>
+                        <span className="ml-2 font-medium text-[var(--text-main)]">{quotations.length}</span>
                     </div>
                 </div>
-                <div className="mt-3 pt-3 border-t border-white/10">
-                    <p className="text-xs text-slate-500">Description</p>
-                    <p className="text-sm text-white mt-1">{request.description}</p>
+                <div className="mt-3 pt-3 border-t border-[var(--border-subtle)]">
+                    <p className="text-xs text-[var(--text-faint)]">Description</p>
+                    <p className="text-sm text-[var(--text-main)] mt-1">{request.description}</p>
                 </div>
             </div>
 
             {/* Quotation Comparison Table */}
             {quotations.length > 0 && (
-                <div className="rounded-xl border border-white/10 bg-slate-900 shadow-sm">
-                    <div className="p-6 border-b border-white/10">
-                        <h3 className="text-lg font-bold text-white">Quotation Comparison ({quotations.length})</h3>
-                        <p className="text-sm text-slate-500">Compare vendor quotations side-by-side</p>
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-sm">
+                    <div className="p-6 border-b border-[var(--border-subtle)]">
+                        <h3 className="text-lg font-bold text-[var(--text-main)]">Quotation Comparison ({quotations.length})</h3>
+                        <p className="text-sm text-[var(--text-faint)]">Compare vendor quotations side-by-side</p>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-white/10">
-                            <thead className="bg-slate-800/50">
+                            <thead className="bg-[var(--bg-surface)]/50">
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Garage</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Parts</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Labor</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Other</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Total</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Duration</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Status</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">Garage</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">Parts</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">Labor</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">Other</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">Total</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">Duration</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">Status</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-white/10 bg-slate-900">
+                            <tbody className="divide-y divide-white/10 bg-[var(--bg-surface)]">
                                 {quotations.map(quot => (
-                                    <tr key={quot.id} className="hover:bg-white/5">
+                                    <tr key={quot.id} className="hover:bg-[var(--bg-surface-hover)]">
                                         <td className="whitespace-nowrap px-6 py-4">
-                                            <div className="text-sm font-medium text-white">{quot.garageName}</div>
-                                            <div className="text-xs text-slate-300">Submitted {new Date(quot.submittedAt).toLocaleDateString()}</div>
+                                            <div className="text-sm font-medium text-[var(--text-main)]">{quot.garageName}</div>
+                                            <div className="text-xs text-[var(--text-muted)]">Submitted {new Date(quot.submittedAt).toLocaleDateString()}</div>
                                         </td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-white">{formatCurrency(quot.partsCost)}</td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-white">{formatCurrency(quot.laborCost)}</td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-white">{formatCurrency(quot.otherCharges)}</td>
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-[var(--text-main)]">{formatCurrency(quot.partsCost)}</td>
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-[var(--text-main)]">{formatCurrency(quot.laborCost)}</td>
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-[var(--text-main)]">{formatCurrency(quot.otherCharges)}</td>
                                         <td className="whitespace-nowrap px-6 py-4">
                                             <div className="text-sm font-bold text-blue-600">{formatCurrency(quot.totalCost)}</div>
                                         </td>
-                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-white">{quot.estimatedDuration} days</td>
+                                        <td className="whitespace-nowrap px-6 py-4 text-sm text-[var(--text-main)]">{quot.estimatedDuration} days</td>
                                         <td className="whitespace-nowrap px-6 py-4">
                                             <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${quot.status === 'APPROVED' ? 'bg-emerald-500/20 text-green-700 border-green-300' :
                                                 quot.status === 'REJECTED' ? 'bg-red-500/20 text-red-700 border-red-300' :
@@ -365,12 +365,12 @@ export default function EstimationPage() {
             )}
 
             {/* Matched Garages with Search */}
-            <div className="rounded-xl border border-white/10 bg-slate-900 shadow-sm">
-                <div className="p-6 border-b border-white/10">
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-sm">
+                <div className="p-6 border-b border-[var(--border-subtle)]">
                     <div className="flex items-center justify-between mb-4">
                         <div>
-                            <h3 className="text-lg font-bold text-white">Vendor Selection ({filteredGarages.length})</h3>
-                            <p className="text-sm text-slate-500">Select garages to send RFQ</p>
+                            <h3 className="text-lg font-bold text-[var(--text-main)]">Vendor Selection ({filteredGarages.length})</h3>
+                            <p className="text-sm text-[var(--text-faint)]">Select garages to send RFQ</p>
                         </div>
                         <div className="w-64">
                             <input
@@ -378,18 +378,18 @@ export default function EstimationPage() {
                                 placeholder="Search garages..."
                                 value={garageSearch}
                                 onChange={(e) => setGarageSearch(e.target.value)}
-                                className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm bg-slate-900 text-white"
+                                className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm bg-[var(--bg-surface)] text-[var(--text-main)]"
                             />
                         </div>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
-                        <span className="text-slate-500">Selected:</span>
+                        <span className="text-[var(--text-faint)]">Selected:</span>
                         <span className="font-medium text-blue-600">{selectedGarages.size} garage(s)</span>
                     </div>
                 </div>
                 <div className="divide-y divide-white/10 max-h-96 overflow-y-auto">
                     {filteredGarages.length === 0 ? (
-                        <div className="p-12 text-center text-slate-500">
+                        <div className="p-12 text-center text-[var(--text-faint)]">
                             {garageSearch ? 'No garages match your search' : 'No garages matched for this request'}
                         </div>
                     ) : (
@@ -399,18 +399,18 @@ export default function EstimationPage() {
                             const hasQuotation = quotations.some(q => q.garageId === match.garageId);
 
                             return (
-                                <div key={match.garageId} className={`p-6 hover:bg-white/5 transition-colors ${isSelected ? 'bg-blue-500/10' : ''}`}>
+                                <div key={match.garageId} className={`p-6 hover:bg-[var(--bg-surface-hover)] transition-colors ${isSelected ? 'bg-blue-500/10' : ''}`}>
                                     <div className="flex items-start gap-4">
                                         <input
                                             type="checkbox"
                                             checked={isSelected}
                                             onChange={() => toggleGarageSelection(match.garageId)}
                                             disabled={rfqSent}
-                                            className="mt-1 h-4 w-4 rounded border-white/15 text-blue-600 disabled:opacity-50"
+                                            className="mt-1 h-4 w-4 rounded border-[var(--border-subtle)] text-blue-600 disabled:opacity-50"
                                         />
                                         <div className="flex-1">
                                             <div className="flex items-center gap-3 mb-2">
-                                                <h4 className="text-base font-bold text-white">{match.garageName}</h4>
+                                                <h4 className="text-base font-bold text-[var(--text-main)]">{match.garageName}</h4>
                                                 <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium border ${getMatchScoreBadge(match.matchScore)}`}>
                                                     {match.matchScore}% Match
                                                 </span>
@@ -427,7 +427,7 @@ export default function EstimationPage() {
                                             </div>
                                             <div className="grid grid-cols-2 gap-4 text-sm">
                                                 <div>
-                                                    <span className="text-slate-500">Specialties:</span>
+                                                    <span className="text-[var(--text-faint)]">Specialties:</span>
                                                     <div className="flex flex-wrap gap-1 mt-1">
                                                         {match.matchedSpecialties.map((spec, idx) => (
                                                             <span key={idx} className="inline-flex items-center rounded bg-blue-500/20 px-2 py-0.5 text-xs text-blue-700">
@@ -438,8 +438,8 @@ export default function EstimationPage() {
                                                 </div>
                                                 {rfqSent && (
                                                     <div>
-                                                        <span className="text-slate-500">RFQ Sent:</span>
-                                                        <span className="ml-2 text-white">{new Date(match.rfqSentAt!).toLocaleDateString()}</span>
+                                                        <span className="text-[var(--text-faint)]">RFQ Sent:</span>
+                                                        <span className="ml-2 text-[var(--text-main)]">{new Date(match.rfqSentAt!).toLocaleDateString()}</span>
                                                     </div>
                                                 )}
                                             </div>
@@ -466,11 +466,11 @@ export default function EstimationPage() {
             {/* Quotation Entry Modal */}
             {showQuotationModal && selectedGarage && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-slate-900 rounded-2xl w-full max-w-2xl shadow-2xl">
-                        <div className="p-6 border-b border-white/10">
+                    <div className="bg-[var(--bg-surface)] rounded-2xl w-full max-w-2xl shadow-2xl">
+                        <div className="p-6 border-b border-[var(--border-subtle)]">
                             <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-bold text-white">Enter Quotation - {selectedGarage.garageName}</h3>
-                                <button onClick={() => setShowQuotationModal(false)} className="text-slate-400 hover:text-slate-300">
+                                <h3 className="text-lg font-bold text-[var(--text-main)]">Enter Quotation - {selectedGarage.garageName}</h3>
+                                <button onClick={() => setShowQuotationModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-muted)]">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                                     </svg>
@@ -481,30 +481,30 @@ export default function EstimationPage() {
                         <div className="p-6 space-y-4">
                             <div className="grid grid-cols-3 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-300 mb-2">Parts Cost (AED)</label>
+                                    <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Parts Cost (AED)</label>
                                     <input
                                         type="number"
                                         value={quotationForm.partsCost}
                                         onChange={(e) => setQuotationForm({ ...quotationForm, partsCost: Number(e.target.value) })}
-                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                                        className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-300 mb-2">Labor Cost (AED)</label>
+                                    <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Labor Cost (AED)</label>
                                     <input
                                         type="number"
                                         value={quotationForm.laborCost}
                                         onChange={(e) => setQuotationForm({ ...quotationForm, laborCost: Number(e.target.value) })}
-                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                                        className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-300 mb-2">Other Charges (AED)</label>
+                                    <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Other Charges (AED)</label>
                                     <input
                                         type="number"
                                         value={quotationForm.otherCharges}
                                         onChange={(e) => setQuotationForm({ ...quotationForm, otherCharges: Number(e.target.value) })}
-                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                                        className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                     />
                                 </div>
                             </div>
@@ -520,41 +520,41 @@ export default function EstimationPage() {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-300 mb-2">Estimated Duration (days)</label>
+                                    <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Estimated Duration (days)</label>
                                     <input
                                         type="number"
                                         value={quotationForm.estimatedDuration}
                                         onChange={(e) => setQuotationForm({ ...quotationForm, estimatedDuration: Number(e.target.value) })}
-                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                                        className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-300 mb-2">Valid Until</label>
+                                    <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Valid Until</label>
                                     <input
                                         type="date"
                                         value={quotationForm.validUntil}
                                         onChange={(e) => setQuotationForm({ ...quotationForm, validUntil: e.target.value })}
-                                        className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                                        className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                     />
                                 </div>
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-2">Notes (Optional)</label>
+                                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Notes (Optional)</label>
                                 <textarea
                                     rows={3}
                                     value={quotationForm.notes}
                                     onChange={(e) => setQuotationForm({ ...quotationForm, notes: e.target.value })}
-                                    className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                     placeholder="Add any notes about the quotation..."
                                 />
                             </div>
                         </div>
 
-                        <div className="p-6 border-t border-white/10 flex justify-end gap-3">
+                        <div className="p-6 border-t border-[var(--border-subtle)] flex justify-end gap-3">
                             <button
                                 onClick={() => setShowQuotationModal(false)}
-                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
+                                className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
                             >
                                 Cancel
                             </button>

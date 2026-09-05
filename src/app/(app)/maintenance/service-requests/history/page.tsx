@@ -138,9 +138,9 @@ export default function ServiceRequestHistoryPage() {
         switch (status) {
             case 'Resolved': return 'bg-green-500/20 text-green-600 border-green-500/50';
             case 'Completed': return 'bg-green-500/20 text-green-600 border-green-500/50';
-            case 'Closed': return 'bg-slate-500/20 text-slate-600 border-slate-500/50';
+            case 'Closed': return 'bg-slate-500/20 text-[var(--text-faint)] border-slate-500/50';
             case 'Rejected': return 'bg-red-500/20 text-red-600 border-red-500/50';
-            default: return 'bg-gray-500/20 text-gray-600 border-gray-500/50';
+            default: return 'bg-gray-500/20 text-[var(--text-faint)] border-gray-500/50';
         }
     };
 
@@ -152,15 +152,15 @@ export default function ServiceRequestHistoryPage() {
                         <div className="flex items-center gap-2 mb-1">
                             <button
                                 onClick={() => router.back()}
-                                className="text-slate-400 hover:text-slate-300 transition-colors"
+                                className="text-[var(--text-muted)] hover:text-[var(--text-muted)] transition-colors"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
                                 </svg>
                             </button>
-                            <h1 className="text-2xl font-bold text-white tracking-tight">Service Request History</h1>
+                            <h1 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">Service Request History</h1>
                         </div>
-                        <p className="text-xs mt-1 text-slate-500 ml-7">View resolved service requests.</p>
+                        <p className="text-xs mt-1 text-[var(--text-faint)] ml-7">View resolved service requests.</p>
                     </div>
                 </div>
 
@@ -178,7 +178,7 @@ export default function ServiceRequestHistoryPage() {
 
                 <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                     {filteredRequests.length === 0 ? (
-                        <div className="col-span-full text-center py-12 text-slate-500 bg-slate-800/50 rounded-lg border border-dashed border-white/15">
+                        <div className="col-span-full text-center py-12 text-[var(--text-faint)] bg-[var(--bg-surface)]/50 rounded-lg border border-dashed border-[var(--border-subtle)]">
                             No resolved requests found.
                         </div>
                     ) : (
@@ -188,34 +188,34 @@ export default function ServiceRequestHistoryPage() {
                             const vehicle = vehicles.find(v => v.id === request.vehicleId);
 
                             return (
-                                <div key={request.id} className="bg-slate-800/50 rounded-lg p-4 relative overflow-hidden border border-white/10 hover:shadow-md transition-all flex flex-col min-h-[200px]">
+                                <div key={request.id} className="bg-[var(--bg-surface)]/50 rounded-lg p-4 relative overflow-hidden border border-[var(--border-subtle)] hover:shadow-md transition-all flex flex-col min-h-[200px]">
                                     <div className="relative z-10 flex-1 flex flex-col">
                                         <div className="flex justify-between items-start mb-3">
-                                            <span className="text-[11px] font-mono font-semibold text-slate-300 bg-slate-900 px-2 py-0.5 rounded border border-white/10" title={request.id}>{formatServiceRequestId(request, readableIdMap)}</span>
+                                            <span className="text-[11px] font-mono font-semibold text-[var(--text-muted)] bg-[var(--bg-surface)] px-2 py-0.5 rounded border border-[var(--border-subtle)]" title={request.id}>{formatServiceRequestId(request, readableIdMap)}</span>
                                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${getStatusColor(request.status)}`}>
                                                 {request.status}
                                             </span>
                                         </div>
 
-                                        <h4 className="text-sm font-bold text-slate-300 mb-1 line-clamp-1" title={request.serviceType}>
+                                        <h4 className="text-sm font-bold text-[var(--text-muted)] mb-1 line-clamp-1" title={request.serviceType}>
                                             {request.serviceType}
                                         </h4>
 
-                                        <p className="text-xs text-slate-500 mb-3 line-clamp-2 h-8">
+                                        <p className="text-xs text-[var(--text-faint)] mb-3 line-clamp-2 h-8">
                                             {request.description}
                                         </p>
 
-                                        <div className="space-y-1.5 text-xs border-t border-white/10 pt-3">
+                                        <div className="space-y-1.5 text-xs border-t border-[var(--border-subtle)] pt-3">
                                             <div className="flex justify-between">
-                                                <span className="text-slate-500">Requestor:</span>
-                                                <span className="text-slate-300 font-medium truncate max-w-[100px]">{requestorName}</span>
+                                                <span className="text-[var(--text-faint)]">Requestor:</span>
+                                                <span className="text-[var(--text-muted)] font-medium truncate max-w-[100px]">{requestorName}</span>
                                             </div>
                                             {/* Dynamic Details: Vehicle or Driver */}
                                             {request.serviceType.includes('Driver') ? (
                                                 request.relatedDriverId && (
                                                     <div className="flex justify-between">
-                                                        <span className="text-slate-500">Driver Subject:</span>
-                                                        <span className="text-slate-300 truncate max-w-[100px]">
+                                                        <span className="text-[var(--text-faint)]">Driver Subject:</span>
+                                                        <span className="text-[var(--text-muted)] truncate max-w-[100px]">
                                                             {drivers.find(d => d.id === request.relatedDriverId)?.name || 'Unknown'}
                                                         </span>
                                                     </div>
@@ -224,31 +224,31 @@ export default function ServiceRequestHistoryPage() {
                                                 vehicle && (
                                                     <>
                                                         <div className="flex justify-between">
-                                                            <span className="text-slate-500">Vehicle ID:</span>
-                                                            <span className="text-slate-300 font-mono text-[10px]">{vehicle.id}</span>
+                                                            <span className="text-[var(--text-faint)]">Vehicle ID:</span>
+                                                            <span className="text-[var(--text-muted)] font-mono text-[10px]">{vehicle.id}</span>
                                                         </div>
                                                         <div className="flex justify-between">
-                                                            <span className="text-slate-500">Vehicle:</span>
-                                                            <span className="text-slate-300 truncate max-w-[100px]">{vehicle.make} {vehicle.model}</span>
+                                                            <span className="text-[var(--text-faint)]">Vehicle:</span>
+                                                            <span className="text-[var(--text-muted)] truncate max-w-[100px]">{vehicle.make} {vehicle.model}</span>
                                                         </div>
                                                     </>
                                                 )
                                             )}
                                             <div className="flex justify-between">
-                                                <span className="text-slate-500">Service Needed:</span>
-                                                <span className="text-slate-300 font-medium">{request.date}</span>
+                                                <span className="text-[var(--text-faint)]">Service Needed:</span>
+                                                <span className="text-[var(--text-muted)] font-medium">{request.date}</span>
                                             </div>
                                             {request.assignedTo && (
                                                 <div className="flex justify-between items-center pt-1">
-                                                    <span className="text-slate-500">Assigned To:</span>
-                                                    <span className="text-slate-300 truncate max-w-[100px]" title={request.assignedTo}>
+                                                    <span className="text-[var(--text-faint)]">Assigned To:</span>
+                                                    <span className="text-[var(--text-muted)] truncate max-w-[100px]" title={request.assignedTo}>
                                                         {request.assignedTo}
                                                     </span>
                                                 </div>
                                             )}
                                         </div>
 
-                                        <div className="mt-auto pt-3 border-t border-white/10">
+                                        <div className="mt-auto pt-3 border-t border-[var(--border-subtle)]">
                                             <button
                                                 onClick={() => {
                                                     setSelectedRequestForTimeline(request);

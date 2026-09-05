@@ -181,12 +181,12 @@ function KpiCard({
     colorCls: string;
 }) {
     return (
-        <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-start gap-3">
+        <div className="bg-white rounded-xl border border-[var(--border-subtle)] p-4 flex items-start gap-3">
             <div className={`p-2 rounded-lg ${colorCls}`}>{icon}</div>
             <div>
-                <p className="text-2xl font-bold text-slate-900">{value}</p>
-                <p className="text-sm text-slate-600">{label}</p>
-                {sub && <p className="text-xs text-slate-400 mt-0.5">{sub}</p>}
+                <p className="text-2xl font-bold text-[var(--text-main)]">{value}</p>
+                <p className="text-sm text-[var(--text-faint)]">{label}</p>
+                {sub && <p className="text-xs text-[var(--text-muted)] mt-0.5">{sub}</p>}
             </div>
         </div>
     );
@@ -195,7 +195,7 @@ function KpiCard({
 function StatusPill({ status }: { status: SLAStatus | 'PENDING' }) {
     if (status === 'PENDING') {
         return (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-slate-50 text-slate-500 border-slate-200">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-[var(--bg-surface-hover)] text-[var(--text-faint)] border-[var(--border-subtle)]">
                 <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
                 Pending
             </span>
@@ -215,7 +215,7 @@ function PhaseRow({ phase }: { phase: SLAPhaseSnapshot }) {
     const barColor = phaseBarColor(phase.status);
     return (
         <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 w-28 shrink-0 text-slate-600 text-xs">
+            <div className="flex items-center gap-1.5 w-28 shrink-0 text-[var(--text-faint)] text-xs">
                 {PHASE_ICONS[phase.phase]}
                 <span>{phase.label}</span>
             </div>
@@ -228,7 +228,7 @@ function PhaseRow({ phase }: { phase: SLAPhaseSnapshot }) {
             <div className="w-24 text-right shrink-0">
                 <StatusPill status={phase.status} />
             </div>
-            <div className="w-20 text-right text-xs text-slate-500 shrink-0">
+            <div className="w-20 text-right text-xs text-[var(--text-faint)] shrink-0">
                 {phase.status === 'PENDING' ? '—' :
                     phase.completedAt ? fmtMins(phase.elapsedMinutes) + ' / ' + fmtMins(phase.targetMinutes) :
                     fmtMins(phase.remainingMinutes) + ' left'}
@@ -296,14 +296,14 @@ export default function SLADashboardPage() {
     ];
 
     return (
-        <div className="min-h-screen bg-slate-50 p-6 space-y-6">
+        <div className="min-h-screen bg-[var(--bg-surface-hover)] p-6 space-y-6">
             {/* Header */}
             <div>
-                <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <h1 className="text-xl font-bold text-[var(--text-main)] flex items-center gap-2">
                     <TrendingUp className="w-5 h-5 text-blue-600" />
                     Maintenance SLA
                 </h1>
-                <p className="text-sm text-slate-500 mt-0.5">
+                <p className="text-sm text-[var(--text-faint)] mt-0.5">
                     Response &amp; repair SLA tracking across all active maintenance requests
                 </p>
             </div>
@@ -337,7 +337,7 @@ export default function SLADashboardPage() {
             {/* Filters */}
             <div className="flex flex-wrap items-center gap-3">
                 {/* Status tabs */}
-                <div className="flex bg-white border border-slate-200 rounded-lg p-0.5 gap-0.5">
+                <div className="flex bg-white border border-[var(--border-subtle)] rounded-lg p-0.5 gap-0.5">
                     {STATUS_TABS.map(t => (
                         <button
                             key={t.key}
@@ -345,12 +345,12 @@ export default function SLADashboardPage() {
                             className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                                 statusFilter === t.key
                                     ? 'bg-blue-600 text-white'
-                                    : 'text-slate-600 hover:bg-slate-50'
+                                    : 'text-[var(--text-faint)] hover:bg-[var(--bg-surface-hover)]'
                             }`}
                         >
                             {t.label}
                             <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] ${
-                                statusFilter === t.key ? 'bg-blue-500 text-white' : 'bg-slate-100 text-slate-500'
+                                statusFilter === t.key ? 'bg-blue-500 text-white' : 'bg-slate-100 text-[var(--text-faint)]'
                             }`}>{t.count}</span>
                         </button>
                     ))}
@@ -360,7 +360,7 @@ export default function SLADashboardPage() {
                 <select
                     value={tierFilter}
                     onChange={e => setTierFilter(e.target.value)}
-                    className="text-xs border border-slate-200 rounded-lg px-3 py-2 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="text-xs border border-[var(--border-subtle)] rounded-lg px-3 py-2 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                     <option value="ALL">All tiers</option>
                     <option value="CRITICAL">Critical</option>
@@ -372,11 +372,11 @@ export default function SLADashboardPage() {
             {/* Two-pane layout */}
             <div className="flex gap-4 items-start">
                 {/* League table */}
-                <div className="flex-1 min-w-0 bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <div className="flex-1 min-w-0 bg-white rounded-xl border border-[var(--border-subtle)] overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                             <thead>
-                                <tr className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 uppercase tracking-wide">
+                                <tr className="bg-[var(--bg-surface-hover)] border-b border-[var(--border-subtle)] text-xs text-[var(--text-faint)] uppercase tracking-wide">
                                     <th className="text-left px-4 py-3 font-medium">Work Order</th>
                                     <th className="text-left px-4 py-3 font-medium">Description</th>
                                     <th className="text-left px-4 py-3 font-medium">Tier</th>
@@ -386,10 +386,10 @@ export default function SLADashboardPage() {
                                     <th className="px-4 py-3" />
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100">
+                            <tbody className="divide-y divide-[var(--border-subtle)]">
                                 {filtered.length === 0 && (
                                     <tr>
-                                        <td colSpan={7} className="text-center py-10 text-slate-400 text-sm">
+                                        <td colSpan={7} className="text-center py-10 text-[var(--text-muted)] text-sm">
                                             No maintenance requests match the selected filters.
                                         </td>
                                     </tr>
@@ -427,7 +427,7 @@ export default function SLADashboardPage() {
                                                 <StatusPill status={snap.overallStatus} />
                                             </td>
                                             <td className="px-4 py-3">
-                                                <ChevronRight className={`w-4 h-4 transition-transform ${isSelected ? 'rotate-90 text-blue-600' : 'text-slate-300'}`} />
+                                                <ChevronRight className={`w-4 h-4 transition-transform ${isSelected ? 'rotate-90 text-blue-600' : 'text-[var(--text-muted)]'}`} />
                                             </td>
                                         </tr>
                                     );
@@ -439,18 +439,18 @@ export default function SLADashboardPage() {
 
                 {/* Detail panel */}
                 {selected && selectedMR && (
-                    <div className="w-96 shrink-0 bg-white rounded-xl border border-slate-200 p-5 space-y-5 sticky top-6">
+                    <div className="w-96 shrink-0 bg-white rounded-xl border border-[var(--border-subtle)] p-5 space-y-5 sticky top-6">
                         <div>
                             <div className="flex items-center justify-between">
-                                <h2 className="font-semibold text-slate-900 text-sm">SLA Detail</h2>
+                                <h2 className="font-semibold text-[var(--text-main)] text-sm">SLA Detail</h2>
                                 <button
                                     onClick={() => setSelectedId(null)}
-                                    className="text-slate-400 hover:text-slate-600 text-xs"
+                                    className="text-[var(--text-muted)] hover:text-[var(--text-faint)] text-xs"
                                 >
                                     ✕
                                 </button>
                             </div>
-                            <p className="text-xs text-slate-500 mt-1">{selectedMR.description}</p>
+                            <p className="text-xs text-[var(--text-faint)] mt-1">{selectedMR.description}</p>
                         </div>
 
                         {/* Summary badges */}
@@ -463,15 +463,15 @@ export default function SLADashboardPage() {
 
                         {/* Response / Repair deadlines */}
                         <div className="grid grid-cols-2 gap-3">
-                            <div className="bg-slate-50 rounded-lg p-3">
-                                <p className="text-[10px] text-slate-500 uppercase tracking-wide font-medium">Response deadline</p>
+                            <div className="bg-[var(--bg-surface-hover)] rounded-lg p-3">
+                                <p className="text-[10px] text-[var(--text-faint)] uppercase tracking-wide font-medium">Response deadline</p>
                                 <p className="text-xs font-semibold text-slate-800 mt-0.5">
                                     {fmtMins(selected.rules.responseMinutes)} target
                                 </p>
                                 <StatusPill status={selected.responseStatus} />
                             </div>
-                            <div className="bg-slate-50 rounded-lg p-3">
-                                <p className="text-[10px] text-slate-500 uppercase tracking-wide font-medium">Repair deadline</p>
+                            <div className="bg-[var(--bg-surface-hover)] rounded-lg p-3">
+                                <p className="text-[10px] text-[var(--text-faint)] uppercase tracking-wide font-medium">Repair deadline</p>
                                 <p className="text-xs font-semibold text-slate-800 mt-0.5">
                                     {fmtMins(selected.rules.repairMinutes)} target
                                 </p>
@@ -514,7 +514,7 @@ export default function SLADashboardPage() {
                             </div>
                             <div className="flex gap-1 mt-0.5">
                                 {selected.phases.map(phase => (
-                                    <div key={phase.phase} className="flex-1 text-[9px] text-slate-400 text-center truncate">
+                                    <div key={phase.phase} className="flex-1 text-[9px] text-[var(--text-muted)] text-center truncate">
                                         {phase.label.slice(0, 3)}
                                     </div>
                                 ))}

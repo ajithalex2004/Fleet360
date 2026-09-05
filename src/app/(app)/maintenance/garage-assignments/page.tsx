@@ -25,12 +25,12 @@ export default function GarageAssignmentsPage() {
     <div className="space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Garage Assignments</h1>
-          <p className="text-xs mt-1 text-slate-500">Active work orders and their assigned garages.</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Garage Assignments</h1>
+          <p className="text-xs mt-1 text-[var(--text-faint)]">Active work orders and their assigned garages.</p>
         </div>
         <Link
           href="/vendors/garages"
-          className="flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-400 hover:text-white hover:border-white/20 transition-colors"
+          className="flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-main)] hover:border-[var(--border-strong)] transition-colors"
         >
           Manage garages
           <ExternalLink className="h-3.5 w-3.5" />
@@ -38,10 +38,10 @@ export default function GarageAssignmentsPage() {
       </div>
 
       {/* Consumer view notice */}
-      <div className="rounded-xl border border-slate-500/30 bg-slate-800/50 p-4 flex items-center gap-3">
-        <Building2 className="h-5 w-5 text-slate-400 flex-shrink-0" />
-        <p className="text-sm text-slate-400">
-          <span className="font-semibold text-slate-300">Read-only consumer view.</span>{' '}
+      <div className="rounded-xl border border-slate-500/30 bg-[var(--bg-surface)]/50 p-4 flex items-center gap-3">
+        <Building2 className="h-5 w-5 text-[var(--text-muted)] flex-shrink-0" />
+        <p className="text-sm text-[var(--text-muted)]">
+          <span className="font-semibold text-[var(--text-muted)]">Read-only consumer view.</span>{' '}
           Garage CRUD and onboarding is managed in{' '}
           <Link href="/vendors/garages" className="text-blue-400 underline hover:text-blue-300">
             Vendors → Garage management
@@ -50,12 +50,12 @@ export default function GarageAssignmentsPage() {
       </div>
 
       {/* Assignments table */}
-      <div className="overflow-hidden rounded-xl border border-white/10 bg-slate-900">
+      <div className="overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]">
         <table className="min-w-full divide-y divide-white/10">
-          <thead className="bg-slate-800/50">
+          <thead className="bg-[var(--bg-surface)]/50">
             <tr>
               {['Work Order', 'Vehicle', 'Assigned Garage', 'Status', 'Since'].map(h => (
-                <th key={h} className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
+                <th key={h} className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--text-faint)]">
                   {h}
                 </th>
               ))}
@@ -63,16 +63,16 @@ export default function GarageAssignmentsPage() {
           </thead>
           <tbody className="divide-y divide-white/10">
             {MOCK_ASSIGNMENTS.map(row => (
-              <tr key={row.workOrder} className="hover:bg-white/5 transition-colors">
+              <tr key={row.workOrder} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                 <td className="px-5 py-4 text-sm font-mono text-blue-400">{row.workOrder}</td>
-                <td className="px-5 py-4 text-sm text-white">{row.vehicle}</td>
-                <td className="px-5 py-4 text-sm text-slate-300">{row.garage}</td>
+                <td className="px-5 py-4 text-sm text-[var(--text-main)]">{row.vehicle}</td>
+                <td className="px-5 py-4 text-sm text-[var(--text-muted)]">{row.garage}</td>
                 <td className="px-5 py-4">
-                  <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${statusColor[row.status] ?? 'bg-slate-700/40 text-slate-400 border-white/10'}`}>
+                  <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${statusColor[row.status] ?? 'bg-[var(--bg-surface-hover)]/40 text-[var(--text-muted)] border-[var(--border-subtle)]'}`}>
                     {row.status.replace(/_/g, ' ')}
                   </span>
                 </td>
-                <td className="px-5 py-4 text-sm text-slate-500">{row.since}</td>
+                <td className="px-5 py-4 text-sm text-[var(--text-faint)]">{row.since}</td>
               </tr>
             ))}
           </tbody>

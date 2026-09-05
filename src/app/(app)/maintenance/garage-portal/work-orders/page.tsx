@@ -56,20 +56,20 @@ export default function GarageWorkOrdersPage() {
     }, [workOrders, searchFilter, dateFilter, statusFilter]);
 
     if (loading) {
-        return <div className="min-h-screen flex items-center justify-center bg-slate-800/50">Loading...</div>;
+        return <div className="min-h-screen flex items-center justify-center bg-[var(--bg-surface)]/50">Loading...</div>;
     }
 
     return (
-        <div className="min-h-screen bg-slate-800/50">
+        <div className="min-h-screen bg-[var(--bg-surface)]/50">
             {/* Top Bar */}
-            <header className="flex items-center justify-between px-4 py-3 bg-slate-900 shadow-sm md:px-6 sticky top-0 z-10">
+            <header className="flex items-center justify-between px-4 py-3 bg-[var(--bg-surface)] shadow-sm md:px-6 sticky top-0 z-10">
                 <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs font-bold">
+                    <div className="h-8 w-8 rounded-full bg-[var(--bg-surface)] flex items-center justify-center text-[var(--text-main)] text-xs font-bold">
                         G
                     </div>
-                    <div className="font-semibold text-slate-200 text-sm md:text-base">Garage Portal</div>
+                    <div className="font-semibold text-[var(--text-main)] text-sm md:text-base">Garage Portal</div>
                 </div>
-                <div className="text-xs text-slate-600 md:text-sm">
+                <div className="text-xs text-[var(--text-faint)] md:text-sm">
                     Logged in as <span className="font-medium">Autopro Service Centre</span>
                 </div>
             </header>
@@ -77,25 +77,25 @@ export default function GarageWorkOrdersPage() {
             <main className="max-w-6xl mx-auto px-4 py-6">
                 <div className="space-y-4">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <h2 className="text-2xl font-bold text-slate-200">Work Orders</h2>
+                        <h2 className="text-2xl font-bold text-[var(--text-main)]">Work Orders</h2>
                         <div className="flex flex-col sm:flex-row gap-2 text-sm">
                             <input
                                 type="text"
                                 placeholder="Search WO or Description..."
                                 value={searchFilter}
                                 onChange={(e) => setSearchFilter(e.target.value)}
-                                className="px-3 py-2 rounded-lg border border-white/10 focus:outline-none focus:ring-2 focus:ring-slate-900 w-full sm:w-64 text-white"
+                                className="px-3 py-2 rounded-lg border border-[var(--border-subtle)] focus:outline-none focus:ring-2 focus:ring-slate-900 w-full sm:w-64 text-[var(--text-main)]"
                             />
                             <input
                                 type="date"
                                 value={dateFilter}
                                 onChange={(e) => setDateFilter(e.target.value)}
-                                className="px-3 py-2 rounded-lg border border-white/10 focus:outline-none focus:ring-2 focus:ring-slate-900 text-white"
+                                className="px-3 py-2 rounded-lg border border-[var(--border-subtle)] focus:outline-none focus:ring-2 focus:ring-slate-900 text-[var(--text-main)]"
                             />
                             <select
                                 value={statusFilter}
                                 onChange={(e) => setStatusFilter(e.target.value)}
-                                className="px-3 py-2 rounded-lg border border-white/10 focus:outline-none focus:ring-2 focus:ring-slate-900 text-white"
+                                className="px-3 py-2 rounded-lg border border-[var(--border-subtle)] focus:outline-none focus:ring-2 focus:ring-slate-900 text-[var(--text-main)]"
                             >
                                 <option value="All Status">All Status</option>
                                 <option value={MaintenanceStatus.UNDER_MAINTENANCE}>{MaintenanceStatus.UNDER_MAINTENANCE}</option>
@@ -107,8 +107,8 @@ export default function GarageWorkOrdersPage() {
                     </div>
 
                     {filteredWorkOrders.length === 0 ? (
-                        <div className="text-center py-12 bg-slate-900 rounded-2xl shadow-sm">
-                            <p className="text-slate-500">No work orders found.</p>
+                        <div className="text-center py-12 bg-[var(--bg-surface)] rounded-2xl shadow-sm">
+                            <p className="text-[var(--text-faint)]">No work orders found.</p>
                         </div>
                     ) : (
                         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -116,28 +116,28 @@ export default function GarageWorkOrdersPage() {
                                 <div
                                     key={wo.id}
                                     onClick={() => router.push(`/maintenance/work-orders/${encodeURIComponent(wo.id)}`)}
-                                    className="bg-slate-900 rounded-xl shadow-sm p-5 cursor-pointer hover:shadow-md transition-shadow border border-transparent hover:border-blue-500/30 group"
+                                    className="bg-[var(--bg-surface)] rounded-xl shadow-sm p-5 cursor-pointer hover:shadow-md transition-shadow border border-transparent hover:border-blue-500/30 group"
                                 >
                                     <div className="flex justify-between items-start mb-3">
-                                        <span className="font-mono text-xs font-medium text-slate-500 bg-slate-700/40 px-2 py-1 rounded">
+                                        <span className="font-mono text-xs font-medium text-[var(--text-faint)] bg-[var(--bg-surface-hover)]/40 px-2 py-1 rounded">
                                             {wo.workOrderNo || `WO-${wo.id.toUpperCase()}`}
                                         </span>
                                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${wo.status === MaintenanceStatus.MAINTENANCE_COMPLETED ? 'bg-emerald-500/10 text-green-700' :
                                             wo.status === MaintenanceStatus.UNDER_MAINTENANCE ? 'bg-blue-500/10 text-blue-700' :
-                                                'bg-slate-700/40 text-slate-300'
+                                                'bg-[var(--bg-surface-hover)]/40 text-[var(--text-muted)]'
                                             }`}>
                                             {wo.status}
                                         </span>
                                     </div>
-                                    <h3 className="font-semibold text-slate-200 mb-1 group-hover:text-blue-600 transition-colors line-clamp-1">
+                                    <h3 className="font-semibold text-[var(--text-main)] mb-1 group-hover:text-blue-600 transition-colors line-clamp-1">
                                         {wo.description}
                                     </h3>
-                                    <div className="text-xs text-slate-500 mb-4">
+                                    <div className="text-xs text-[var(--text-faint)] mb-4">
                                         Started: {new Date(wo.requestDate).toLocaleDateString()}
                                     </div>
-                                    <div className="flex items-center justify-between pt-3 border-t border-white/5">
-                                        <span className="text-xs font-medium text-slate-600">Open Work Order</span>
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-slate-400 group-hover:text-blue-500">
+                                    <div className="flex items-center justify-between pt-3 border-t border-[var(--border-subtle)]">
+                                        <span className="text-xs font-medium text-[var(--text-faint)]">Open Work Order</span>
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-[var(--text-muted)] group-hover:text-blue-500">
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
                                         </svg>
                                     </div>
@@ -148,7 +148,7 @@ export default function GarageWorkOrdersPage() {
                 </div>
             </main>
 
-            <footer className="py-3 text-center text-[11px] text-slate-400">
+            <footer className="py-3 text-center text-[11px] text-[var(--text-muted)]">
                 Powered by Fleet360
             </footer>
         </div>
