@@ -51,7 +51,7 @@ const STATUS_COLORS: Record<string, string> = {
   ACTIVE:        'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
   EXPIRING_SOON: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
   EXPIRED:       'bg-rose-500/20 text-rose-400 border-rose-500/30',
-  CANCELLED:     'bg-slate-500/20 text-slate-400 border-slate-500/30',
+  CANCELLED:     'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30',
   PENDING:       'bg-blue-500/20 text-blue-400 border-blue-500/30',
 };
 
@@ -190,16 +190,16 @@ export default function InsurancePage() {
 
   const expiringSoon = stats?.expiringSoon ?? 0;
 
-  const inputCls = 'w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none text-sm';
-  const labelCls = 'block text-sm font-medium text-slate-300 mb-1.5';
+  const inputCls = 'w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-teal-500 focus:outline-none text-sm';
+  const labelCls = 'block text-sm font-medium text-[var(--text-muted)] mb-1.5';
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-2">Insurance Documentation</h1>
-          <p className="text-xs text-slate-400">Manage RAC vehicle insurance policies</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Insurance Documentation</h1>
+          <p className="text-xs text-[var(--text-muted)]">Manage RAC vehicle insurance policies</p>
         </div>
         <button
           onClick={openNew}
@@ -237,10 +237,10 @@ export default function InsurancePage() {
             { label: 'Expired',             value: stats.expired,          color: 'text-rose-400',    icon: '❌' },
             { label: 'Total Premium (AED/yr)', value: `AED ${fmt(stats.totalPremiumAed, 0)}`, color: 'text-teal-400', icon: '💰', raw: true },
           ].map(({ label, value, color, icon, raw }) => (
-            <div key={label} className="bg-slate-800/60 border border-white/10 rounded-2xl p-5 backdrop-blur-sm">
+            <div key={label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5 backdrop-blur-sm">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-lg">{icon}</span>
-                <p className="text-xs text-slate-400 uppercase tracking-wider">{label}</p>
+                <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">{label}</p>
               </div>
               <p className={`text-3xl font-bold ${color}`}>
                 {raw ? value : fmt(value as number)}
@@ -251,7 +251,7 @@ export default function InsurancePage() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-slate-800/60 border border-white/10 rounded-xl p-1 w-fit">
+      <div className="flex gap-1 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-1 w-fit">
         {TABS.map(t => (
           <button
             key={t.key}
@@ -259,7 +259,7 @@ export default function InsurancePage() {
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
               tab === t.key
                 ? 'bg-gradient-to-r from-teal-600 to-cyan-600 text-white'
-                : 'text-slate-400 hover:text-white'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
             }`}
           >
             {t.label}
@@ -275,22 +275,22 @@ export default function InsurancePage() {
         value={search}
         onChange={e => setSearch(e.target.value)}
         placeholder="Search by vehicle no, policy no, or insurer..."
-        className="w-full max-w-md px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none text-sm"
+        className="w-full max-w-md px-4 py-2 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-teal-500 focus:outline-none text-sm"
       />
 
       {/* Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-hidden backdrop-blur-sm">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl overflow-hidden backdrop-blur-sm">
         {loading ? (
-          <div className="flex items-center justify-center py-16 text-slate-400 animate-pulse">Loading policies...</div>
+          <div className="flex items-center justify-center py-16 text-[var(--text-muted)] animate-pulse">Loading policies...</div>
         ) : policies.length === 0 ? (
-          <div className="text-center text-slate-400 py-16">No insurance policies found</div>
+          <div className="text-center text-[var(--text-muted)] py-16">No insurance policies found</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-white/5">
+                <tr className="border-b border-[var(--border-subtle)]">
                   {['Policy No', 'Vehicle No', 'Vehicle Name', 'Insurer', 'Type', 'Coverage (AED)', 'Premium/yr', 'Period', 'Days Left', 'Status', 'Actions'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -300,29 +300,29 @@ export default function InsurancePage() {
                   return (
                     <tr
                       key={p.id}
-                      className={`border-b border-white/5 hover:bg-white/5 transition-colors ${isWarning ? 'bg-amber-500/5' : ''}`}
+                      className={`border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors ${isWarning ? 'bg-amber-500/5' : ''}`}
                     >
                       <td className="px-4 py-3 text-sm font-mono text-teal-400 whitespace-nowrap">
                         {p.policyNo}
                         {isWarning && <span className="ml-2 text-xs text-amber-400">⚠</span>}
                       </td>
-                      <td className="px-4 py-3 text-sm font-medium text-white whitespace-nowrap">{p.vehicleNo}</td>
-                      <td className="px-4 py-3 text-sm text-slate-300 whitespace-nowrap">{p.vehicleName ?? '—'}</td>
-                      <td className="px-4 py-3 text-sm text-white whitespace-nowrap">{p.insurer}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-[var(--text-main)] whitespace-nowrap">{p.vehicleNo}</td>
+                      <td className="px-4 py-3 text-sm text-[var(--text-muted)] whitespace-nowrap">{p.vehicleName ?? '—'}</td>
+                      <td className="px-4 py-3 text-sm text-[var(--text-main)] whitespace-nowrap">{p.insurer}</td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium border ${POLICY_TYPE_COLORS[p.policyType] ?? 'bg-slate-500/20 text-slate-400 border-slate-500/30'}`}>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium border ${POLICY_TYPE_COLORS[p.policyType] ?? 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30'}`}>
                           {p.policyType.replace('_', ' ')}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-sm text-white whitespace-nowrap">
+                      <td className="px-4 py-3 text-sm text-[var(--text-main)] whitespace-nowrap">
                         {p.coverageAmount != null ? `AED ${fmt(p.coverageAmount)}` : '—'}
                       </td>
-                      <td className="px-4 py-3 text-sm text-white whitespace-nowrap">
+                      <td className="px-4 py-3 text-sm text-[var(--text-main)] whitespace-nowrap">
                         {p.premiumAnnual != null ? `AED ${fmt(p.premiumAnnual)}` : '—'}
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-300 whitespace-nowrap">
+                      <td className="px-4 py-3 text-xs text-[var(--text-muted)] whitespace-nowrap">
                         <div>{fmtDate(p.startDate)}</div>
-                        <div className="text-slate-500">→ {fmtDate(p.endDate)}</div>
+                        <div className="text-[var(--text-faint)]">→ {fmtDate(p.endDate)}</div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <span className={`text-sm font-semibold ${daysColor(p.expiryDaysRemaining)}`}>
@@ -332,7 +332,7 @@ export default function InsurancePage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium border ${STATUS_COLORS[p.status] ?? 'bg-slate-500/20 text-slate-400 border-slate-500/30'}`}>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium border ${STATUS_COLORS[p.status] ?? 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30'}`}>
                           {p.status.replace('_', ' ')}
                         </span>
                       </td>
@@ -366,12 +366,12 @@ export default function InsurancePage() {
       {/* Add / Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-800/95 border border-white/10 rounded-2xl p-8">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl p-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">
+              <h2 className="text-2xl font-bold text-[var(--text-main)]">
                 {editPolicy ? 'Edit Policy' : 'Add Insurance Policy'}
               </h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white text-xl">✕</button>
+              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">✕</button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -479,7 +479,7 @@ export default function InsurancePage() {
               <div className="flex gap-4 justify-end pt-2">
                 <button
                   type="button" onClick={() => setShowModal(false)}
-                  className="px-6 py-2.5 rounded-lg border border-white/10 text-white hover:bg-white/5 text-sm"
+                  className="px-6 py-2.5 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm"
                 >
                   Cancel
                 </button>

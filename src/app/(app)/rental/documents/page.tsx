@@ -85,12 +85,12 @@ function fmtDate(d: string | null): string {
 }
 
 function expiryBadge(days: number | null): React.ReactNode {
-  if (days == null) return <span className="text-slate-500 text-xs">N/A</span>;
+  if (days == null) return <span className="text-[var(--text-faint)] text-xs">N/A</span>;
   if (days < 0)
     return <span className="text-rose-400 font-semibold text-xs">Expired {Math.abs(days)}d ago</span>;
   if (days <= 30)
     return <span className="text-amber-400 font-semibold text-xs">{days}d ⚠</span>;
-  return <span className="text-slate-300 text-xs">{days}d</span>;
+  return <span className="text-[var(--text-muted)] text-xs">{days}d</span>;
 }
 
 const emptyForm = {
@@ -206,8 +206,8 @@ export default function DocumentsPage() {
     }
   };
 
-  const inputCls = 'w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none text-sm';
-  const labelCls = 'block text-sm font-medium text-slate-300 mb-1.5';
+  const inputCls = 'w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-teal-500 focus:outline-none text-sm';
+  const labelCls = 'block text-sm font-medium text-[var(--text-muted)] mb-1.5';
 
   const needsExpiryWarning = (d: Doc): boolean => {
     if (!['EMIRATES_ID', 'DRIVING_LICENSE', 'VISIT_VISA', 'PASSPORT'].includes(d.docType)) return false;
@@ -220,7 +220,7 @@ export default function DocumentsPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-2">Compliance Document Vault</h1>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Compliance Document Vault</h1>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-lg">🇦🇪</span>
             <p className="text-amber-400 text-sm font-medium">
@@ -246,15 +246,15 @@ export default function DocumentsPage() {
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: 'Total Documents',      value: stats.total,             color: 'text-white',         icon: '📁' },
+            { label: 'Total Documents',      value: stats.total,             color: 'text-[var(--text-main)]',         icon: '📁' },
             { label: 'Verified',             value: stats.verified,          color: 'text-emerald-400',   icon: '✅' },
             { label: 'Pending Verification', value: stats.pending,           color: 'text-amber-400',     icon: '⏳' },
             { label: 'Expired / Expiring',   value: stats.expiredOrExpiring, color: 'text-rose-400',      icon: '⚠️' },
           ].map(({ label, value, color, icon }) => (
-            <div key={label} className="bg-slate-800/60 border border-white/10 rounded-2xl p-5 backdrop-blur-sm">
+            <div key={label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5 backdrop-blur-sm">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-lg">{icon}</span>
-                <p className="text-xs text-slate-400 uppercase tracking-wider">{label}</p>
+                <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">{label}</p>
               </div>
               <p className={`text-3xl font-bold ${color}`}>{value}</p>
             </div>
@@ -265,7 +265,7 @@ export default function DocumentsPage() {
       {/* Filters */}
       <div className="flex flex-wrap gap-4 items-center">
         {/* Doc Type Tabs */}
-        <div className="flex gap-1 bg-slate-800/60 border border-white/10 rounded-xl p-1">
+        <div className="flex gap-1 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-1">
           {DOC_TYPE_TABS.map(t => (
             <button
               key={t.key}
@@ -273,7 +273,7 @@ export default function DocumentsPage() {
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
                 docTypeTab === t.key
                   ? 'bg-gradient-to-r from-teal-600 to-cyan-600 text-white'
-                  : 'text-slate-400 hover:text-white'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
               }`}
             >
               {t.key !== 'ALL' && DOC_ICONS[t.key]} {t.label}
@@ -285,7 +285,7 @@ export default function DocumentsPage() {
         <select
           value={statusTab}
           onChange={e => setStatusTab(e.target.value)}
-          className="px-3 py-1.5 rounded-lg bg-slate-800/60 border border-white/10 text-sm text-white focus:border-teal-500 focus:outline-none"
+          className="px-3 py-1.5 rounded-lg bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-sm text-[var(--text-main)] focus:border-teal-500 focus:outline-none"
         >
           {STATUS_TABS.map(t => (
             <option key={t.key} value={t.key}>{t.label}</option>
@@ -297,23 +297,23 @@ export default function DocumentsPage() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search by customer or document number..."
-          className="px-4 py-1.5 rounded-lg bg-slate-800/50 border border-white/10 text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none text-sm w-72"
+          className="px-4 py-1.5 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-teal-500 focus:outline-none text-sm w-72"
         />
       </div>
 
       {/* Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-hidden backdrop-blur-sm">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl overflow-hidden backdrop-blur-sm">
         {loading ? (
-          <div className="flex items-center justify-center py-16 text-slate-400 animate-pulse">Loading documents...</div>
+          <div className="flex items-center justify-center py-16 text-[var(--text-muted)] animate-pulse">Loading documents...</div>
         ) : docs.length === 0 ? (
-          <div className="text-center text-slate-400 py-16">No documents found</div>
+          <div className="text-center text-[var(--text-muted)] py-16">No documents found</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-white/5">
+                <tr className="border-b border-[var(--border-subtle)]">
                   {['Ref No', 'Customer', 'Document Type', 'Doc Number', 'Expiry Date', 'Days Left', 'Status', 'Verified By', 'Actions'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -323,15 +323,15 @@ export default function DocumentsPage() {
                   return (
                     <tr
                       key={d.id}
-                      className={`border-b border-white/5 hover:bg-white/5 transition-colors ${warn ? 'bg-amber-500/5' : ''}`}
+                      className={`border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors ${warn ? 'bg-amber-500/5' : ''}`}
                     >
                       <td className="px-4 py-3 text-sm font-mono text-teal-400 whitespace-nowrap">{d.docRef}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-white whitespace-nowrap">
+                      <td className="px-4 py-3 text-sm font-medium text-[var(--text-main)] whitespace-nowrap">
                         {d.customerName}
-                        {d.nationality && <div className="text-xs text-slate-400">{d.nationality}</div>}
+                        {d.nationality && <div className="text-xs text-[var(--text-muted)]">{d.nationality}</div>}
                       </td>
                       <td className="px-4 py-3 text-sm whitespace-nowrap">
-                        <span className="flex items-center gap-1.5 text-white">
+                        <span className="flex items-center gap-1.5 text-[var(--text-main)]">
                           <span className="text-base">{DOC_ICONS[d.docType] ?? '📁'}</span>
                           <span>{DOC_LABELS[d.docType] ?? d.docType}</span>
                         </span>
@@ -339,17 +339,17 @@ export default function DocumentsPage() {
                           <div className="text-xs text-amber-400 mt-0.5">⚠ Expiry Alert</div>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-300 whitespace-nowrap font-mono">
+                      <td className="px-4 py-3 text-sm text-[var(--text-muted)] whitespace-nowrap font-mono">
                         {d.docNumber ?? '—'}
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-300 whitespace-nowrap">
+                      <td className="px-4 py-3 text-sm text-[var(--text-muted)] whitespace-nowrap">
                         {fmtDate(d.expiryDate)}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         {expiryBadge(d.daysToExpiry)}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium border ${STATUS_COLORS[d.status] ?? 'bg-slate-500/20 text-slate-400 border-slate-500/30'}`}>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium border ${STATUS_COLORS[d.status] ?? 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30'}`}>
                           {d.status.replace(/_/g, ' ')}
                         </span>
                         {d.status === 'REJECTED' && d.rejectionReason && (
@@ -358,10 +358,10 @@ export default function DocumentsPage() {
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-300 whitespace-nowrap">
+                      <td className="px-4 py-3 text-sm text-[var(--text-muted)] whitespace-nowrap">
                         {d.verifiedBy ?? '—'}
                         {d.verifiedAt && (
-                          <div className="text-xs text-slate-500">{fmtDate(d.verifiedAt)}</div>
+                          <div className="text-xs text-[var(--text-faint)]">{fmtDate(d.verifiedAt)}</div>
                         )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
@@ -382,7 +382,7 @@ export default function DocumentsPage() {
                           </div>
                         )}
                         {d.status !== 'PENDING_VERIFICATION' && (
-                          <span className="text-xs text-slate-500">—</span>
+                          <span className="text-xs text-[var(--text-faint)]">—</span>
                         )}
                       </td>
                     </tr>
@@ -397,10 +397,10 @@ export default function DocumentsPage() {
       {/* Add Document Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-800/95 border border-white/10 rounded-2xl p-8">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl p-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">Add Document</h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white text-xl">✕</button>
+              <h2 className="text-2xl font-bold text-[var(--text-main)]">Add Document</h2>
+              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">✕</button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -489,7 +489,7 @@ export default function DocumentsPage() {
               <div className="flex gap-4 justify-end pt-2">
                 <button
                   type="button" onClick={() => setShowModal(false)}
-                  className="px-6 py-2.5 rounded-lg border border-white/10 text-white hover:bg-white/5 text-sm"
+                  className="px-6 py-2.5 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm"
                 >
                   Cancel
                 </button>
@@ -508,9 +508,9 @@ export default function DocumentsPage() {
       {/* Verify Modal */}
       {verifyDoc && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-slate-800/95 border border-white/10 rounded-2xl p-8">
-            <h2 className="text-xl font-bold text-white mb-2">Verify Document</h2>
-            <p className="text-slate-400 text-sm mb-4">
+          <div className="w-full max-w-md bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl p-8">
+            <h2 className="text-xl font-bold text-[var(--text-main)] mb-2">Verify Document</h2>
+            <p className="text-[var(--text-muted)] text-sm mb-4">
               Verifying <span className="text-teal-400">{verifyDoc.docRef}</span> for {verifyDoc.customerName}
             </p>
             <div className="mb-5">
@@ -525,7 +525,7 @@ export default function DocumentsPage() {
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setVerifyDoc(null)}
-                className="px-5 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5 text-sm"
+                className="px-5 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm"
               >
                 Cancel
               </button>
@@ -543,9 +543,9 @@ export default function DocumentsPage() {
       {/* Reject Modal */}
       {rejectDoc && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-slate-800/95 border border-white/10 rounded-2xl p-8">
-            <h2 className="text-xl font-bold text-white mb-2">Reject Document</h2>
-            <p className="text-slate-400 text-sm mb-4">
+          <div className="w-full max-w-md bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl p-8">
+            <h2 className="text-xl font-bold text-[var(--text-main)] mb-2">Reject Document</h2>
+            <p className="text-[var(--text-muted)] text-sm mb-4">
               Rejecting <span className="text-teal-400">{rejectDoc.docRef}</span> for {rejectDoc.customerName}
             </p>
             <div className="mb-5">
@@ -560,7 +560,7 @@ export default function DocumentsPage() {
             <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setRejectDoc(null)}
-                className="px-5 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5 text-sm"
+                className="px-5 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm"
               >
                 Cancel
               </button>

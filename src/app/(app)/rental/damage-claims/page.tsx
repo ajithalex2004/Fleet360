@@ -18,7 +18,7 @@ const STATUS_COLORS: Record<string, string> = {
   OPEN:     'bg-amber-500/20 text-amber-400 border-amber-500/30',
   ASSESSED: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
   BILLED:   'bg-purple-500/20 text-purple-400 border-purple-500/30',
-  CLOSED:   'bg-slate-500/20 text-slate-400 border-slate-500/30',
+  CLOSED:   'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30',
 };
 
 export default function DamageClaimsPage() {
@@ -96,14 +96,14 @@ export default function DamageClaimsPage() {
   const totalValue = claims.reduce((s, c) => s + Number(c.estimatedCost ?? 0), 0);
   const openCount  = claims.filter(c => c.status === 'OPEN').length;
 
-  if (loading) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading...</div></div>;
+  if (loading) return <div className="flex items-center justify-center h-full"><div className="text-[var(--text-muted)] animate-pulse">Loading...</div></div>;
 
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-2">Damage Claims</h1>
-          <p className="text-xs text-slate-400">{openCount} open claims — AED {totalValue.toLocaleString()} estimated</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Damage Claims</h1>
+          <p className="text-xs text-[var(--text-muted)]">{openCount} open claims — AED {totalValue.toLocaleString()} estimated</p>
         </div>
         <button onClick={() => setShowModal(true)} className="rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90">
           + New Claim
@@ -116,38 +116,38 @@ export default function DamageClaimsPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {['All','OPEN','ASSESSED','BILLED','CLOSED'].slice(0,4).map(s => (
           <button key={s} onClick={() => setStatus(s)}
-            className={`p-4 rounded-xl border text-left transition-all ${statusFilter === s ? 'border-rose-500 bg-rose-500/10' : 'border-white/10 bg-slate-800/50 hover:border-white/20'}`}>
-            <div className="text-2xl font-bold text-white">{s === 'All' ? claims.length : claims.filter(c => c.status === s).length}</div>
-            <div className="text-xs text-slate-400 mt-1">{s}</div>
+            className={`p-4 rounded-xl border text-left transition-all ${statusFilter === s ? 'border-rose-500 bg-rose-500/10' : 'border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 hover:border-[var(--border-strong)]'}`}>
+            <div className="text-2xl font-bold text-[var(--text-main)]">{s === 'All' ? claims.length : claims.filter(c => c.status === s).length}</div>
+            <div className="text-xs text-[var(--text-muted)] mt-1">{s}</div>
           </button>
         ))}
       </div>
 
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
         {filtered.length === 0 ? (
-          <div className="text-center text-slate-400 py-12">No damage claims found</div>
+          <div className="text-center text-[var(--text-muted)] py-12">No damage claims found</div>
         ) : (
           <table className="w-full">
             <thead>
-              <tr className="border-b border-white/5">
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Date</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Booking</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Customer</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Description</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Est. Cost</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Actual Cost</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Insurance</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Status</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Actions</th>
+              <tr className="border-b border-[var(--border-subtle)]">
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Date</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Booking</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Customer</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Description</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Est. Cost</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Actual Cost</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Insurance</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Status</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map(c => (
-                <tr key={c.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                  <td className="px-4 py-4 text-sm text-slate-200">{c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '-'}</td>
-                  <td className="px-4 py-4 text-sm font-medium text-white">{c.booking?.bookingRef ?? c.bookingId.slice(0,8)}</td>
-                  <td className="px-4 py-4 text-sm text-white">{c.booking?.customer?.fullName ?? '-'}</td>
-                  <td className="px-4 py-4 text-sm text-white max-w-xs truncate">{c.description ?? '-'}</td>
+                <tr key={c.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
+                  <td className="px-4 py-4 text-sm text-[var(--text-main)]">{c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '-'}</td>
+                  <td className="px-4 py-4 text-sm font-medium text-[var(--text-main)]">{c.booking?.bookingRef ?? c.bookingId.slice(0,8)}</td>
+                  <td className="px-4 py-4 text-sm text-[var(--text-main)]">{c.booking?.customer?.fullName ?? '-'}</td>
+                  <td className="px-4 py-4 text-sm text-[var(--text-main)] max-w-xs truncate">{c.description ?? '-'}</td>
                   <td className="px-4 py-4 text-sm text-amber-400 font-medium">
                     {c.estimatedCost ? `AED ${Number(c.estimatedCost).toLocaleString()}` : '-'}
                   </td>
@@ -155,7 +155,7 @@ export default function DamageClaimsPage() {
                     {c.actualCost ? `AED ${Number(c.actualCost).toLocaleString()}` : '-'}
                   </td>
                   <td className="px-4 py-4 text-sm">
-                    {c.insuranceClaim ? <span className="text-blue-400">Insurance</span> : <span className="text-slate-300">Self</span>}
+                    {c.insuranceClaim ? <span className="text-blue-400">Insurance</span> : <span className="text-[var(--text-muted)]">Self</span>}
                   </td>
                   <td className="px-4 py-4">
                     <span className={`px-3 py-1 rounded-full text-xs font-medium border ${STATUS_COLORS[c.status ?? 'OPEN']}`}>
@@ -166,7 +166,7 @@ export default function DamageClaimsPage() {
                     <select
                       value={c.status ?? 'OPEN'}
                       onChange={e => updateStatus(c.id, e.target.value)}
-                      className="text-xs px-2 py-1 rounded bg-slate-700 border border-white/10 text-white focus:outline-none"
+                      className="text-xs px-2 py-1 rounded bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none"
                     >
                       <option value="OPEN">OPEN</option>
                       <option value="ASSESSED">ASSESSED</option>
@@ -183,16 +183,16 @@ export default function DamageClaimsPage() {
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-lg bg-slate-800/95 border border-white/10 rounded-2xl p-8">
+          <div className="w-full max-w-lg bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl p-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">New Damage Claim</h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white">✕</button>
+              <h2 className="text-2xl font-bold text-[var(--text-main)]">New Damage Claim</h2>
+              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">✕</button>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Booking *</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Booking *</label>
                 <select value={formData.bookingId} onChange={e => setFormData(p => ({...p, bookingId: e.target.value}))} required
-                  className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-rose-500 focus:outline-none">
+                  className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-rose-500 focus:outline-none">
                   <option value="">Select booking</option>
                   {bookings.filter(b => b.status !== 'CANCELLED').map(b => (
                     <option key={b.id} value={b.id}>{b.bookingRef ?? b.id.slice(0,8)} — {b.customer?.fullName ?? b.customerId}</option>
@@ -200,28 +200,28 @@ export default function DamageClaimsPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Damage Description *</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Damage Description *</label>
                 <textarea value={formData.description} onChange={e => setFormData(p => ({...p, description: e.target.value}))} required rows={3}
                   placeholder="Describe the damage..."
-                  className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-rose-500 focus:outline-none" />
+                  className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-rose-500 focus:outline-none" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Estimated Cost (AED)</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Estimated Cost (AED)</label>
                 <input type="number" value={formData.estimatedCost} onChange={e => setFormData(p => ({...p, estimatedCost: e.target.value}))} placeholder="0.00" min="0" step="0.01"
-                  className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-rose-500 focus:outline-none" />
+                  className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-rose-500 focus:outline-none" />
               </div>
               <div className="flex gap-6">
-                <label className="flex items-center gap-2 text-sm text-slate-300">
-                  <input type="checkbox" checked={formData.insuranceClaim} onChange={e => setFormData(p => ({...p, insuranceClaim: e.target.checked}))} className="accent-blue-500 text-white" />
+                <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+                  <input type="checkbox" checked={formData.insuranceClaim} onChange={e => setFormData(p => ({...p, insuranceClaim: e.target.checked}))} className="accent-blue-500 text-[var(--text-main)]" />
                   Insurance Claim
                 </label>
-                <label className="flex items-center gap-2 text-sm text-slate-300">
-                  <input type="checkbox" checked={formData.billedToCustomer} onChange={e => setFormData(p => ({...p, billedToCustomer: e.target.checked}))} className="accent-rose-500 text-white" />
+                <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+                  <input type="checkbox" checked={formData.billedToCustomer} onChange={e => setFormData(p => ({...p, billedToCustomer: e.target.checked}))} className="accent-rose-500 text-[var(--text-main)]" />
                   Bill to Customer
                 </label>
               </div>
               <div className="flex gap-4 justify-end pt-4">
-                <button type="button" onClick={() => setShowModal(false)} className="px-6 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5">Cancel</button>
+                <button type="button" onClick={() => setShowModal(false)} className="px-6 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]">Cancel</button>
                 <button type="submit" disabled={saving} className="px-6 py-2 rounded-lg bg-gradient-to-r from-rose-600 to-pink-600 text-white hover:opacity-90 disabled:opacity-50">
                   {saving ? 'Creating...' : 'Create Claim'}
                 </button>

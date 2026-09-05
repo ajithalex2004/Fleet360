@@ -258,34 +258,34 @@ export default function CounterPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by booking ref, customer, or vehicle category…"
-              className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white placeholder-slate-500"
+              className="w-full px-4 py-3 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)]"
             />
             {filteredBookings.length === 0 ? (
-              <div className="p-8 rounded-xl bg-slate-800/40 border border-slate-700 text-center text-slate-400">
+              <div className="p-8 rounded-xl bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] text-center text-[var(--text-muted)]">
                 No confirmed bookings to handover.
               </div>
             ) : filteredBookings.map((b) => (
               <button
                 key={b.id}
                 onClick={() => { setSelected(b); setStep('INSPECT'); }}
-                className="w-full text-left p-4 rounded-xl bg-slate-800/60 border border-slate-700 hover:bg-slate-700/60 active:scale-[0.99] transition flex items-center justify-between gap-3"
+                className="w-full text-left p-4 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]/60 active:scale-[0.99] transition flex items-center justify-between gap-3"
               >
                 <div className="min-w-0">
                   <div className="font-mono text-cyan-300 text-xs">{b.bookingRef ?? b.id.slice(0, 8)}</div>
-                  <div className="font-semibold text-white truncate">
+                  <div className="font-semibold text-[var(--text-main)] truncate">
                     {b.customer?.companyName ?? b.customer?.fullName ?? '—'}
                   </div>
-                  <div className="text-xs text-slate-400 truncate">
+                  <div className="text-xs text-[var(--text-muted)] truncate">
                     {b.vehicleCategory ?? '—'} · {new Date(b.pickupDate).toLocaleDateString('en-GB')} → {new Date(b.dropoffDate).toLocaleDateString('en-GB')}
                   </div>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <div className="text-xs text-slate-400">Total</div>
+                  <div className="text-xs text-[var(--text-muted)]">Total</div>
                   <div className="font-bold text-emerald-300">
                     AED {(b.totalAmount ?? 0).toLocaleString()}
                   </div>
                 </div>
-                <ChevronRight className="h-5 w-5 text-slate-500" />
+                <ChevronRight className="h-5 w-5 text-[var(--text-faint)]" />
               </button>
             ))}
           </div>
@@ -294,41 +294,41 @@ export default function CounterPage() {
         {/* STEP 2 — INSPECT */}
         {step === 'INSPECT' && selected && (
           <div className="space-y-4">
-            <div className="rounded-xl bg-slate-800/60 border border-slate-700 p-3">
+            <div className="rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] p-3">
               <div className="font-mono text-xs text-cyan-300">{selected.bookingRef ?? selected.id.slice(0, 8)}</div>
               <div className="font-semibold">{selected.customer?.companyName ?? selected.customer?.fullName ?? '—'}</div>
-              <div className="text-xs text-slate-400">{selected.vehicleCategory ?? '—'}</div>
+              <div className="text-xs text-[var(--text-muted)]">{selected.vehicleCategory ?? '—'}</div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-slate-400 block mb-1">Mileage at pickup (km) *</label>
+                <label className="text-xs text-[var(--text-muted)] block mb-1">Mileage at pickup (km) *</label>
                 <input
                   type="number"
                   inputMode="numeric"
                   min="0"
                   value={mileageOut}
                   onChange={(e) => setMileageOut(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-white text-lg"
+                  className="w-full px-4 py-3 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-lg"
                   placeholder="e.g. 24500"
                 />
               </div>
               <div>
-                <label className="text-xs text-slate-400 block mb-1">Fuel level *</label>
+                <label className="text-xs text-[var(--text-muted)] block mb-1">Fuel level *</label>
                 <div className="flex gap-1">
                   {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
                     <button
                       key={n}
                       onClick={() => setFuelOut(n)}
                       className={`flex-1 py-3 rounded text-xs font-bold transition ${
-                        n <= fuelOut ? 'bg-emerald-500 text-white' : 'bg-slate-700 text-slate-500'
+                        n <= fuelOut ? 'bg-emerald-500 text-[var(--text-main)]' : 'bg-[var(--bg-surface-hover)] text-[var(--text-faint)]'
                       }`}
                     >
                       {n === 8 ? 'F' : n === 4 ? '½' : n === 1 ? 'E' : n}
                     </button>
                   ))}
                 </div>
-                <div className="text-xs text-slate-500 mt-1">{fuelOut}/8</div>
+                <div className="text-xs text-[var(--text-faint)] mt-1">{fuelOut}/8</div>
               </div>
             </div>
 
@@ -337,7 +337,7 @@ export default function CounterPage() {
             {/* Photos */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-400 uppercase tracking-wider">
+                <span className="text-xs text-[var(--text-muted)] uppercase tracking-wider">
                   Walkaround photos {photos.length > 0 && <span className="text-cyan-300">· {photos.length}</span>}
                 </span>
                 <input
@@ -355,7 +355,7 @@ export default function CounterPage() {
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploadingPhoto}
-                  className="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-500 flex items-center gap-2 disabled:opacity-40"
+                  className="px-4 py-2 rounded-lg bg-teal-600 text-[var(--text-main)] text-sm font-medium hover:bg-teal-500 flex items-center gap-2 disabled:opacity-40"
                 >
                   {uploadingPhoto ? <Loader className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
                   {uploadingPhoto ? 'Uploading…' : 'Capture'}
@@ -365,11 +365,11 @@ export default function CounterPage() {
                 <div className="space-y-2">
                   <div className="grid grid-cols-3 gap-2">
                     {photos.map((p, i) => (
-                      <div key={i} className="relative aspect-square rounded-lg overflow-hidden bg-slate-800 border border-slate-700">
+                      <div key={i} className="relative aspect-square rounded-lg overflow-hidden bg-[var(--bg-surface)] border border-[var(--border-subtle)]">
                         <img src={p.url} alt={p.name} className="w-full h-full object-cover" />
                         <button
                           onClick={() => setPhotos(photos.filter((_, idx) => idx !== i))}
-                          className="absolute top-1 right-1 w-6 h-6 rounded-full bg-rose-600 text-white flex items-center justify-center text-xs"
+                          className="absolute top-1 right-1 w-6 h-6 rounded-full bg-rose-600 text-[var(--text-main)] flex items-center justify-center text-xs"
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -394,10 +394,10 @@ export default function CounterPage() {
             </div>
 
             {/* Step nav */}
-            <div className="fixed bottom-0 left-0 right-0 bg-slate-900/95 border-t border-slate-700 p-3 flex gap-2 max-w-2xl mx-auto">
+            <div className="fixed bottom-0 left-0 right-0 bg-[var(--bg-surface)]/95 border-t border-[var(--border-subtle)] p-3 flex gap-2 max-w-2xl mx-auto">
               <button
                 onClick={() => setStep('PICK')}
-                className="px-4 py-3 rounded-xl bg-slate-700 text-slate-200 font-medium flex items-center gap-1"
+                className="px-4 py-3 rounded-xl bg-[var(--bg-surface-hover)] text-[var(--text-main)] font-medium flex items-center gap-1"
               >
                 <ChevronLeft className="h-4 w-4" /> Back
               </button>
@@ -415,24 +415,24 @@ export default function CounterPage() {
         {/* STEP 3 — SIGN */}
         {step === 'SIGN' && selected && (
           <div className="space-y-4">
-            <div className="rounded-xl bg-slate-800/60 border border-slate-700 p-3 text-sm">
+            <div className="rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] p-3 text-sm">
               <div className="font-semibold">{selected.customer?.companyName ?? selected.customer?.fullName}</div>
-              <div className="text-xs text-slate-400 mt-1">
+              <div className="text-xs text-[var(--text-muted)] mt-1">
                 {markers.length} damage marker{markers.length === 1 ? '' : 's'} · {photos.length} photo{photos.length === 1 ? '' : 's'} · mileage {mileageOut} km · fuel {fuelOut}/8
               </div>
             </div>
 
             <SignaturePad onChange={setSignature} label="Customer signature" />
 
-            <p className="text-xs text-slate-500 italic">
+            <p className="text-xs text-[var(--text-faint)] italic">
               By signing, the customer confirms: vehicle inspected, damage walkaround
               recorded, mileage and fuel levels acknowledged, and rental terms accepted.
             </p>
 
-            <div className="fixed bottom-0 left-0 right-0 bg-slate-900/95 border-t border-slate-700 p-3 flex gap-2 max-w-2xl mx-auto">
+            <div className="fixed bottom-0 left-0 right-0 bg-[var(--bg-surface)]/95 border-t border-[var(--border-subtle)] p-3 flex gap-2 max-w-2xl mx-auto">
               <button
                 onClick={() => setStep('INSPECT')}
-                className="px-4 py-3 rounded-xl bg-slate-700 text-slate-200 font-medium flex items-center gap-1"
+                className="px-4 py-3 rounded-xl bg-[var(--bg-surface-hover)] text-[var(--text-main)] font-medium flex items-center gap-1"
               >
                 <ChevronLeft className="h-4 w-4" /> Back
               </button>
@@ -463,12 +463,12 @@ export default function CounterPage() {
               {agreementNo && (
                 <Link
                   href={`/rental/agreements`}
-                  className="px-4 py-2 rounded-lg bg-slate-700 text-white text-sm hover:bg-slate-600"
+                  className="px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-sm hover:bg-[var(--bg-surface-hover)]"
                 >
                   View Agreement
                 </Link>
               )}
-              <button onClick={reset} className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500">
+              <button onClick={reset} className="px-4 py-2 rounded-lg bg-emerald-600 text-[var(--text-main)] text-sm font-medium hover:bg-emerald-500">
                 <Plus className="h-4 w-4 inline mr-1" />
                 Next handover
               </button>
@@ -492,9 +492,9 @@ function stepTitle(s: Step): string {
 function StepDot({ active, done, label }: { active: boolean; done: boolean; label: string }) {
   return (
     <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold border-2 ${
-      done ? 'bg-emerald-500 border-emerald-300 text-white' :
+      done ? 'bg-emerald-500 border-emerald-300 text-[var(--text-main)]' :
       active ? 'bg-white text-teal-700 border-white' :
-      'bg-transparent border-white/40 text-white/60'
+      'bg-transparent border-white/40 text-[var(--text-main)]/60'
     }`}>
       {done ? '✓' : label}
     </div>

@@ -59,9 +59,9 @@ const STANDARD_CHECKLIST: string[] = [
 ];
 
 const INPUT_CLS =
-  'w-full px-4 py-2.5 rounded-lg bg-slate-700/80 border border-white/10 text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none text-sm transition-colors';
-const LABEL_CLS = 'block text-sm font-medium text-slate-300 mb-1.5';
-const SECTION_CLS = 'bg-slate-800/60 border border-white/10 rounded-xl p-5 space-y-4';
+  'w-full px-4 py-2.5 rounded-lg bg-[var(--bg-surface-hover)]/80 border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-teal-500 focus:outline-none text-sm transition-colors';
+const LABEL_CLS = 'block text-sm font-medium text-[var(--text-muted)] mb-1.5';
+const SECTION_CLS = 'bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-5 space-y-4';
 
 /* ─── Sub-components ─── */
 function FuelGauge({ level }: { level: number }) {
@@ -72,12 +72,12 @@ function FuelGauge({ level }: { level: number }) {
           <div
             key={i}
             className={`w-5 h-5 rounded-sm transition-colors ${
-              i < level ? 'bg-gradient-to-t from-teal-600 to-cyan-500' : 'bg-slate-700'
+              i < level ? 'bg-gradient-to-t from-teal-600 to-cyan-500' : 'bg-[var(--bg-surface-hover)]'
             }`}
           />
         ))}
       </div>
-      <span className="text-xs text-slate-400 whitespace-nowrap">
+      <span className="text-xs text-[var(--text-muted)] whitespace-nowrap">
         {FUEL_LABELS[level] ?? `${level}/8`}
       </span>
     </div>
@@ -90,7 +90,7 @@ function StarRating({ score }: { score: number }) {
   return (
     <div className="flex items-center gap-0.5">
       {Array.from({ length: 5 }, (_, i) => (
-        <span key={i} className={`text-sm ${i < score ? color : 'text-slate-700'}`}>
+        <span key={i} className={`text-sm ${i < score ? color : 'text-[var(--text-faint)]'}`}>
           ★
         </span>
       ))}
@@ -115,13 +115,13 @@ function StarSelector({
             key={n}
             type="button"
             onClick={() => onChange(n)}
-            className={`text-2xl transition-colors ${n <= value ? c : 'text-slate-700 hover:text-slate-500'}`}
+            className={`text-2xl transition-colors ${n <= value ? c : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'}`}
           >
             ★
           </button>
         );
       })}
-      <span className="text-sm text-slate-400 ml-2 self-center">{value}/5</span>
+      <span className="text-sm text-[var(--text-muted)] ml-2 self-center">{value}/5</span>
     </div>
   );
 }
@@ -145,7 +145,7 @@ function StatusBadge({ status }: { status: string }) {
     CANCELLED: 'bg-red-500/20 text-red-400 border-red-500/30',
   };
   return (
-    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${map[status] ?? 'bg-slate-500/20 text-slate-400 border-slate-500/30'}`}>
+    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${map[status] ?? 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30'}`}>
       {status}
     </span>
   );
@@ -345,7 +345,7 @@ export default function HandoverPage() {
   if (loading)
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-slate-400 animate-pulse text-lg">Loading handovers...</div>
+        <div className="text-[var(--text-muted)] animate-pulse text-lg">Loading handovers...</div>
       </div>
     );
 
@@ -354,8 +354,8 @@ export default function HandoverPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-2">Handover Checklists</h1>
-          <p className="text-xs text-slate-400">Vehicle pickup and return condition records</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Handover Checklists</h1>
+          <p className="text-xs text-[var(--text-muted)]">Vehicle pickup and return condition records</p>
         </div>
         <button
           onClick={() => { resetForm(); setShowModal(true); }}
@@ -375,17 +375,17 @@ export default function HandoverPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {kpiCards.map((c) => (
-          <div key={c.label} className={`bg-slate-800/60 border ${c.border} rounded-2xl p-5 backdrop-blur-sm`}>
+          <div key={c.label} className={`bg-[var(--bg-surface)]/60 border ${c.border} rounded-2xl p-5 backdrop-blur-sm`}>
             <div className="text-2xl mb-1">{c.icon}</div>
             <div className={`text-2xl font-bold ${c.color} mb-1`}>{c.value}</div>
-            <div className="text-sm font-medium text-white">{c.label}</div>
+            <div className="text-sm font-medium text-[var(--text-main)]">{c.label}</div>
           </div>
         ))}
       </div>
 
       {/* Type Tabs + Search */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-        <div className="flex gap-1 bg-slate-800/60 border border-white/10 rounded-xl p-1">
+        <div className="flex gap-1 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-1">
           {(['PICKUP', 'RETURN'] as const).map((tab) => (
             <button
               key={tab}
@@ -395,7 +395,7 @@ export default function HandoverPage() {
                   ? tab === 'PICKUP'
                     ? 'bg-gradient-to-r from-teal-600 to-cyan-600 text-white shadow'
                     : 'bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow'
-                  : 'text-slate-400 hover:text-white'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
               }`}
             >
               {tab === 'PICKUP' ? '🚗 PICKUP Handovers' : '🔄 RETURN Handovers'}
@@ -407,26 +407,26 @@ export default function HandoverPage() {
           placeholder="Search agreement, customer, vehicle..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="flex-1 px-4 py-2 rounded-xl bg-slate-800/60 border border-white/10 text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none text-sm"
+          className="flex-1 px-4 py-2 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-teal-500 focus:outline-none text-sm"
         />
       </div>
 
       {/* Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl backdrop-blur-sm overflow-x-auto">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl backdrop-blur-sm overflow-x-auto">
         {handovers.length === 0 ? (
-          <div className="text-center text-slate-400 py-16">
+          <div className="text-center text-[var(--text-muted)] py-16">
             <div className="text-4xl mb-3">{activeTab === 'PICKUP' ? '🚗' : '🔄'}</div>
             <div>No {activeTab.toLowerCase()} handovers found</div>
           </div>
         ) : (
           <table className="w-full min-w-[1200px]">
             <thead>
-              <tr className="border-b border-white/5">
+              <tr className="border-b border-[var(--border-subtle)]">
                 {[
                   'Handover No', 'Type', 'Agreement', 'Customer', 'Vehicle',
                   'Date', 'Fuel', 'Odometer', 'Condition', 'Status', 'Actions',
                 ].map((h) => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">
                     {h}
                   </th>
                 ))}
@@ -434,20 +434,20 @@ export default function HandoverPage() {
             </thead>
             <tbody>
               {handovers.map((h) => (
-                <tr key={h.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                <tr key={h.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
                   <td className="px-4 py-3.5 text-sm font-mono text-teal-400 font-medium whitespace-nowrap">
                     {h.handover_no}
                   </td>
                   <td className="px-4 py-3.5">
                     <TypeBadge type={h.handover_type} />
                   </td>
-                  <td className="px-4 py-3.5 text-sm text-slate-300">{h.agreement_no ?? '—'}</td>
-                  <td className="px-4 py-3.5 text-sm text-white font-medium">{h.customer_name ?? '—'}</td>
-                  <td className="px-4 py-3.5 text-sm text-slate-300">
+                  <td className="px-4 py-3.5 text-sm text-[var(--text-muted)]">{h.agreement_no ?? '—'}</td>
+                  <td className="px-4 py-3.5 text-sm text-[var(--text-main)] font-medium">{h.customer_name ?? '—'}</td>
+                  <td className="px-4 py-3.5 text-sm text-[var(--text-muted)]">
                     <div>{h.vehicle_name ?? '—'}</div>
-                    {h.vehicle_no && <div className="text-xs text-slate-500">{h.vehicle_no}</div>}
+                    {h.vehicle_no && <div className="text-xs text-[var(--text-faint)]">{h.vehicle_no}</div>}
                   </td>
-                  <td className="px-4 py-3.5 text-sm text-slate-300 whitespace-nowrap">
+                  <td className="px-4 py-3.5 text-sm text-[var(--text-muted)] whitespace-nowrap">
                     {h.handover_date
                       ? new Date(h.handover_date).toLocaleString('en-GB', {
                           day: '2-digit', month: 'short', year: 'numeric',
@@ -458,7 +458,7 @@ export default function HandoverPage() {
                   <td className="px-4 py-3.5">
                     <FuelGauge level={h.fuel_level ?? 0} />
                   </td>
-                  <td className="px-4 py-3.5 text-sm text-slate-300 whitespace-nowrap">
+                  <td className="px-4 py-3.5 text-sm text-[var(--text-muted)] whitespace-nowrap">
                     {h.odometer_reading != null ? h.odometer_reading.toLocaleString() + ' km' : '—'}
                   </td>
                   <td className="px-4 py-3.5">
@@ -476,7 +476,7 @@ export default function HandoverPage() {
                             placeholder="Signed by..."
                             value={signedBy}
                             onChange={(e) => setSignedByInput(e.target.value)}
-                            className="w-28 px-2 py-1 rounded-lg bg-slate-700 border border-white/10 text-white text-xs focus:border-teal-500 focus:outline-none"
+                            className="w-28 px-2 py-1 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] text-xs focus:border-teal-500 focus:outline-none"
                           />
                           <button
                             onClick={() => handleSignOff(h.id)}
@@ -486,7 +486,7 @@ export default function HandoverPage() {
                           </button>
                           <button
                             onClick={() => { setSignOffId(null); setSignedByInput(''); }}
-                            className="text-slate-500 hover:text-white text-xs"
+                            className="text-[var(--text-faint)] hover:text-[var(--text-main)] text-xs"
                           >
                             ✕
                           </button>
@@ -501,7 +501,7 @@ export default function HandoverPage() {
                       )
                     )}
                     {h.status === 'COMPLETED' && (
-                      <div className="text-xs text-slate-500">
+                      <div className="text-xs text-[var(--text-faint)]">
                         <div>Signed: {h.signed_by ?? '—'}</div>
                         {h.signed_at && (
                           <div>{new Date(h.signed_at).toLocaleDateString('en-GB')}</div>
@@ -519,18 +519,18 @@ export default function HandoverPage() {
       {/* ─── NEW HANDOVER MODAL ─── */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-3xl bg-slate-900 border border-white/10 rounded-2xl shadow-2xl max-h-[95vh] overflow-y-auto">
+          <div className="w-full max-w-3xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl max-h-[95vh] overflow-y-auto">
             {/* Modal header */}
-            <div className="sticky top-0 bg-slate-900 border-b border-white/10 px-8 py-5 flex items-center justify-between rounded-t-2xl z-10">
+            <div className="sticky top-0 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] px-8 py-5 flex items-center justify-between rounded-t-2xl z-10">
               <div>
-                <h2 className="text-xl font-bold text-white">New Handover Checklist</h2>
-                <p className="text-sm text-slate-400 mt-0.5">
+                <h2 className="text-xl font-bold text-[var(--text-main)]">New Handover Checklist</h2>
+                <p className="text-sm text-[var(--text-muted)] mt-0.5">
                   Complete vehicle {form.handoverType.toLowerCase()} inspection
                 </p>
               </div>
               <button
                 onClick={() => { setShowModal(false); resetForm(); }}
-                className="text-slate-400 hover:text-white text-xl leading-none transition-colors"
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl leading-none transition-colors"
               >
                 ✕
               </button>
@@ -604,9 +604,9 @@ export default function HandoverPage() {
                           className={`flex-1 py-2.5 rounded-lg text-sm font-semibold border transition-all ${
                             form.handoverType === t
                               ? t === 'PICKUP'
-                                ? 'bg-teal-600 text-white border-teal-500'
-                                : 'bg-violet-600 text-white border-violet-500'
-                              : 'bg-slate-700/50 text-slate-400 border-white/10 hover:border-white/20'
+                                ? 'bg-teal-600 text-[var(--text-main)] border-teal-500'
+                                : 'bg-violet-600 text-[var(--text-main)] border-violet-500'
+                              : 'bg-[var(--bg-surface-hover)]/50 text-[var(--text-muted)] border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
                           }`}
                         >
                           {t === 'PICKUP' ? '🚗 PICKUP' : '🔄 RETURN'}
@@ -635,20 +635,20 @@ export default function HandoverPage() {
                   </div>
                   <div className="grid grid-cols-4 gap-3 text-sm">
                     <div>
-                      <div className="text-slate-400 text-xs mb-1">Fuel</div>
+                      <div className="text-[var(--text-muted)] text-xs mb-1">Fuel</div>
                       <FuelGauge level={pickupRef.fuel_level ?? 0} />
                     </div>
                     <div>
-                      <div className="text-slate-400 text-xs mb-1">Odometer</div>
-                      <div className="text-white font-medium">{(pickupRef.odometer_reading ?? 0).toLocaleString()} km</div>
+                      <div className="text-[var(--text-muted)] text-xs mb-1">Odometer</div>
+                      <div className="text-[var(--text-main)] font-medium">{(pickupRef.odometer_reading ?? 0).toLocaleString()} km</div>
                     </div>
                     <div>
-                      <div className="text-slate-400 text-xs mb-1">Condition</div>
+                      <div className="text-[var(--text-muted)] text-xs mb-1">Condition</div>
                       <StarRating score={pickupRef.condition_score ?? 0} />
                     </div>
                     <div>
-                      <div className="text-slate-400 text-xs mb-1">Body</div>
-                      <div className="text-white">{pickupRef.body_condition ?? '—'}</div>
+                      <div className="text-[var(--text-muted)] text-xs mb-1">Body</div>
+                      <div className="text-[var(--text-main)]">{pickupRef.body_condition ?? '—'}</div>
                     </div>
                   </div>
                 </div>
@@ -679,7 +679,7 @@ export default function HandoverPage() {
                       {FUEL_LABELS.map((l, i) => (
                         <span
                           key={i}
-                          className={`text-xs ${i === form.fuelLevel ? 'text-teal-400 font-bold' : 'text-slate-600'}`}
+                          className={`text-xs ${i === form.fuelLevel ? 'text-teal-400 font-bold' : 'text-[var(--text-faint)]'}`}
                         >
                           {l}
                         </span>
@@ -695,7 +695,7 @@ export default function HandoverPage() {
                           className={`h-6 flex-1 rounded transition-colors ${
                             i < form.fuelLevel
                               ? 'bg-gradient-to-t from-teal-600 to-cyan-500'
-                              : 'bg-slate-700 hover:bg-slate-600'
+                              : 'bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)]'
                           }`}
                         />
                       ))}
@@ -779,8 +779,8 @@ export default function HandoverPage() {
                           onClick={() => set('keysCount', n)}
                           className={`flex-1 py-2 rounded-lg text-sm font-semibold border transition-all ${
                             form.keysCount === n
-                              ? 'bg-teal-600 text-white border-teal-500'
-                              : 'bg-slate-700/50 text-slate-400 border-white/10 hover:border-white/20'
+                              ? 'bg-teal-600 text-[var(--text-main)] border-teal-500'
+                              : 'bg-[var(--bg-surface-hover)]/50 text-[var(--text-muted)] border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
                           }`}
                         >
                           {n} Key{n > 1 ? 's' : ''}
@@ -800,12 +800,12 @@ export default function HandoverPage() {
                           className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors cursor-pointer ${
                             form[field]
                               ? 'bg-teal-600 border-teal-500'
-                              : 'bg-transparent border-slate-500'
+                              : 'bg-transparent border-[var(--border-strong)]'
                           }`}
                         >
-                          {form[field] && <span className="text-white text-xs font-bold">✓</span>}
+                          {form[field] && <span className="text-[var(--text-main)] text-xs font-bold">✓</span>}
                         </div>
-                        <span className="text-sm text-slate-300">{label}</span>
+                        <span className="text-sm text-[var(--text-muted)]">{label}</span>
                       </label>
                     ))}
                   </div>
@@ -825,18 +825,18 @@ export default function HandoverPage() {
                         className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors cursor-pointer flex-shrink-0 ${
                           item.checked
                             ? 'bg-emerald-600 border-emerald-500'
-                            : 'bg-transparent border-slate-500 group-hover:border-slate-400'
+                            : 'bg-transparent border-[var(--border-strong)] group-hover:border-[var(--text-muted)]'
                         }`}
                       >
-                        {item.checked && <span className="text-white text-xs font-bold">✓</span>}
+                        {item.checked && <span className="text-[var(--text-main)] text-xs font-bold">✓</span>}
                       </div>
-                      <span className={`text-sm transition-colors ${item.checked ? 'text-white' : 'text-slate-400'}`}>
+                      <span className={`text-sm transition-colors ${item.checked ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)]'}`}>
                         {item.label}
                       </span>
                     </label>
                   ))}
                 </div>
-                <div className="text-xs text-slate-500 mt-2">
+                <div className="text-xs text-[var(--text-faint)] mt-2">
                   {form.checklistItems.filter((i) => i.checked).length} / {form.checklistItems.length} items confirmed
                 </div>
               </div>
@@ -873,7 +873,7 @@ export default function HandoverPage() {
                 <button
                   type="button"
                   onClick={() => { setShowModal(false); resetForm(); }}
-                  className="px-6 py-2.5 rounded-xl border border-white/10 text-white text-sm hover:bg-white/5 transition-colors"
+                  className="px-6 py-2.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-main)] text-sm hover:bg-[var(--bg-surface-hover)] transition-colors"
                 >
                   Cancel
                 </button>

@@ -186,8 +186,8 @@ export default function RateEnginePage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Rate Engine</h1>
-          <p className="text-slate-400 text-xs mt-0.5">Manage pricing rules for all vehicle categories</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Rate Engine</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Manage pricing rules for all vehicle categories</p>
         </div>
         <div className="flex gap-3">
           <button
@@ -198,7 +198,7 @@ export default function RateEnginePage() {
           </button>
           <button
             onClick={() => { setEditRule(emptyRule()); setShowForm(true); setFormError(''); }}
-            className="px-4 py-2 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 transition text-sm font-medium"
+            className="px-4 py-2 rounded-lg bg-emerald-500 text-[var(--text-main)] hover:bg-emerald-600 transition text-sm font-medium"
           >
             + New Pricing Rule
           </button>
@@ -207,71 +207,71 @@ export default function RateEnginePage() {
 
       {/* Rate Calculator Panel */}
       {calcOpen && (
-        <div className="bg-slate-800/60 border border-teal-500/20 rounded-xl p-6 space-y-4">
+        <div className="bg-[var(--bg-surface)]/60 border border-teal-500/20 rounded-xl p-6 space-y-4">
           <h2 className="text-lg font-semibold text-teal-300 flex items-center gap-2">🧮 Rate Calculator Preview</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Vehicle Category</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Vehicle Category</label>
               <select
                 value={calcInput.vehicleCategory}
                 onChange={e => setCalcInput(p => ({ ...p, vehicleCategory: e.target.value }))}
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm"
+                className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm"
               >
                 {VEHICLE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Pickup Date</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Pickup Date</label>
               <input type="date" value={calcInput.pickupDate}
                 onChange={e => setCalcInput(p => ({ ...p, pickupDate: e.target.value }))}
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm" />
+                className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm" />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Dropoff Date</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Dropoff Date</label>
               <input type="date" value={calcInput.dropoffDate}
                 onChange={e => setCalcInput(p => ({ ...p, dropoffDate: e.target.value }))}
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm" />
+                className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm" />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Customer Type</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Customer Type</label>
               <select value={calcInput.customerType}
                 onChange={e => setCalcInput(p => ({ ...p, customerType: e.target.value }))}
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm">
+                className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm">
                 {CUSTOMER_TYPES.map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Channel</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Channel</label>
               <select value={calcInput.channel}
                 onChange={e => setCalcInput(p => ({ ...p, channel: e.target.value }))}
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm">
+                className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm">
                 {CHANNELS.map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Currency</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Currency</label>
               <select value={calcInput.currency}
                 onChange={e => setCalcInput(p => ({ ...p, currency: e.target.value }))}
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm">
+                className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm">
                 {CURRENCIES.map(c => <option key={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Promo Code</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Promo Code</label>
               <input type="text" value={calcInput.promoCode} placeholder="Optional"
                 onChange={e => setCalcInput(p => ({ ...p, promoCode: e.target.value }))}
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm" />
+                className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm" />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Insurance Plan</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Insurance Plan</label>
               <input type="text" value={calcInput.insurancePlanCode} placeholder="e.g. CDW"
                 onChange={e => setCalcInput(p => ({ ...p, insurancePlanCode: e.target.value }))}
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm" />
+                className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm" />
             </div>
           </div>
           <button
             onClick={calcRate} disabled={calcLoading}
-            className="px-6 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 transition text-sm font-medium disabled:opacity-50"
+            className="px-6 py-2 bg-teal-500 text-[var(--text-main)] rounded-lg hover:bg-teal-600 transition text-sm font-medium disabled:opacity-50"
           >
             {calcLoading ? 'Calculating…' : 'Calculate Rate'}
           </button>
@@ -281,13 +281,13 @@ export default function RateEnginePage() {
           {calcResult && (
             <div className="mt-4 space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-400">Applied Rule</span>
-                <span className="text-sm text-white font-medium">{calcResult.ruleName}</span>
+                <span className="text-sm text-[var(--text-muted)]">Applied Rule</span>
+                <span className="text-sm text-[var(--text-main)] font-medium">{calcResult.ruleName}</span>
               </div>
-              <div className="bg-slate-700/50 rounded-lg overflow-hidden">
+              <div className="bg-[var(--bg-surface-hover)]/50 rounded-lg overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-xs text-slate-400 border-b border-slate-600">
+                    <tr className="text-xs text-[var(--text-muted)] border-b border-[var(--border-strong)]">
                       <th className="px-4 py-2 text-left">Description</th>
                       <th className="px-4 py-2 text-right">Qty</th>
                       <th className="px-4 py-2 text-right">Unit Price</th>
@@ -296,7 +296,7 @@ export default function RateEnginePage() {
                   </thead>
                   <tbody>
                     {calcResult.breakdown.map((bl, i) => (
-                      <tr key={i} className={`border-b border-slate-700/50 ${bl.type === 'DISCOUNT' ? 'text-amber-400' : bl.type === 'TAX' ? 'text-slate-400' : 'text-white'}`}>
+                      <tr key={i} className={`border-b border-[var(--border-subtle)]/50 ${bl.type === 'DISCOUNT' ? 'text-amber-400' : bl.type === 'TAX' ? 'text-[var(--text-muted)]' : 'text-[var(--text-main)]'}`}>
                         <td className="px-4 py-2">{bl.label}</td>
                         <td className="px-4 py-2 text-right">{bl.qty} {bl.unitLabel}</td>
                         <td className="px-4 py-2 text-right">{fmt(bl.unitPrice, calcResult.currency)}</td>
@@ -322,35 +322,35 @@ export default function RateEnginePage() {
         <input
           type="text" placeholder="Search rules…" value={search}
           onChange={e => setSearch(e.target.value)}
-          className="px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm w-56"
+          className="px-3 py-2 bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm w-56"
         />
         <select value={filterCat} onChange={e => { setFilterCat(e.target.value); setPage(1); }}
-          className="px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm">
+          className="px-3 py-2 bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm">
           <option value="">All Categories</option>
           {VEHICLE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
         </select>
         <select value={filterActive} onChange={e => { setFilterActive(e.target.value); setPage(1); }}
-          className="px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm">
+          className="px-3 py-2 bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm">
           <option value="">All Status</option>
           <option value="true">Active</option>
           <option value="false">Inactive</option>
         </select>
-        <span className="ml-auto text-slate-400 text-sm self-center">{total} rule{total !== 1 ? 's' : ''}</span>
+        <span className="ml-auto text-[var(--text-muted)] text-sm self-center">{total} rule{total !== 1 ? 's' : ''}</span>
       </div>
 
       {/* Rules Table */}
-      <div className="bg-slate-800/60 border border-white/10 rounded-xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl overflow-hidden">
         {loading ? (
-          <div className="p-12 text-center text-slate-400">Loading…</div>
+          <div className="p-12 text-center text-[var(--text-muted)]">Loading…</div>
         ) : filteredRules.length === 0 ? (
           <div className="p-12 text-center">
-            <p className="text-slate-400 text-lg">No pricing rules found</p>
-            <p className="text-slate-500 text-sm mt-1">Create your first rule to get started</p>
+            <p className="text-[var(--text-muted)] text-lg">No pricing rules found</p>
+            <p className="text-[var(--text-faint)] text-sm mt-1">Create your first rule to get started</p>
           </div>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/10 text-xs text-slate-400">
+              <tr className="border-b border-[var(--border-subtle)] text-xs text-[var(--text-muted)]">
                 <th className="px-4 py-3 text-left">Rule Name</th>
                 <th className="px-4 py-3 text-left">Category</th>
                 <th className="px-4 py-3 text-right">Daily Rate</th>
@@ -365,8 +365,8 @@ export default function RateEnginePage() {
             </thead>
             <tbody>
               {filteredRules.map(rule => (
-                <tr key={rule.id} className="border-b border-white/5 hover:bg-white/5 transition">
-                  <td className="px-4 py-3 text-white font-medium">
+                <tr key={rule.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition">
+                  <td className="px-4 py-3 text-[var(--text-main)] font-medium">
                     {rule.name}
                     {rule.promoCode && (
                       <span className="ml-2 px-1.5 py-0.5 rounded text-xs bg-amber-500/20 text-amber-300 border border-amber-500/30">
@@ -379,24 +379,24 @@ export default function RateEnginePage() {
                       {rule.vehicleCategory}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right text-white font-mono">
+                  <td className="px-4 py-3 text-right text-[var(--text-main)] font-mono">
                     {fmt(rule.baseDailyRate, rule.currency)}
                   </td>
-                  <td className="px-4 py-3 text-right text-slate-300 font-mono">
+                  <td className="px-4 py-3 text-right text-[var(--text-muted)] font-mono">
                     {rule.weeklyRate ? fmt(rule.weeklyRate, rule.currency) : '—'}
                   </td>
-                  <td className="px-4 py-3 text-right text-slate-300 font-mono">
+                  <td className="px-4 py-3 text-right text-[var(--text-muted)] font-mono">
                     {rule.monthlyRate ? fmt(rule.monthlyRate, rule.currency) : '—'}
                   </td>
-                  <td className="px-4 py-3 text-slate-300">{rule.customerType ?? 'All'}</td>
-                  <td className="px-4 py-3 text-slate-300">{rule.channel ?? 'All'}</td>
+                  <td className="px-4 py-3 text-[var(--text-muted)]">{rule.customerType ?? 'All'}</td>
+                  <td className="px-4 py-3 text-[var(--text-muted)]">{rule.channel ?? 'All'}</td>
                   <td className="px-4 py-3 text-center">
-                    <span className="px-2 py-0.5 rounded-full text-xs bg-slate-700 text-slate-300">
+                    <span className="px-2 py-0.5 rounded-full text-xs bg-[var(--bg-surface-hover)] text-[var(--text-muted)]">
                       {rule.priority}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${rule.isActive ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-600/50 text-slate-400'}`}>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${rule.isActive ? 'bg-emerald-500/20 text-emerald-300' : 'bg-[var(--bg-surface-hover)]/50 text-[var(--text-muted)]'}`}>
                       {rule.isActive ? 'Active' : 'Inactive'}
                     </span>
                   </td>
@@ -427,12 +427,12 @@ export default function RateEnginePage() {
       {total > limit && (
         <div className="flex items-center justify-between">
           <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-            className="px-4 py-2 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 disabled:opacity-40 text-sm">
+            className="px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] disabled:opacity-40 text-sm">
             ← Prev
           </button>
-          <span className="text-slate-400 text-sm">Page {page} of {Math.ceil(total / limit)}</span>
+          <span className="text-[var(--text-muted)] text-sm">Page {page} of {Math.ceil(total / limit)}</span>
           <button onClick={() => setPage(p => p + 1)} disabled={page * limit >= total}
-            className="px-4 py-2 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 disabled:opacity-40 text-sm">
+            className="px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] disabled:opacity-40 text-sm">
             Next →
           </button>
         </div>
@@ -441,10 +441,10 @@ export default function RateEnginePage() {
       {/* Rule Form Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 border border-white/10 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
-            <div className="flex items-center justify-between p-6 border-b border-white/10">
-              <h2 className="text-lg font-bold text-white">{editRule.id ? 'Edit Pricing Rule' : 'New Pricing Rule'}</h2>
-              <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-white text-2xl">×</button>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between p-6 border-b border-[var(--border-subtle)]">
+              <h2 className="text-lg font-bold text-[var(--text-main)]">{editRule.id ? 'Edit Pricing Rule' : 'New Pricing Rule'}</h2>
+              <button onClick={() => setShowForm(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-2xl">×</button>
             </div>
             <div className="p-6 space-y-5">
               {formError && (
@@ -453,100 +453,100 @@ export default function RateEnginePage() {
 
               {/* Basic Info */}
               <div>
-                <h3 className="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wider">Basic Information</h3>
+                <h3 className="text-sm font-semibold text-[var(--text-muted)] mb-3 uppercase tracking-wider">Basic Information</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="col-span-2">
-                    <label className="block text-xs text-slate-400 mb-1">Rule Name *</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Rule Name *</label>
                     <input type="text" value={editRule.name ?? ''} placeholder="e.g. Standard Economy — Summer 2025"
                       onChange={e => setEditRule(p => ({ ...p, name: e.target.value }))}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm" />
+                      className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Vehicle Category *</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Vehicle Category *</label>
                     <select value={editRule.vehicleCategory ?? 'ECONOMY'}
                       onChange={e => setEditRule(p => ({ ...p, vehicleCategory: e.target.value }))}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm">
+                      className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm">
                       {VEHICLE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Currency</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Currency</label>
                     <select value={editRule.currency ?? 'AED'}
                       onChange={e => setEditRule(p => ({ ...p, currency: e.target.value }))}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm">
+                      className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm">
                       {CURRENCIES.map(c => <option key={c}>{c}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Priority (higher = preferred)</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Priority (higher = preferred)</label>
                     <input type="number" value={editRule.priority ?? 0}
                       onChange={e => setEditRule(p => ({ ...p, priority: Number(e.target.value) }))}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm" />
+                      className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm" />
                   </div>
                   <div className="flex items-center gap-3 pt-5">
                     <input type="checkbox" id="isActive" checked={editRule.isActive ?? true}
                       onChange={e => setEditRule(p => ({ ...p, isActive: e.target.checked }))}
                       className="w-4 h-4 accent-emerald-500" />
-                    <label htmlFor="isActive" className="text-sm text-slate-300">Active</label>
+                    <label htmlFor="isActive" className="text-sm text-[var(--text-muted)]">Active</label>
                   </div>
                 </div>
               </div>
 
               {/* Rates */}
               <div>
-                <h3 className="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wider">Rates</h3>
+                <h3 className="text-sm font-semibold text-[var(--text-muted)] mb-3 uppercase tracking-wider">Rates</h3>
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Base Daily Rate *</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Base Daily Rate *</label>
                     <input type="number" step="0.01" value={editRule.baseDailyRate ?? 0}
                       onChange={e => setEditRule(p => ({ ...p, baseDailyRate: Number(e.target.value) }))}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm" />
+                      className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Weekly Rate (7-day total)</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Weekly Rate (7-day total)</label>
                     <input type="number" step="0.01" value={editRule.weeklyRate ?? ''}
                       onChange={e => setEditRule(p => ({ ...p, weeklyRate: e.target.value ? Number(e.target.value) : undefined }))}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm" placeholder="Auto from daily" />
+                      className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm" placeholder="Auto from daily" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Monthly Rate (30-day total)</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Monthly Rate (30-day total)</label>
                     <input type="number" step="0.01" value={editRule.monthlyRate ?? ''}
                       onChange={e => setEditRule(p => ({ ...p, monthlyRate: e.target.value ? Number(e.target.value) : undefined }))}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm" placeholder="Auto from daily" />
+                      className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm" placeholder="Auto from daily" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Tax Rate (%)</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Tax Rate (%)</label>
                     <input type="number" step="0.01" value={editRule.taxRate ?? 5}
                       onChange={e => setEditRule(p => ({ ...p, taxRate: Number(e.target.value) }))}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm" />
+                      className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Online Discount (%)</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Online Discount (%)</label>
                     <input type="number" step="0.01" value={editRule.onlineDiscount ?? ''}
                       onChange={e => setEditRule(p => ({ ...p, onlineDiscount: e.target.value ? Number(e.target.value) : undefined }))}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm" placeholder="0" />
+                      className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm" placeholder="0" />
                   </div>
                 </div>
               </div>
 
               {/* Segmentation */}
               <div>
-                <h3 className="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wider">Customer Segmentation</h3>
+                <h3 className="text-sm font-semibold text-[var(--text-muted)] mb-3 uppercase tracking-wider">Customer Segmentation</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Customer Type (blank = all)</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Customer Type (blank = all)</label>
                     <select value={editRule.customerType ?? ''}
                       onChange={e => setEditRule(p => ({ ...p, customerType: e.target.value || undefined }))}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm">
+                      className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm">
                       <option value="">All Customers</option>
                       {CUSTOMER_TYPES.map(c => <option key={c}>{c}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Channel (blank = all)</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Channel (blank = all)</label>
                     <select value={editRule.channel ?? ''}
                       onChange={e => setEditRule(p => ({ ...p, channel: e.target.value || undefined }))}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm">
+                      className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm">
                       <option value="">All Channels</option>
                       {CHANNELS.map(c => <option key={c}>{c}</option>)}
                     </select>
@@ -556,87 +556,87 @@ export default function RateEnginePage() {
 
               {/* Season */}
               <div>
-                <h3 className="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wider">Season / Validity</h3>
+                <h3 className="text-sm font-semibold text-[var(--text-muted)] mb-3 uppercase tracking-wider">Season / Validity</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Season From</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Season From</label>
                     <input type="date" value={editRule.seasonFrom?.split('T')[0] ?? ''}
                       onChange={e => setEditRule(p => ({ ...p, seasonFrom: e.target.value || undefined }))}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm" />
+                      className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Season To</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Season To</label>
                     <input type="date" value={editRule.seasonTo?.split('T')[0] ?? ''}
                       onChange={e => setEditRule(p => ({ ...p, seasonTo: e.target.value || undefined }))}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm" />
+                      className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm" />
                   </div>
                 </div>
               </div>
 
               {/* Promo */}
               <div>
-                <h3 className="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wider">Promo Code</h3>
+                <h3 className="text-sm font-semibold text-[var(--text-muted)] mb-3 uppercase tracking-wider">Promo Code</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Promo Code</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Promo Code</label>
                     <input type="text" value={editRule.promoCode ?? ''} placeholder="e.g. SUMMER25"
                       onChange={e => setEditRule(p => ({ ...p, promoCode: e.target.value || undefined }))}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm" />
+                      className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Promo Discount (%)</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Promo Discount (%)</label>
                     <input type="number" step="0.01" value={editRule.promoDiscountPct ?? ''}
                       onChange={e => setEditRule(p => ({ ...p, promoDiscountPct: e.target.value ? Number(e.target.value) : undefined }))}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm" placeholder="0" />
+                      className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm" placeholder="0" />
                   </div>
                 </div>
               </div>
 
               {/* Late Fees / KM */}
               <div>
-                <h3 className="text-sm font-semibold text-slate-300 mb-3 uppercase tracking-wider">Late Return & Mileage Policy</h3>
+                <h3 className="text-sm font-semibold text-[var(--text-muted)] mb-3 uppercase tracking-wider">Late Return & Mileage Policy</h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Grace Period (min)</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Grace Period (min)</label>
                     <input type="number" value={editRule.gracePeriodMin ?? 30}
                       onChange={e => setEditRule(p => ({ ...p, gracePeriodMin: Number(e.target.value) }))}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm" />
+                      className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Late Fee / Hour</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Late Fee / Hour</label>
                     <input type="number" step="0.01" value={editRule.lateFeePerHour ?? ''}
                       onChange={e => setEditRule(p => ({ ...p, lateFeePerHour: e.target.value ? Number(e.target.value) : undefined }))}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm" placeholder="0" />
+                      className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm" placeholder="0" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Late Fee Cap</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Late Fee Cap</label>
                     <input type="number" step="0.01" value={editRule.lateFeeCap ?? ''}
                       onChange={e => setEditRule(p => ({ ...p, lateFeeCap: e.target.value ? Number(e.target.value) : undefined }))}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm" placeholder="No cap" />
+                      className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm" placeholder="No cap" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Included KM / Day</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Included KM / Day</label>
                     <input type="number" value={editRule.includedKmPerDay ?? ''}
                       onChange={e => setEditRule(p => ({ ...p, includedKmPerDay: e.target.value ? Number(e.target.value) : undefined }))}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm" placeholder="Unlimited" />
+                      className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm" placeholder="Unlimited" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Excess KM Rate</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Excess KM Rate</label>
                     <input type="number" step="0.01" value={editRule.excessKmRate ?? ''}
                       onChange={e => setEditRule(p => ({ ...p, excessKmRate: e.target.value ? Number(e.target.value) : undefined }))}
-                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm" placeholder="0 per km" />
+                      className="w-full px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] rounded-lg text-[var(--text-main)] text-sm" placeholder="0 per km" />
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="flex gap-3 justify-end p-6 border-t border-white/10">
+            <div className="flex gap-3 justify-end p-6 border-t border-[var(--border-subtle)]">
               <button onClick={() => setShowForm(false)}
-                className="px-5 py-2 rounded-lg bg-slate-700 text-slate-300 hover:bg-slate-600 text-sm">
+                className="px-5 py-2 rounded-lg bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] text-sm">
                 Cancel
               </button>
               <button onClick={saveRule} disabled={saving}
-                className="px-6 py-2 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 text-sm font-medium disabled:opacity-50">
+                className="px-6 py-2 rounded-lg bg-emerald-500 text-[var(--text-main)] hover:bg-emerald-600 text-sm font-medium disabled:opacity-50">
                 {saving ? 'Saving…' : editRule.id ? 'Update Rule' : 'Create Rule'}
               </button>
             </div>

@@ -39,7 +39,7 @@ interface SummaryEntry {
 const STATUS_TABS = ['ALL', 'DRAFT', 'SENT', 'ACCEPTED', 'REJECTED', 'EXPIRED'];
 
 const STATUS_COLORS: Record<string, string> = {
-  DRAFT:    'bg-slate-600/30 text-slate-300 border-slate-600/40',
+  DRAFT:    'bg-[var(--bg-surface-hover)]/30 text-[var(--text-muted)] border-[var(--border-strong)]/40',
   SENT:     'bg-blue-500/20 text-blue-400 border-blue-500/30',
   ACCEPTED: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
   REJECTED: 'bg-red-500/20 text-red-400 border-red-500/30',
@@ -221,7 +221,7 @@ export default function QuotationsPage() {
       setFormData(p => ({ ...p, [key]: e.target.value })),
   });
 
-  const inputCls = 'w-full px-4 py-2.5 rounded-lg bg-slate-700/60 border border-white/10 text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500/40 transition-colors text-sm';
+  const inputCls = 'w-full px-4 py-2.5 rounded-lg bg-[var(--bg-surface-hover)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500/40 transition-colors text-sm';
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -229,8 +229,8 @@ export default function QuotationsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">RAC Quotations</h1>
-          <p className="text-slate-400 text-xs mt-1">Generate and track formal rental quotes through acceptance</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">RAC Quotations</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-1">Generate and track formal rental quotes through acceptance</p>
         </div>
         <button
           onClick={openNew}
@@ -251,37 +251,37 @@ export default function QuotationsPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Quotes */}
-        <div className="bg-slate-900 border border-white/10 rounded-2xl p-5">
-          <div className="text-slate-400 text-xs font-semibold uppercase tracking-wider mb-2">Total Quotes</div>
-          <div className="text-3xl font-bold text-white">{kpi.total}</div>
-          <div className="text-slate-500 text-xs mt-1">all time</div>
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5">
+          <div className="text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider mb-2">Total Quotes</div>
+          <div className="text-3xl font-bold text-[var(--text-main)]">{kpi.total}</div>
+          <div className="text-[var(--text-faint)] text-xs mt-1">all time</div>
         </div>
 
         {/* Accepted Value */}
         <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-5">
           <div className="text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-2">Accepted Value</div>
           <div className="text-2xl font-bold text-emerald-300 truncate">{fmtAED(kpi.acceptedVal)}</div>
-          <div className="text-slate-500 text-xs mt-1">confirmed revenue</div>
+          <div className="text-[var(--text-faint)] text-xs mt-1">confirmed revenue</div>
         </div>
 
         {/* Pending Value */}
         <div className="bg-blue-500/5 border border-blue-500/20 rounded-2xl p-5">
           <div className="text-blue-400 text-xs font-semibold uppercase tracking-wider mb-2">Pending Value</div>
           <div className="text-2xl font-bold text-blue-300 truncate">{fmtAED(kpi.pendingVal)}</div>
-          <div className="text-slate-500 text-xs mt-1">draft + sent</div>
+          <div className="text-[var(--text-faint)] text-xs mt-1">draft + sent</div>
         </div>
 
         {/* Conversion Rate */}
         <div className="bg-violet-500/5 border border-violet-500/20 rounded-2xl p-5">
           <div className="text-violet-400 text-xs font-semibold uppercase tracking-wider mb-2">Conversion Rate</div>
           <div className="text-3xl font-bold text-violet-300">{kpi.convRate}%</div>
-          <div className="text-slate-500 text-xs mt-1">accepted / total</div>
+          <div className="text-[var(--text-faint)] text-xs mt-1">accepted / total</div>
         </div>
       </div>
 
       {/* Filter Tabs + Search */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-        <div className="flex gap-1 bg-slate-900 border border-white/10 rounded-xl p-1 flex-wrap">
+        <div className="flex gap-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-1 flex-wrap">
           {STATUS_TABS.map(tab => (
             <button
               key={tab}
@@ -289,11 +289,11 @@ export default function QuotationsPage() {
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 activeTab === tab
                   ? 'bg-gradient-to-r from-teal-600 to-cyan-600 text-white shadow'
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]'
               }`}
             >
               {tab}
-              <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs ${activeTab === tab ? 'bg-white/20' : 'bg-slate-700 text-slate-300'}`}>
+              <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs ${activeTab === tab ? 'bg-[var(--bg-surface-hover)]' : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'}`}>
                 {getCount(tab)}
               </span>
             </button>
@@ -303,20 +303,20 @@ export default function QuotationsPage() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search by name or quote no..."
-          className="flex-1 max-w-xs px-4 py-2 rounded-xl bg-slate-900 border border-white/10 text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none text-sm"
+          className="flex-1 max-w-xs px-4 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-teal-500 focus:outline-none text-sm"
         />
       </div>
 
       {/* Table */}
-      <div className="bg-slate-900 border border-white/10 rounded-2xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-16 text-slate-400 text-sm animate-pulse">
+          <div className="flex items-center justify-center py-16 text-[var(--text-muted)] text-sm animate-pulse">
             Loading quotations...
           </div>
         ) : quotations.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
             <div className="text-4xl">📄</div>
-            <p className="text-slate-400 text-sm">No quotations found</p>
+            <p className="text-[var(--text-muted)] text-sm">No quotations found</p>
             <button onClick={openNew} className="text-teal-400 text-sm hover:text-teal-300 underline underline-offset-2">
               Create the first quote
             </button>
@@ -325,17 +325,17 @@ export default function QuotationsPage() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1100px]">
               <thead>
-                <tr className="border-b border-white/5 bg-slate-800/40">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Quote No</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Customer</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Vehicle</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Pickup → Return</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Days</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Daily Rate</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Grand Total (VAT)</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Valid Until</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
+                <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/40">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Quote No</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Customer</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Vehicle</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Pickup → Return</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Days</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Daily Rate</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Grand Total (VAT)</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Valid Until</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -346,7 +346,7 @@ export default function QuotationsPage() {
                   return (
                     <tr
                       key={q.id}
-                      className={`border-b border-white/5 hover:bg-white/[0.03] transition-colors ${i % 2 === 0 ? '' : 'bg-slate-800/10'}`}
+                      className={`border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors ${i % 2 === 0 ? '' : 'bg-[var(--bg-surface)]/10'}`}
                     >
                       {/* Quote No */}
                       <td className="px-4 py-3">
@@ -355,41 +355,41 @@ export default function QuotationsPage() {
 
                       {/* Customer */}
                       <td className="px-4 py-3">
-                        <div className="text-sm font-medium text-white">{q.customer_name}</div>
-                        {q.phone && <div className="text-xs text-slate-400 mt-0.5">{q.phone}</div>}
+                        <div className="text-sm font-medium text-[var(--text-main)]">{q.customer_name}</div>
+                        {q.phone && <div className="text-xs text-[var(--text-muted)] mt-0.5">{q.phone}</div>}
                       </td>
 
                       {/* Vehicle */}
                       <td className="px-4 py-3">
-                        <div className="text-sm text-slate-200">{q.vehicle_type ?? '—'}</div>
-                        {q.vehicle_name && <div className="text-xs text-slate-500 mt-0.5">{q.vehicle_name}</div>}
+                        <div className="text-sm text-[var(--text-main)]">{q.vehicle_type ?? '—'}</div>
+                        {q.vehicle_name && <div className="text-xs text-[var(--text-faint)] mt-0.5">{q.vehicle_name}</div>}
                       </td>
 
                       {/* Dates */}
                       <td className="px-4 py-3">
-                        <div className="text-xs text-slate-300">{fmtDate(q.pickup_date)}</div>
-                        <div className="text-xs text-slate-500">→ {fmtDate(q.return_date)}</div>
+                        <div className="text-xs text-[var(--text-muted)]">{fmtDate(q.pickup_date)}</div>
+                        <div className="text-xs text-[var(--text-faint)]">→ {fmtDate(q.return_date)}</div>
                       </td>
 
                       {/* Days */}
                       <td className="px-4 py-3 text-right">
-                        <span className="text-sm font-semibold text-white">{q.rental_days}d</span>
+                        <span className="text-sm font-semibold text-[var(--text-main)]">{q.rental_days}d</span>
                       </td>
 
                       {/* Daily Rate */}
                       <td className="px-4 py-3 text-right">
-                        <span className="text-sm text-slate-200">{fmtAED(q.daily_rate)}</span>
+                        <span className="text-sm text-[var(--text-main)]">{fmtAED(q.daily_rate)}</span>
                       </td>
 
                       {/* Grand Total */}
                       <td className="px-4 py-3 text-right">
-                        <div className="text-sm font-bold text-white">{fmtAED(q.grand_total)}</div>
-                        <div className="text-xs text-slate-500 mt-0.5">incl. 5% VAT</div>
+                        <div className="text-sm font-bold text-[var(--text-main)]">{fmtAED(q.grand_total)}</div>
+                        <div className="text-xs text-[var(--text-faint)] mt-0.5">incl. 5% VAT</div>
                       </td>
 
                       {/* Valid Until */}
                       <td className="px-4 py-3">
-                        <div className={`text-xs ${expired ? 'text-amber-400 font-semibold' : 'text-slate-300'}`}>
+                        <div className={`text-xs ${expired ? 'text-amber-400 font-semibold' : 'text-[var(--text-muted)]'}`}>
                           {fmtDate(q.valid_until)}
                           {expired && <div className="text-amber-500 text-xs">⚠ Expired</div>}
                         </div>
@@ -416,7 +416,7 @@ export default function QuotationsPage() {
                             </button>
                           ))}
                           {actions.length === 0 && (
-                            <span className="text-xs text-slate-600 italic">—</span>
+                            <span className="text-xs text-[var(--text-faint)] italic">—</span>
                           )}
                         </div>
                       </td>
@@ -432,16 +432,16 @@ export default function QuotationsPage() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto bg-slate-900 border border-white/10 rounded-2xl shadow-2xl">
+          <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl">
             {/* Modal Header */}
-            <div className="sticky top-0 z-10 bg-slate-900 border-b border-white/10 px-6 py-5 flex items-center justify-between">
+            <div className="sticky top-0 z-10 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] px-6 py-5 flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-bold text-white">New Rental Quotation</h2>
-                <p className="text-slate-400 text-xs mt-0.5">Quote will be valid for 7 days from creation</p>
+                <h2 className="text-xl font-bold text-[var(--text-main)]">New Rental Quotation</h2>
+                <p className="text-[var(--text-muted)] text-xs mt-0.5">Quote will be valid for 7 days from creation</p>
               </div>
               <button
                 onClick={() => setShowModal(false)}
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] transition-colors"
               >
                 ✕
               </button>
@@ -450,7 +450,7 @@ export default function QuotationsPage() {
             <form onSubmit={handleSubmit} className="p-6 space-y-5">
               {/* Customer Name */}
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">
                   Customer Name <span className="text-red-400">*</span>
                 </label>
                 <input
@@ -465,11 +465,11 @@ export default function QuotationsPage() {
               {/* Phone + Email */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Phone</label>
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Phone</label>
                   <input type="tel" placeholder="+971 50 000 0000" className={inputCls} {...field('phone')} />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Email</label>
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Email</label>
                   <input type="email" placeholder="customer@email.com" className={inputCls} {...field('email')} />
                 </div>
               </div>
@@ -477,14 +477,14 @@ export default function QuotationsPage() {
               {/* Vehicle Type + Vehicle Name/Plate */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Vehicle Type</label>
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Vehicle Type</label>
                   <select className={inputCls} {...field('vehicleType')}>
                     <option value="">Select type</option>
                     {VEHICLE_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Vehicle Name / Plate</label>
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Vehicle Name / Plate</label>
                   <input type="text" placeholder="Toyota Camry / DXB A 12345" className={inputCls} {...field('vehicleName')} />
                 </div>
               </div>
@@ -492,13 +492,13 @@ export default function QuotationsPage() {
               {/* Pickup + Return Dates */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">
                     Pickup Date <span className="text-red-400">*</span>
                   </label>
                   <input type="date" required className={inputCls} {...field('pickupDate')} />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">
                     Return Date <span className="text-red-400">*</span>
                   </label>
                   <input type="date" required className={inputCls} {...field('returnDate')} />
@@ -508,7 +508,7 @@ export default function QuotationsPage() {
               {/* Daily Rate + Deposit */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">
                     Daily Rate (AED) <span className="text-red-400">*</span>
                   </label>
                   <input
@@ -522,7 +522,7 @@ export default function QuotationsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Deposit Amount (AED)</label>
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Deposit Amount (AED)</label>
                   <input
                     type="number"
                     min="0"
@@ -536,26 +536,26 @@ export default function QuotationsPage() {
 
               {/* Live Calculation Preview */}
               {(liveDays > 0 || liveRate > 0) && (
-                <div className="bg-slate-800/60 border border-teal-500/20 rounded-xl p-4 space-y-2">
+                <div className="bg-[var(--bg-surface)]/60 border border-teal-500/20 rounded-xl p-4 space-y-2">
                   <div className="text-xs font-semibold text-teal-400 uppercase tracking-wider mb-3">Live Quote Calculation</div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-slate-400">Rental Period</span>
-                    <span className="text-white font-medium">{liveDays} day{liveDays !== 1 ? 's' : ''}</span>
+                    <span className="text-[var(--text-muted)]">Rental Period</span>
+                    <span className="text-[var(--text-main)] font-medium">{liveDays} day{liveDays !== 1 ? 's' : ''}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-slate-400">Daily Rate</span>
-                    <span className="text-white font-medium">{fmtAED(liveRate)}</span>
+                    <span className="text-[var(--text-muted)]">Daily Rate</span>
+                    <span className="text-[var(--text-main)] font-medium">{fmtAED(liveRate)}</span>
                   </div>
-                  <div className="flex justify-between text-sm border-t border-white/5 pt-2">
-                    <span className="text-slate-400">Subtotal</span>
-                    <span className="text-white font-medium">{fmtAED(liveSubtotal)}</span>
+                  <div className="flex justify-between text-sm border-t border-[var(--border-subtle)] pt-2">
+                    <span className="text-[var(--text-muted)]">Subtotal</span>
+                    <span className="text-[var(--text-main)] font-medium">{fmtAED(liveSubtotal)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-slate-400">VAT (5%)</span>
+                    <span className="text-[var(--text-muted)]">VAT (5%)</span>
                     <span className="text-amber-400 font-medium">{fmtAED(liveVat)}</span>
                   </div>
-                  <div className="flex justify-between text-base border-t border-white/10 pt-2 mt-1">
-                    <span className="text-white font-bold">Grand Total</span>
+                  <div className="flex justify-between text-base border-t border-[var(--border-subtle)] pt-2 mt-1">
+                    <span className="text-[var(--text-main)] font-bold">Grand Total</span>
                     <span className="text-teal-300 font-bold text-lg">{fmtAED(liveGrand)}</span>
                   </div>
                 </div>
@@ -563,7 +563,7 @@ export default function QuotationsPage() {
 
               {/* Notes */}
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Notes</label>
+                <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Notes</label>
                 <textarea
                   rows={3}
                   placeholder="Additional terms, conditions, or remarks..."
@@ -578,7 +578,7 @@ export default function QuotationsPage() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-5 py-2.5 rounded-xl border border-white/10 text-slate-300 hover:text-white hover:bg-white/5 text-sm font-medium transition-colors"
+                  className="px-5 py-2.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm font-medium transition-colors"
                 >
                   Cancel
                 </button>

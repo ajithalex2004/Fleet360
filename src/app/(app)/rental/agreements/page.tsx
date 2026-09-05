@@ -47,7 +47,7 @@ interface Agreement {
 // ── Status config ─────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG = {
-  DRAFT:     { label: 'Draft',     icon: '📝', color: 'text-slate-400',   bg: 'bg-slate-500/10 border-slate-500/20',   badge: 'bg-slate-500/20 text-slate-400 border-slate-500/30' },
+  DRAFT:     { label: 'Draft',     icon: '📝', color: 'text-[var(--text-muted)]',   bg: 'bg-slate-500/10 border-slate-500/20',   badge: 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30' },
   ACTIVE:    { label: 'Active',    icon: '🟢', color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20', badge: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
   COMPLETED: { label: 'Completed', icon: '✅', color: 'text-teal-400',    bg: 'bg-teal-500/10 border-teal-500/20',     badge: 'bg-teal-500/20 text-teal-400 border-teal-500/30' },
   CANCELLED: { label: 'Cancelled', icon: '❌', color: 'text-red-400',     bg: 'bg-red-500/10 border-red-500/20',       badge: 'bg-red-500/20 text-red-400 border-red-500/30' },
@@ -127,14 +127,14 @@ function TransitionModal({ agreement, onClose, onDone }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-slate-900 border border-white/15 rounded-2xl w-full max-w-md">
-        <div className="border-b border-white/10 px-5 py-4 flex items-center justify-between">
-          <h2 className="font-semibold text-white">Update Agreement</h2>
-          <button onClick={onClose} className="text-slate-500 hover:text-white">✕</button>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-md">
+        <div className="border-b border-[var(--border-subtle)] px-5 py-4 flex items-center justify-between">
+          <h2 className="font-semibold text-[var(--text-main)]">Update Agreement</h2>
+          <button onClick={onClose} className="text-[var(--text-faint)] hover:text-[var(--text-main)]">✕</button>
         </div>
         <div className="p-5 space-y-4">
-          <p className="text-sm text-slate-400">
-            <span className="font-mono text-white">{agreement.agreementNo}</span> ·{' '}
+          <p className="text-sm text-[var(--text-muted)]">
+            <span className="font-mono text-[var(--text-main)]">{agreement.agreementNo}</span> ·{' '}
             {agreement.booking?.customer?.fullName ?? '—'}
           </p>
 
@@ -144,12 +144,12 @@ function TransitionModal({ agreement, onClose, onDone }: {
               <label key={a.key} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
                 action === a.key
                   ? 'border-amber-500/40 bg-amber-500/10'
-                  : 'border-white/5 bg-slate-800/40 hover:border-white/10'
+                  : 'border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 hover:border-[var(--border-subtle)]'
               }`}>
                 <input type="radio" name="action" value={a.key}
                   checked={action === a.key} onChange={() => setAction(a.key as typeof action)}
                   className="accent-amber-500" />
-                <span className="text-sm text-white">{a.label}</span>
+                <span className="text-sm text-[var(--text-main)]">{a.label}</span>
               </label>
             ))}
           </div>
@@ -158,25 +158,25 @@ function TransitionModal({ agreement, onClose, onDone }: {
           {action === 'sign' && (
             <input value={signedBy} onChange={e => setSignedBy(e.target.value)}
               placeholder="Signed by (name)"
-              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/40" />
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-amber-500/40" />
           )}
           {action === 'activate' && (
             <div className="grid grid-cols-2 gap-2">
-              <input type="number" value={mileageIn} onChange={e => setMileageIn(e.target.value)} placeholder="Odometer (km)" className="bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/40" />
-              <input type="number" value={fuelIn} onChange={e => setFuelIn(e.target.value)} placeholder="Fuel level %" min={0} max={100} className="bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/40" />
+              <input type="number" value={mileageIn} onChange={e => setMileageIn(e.target.value)} placeholder="Odometer (km)" className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-amber-500/40" />
+              <input type="number" value={fuelIn} onChange={e => setFuelIn(e.target.value)} placeholder="Fuel level %" min={0} max={100} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-amber-500/40" />
             </div>
           )}
           {action === 'complete' && (
             <div className="grid grid-cols-2 gap-2">
-              <input type="number" value={mileageOut} onChange={e => setMileageOut(e.target.value)} placeholder="Return odometer" className="bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/40" />
-              <input type="number" value={fuelOut} onChange={e => setFuelOut(e.target.value)} placeholder="Return fuel %" min={0} max={100} className="bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/40" />
+              <input type="number" value={mileageOut} onChange={e => setMileageOut(e.target.value)} placeholder="Return odometer" className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-amber-500/40" />
+              <input type="number" value={fuelOut} onChange={e => setFuelOut(e.target.value)} placeholder="Return fuel %" min={0} max={100} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-amber-500/40" />
             </div>
           )}
 
           {error && <p className="text-red-400 text-xs">{error}</p>}
 
           <button onClick={handle} disabled={saving || actions.length === 0}
-            className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">
+            className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-[var(--text-main)] font-semibold py-2.5 rounded-xl text-sm transition-colors">
             {saving ? 'Saving…' : 'Apply'}
           </button>
         </div>
@@ -202,8 +202,8 @@ function AgreementCard({ agreement, onAction }: {
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="font-mono text-sm font-bold text-white">{agreement.agreementNo ?? '—'}</p>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="font-mono text-sm font-bold text-[var(--text-main)]">{agreement.agreementNo ?? '—'}</p>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">
             {agreement.booking?.customer?.fullName ?? '—'}
             {agreement.isCorporate && <span className="ml-1.5 text-xs text-violet-400 bg-violet-500/10 border border-violet-500/20 rounded-full px-1.5 py-0.5">Corp</span>}
           </p>
@@ -220,29 +220,29 @@ function AgreementCard({ agreement, onAction }: {
         </p>
       )}
       <div className="grid grid-cols-2 gap-2 text-xs">
-        <div className="bg-slate-900/40 rounded-xl p-2.5">
-          <p className="text-slate-500">Pickup</p>
-          <p className="text-white font-medium mt-0.5">{fmt(agreement.startDate)}</p>
-          {agreement.booking?.pickupLocation && <p className="text-slate-600 truncate">{agreement.booking.pickupLocation}</p>}
+        <div className="bg-[var(--bg-surface)]/40 rounded-xl p-2.5">
+          <p className="text-[var(--text-faint)]">Pickup</p>
+          <p className="text-[var(--text-main)] font-medium mt-0.5">{fmt(agreement.startDate)}</p>
+          {agreement.booking?.pickupLocation && <p className="text-[var(--text-faint)] truncate">{agreement.booking.pickupLocation}</p>}
         </div>
-        <div className="bg-slate-900/40 rounded-xl p-2.5">
-          <p className="text-slate-500">Return</p>
-          <p className="text-white font-medium mt-0.5">{fmt(agreement.endDate)}</p>
-          {agreement.booking?.dropoffLocation && <p className="text-slate-600 truncate">{agreement.booking.dropoffLocation}</p>}
+        <div className="bg-[var(--bg-surface)]/40 rounded-xl p-2.5">
+          <p className="text-[var(--text-faint)]">Return</p>
+          <p className="text-[var(--text-main)] font-medium mt-0.5">{fmt(agreement.endDate)}</p>
+          {agreement.booking?.dropoffLocation && <p className="text-[var(--text-faint)] truncate">{agreement.booking.dropoffLocation}</p>}
         </div>
       </div>
 
       {/* Financials */}
       <div className="space-y-1.5 text-xs">
         <div className="flex justify-between">
-          <span className="text-slate-500">{days} days × {fmtAmt(agreement.dailyRate, agreement.currency ?? 'AED')}/day</span>
-          <span className="text-white font-semibold">{fmtAmt(agreement.totalAmount, agreement.currency ?? 'AED')}</span>
+          <span className="text-[var(--text-faint)]">{days} days × {fmtAmt(agreement.dailyRate, agreement.currency ?? 'AED')}/day</span>
+          <span className="text-[var(--text-main)] font-semibold">{fmtAmt(agreement.totalAmount, agreement.currency ?? 'AED')}</span>
         </div>
         {agreement.securityDeposit !== null && (
           <div className="flex justify-between items-center">
-            <span className="text-slate-500">Security deposit</span>
+            <span className="text-[var(--text-faint)]">Security deposit</span>
             <div className="flex items-center gap-2">
-              <span className="text-slate-300">{fmtAmt(agreement.securityDeposit, agreement.currency ?? 'AED')}</span>
+              <span className="text-[var(--text-muted)]">{fmtAmt(agreement.securityDeposit, agreement.currency ?? 'AED')}</span>
               <span className={`px-1.5 py-0.5 rounded-full text-xs border ${DEPOSIT_STATUS[agreement.depositStatus as keyof typeof DEPOSIT_STATUS] ?? DEPOSIT_STATUS.PENDING}`}>
                 {agreement.depositStatus ?? 'PENDING'}
               </span>
@@ -251,8 +251,8 @@ function AgreementCard({ agreement, onAction }: {
         )}
         {kmUsed !== null && (
           <div className="flex justify-between">
-            <span className="text-slate-500">KM used</span>
-            <span className="text-slate-300">{kmUsed.toLocaleString()} km</span>
+            <span className="text-[var(--text-faint)]">KM used</span>
+            <span className="text-[var(--text-muted)]">{kmUsed.toLocaleString()} km</span>
           </div>
         )}
       </div>
@@ -291,13 +291,13 @@ function AgreementCard({ agreement, onAction }: {
         )}
         {agreement.booking && (
           <Link href={`/rental/bookings/${agreement.booking.id}/inspect`}
-            className="text-xs text-slate-500 hover:text-slate-300 border border-white/10 px-3 py-2 rounded-xl transition-colors">
+            className="text-xs text-[var(--text-faint)] hover:text-[var(--text-muted)] border border-[var(--border-subtle)] px-3 py-2 rounded-xl transition-colors">
             🔍 Inspect
           </Link>
         )}
         {agreement.booking && (
           <Link href={`/rental/invoices?agreementId=${agreement.id}`}
-            className="text-xs text-slate-500 hover:text-slate-300 border border-white/10 px-3 py-2 rounded-xl transition-colors">
+            className="text-xs text-[var(--text-faint)] hover:text-[var(--text-muted)] border border-[var(--border-subtle)] px-3 py-2 rounded-xl transition-colors">
             🧾
           </Link>
         )}
@@ -382,11 +382,11 @@ export default function RentalAgreementsPage() {
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-white">Rental Agreements</h1>
-            <p className="text-slate-400 text-xs mt-0.5">Agreement lifecycle management</p>
+            <h1 className="text-2xl font-bold text-[var(--text-main)]">Rental Agreements</h1>
+            <p className="text-[var(--text-muted)] text-xs mt-0.5">Agreement lifecycle management</p>
           </div>
           <Link href="/rental/bookings"
-            className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-2 rounded-xl text-sm transition-colors">
+            className="bg-emerald-600 hover:bg-emerald-500 text-[var(--text-main)] font-semibold px-4 py-2 rounded-xl text-sm transition-colors">
             ➕ New Booking
           </Link>
         </div>
@@ -394,21 +394,21 @@ export default function RentalAgreementsPage() {
         {/* Summary stats */}
         <div className="grid grid-cols-3 gap-4">
           <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4">
-            <p className="text-xs text-slate-500">Active Revenue</p>
+            <p className="text-xs text-[var(--text-faint)]">Active Revenue</p>
             <p className="text-xl font-bold text-emerald-400 mt-1">
               AED {activeTotal.toLocaleString('en-AE', { maximumFractionDigits: 0 })}
             </p>
-            <p className="text-xs text-slate-600 mt-0.5">{counts.ACTIVE} active agreements</p>
+            <p className="text-xs text-[var(--text-faint)] mt-0.5">{counts.ACTIVE} active agreements</p>
           </div>
           <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4">
-            <p className="text-xs text-slate-500">Pending Deposits</p>
+            <p className="text-xs text-[var(--text-faint)]">Pending Deposits</p>
             <p className="text-xl font-bold text-amber-400 mt-1">{pendingDeposits}</p>
-            <p className="text-xs text-slate-600 mt-0.5">awaiting payment</p>
+            <p className="text-xs text-[var(--text-faint)] mt-0.5">awaiting payment</p>
           </div>
-          <div className="bg-slate-800/60 border border-white/10 rounded-2xl p-4">
-            <p className="text-xs text-slate-500">Draft Agreements</p>
-            <p className="text-xl font-bold text-slate-300 mt-1">{counts.DRAFT}</p>
-            <p className="text-xs text-slate-600 mt-0.5">need activation</p>
+          <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
+            <p className="text-xs text-[var(--text-faint)]">Draft Agreements</p>
+            <p className="text-xl font-bold text-[var(--text-muted)] mt-1">{counts.DRAFT}</p>
+            <p className="text-xs text-[var(--text-faint)] mt-0.5">need activation</p>
           </div>
         </div>
 
@@ -419,7 +419,7 @@ export default function RentalAgreementsPage() {
               className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                 tab === t
                   ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                  : 'text-slate-400 border-white/10 hover:border-white/20 hover:text-white'
+                  : 'text-[var(--text-muted)] border-[var(--border-subtle)] hover:border-[var(--border-strong)] hover:text-[var(--text-main)]'
               }`}>
               {STATUS_CONFIG[t as keyof typeof STATUS_CONFIG]?.label ?? t}
               <span className="ml-1.5 opacity-60">{counts[t as keyof typeof counts] ?? 0}</span>
@@ -430,18 +430,18 @@ export default function RentalAgreementsPage() {
         {/* Search */}
         <input type="text" value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search by agreement number, customer, booking ref…"
-          className="w-full bg-slate-800/60 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/40" />
+          className="w-full bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-emerald-500/40" />
 
         {/* Grid */}
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {[...Array(6)].map((_, i) => <div key={i} className="h-72 bg-slate-800/60 rounded-2xl animate-pulse" />)}
+            {[...Array(6)].map((_, i) => <div key={i} className="h-72 bg-[var(--bg-surface)]/60 rounded-2xl animate-pulse" />)}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-16 text-center space-y-3">
+          <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-16 text-center space-y-3">
             <div className="text-5xl">📄</div>
-            <p className="text-slate-400">No rental agreements found</p>
-            <p className="text-slate-600 text-xs">Agreements are created from confirmed bookings</p>
+            <p className="text-[var(--text-muted)]">No rental agreements found</p>
+            <p className="text-[var(--text-faint)] text-xs">Agreements are created from confirmed bookings</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">

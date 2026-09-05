@@ -84,7 +84,7 @@ export function SignaturePad({ onChange, height = 180, label }: SignaturePadProp
 
   return (
     <div className="space-y-2">
-      {label && <div className="text-xs text-slate-400 uppercase tracking-wider">{label}</div>}
+      {label && <div className="text-xs text-[var(--text-muted)] uppercase tracking-wider">{label}</div>}
       <div className="rounded-xl bg-white border border-slate-300 overflow-hidden touch-none">
         <canvas
           ref={canvasRef}
@@ -97,13 +97,13 @@ export function SignaturePad({ onChange, height = 180, label }: SignaturePadProp
         />
       </div>
       <div className="flex items-center justify-between text-xs">
-        <span className={hasInk ? 'text-emerald-300' : 'text-slate-500'}>
+        <span className={hasInk ? 'text-emerald-300' : 'text-[var(--text-faint)]'}>
           {hasInk ? '✓ Signed' : 'Tap and draw to sign'}
         </span>
         <button
           type="button"
           onClick={clear}
-          className="px-3 py-1 rounded-lg bg-slate-700 text-slate-200 hover:bg-slate-600 text-xs"
+          className="px-3 py-1 rounded-lg bg-[var(--bg-surface-hover)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-xs"
         >
           Clear
         </button>

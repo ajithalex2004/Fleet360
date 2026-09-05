@@ -50,7 +50,7 @@ const SEVERITY_COLORS: Record<string, string> = {
 };
 const ORIGIN_COLORS: Record<string, string> = {
   NEW: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
-  PRE_EXISTING: 'bg-slate-500/20 text-slate-300 border-slate-500/40',
+  PRE_EXISTING: 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/40',
   REPAIRED: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
 };
 const CONDITION_COLORS: Record<string, string> = {
@@ -112,14 +112,14 @@ export default function DamageAIPage() {
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
       <div>
-        <Link href="/rental/damage-claims" className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-cyan-400">
+        <Link href="/rental/damage-claims" className="inline-flex items-center gap-1 text-xs text-[var(--text-faint)] hover:text-cyan-400">
           <ChevronLeft className="h-3 w-3" /> Back to damage claims
         </Link>
-        <h1 className="text-2xl font-bold text-white mt-2 flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-[var(--text-main)] mt-2 flex items-center gap-2">
           <Sparkles className="h-6 w-6 text-rose-400" />
           Damage AI Studio
         </h1>
-        <p className="text-sm text-slate-400 mt-1">
+        <p className="text-sm text-[var(--text-muted)] mt-1">
           gpt-4o vision identifies damage on a vehicle photo and estimates
           repair cost from the UAE bodyshop price index. Diff mode isolates
           new damage from pre-existing — closes the #1 customer-dispute area.
@@ -127,13 +127,13 @@ export default function DamageAIPage() {
       </div>
 
       {/* Mode picker */}
-      <div className="flex gap-2 p-1 bg-slate-900/60 rounded-xl border border-slate-700">
+      <div className="flex gap-2 p-1 bg-[var(--bg-surface)]/60 rounded-xl border border-[var(--border-subtle)]">
         <button
           onClick={() => { setMode('single'); reset(); }}
           className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
             mode === 'single'
-              ? 'bg-rose-600 text-white shadow-lg'
-              : 'text-slate-400 hover:text-white hover:bg-white/5'
+              ? 'bg-rose-600 text-[var(--text-main)] shadow-lg'
+              : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]'
           }`}
         >
           <div className="font-semibold flex items-center justify-center gap-2">
@@ -145,8 +145,8 @@ export default function DamageAIPage() {
           onClick={() => { setMode('diff'); reset(); }}
           className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
             mode === 'diff'
-              ? 'bg-rose-600 text-white shadow-lg'
-              : 'text-slate-400 hover:text-white hover:bg-white/5'
+              ? 'bg-rose-600 text-[var(--text-main)] shadow-lg'
+              : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]'
           }`}
         >
           <div className="font-semibold flex items-center justify-center gap-2">
@@ -157,18 +157,18 @@ export default function DamageAIPage() {
       </div>
 
       {/* File pickers */}
-      <div className="bg-slate-800/50 border border-rose-500/20 rounded-2xl p-6">
+      <div className="bg-[var(--bg-surface)]/50 border border-rose-500/20 rounded-2xl p-6">
         {mode === 'single' ? (
           <div>
-            <label className="text-xs text-slate-400 block mb-2">Vehicle photo *</label>
+            <label className="text-xs text-[var(--text-muted)] block mb-2">Vehicle photo *</label>
             <input
               type="file"
               accept="image/png,image/jpeg,image/webp"
               onChange={(e) => setSinglePhoto(e.target.files?.[0] ?? null)}
-              className="w-full text-sm text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-rose-700 file:text-white hover:file:bg-rose-600"
+              className="w-full text-sm text-[var(--text-muted)] file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-rose-700 file:text-[var(--text-main)] hover:file:bg-rose-600"
             />
             {singlePhoto && (
-              <p className="mt-1 text-xs text-slate-400">
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
                 {singlePhoto.name} ({(singlePhoto.size / 1024).toFixed(1)} KB)
               </p>
             )}
@@ -176,33 +176,33 @@ export default function DamageAIPage() {
         ) : (
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs text-slate-400 block mb-2">
+              <label className="text-xs text-[var(--text-muted)] block mb-2">
                 <span className="font-semibold text-emerald-300">BEFORE</span> handover photo *
               </label>
               <input
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
                 onChange={(e) => setBeforePhoto(e.target.files?.[0] ?? null)}
-                className="w-full text-sm text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-emerald-700 file:text-white hover:file:bg-emerald-600"
+                className="w-full text-sm text-[var(--text-muted)] file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-emerald-700 file:text-[var(--text-main)] hover:file:bg-emerald-600"
               />
               {beforePhoto && (
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-1 text-xs text-[var(--text-muted)]">
                   {beforePhoto.name} ({(beforePhoto.size / 1024).toFixed(1)} KB)
                 </p>
               )}
             </div>
             <div>
-              <label className="text-xs text-slate-400 block mb-2">
+              <label className="text-xs text-[var(--text-muted)] block mb-2">
                 <span className="font-semibold text-rose-300">AFTER</span> return photo *
               </label>
               <input
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
                 onChange={(e) => setAfterPhoto(e.target.files?.[0] ?? null)}
-                className="w-full text-sm text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-rose-700 file:text-white hover:file:bg-rose-600"
+                className="w-full text-sm text-[var(--text-muted)] file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-rose-700 file:text-[var(--text-main)] hover:file:bg-rose-600"
               />
               {afterPhoto && (
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-1 text-xs text-[var(--text-muted)]">
                   {afterPhoto.name} ({(afterPhoto.size / 1024).toFixed(1)} KB)
                 </p>
               )}
@@ -232,7 +232,7 @@ export default function DamageAIPage() {
       {result && (
         <div className="space-y-4">
           {/* Summary card */}
-          <div className="bg-slate-800/50 border border-emerald-500/20 rounded-2xl p-6">
+          <div className="bg-[var(--bg-surface)]/50 border border-emerald-500/20 rounded-2xl p-6">
             <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-5 w-5 text-emerald-400" />
@@ -247,7 +247,7 @@ export default function DamageAIPage() {
                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${result.vehicleLooksRoadworthy ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-rose-500/20 text-rose-300 border-rose-500/40'}`}>
                   {result.vehicleLooksRoadworthy ? 'Roadworthy' : 'NOT roadworthy'}
                 </span>
-                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-700 text-slate-300 border border-slate-600">
+                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border border-[var(--border-strong)]">
                   {result.mode} mode
                 </span>
               </div>
@@ -268,13 +268,13 @@ export default function DamageAIPage() {
 
             {/* Bilingual summary */}
             <div className="grid md:grid-cols-2 gap-3 text-sm">
-              <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-700">
-                <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">Summary (EN)</div>
-                <p className="text-slate-200 leading-relaxed">{result.summaryEn}</p>
+              <div className="p-3 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)]">
+                <div className="text-xs text-[var(--text-faint)] uppercase tracking-wider mb-1">Summary (EN)</div>
+                <p className="text-[var(--text-main)] leading-relaxed">{result.summaryEn}</p>
               </div>
-              <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-700" dir="rtl" lang="ar">
-                <div className="text-xs text-slate-500 uppercase tracking-wider mb-1" dir="ltr">Summary (AR)</div>
-                <p className="text-slate-200 leading-relaxed">{result.summaryAr}</p>
+              <div className="p-3 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)]" dir="rtl" lang="ar">
+                <div className="text-xs text-[var(--text-faint)] uppercase tracking-wider mb-1" dir="ltr">Summary (AR)</div>
+                <p className="text-[var(--text-main)] leading-relaxed">{result.summaryAr}</p>
               </div>
             </div>
           </div>
@@ -282,7 +282,7 @@ export default function DamageAIPage() {
           {/* Per-damage cards */}
           {result.damages.length > 0 ? (
             <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">
+              <h3 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider">
                 Detected damages ({result.damages.length})
               </h3>
               {result.damages.map((d, i) => (
@@ -290,17 +290,17 @@ export default function DamageAIPage() {
                   key={i}
                   className={`rounded-xl border p-4 ${
                     d.origin === 'NEW' ? 'bg-rose-900/20 border-rose-700/50'
-                    : d.origin === 'PRE_EXISTING' ? 'bg-slate-800/40 border-slate-700'
+                    : d.origin === 'PRE_EXISTING' ? 'bg-[var(--bg-surface)]/40 border-[var(--border-subtle)]'
                     : d.origin === 'REPAIRED' ? 'bg-emerald-900/20 border-emerald-700/50'
-                    : 'bg-slate-800/40 border-slate-700'
+                    : 'bg-[var(--bg-surface)]/40 border-[var(--border-subtle)]'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-mono text-xs text-cyan-300">{d.damageType}</span>
-                        <span className="text-slate-500">·</span>
-                        <span className="text-sm font-semibold text-white">
+                        <span className="text-[var(--text-faint)]">·</span>
+                        <span className="text-sm font-semibold text-[var(--text-main)]">
                           {d.location.replace(/_/g, ' ')}
                         </span>
                         <span className={`text-xs px-2 py-0.5 rounded-full border ${SEVERITY_COLORS[d.severity]}`}>
@@ -311,15 +311,15 @@ export default function DamageAIPage() {
                             {d.origin === 'NEW' ? '⚠ NEW' : d.origin === 'PRE_EXISTING' ? '◇ Pre-existing' : '✓ Repaired'}
                           </span>
                         )}
-                        <span className="text-[10px] text-slate-500 uppercase">
+                        <span className="text-[10px] text-[var(--text-faint)] uppercase">
                           {d.confidence} conf.
                         </span>
                       </div>
-                      <p className="text-sm text-slate-300 mt-2">{d.description}</p>
+                      <p className="text-sm text-[var(--text-muted)] mt-2">{d.description}</p>
                     </div>
                     <div className="text-right">
-                      <div className="text-xs text-slate-400">Repair estimate</div>
-                      <div className="text-lg font-bold text-white">
+                      <div className="text-xs text-[var(--text-muted)]">Repair estimate</div>
+                      <div className="text-lg font-bold text-[var(--text-main)]">
                         AED {d.estimatedCostMin.toLocaleString()}–{d.estimatedCostMax.toLocaleString()}
                       </div>
                     </div>
@@ -352,7 +352,7 @@ export default function DamageAIPage() {
           <div className="flex gap-3 justify-end">
             <button
               onClick={reset}
-              className="px-4 py-2 rounded-xl bg-slate-700 text-slate-200 hover:bg-slate-600 text-sm"
+              className="px-4 py-2 rounded-xl bg-[var(--bg-surface-hover)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm"
             >
               Analyse another vehicle
             </button>
@@ -364,7 +364,7 @@ export default function DamageAIPage() {
             </Link>
           </div>
 
-          <p className="text-xs text-slate-500 italic">
+          <p className="text-xs text-[var(--text-faint)] italic">
             AI estimates use the UAE bodyshop reference index. Final invoice amount
             should reflect actual repair quote from the bodyshop. Photos are not
             persisted by the classifier — keep originals for the damage claim record.
@@ -377,9 +377,9 @@ export default function DamageAIPage() {
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: 'rose' }) {
   return (
-    <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-700">
-      <div className="text-xs text-slate-400">{label}</div>
-      <div className={`text-lg font-bold mt-0.5 ${tone === 'rose' ? 'text-rose-300' : 'text-white'}`}>
+    <div className="p-3 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)]">
+      <div className="text-xs text-[var(--text-muted)]">{label}</div>
+      <div className={`text-lg font-bold mt-0.5 ${tone === 'rose' ? 'text-rose-300' : 'text-[var(--text-main)]'}`}>
         {value}
       </div>
     </div>

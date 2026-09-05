@@ -60,27 +60,27 @@ export default function AvailabilityPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-white mb-2">Vehicle Availability</h1>
-        <p className="text-xs text-slate-400">Check which vehicles are available for a given rental period</p>
+        <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Vehicle Availability</h1>
+        <p className="text-xs text-[var(--text-muted)]">Check which vehicles are available for a given rental period</p>
       </div>
 
       {/* Search Panel */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Pickup Date *</label>
+            <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Pickup Date *</label>
             <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
-              className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-emerald-500 focus:outline-none" />
+              className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-emerald-500 focus:outline-none" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Return Date *</label>
+            <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Return Date *</label>
             <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
-              className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-emerald-500 focus:outline-none" />
+              className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-emerald-500 focus:outline-none" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Category</label>
+            <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Category</label>
             <select value={category} onChange={e => setCategory(e.target.value)}
-              className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-emerald-500 focus:outline-none">
+              className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-emerald-500 focus:outline-none">
               <option value="">All Categories</option>
               {VEHICLE_CATEGORIES.filter(Boolean).map(c => <option key={c} value={c}>{c}</option>)}
             </select>
@@ -91,7 +91,7 @@ export default function AvailabilityPage() {
           </button>
         </div>
         {days > 0 && (
-          <p className="mt-3 text-sm text-slate-400">Rental period: <span className="text-emerald-400 font-medium">{days} day{days !== 1 ? 's' : ''}</span></p>
+          <p className="mt-3 text-sm text-[var(--text-muted)]">Rental period: <span className="text-emerald-400 font-medium">{days} day{days !== 1 ? 's' : ''}</span></p>
         )}
       </div>
 
@@ -104,29 +104,29 @@ export default function AvailabilityPage() {
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-6 text-center">
               <div className="text-5xl font-bold text-emerald-400">{result.available}</div>
-              <div className="text-sm text-slate-400 mt-2">Available Vehicles</div>
+              <div className="text-sm text-[var(--text-muted)] mt-2">Available Vehicles</div>
             </div>
             <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6 text-center">
               <div className="text-5xl font-bold text-rose-400">{result.booked}</div>
-              <div className="text-sm text-slate-400 mt-2">Booked / Unavailable</div>
+              <div className="text-sm text-[var(--text-muted)] mt-2">Booked / Unavailable</div>
             </div>
           </div>
 
           {/* Vehicle List */}
           {result.vehicles.length === 0 ? (
-            <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-12 text-center text-slate-400">
+            <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-12 text-center text-[var(--text-muted)]">
               No vehicles available for the selected period{category ? ` in the ${category} category` : ''}.
             </div>
           ) : (
-            <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm">
-              <h2 className="text-lg font-semibold text-white mb-4">Available Vehicles</h2>
+            <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm">
+              <h2 className="text-lg font-semibold text-[var(--text-main)] mb-4">Available Vehicles</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                 {result.vehicles.map(v => (
-                  <div key={v.id} className="bg-slate-700/50 border border-white/10 rounded-xl p-4 hover:border-emerald-500/50 transition-all">
+                  <div key={v.id} className="bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl p-4 hover:border-emerald-500/50 transition-all">
                     <div className="flex items-start justify-between mb-3">
                       <div>
-                        <div className="font-semibold text-white">{v.make} {v.model}</div>
-                        <div className="text-sm text-slate-400">{v.year ?? ''} {v.color ? `· ${v.color}` : ''}</div>
+                        <div className="font-semibold text-[var(--text-main)]">{v.make} {v.model}</div>
+                        <div className="text-sm text-[var(--text-muted)]">{v.year ?? ''} {v.color ? `· ${v.color}` : ''}</div>
                       </div>
                       {v.category && (
                         <span className="px-2 py-0.5 rounded text-xs bg-blue-500/20 text-blue-400 border border-blue-500/30">
@@ -135,7 +135,7 @@ export default function AvailabilityPage() {
                       )}
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-300 font-mono">{v.plateNo ?? 'No plate'}</span>
+                      <span className="text-sm text-[var(--text-muted)] font-mono">{v.plateNo ?? 'No plate'}</span>
                       <span className="px-2 py-0.5 rounded text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Available</span>
                     </div>
                   </div>
@@ -147,7 +147,7 @@ export default function AvailabilityPage() {
       )}
 
       {result === null && !loading && (
-        <div className="bg-slate-800/30 border border-white/5 rounded-2xl p-12 text-center text-slate-500">
+        <div className="bg-[var(--bg-surface)]/30 border border-[var(--border-subtle)] rounded-2xl p-12 text-center text-[var(--text-faint)]">
           Select a date range and click "Check Availability" to see available vehicles
         </div>
       )}

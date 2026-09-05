@@ -43,8 +43,8 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const INPUT_CLS =
-  'w-full px-4 py-2.5 rounded-lg bg-slate-700/80 border border-white/10 text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none text-sm transition-colors';
-const LABEL_CLS = 'block text-sm font-medium text-slate-300 mb-1.5';
+  'w-full px-4 py-2.5 rounded-lg bg-[var(--bg-surface-hover)]/80 border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-teal-500 focus:outline-none text-sm transition-colors';
+const LABEL_CLS = 'block text-sm font-medium text-[var(--text-muted)] mb-1.5';
 
 /* ─── Helpers ─── */
 function fmt(n: number | string | undefined, decimals = 2) {
@@ -202,7 +202,7 @@ export default function RenewalsPage() {
   if (loading)
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-slate-400 animate-pulse text-lg">Loading renewals...</div>
+        <div className="text-[var(--text-muted)] animate-pulse text-lg">Loading renewals...</div>
       </div>
     );
 
@@ -211,8 +211,8 @@ export default function RenewalsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-2">RAC Renewals</h1>
-          <p className="text-xs text-slate-400">
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">RAC Renewals</h1>
+          <p className="text-xs text-[var(--text-muted)]">
             {renewals.length} renewal{renewals.length !== 1 ? 's' : ''} — manage agreement extension requests
           </p>
         </div>
@@ -236,18 +236,18 @@ export default function RenewalsPage() {
         {kpiCards.map((c) => (
           <div
             key={c.label}
-            className={`bg-slate-800/60 border ${c.border} rounded-2xl p-5 backdrop-blur-sm`}
+            className={`bg-[var(--bg-surface)]/60 border ${c.border} rounded-2xl p-5 backdrop-blur-sm`}
           >
             <div className={`text-2xl font-bold ${c.color} mb-1`}>{c.value}</div>
-            <div className="text-sm font-medium text-white">{c.label}</div>
-            <div className="text-xs text-slate-500 mt-0.5">{c.sub}</div>
+            <div className="text-sm font-medium text-[var(--text-main)]">{c.label}</div>
+            <div className="text-xs text-[var(--text-faint)] mt-0.5">{c.sub}</div>
           </div>
         ))}
       </div>
 
       {/* Status Tabs + Search */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-        <div className="flex gap-1 bg-slate-800/60 border border-white/10 rounded-xl p-1">
+        <div className="flex gap-1 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-1">
           {STATUS_TABS.map((tab) => (
             <button
               key={tab}
@@ -255,7 +255,7 @@ export default function RenewalsPage() {
               className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
                 activeTab === tab
                   ? 'bg-gradient-to-r from-teal-600 to-cyan-600 text-white shadow'
-                  : 'text-slate-400 hover:text-white'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
               }`}
             >
               {tab}
@@ -267,27 +267,27 @@ export default function RenewalsPage() {
           placeholder="Search customer, renewal no, vehicle..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="flex-1 px-4 py-2 rounded-xl bg-slate-800/60 border border-white/10 text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none text-sm"
+          className="flex-1 px-4 py-2 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-teal-500 focus:outline-none text-sm"
         />
       </div>
 
       {/* Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl backdrop-blur-sm overflow-x-auto">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl backdrop-blur-sm overflow-x-auto">
         {renewals.length === 0 ? (
-          <div className="text-center text-slate-400 py-16">
+          <div className="text-center text-[var(--text-muted)] py-16">
             <div className="text-4xl mb-3">📋</div>
             <div>No renewals found</div>
           </div>
         ) : (
           <table className="w-full min-w-[1100px]">
             <thead>
-              <tr className="border-b border-white/5">
+              <tr className="border-b border-[var(--border-subtle)]">
                 {[
                   'Renewal No', 'Agreement No', 'Customer', 'Vehicle',
                   'Original End', 'New End', 'Ext Days', 'Daily Rate',
                   'Total (AED)', 'Status', 'Actions',
                 ].map((h) => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">
                     {h}
                   </th>
                 ))}
@@ -299,28 +299,28 @@ export default function RenewalsPage() {
                 return (
                   <tr
                     key={r.id}
-                    className={`border-b border-white/5 hover:bg-white/5 transition-colors ${
+                    className={`border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors ${
                       expiring ? 'bg-amber-500/5' : ''
                     }`}
                   >
                     <td className="px-4 py-3.5 text-sm font-mono text-teal-400 font-medium whitespace-nowrap">
                       {r.renewal_no}
                     </td>
-                    <td className="px-4 py-3.5 text-sm text-slate-300 whitespace-nowrap">
+                    <td className="px-4 py-3.5 text-sm text-[var(--text-muted)] whitespace-nowrap">
                       {r.agreement_no ?? '—'}
                     </td>
-                    <td className="px-4 py-3.5 text-sm text-white font-medium">
+                    <td className="px-4 py-3.5 text-sm text-[var(--text-main)] font-medium">
                       {r.customer_name ?? '—'}
                     </td>
-                    <td className="px-4 py-3.5 text-sm text-slate-300">
+                    <td className="px-4 py-3.5 text-sm text-[var(--text-muted)]">
                       <div>{r.vehicle_name ?? '—'}</div>
                       {r.vehicle_no && (
-                        <div className="text-xs text-slate-500">{r.vehicle_no}</div>
+                        <div className="text-xs text-[var(--text-faint)]">{r.vehicle_no}</div>
                       )}
                     </td>
                     <td
                       className={`px-4 py-3.5 text-sm whitespace-nowrap ${
-                        expiring ? 'text-amber-400 font-semibold' : 'text-slate-300'
+                        expiring ? 'text-amber-400 font-semibold' : 'text-[var(--text-muted)]'
                       }`}
                     >
                       {r.original_end_date
@@ -332,25 +332,25 @@ export default function RenewalsPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3.5 text-sm text-slate-300 whitespace-nowrap">
+                    <td className="px-4 py-3.5 text-sm text-[var(--text-muted)] whitespace-nowrap">
                       {r.new_end_date
                         ? new Date(r.new_end_date).toLocaleDateString('en-GB')
                         : '—'}
                     </td>
                     <td className="px-4 py-3.5 text-sm text-center">
                       <span className="font-bold text-cyan-400">{r.extension_days ?? 0}</span>
-                      <span className="text-slate-500 text-xs ml-1">d</span>
+                      <span className="text-[var(--text-faint)] text-xs ml-1">d</span>
                     </td>
-                    <td className="px-4 py-3.5 text-sm text-slate-300">
+                    <td className="px-4 py-3.5 text-sm text-[var(--text-muted)]">
                       AED {fmt(r.daily_rate)}
                     </td>
-                    <td className="px-4 py-3.5 text-sm font-semibold text-white">
+                    <td className="px-4 py-3.5 text-sm font-semibold text-[var(--text-main)]">
                       AED {fmt(r.total_amount)}
                     </td>
                     <td className="px-4 py-3.5">
                       <span
                         className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${
-                          STATUS_COLORS[r.status] ?? 'bg-slate-500/20 text-slate-400 border-slate-500/30'
+                          STATUS_COLORS[r.status] ?? 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30'
                         }`}
                       >
                         {r.status}
@@ -382,7 +382,7 @@ export default function RenewalsPage() {
                         </button>
                       )}
                       {(r.status === 'REJECTED' || r.status === 'COMPLETED') && (
-                        <span className="text-xs text-slate-500">—</span>
+                        <span className="text-xs text-[var(--text-faint)]">—</span>
                       )}
                     </td>
                   </tr>
@@ -396,16 +396,16 @@ export default function RenewalsPage() {
       {/* ─── REQUEST RENEWAL MODAL ─── */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-2xl bg-slate-900 border border-white/10 rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="w-full max-w-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
             {/* Modal header */}
-            <div className="sticky top-0 bg-slate-900 border-b border-white/10 px-8 py-5 flex items-center justify-between rounded-t-2xl z-10">
+            <div className="sticky top-0 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] px-8 py-5 flex items-center justify-between rounded-t-2xl z-10">
               <div>
-                <h2 className="text-xl font-bold text-white">Request Renewal</h2>
-                <p className="text-sm text-slate-400 mt-0.5">Extend a rental agreement</p>
+                <h2 className="text-xl font-bold text-[var(--text-main)]">Request Renewal</h2>
+                <p className="text-sm text-[var(--text-muted)] mt-0.5">Extend a rental agreement</p>
               </div>
               <button
                 onClick={() => { setShowModal(false); setForm(DEFAULT_FORM); }}
-                className="text-slate-400 hover:text-white text-xl leading-none transition-colors"
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl leading-none transition-colors"
               >
                 ✕
               </button>
@@ -517,30 +517,30 @@ export default function RenewalsPage() {
 
               {/* Live Calculation Panel */}
               {(extDays > 0 || dailyR > 0) && (
-                <div className="bg-slate-800/80 border border-teal-500/20 rounded-xl p-5 space-y-3">
+                <div className="bg-[var(--bg-surface)]/80 border border-teal-500/20 rounded-xl p-5 space-y-3">
                   <div className="text-xs font-semibold text-teal-400 uppercase tracking-wider mb-3">
                     Live Calculation
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="flex justify-between">
-                      <span className="text-sm text-slate-400">Extension Days</span>
+                      <span className="text-sm text-[var(--text-muted)]">Extension Days</span>
                       <span className="text-sm font-bold text-cyan-400">{extDays} days</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-sm text-slate-400">Daily Rate</span>
-                      <span className="text-sm font-semibold text-white">AED {fmt(dailyR)}</span>
+                      <span className="text-sm text-[var(--text-muted)]">Daily Rate</span>
+                      <span className="text-sm font-semibold text-[var(--text-main)]">AED {fmt(dailyR)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-sm text-slate-400">Renewal Amount</span>
-                      <span className="text-sm font-semibold text-white">AED {fmt(renewAmt)}</span>
+                      <span className="text-sm text-[var(--text-muted)]">Renewal Amount</span>
+                      <span className="text-sm font-semibold text-[var(--text-main)]">AED {fmt(renewAmt)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-sm text-slate-400">VAT (5%)</span>
+                      <span className="text-sm text-[var(--text-muted)]">VAT (5%)</span>
                       <span className="text-sm font-semibold text-amber-400">AED {fmt(vatAmt)}</span>
                     </div>
                   </div>
-                  <div className="border-t border-white/10 pt-3 flex justify-between">
-                    <span className="text-sm font-semibold text-white">Total Amount</span>
+                  <div className="border-t border-[var(--border-subtle)] pt-3 flex justify-between">
+                    <span className="text-sm font-semibold text-[var(--text-main)]">Total Amount</span>
                     <span className="text-lg font-bold text-teal-400">AED {fmt(totalAmt)}</span>
                   </div>
                 </div>
@@ -563,7 +563,7 @@ export default function RenewalsPage() {
                 <button
                   type="button"
                   onClick={() => { setShowModal(false); setForm(DEFAULT_FORM); }}
-                  className="px-6 py-2.5 rounded-xl border border-white/10 text-white text-sm hover:bg-white/5 transition-colors"
+                  className="px-6 py-2.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-main)] text-sm hover:bg-[var(--bg-surface-hover)] transition-colors"
                 >
                   Cancel
                 </button>

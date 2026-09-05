@@ -119,14 +119,14 @@ export default function PricingPage() {
     } catch { setError('Failed to update'); }
   };
 
-  if (loading) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading...</div></div>;
+  if (loading) return <div className="flex items-center justify-center h-full"><div className="text-[var(--text-muted)] animate-pulse">Loading...</div></div>;
 
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-2">Pricing Rules</h1>
-          <p className="text-xs text-slate-400">{rules.filter(r => r.isActive).length} active / {rules.length} total rules</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Pricing Rules</h1>
+          <p className="text-xs text-[var(--text-muted)]">{rules.filter(r => r.isActive).length} active / {rules.length} total rules</p>
         </div>
         <button onClick={openNew} className="rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90">
           + New Rule
@@ -135,49 +135,49 @@ export default function PricingPage() {
 
       {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">{error}</div>}
 
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
         {rules.length === 0 ? (
-          <div className="text-center text-slate-400 py-12">No pricing rules configured</div>
+          <div className="text-center text-[var(--text-muted)] py-12">No pricing rules configured</div>
         ) : (
           <table className="w-full">
             <thead>
-              <tr className="border-b border-white/5">
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Category</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Daily Rate</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Weekly Rate</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Monthly Rate</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Per KM</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Season</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Multiplier</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Status</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Actions</th>
+              <tr className="border-b border-[var(--border-subtle)]">
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Category</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Daily Rate</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Weekly Rate</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Monthly Rate</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Per KM</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Season</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Multiplier</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Status</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Actions</th>
               </tr>
             </thead>
             <tbody>
               {rules.map(r => (
-                <tr key={r.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                  <td className="px-4 py-4 text-sm font-medium text-white">
+                <tr key={r.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
+                  <td className="px-4 py-4 text-sm font-medium text-[var(--text-main)]">
                     {VEHICLE_CATEGORIES.find(c => c.value === r.vehicleCategory)?.label ?? r.vehicleCategory}
                   </td>
                   <td className="px-4 py-4 text-sm font-medium text-amber-400">{r.currency ?? 'AED'} {Number(r.baseDailyRate).toLocaleString()}</td>
-                  <td className="px-4 py-4 text-sm text-white">{r.weeklyRate  ? `${r.currency ?? 'AED'} ${Number(r.weeklyRate).toLocaleString()}`  : '-'}</td>
-                  <td className="px-4 py-4 text-sm text-white">{r.monthlyRate ? `${r.currency ?? 'AED'} ${Number(r.monthlyRate).toLocaleString()}` : '-'}</td>
-                  <td className="px-4 py-4 text-sm text-white">{r.baseKmRate  ? `${r.currency ?? 'AED'} ${Number(r.baseKmRate).toFixed(2)}`         : '-'}</td>
-                  <td className="px-4 py-4 text-sm text-slate-200">
+                  <td className="px-4 py-4 text-sm text-[var(--text-main)]">{r.weeklyRate  ? `${r.currency ?? 'AED'} ${Number(r.weeklyRate).toLocaleString()}`  : '-'}</td>
+                  <td className="px-4 py-4 text-sm text-[var(--text-main)]">{r.monthlyRate ? `${r.currency ?? 'AED'} ${Number(r.monthlyRate).toLocaleString()}` : '-'}</td>
+                  <td className="px-4 py-4 text-sm text-[var(--text-main)]">{r.baseKmRate  ? `${r.currency ?? 'AED'} ${Number(r.baseKmRate).toFixed(2)}`         : '-'}</td>
+                  <td className="px-4 py-4 text-sm text-[var(--text-main)]">
                     {r.seasonFrom && r.seasonTo
                       ? `${new Date(r.seasonFrom).toLocaleDateString()} — ${new Date(r.seasonTo).toLocaleDateString()}`
                       : 'Year-round'}
                   </td>
-                  <td className="px-4 py-4 text-sm text-white">{Number(r.multiplier ?? 1).toFixed(2)}x</td>
+                  <td className="px-4 py-4 text-sm text-[var(--text-main)]">{Number(r.multiplier ?? 1).toFixed(2)}x</td>
                   <td className="px-4 py-4">
                     {r.isActive
                       ? <span className="px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Active</span>
-                      : <span className="px-3 py-1 rounded-full text-xs font-medium bg-slate-500/20 text-slate-200 border border-slate-500/30">Inactive</span>}
+                      : <span className="px-3 py-1 rounded-full text-xs font-medium bg-slate-500/20 text-[var(--text-main)] border border-slate-500/30">Inactive</span>}
                   </td>
                   <td className="px-4 py-4">
                     <div className="flex gap-2">
                       <button onClick={() => openEdit(r)} className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30">Edit</button>
-                      <button onClick={() => toggleActive(r)} className="text-xs px-2 py-1 rounded bg-slate-700 text-white border border-white/10 hover:bg-slate-600">
+                      <button onClick={() => toggleActive(r)} className="text-xs px-2 py-1 rounded bg-[var(--bg-surface-hover)] text-[var(--text-main)] border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]">
                         {r.isActive ? 'Disable' : 'Enable'}
                       </button>
                     </div>
@@ -191,25 +191,25 @@ export default function PricingPage() {
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-800/95 border border-white/10 rounded-2xl p-8">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl p-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">{editRule ? 'Edit Pricing Rule' : 'New Pricing Rule'}</h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white">✕</button>
+              <h2 className="text-2xl font-bold text-[var(--text-main)]">{editRule ? 'Edit Pricing Rule' : 'New Pricing Rule'}</h2>
+              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">✕</button>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Vehicle Category *</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Vehicle Category *</label>
                   <select value={formData.vehicleCategory} onChange={e => setFormData(p => ({...p, vehicleCategory: e.target.value}))} required
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-amber-500 focus:outline-none">
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-amber-500 focus:outline-none">
                     <option value="">Select category</option>
                     {VEHICLE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Currency</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Currency</label>
                   <select value={formData.currency} onChange={e => setFormData(p => ({...p, currency: e.target.value}))}
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-amber-500 focus:outline-none">
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-amber-500 focus:outline-none">
                     <option value="AED">AED</option>
                     <option value="USD">USD</option>
                     <option value="EUR">EUR</option>
@@ -223,29 +223,29 @@ export default function PricingPage() {
                   { label:'Multiplier', key:'multiplier', placeholder:'1.0' },
                 ].map(({ label, key, placeholder, required }) => (
                   <div key={key}>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">{label}</label>
+                    <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">{label}</label>
                     <input type="number" value={(formData as any)[key]} onChange={e => setFormData(p => ({...p, [key]: e.target.value}))}
                       placeholder={placeholder} required={required} min="0" step="0.01"
-                      className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none" />
+                      className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-amber-500 focus:outline-none" />
                   </div>
                 ))}
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Season From</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Season From</label>
                   <input type="date" value={formData.seasonFrom} onChange={e => setFormData(p => ({...p, seasonFrom: e.target.value}))}
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-amber-500 focus:outline-none" />
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-amber-500 focus:outline-none" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Season To</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Season To</label>
                   <input type="date" value={formData.seasonTo} onChange={e => setFormData(p => ({...p, seasonTo: e.target.value}))}
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-amber-500 focus:outline-none" />
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-amber-500 focus:outline-none" />
                 </div>
                 <div className="flex items-center gap-3 col-span-2">
-                  <input type="checkbox" id="isActive" checked={formData.isActive as boolean} onChange={e => setFormData(p => ({...p, isActive: e.target.checked}))} className="w-4 h-4 accent-amber-500 text-white" />
-                  <label htmlFor="isActive" className="text-sm text-white">Active Rule</label>
+                  <input type="checkbox" id="isActive" checked={formData.isActive as boolean} onChange={e => setFormData(p => ({...p, isActive: e.target.checked}))} className="w-4 h-4 accent-amber-500 text-[var(--text-main)]" />
+                  <label htmlFor="isActive" className="text-sm text-[var(--text-main)]">Active Rule</label>
                 </div>
               </div>
               <div className="flex gap-4 justify-end pt-4">
-                <button type="button" onClick={() => setShowModal(false)} className="px-6 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5">Cancel</button>
+                <button type="button" onClick={() => setShowModal(false)} className="px-6 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]">Cancel</button>
                 <button type="submit" disabled={saving} className="px-6 py-2 rounded-lg bg-gradient-to-r from-amber-600 to-orange-600 text-white hover:opacity-90 disabled:opacity-50">
                   {saving ? 'Saving...' : editRule ? 'Update' : 'Create'}
                 </button>

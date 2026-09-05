@@ -154,16 +154,16 @@ export default function BranchesPage() {
     }
   };
 
-  const inputCls = 'w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none text-sm';
-  const labelCls = 'block text-sm font-medium text-slate-300 mb-1.5';
+  const inputCls = 'w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-teal-500 focus:outline-none text-sm';
+  const labelCls = 'block text-sm font-medium text-[var(--text-muted)] mb-1.5';
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-2">Branch Management</h1>
-          <p className="text-xs text-slate-400">Manage RAC branches across all UAE emirates</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Branch Management</h1>
+          <p className="text-xs text-[var(--text-muted)]">Manage RAC branches across all UAE emirates</p>
         </div>
         <button
           onClick={openNew}
@@ -183,15 +183,15 @@ export default function BranchesPage() {
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: 'Total Branches',     value: stats.total,           color: 'text-white',       icon: '🏢' },
+            { label: 'Total Branches',     value: stats.total,           color: 'text-[var(--text-main)]',       icon: '🏢' },
             { label: 'Active Branches',    value: stats.active,          color: 'text-emerald-400', icon: '✅' },
             { label: 'Emirates Covered',   value: stats.emiratesCovered, color: 'text-teal-400',    icon: '🗺️' },
             { label: 'Total Capacity',     value: `${stats.totalCapacity} vehicles`, color: 'text-cyan-400', icon: '🚗', raw: true },
           ].map(({ label, value, color, icon, raw }) => (
-            <div key={label} className="bg-slate-800/60 border border-white/10 rounded-2xl p-5 backdrop-blur-sm">
+            <div key={label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5 backdrop-blur-sm">
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-lg">{icon}</span>
-                <p className="text-xs text-slate-400 uppercase tracking-wider">{label}</p>
+                <p className="text-xs text-[var(--text-muted)] uppercase tracking-wider">{label}</p>
               </div>
               <p className={`text-3xl font-bold ${color}`}>
                 {raw ? value : value}
@@ -208,7 +208,7 @@ export default function BranchesPage() {
           <select
             value={emirateFilter}
             onChange={e => setEmirateFilter(e.target.value)}
-            className="px-3 py-1.5 rounded-lg bg-slate-800/60 border border-white/10 text-sm text-white focus:border-teal-500 focus:outline-none"
+            className="px-3 py-1.5 rounded-lg bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-sm text-[var(--text-main)] focus:border-teal-500 focus:outline-none"
           >
             <option value="ALL">All Emirates</option>
             {EMIRATES.map(em => (
@@ -221,21 +221,21 @@ export default function BranchesPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search branches..."
-            className="px-4 py-1.5 rounded-lg bg-slate-800/50 border border-white/10 text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none text-sm w-52"
+            className="px-4 py-1.5 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-teal-500 focus:outline-none text-sm w-52"
           />
         </div>
 
         {/* View Toggle */}
-        <div className="flex gap-1 bg-slate-800/60 border border-white/10 rounded-xl p-1">
+        <div className="flex gap-1 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-1">
           <button
             onClick={() => setViewMode('grid')}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${viewMode === 'grid' ? 'bg-gradient-to-r from-teal-600 to-cyan-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${viewMode === 'grid' ? 'bg-gradient-to-r from-teal-600 to-cyan-600 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
           >
             ▦ Grid
           </button>
           <button
             onClick={() => setViewMode('table')}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${viewMode === 'table' ? 'bg-gradient-to-r from-teal-600 to-cyan-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${viewMode === 'table' ? 'bg-gradient-to-r from-teal-600 to-cyan-600 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
           >
             ≡ Table
           </button>
@@ -244,9 +244,9 @@ export default function BranchesPage() {
 
       {/* Grid View */}
       {loading ? (
-        <div className="flex items-center justify-center py-16 text-slate-400 animate-pulse">Loading branches...</div>
+        <div className="flex items-center justify-center py-16 text-[var(--text-muted)] animate-pulse">Loading branches...</div>
       ) : branches.length === 0 ? (
-        <div className="text-center text-slate-400 py-16 bg-slate-800/50 border border-white/10 rounded-2xl">
+        <div className="text-center text-[var(--text-muted)] py-16 bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl">
           No branches found. Add your first branch to get started.
         </div>
       ) : viewMode === 'grid' ? (
@@ -257,8 +257,8 @@ export default function BranchesPage() {
             return (
               <div
                 key={b.id}
-                className={`bg-slate-800/60 border rounded-2xl p-6 backdrop-blur-sm transition-all hover:border-teal-500/30 ${
-                  isActive ? 'border-white/10' : 'border-white/5 opacity-60'
+                className={`bg-[var(--bg-surface)]/60 border rounded-2xl p-6 backdrop-blur-sm transition-all hover:border-teal-500/30 ${
+                  isActive ? 'border-[var(--border-subtle)]' : 'border-[var(--border-subtle)] opacity-60'
                 }`}
               >
                 {/* Card Header */}
@@ -266,7 +266,7 @@ export default function BranchesPage() {
                   <div className="flex items-center gap-3">
                     <span className="text-3xl">{em?.flag ?? '🏢'}</span>
                     <div>
-                      <h3 className="text-white font-semibold text-lg leading-tight">{b.branchName}</h3>
+                      <h3 className="text-[var(--text-main)] font-semibold text-lg leading-tight">{b.branchName}</h3>
                       <span className="inline-block px-2 py-0.5 bg-teal-500/20 text-teal-400 border border-teal-500/30 rounded-full text-xs font-mono mt-0.5">
                         {b.branchCode}
                       </span>
@@ -275,47 +275,47 @@ export default function BranchesPage() {
                   <span className={`px-2.5 py-1 rounded-full text-xs font-medium border ${
                     isActive
                       ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                      : 'bg-slate-500/20 text-slate-400 border-slate-500/30'
+                      : 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30'
                   }`}>
                     {b.status}
                   </span>
                 </div>
 
                 {/* Emirate */}
-                <div className="text-sm text-slate-400 mb-3">{em?.label ?? b.emirate}</div>
+                <div className="text-sm text-[var(--text-muted)] mb-3">{em?.label ?? b.emirate}</div>
 
                 {/* Details */}
                 <div className="space-y-2 text-sm">
                   {b.address && (
                     <div className="flex gap-2">
-                      <span className="text-slate-500 flex-shrink-0">📍</span>
-                      <span className="text-slate-300">{b.address}</span>
+                      <span className="text-[var(--text-faint)] flex-shrink-0">📍</span>
+                      <span className="text-[var(--text-muted)]">{b.address}</span>
                     </div>
                   )}
                   {b.phone && (
                     <div className="flex gap-2">
-                      <span className="text-slate-500 flex-shrink-0">📞</span>
-                      <span className="text-slate-300">{b.phone}</span>
+                      <span className="text-[var(--text-faint)] flex-shrink-0">📞</span>
+                      <span className="text-[var(--text-muted)]">{b.phone}</span>
                     </div>
                   )}
                   {b.managerName && (
                     <div className="flex gap-2">
-                      <span className="text-slate-500 flex-shrink-0">👤</span>
-                      <span className="text-slate-300">{b.managerName}</span>
+                      <span className="text-[var(--text-faint)] flex-shrink-0">👤</span>
+                      <span className="text-[var(--text-muted)]">{b.managerName}</span>
                     </div>
                   )}
                   <div className="flex gap-2">
-                    <span className="text-slate-500 flex-shrink-0">🕐</span>
-                    <span className="text-slate-300">{b.operatingHours}</span>
+                    <span className="text-[var(--text-faint)] flex-shrink-0">🕐</span>
+                    <span className="text-[var(--text-muted)]">{b.operatingHours}</span>
                   </div>
                   <div className="flex gap-2">
-                    <span className="text-slate-500 flex-shrink-0">🚗</span>
-                    <span className="text-slate-300">{b.vehicleCapacity} vehicle capacity</span>
+                    <span className="text-[var(--text-faint)] flex-shrink-0">🚗</span>
+                    <span className="text-[var(--text-muted)]">{b.vehicleCapacity} vehicle capacity</span>
                   </div>
                 </div>
 
                 {/* Actions */}
-                <div className="flex gap-2 mt-5 pt-4 border-t border-white/5">
+                <div className="flex gap-2 mt-5 pt-4 border-t border-[var(--border-subtle)]">
                   <button
                     onClick={() => openEdit(b)}
                     className="flex-1 text-sm py-1.5 rounded-lg bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30"
@@ -326,7 +326,7 @@ export default function BranchesPage() {
                     onClick={() => handleToggleStatus(b)}
                     className={`flex-1 text-sm py-1.5 rounded-lg border ${
                       isActive
-                        ? 'bg-slate-500/20 text-slate-400 border-slate-500/30 hover:bg-slate-500/30'
+                        ? 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30 hover:bg-slate-500/30'
                         : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30'
                     }`}
                   >
@@ -339,13 +339,13 @@ export default function BranchesPage() {
         </div>
       ) : (
         /* Table View */
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-hidden backdrop-blur-sm">
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl overflow-hidden backdrop-blur-sm">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-white/5">
+                <tr className="border-b border-[var(--border-subtle)]">
                   {['Branch Code', 'Name', 'Emirate', 'Address', 'Manager', 'Phone', 'Capacity', 'Hours', 'Status', 'Actions'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -354,25 +354,25 @@ export default function BranchesPage() {
                   const em = EMIRATE_MAP[b.emirate];
                   const isActive = b.status === 'ACTIVE';
                   return (
-                    <tr key={b.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                    <tr key={b.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
                       <td className="px-4 py-3 text-sm font-mono text-teal-400 whitespace-nowrap">{b.branchCode}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-white whitespace-nowrap">{b.branchName}</td>
-                      <td className="px-4 py-3 text-sm text-white whitespace-nowrap">
+                      <td className="px-4 py-3 text-sm font-medium text-[var(--text-main)] whitespace-nowrap">{b.branchName}</td>
+                      <td className="px-4 py-3 text-sm text-[var(--text-main)] whitespace-nowrap">
                         <span className="flex items-center gap-1.5">
                           <span>{em?.flag ?? '🏢'}</span>
                           <span>{em?.label ?? b.emirate}</span>
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-300 max-w-[180px] truncate">{b.address ?? '—'}</td>
-                      <td className="px-4 py-3 text-sm text-slate-300 whitespace-nowrap">{b.managerName ?? '—'}</td>
-                      <td className="px-4 py-3 text-sm text-slate-300 whitespace-nowrap">{b.phone ?? '—'}</td>
-                      <td className="px-4 py-3 text-sm text-white whitespace-nowrap text-center">{b.vehicleCapacity}</td>
-                      <td className="px-4 py-3 text-xs text-slate-300 whitespace-nowrap">{b.operatingHours}</td>
+                      <td className="px-4 py-3 text-sm text-[var(--text-muted)] max-w-[180px] truncate">{b.address ?? '—'}</td>
+                      <td className="px-4 py-3 text-sm text-[var(--text-muted)] whitespace-nowrap">{b.managerName ?? '—'}</td>
+                      <td className="px-4 py-3 text-sm text-[var(--text-muted)] whitespace-nowrap">{b.phone ?? '—'}</td>
+                      <td className="px-4 py-3 text-sm text-[var(--text-main)] whitespace-nowrap text-center">{b.vehicleCapacity}</td>
+                      <td className="px-4 py-3 text-xs text-[var(--text-muted)] whitespace-nowrap">{b.operatingHours}</td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium border ${
                           isActive
                             ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                            : 'bg-slate-500/20 text-slate-400 border-slate-500/30'
+                            : 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30'
                         }`}>
                           {b.status}
                         </span>
@@ -389,7 +389,7 @@ export default function BranchesPage() {
                             onClick={() => handleToggleStatus(b)}
                             className={`text-xs px-2.5 py-1 rounded border ${
                               isActive
-                                ? 'bg-slate-500/20 text-slate-400 border-slate-500/30 hover:bg-slate-500/30'
+                                ? 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30 hover:bg-slate-500/30'
                                 : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30'
                             }`}
                           >
@@ -409,12 +409,12 @@ export default function BranchesPage() {
       {/* Add / Edit Branch Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-800/95 border border-white/10 rounded-2xl p-8">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl p-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">
+              <h2 className="text-2xl font-bold text-[var(--text-main)]">
                 {editBranch ? 'Edit Branch' : 'Add New Branch'}
               </h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white text-xl">✕</button>
+              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">✕</button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -514,7 +514,7 @@ export default function BranchesPage() {
               <div className="flex gap-4 justify-end pt-2">
                 <button
                   type="button" onClick={() => setShowModal(false)}
-                  className="px-6 py-2.5 rounded-lg border border-white/10 text-white hover:bg-white/5 text-sm"
+                  className="px-6 py-2.5 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm"
                 >
                   Cancel
                 </button>

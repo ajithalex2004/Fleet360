@@ -53,7 +53,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   PERMIT:    'bg-amber-500/10 text-amber-300 border-amber-500/30',
   DRIVER:    'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
   FUEL:      'bg-orange-500/10 text-orange-300 border-orange-500/30',
-  OTHER:     'bg-slate-500/10 text-slate-300 border-slate-500/30',
+  OTHER:     'bg-slate-500/10 text-[var(--text-muted)] border-slate-500/30',
 };
 
 const blank = {
@@ -136,11 +136,11 @@ export default function AncillariesPage() {
     <div className="max-w-6xl mx-auto p-6 space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <Link href="/rental" className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-cyan-400">
+          <Link href="/rental" className="inline-flex items-center gap-1 text-xs text-[var(--text-faint)] hover:text-cyan-400">
             <ChevronLeft className="h-3 w-3" /> Back to dashboard
           </Link>
-          <h1 className="text-2xl font-bold text-white mt-2">Ancillary Catalogue</h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mt-2">Ancillary Catalogue</h1>
+          <p className="text-xs text-[var(--text-muted)] mt-1">
             Master list of add-ons attachable to bookings. The AI co-pilot suggests
             from this catalogue. Per-day vs one-time, applicable categories,
             insurance / permit / accessory / fuel / driver categorisation.
@@ -150,7 +150,7 @@ export default function AncillariesPage() {
           <button
             onClick={seedAll}
             disabled={seedBusy || items.length > 0}
-            className="px-4 py-2 rounded-xl bg-slate-700 border border-slate-600 text-slate-200 text-sm hover:bg-slate-600 disabled:opacity-40"
+            className="px-4 py-2 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] text-[var(--text-main)] text-sm hover:bg-[var(--bg-surface-hover)] disabled:opacity-40"
             title={items.length > 0 ? 'Catalogue already populated' : 'One-click seed UAE-standard ancillaries'}
           >
             {seedBusy ? 'Seeding…' : '+ Seed UAE Standards'}
@@ -169,17 +169,17 @@ export default function AncillariesPage() {
       )}
 
       {loading ? (
-        <div className="text-slate-500 text-center py-12">Loading…</div>
+        <div className="text-[var(--text-faint)] text-center py-12">Loading…</div>
       ) : items.length === 0 ? (
-        <div className="p-8 rounded-xl bg-slate-800/40 border border-slate-700 text-center text-slate-400">
+        <div className="p-8 rounded-xl bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] text-center text-[var(--text-muted)]">
           No ancillaries yet. Click <strong className="text-cyan-300">+ Seed UAE Standards</strong> for an
           18-item kickstart, or add custom ones with <strong className="text-cyan-300">+ New Ancillary</strong>.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-700">
+        <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
           <table className="w-full text-sm">
-            <thead className="bg-slate-800/60">
-              <tr className="text-left text-xs text-slate-400">
+            <thead className="bg-[var(--bg-surface)]/60">
+              <tr className="text-left text-xs text-[var(--text-muted)]">
                 <th className="px-4 py-3">Code</th>
                 <th className="px-4 py-3">Name (EN / AR)</th>
                 <th className="px-4 py-3">Category</th>
@@ -191,11 +191,11 @@ export default function AncillariesPage() {
             </thead>
             <tbody>
               {items.map((a) => (
-                <tr key={a.id} className="border-t border-slate-800 hover:bg-slate-800/30">
+                <tr key={a.id} className="border-t border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]/30">
                   <td className="px-4 py-3 font-mono text-xs text-cyan-300">{a.code}</td>
                   <td className="px-4 py-3">
-                    <div className="text-white">{a.nameEn}</div>
-                    {a.nameAr && <div className="text-xs text-slate-400" dir="rtl">{a.nameAr}</div>}
+                    <div className="text-[var(--text-main)]">{a.nameEn}</div>
+                    {a.nameAr && <div className="text-xs text-[var(--text-muted)]" dir="rtl">{a.nameAr}</div>}
                   </td>
                   <td className="px-4 py-3">
                     {a.category && (
@@ -204,15 +204,15 @@ export default function AncillariesPage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-xs text-slate-300">
+                  <td className="px-4 py-3 text-xs text-[var(--text-muted)]">
                     {a.pricingType === 'PER_DAY' ? 'Per day' : 'One-time'}
                   </td>
-                  <td className="px-4 py-3 text-right text-white font-medium">
+                  <td className="px-4 py-3 text-right text-[var(--text-main)] font-medium">
                     {a.currency} {Number(a.unitPrice).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                    <span className="text-xs text-slate-500 ml-1">{a.pricingType === 'PER_DAY' ? '/day' : ''}</span>
+                    <span className="text-xs text-[var(--text-faint)] ml-1">{a.pricingType === 'PER_DAY' ? '/day' : ''}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-0.5 rounded-full border ${a.isActive ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-slate-700 text-slate-400 border-slate-600'}`}>
+                    <span className={`text-xs px-2 py-0.5 rounded-full border ${a.isActive ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border-[var(--border-strong)]'}`}>
                       {a.isActive ? 'Active' : 'Inactive'}
                     </span>
                   </td>
@@ -231,10 +231,10 @@ export default function AncillariesPage() {
       {/* Form modal */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-2xl bg-slate-800 border border-slate-700 rounded-2xl p-6 max-h-[90vh] overflow-y-auto">
+          <div className="w-full max-w-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-white">New Ancillary</h2>
-              <button onClick={() => setShowForm(false)} className="text-slate-400 hover:text-white">×</button>
+              <h2 className="text-xl font-bold text-[var(--text-main)]">New Ancillary</h2>
+              <button onClick={() => setShowForm(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">×</button>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Code *" mono value={form.code}
@@ -254,7 +254,7 @@ export default function AncillariesPage() {
                 onChange={(v) => setForm({ ...form, description: v })} />
             </div>
             <div className="flex gap-3 justify-end mt-6">
-              <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-lg bg-slate-700 text-slate-200 hover:bg-slate-600 text-sm">
+              <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm">
                 Cancel
               </button>
               <button
@@ -278,10 +278,10 @@ function Field({
   label: string; value: string; onChange: (v: string) => void; type?: 'text' | 'number' | 'select';
   options?: string[]; placeholder?: string; mono?: boolean; rtl?: boolean; className?: string;
 }) {
-  const baseClass = `w-full mt-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-sm ${mono ? 'font-mono' : ''}`;
+  const baseClass = `w-full mt-1 px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm ${mono ? 'font-mono' : ''}`;
   return (
     <div className={className}>
-      <label className="text-xs text-slate-400">{label}</label>
+      <label className="text-xs text-[var(--text-muted)]">{label}</label>
       {type === 'select' && options ? (
         <select value={value} onChange={(e) => onChange(e.target.value)} className={baseClass}>
           {options.map((o) => <option key={o} value={o}>{o}</option>)}

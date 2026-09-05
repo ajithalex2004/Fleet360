@@ -87,7 +87,7 @@ const REASON_COLORS: Record<TransferReason, string> = {
   CUSTOMER_DROPOFF:'bg-teal-500/20  text-teal-300  border border-teal-500/30',
   MAINTENANCE:     'bg-amber-500/20 text-amber-300 border border-amber-500/30',
   OVERFLOW:        'bg-cyan-500/20  text-cyan-300  border border-cyan-500/30',
-  OTHER:           'bg-slate-500/20 text-slate-300 border border-slate-500/30',
+  OTHER:           'bg-slate-500/20 text-[var(--text-muted)] border border-slate-500/30',
 };
 
 const STATUS_COLORS: Record<TransferStatus, string> = {
@@ -121,8 +121,8 @@ const emptyForm = () => ({
 });
 
 // ─── Input helper ─────────────────────────────────────────────────────────────
-const inputCls = 'w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-teal-500';
-const labelCls = 'block text-xs font-medium text-slate-400 mb-1';
+const inputCls = 'w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-teal-500';
+const labelCls = 'block text-xs font-medium text-[var(--text-muted)] mb-1';
 
 export default function RentalTransfersPage() {
   const [transfers, setTransfers]     = useState<Transfer[]>([]);
@@ -244,8 +244,8 @@ export default function RentalTransfersPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Inter-Branch Vehicle Transfers</h1>
-          <p className="text-xs text-slate-400 mt-1">Manage vehicle movements between branches and emirates</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Inter-Branch Vehicle Transfers</h1>
+          <p className="text-xs text-[var(--text-muted)] mt-1">Manage vehicle movements between branches and emirates</p>
         </div>
         <button
           onClick={() => { setForm(emptyForm()); setError(''); setShowCreate(true); }}
@@ -257,31 +257,31 @@ export default function RentalTransfersPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-slate-900 border border-amber-500/20 rounded-xl p-4">
-          <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Requested</p>
+        <div className="bg-[var(--bg-surface)] border border-amber-500/20 rounded-xl p-4">
+          <p className="text-xs text-[var(--text-muted)] font-medium uppercase tracking-wider">Requested</p>
           <p className="text-3xl font-bold text-amber-400 mt-1">{summary.requested}</p>
-          <p className="text-xs text-slate-500 mt-1">Awaiting approval</p>
+          <p className="text-xs text-[var(--text-faint)] mt-1">Awaiting approval</p>
         </div>
-        <div className="bg-slate-900 border border-cyan-500/20 rounded-xl p-4">
-          <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">In Transit</p>
+        <div className="bg-[var(--bg-surface)] border border-cyan-500/20 rounded-xl p-4">
+          <p className="text-xs text-[var(--text-muted)] font-medium uppercase tracking-wider">In Transit</p>
           <p className="text-3xl font-bold text-cyan-400 mt-1">{summary.inTransit}</p>
-          <p className="text-xs text-slate-500 mt-1">On the road now</p>
+          <p className="text-xs text-[var(--text-faint)] mt-1">On the road now</p>
         </div>
-        <div className="bg-slate-900 border border-emerald-500/20 rounded-xl p-4">
-          <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Completed This Month</p>
+        <div className="bg-[var(--bg-surface)] border border-emerald-500/20 rounded-xl p-4">
+          <p className="text-xs text-[var(--text-muted)] font-medium uppercase tracking-wider">Completed This Month</p>
           <p className="text-3xl font-bold text-emerald-400 mt-1">{summary.completedThisMonth}</p>
-          <p className="text-xs text-slate-500 mt-1">Arrived at destination</p>
+          <p className="text-xs text-[var(--text-faint)] mt-1">Arrived at destination</p>
         </div>
-        <div className="bg-slate-900 border border-red-500/20 rounded-xl p-4">
-          <p className="text-xs text-slate-400 font-medium uppercase tracking-wider">Cancelled</p>
+        <div className="bg-[var(--bg-surface)] border border-red-500/20 rounded-xl p-4">
+          <p className="text-xs text-[var(--text-muted)] font-medium uppercase tracking-wider">Cancelled</p>
           <p className="text-3xl font-bold text-red-400 mt-1">{summary.cancelled}</p>
-          <p className="text-xs text-slate-500 mt-1">All time</p>
+          <p className="text-xs text-[var(--text-faint)] mt-1">All time</p>
         </div>
       </div>
 
       {/* Transfer Pipeline Visual */}
-      <div className="bg-slate-900 border border-white/5 rounded-xl p-4">
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Transfer Pipeline</p>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4">
+        <p className="text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wider mb-3">Transfer Pipeline</p>
         <div className="flex items-center gap-1">
           {pipelineSteps.map((step, i) => (
             <React.Fragment key={step.key}>
@@ -290,7 +290,7 @@ export default function RentalTransfersPage() {
                 <p className="text-xs font-medium mt-0.5">{step.label}</p>
               </div>
               {i < pipelineSteps.length - 1 && (
-                <span className="text-slate-600 text-lg px-0.5">→</span>
+                <span className="text-[var(--text-faint)] text-lg px-0.5">→</span>
               )}
             </React.Fragment>
           ))}
@@ -308,7 +308,7 @@ export default function RentalTransfersPage() {
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 statusFilter === s
                   ? 'bg-gradient-to-r from-teal-600 to-cyan-600 text-white shadow-sm'
-                  : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
+                  : 'bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]'
               }`}
             >
               {s === 'ALL' ? 'All' : STATUS_LABELS[s]}
@@ -330,50 +330,50 @@ export default function RentalTransfersPage() {
           placeholder="Search vehicle no / transfer no…"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 w-64"
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-1.5 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-teal-500 w-64"
         />
       </div>
 
       {/* Table */}
-      <div className="bg-slate-900 border border-white/5 rounded-xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/5 bg-slate-800/60">
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Transfer No</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Vehicle</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">From Branch</th>
-                <th className="text-center px-2 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">→</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">To Branch</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Transfer Date</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Reason</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Driver</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
+              <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/60">
+                <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Transfer No</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Vehicle</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">From Branch</th>
+                <th className="text-center px-2 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">→</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">To Branch</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Transfer Date</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Reason</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Driver</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Status</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5">
+            <tbody className="divide-y divide-[var(--border-subtle)]">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-12 text-slate-500">Loading transfers…</td>
+                  <td colSpan={10} className="text-center py-12 text-[var(--text-faint)]">Loading transfers…</td>
                 </tr>
               ) : transfers.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-12 text-slate-500">No transfers found</td>
+                  <td colSpan={10} className="text-center py-12 text-[var(--text-faint)]">No transfers found</td>
                 </tr>
               ) : transfers.map(t => (
-                <tr key={t.id} className="hover:bg-white/[0.02] transition-colors">
+                <tr key={t.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                   {/* Transfer No */}
                   <td className="px-4 py-3">
                     <span className="font-mono text-teal-300 text-xs">{t.transferNo}</span>
-                    <p className="text-xs text-slate-500 mt-0.5">{f(t.createdAt)}</p>
+                    <p className="text-xs text-[var(--text-faint)] mt-0.5">{f(t.createdAt)}</p>
                   </td>
                   {/* Vehicle */}
                   <td className="px-4 py-3">
-                    <p className="font-medium text-white">{t.vehicleNo}</p>
-                    {t.vehicleName && <p className="text-xs text-slate-400">{t.vehicleName}</p>}
+                    <p className="font-medium text-[var(--text-main)]">{t.vehicleNo}</p>
+                    {t.vehicleName && <p className="text-xs text-[var(--text-muted)]">{t.vehicleName}</p>}
                     {(t.vehicleMake || t.vehicleModel) && (
-                      <p className="text-xs text-slate-500">{[t.vehicleMake, t.vehicleModel].filter(Boolean).join(' ')}</p>
+                      <p className="text-xs text-[var(--text-faint)]">{[t.vehicleMake, t.vehicleModel].filter(Boolean).join(' ')}</p>
                     )}
                   </td>
                   {/* From Branch */}
@@ -381,25 +381,25 @@ export default function RentalTransfersPage() {
                     <div className="flex items-center gap-1.5">
                       <span className="text-base">{emirateFlag(t.fromEmirate)}</span>
                       <div>
-                        <p className="font-medium text-white text-xs">{t.fromBranchName}</p>
-                        {t.fromEmirate && <p className="text-xs text-slate-500">{emirateLabel(t.fromEmirate)}</p>}
+                        <p className="font-medium text-[var(--text-main)] text-xs">{t.fromBranchName}</p>
+                        {t.fromEmirate && <p className="text-xs text-[var(--text-faint)]">{emirateLabel(t.fromEmirate)}</p>}
                       </div>
                     </div>
                   </td>
                   {/* Arrow */}
-                  <td className="px-2 py-3 text-center text-slate-500 text-lg">→</td>
+                  <td className="px-2 py-3 text-center text-[var(--text-faint)] text-lg">→</td>
                   {/* To Branch */}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5">
                       <span className="text-base">{emirateFlag(t.toEmirate)}</span>
                       <div>
-                        <p className="font-medium text-white text-xs">{t.toBranchName}</p>
-                        {t.toEmirate && <p className="text-xs text-slate-500">{emirateLabel(t.toEmirate)}</p>}
+                        <p className="font-medium text-[var(--text-main)] text-xs">{t.toBranchName}</p>
+                        {t.toEmirate && <p className="text-xs text-[var(--text-faint)]">{emirateLabel(t.toEmirate)}</p>}
                       </div>
                     </div>
                   </td>
                   {/* Transfer Date */}
-                  <td className="px-4 py-3 text-slate-300 text-xs whitespace-nowrap">{f(t.transferDate)}</td>
+                  <td className="px-4 py-3 text-[var(--text-muted)] text-xs whitespace-nowrap">{f(t.transferDate)}</td>
                   {/* Reason */}
                   <td className="px-4 py-3">
                     <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${REASON_COLORS[t.reason]}`}>
@@ -410,11 +410,11 @@ export default function RentalTransfersPage() {
                   <td className="px-4 py-3">
                     {t.driverName ? (
                       <div>
-                        <p className="text-xs text-slate-300">{t.driverName}</p>
-                        {t.driverPhone && <p className="text-xs text-slate-500">{t.driverPhone}</p>}
+                        <p className="text-xs text-[var(--text-muted)]">{t.driverName}</p>
+                        {t.driverPhone && <p className="text-xs text-[var(--text-faint)]">{t.driverPhone}</p>}
                       </div>
                     ) : (
-                      <span className="text-xs text-slate-600">—</span>
+                      <span className="text-xs text-[var(--text-faint)]">—</span>
                     )}
                   </td>
                   {/* Status */}
@@ -423,7 +423,7 @@ export default function RentalTransfersPage() {
                       {STATUS_LABELS[t.status]}
                     </span>
                     {t.approvedBy && (
-                      <p className="text-xs text-slate-500 mt-0.5">by {t.approvedBy}</p>
+                      <p className="text-xs text-[var(--text-faint)] mt-0.5">by {t.approvedBy}</p>
                     )}
                   </td>
                   {/* Actions */}
@@ -433,7 +433,7 @@ export default function RentalTransfersPage() {
                         <>
                           <button
                             onClick={() => { setShowApprove(t); setApprovedBy(''); setError(''); }}
-                            className="px-2.5 py-1 rounded text-xs font-medium bg-teal-600 hover:bg-teal-500 text-white transition-colors"
+                            className="px-2.5 py-1 rounded text-xs font-medium bg-teal-600 hover:bg-teal-500 text-[var(--text-main)] transition-colors"
                           >Approve</button>
                           <button
                             onClick={() => { setShowCancel(t); setCancelReason(''); setError(''); }}
@@ -444,17 +444,17 @@ export default function RentalTransfersPage() {
                       {t.status === 'APPROVED' && (
                         <button
                           onClick={() => handleAction(t.id, 'DEPART')}
-                          className="px-2.5 py-1 rounded text-xs font-medium bg-cyan-700 hover:bg-cyan-600 text-white transition-colors whitespace-nowrap"
+                          className="px-2.5 py-1 rounded text-xs font-medium bg-cyan-700 hover:bg-cyan-600 text-[var(--text-main)] transition-colors whitespace-nowrap"
                         >Mark Departed</button>
                       )}
                       {t.status === 'IN_TRANSIT' && (
                         <button
                           onClick={() => handleAction(t.id, 'ARRIVE')}
-                          className="px-2.5 py-1 rounded text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors whitespace-nowrap"
+                          className="px-2.5 py-1 rounded text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-[var(--text-main)] transition-colors whitespace-nowrap"
                         >Mark Arrived</button>
                       )}
                       {(t.status === 'COMPLETED' || t.status === 'CANCELLED') && (
-                        <span className="text-xs text-slate-600">—</span>
+                        <span className="text-xs text-[var(--text-faint)]">—</span>
                       )}
                     </div>
                   </td>
@@ -468,13 +468,13 @@ export default function RentalTransfersPage() {
       {/* ── Create Modal ──────────────────────────────────────────────────── */}
       {showCreate && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
-            <div className="flex items-center justify-between p-6 border-b border-white/5">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between p-6 border-b border-[var(--border-subtle)]">
               <div>
-                <h2 className="text-lg font-bold text-white">Request Transfer</h2>
-                <p className="text-xs text-slate-400 mt-0.5">New inter-branch vehicle movement</p>
+                <h2 className="text-lg font-bold text-[var(--text-main)]">Request Transfer</h2>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">New inter-branch vehicle movement</p>
               </div>
-              <button onClick={() => setShowCreate(false)} className="text-slate-500 hover:text-white text-xl leading-none">✕</button>
+              <button onClick={() => setShowCreate(false)} className="text-[var(--text-faint)] hover:text-[var(--text-main)] text-xl leading-none">✕</button>
             </div>
 
             <div className="p-6 space-y-5">
@@ -484,7 +484,7 @@ export default function RentalTransfersPage() {
 
               {/* Vehicle Details */}
               <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Vehicle Details</p>
+                <p className="text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wider mb-3">Vehicle Details</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="col-span-2 sm:col-span-1">
                     <label className={labelCls}>Vehicle No <span className="text-red-400">*</span></label>
@@ -511,7 +511,7 @@ export default function RentalTransfersPage() {
 
               {/* From / To Branch */}
               <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Branch Details</p>
+                <p className="text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wider mb-3">Branch Details</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className={labelCls}>From Branch Name <span className="text-red-400">*</span></label>
@@ -548,7 +548,7 @@ export default function RentalTransfersPage() {
 
               {/* Transfer Details */}
               <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Transfer Details</p>
+                <p className="text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wider mb-3">Transfer Details</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className={labelCls}>Transfer Date <span className="text-red-400">*</span></label>
@@ -579,7 +579,7 @@ export default function RentalTransfersPage() {
 
               {/* Vehicle Condition */}
               <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Vehicle Condition</p>
+                <p className="text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wider mb-3">Vehicle Condition</p>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className={labelCls}>Fuel Level (0–8)</label>
@@ -614,8 +614,8 @@ export default function RentalTransfersPage() {
               </div>
             </div>
 
-            <div className="flex gap-3 p-6 border-t border-white/5">
-              <button onClick={() => setShowCreate(false)} className="flex-1 px-4 py-2 rounded-lg bg-slate-800 text-slate-300 text-sm hover:bg-slate-700 transition-colors">
+            <div className="flex gap-3 p-6 border-t border-[var(--border-subtle)]">
+              <button onClick={() => setShowCreate(false)} className="flex-1 px-4 py-2 rounded-lg bg-[var(--bg-surface)] text-[var(--text-muted)] text-sm hover:bg-[var(--bg-surface-hover)] transition-colors">
                 Cancel
               </button>
               <button onClick={handleCreate} disabled={saving}
@@ -630,16 +630,16 @@ export default function RentalTransfersPage() {
       {/* ── Approve Modal ─────────────────────────────────────────────────── */}
       {showApprove && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm shadow-2xl">
-            <div className="flex items-center justify-between p-5 border-b border-white/5">
-              <h2 className="text-base font-bold text-white">Approve Transfer</h2>
-              <button onClick={() => setShowApprove(null)} className="text-slate-500 hover:text-white text-xl leading-none">✕</button>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-sm shadow-2xl">
+            <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)]">
+              <h2 className="text-base font-bold text-[var(--text-main)]">Approve Transfer</h2>
+              <button onClick={() => setShowApprove(null)} className="text-[var(--text-faint)] hover:text-[var(--text-main)] text-xl leading-none">✕</button>
             </div>
             <div className="p-5 space-y-4">
               {error && <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 text-xs text-red-400">{error}</div>}
-              <p className="text-sm text-slate-300">
+              <p className="text-sm text-[var(--text-muted)]">
                 Approving transfer <span className="font-mono text-teal-300">{showApprove.transferNo}</span> for vehicle{' '}
-                <span className="font-medium text-white">{showApprove.vehicleNo}</span>
+                <span className="font-medium text-[var(--text-main)]">{showApprove.vehicleNo}</span>
               </p>
               <div>
                 <label className={labelCls}>Approved By <span className="text-red-400">*</span></label>
@@ -647,12 +647,12 @@ export default function RentalTransfersPage() {
                   onChange={e => setApprovedBy(e.target.value)} />
               </div>
             </div>
-            <div className="flex gap-3 p-5 border-t border-white/5">
-              <button onClick={() => setShowApprove(null)} className="flex-1 px-4 py-2 rounded-lg bg-slate-800 text-slate-300 text-sm hover:bg-slate-700 transition-colors">
+            <div className="flex gap-3 p-5 border-t border-[var(--border-subtle)]">
+              <button onClick={() => setShowApprove(null)} className="flex-1 px-4 py-2 rounded-lg bg-[var(--bg-surface)] text-[var(--text-muted)] text-sm hover:bg-[var(--bg-surface-hover)] transition-colors">
                 Cancel
               </button>
               <button onClick={() => handleAction(showApprove.id, 'APPROVE', { approvedBy })} disabled={saving || !approvedBy.trim()}
-                className="flex-1 px-4 py-2 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-sm font-medium transition-colors disabled:opacity-50">
+                className="flex-1 px-4 py-2 rounded-lg bg-teal-600 hover:bg-teal-500 text-[var(--text-main)] text-sm font-medium transition-colors disabled:opacity-50">
                 {saving ? 'Approving…' : 'Approve'}
               </button>
             </div>
@@ -663,14 +663,14 @@ export default function RentalTransfersPage() {
       {/* ── Cancel Modal ──────────────────────────────────────────────────── */}
       {showCancel && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-sm shadow-2xl">
-            <div className="flex items-center justify-between p-5 border-b border-white/5">
-              <h2 className="text-base font-bold text-white">Cancel Transfer</h2>
-              <button onClick={() => setShowCancel(null)} className="text-slate-500 hover:text-white text-xl leading-none">✕</button>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-sm shadow-2xl">
+            <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)]">
+              <h2 className="text-base font-bold text-[var(--text-main)]">Cancel Transfer</h2>
+              <button onClick={() => setShowCancel(null)} className="text-[var(--text-faint)] hover:text-[var(--text-main)] text-xl leading-none">✕</button>
             </div>
             <div className="p-5 space-y-4">
               {error && <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 text-xs text-red-400">{error}</div>}
-              <p className="text-sm text-slate-300">
+              <p className="text-sm text-[var(--text-muted)]">
                 Cancelling transfer <span className="font-mono text-teal-300">{showCancel.transferNo}</span>
               </p>
               <div>
@@ -679,12 +679,12 @@ export default function RentalTransfersPage() {
                   onChange={e => setCancelReason(e.target.value)} />
               </div>
             </div>
-            <div className="flex gap-3 p-5 border-t border-white/5">
-              <button onClick={() => setShowCancel(null)} className="flex-1 px-4 py-2 rounded-lg bg-slate-800 text-slate-300 text-sm hover:bg-slate-700 transition-colors">
+            <div className="flex gap-3 p-5 border-t border-[var(--border-subtle)]">
+              <button onClick={() => setShowCancel(null)} className="flex-1 px-4 py-2 rounded-lg bg-[var(--bg-surface)] text-[var(--text-muted)] text-sm hover:bg-[var(--bg-surface-hover)] transition-colors">
                 Back
               </button>
               <button onClick={() => handleAction(showCancel.id, 'CANCEL', { cancelledReason: cancelReason })} disabled={saving || !cancelReason.trim()}
-                className="flex-1 px-4 py-2 rounded-lg bg-red-700 hover:bg-red-600 text-white text-sm font-medium transition-colors disabled:opacity-50">
+                className="flex-1 px-4 py-2 rounded-lg bg-red-700 hover:bg-red-600 text-[var(--text-main)] text-sm font-medium transition-colors disabled:opacity-50">
                 {saving ? 'Cancelling…' : 'Cancel Transfer'}
               </button>
             </div>

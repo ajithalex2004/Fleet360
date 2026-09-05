@@ -149,15 +149,15 @@ export default function RentalCopilotPage() {
       <div>
         <Link
           href="/rental/bookings"
-          className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-cyan-400"
+          className="inline-flex items-center gap-1 text-xs text-[var(--text-faint)] hover:text-cyan-400"
         >
           <ChevronLeft className="h-3 w-3" /> Back to bookings
         </Link>
-        <h1 className="text-2xl font-bold text-white mt-2 flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-[var(--text-main)] mt-2 flex items-center gap-2">
           <Sparkles className="h-6 w-6 text-teal-400" />
           AI Rental Co-pilot
         </h1>
-        <p className="text-sm text-slate-400 mt-1">
+        <p className="text-sm text-[var(--text-muted)] mt-1">
           Describe what the customer needs in plain English or Arabic. The
           co-pilot returns a structured rental proposal with priced ancillaries
           and length-of-rental discount applied automatically.
@@ -165,29 +165,29 @@ export default function RentalCopilotPage() {
       </div>
 
       {/* Brief input */}
-      <div className="bg-slate-800/50 border border-teal-500/20 rounded-2xl p-6 backdrop-blur-sm">
-        <label className="block text-sm font-medium text-slate-300 mb-2">Customer brief</label>
+      <div className="bg-[var(--bg-surface)]/50 border border-teal-500/20 rounded-2xl p-6 backdrop-blur-sm">
+        <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Customer brief</label>
         <textarea
           value={brief}
           onChange={(e) => setBrief(e.target.value)}
           rows={5}
           placeholder='e.g. "1 SUV for a Saudi family from DXB Saturday to next Friday, GPS + 2 child seats, full insurance, going to Oman."'
-          className="w-full px-4 py-3 rounded-xl bg-slate-900/60 border border-slate-700 text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none transition resize-none"
+          className="w-full px-4 py-3 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-teal-500 focus:outline-none transition resize-none"
         />
         <div className="flex flex-wrap gap-2 mt-3">
-          <span className="text-xs text-slate-500 self-center mr-1">Try an example:</span>
+          <span className="text-xs text-[var(--text-faint)] self-center mr-1">Try an example:</span>
           {EXAMPLES.map((ex) => (
             <button
               key={ex.label}
               onClick={() => setBrief(ex.brief)}
-              className="text-xs px-3 py-1 rounded-full bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 border border-slate-600 transition"
+              className="text-xs px-3 py-1 rounded-full bg-[var(--bg-surface-hover)]/50 hover:bg-[var(--bg-surface-hover)]/50 text-[var(--text-muted)] border border-[var(--border-strong)] transition"
             >
               {ex.label}
             </button>
           ))}
         </div>
         <div className="mt-4 flex items-center justify-between">
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-[var(--text-faint)]">
             Powered by GPT-4o · responses typically take 5–15 seconds
           </p>
           <button
@@ -211,7 +211,7 @@ export default function RentalCopilotPage() {
       {suggestion && (
         <div className="space-y-4">
           {/* Header card */}
-          <div className="bg-slate-800/50 border border-emerald-500/20 rounded-2xl p-6">
+          <div className="bg-[var(--bg-surface)]/50 border border-emerald-500/20 rounded-2xl p-6">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-5 w-5 text-emerald-400" />
@@ -220,17 +220,17 @@ export default function RentalCopilotPage() {
                 </span>
               </div>
               <div className="flex gap-2 flex-wrap">
-                <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${CATEGORY_COLORS[suggestion.vehicleCategory] ?? 'bg-slate-700 text-slate-300 border-slate-600'}`}>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${CATEGORY_COLORS[suggestion.vehicleCategory] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border-[var(--border-strong)]'}`}>
                   {suggestion.vehicleCategory.replace(/_/g, ' ')}
                 </span>
                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${CONFIDENCE_COLORS[suggestion.confidence]}`}>
                   {suggestion.confidence} confidence
                 </span>
-                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-700 text-slate-300 border border-slate-600">
+                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border border-[var(--border-strong)]">
                   {suggestion.detectedLanguage.toUpperCase()} · {suggestion.channel}
                 </span>
                 {meta && (
-                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-700/50 text-slate-400 border border-slate-700">
+                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--bg-surface-hover)]/50 text-[var(--text-muted)] border border-[var(--border-subtle)]">
                     {meta.durationMs}ms · {meta.promptTokens + meta.completionTokens} tokens
                   </span>
                 )}
@@ -252,11 +252,11 @@ export default function RentalCopilotPage() {
               />
             </div>
 
-            <div className="mt-4 p-3 rounded-xl bg-slate-900/50 border border-slate-700">
-              <div className="text-xs text-slate-400 mb-1">Example vehicles in this category:</div>
+            <div className="mt-4 p-3 rounded-xl bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)]">
+              <div className="text-xs text-[var(--text-muted)] mb-1">Example vehicles in this category:</div>
               <div className="flex flex-wrap gap-2">
                 {suggestion.exampleVehicles.map((v) => (
-                  <span key={v} className="text-xs px-2 py-1 rounded-md bg-slate-800 border border-slate-700 text-slate-200">
+                  <span key={v} className="text-xs px-2 py-1 rounded-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)]">
                     {v}
                   </span>
                 ))}
@@ -265,14 +265,14 @@ export default function RentalCopilotPage() {
           </div>
 
           {/* Cost breakdown */}
-          <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6">
-            <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Cost breakdown</h3>
+          <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6">
+            <h3 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-4">Cost breakdown</h3>
             <div className="space-y-2 text-sm">
               <Row label="Base rental" sub={`${suggestion.totalDays} × AED ${suggestion.appliedDailyRate.toLocaleString()}`} amount={suggestion.baseRentalCharge} />
               <Row label={`Insurance · ${suggestion.insuranceTier}`} amount={suggestion.insuranceCharge} />
               {suggestion.ancillaries.length > 0 && (
                 <>
-                  <div className="pt-2 mt-2 border-t border-slate-700 text-xs text-slate-400 uppercase tracking-wider">Ancillaries</div>
+                  <div className="pt-2 mt-2 border-t border-[var(--border-subtle)] text-xs text-[var(--text-muted)] uppercase tracking-wider">Ancillaries</div>
                   {suggestion.ancillaries.map((a, i) => (
                     <Row
                       key={i}
@@ -287,8 +287,8 @@ export default function RentalCopilotPage() {
               <Row label={`VAT (${suggestion.vatPct}%)`} amount={suggestion.vatAmount} muted />
             </div>
             <div className="mt-3 p-3 rounded-xl bg-gradient-to-r from-teal-600 to-cyan-600 flex items-center justify-between">
-              <span className="text-white font-bold">Total</span>
-              <span className="text-white text-xl font-bold">AED {suggestion.totalAmount.toLocaleString()}</span>
+              <span className="text-[var(--text-main)] font-bold">Total</span>
+              <span className="text-[var(--text-main)] text-xl font-bold">AED {suggestion.totalAmount.toLocaleString()}</span>
             </div>
             <div className="mt-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs text-amber-200">
               <span>Refundable security deposit (card pre-auth)</span>
@@ -297,11 +297,11 @@ export default function RentalCopilotPage() {
           </div>
 
           {/* Pricing rationale */}
-          <div className="bg-slate-800/50 border border-cyan-500/20 rounded-2xl p-6">
+          <div className="bg-[var(--bg-surface)]/50 border border-cyan-500/20 rounded-2xl p-6">
             <h3 className="text-sm font-semibold text-cyan-300 uppercase tracking-wider mb-2">Pricing rationale</h3>
             <p
               dir={isRtl ? 'rtl' : 'ltr'}
-              className="text-sm text-slate-300 leading-relaxed"
+              className="text-sm text-[var(--text-muted)] leading-relaxed"
             >
               {suggestion.pricingRationale}
             </p>
@@ -324,7 +324,7 @@ export default function RentalCopilotPage() {
           <div className="flex gap-3 justify-end">
             <button
               onClick={() => { setSuggestion(null); setMeta(null); }}
-              className="px-4 py-2 rounded-xl bg-slate-700 text-slate-200 hover:bg-slate-600 text-sm"
+              className="px-4 py-2 rounded-xl bg-[var(--bg-surface-hover)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm"
             >
               Try another brief
             </button>
@@ -336,7 +336,7 @@ export default function RentalCopilotPage() {
             </button>
           </div>
 
-          <p className="text-xs text-slate-500 italic">
+          <p className="text-xs text-[var(--text-faint)] italic">
             Co-pilot suggests realistic UAE market rates as a starting point.
             Always verify against current fleet availability and corporate contracts before quoting.
           </p>
@@ -349,21 +349,21 @@ export default function RentalCopilotPage() {
 function Stat({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div>
-      <div className="text-xs text-slate-400">{label}</div>
-      <div className="font-semibold text-white mt-0.5">{value}</div>
-      {sub && <div className="text-xs text-slate-500 mt-0.5">{sub}</div>}
+      <div className="text-xs text-[var(--text-muted)]">{label}</div>
+      <div className="font-semibold text-[var(--text-main)] mt-0.5">{value}</div>
+      {sub && <div className="text-xs text-[var(--text-faint)] mt-0.5">{sub}</div>}
     </div>
   );
 }
 
 function Row({ label, sub, amount, bold, muted }: { label: string; sub?: string; amount: number; bold?: boolean; muted?: boolean }) {
   return (
-    <div className={`flex items-center justify-between ${bold ? 'pt-2 mt-2 border-t border-slate-700' : ''}`}>
+    <div className={`flex items-center justify-between ${bold ? 'pt-2 mt-2 border-t border-[var(--border-subtle)]' : ''}`}>
       <div>
-        <div className={`${bold ? 'font-semibold text-white' : muted ? 'text-slate-400' : 'text-slate-300'}`}>{label}</div>
-        {sub && <div className="text-xs text-slate-500">{sub}</div>}
+        <div className={`${bold ? 'font-semibold text-[var(--text-main)]' : muted ? 'text-[var(--text-muted)]' : 'text-[var(--text-muted)]'}`}>{label}</div>
+        {sub && <div className="text-xs text-[var(--text-faint)]">{sub}</div>}
       </div>
-      <div className={`${bold ? 'font-bold text-white' : muted ? 'text-slate-400' : 'text-slate-200'}`}>
+      <div className={`${bold ? 'font-bold text-[var(--text-main)]' : muted ? 'text-[var(--text-muted)]' : 'text-[var(--text-main)]'}`}>
         AED {amount.toLocaleString()}
       </div>
     </div>

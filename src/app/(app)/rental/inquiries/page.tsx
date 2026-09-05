@@ -212,7 +212,7 @@ export default function InquiriesPage() {
       setFormData(p => ({ ...p, [key]: e.target.value })),
   });
 
-  const inputCls = 'w-full px-4 py-2.5 rounded-lg bg-slate-700/60 border border-white/10 text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500/40 transition-colors text-sm';
+  const inputCls = 'w-full px-4 py-2.5 rounded-lg bg-[var(--bg-surface-hover)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500/40 transition-colors text-sm';
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -220,8 +220,8 @@ export default function InquiriesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">RAC Inquiries</h1>
-          <p className="text-slate-400 text-xs mt-1">Track and manage rental leads before booking is confirmed</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">RAC Inquiries</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-1">Track and manage rental leads before booking is confirmed</p>
         </div>
         <button
           onClick={openNew}
@@ -251,7 +251,7 @@ export default function InquiriesPage() {
             >
               <div className="text-2xl mb-1">{c.icon}</div>
               <div className={`text-2xl font-bold ${c.text}`}>{cnt}</div>
-              <div className="text-slate-400 text-xs font-medium mt-0.5">{s}</div>
+              <div className="text-[var(--text-muted)] text-xs font-medium mt-0.5">{s}</div>
             </button>
           );
         })}
@@ -259,7 +259,7 @@ export default function InquiriesPage() {
 
       {/* Filter tabs + Search */}
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-        <div className="flex gap-1 bg-slate-900 border border-white/10 rounded-xl p-1 flex-wrap">
+        <div className="flex gap-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-1 flex-wrap">
           {STATUS_TABS.map(tab => (
             <button
               key={tab}
@@ -267,17 +267,17 @@ export default function InquiriesPage() {
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 activeTab === tab
                   ? 'bg-gradient-to-r from-teal-600 to-cyan-600 text-white shadow'
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]'
               }`}
             >
               {tab}
               {tab !== 'ALL' && (
-                <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs ${activeTab === tab ? 'bg-white/20' : 'bg-slate-700 text-slate-300'}`}>
+                <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs ${activeTab === tab ? 'bg-[var(--bg-surface-hover)]' : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'}`}>
                   {getCount(tab)}
                 </span>
               )}
               {tab === 'ALL' && (
-                <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs ${activeTab === tab ? 'bg-white/20' : 'bg-slate-700 text-slate-300'}`}>
+                <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs ${activeTab === tab ? 'bg-[var(--bg-surface-hover)]' : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'}`}>
                   {getCount('ALL')}
                 </span>
               )}
@@ -288,20 +288,20 @@ export default function InquiriesPage() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search by name, phone, email..."
-          className="flex-1 max-w-xs px-4 py-2 rounded-xl bg-slate-900 border border-white/10 text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none text-sm"
+          className="flex-1 max-w-xs px-4 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-teal-500 focus:outline-none text-sm"
         />
       </div>
 
       {/* Table */}
-      <div className="bg-slate-900 border border-white/10 rounded-2xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-16 text-slate-400 text-sm animate-pulse">
+          <div className="flex items-center justify-center py-16 text-[var(--text-muted)] text-sm animate-pulse">
             Loading inquiries...
           </div>
         ) : inquiries.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
             <div className="text-4xl">📋</div>
-            <p className="text-slate-400 text-sm">No inquiries found</p>
+            <p className="text-[var(--text-muted)] text-sm">No inquiries found</p>
             <button onClick={openNew} className="text-teal-400 text-sm hover:text-teal-300 underline underline-offset-2">
               Create the first one
             </button>
@@ -310,24 +310,24 @@ export default function InquiriesPage() {
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1000px]">
               <thead>
-                <tr className="border-b border-white/5 bg-slate-800/40">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Inquiry No</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Customer</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Phone / Email</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Vehicle Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Pickup Location</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Dates</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Days</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Source</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
+                <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/40">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Inquiry No</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Customer</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Phone / Email</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Vehicle Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Pickup Location</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Dates</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Days</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Source</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {inquiries.map((inq, i) => (
                   <tr
                     key={inq.id}
-                    className={`border-b border-white/5 hover:bg-white/[0.03] transition-colors ${i % 2 === 0 ? '' : 'bg-slate-800/10'}`}
+                    className={`border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors ${i % 2 === 0 ? '' : 'bg-[var(--bg-surface)]/10'}`}
                   >
                     {/* Inquiry No */}
                     <td className="px-4 py-3">
@@ -336,57 +336,57 @@ export default function InquiriesPage() {
 
                     {/* Customer */}
                     <td className="px-4 py-3">
-                      <div className="text-sm font-medium text-white">{inq.customer_name}</div>
+                      <div className="text-sm font-medium text-[var(--text-main)]">{inq.customer_name}</div>
                       {inq.assigned_to && (
-                        <div className="text-xs text-slate-500 mt-0.5">→ {inq.assigned_to}</div>
+                        <div className="text-xs text-[var(--text-faint)] mt-0.5">→ {inq.assigned_to}</div>
                       )}
                     </td>
 
                     {/* Phone / Email */}
                     <td className="px-4 py-3">
-                      <div className="text-sm text-white">{inq.phone}</div>
-                      {inq.email && <div className="text-xs text-slate-400 mt-0.5">{inq.email}</div>}
+                      <div className="text-sm text-[var(--text-main)]">{inq.phone}</div>
+                      {inq.email && <div className="text-xs text-[var(--text-muted)] mt-0.5">{inq.email}</div>}
                     </td>
 
                     {/* Vehicle Type */}
-                    <td className="px-4 py-3 text-sm text-slate-200">
+                    <td className="px-4 py-3 text-sm text-[var(--text-main)]">
                       {inq.vehicle_type ?? '—'}
                     </td>
 
                     {/* Pickup Location */}
-                    <td className="px-4 py-3 text-sm text-slate-200 max-w-[140px] truncate">
+                    <td className="px-4 py-3 text-sm text-[var(--text-main)] max-w-[140px] truncate">
                       {inq.pickup_location ?? '—'}
                     </td>
 
                     {/* Dates */}
                     <td className="px-4 py-3">
                       {inq.pickup_date || inq.return_date ? (
-                        <div className="text-xs text-slate-300 space-y-0.5">
+                        <div className="text-xs text-[var(--text-muted)] space-y-0.5">
                           <div>{fmtDate(inq.pickup_date)}</div>
-                          <div className="text-slate-500">→ {fmtDate(inq.return_date)}</div>
+                          <div className="text-[var(--text-faint)]">→ {fmtDate(inq.return_date)}</div>
                         </div>
                       ) : (
-                        <span className="text-slate-500 text-xs">—</span>
+                        <span className="text-[var(--text-faint)] text-xs">—</span>
                       )}
                     </td>
 
                     {/* Rental Days */}
                     <td className="px-4 py-3">
                       {inq.rental_days ? (
-                        <span className="text-sm font-semibold text-white">{inq.rental_days}d</span>
+                        <span className="text-sm font-semibold text-[var(--text-main)]">{inq.rental_days}d</span>
                       ) : '—'}
                     </td>
 
                     {/* Status Badge */}
                     <td className="px-4 py-3">
-                      <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold border ${STATUS_COLORS[inq.status] ?? 'bg-slate-600/20 text-slate-400 border-slate-600/30'}`}>
+                      <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold border ${STATUS_COLORS[inq.status] ?? 'bg-[var(--bg-surface-hover)]/20 text-[var(--text-muted)] border-[var(--border-strong)]/30'}`}>
                         {inq.status}
                       </span>
                     </td>
 
                     {/* Source */}
                     <td className="px-4 py-3">
-                      <span className="text-xs text-slate-400 bg-slate-700/40 px-2 py-1 rounded-md">
+                      <span className="text-xs text-[var(--text-muted)] bg-[var(--bg-surface-hover)]/40 px-2 py-1 rounded-md">
                         {inq.source?.replace('_', ' ')}
                       </span>
                     </td>
@@ -404,7 +404,7 @@ export default function InquiriesPage() {
                           value={inq.status}
                           disabled={statusLoading === inq.id}
                           onChange={e => handleStatusChange(inq, e.target.value)}
-                          className="text-xs px-2 py-1.5 rounded-lg bg-slate-700/60 border border-white/10 text-slate-300 hover:border-teal-500/50 focus:outline-none focus:border-teal-500 cursor-pointer disabled:opacity-50 transition-colors"
+                          className="text-xs px-2 py-1.5 rounded-lg bg-[var(--bg-surface-hover)]/60 border border-[var(--border-subtle)] text-[var(--text-muted)] hover:border-teal-500/50 focus:outline-none focus:border-teal-500 cursor-pointer disabled:opacity-50 transition-colors"
                         >
                           {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                         </select>
@@ -421,11 +421,11 @@ export default function InquiriesPage() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto bg-slate-900 border border-white/10 rounded-2xl shadow-2xl">
+          <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl">
             {/* Modal Header */}
-            <div className="sticky top-0 z-10 bg-slate-900 border-b border-white/10 px-6 py-5 flex items-center justify-between">
+            <div className="sticky top-0 z-10 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] px-6 py-5 flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-bold text-white">
+                <h2 className="text-xl font-bold text-[var(--text-main)]">
                   {editItem ? 'Edit Inquiry' : 'New Inquiry'}
                 </h2>
                 {editItem && (
@@ -434,7 +434,7 @@ export default function InquiriesPage() {
               </div>
               <button
                 onClick={() => setShowModal(false)}
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] transition-colors"
               >
                 ✕
               </button>
@@ -445,7 +445,7 @@ export default function InquiriesPage() {
               {/* Customer Name + Phone */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">
                     Customer Name <span className="text-red-400">*</span>
                   </label>
                   <input
@@ -457,7 +457,7 @@ export default function InquiriesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">
                     Phone <span className="text-red-400">*</span>
                   </label>
                   <input
@@ -473,7 +473,7 @@ export default function InquiriesPage() {
               {/* Email + Vehicle Type */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Email</label>
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Email</label>
                   <input
                     type="email"
                     placeholder="customer@email.com"
@@ -482,7 +482,7 @@ export default function InquiriesPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Vehicle Type</label>
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Vehicle Type</label>
                   <select className={inputCls} {...field('vehicleType')}>
                     <option value="">Select vehicle type</option>
                     {VEHICLE_TYPES.map(v => <option key={v} value={v}>{v}</option>)}
@@ -492,7 +492,7 @@ export default function InquiriesPage() {
 
               {/* Pickup Location */}
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Pickup Location</label>
+                <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Pickup Location</label>
                 <input
                   type="text"
                   placeholder="Dubai Airport Terminal 3, DXB"
@@ -504,11 +504,11 @@ export default function InquiriesPage() {
               {/* Dates + Days preview */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Pickup Date</label>
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Pickup Date</label>
                   <input type="date" className={inputCls} {...field('pickupDate')} />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Return Date</label>
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Return Date</label>
                   <input type="date" className={inputCls} {...field('returnDate')} />
                 </div>
               </div>
@@ -522,13 +522,13 @@ export default function InquiriesPage() {
               {/* Source + Assigned To */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Source</label>
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Source</label>
                   <select className={inputCls} {...field('source')}>
                     {SOURCES.map(s => <option key={s} value={s}>{s.replace('_', ' ')}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Assigned To</label>
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Assigned To</label>
                   <input
                     type="text"
                     placeholder="Staff name or ID"
@@ -541,7 +541,7 @@ export default function InquiriesPage() {
               {/* Status (edit mode only) */}
               {editItem && (
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Status</label>
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Status</label>
                   <select className={inputCls} {...field('status')}>
                     {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
@@ -550,7 +550,7 @@ export default function InquiriesPage() {
 
               {/* Notes */}
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Notes</label>
+                <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Notes</label>
                 <textarea
                   rows={3}
                   placeholder="Any special requirements or comments..."
@@ -565,7 +565,7 @@ export default function InquiriesPage() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-5 py-2.5 rounded-xl border border-white/10 text-slate-300 hover:text-white hover:bg-white/5 text-sm font-medium transition-colors"
+                  className="px-5 py-2.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm font-medium transition-colors"
                 >
                   Cancel
                 </button>

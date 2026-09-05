@@ -43,7 +43,7 @@ const ROLE_COLORS: Record<string, string> = {
   RENTAL_AGENT:   'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
   COORDINATOR:    'bg-blue-500/20 text-blue-300 border-blue-500/40',
   DRIVER:         'bg-amber-500/20 text-amber-300 border-amber-500/40',
-  ADMIN:          'bg-slate-500/20 text-slate-300 border-slate-500/40',
+  ADMIN:          'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/40',
 };
 
 const MODULE_OPTIONS = ['RENTAL', 'BOTH'];
@@ -52,7 +52,7 @@ const STATUS_COLORS: Record<string, string> = {
   ACTIVE:      'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
   ON_LEAVE:    'bg-amber-500/20 text-amber-400 border-amber-500/40',
   TRANSFERRED: 'bg-blue-500/20 text-blue-400 border-blue-500/40',
-  INACTIVE:    'bg-slate-500/20 text-slate-400 border-slate-500/40',
+  INACTIVE:    'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/40',
 };
 
 const UAE_EMIRATES = ['Abu Dhabi', 'Dubai', 'Sharjah', 'Ajman', 'Umm Al Quwain', 'Ras Al Khaimah', 'Fujairah'];
@@ -224,8 +224,8 @@ export default function RentalStaffPage() {
       {/* ── Header ── */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-1">Branch Staff Management</h1>
-          <p className="text-slate-400 text-xs">Manage staff assignments across all Rent-A-Car branches</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-1">Branch Staff Management</h1>
+          <p className="text-[var(--text-muted)] text-xs">Manage staff assignments across all Rent-A-Car branches</p>
         </div>
         <button
           onClick={() => { setEditTarget(null); setForm({ ...EMPTY_FORM }); setShowAssign(true); }}
@@ -238,13 +238,13 @@ export default function RentalStaffPage() {
       {/* ── KPI Cards ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Total Staff',     value: kpi.total,           color: 'text-white' },
+          { label: 'Total Staff',     value: kpi.total,           color: 'text-[var(--text-main)]' },
           { label: 'Active',          value: kpi.active,          color: 'text-emerald-400' },
           { label: 'Branch Managers', value: kpi.branch_managers, color: 'text-teal-400' },
           { label: 'On Leave',        value: kpi.on_leave,        color: 'text-amber-400' },
         ].map(card => (
-          <div key={card.label} className="bg-slate-800/50 border border-white/10 rounded-2xl p-5">
-            <p className="text-xs text-slate-500 font-medium mb-1">{card.label}</p>
+          <div key={card.label} className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-5">
+            <p className="text-xs text-[var(--text-faint)] font-medium mb-1">{card.label}</p>
             <p className={`text-3xl font-bold ${card.color}`}>{card.value}</p>
           </div>
         ))}
@@ -257,30 +257,30 @@ export default function RentalStaffPage() {
           placeholder="Search name, staff no, employee ID..."
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="px-4 py-2 bg-slate-800/60 border border-white/10 rounded-xl text-white placeholder-slate-500 text-sm focus:outline-none focus:border-teal-500/50 w-64"
+          className="px-4 py-2 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-teal-500/50 w-64"
         />
         <select value={filterBranch} onChange={e => setFilterBranch(e.target.value)}
-          className="px-4 py-2 bg-slate-800/60 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-teal-500/50">
+          className="px-4 py-2 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl text-[var(--text-main)] text-sm focus:outline-none focus:border-teal-500/50">
           <option value="">All Branches</option>
           {branches.map(b => <option key={b} value={b}>{b}</option>)}
         </select>
         <select value={filterRole} onChange={e => setFilterRole(e.target.value)}
-          className="px-4 py-2 bg-slate-800/60 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-teal-500/50">
+          className="px-4 py-2 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl text-[var(--text-main)] text-sm focus:outline-none focus:border-teal-500/50">
           <option value="">All Roles</option>
           {ROLES.map(r => <option key={r} value={r}>{r.replace(/_/g,' ')}</option>)}
         </select>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-          className="px-4 py-2 bg-slate-800/60 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-teal-500/50">
+          className="px-4 py-2 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl text-[var(--text-main)] text-sm focus:outline-none focus:border-teal-500/50">
           <option value="">All Statuses</option>
           {['ACTIVE','ON_LEAVE','TRANSFERRED','INACTIVE'].map(s => <option key={s} value={s}>{s}</option>)}
         </select>
-        <div className="ml-auto flex gap-1 bg-slate-800/60 border border-white/10 rounded-xl p-1">
+        <div className="ml-auto flex gap-1 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-1">
           <button onClick={() => setView('grid')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${view==='grid' ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${view==='grid' ? 'bg-teal-600 text-[var(--text-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
             ⊞ Grid
           </button>
           <button onClick={() => setView('table')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${view==='table' ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${view==='table' ? 'bg-teal-600 text-[var(--text-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
             ☰ Table
           </button>
         </div>
@@ -291,27 +291,27 @@ export default function RentalStaffPage() {
         <div className="flex items-center justify-center py-24">
           <div className="text-center">
             <div className="inline-block w-8 h-8 border-2 border-teal-500 border-t-transparent rounded-full animate-spin mb-3" />
-            <p className="text-slate-400 text-sm">Loading staff data...</p>
+            <p className="text-[var(--text-muted)] text-sm">Loading staff data...</p>
           </div>
         </div>
       ) : staff.length === 0 ? (
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-16 text-center">
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-16 text-center">
           <div className="text-5xl mb-4">👔</div>
-          <p className="text-slate-300 text-lg font-semibold">No staff assignments found</p>
-          <p className="text-slate-500 text-sm mt-1">Click "+ Assign Staff" to add your first team member</p>
+          <p className="text-[var(--text-muted)] text-lg font-semibold">No staff assignments found</p>
+          <p className="text-[var(--text-faint)] text-sm mt-1">Click "+ Assign Staff" to add your first team member</p>
         </div>
       ) : view === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {staff.map(s => (
-            <div key={s.id} className="bg-slate-800/60 border border-white/10 rounded-2xl p-5 hover:border-teal-500/30 transition-all group">
+            <div key={s.id} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5 hover:border-teal-500/30 transition-all group">
               <div className="flex items-start gap-4 mb-4">
                 <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-teal-600 to-cyan-700 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
                   {getInitials(s.full_name)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-white font-semibold truncate">{s.full_name}</p>
-                  <p className="text-slate-500 text-xs">{s.staff_no}</p>
-                  {s.employee_id && <p className="text-slate-600 text-xs">EID: {s.employee_id}</p>}
+                  <p className="text-[var(--text-main)] font-semibold truncate">{s.full_name}</p>
+                  <p className="text-[var(--text-faint)] text-xs">{s.staff_no}</p>
+                  {s.employee_id && <p className="text-[var(--text-faint)] text-xs">EID: {s.employee_id}</p>}
                 </div>
                 <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border flex-shrink-0 ${STATUS_COLORS[s.status] || STATUS_COLORS.INACTIVE}`}>
                   {s.status}
@@ -319,7 +319,7 @@ export default function RentalStaffPage() {
               </div>
 
               <div className="flex flex-wrap gap-2 mb-3">
-                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${ROLE_COLORS[s.role] || 'bg-slate-500/20 text-slate-400 border-slate-500/40'}`}>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${ROLE_COLORS[s.role] || 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/40'}`}>
                   {s.role.replace(/_/g,' ')}
                 </span>
                 <span className="px-2 py-0.5 rounded-full text-xs font-semibold border bg-teal-500/10 text-teal-400 border-teal-500/20">
@@ -327,24 +327,24 @@ export default function RentalStaffPage() {
                 </span>
               </div>
 
-              <div className="flex items-center gap-1.5 text-slate-400 text-xs mb-1">
+              <div className="flex items-center gap-1.5 text-[var(--text-muted)] text-xs mb-1">
                 <span>🏢</span>
-                <span className="font-medium text-slate-300">{s.branch_name}</span>
+                <span className="font-medium text-[var(--text-muted)]">{s.branch_name}</span>
                 {s.emirate && <span>{EMIRATE_FLAGS[s.emirate] || '📍'} {s.emirate}</span>}
               </div>
               {s.phone && (
-                <div className="flex items-center gap-1.5 text-slate-500 text-xs mb-0.5">
+                <div className="flex items-center gap-1.5 text-[var(--text-faint)] text-xs mb-0.5">
                   <span>📞</span><span>{s.phone}</span>
                 </div>
               )}
               {s.email && (
-                <div className="flex items-center gap-1.5 text-slate-500 text-xs mb-2">
+                <div className="flex items-center gap-1.5 text-[var(--text-faint)] text-xs mb-2">
                   <span>✉️</span><span className="truncate">{s.email}</span>
                 </div>
               )}
-              <p className="text-slate-600 text-xs mb-3">From: {formatDate(s.start_date)}</p>
+              <p className="text-[var(--text-faint)] text-xs mb-3">From: {formatDate(s.start_date)}</p>
 
-              <div className="flex items-center gap-2 pt-3 border-t border-white/5">
+              <div className="flex items-center gap-2 pt-3 border-t border-[var(--border-subtle)]">
                 <button onClick={() => openEdit(s)}
                   className="flex-1 px-3 py-1.5 rounded-lg bg-teal-600/20 border border-teal-500/30 text-teal-400 hover:bg-teal-600/40 text-xs font-medium transition-colors">
                   Edit
@@ -354,25 +354,25 @@ export default function RentalStaffPage() {
                   Transfer
                 </button>
                 <div className="relative group/menu">
-                  <button className="px-2.5 py-1.5 rounded-lg bg-slate-700/50 border border-white/10 text-slate-400 hover:text-white text-xs transition-colors">
+                  <button className="px-2.5 py-1.5 rounded-lg bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] text-xs transition-colors">
                     ···
                   </button>
-                  <div className="absolute right-0 top-full mt-1 bg-slate-800 border border-white/10 rounded-xl p-1 shadow-xl z-10 min-w-[140px] hidden group-hover/menu:block">
+                  <div className="absolute right-0 top-full mt-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-1 shadow-xl z-10 min-w-[140px] hidden group-hover/menu:block">
                     {s.status !== 'ON_LEAVE' && (
                       <button onClick={() => handleStatus(s.id, 'ON_LEAVE')}
-                        className="w-full text-left px-3 py-1.5 text-xs text-amber-400 hover:bg-white/5 rounded-lg">
+                        className="w-full text-left px-3 py-1.5 text-xs text-amber-400 hover:bg-[var(--bg-surface-hover)] rounded-lg">
                         Set On Leave
                       </button>
                     )}
                     {s.status === 'ON_LEAVE' && (
                       <button onClick={() => handleStatus(s.id, 'ACTIVE')}
-                        className="w-full text-left px-3 py-1.5 text-xs text-emerald-400 hover:bg-white/5 rounded-lg">
+                        className="w-full text-left px-3 py-1.5 text-xs text-emerald-400 hover:bg-[var(--bg-surface-hover)] rounded-lg">
                         Mark Active
                       </button>
                     )}
                     {s.status !== 'INACTIVE' && (
                       <button onClick={() => handleStatus(s.id, 'INACTIVE')}
-                        className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-white/5 rounded-lg">
+                        className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-[var(--bg-surface-hover)] rounded-lg">
                         Deactivate
                       </button>
                     )}
@@ -383,33 +383,33 @@ export default function RentalStaffPage() {
           ))}
         </div>
       ) : (
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-hidden">
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/5">
+                <tr className="border-b border-[var(--border-subtle)]">
                   {['Staff No','Name','Role','Module','Branch / Emirate','Phone','Start Date','Status','Actions'].map(h => (
-                    <th key={h} className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">{h}</th>
+                    <th key={h} className="text-left text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wider px-5 py-3">{h}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5">
+              <tbody className="divide-y divide-[var(--border-subtle)]">
                 {staff.map(s => (
-                  <tr key={s.id} className="hover:bg-white/3 transition-colors">
-                    <td className="px-5 py-3.5 font-mono text-xs text-slate-400">{s.staff_no}</td>
+                  <tr key={s.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
+                    <td className="px-5 py-3.5 font-mono text-xs text-[var(--text-muted)]">{s.staff_no}</td>
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-2.5">
                         <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-teal-600 to-cyan-700 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
                           {getInitials(s.full_name)}
                         </div>
                         <div>
-                          <p className="text-white font-medium text-sm">{s.full_name}</p>
-                          {s.employee_id && <p className="text-slate-600 text-xs">{s.employee_id}</p>}
+                          <p className="text-[var(--text-main)] font-medium text-sm">{s.full_name}</p>
+                          {s.employee_id && <p className="text-[var(--text-faint)] text-xs">{s.employee_id}</p>}
                         </div>
                       </div>
                     </td>
                     <td className="px-5 py-3.5">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${ROLE_COLORS[s.role] || 'bg-slate-500/20 text-slate-400 border-slate-500/40'}`}>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${ROLE_COLORS[s.role] || 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/40'}`}>
                         {s.role.replace(/_/g,' ')}
                       </span>
                     </td>
@@ -418,12 +418,12 @@ export default function RentalStaffPage() {
                         {s.module}
                       </span>
                     </td>
-                    <td className="px-5 py-3.5 text-slate-300 text-xs">
+                    <td className="px-5 py-3.5 text-[var(--text-muted)] text-xs">
                       <p>{s.branch_name}</p>
-                      {s.emirate && <p className="text-slate-500">{EMIRATE_FLAGS[s.emirate] || ''} {s.emirate}</p>}
+                      {s.emirate && <p className="text-[var(--text-faint)]">{EMIRATE_FLAGS[s.emirate] || ''} {s.emirate}</p>}
                     </td>
-                    <td className="px-5 py-3.5 text-slate-400 text-xs">{s.phone}</td>
-                    <td className="px-5 py-3.5 text-slate-400 text-xs font-mono">{formatDate(s.start_date)}</td>
+                    <td className="px-5 py-3.5 text-[var(--text-muted)] text-xs">{s.phone}</td>
+                    <td className="px-5 py-3.5 text-[var(--text-muted)] text-xs font-mono">{formatDate(s.start_date)}</td>
                     <td className="px-5 py-3.5">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${STATUS_COLORS[s.status] || STATUS_COLORS.INACTIVE}`}>
                         {s.status}
@@ -452,11 +452,11 @@ export default function RentalStaffPage() {
       {/* ── Assign / Edit Modal ── */}
       {showAssign && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 border border-white/10 rounded-2xl p-7 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-7 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-white">{editTarget ? 'Edit Staff Member' : 'Assign Staff to Branch'}</h2>
+              <h2 className="text-xl font-bold text-[var(--text-main)]">{editTarget ? 'Edit Staff Member' : 'Assign Staff to Branch'}</h2>
               <button onClick={() => { setShowAssign(false); setEditTarget(null); setError(''); }}
-                className="text-slate-400 hover:text-white text-2xl leading-none">✕</button>
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-2xl leading-none">✕</button>
             </div>
 
             {error && (
@@ -465,84 +465,84 @@ export default function RentalStaffPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
-                <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Full Name *</label>
+                <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">Full Name *</label>
                 <input value={form.full_name} onChange={e => setForm({...form, full_name: e.target.value})}
                   placeholder="e.g. Ahmed Al-Mansouri"
-                  className="w-full px-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl text-white placeholder-slate-600 text-sm focus:outline-none focus:border-teal-500/50" />
+                  className="w-full px-4 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-teal-500/50" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Phone *</label>
+                <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">Phone *</label>
                 <input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})}
                   placeholder="+971 50 000 0000"
-                  className="w-full px-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl text-white placeholder-slate-600 text-sm focus:outline-none focus:border-teal-500/50" />
+                  className="w-full px-4 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-teal-500/50" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Email</label>
+                <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">Email</label>
                 <input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})}
                   placeholder="staff@company.ae"
-                  className="w-full px-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl text-white placeholder-slate-600 text-sm focus:outline-none focus:border-teal-500/50" />
+                  className="w-full px-4 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-teal-500/50" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Employee ID</label>
+                <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">Employee ID</label>
                 <input value={form.employee_id} onChange={e => setForm({...form, employee_id: e.target.value})}
                   placeholder="EMP-0001"
-                  className="w-full px-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl text-white placeholder-slate-600 text-sm focus:outline-none focus:border-teal-500/50" />
+                  className="w-full px-4 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-teal-500/50" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Role *</label>
+                <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">Role *</label>
                 <select value={form.role} onChange={e => setForm({...form, role: e.target.value})}
-                  className="w-full px-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-teal-500/50">
+                  className="w-full px-4 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl text-[var(--text-main)] text-sm focus:outline-none focus:border-teal-500/50">
                   {ROLES.map(r => <option key={r} value={r}>{r.replace(/_/g,' ')}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Module *</label>
+                <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">Module *</label>
                 <select value={form.module} onChange={e => setForm({...form, module: e.target.value})}
-                  className="w-full px-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-teal-500/50">
+                  className="w-full px-4 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl text-[var(--text-main)] text-sm focus:outline-none focus:border-teal-500/50">
                   {MODULE_OPTIONS.map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Branch Name *</label>
+                <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">Branch Name *</label>
                 <input value={form.branch_name} onChange={e => setForm({...form, branch_name: e.target.value})}
                   placeholder="e.g. Dubai Marina Branch"
-                  className="w-full px-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl text-white placeholder-slate-600 text-sm focus:outline-none focus:border-teal-500/50" />
+                  className="w-full px-4 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-teal-500/50" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Emirate</label>
+                <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">Emirate</label>
                 <select value={form.emirate} onChange={e => setForm({...form, emirate: e.target.value})}
-                  className="w-full px-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-teal-500/50">
+                  className="w-full px-4 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl text-[var(--text-main)] text-sm focus:outline-none focus:border-teal-500/50">
                   <option value="">Select Emirate</option>
                   {UAE_EMIRATES.map(e => <option key={e} value={e}>{e}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Start Date *</label>
+                <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">Start Date *</label>
                 <input type="date" value={form.start_date} onChange={e => setForm({...form, start_date: e.target.value})}
-                  className="w-full px-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-teal-500/50" />
+                  className="w-full px-4 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl text-[var(--text-main)] text-sm focus:outline-none focus:border-teal-500/50" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">End Date (optional)</label>
+                <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">End Date (optional)</label>
                 <input type="date" value={form.end_date} onChange={e => setForm({...form, end_date: e.target.value})}
-                  className="w-full px-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-teal-500/50" />
+                  className="w-full px-4 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl text-[var(--text-main)] text-sm focus:outline-none focus:border-teal-500/50" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Nationality</label>
+                <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">Nationality</label>
                 <input value={form.nationality} onChange={e => setForm({...form, nationality: e.target.value})}
                   placeholder="e.g. Emirati, Indian..."
-                  className="w-full px-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl text-white placeholder-slate-600 text-sm focus:outline-none focus:border-teal-500/50" />
+                  className="w-full px-4 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-teal-500/50" />
               </div>
               <div className="col-span-2">
-                <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Notes</label>
+                <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">Notes</label>
                 <textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})}
                   rows={2} placeholder="Additional notes..."
-                  className="w-full px-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl text-white placeholder-slate-600 text-sm focus:outline-none focus:border-teal-500/50 resize-none" />
+                  className="w-full px-4 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-teal-500/50 resize-none" />
               </div>
             </div>
 
             <div className="flex gap-3 mt-6">
               <button onClick={() => { setShowAssign(false); setEditTarget(null); setError(''); }}
-                className="flex-1 px-4 py-2.5 border border-white/10 rounded-xl text-white hover:bg-white/5 text-sm font-medium transition-colors">
+                className="flex-1 px-4 py-2.5 border border-[var(--border-subtle)] rounded-xl text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm font-medium transition-colors">
                 Cancel
               </button>
               <button onClick={handleSave} disabled={saving}
@@ -557,43 +557,43 @@ export default function RentalStaffPage() {
       {/* ── Transfer Modal ── */}
       {showTransfer && transferTarget && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 border border-white/10 rounded-2xl p-7 w-full max-w-md">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-7 w-full max-w-md">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-white">Transfer Staff</h2>
+              <h2 className="text-xl font-bold text-[var(--text-main)]">Transfer Staff</h2>
               <button onClick={() => { setShowTransfer(false); setTransferTarget(null); }}
-                className="text-slate-400 hover:text-white text-2xl leading-none">✕</button>
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-2xl leading-none">✕</button>
             </div>
-            <p className="text-slate-400 text-sm mb-5">
-              Transferring <span className="text-white font-medium">{transferTarget.full_name}</span> from{' '}
+            <p className="text-[var(--text-muted)] text-sm mb-5">
+              Transferring <span className="text-[var(--text-main)] font-medium">{transferTarget.full_name}</span> from{' '}
               <span className="text-teal-400">{transferTarget.branch_name}</span>
             </p>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">New Branch Name *</label>
+                <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">New Branch Name *</label>
                 <input value={transferForm.branch_name} onChange={e => setTransferForm({...transferForm, branch_name: e.target.value})}
                   placeholder="e.g. Sharjah Airport Branch"
-                  className="w-full px-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl text-white placeholder-slate-600 text-sm focus:outline-none focus:border-teal-500/50" />
+                  className="w-full px-4 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-teal-500/50" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">New Emirate</label>
+                <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">New Emirate</label>
                 <select value={transferForm.emirate} onChange={e => setTransferForm({...transferForm, emirate: e.target.value})}
-                  className="w-full px-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-teal-500/50">
+                  className="w-full px-4 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl text-[var(--text-main)] text-sm focus:outline-none focus:border-teal-500/50">
                   <option value="">Select Emirate</option>
                   {UAE_EMIRATES.map(e => <option key={e} value={e}>{e}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wider">Transfer Reason</label>
+                <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5 uppercase tracking-wider">Transfer Reason</label>
                 <input value={transferForm.reason} onChange={e => setTransferForm({...transferForm, reason: e.target.value})}
                   placeholder="e.g. New branch opening, staff request..."
-                  className="w-full px-4 py-2.5 bg-slate-900/60 border border-white/10 rounded-xl text-white placeholder-slate-600 text-sm focus:outline-none focus:border-teal-500/50" />
+                  className="w-full px-4 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-teal-500/50" />
               </div>
             </div>
 
             <div className="flex gap-3 mt-6">
               <button onClick={() => { setShowTransfer(false); setTransferTarget(null); }}
-                className="flex-1 px-4 py-2.5 border border-white/10 rounded-xl text-white hover:bg-white/5 text-sm font-medium transition-colors">
+                className="flex-1 px-4 py-2.5 border border-[var(--border-subtle)] rounded-xl text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm font-medium transition-colors">
                 Cancel
               </button>
               <button onClick={handleTransfer} disabled={saving || !transferForm.branch_name}

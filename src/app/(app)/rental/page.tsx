@@ -25,7 +25,7 @@ const STATUS_COLORS: Record<string, string> = {
   PENDING:   'bg-amber-500/20 text-amber-400 border-amber-500/30',
   CONFIRMED: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
   ACTIVE:    'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-  COMPLETED: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+  COMPLETED: 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30',
   CANCELLED: 'bg-rose-500/20 text-rose-400 border-rose-500/30',
 };
 
@@ -76,7 +76,7 @@ export default function RentalDashboard() {
 
   if (loading) return (
     <div className="flex items-center justify-center h-full">
-      <div className="text-slate-400 animate-pulse">Loading dashboard...</div>
+      <div className="text-[var(--text-muted)] animate-pulse">Loading dashboard...</div>
     </div>
   );
 
@@ -93,9 +93,9 @@ export default function RentalDashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
         {statCards.map((card) => (
           <div key={card.title} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.color} p-6`}>
-            <div className="text-3xl font-bold text-white">{card.value}</div>
-            <div className="mt-1 text-sm font-medium text-white/80">{card.title}</div>
-            <div className="mt-1 text-xs text-white/60">{card.change}</div>
+            <div className="text-3xl font-bold text-[var(--text-main)]">{card.value}</div>
+            <div className="mt-1 text-sm font-medium text-[var(--text-main)]/80">{card.title}</div>
+            <div className="mt-1 text-xs text-[var(--text-main)]/60">{card.change}</div>
           </div>
         ))}
       </div>
@@ -103,45 +103,45 @@ export default function RentalDashboard() {
       {/* Booking Status Breakdown */}
       <div className="grid grid-cols-5 gap-4">
         {['PENDING','CONFIRMED','ACTIVE','COMPLETED','CANCELLED'].map(s => (
-          <div key={s} className="bg-slate-800/50 border border-white/10 rounded-xl p-4 text-center">
-            <div className="text-2xl font-bold text-white">{bookings.filter(b => (b.status ?? 'PENDING') === s).length}</div>
-            <div className="text-xs text-slate-400 mt-1">{s.charAt(0) + s.slice(1).toLowerCase()}</div>
+          <div key={s} className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-xl p-4 text-center">
+            <div className="text-2xl font-bold text-[var(--text-main)]">{bookings.filter(b => (b.status ?? 'PENDING') === s).length}</div>
+            <div className="text-xs text-[var(--text-muted)] mt-1">{s.charAt(0) + s.slice(1).toLowerCase()}</div>
           </div>
         ))}
       </div>
 
       {/* Recent Bookings */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-white">Recent Bookings</h2>
+          <h2 className="text-lg font-semibold text-[var(--text-main)]">Recent Bookings</h2>
           <a href="/rental/bookings" className="text-sm text-emerald-400 hover:text-emerald-300">View all</a>
         </div>
         {recentBookings.length === 0 ? (
-          <div className="text-center text-slate-400 py-8">No bookings yet. <a href="/rental/bookings" className="text-emerald-400 hover:underline">Create one.</a></div>
+          <div className="text-center text-[var(--text-muted)] py-8">No bookings yet. <a href="/rental/bookings" className="text-emerald-400 hover:underline">Create one.</a></div>
         ) : (
           <table className="w-full">
             <thead>
-              <tr className="border-b border-white/5">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">REF</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">CUSTOMER</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">CATEGORY</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">PICKUP</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">RETURN</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">AMOUNT</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">STATUS</th>
+              <tr className="border-b border-[var(--border-subtle)]">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">REF</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">CUSTOMER</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">CATEGORY</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">PICKUP</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">RETURN</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">AMOUNT</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">STATUS</th>
               </tr>
             </thead>
             <tbody>
               {recentBookings.map(b => {
                 const status = (b.status ?? 'PENDING').toUpperCase();
                 return (
-                  <tr key={b.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                    <td className="px-4 py-3 text-sm font-medium text-white">{b.bookingRef ?? b.id.slice(0,8)}</td>
-                    <td className="px-4 py-3 text-sm text-white">{b.customer?.fullName ?? b.customerId}</td>
-                    <td className="px-4 py-3 text-sm text-white">{b.vehicleCategory ?? '-'}</td>
-                    <td className="px-4 py-3 text-sm text-slate-200">{new Date(b.pickupDate).toLocaleDateString()}</td>
-                    <td className="px-4 py-3 text-sm text-slate-200">{new Date(b.dropoffDate).toLocaleDateString()}</td>
-                    <td className="px-4 py-3 text-sm font-medium text-white">
+                  <tr key={b.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
+                    <td className="px-4 py-3 text-sm font-medium text-[var(--text-main)]">{b.bookingRef ?? b.id.slice(0,8)}</td>
+                    <td className="px-4 py-3 text-sm text-[var(--text-main)]">{b.customer?.fullName ?? b.customerId}</td>
+                    <td className="px-4 py-3 text-sm text-[var(--text-main)]">{b.vehicleCategory ?? '-'}</td>
+                    <td className="px-4 py-3 text-sm text-[var(--text-main)]">{new Date(b.pickupDate).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-sm text-[var(--text-main)]">{new Date(b.dropoffDate).toLocaleDateString()}</td>
+                    <td className="px-4 py-3 text-sm font-medium text-[var(--text-main)]">
                       {b.totalAmount ? `AED ${Number(b.totalAmount).toLocaleString()}` : '-'}
                     </td>
                     <td className="px-4 py-3">

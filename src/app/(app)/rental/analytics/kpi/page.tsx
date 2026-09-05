@@ -62,7 +62,7 @@ const CHANNEL_COLORS: Record<string, string> = {
   CORPORATE: 'bg-violet-500/20 text-violet-300 border-violet-500/30',
   AGENCY: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
   ONLINE: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-  UNKNOWN: 'bg-slate-500/20 text-slate-300 border-slate-500/30',
+  UNKNOWN: 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30',
 };
 
 function todayMinusDays(days: number): string {
@@ -117,35 +117,35 @@ export default function RevpacDashboardPage() {
     <div className="max-w-7xl mx-auto p-6 space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <Link href="/rental" className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-cyan-400">
+          <Link href="/rental" className="inline-flex items-center gap-1 text-xs text-[var(--text-faint)] hover:text-cyan-400">
             <ChevronLeft className="h-3 w-3" /> Back to dashboard
           </Link>
-          <h1 className="text-2xl font-bold text-white mt-2 flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mt-2 flex items-center gap-2">
             <TrendingUp className="h-6 w-6 text-teal-400" />
             RevPAC Dashboard
           </h1>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-[var(--text-muted)] mt-1">
             Revenue Per Available Car. The single most-watched RAC KPI. UAE
             mid-market benchmark: AED 200–300/day. Best-in-class: AED 350+.
           </p>
         </div>
         <div className="flex gap-3 items-end">
           <div>
-            <label className="text-xs text-slate-400 block mb-1">From</label>
+            <label className="text-xs text-[var(--text-muted)] block mb-1">From</label>
             <input
               type="date"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
-              className="px-3 py-2 rounded-lg bg-slate-900/60 border border-slate-700 text-white text-sm"
+              className="px-3 py-2 rounded-lg bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] text-sm"
             />
           </div>
           <div>
-            <label className="text-xs text-slate-400 block mb-1">To</label>
+            <label className="text-xs text-[var(--text-muted)] block mb-1">To</label>
             <input
               type="date"
               value={to}
               onChange={(e) => setTo(e.target.value)}
-              className="px-3 py-2 rounded-lg bg-slate-900/60 border border-slate-700 text-white text-sm"
+              className="px-3 py-2 rounded-lg bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] text-sm"
             />
           </div>
           <button
@@ -169,8 +169,8 @@ export default function RevpacDashboardPage() {
           <div className="rounded-2xl bg-gradient-to-br from-slate-800/70 to-teal-900/20 border border-teal-500/30 p-8">
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div>
-                <div className="text-xs text-slate-400 uppercase tracking-wider">RevPAC · per available car / day</div>
-                <div className="text-5xl font-bold text-white mt-2">
+                <div className="text-xs text-[var(--text-muted)] uppercase tracking-wider">RevPAC · per available car / day</div>
+                <div className="text-5xl font-bold text-[var(--text-main)] mt-2">
                   AED {data.revPAC.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </div>
                 <div className={`mt-3 inline-flex px-3 py-1 rounded-full text-xs font-semibold border ${tone.classes}`}>
@@ -178,11 +178,11 @@ export default function RevpacDashboardPage() {
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-xs text-slate-400 uppercase tracking-wider">Period revenue</div>
+                <div className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Period revenue</div>
                 <div className="text-2xl font-bold text-emerald-300 mt-2">
                   AED {data.totalRevenue.toLocaleString()}
                 </div>
-                <div className="text-xs text-slate-400 mt-1">
+                <div className="text-xs text-[var(--text-muted)] mt-1">
                   {data.daysInPeriod} day{data.daysInPeriod === 1 ? '' : 's'} · fleet of {data.fleetSize}
                 </div>
               </div>
@@ -215,8 +215,8 @@ export default function RevpacDashboardPage() {
 
           {/* Booking funnel + Damage recovery */}
           <div className="grid md:grid-cols-2 gap-3">
-            <div className="rounded-xl bg-slate-800/40 border border-slate-700 p-5">
-              <div className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-3">Booking Funnel</div>
+            <div className="rounded-xl bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] p-5">
+              <div className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Booking Funnel</div>
               <div className="space-y-2">
                 <FunnelRow label="Pending"   value={data.pendingBookings}   total={data.totalBookings} tone="amber" />
                 <FunnelRow label="Confirmed" value={data.confirmedBookings} total={data.totalBookings} tone="cyan"  />
@@ -226,19 +226,19 @@ export default function RevpacDashboardPage() {
               </div>
             </div>
 
-            <div className="rounded-xl bg-slate-800/40 border border-slate-700 p-5">
-              <div className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-3">Damage Recovery</div>
+            <div className="rounded-xl bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] p-5">
+              <div className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Damage Recovery</div>
               <div className="space-y-2 text-sm">
                 <Row label="Claims" value={data.damageClaimsCount.toString()} />
                 <Row label="Billed total"     value={`AED ${data.damageBilledTotal.toLocaleString()}`} />
                 <Row label="Recovered total"  value={`AED ${data.damageRecoveredTotal.toLocaleString()}`} />
-                <div className="pt-2 mt-2 border-t border-slate-700 flex items-center justify-between">
-                  <span className="text-slate-400">Recovery rate</span>
+                <div className="pt-2 mt-2 border-t border-[var(--border-subtle)] flex items-center justify-between">
+                  <span className="text-[var(--text-muted)]">Recovery rate</span>
                   <span className={`font-bold ${data.damageRecoveryRatePct >= 80 ? 'text-emerald-300' : data.damageRecoveryRatePct >= 50 ? 'text-amber-300' : 'text-rose-300'}`}>
                     {data.damageRecoveryRatePct}%
                   </span>
                 </div>
-                <div className="text-[10px] text-slate-500 mt-1 italic">
+                <div className="text-[10px] text-[var(--text-faint)] mt-1 italic">
                   Industry benchmark: ~70-85% with AI damage classifier (R5)
                 </div>
               </div>
@@ -246,15 +246,15 @@ export default function RevpacDashboardPage() {
           </div>
 
           {/* By Category */}
-          <div className="rounded-xl bg-slate-800/40 border border-slate-700 p-5">
+          <div className="rounded-xl bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] p-5">
             <div className="flex items-center gap-2 mb-3">
-              <Car className="h-4 w-4 text-slate-400" />
-              <div className="text-sm font-semibold text-slate-300 uppercase tracking-wider">RevPAC by Category</div>
+              <Car className="h-4 w-4 text-[var(--text-muted)]" />
+              <div className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider">RevPAC by Category</div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-xs text-slate-400 text-left border-b border-slate-700">
+                  <tr className="text-xs text-[var(--text-muted)] text-left border-b border-[var(--border-subtle)]">
                     <th className="pb-2">Category</th>
                     <th className="pb-2 text-right">Fleet</th>
                     <th className="pb-2 text-right">Rented car-days</th>
@@ -266,17 +266,17 @@ export default function RevpacDashboardPage() {
                 </thead>
                 <tbody>
                   {data.byCategory.length === 0 ? (
-                    <tr><td colSpan={7} className="py-6 text-center text-slate-500">No bookings in this period.</td></tr>
+                    <tr><td colSpan={7} className="py-6 text-center text-[var(--text-faint)]">No bookings in this period.</td></tr>
                   ) : data.byCategory.map((c) => {
                     const t = revPacTone(c.revPAC);
                     return (
-                      <tr key={c.category} className="border-b border-slate-800">
+                      <tr key={c.category} className="border-b border-[var(--border-subtle)]">
                         <td className="py-2 font-mono text-cyan-300 text-xs">{c.category}</td>
-                        <td className="py-2 text-right text-slate-300">{c.fleetSize}</td>
-                        <td className="py-2 text-right text-slate-300">{c.rentedCarDays.toLocaleString()}</td>
+                        <td className="py-2 text-right text-[var(--text-muted)]">{c.fleetSize}</td>
+                        <td className="py-2 text-right text-[var(--text-muted)]">{c.rentedCarDays.toLocaleString()}</td>
                         <td className={`py-2 text-right font-medium ${utilizationTone(c.utilizationPct)}`}>{c.utilizationPct}%</td>
-                        <td className="py-2 text-right text-white">AED {c.totalRevenue.toLocaleString()}</td>
-                        <td className="py-2 text-right text-slate-300">AED {c.averageDailyRate.toLocaleString()}</td>
+                        <td className="py-2 text-right text-[var(--text-main)]">AED {c.totalRevenue.toLocaleString()}</td>
+                        <td className="py-2 text-right text-[var(--text-muted)]">AED {c.averageDailyRate.toLocaleString()}</td>
                         <td className="py-2 text-right">
                           <span className={`px-2 py-0.5 rounded-full text-xs border ${t.classes} font-semibold`}>
                             AED {c.revPAC.toLocaleString()}
@@ -291,13 +291,13 @@ export default function RevpacDashboardPage() {
           </div>
 
           {/* By Channel */}
-          <div className="rounded-xl bg-slate-800/40 border border-slate-700 p-5">
+          <div className="rounded-xl bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] p-5">
             <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="h-4 w-4 text-slate-400" />
-              <div className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Channel Mix</div>
+              <Sparkles className="h-4 w-4 text-[var(--text-muted)]" />
+              <div className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider">Channel Mix</div>
             </div>
             {data.byChannel.length === 0 ? (
-              <div className="text-slate-500 py-6 text-center">No channels recorded.</div>
+              <div className="text-[var(--text-faint)] py-6 text-center">No channels recorded.</div>
             ) : (
               <div className="space-y-3">
                 {data.byChannel.map((c) => (
@@ -307,16 +307,16 @@ export default function RevpacDashboardPage() {
                         <span className={`text-xs px-2 py-0.5 rounded-full border ${CHANNEL_COLORS[c.channel] ?? CHANNEL_COLORS.UNKNOWN}`}>
                           {c.channel}
                         </span>
-                        <span className="text-slate-400 text-xs">
+                        <span className="text-[var(--text-muted)] text-xs">
                           {c.bookingCount} booking{c.bookingCount === 1 ? '' : 's'} · avg {c.averageLengthOfRental} d/rental
                         </span>
                       </div>
-                      <span className="text-white font-bold">
+                      <span className="text-[var(--text-main)] font-bold">
                         AED {c.revenue.toLocaleString()}
-                        <span className="text-slate-400 text-xs font-normal ml-2">{c.revenuePctOfTotal}%</span>
+                        <span className="text-[var(--text-muted)] text-xs font-normal ml-2">{c.revenuePctOfTotal}%</span>
                       </span>
                     </div>
-                    <div className="h-2 bg-slate-900 rounded-full overflow-hidden">
+                    <div className="h-2 bg-[var(--bg-surface)] rounded-full overflow-hidden">
                       <div
                         className="h-full bg-gradient-to-r from-teal-500 to-cyan-500"
                         style={{ width: `${c.revenuePctOfTotal}%` }}
@@ -328,7 +328,7 @@ export default function RevpacDashboardPage() {
             )}
           </div>
 
-          <p className="text-xs text-slate-500 text-right italic">
+          <p className="text-xs text-[var(--text-faint)] text-right italic">
             Snapshot at {new Date(data.snapshotAt).toLocaleString()}
           </p>
         </>
@@ -339,10 +339,10 @@ export default function RevpacDashboardPage() {
 
 function Kpi({ label, value, sub, valueClass }: { label: string; value: string; sub?: string; valueClass?: string }) {
   return (
-    <div className="rounded-xl bg-slate-800/40 border border-slate-700 p-4">
-      <div className="text-xs text-slate-400 uppercase tracking-wider">{label}</div>
-      <div className={`text-2xl font-bold mt-1 ${valueClass ?? 'text-white'}`}>{value}</div>
-      {sub && <div className="text-xs text-slate-500 mt-1">{sub}</div>}
+    <div className="rounded-xl bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] p-4">
+      <div className="text-xs text-[var(--text-muted)] uppercase tracking-wider">{label}</div>
+      <div className={`text-2xl font-bold mt-1 ${valueClass ?? 'text-[var(--text-main)]'}`}>{value}</div>
+      {sub && <div className="text-xs text-[var(--text-faint)] mt-1">{sub}</div>}
     </div>
   );
 }
@@ -350,8 +350,8 @@ function Kpi({ label, value, sub, valueClass }: { label: string; value: string; 
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="text-slate-400">{label}</span>
-      <span className="text-white font-medium">{value}</span>
+      <span className="text-[var(--text-muted)]">{label}</span>
+      <span className="text-[var(--text-main)] font-medium">{value}</span>
     </div>
   );
 }
@@ -368,10 +368,10 @@ function FunnelRow({ label, value, total, tone }: { label: string; value: number
   return (
     <div>
       <div className="flex items-center justify-between text-xs mb-0.5">
-        <span className="text-slate-300">{label}</span>
-        <span className="text-slate-400">{value} <span className="text-slate-600">({pct.toFixed(0)}%)</span></span>
+        <span className="text-[var(--text-muted)]">{label}</span>
+        <span className="text-[var(--text-muted)]">{value} <span className="text-[var(--text-faint)]">({pct.toFixed(0)}%)</span></span>
       </div>
-      <div className="h-1.5 bg-slate-900 rounded-full overflow-hidden">
+      <div className="h-1.5 bg-[var(--bg-surface)] rounded-full overflow-hidden">
         <div className={`h-full ${colors}`} style={{ width: `${pct}%` }} />
       </div>
     </div>

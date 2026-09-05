@@ -122,7 +122,7 @@ export function DamageWalkaround({ markers, onChange, readonly }: DamageWalkarou
 
   return (
     <div className="space-y-3">
-      <div className="text-xs text-slate-400 uppercase tracking-wider">
+      <div className="text-xs text-[var(--text-muted)] uppercase tracking-wider">
         Damage walkaround {markers.length > 0 && <span className="text-amber-300">· {markers.length} marker{markers.length === 1 ? '' : 's'}</span>}
       </div>
       <div className="rounded-xl bg-slate-100 p-4 select-none touch-none">
@@ -170,34 +170,34 @@ export function DamageWalkaround({ markers, onChange, readonly }: DamageWalkarou
             </circle>
           )}
         </svg>
-        <div className="text-center text-xs text-slate-500 mt-2">
+        <div className="text-center text-xs text-[var(--text-faint)] mt-2">
           {readonly ? 'Read-only view' : pendingPosition ? `Tap "Save marker" below — selected ${pendingPosition.zone}` : 'Tap a panel to mark damage. Tap a marker to remove.'}
         </div>
       </div>
 
       {/* Pending marker form */}
       {pendingPosition && !readonly && (
-        <div className="rounded-xl bg-slate-800/60 border border-amber-500/30 p-4 space-y-3">
+        <div className="rounded-xl bg-[var(--bg-surface)]/60 border border-amber-500/30 p-4 space-y-3">
           <div className="text-sm font-medium text-amber-200">
             New marker · <span className="font-mono">{pendingPosition.zone.replace(/_/g, ' ')}</span>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-slate-400 block mb-1">Type</label>
+              <label className="text-xs text-[var(--text-muted)] block mb-1">Type</label>
               <select
                 value={tempMarker.type}
                 onChange={(e) => setTempMarker({ ...tempMarker, type: e.target.value as DamageMarker['type'] })}
-                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-sm"
+                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm"
               >
                 {TYPE_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div>
-              <label className="text-xs text-slate-400 block mb-1">Severity</label>
+              <label className="text-xs text-[var(--text-muted)] block mb-1">Severity</label>
               <select
                 value={tempMarker.severity}
                 onChange={(e) => setTempMarker({ ...tempMarker, severity: e.target.value as DamageMarker['severity'] })}
-                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-sm"
+                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm"
               >
                 {SEVERITY_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
@@ -208,18 +208,18 @@ export function DamageWalkaround({ markers, onChange, readonly }: DamageWalkarou
             value={tempMarker.note}
             onChange={(e) => setTempMarker({ ...tempMarker, note: e.target.value })}
             placeholder="Note (optional)"
-            className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white text-sm"
+            className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm"
           />
           <div className="flex gap-2">
             <button
               onClick={() => setPendingPosition(null)}
-              className="flex-1 px-3 py-2 rounded-lg bg-slate-700 text-slate-200 hover:bg-slate-600 text-sm"
+              className="flex-1 px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm"
             >
               Cancel
             </button>
             <button
               onClick={commitPending}
-              className="flex-1 px-3 py-2 rounded-lg bg-amber-600 text-white hover:bg-amber-500 text-sm font-medium"
+              className="flex-1 px-3 py-2 rounded-lg bg-amber-600 text-[var(--text-main)] hover:bg-amber-500 text-sm font-medium"
             >
               Save marker
             </button>
@@ -229,20 +229,20 @@ export function DamageWalkaround({ markers, onChange, readonly }: DamageWalkarou
 
       {/* Markers list */}
       {markers.length > 0 && (
-        <div className="rounded-xl bg-slate-800/40 border border-slate-700 p-3 space-y-1">
+        <div className="rounded-xl bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] p-3 space-y-1">
           {markers.map((m, i) => (
             <div key={i} className="flex items-center justify-between text-xs">
               <div className="flex items-center gap-2">
                 <span
-                  className="w-5 h-5 rounded-full flex items-center justify-center text-white font-bold"
+                  className="w-5 h-5 rounded-full flex items-center justify-center text-[var(--text-main)] font-bold"
                   style={{ background: TYPE_COLORS[m.type] }}
                 >
                   {i + 1}
                 </span>
-                <span className="text-slate-300">{m.zone.replace(/_/g, ' ')}</span>
-                <span className="text-slate-500">·</span>
-                <span className="text-slate-400">{m.type} ({m.severity})</span>
-                {m.note && <span className="text-slate-500 italic">— {m.note}</span>}
+                <span className="text-[var(--text-muted)]">{m.zone.replace(/_/g, ' ')}</span>
+                <span className="text-[var(--text-faint)]">·</span>
+                <span className="text-[var(--text-muted)]">{m.type} ({m.severity})</span>
+                {m.note && <span className="text-[var(--text-faint)] italic">— {m.note}</span>}
               </div>
               {!readonly && (
                 <button

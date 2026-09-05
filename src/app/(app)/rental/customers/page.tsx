@@ -103,14 +103,14 @@ export default function CustomersPage() {
     (c.phone ?? '').includes(search)
   );
 
-  if (loading) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading customers...</div></div>;
+  if (loading) return <div className="flex items-center justify-center h-full"><div className="text-[var(--text-muted)] animate-pulse">Loading customers...</div></div>;
 
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-2">Customers</h1>
-          <p className="text-xs text-slate-400">{customers.length} registered customers</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Customers</h1>
+          <p className="text-xs text-[var(--text-muted)]">{customers.length} registered customers</p>
         </div>
         <button onClick={openNew} className="rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90">
           + New Customer
@@ -121,39 +121,39 @@ export default function CustomersPage() {
 
       <input
         value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, email or phone..."
-        className="w-full max-w-md px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
+        className="w-full max-w-md px-4 py-2 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-emerald-500 focus:outline-none"
       />
 
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
         {filtered.length === 0 ? (
-          <div className="text-center text-slate-400 py-12">No customers found</div>
+          <div className="text-center text-[var(--text-muted)] py-12">No customers found</div>
         ) : (
           <table className="w-full">
             <thead>
-              <tr className="border-b border-white/5">
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Name</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Nationality</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Passport / ID</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">License No.</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">License Expiry</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Contact</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Status</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-slate-300">Actions</th>
+              <tr className="border-b border-[var(--border-subtle)]">
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Name</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Nationality</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Passport / ID</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">License No.</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">License Expiry</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Contact</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Status</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map(c => (
-                <tr key={c.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                  <td className="px-4 py-4 text-sm font-medium text-white">{c.fullName}</td>
-                  <td className="px-4 py-4 text-sm text-white">{c.nationality ?? '-'}</td>
-                  <td className="px-4 py-4 text-sm text-white">{c.passportNo ?? '-'}</td>
-                  <td className="px-4 py-4 text-sm text-white">{c.drivingLicenseNo ?? '-'}</td>
-                  <td className="px-4 py-4 text-sm text-slate-200">
+                <tr key={c.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
+                  <td className="px-4 py-4 text-sm font-medium text-[var(--text-main)]">{c.fullName}</td>
+                  <td className="px-4 py-4 text-sm text-[var(--text-main)]">{c.nationality ?? '-'}</td>
+                  <td className="px-4 py-4 text-sm text-[var(--text-main)]">{c.passportNo ?? '-'}</td>
+                  <td className="px-4 py-4 text-sm text-[var(--text-main)]">{c.drivingLicenseNo ?? '-'}</td>
+                  <td className="px-4 py-4 text-sm text-[var(--text-main)]">
                     {c.licenseExpiry ? new Date(c.licenseExpiry).toLocaleDateString() : '-'}
                   </td>
-                  <td className="px-4 py-4 text-sm text-white">
+                  <td className="px-4 py-4 text-sm text-[var(--text-main)]">
                     <div>{c.phone ?? '-'}</div>
-                    <div className="text-slate-300 text-xs">{c.email ?? ''}</div>
+                    <div className="text-[var(--text-muted)] text-xs">{c.email ?? ''}</div>
                   </td>
                   <td className="px-4 py-4">
                     {c.blacklisted
@@ -177,10 +177,10 @@ export default function CustomersPage() {
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-800/95 border border-white/10 rounded-2xl p-8">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl p-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">{editCustomer ? 'Edit Customer' : 'New Customer'}</h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white">✕</button>
+              <h2 className="text-2xl font-bold text-[var(--text-main)]">{editCustomer ? 'Edit Customer' : 'New Customer'}</h2>
+              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">✕</button>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -194,19 +194,19 @@ export default function CustomersPage() {
                   { label:'Phone', key:'phone', type:'text', placeholder:'+971 50 000 0000' },
                 ].map(({ label, key, type, placeholder, required }) => (
                   <div key={key}>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">{label}</label>
+                    <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">{label}</label>
                     <input type={type} value={(formData as any)[key]} onChange={e => setFormData(p => ({...p, [key]: e.target.value}))} placeholder={placeholder} required={required}
-                      className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none" />
+                      className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-emerald-500 focus:outline-none" />
                   </div>
                 ))}
                 <div className="flex items-center gap-3 col-span-2">
                   <input type="checkbox" id="blacklisted" checked={formData.blacklisted} onChange={e => setFormData(p => ({...p, blacklisted: e.target.checked}))}
-                    className="w-4 h-4 rounded accent-rose-500 text-white" />
-                  <label htmlFor="blacklisted" className="text-sm text-slate-300">Mark as Blacklisted</label>
+                    className="w-4 h-4 rounded accent-rose-500 text-[var(--text-main)]" />
+                  <label htmlFor="blacklisted" className="text-sm text-[var(--text-muted)]">Mark as Blacklisted</label>
                 </div>
               </div>
               <div className="flex gap-4 justify-end pt-4">
-                <button type="button" onClick={() => setShowModal(false)} className="px-6 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5">Cancel</button>
+                <button type="button" onClick={() => setShowModal(false)} className="px-6 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]">Cancel</button>
                 <button type="submit" disabled={saving} className="px-6 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:opacity-90 disabled:opacity-50">
                   {saving ? 'Saving...' : editCustomer ? 'Update' : 'Create'}
                 </button>

@@ -55,12 +55,12 @@ function FuelGauge({ value, onChange }: { value: number; onChange: (v: number) =
   const levels = [0, 12, 25, 37, 50, 62, 75, 87, 100];
   return (
     <div className="space-y-2">
-      <div className="flex justify-between text-xs text-slate-400">
+      <div className="flex justify-between text-xs text-[var(--text-muted)]">
         <span>Empty</span>
-        <span className="text-white font-medium">{value}%</span>
+        <span className="text-[var(--text-main)] font-medium">{value}%</span>
         <span>Full</span>
       </div>
-      <div className="relative h-8 bg-slate-800 rounded-full overflow-hidden border border-white/10">
+      <div className="relative h-8 bg-[var(--bg-surface)] rounded-full overflow-hidden border border-[var(--border-subtle)]">
         <div className={`h-full rounded-full transition-all duration-300 ${
           value >= 75 ? 'bg-emerald-500' : value >= 25 ? 'bg-amber-500' : 'bg-red-500'
         }`} style={{ width: `${value}%` }} />
@@ -72,7 +72,7 @@ function FuelGauge({ value, onChange }: { value: number; onChange: (v: number) =
         {levels.map(l => (
           <button key={l} onClick={() => onChange(l)}
             className={`text-xs px-1 py-0.5 rounded transition-colors ${
-              value === l ? 'text-white bg-white/10' : 'text-slate-600 hover:text-slate-400'
+              value === l ? 'text-[var(--text-main)] bg-[var(--bg-surface-hover)]' : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'
             }`}>
             {l === 0 ? 'E' : l === 100 ? 'F' : `${l}`}
           </button>
@@ -90,7 +90,7 @@ function VehicleDiagram({ damaged, onToggle }: {
 }) {
   return (
     <div className="relative w-full" style={{ paddingBottom: '100%' }}>
-      <div className="absolute inset-0 bg-slate-800/60 border border-white/10 rounded-2xl overflow-hidden">
+      <div className="absolute inset-0 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
         {/* Car body outline */}
         <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full p-4">
           {/* Body */}
@@ -111,8 +111,8 @@ function VehicleDiagram({ damaged, onToggle }: {
             title={zone.label}
             className={`absolute transition-all rounded border text-xs font-bold ${
               damaged.has(zone.id)
-                ? 'bg-red-500/70 border-red-400 text-white shadow-[0_0_8px_rgba(239,68,68,0.5)]'
-                : 'bg-slate-700/40 border-slate-600/60 text-slate-500 hover:bg-amber-500/20 hover:border-amber-500/60 hover:text-amber-300'
+                ? 'bg-red-500/70 border-red-400 text-[var(--text-main)] shadow-[0_0_8px_rgba(239,68,68,0.5)]'
+                : 'bg-[var(--bg-surface-hover)]/40 border-[var(--border-strong)]/60 text-[var(--text-faint)] hover:bg-amber-500/20 hover:border-amber-500/60 hover:text-amber-300'
             }`}
             style={{
               left: `${zone.x}%`, top: `${zone.y}%`,
@@ -124,7 +124,7 @@ function VehicleDiagram({ damaged, onToggle }: {
           </button>
         ))}
 
-        <p className="absolute bottom-2 left-0 right-0 text-center text-xs text-slate-600">
+        <p className="absolute bottom-2 left-0 right-0 text-center text-xs text-[var(--text-faint)]">
           Tap zones to mark damage
         </p>
       </div>
@@ -148,14 +148,14 @@ function InspectionCard({ insp }: { insp: Inspection }) {
         <span className={`text-sm font-semibold ${insp.type === 'checkin' ? 'text-blue-300' : 'text-amber-300'}`}>
           {insp.type === 'checkin' ? '🚗 Check-In' : '🔑 Check-Out'} Inspection
         </span>
-        <span className="text-xs text-slate-500">
+        <span className="text-xs text-[var(--text-faint)]">
           {new Date(insp.createdAt).toLocaleDateString('en-AE', { day: '2-digit', month: 'short', year: 'numeric' })}
         </span>
       </div>
       <div className="grid grid-cols-3 gap-2 text-xs">
-        <div><p className="text-slate-500">Mileage</p><p className="text-white font-mono">{insp.mileage?.toLocaleString() ?? '—'} km</p></div>
-        <div><p className="text-slate-500">Fuel Level</p><p className="text-white">{insp.fuelLevel ?? '—'}%</p></div>
-        <div><p className="text-slate-500">Inspector</p><p className="text-white">{insp.inspector ?? '—'}</p></div>
+        <div><p className="text-[var(--text-faint)]">Mileage</p><p className="text-[var(--text-main)] font-mono">{insp.mileage?.toLocaleString() ?? '—'} km</p></div>
+        <div><p className="text-[var(--text-faint)]">Fuel Level</p><p className="text-[var(--text-main)]">{insp.fuelLevel ?? '—'}%</p></div>
+        <div><p className="text-[var(--text-faint)]">Inspector</p><p className="text-[var(--text-main)]">{insp.inspector ?? '—'}</p></div>
       </div>
       {damages.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -166,7 +166,7 @@ function InspectionCard({ insp }: { insp: Inspection }) {
           ))}
         </div>
       )}
-      {insp.notes && <p className="text-xs text-slate-500 italic">"{insp.notes}"</p>}
+      {insp.notes && <p className="text-xs text-[var(--text-faint)] italic">"{insp.notes}"</p>}
     </div>
   );
 }
@@ -304,7 +304,7 @@ export default function InspectionPage() {
   };
 
   if (loading) {
-    return <div className="space-y-4 animate-pulse">{[...Array(3)].map((_,i) => <div key={i} className="h-32 bg-slate-800/60 rounded-2xl" />)}</div>;
+    return <div className="space-y-4 animate-pulse">{[...Array(3)].map((_,i) => <div key={i} className="h-32 bg-[var(--bg-surface)]/60 rounded-2xl" />)}</div>;
   }
 
   const hasDamage = damaged.size > 0;
@@ -316,15 +316,15 @@ export default function InspectionPage() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <div className="flex items-center gap-2 text-sm text-slate-500 mb-1">
-            <Link href="/rental/bookings" className="hover:text-slate-300">Bookings</Link>
+          <div className="flex items-center gap-2 text-sm text-[var(--text-faint)] mb-1">
+            <Link href="/rental/bookings" className="hover:text-[var(--text-muted)]">Bookings</Link>
             <span>/</span>
-            <span className="font-mono text-slate-400">{booking?.bookingRef ?? bookingId.slice(0, 8)}</span>
+            <span className="font-mono text-[var(--text-muted)]">{booking?.bookingRef ?? bookingId.slice(0, 8)}</span>
             <span>/</span>
             <span>Inspection</span>
           </div>
-          <h1 className="text-2xl font-bold text-white">Vehicle Inspection</h1>
-          <p className="text-slate-400 text-xs mt-0.5">
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Vehicle Inspection</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">
             {booking?.customer?.fullName ?? '—'} · {booking?.vehicleCategory ?? 'Vehicle not specified'}
           </p>
         </div>
@@ -337,7 +337,7 @@ export default function InspectionPage() {
       {/* Existing inspections */}
       {inspections.length > 0 && (
         <div className="space-y-3">
-          <h2 className="text-sm font-medium text-slate-400 uppercase tracking-wider">Previous Inspections</h2>
+          <h2 className="text-sm font-medium text-[var(--text-muted)] uppercase tracking-wider">Previous Inspections</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {inspections.map(insp => <InspectionCard key={insp.id} insp={insp} />)}
           </div>
@@ -348,7 +348,7 @@ export default function InspectionPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left: damage diagram + condition */}
         <div className="space-y-4">
-          <h2 className="text-sm font-medium text-white uppercase tracking-wider">Damage Assessment</h2>
+          <h2 className="text-sm font-medium text-[var(--text-main)] uppercase tracking-wider">Damage Assessment</h2>
 
           {/* Inspection type toggle */}
           <div className="grid grid-cols-2 gap-2">
@@ -359,7 +359,7 @@ export default function InspectionPage() {
                     ? t === 'checkin'
                       ? 'bg-blue-500/20 border-blue-500/40 text-blue-300'
                       : 'bg-amber-500/20 border-amber-500/40 text-amber-300'
-                    : 'border-white/10 text-slate-500 hover:border-white/20'
+                    : 'border-[var(--border-subtle)] text-[var(--text-faint)] hover:border-[var(--border-strong)]'
                 }`}>
                 {t === 'checkin' ? '🚗 Check-In' : '🔑 Check-Out'}
               </button>
@@ -384,19 +384,19 @@ export default function InspectionPage() {
 
           {/* Condition grade */}
           <div className="space-y-2">
-            <p className="text-xs text-slate-500 uppercase tracking-wider">Overall Condition Grade</p>
+            <p className="text-xs text-[var(--text-faint)] uppercase tracking-wider">Overall Condition Grade</p>
             <div className="grid grid-cols-4 gap-2">
               {CONDITION_GRADES.map(g => (
                 <button key={g.grade} onClick={() => setGrade(g.grade)}
                   className={`py-2 rounded-xl border text-center transition-all ${
-                    grade === g.grade ? g.bg : 'border-white/10 bg-slate-800/40 hover:border-white/20'
+                    grade === g.grade ? g.bg : 'border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 hover:border-[var(--border-strong)]'
                   }`}>
-                  <p className={`text-xl font-bold ${grade === g.grade ? g.color : 'text-slate-600'}`}>{g.grade}</p>
-                  <p className={`text-xs mt-0.5 ${grade === g.grade ? g.color : 'text-slate-600'}`}>{g.label}</p>
+                  <p className={`text-xl font-bold ${grade === g.grade ? g.color : 'text-[var(--text-faint)]'}`}>{g.grade}</p>
+                  <p className={`text-xs mt-0.5 ${grade === g.grade ? g.color : 'text-[var(--text-faint)]'}`}>{g.label}</p>
                 </button>
               ))}
             </div>
-            <p className="text-xs text-slate-600 italic">
+            <p className="text-xs text-[var(--text-faint)] italic">
               {CONDITION_GRADES.find(g => g.grade === grade)?.desc}
             </p>
           </div>
@@ -404,36 +404,36 @@ export default function InspectionPage() {
 
         {/* Right: details + signature */}
         <div className="space-y-4">
-          <h2 className="text-sm font-medium text-white uppercase tracking-wider">Inspection Details</h2>
+          <h2 className="text-sm font-medium text-[var(--text-main)] uppercase tracking-wider">Inspection Details</h2>
 
           {/* Mileage + inspector */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-slate-500 block mb-1.5">Odometer (km)</label>
+              <label className="text-xs text-[var(--text-faint)] block mb-1.5">Odometer (km)</label>
               <input type="number" value={mileage} onChange={e => setMileage(e.target.value)}
                 placeholder="e.g. 24500"
-                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/40" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-emerald-500/40" />
             </div>
             <div>
-              <label className="text-xs text-slate-500 block mb-1.5">Inspector Name</label>
+              <label className="text-xs text-[var(--text-faint)] block mb-1.5">Inspector Name</label>
               <input value={inspector} onChange={e => setInspector(e.target.value)}
                 placeholder="Staff name"
-                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/40" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-emerald-500/40" />
             </div>
           </div>
 
           {/* Fuel level */}
           <div>
-            <label className="text-xs text-slate-500 block mb-2">Fuel Level</label>
+            <label className="text-xs text-[var(--text-faint)] block mb-2">Fuel Level</label>
             <FuelGauge value={fuelLevel} onChange={setFuelLevel} />
           </div>
 
           {/* Notes */}
           <div>
-            <label className="text-xs text-slate-500 block mb-1.5">Inspection Notes</label>
+            <label className="text-xs text-[var(--text-faint)] block mb-1.5">Inspection Notes</label>
             <textarea value={notes} onChange={e => setNotes(e.target.value)}
               placeholder="Additional observations…" rows={3}
-              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500/40 resize-none" />
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-emerald-500/40 resize-none" />
           </div>
 
           {/* Damage claim creation */}
@@ -447,10 +447,10 @@ export default function InspectionPage() {
                 <div className="space-y-2">
                   <input value={claimNote} onChange={e => setClaimNote(e.target.value)}
                     placeholder="Damage claim description (optional)"
-                    className="w-full bg-slate-900/60 border border-red-500/20 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none" />
+                    className="w-full bg-[var(--bg-surface)]/60 border border-red-500/20 rounded-lg px-3 py-2 text-xs text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none" />
                   <input type="number" value={claimCost} onChange={e => setClaimCost(e.target.value)}
                     placeholder="Estimated repair cost (AED)"
-                    className="w-full bg-slate-900/60 border border-red-500/20 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none" />
+                    className="w-full bg-[var(--bg-surface)]/60 border border-red-500/20 rounded-lg px-3 py-2 text-xs text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none" />
                 </div>
               )}
             </div>
@@ -459,14 +459,14 @@ export default function InspectionPage() {
           {/* Signature */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-500">Customer Signature</span>
-              <button onClick={clearSig} className="text-slate-600 hover:text-slate-400">Clear</button>
+              <span className="text-[var(--text-faint)]">Customer Signature</span>
+              <button onClick={clearSig} className="text-[var(--text-faint)] hover:text-[var(--text-muted)]">Clear</button>
             </div>
             <canvas ref={canvasRef} width={500} height={120}
-              className="w-full h-24 bg-slate-800 border border-white/10 rounded-xl touch-none cursor-crosshair"
+              className="w-full h-24 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl touch-none cursor-crosshair"
               onMouseDown={startDraw} onMouseMove={draw} onMouseUp={stopDraw} onMouseLeave={stopDraw}
               onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={stopDraw} />
-            {!signed && <p className="text-xs text-slate-600 text-center">Sign above</p>}
+            {!signed && <p className="text-xs text-[var(--text-faint)] text-center">Sign above</p>}
           </div>
 
           {/* Status messages */}
@@ -475,7 +475,7 @@ export default function InspectionPage() {
 
           {/* Submit */}
           <button onClick={submit} disabled={saving}
-            className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-semibold py-3 rounded-xl text-sm transition-colors">
+            className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-[var(--text-main)] font-semibold py-3 rounded-xl text-sm transition-colors">
             {saving ? 'Saving…' : `💾 Save ${inspType === 'checkin' ? 'Check-In' : 'Check-Out'} Inspection`}
           </button>
         </div>

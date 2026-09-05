@@ -98,7 +98,7 @@ function StarRating({ score, max = 5 }: { score: number; max?: number }) {
   return (
     <div className="flex gap-0.5">
       {Array.from({ length: max }).map((_, i) => (
-        <span key={i} className={i < Math.round(score) ? 'text-amber-400' : 'text-slate-600'}>
+        <span key={i} className={i < Math.round(score) ? 'text-amber-400' : 'text-[var(--text-faint)]'}>
           ★
         </span>
       ))}
@@ -112,16 +112,16 @@ function FuelBar({ level }: { level: number }) {
   const color = pct >= 60 ? 'bg-green-500' : pct >= 30 ? 'bg-amber-500' : 'bg-red-500';
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 bg-slate-700 rounded-full h-2 overflow-hidden">
+      <div className="flex-1 bg-[var(--bg-surface-hover)] rounded-full h-2 overflow-hidden">
         <div className={`h-2 rounded-full ${color} transition-all`} style={{ width: `${Math.min(pct, 100)}%` }} />
       </div>
-      <span className="text-xs text-slate-400 w-8 text-right">{Math.round(pct)}%</span>
+      <span className="text-xs text-[var(--text-muted)] w-8 text-right">{Math.round(pct)}%</span>
     </div>
   );
 }
 
 function TrendBadge({ current, previous }: { current: number; previous: number }) {
-  if (previous === 0 && current === 0) return <span className="text-slate-500 text-xs">—</span>;
+  if (previous === 0 && current === 0) return <span className="text-[var(--text-faint)] text-xs">—</span>;
   if (previous === 0) return <span className="text-emerald-400 text-xs font-medium">▲ New</span>;
   const delta = ((current - previous) / previous) * 100;
   const up = delta >= 0;
@@ -175,27 +175,27 @@ export default function RentalAnalyticsPage() {
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[var(--text-main)] flex items-center gap-2">
             <span>📈</span> Rental Analytics &amp; Performance
           </h1>
-          <p className="text-slate-400 mt-1 text-sm">
+          <p className="text-[var(--text-muted)] mt-1 text-sm">
             Branch-level insights, revenue tracking, and operational KPIs
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <label className="text-xs text-slate-400">From</label>
+          <label className="text-xs text-[var(--text-muted)]">From</label>
           <input
             type="date"
             value={startDate}
             onChange={e => setStartDate(e.target.value)}
-            className="bg-slate-800 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+            className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-1.5 text-sm text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-teal-500"
           />
-          <label className="text-xs text-slate-400">To</label>
+          <label className="text-xs text-[var(--text-muted)]">To</label>
           <input
             type="date"
             value={endDate}
             onChange={e => setEndDate(e.target.value)}
-            className="bg-slate-800 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+            className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-1.5 text-sm text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-teal-500"
           />
           <button
             onClick={runReport}
@@ -219,39 +219,39 @@ export default function RentalAnalyticsPage() {
         <div className="bg-gradient-to-br from-teal-900/50 to-teal-950 border border-teal-500/20 rounded-2xl p-5">
           <div className="text-2xl mb-2">💰</div>
           <p className="text-xs text-teal-400 font-medium uppercase tracking-wide">Total Revenue</p>
-          <p className="text-2xl font-bold text-white mt-1">{fmtAED(ov.total_revenue)}</p>
-          <p className="text-xs text-slate-500 mt-1">Across all branches</p>
+          <p className="text-2xl font-bold text-[var(--text-main)] mt-1">{fmtAED(ov.total_revenue)}</p>
+          <p className="text-xs text-[var(--text-faint)] mt-1">Across all branches</p>
         </div>
         {/* Bookings */}
         <div className="bg-gradient-to-br from-blue-900/50 to-blue-950 border border-blue-500/20 rounded-2xl p-5">
           <div className="text-2xl mb-2">📅</div>
           <p className="text-xs text-blue-400 font-medium uppercase tracking-wide">Total Bookings</p>
-          <p className="text-2xl font-bold text-white mt-1">{fmt(ov.total_bookings)}</p>
-          <p className="text-xs text-slate-500 mt-1">Avg {ov.avg_rental_days} days/rental</p>
+          <p className="text-2xl font-bold text-[var(--text-main)] mt-1">{fmt(ov.total_bookings)}</p>
+          <p className="text-xs text-[var(--text-faint)] mt-1">Avg {ov.avg_rental_days} days/rental</p>
         </div>
         {/* Conversion */}
         <div className="bg-gradient-to-br from-emerald-900/50 to-emerald-950 border border-emerald-500/20 rounded-2xl p-5">
           <div className="text-2xl mb-2">📊</div>
           <p className="text-xs text-emerald-400 font-medium uppercase tracking-wide">Quote Conversion</p>
-          <p className="text-2xl font-bold text-white mt-1">{ov.quote_conversion_rate}%</p>
-          <p className="text-xs text-slate-500 mt-1">{fmt(ov.accepted_quotes)} / {fmt(ov.total_quotes)} quotes</p>
+          <p className="text-2xl font-bold text-[var(--text-main)] mt-1">{ov.quote_conversion_rate}%</p>
+          <p className="text-xs text-[var(--text-faint)] mt-1">{fmt(ov.accepted_quotes)} / {fmt(ov.total_quotes)} quotes</p>
         </div>
         {/* Inquiries */}
         <div className="bg-gradient-to-br from-amber-900/50 to-amber-950 border border-amber-500/20 rounded-2xl p-5">
           <div className="text-2xl mb-2">🔍</div>
           <p className="text-xs text-amber-400 font-medium uppercase tracking-wide">Total Inquiries</p>
-          <p className="text-2xl font-bold text-white mt-1">{fmt(ov.total_inquiries)}</p>
-          <p className="text-xs text-slate-500 mt-1">Lead pipeline entries</p>
+          <p className="text-2xl font-bold text-[var(--text-main)] mt-1">{fmt(ov.total_inquiries)}</p>
+          <p className="text-xs text-[var(--text-faint)] mt-1">Lead pipeline entries</p>
         </div>
       </div>
 
       {/* ── Section 2: Revenue by Branch ──────────────────────────────── */}
-      <div className="bg-slate-900 border border-white/5 rounded-2xl p-6">
-        <h2 className="text-base font-semibold text-white mb-5 flex items-center gap-2">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
+        <h2 className="text-base font-semibold text-[var(--text-main)] mb-5 flex items-center gap-2">
           <span>🏢</span> Revenue by Branch
         </h2>
         {(data?.by_branch ?? []).length === 0 ? (
-          <div className="text-center py-10 text-slate-500">
+          <div className="text-center py-10 text-[var(--text-faint)]">
             <div className="text-3xl mb-2">🏙️</div>
             <p className="text-sm">No branch data available — add branches and bookings to see analytics</p>
           </div>
@@ -270,15 +270,15 @@ export default function RentalAnalyticsPage() {
                          branch.emirate === 'ABU DHABI' ? '🏛️' :
                          branch.emirate === 'SHARJAH' ? '🕌' : '📍'}
                       </span>
-                      <span className="text-white font-medium truncate">{branch.branch_name}</span>
-                      <span className="text-xs text-slate-500 hidden md:inline">{branch.emirate}</span>
+                      <span className="text-[var(--text-main)] font-medium truncate">{branch.branch_name}</span>
+                      <span className="text-xs text-[var(--text-faint)] hidden md:inline">{branch.emirate}</span>
                     </div>
-                    <div className="flex items-center gap-4 flex-shrink-0 text-xs text-slate-400">
+                    <div className="flex items-center gap-4 flex-shrink-0 text-xs text-[var(--text-muted)]">
                       <span>{branch.booking_count} bookings</span>
                       <span className="text-teal-400 font-semibold">{fmtAED(branch.revenue)}</span>
                     </div>
                   </div>
-                  <div className="bg-slate-800 rounded-full h-2 overflow-hidden">
+                  <div className="bg-[var(--bg-surface)] rounded-full h-2 overflow-hidden">
                     <div
                       className="h-2 rounded-full bg-gradient-to-r from-teal-500 to-cyan-400 transition-all"
                       style={{ width: `${pct}%` }}
@@ -295,12 +295,12 @@ export default function RentalAnalyticsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         {/* Inquiry Sources */}
-        <div className="bg-slate-900 border border-white/5 rounded-2xl p-6">
-          <h2 className="text-base font-semibold text-white mb-5 flex items-center gap-2">
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
+          <h2 className="text-base font-semibold text-[var(--text-main)] mb-5 flex items-center gap-2">
             <span>📡</span> Inquiry Sources
           </h2>
           {(data?.by_source ?? []).length === 0 ? (
-            <div className="text-center py-8 text-slate-500">
+            <div className="text-center py-8 text-[var(--text-faint)]">
               <div className="text-2xl mb-2">📭</div>
               <p className="text-sm">No inquiry source data available</p>
             </div>
@@ -315,15 +315,15 @@ export default function RentalAnalyticsPage() {
                 return (
                   <div key={src.source} className="space-y-1">
                     <div className="flex items-center justify-between text-sm">
-                      <span className="flex items-center gap-2 text-slate-300">
+                      <span className="flex items-center gap-2 text-[var(--text-muted)]">
                         <span>{meta.icon}</span>
                         <span>{meta.label}</span>
                       </span>
-                      <span className="text-xs font-medium text-slate-400">
+                      <span className="text-xs font-medium text-[var(--text-muted)]">
                         {src.count} ({src.pct}%)
                       </span>
                     </div>
-                    <div className="bg-slate-800 rounded-full h-2 overflow-hidden">
+                    <div className="bg-[var(--bg-surface)] rounded-full h-2 overflow-hidden">
                       <div
                         className={`h-2 rounded-full ${meta.color} transition-all`}
                         style={{ width: `${src.pct}%` }}
@@ -337,12 +337,12 @@ export default function RentalAnalyticsPage() {
         </div>
 
         {/* Vehicle Type Popularity */}
-        <div className="bg-slate-900 border border-white/5 rounded-2xl p-6">
-          <h2 className="text-base font-semibold text-white mb-5 flex items-center gap-2">
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
+          <h2 className="text-base font-semibold text-[var(--text-main)] mb-5 flex items-center gap-2">
             <span>🚗</span> Vehicle Type Popularity
           </h2>
           {(data?.by_vehicle_type ?? []).length === 0 ? (
-            <div className="text-center py-8 text-slate-500">
+            <div className="text-center py-8 text-[var(--text-faint)]">
               <div className="text-2xl mb-2">🅿️</div>
               <p className="text-sm">No vehicle type data available</p>
             </div>
@@ -353,7 +353,7 @@ export default function RentalAnalyticsPage() {
                 return (
                   <div
                     key={vt.vehicle_type}
-                    className="bg-slate-800/60 rounded-xl p-4 border border-white/5 relative overflow-hidden"
+                    className="bg-[var(--bg-surface)]/60 rounded-xl p-4 border border-[var(--border-subtle)] relative overflow-hidden"
                   >
                     {/* Donut-style fill indicator */}
                     <div
@@ -362,10 +362,10 @@ export default function RentalAnalyticsPage() {
                     />
                     <div className="relative">
                       <div className="text-xl mb-1">{meta.emoji}</div>
-                      <p className="text-xs text-slate-400 font-medium">{vt.vehicle_type}</p>
-                      <p className="text-lg font-bold text-white">{fmt(vt.count)}</p>
+                      <p className="text-xs text-[var(--text-muted)] font-medium">{vt.vehicle_type}</p>
+                      <p className="text-lg font-bold text-[var(--text-main)]">{fmt(vt.count)}</p>
                       <p className="text-xs text-teal-400">{fmtAED(vt.revenue)}</p>
-                      <div className="mt-2 text-xs text-slate-500">{vt.share_pct}% share</div>
+                      <div className="mt-2 text-xs text-[var(--text-faint)]">{vt.share_pct}% share</div>
                     </div>
                   </div>
                 );
@@ -376,12 +376,12 @@ export default function RentalAnalyticsPage() {
       </div>
 
       {/* ── Section 5: Monthly Trend ───────────────────────────────────── */}
-      <div className="bg-slate-900 border border-white/5 rounded-2xl p-6">
-        <h2 className="text-base font-semibold text-white mb-5 flex items-center gap-2">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
+        <h2 className="text-base font-semibold text-[var(--text-main)] mb-5 flex items-center gap-2">
           <span>📅</span> Monthly Trend
         </h2>
         {(data?.by_month ?? []).length === 0 ? (
-          <div className="text-center py-8 text-slate-500">
+          <div className="text-center py-8 text-[var(--text-faint)]">
             <div className="text-2xl mb-2">📆</div>
             <p className="text-sm">No monthly data available for this period</p>
           </div>
@@ -389,7 +389,7 @@ export default function RentalAnalyticsPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/5 text-xs text-slate-500 uppercase tracking-wide">
+                <tr className="border-b border-[var(--border-subtle)] text-xs text-[var(--text-faint)] uppercase tracking-wide">
                   <th className="text-left py-2 pr-4">Month</th>
                   <th className="text-right py-2 px-4">Revenue (AED)</th>
                   <th className="text-right py-2 px-4">Bookings</th>
@@ -397,12 +397,12 @@ export default function RentalAnalyticsPage() {
                   <th className="text-right py-2 pl-4">Trend</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5">
+              <tbody className="divide-y divide-[var(--border-subtle)]">
                 {(data?.by_month ?? []).map((mo, idx, arr) => {
                   const prev = arr[idx - 1];
                   return (
-                    <tr key={mo.month} className="hover:bg-white/2 transition-colors">
-                      <td className="py-3 pr-4 font-medium text-white">
+                    <tr key={mo.month} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
+                      <td className="py-3 pr-4 font-medium text-[var(--text-main)]">
                         {new Date(mo.month + '-01').toLocaleDateString('en-AE', {
                           month: 'short', year: 'numeric',
                         })}
@@ -410,17 +410,17 @@ export default function RentalAnalyticsPage() {
                       <td className="py-3 px-4 text-right text-teal-400 font-semibold">
                         {fmtAED(mo.revenue)}
                       </td>
-                      <td className="py-3 px-4 text-right text-slate-300">
+                      <td className="py-3 px-4 text-right text-[var(--text-muted)]">
                         {fmt(mo.bookings)}
                       </td>
-                      <td className="py-3 px-4 text-right text-slate-300">
+                      <td className="py-3 px-4 text-right text-[var(--text-muted)]">
                         {fmt(mo.inquiries)}
                       </td>
                       <td className="py-3 pl-4 text-right">
                         {prev ? (
                           <TrendBadge current={mo.revenue} previous={prev.revenue} />
                         ) : (
-                          <span className="text-slate-600 text-xs">—</span>
+                          <span className="text-[var(--text-faint)] text-xs">—</span>
                         )}
                       </td>
                     </tr>
@@ -433,37 +433,37 @@ export default function RentalAnalyticsPage() {
       </div>
 
       {/* ── Section 6: Handover Stats ──────────────────────────────────── */}
-      <div className="bg-slate-900 border border-white/5 rounded-2xl p-6">
-        <h2 className="text-base font-semibold text-white mb-5 flex items-center gap-2">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
+        <h2 className="text-base font-semibold text-[var(--text-main)] mb-5 flex items-center gap-2">
           <span>🔑</span> Handover Statistics
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-slate-800/60 rounded-xl p-4 border border-white/5 text-center">
+          <div className="bg-[var(--bg-surface)]/60 rounded-xl p-4 border border-[var(--border-subtle)] text-center">
             <div className="text-2xl mb-1">📤</div>
-            <p className="text-xs text-slate-400 mb-1">Total Pickups</p>
-            <p className="text-2xl font-bold text-white">
+            <p className="text-xs text-[var(--text-muted)] mb-1">Total Pickups</p>
+            <p className="text-2xl font-bold text-[var(--text-main)]">
               {fmt(data?.handover_stats.total_pickups ?? 0)}
             </p>
           </div>
-          <div className="bg-slate-800/60 rounded-xl p-4 border border-white/5 text-center">
+          <div className="bg-[var(--bg-surface)]/60 rounded-xl p-4 border border-[var(--border-subtle)] text-center">
             <div className="text-2xl mb-1">📥</div>
-            <p className="text-xs text-slate-400 mb-1">Total Returns</p>
-            <p className="text-2xl font-bold text-white">
+            <p className="text-xs text-[var(--text-muted)] mb-1">Total Returns</p>
+            <p className="text-2xl font-bold text-[var(--text-main)]">
               {fmt(data?.handover_stats.total_returns ?? 0)}
             </p>
           </div>
-          <div className="bg-slate-800/60 rounded-xl p-4 border border-white/5">
+          <div className="bg-[var(--bg-surface)]/60 rounded-xl p-4 border border-[var(--border-subtle)]">
             <div className="text-2xl mb-1">⭐</div>
-            <p className="text-xs text-slate-400 mb-2">Avg Condition Score</p>
-            <p className="text-xl font-bold text-white mb-1">
+            <p className="text-xs text-[var(--text-muted)] mb-2">Avg Condition Score</p>
+            <p className="text-xl font-bold text-[var(--text-main)] mb-1">
               {(data?.handover_stats.avg_condition_score ?? 0).toFixed(1)} / 5
             </p>
             <StarRating score={data?.handover_stats.avg_condition_score ?? 0} />
           </div>
-          <div className="bg-slate-800/60 rounded-xl p-4 border border-white/5">
+          <div className="bg-[var(--bg-surface)]/60 rounded-xl p-4 border border-[var(--border-subtle)]">
             <div className="text-2xl mb-1">⛽</div>
-            <p className="text-xs text-slate-400 mb-2">Avg Fuel at Return</p>
-            <p className="text-xl font-bold text-white mb-2">
+            <p className="text-xs text-[var(--text-muted)] mb-2">Avg Fuel at Return</p>
+            <p className="text-xl font-bold text-[var(--text-main)] mb-2">
               {(data?.handover_stats.avg_fuel_at_return ?? 0).toFixed(1)} / 8
             </p>
             <FuelBar level={data?.handover_stats.avg_fuel_at_return ?? 0} />
@@ -472,8 +472,8 @@ export default function RentalAnalyticsPage() {
       </div>
 
       {/* ── Section 7: Quotations Pipeline ────────────────────────────── */}
-      <div className="bg-slate-900 border border-white/5 rounded-2xl p-6">
-        <h2 className="text-base font-semibold text-white mb-5 flex items-center gap-2">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
+        <h2 className="text-base font-semibold text-[var(--text-main)] mb-5 flex items-center gap-2">
           <span>🔀</span> Quotations Pipeline
         </h2>
         {(() => {
@@ -501,21 +501,21 @@ export default function RentalAnalyticsPage() {
                   <React.Fragment key={stage.label}>
                     {idx > 0 && (
                       <div className="flex flex-col items-center gap-1 pb-8">
-                        <span className="text-slate-600 text-lg">→</span>
+                        <span className="text-[var(--text-faint)] text-lg">→</span>
                         {convPct !== null && (
-                          <span className="text-xs text-slate-500">{convPct}%</span>
+                          <span className="text-xs text-[var(--text-faint)]">{convPct}%</span>
                         )}
                       </div>
                     )}
                     <div className="flex flex-col items-center gap-2 flex-1">
-                      <p className="text-lg font-bold text-white">{fmt(stage.value)}</p>
+                      <p className="text-lg font-bold text-[var(--text-main)]">{fmt(stage.value)}</p>
                       <div
                         className={`w-full rounded-t-xl bg-gradient-to-t ${stage.color} transition-all`}
                         style={{ height: `${barH}px`, minHeight: '4px' }}
                       />
                       <div className="text-center">
                         <div className="text-lg">{stage.icon}</div>
-                        <p className="text-xs text-slate-400 font-medium">{stage.label}</p>
+                        <p className="text-xs text-[var(--text-muted)] font-medium">{stage.label}</p>
                       </div>
                     </div>
                   </React.Fragment>
