@@ -387,6 +387,42 @@ async function _doInit(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_demand_period   ON demand_forecasts(forecast_period);
       CREATE INDEX IF NOT EXISTS idx_demand_segment  ON demand_forecasts(segment);
       CREATE INDEX IF NOT EXISTS idx_demand_created  ON demand_forecasts(created_at DESC);
+
+      -- ── tenant_ai_policies ───────────────────────────────────────────────────
+      CREATE TABLE IF NOT EXISTS tenant_ai_policies (
+        tenant_id                             TEXT PRIMARY KEY,
+        max_autonomy_level                    TEXT NOT NULL DEFAULT 'L3',
+        daily_budget_aed                      NUMERIC(10,2) NOT NULL DEFAULT 200.00,
+        monthly_budget_aed                    NUMERIC(10,2) NOT NULL DEFAULT 5000.00,
+        require_human_approval_threshold_aed  NUMERIC(10,2) NOT NULL DEFAULT 500.00,
+        disabled_agents                       JSONB NOT NULL DEFAULT '[]'::jsonb,
+        circuit_breaker_triggered             BOOLEAN NOT NULL DEFAULT false,
+        updated_at                            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      -- ── agent_approvals (Human-in-the-Loop Review Queue) ─────────────────────
+      CREATE TABLE IF NOT EXISTS agent_approvals (
+        id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id            TEXT NOT NULL DEFAULT 'default',
+        agent_id             TEXT NOT NULL,
+        entity_type          TEXT NOT NULL,
+        entity_id            TEXT NOT NULL,
+        action_type          TEXT NOT NULL,
+        title                TEXT NOT NULL,
+        description          TEXT NOT NULL,
+        financial_impact_aed NUMERIC(12,2) DEFAULT 0,
+        proposed_payload     JSONB NOT NULL DEFAULT '{}'::jsonb,
+        status               TEXT NOT NULL DEFAULT 'PENDING',
+        requested_autonomy   TEXT NOT NULL DEFAULT 'L3',
+        reviewed_by          TEXT,
+        reviewed_at          TIMESTAMPTZ,
+        review_notes         TEXT,
+        created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_agent_approvals_tenant_status ON agent_approvals(tenant_id, status);
+      CREATE INDEX IF NOT EXISTS idx_agent_approvals_agent_id      ON agent_approvals(agent_id);
+      CREATE INDEX IF NOT EXISTS idx_agent_approvals_created_at    ON agent_approvals(created_at DESC);
     END
     $DDL$
   `);

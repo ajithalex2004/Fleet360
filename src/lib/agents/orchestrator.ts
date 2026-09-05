@@ -12,12 +12,47 @@ import { AgentEvent, AgentRunResult, ModelCapabilityAlias, ModelProviderType } f
 import { getAgent } from './registry';
 import { ensureAgentSchema } from './schema';
 import { calculateTokenCost, updateDailyRoiMetrics, USD_TO_AED_RATE } from './telemetry';
+import { policyService } from './governance';
 
 export async function dispatch(event: AgentEvent): Promise<AgentRunResult> {
   await ensureAgentSchema();
 
   const started = Date.now();
   let result: AgentRunResult;
+
+  // 1. Governance & Budget Circuit Breaker Check
+  const quota = await policyService.checkBudgetQuota(event.tenant_id);
+  if (!quota.allowed) {
+    return {
+      agentId:         event.agent_id,
+      tenantId:        event.tenant_id,
+      eventType:       event.event_type,
+      entityId:        event.entity_id,
+      status:          'FAILED',
+      durationMs:      Date.now() - started,
+      itemsProcessed:  0,
+      actionsCreated:  0,
+      output:          null,
+      error:           quota.reason ?? 'Tenant AI budget exceeded.',
+    };
+  }
+
+  // 2. Disabled Agent Check
+  const policy = await policyService.getTenantPolicy(event.tenant_id);
+  if (policy.disabledAgents.includes(event.agent_id)) {
+    return {
+      agentId:         event.agent_id,
+      tenantId:        event.tenant_id,
+      eventType:       event.event_type,
+      entityId:        event.entity_id,
+      status:          'FAILED',
+      durationMs:      Date.now() - started,
+      itemsProcessed:  0,
+      actionsCreated:  0,
+      output:          null,
+      error:           `Agent '${event.agent_id}' is disabled by tenant policy.`,
+    };
+  }
 
   try {
     const agent = await getAgent(event.agent_id);
@@ -163,4 +198,8 @@ export async function triggerFullScan(
 
 // Re-export Multi-Tenant Event Dispatcher
 export { eventDispatcher, publishEvent, type PublishEventOptions } from './dispatcher';
+
+// Re-export Governance & Policy Service
+export { policyService, PolicyService, type TenantPolicy, type ActionProposal, type AutonomyDecision, type ApprovalItem } from './governance';
+
 
