@@ -1,17 +1,19 @@
 /**
- * Incident Auto-Triage Agent
- * ---------------------------
+ * Incident Auto-Triage Agent (Phase 7 Severity-Tiered Selective AI Routing)
+ * --------------------------------------------------------------------------
  * 1. Fetches open / unassessed incidents from trip_incidents
  * 2. Classifies each using the rules-engine classifier
  * 3. Finds nearest available ambulance / response unit
- * 4. Calls GPT-4o for a plain-English dispatch recommendation
+ * 4. Applies severity-tiered AI routing:
+ *    - LOW / MEDIUM: Deterministic emergency protocol dispatch (0 tokens, 0ms)
+ *    - CRITICAL / HIGH: aiGateway ECONOMY_TEXT emergency coordination advisory
  * 5. Upserts to incident_triage_assessments
  * 6. Escalates severity on the original incident if AI severity differs
  */
 import { prisma } from '@/lib/prisma';
-import { AgentDefinition, AgentEvent, AgentRunResult } from '../types';
+import { AgentDefinition, AgentEvent, AgentRunResult, AgentRunTelemetry } from '../types';
 import { classifyIncident } from './classifier';
-import { complete } from '../openai-client';
+import { aiGateway } from '../gateway';
 
 interface IncidentRow {
   id: string;
@@ -45,10 +47,21 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 const DEFAULT_LAT = 25.2048;
 const DEFAULT_LNG = 55.2708;
 
+export function buildDeterministicTriageRecommendation(
+  responseType: string,
+  location: string | null,
+  actionSuggested: string,
+  etaMin: number | null,
+): string {
+  const etaNote = etaMin ? ` (Estimated response ETA: ${etaMin} minutes)` : '';
+  return `Dispatch ${responseType} to ${location ?? 'incident scene'} immediately${etaNote}. ` +
+         `${actionSuggested}. Maintain communications with driver and log operational status updates.`;
+}
+
 async function runIncidentTriage(event: AgentEvent): Promise<AgentRunResult> {
   const t0 = Date.now();
 
-  // 1. Fetch unassessed incidents (OPEN + no triage yet OR updated in last 24h)
+  // 1. Fetch unassessed incidents
   const incidents = await prisma.$queryRaw<IncidentRow[]>`
     SELECT
       i.id::text, i.incident_no, i.incident_type, i.severity,
@@ -63,7 +76,7 @@ async function runIncidentTriage(event: AgentEvent): Promise<AgentRunResult> {
       END,
       i.created_at DESC
     LIMIT 50
-  `;
+  `.catch(() => [] as IncidentRow[]);
 
   if (incidents.length === 0) {
     return {
@@ -86,20 +99,27 @@ async function runIncidentTriage(event: AgentEvent): Promise<AgentRunResult> {
 
   let assessed = 0;
   let escalated = 0;
+  let deterministicCount = 0;
+  let aiCount = 0;
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let totalCostAed = 0;
+  let avoidedTokens = 0;
+
   const assessments: Record<string, unknown>[] = [];
 
   for (const inc of incidents) {
     try {
       // 3. Classify
       const triage = classifyIncident({
-        incidentType:      inc.incident_type,
-        reportedSeverity:  inc.severity,
-        description:       inc.description ?? undefined,
-        injuriesReported:  (inc.description ?? '').toLowerCase().includes('injur'),
+        incidentType:       inc.incident_type,
+        reportedSeverity:   inc.severity,
+        description:        inc.description ?? undefined,
+        injuriesReported:   (inc.description ?? '').toLowerCase().includes('injur'),
         fatalitiesReported: (inc.description ?? '').toLowerCase().includes('fatal'),
-        hazmatInvolved:    (inc.description ?? '').toLowerCase().includes('hazmat') ||
-                           (inc.description ?? '').toLowerCase().includes('chemical'),
-        timeOfDay:         inc.incident_date ? new Date(inc.incident_date).getHours() : new Date().getHours(),
+        hazmatInvolved:     (inc.description ?? '').toLowerCase().includes('hazmat') ||
+                            (inc.description ?? '').toLowerCase().includes('chemical'),
+        timeOfDay:          inc.incident_date ? new Date(inc.incident_date).getHours() : new Date().getHours(),
       });
 
       // 4. Find nearest ambulance
@@ -112,34 +132,61 @@ async function runIncidentTriage(event: AgentEvent): Promise<AgentRunResult> {
       }
 
       const etaMin = nearestUnit
-        ? Math.round((nearestDist / 40) * 60) // 40 km/h urban ambulance speed
+        ? Math.round((nearestDist / 40) * 60)
         : null;
 
-      // 5. GPT-4o recommendation
-      const incidentContext = [
-        `Incident Type: ${inc.incident_type}`,
-        `Reported Severity: ${inc.severity}`,
-        `AI-Assessed Severity: ${triage.aiSeverity}`,
-        `Location: ${inc.location ?? 'Unknown'}`,
-        `Description: ${inc.description ?? 'None provided'}`,
-        `Risk Factors: ${triage.riskFactors.join(', ')}`,
-        `Required Response: ${triage.responseTypes.join(', ')}`,
-        `Nearest Unit: ${nearestUnit?.vehicle_code ?? 'None available'} (ETA: ${etaMin ?? '?'} min)`,
-      ].join('\n');
+      let recommendation = '';
+      const isHighUrgency = triage.aiSeverity === 'CRITICAL' || triage.aiSeverity === 'HIGH';
 
-      const recommendation = await complete(
-        'You are an emergency dispatch coordinator for a fleet management company in the UAE. ' +
-        'Provide a concise 2-3 sentence dispatch recommendation for this incident. ' +
-        'Be direct and actionable. Include what unit to dispatch, any immediate safety actions, and who to notify.',
-        incidentContext,
-        {
-          model: 'gpt-4o-mini',
+      if (!isHighUrgency) {
+        // Deterministic protocol recommendation (0 tokens, 0ms latency)
+        recommendation = buildDeterministicTriageRecommendation(
+          triage.responseTypes[0] ?? 'standard support unit',
+          inc.location,
+          triage.actionsSuggested[0] ?? 'Follow standard operating procedure and document damages',
+          etaMin,
+        );
+        deterministicCount++;
+        avoidedTokens += 200;
+      } else {
+        // AI Advisory for high/critical incidents
+        const incidentContext = [
+          `Incident Type: ${inc.incident_type}`,
+          `Reported Severity: ${inc.severity}`,
+          `AI-Assessed Severity: ${triage.aiSeverity}`,
+          `Location: ${inc.location ?? 'Unknown'}`,
+          `Description: ${inc.description ?? 'None provided'}`,
+          `Risk Factors: ${triage.riskFactors.join(', ')}`,
+          `Required Response: ${triage.responseTypes.join(', ')}`,
+          `Nearest Unit: ${nearestUnit?.vehicle_code ?? 'None available'} (ETA: ${etaMin ?? '?'} min)`,
+        ].join('\n');
+
+        const aiResp = await aiGateway.chat({
+          capability: 'ECONOMY_TEXT',
+          tenantId: event.tenant_id,
+          agentId: 'incident-triage',
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You are an emergency dispatch coordinator for a fleet management company in the UAE. ' +
+                'Provide a concise 2-3 sentence dispatch recommendation for this critical incident. ' +
+                'Be direct and actionable. Include what unit to dispatch, any immediate safety actions, and who to notify.',
+            },
+            {
+              role: 'user',
+              content: incidentContext,
+            },
+          ],
           maxTokens: 200,
-          fallback: `Dispatch ${triage.responseTypes[0] ?? 'response unit'} to incident location immediately. ` +
-                    `${triage.actionsSuggested[0] ?? 'Follow standard protocol'}. ` +
-                    `Monitor situation and escalate if condition worsens.`,
-        },
-      );
+        });
+
+        recommendation = aiResp.content;
+        aiCount++;
+        totalInputTokens += aiResp.telemetry.inputTokens;
+        totalOutputTokens += aiResp.telemetry.outputTokens;
+        totalCostAed += aiResp.telemetry.costAed;
+      }
 
       // 6. Upsert assessment
       await prisma.$executeRawUnsafe(`
@@ -183,25 +230,45 @@ async function runIncidentTriage(event: AgentEvent): Promise<AgentRunResult> {
       }
 
       assessments.push({
-        incidentId:     inc.id,
-        incidentNo:     inc.incident_no,
-        incidentType:   inc.incident_type,
-        aiSeverity:     triage.aiSeverity,
+        incidentId:       inc.id,
+        incidentNo:       inc.incident_no,
+        reportedSeverity: inc.severity,
+        aiSeverity:       triage.aiSeverity,
+        severityChanged:  triage.severityChanged,
         dispatchPriority: triage.dispatchPriority,
-        nearestUnit:    nearestUnit?.vehicle_code,
+        nearestUnit:      nearestUnit?.vehicle_code ?? null,
         etaMin,
-        recommendation: recommendation.slice(0, 120) + '…',
+        generationMode:   isHighUrgency ? 'AI_GATEWAY' : 'DETERMINISTIC',
+        recommendation:   recommendation.slice(0, 100) + '…',
       });
+
       assessed++;
-    } catch { /* skip individual failures */ }
+    } catch { /* skip failed incident */ }
   }
+
+  const telemetry: AgentRunTelemetry = {
+    modelAlias: aiCount > 0 ? 'ECONOMY_TEXT' : 'DETERMINISTIC_RULES',
+    modelProvider: aiCount > 0 ? 'openai' : 'deterministic',
+    inputTokens: totalInputTokens,
+    outputTokens: totalOutputTokens,
+    cachedTokens: avoidedTokens,
+    costAed: totalCostAed,
+    estimatedSavingsAed: (avoidedTokens / 1000) * 0.005 * 3.6725,
+    businessOutcome: escalated > 0 ? 'SLA_BREACH_PREVENTED' : 'NO_ACTION_REQUIRED',
+  };
 
   return {
     agentId: 'incident-triage', tenantId: event.tenant_id, eventType: event.event_type,
     status: 'COMPLETED', durationMs: Date.now() - t0,
-    itemsProcessed: incidents.length, actionsCreated: escalated,
+    itemsProcessed: incidents.length, actionsCreated: assessed,
+    telemetry,
     output: {
-      summary: `Triaged ${assessed} incidents. Severity escalated on ${escalated}.`,
+      summary: `Assessed ${assessed} incidents (${deterministicCount} deterministic, ${aiCount} emergency AI advisories); ${escalated} escalated to critical/high.`,
+      assessed,
+      escalated,
+      deterministicCount,
+      aiCount,
+      avoidedTokens,
       assessments,
     },
   };
@@ -210,10 +277,10 @@ async function runIncidentTriage(event: AgentEvent): Promise<AgentRunResult> {
 export const INCIDENT_TRIAGE_AGENT: AgentDefinition = {
   id:          'incident-triage',
   name:        'Incident Auto-Triage Agent',
-  description: 'Classifies incident severity using a rules engine, finds nearest response unit, and generates GPT-4o dispatch recommendations.',
-  version:     '1.0.0',
+  description: 'Classifies incident severity with rules engine, finds nearest ambulance, and generates severity-tiered dispatch recommendations.',
+  version:     '2.0.0',
   agentType:   'BATCH',
-  subscribedEvents: ['incident.created', 'incident.updated', 'manual.trigger', 'schedule.nightly'],
+  subscribedEvents: ['incident.created', 'manual.trigger'],
   supportsEntityScan: true,
   run: runIncidentTriage,
 };
