@@ -209,7 +209,7 @@ export default function TenantDashboard() {
 
   const revenue = pl?.summary?.totalRevenue ?? 0;
   const outstandingCount = invoices.filter(i => i.status !== 'PAID').length;
-  const outstandingAmt = invoices.filter(i => i.status !== 'PAID').reduce((s, i) => s + i.amount, 0);
+  const outstandingAmt = invoices.filter(i => i.status !== 'PAID').reduce((s, i) => s + Number(i.amount ?? 0), 0);
 
   const billingModules: ModuleBilling[] = billing?.modules ?? activeModules.map(m => ({
     module: m.module,

@@ -129,7 +129,7 @@ export default function LeasingPortalDashboard() {
     const overdueInvoices = invoices.filter(i => i.status === 'OVERDUE').length;
     const overdueAmount = invoices
       .filter(i => i.status === 'OVERDUE')
-      .reduce((s, i) => s + i.totalAmount, 0);
+      .reduce((s, i) => s + Number(i.totalAmount ?? 0), 0);
     return { activeContracts, totalVehicles, monthlySpend, overdueInvoices, overdueAmount };
   }, [contracts, invoices]);
 

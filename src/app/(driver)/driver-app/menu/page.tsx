@@ -458,7 +458,7 @@ function RecentEntriesCard({
                 >
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm text-white">
-                      {f.liters.toFixed(1)}L · {f.locationName ?? 'Unknown station'}
+                      {Number(f.liters ?? 0).toFixed(1)}L · {f.locationName ?? 'Unknown station'}
                     </div>
                     <div className="text-[10px] text-slate-400">{timeAgo(f.filledAt)}</div>
                   </div>

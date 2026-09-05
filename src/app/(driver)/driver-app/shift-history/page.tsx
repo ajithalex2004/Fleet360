@@ -237,7 +237,7 @@ export default function ShiftHistoryPage() {
                             {detail.fuelEntries.map((f) => (
                               <li key={f.id} className="flex items-center justify-between text-slate-300">
                                 <span>
-                                  ⛽ {f.liters.toFixed(2)}L · {formatMinor(f.costMinor, f.currency)}
+                                  ⛽ {Number(f.liters ?? 0).toFixed(2)}L · {formatMinor(f.costMinor, f.currency)}
                                   {f.locationName && <span className="text-slate-500"> · {f.locationName}</span>}
                                 </span>
                                 <span className="text-[10px] text-slate-500">

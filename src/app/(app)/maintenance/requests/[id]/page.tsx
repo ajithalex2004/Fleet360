@@ -1868,7 +1868,7 @@ export default function RequestDetailsPage() {
                                             <div className="grid grid-cols-2 gap-4 text-sm">
                                                 <div>
                                                     <span className="text-slate-500">Total Cost:</span>
-                                                    <div className="font-medium">AED {quote.totalCost.toFixed(2)}</div>
+                                                    <div className="font-medium">AED {Number(quote.totalCost ?? 0).toFixed(2)}</div>
                                                 </div>
                                                 <div>
                                                     <span className="text-slate-500">Estimated Completion:</span>

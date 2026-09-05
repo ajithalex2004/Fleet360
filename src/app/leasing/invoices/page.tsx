@@ -317,7 +317,7 @@ export default function InvoicesPage() {
                       <td className="px-4 py-3 text-sm">{invoice.issueDate}</td>
                       <td className="px-4 py-3 text-sm">{invoice.dueDate}</td>
                       <td className="px-4 py-3 text-center text-sm">{invoice.lines.length}</td>
-                      <td className="px-4 py-3 text-right">{invoice.subtotal.toFixed(2)} AED</td>
+                      <td className="px-4 py-3 text-right">{Number(invoice.subtotal ?? 0).toFixed(2)} AED</td>
                       <td className="px-4 py-3 text-right">{invoice.vat.toFixed(2)} AED</td>
                       <td className="px-4 py-3 text-right font-semibold">{invoice.total.toFixed(2)} AED</td>
                       <td className="px-4 py-3">
@@ -388,7 +388,7 @@ export default function InvoicesPage() {
                                       <td className="px-2 py-2">{line.contractId}</td>
                                       <td className="px-2 py-2">{line.vehicleRef}</td>
                                       <td className="px-2 py-2 text-right">{line.quantity}</td>
-                                      <td className="px-2 py-2 text-right">{line.unitAmount.toFixed(2)}</td>
+                                      <td className="px-2 py-2 text-right">{Number(line.unitAmount ?? 0).toFixed(2)}</td>
                                       <td className="px-2 py-2 text-right font-medium">{(line.quantity * line.unitAmount).toFixed(2)}</td>
                                     </tr>
                                   ))}

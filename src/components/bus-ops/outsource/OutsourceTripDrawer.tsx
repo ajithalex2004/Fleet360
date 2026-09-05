@@ -431,11 +431,11 @@ function ContractRatePricingSection({
         <div className="space-y-2 p-3.5 rounded-xl bg-slate-950 border border-cyan-500/30 text-slate-200">
           <div className="flex justify-between font-bold text-white">
             <span>Contract Matrix Rate:</span>
-            <span className="font-mono text-cyan-300">AED {rateData.totalAmount.toFixed(2)}</span>
+            <span className="font-mono text-cyan-300">AED {Number(rateData.totalAmount ?? 0).toFixed(2)}</span>
           </div>
           <div className="text-[11px] text-slate-400 space-y-0.5 border-t border-slate-800/80 pt-1.5">
             <div className="flex justify-between"><span>Base Rate:</span><span>AED {rateData.baseAmount.toFixed(2)}</span></div>
-            <div className="flex justify-between"><span>VAT (5%):</span><span>AED {rateData.vatAmount.toFixed(2)}</span></div>
+            <div className="flex justify-between"><span>VAT (5%):</span><span>AED {Number(rateData.vatAmount ?? 0).toFixed(2)}</span></div>
             <div className="flex justify-between"><span>Rate Card:</span><span className="text-cyan-400 font-mono">{rateData.title || 'Standard Corridor'}</span></div>
           </div>
 

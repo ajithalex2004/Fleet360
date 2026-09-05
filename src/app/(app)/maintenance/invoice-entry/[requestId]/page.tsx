@@ -66,15 +66,15 @@ export default function InvoiceEntryPage() {
     const calculateTotals = () => {
         const partsTotal = lineItems
             .filter(item => item.type === 'PART')
-            .reduce((sum, item) => sum + item.totalPrice, 0);
+            .reduce((sum, item) => sum + Number(item.totalPrice ?? 0), 0);
 
         const laborTotal = lineItems
             .filter(item => item.type === 'LABOR')
-            .reduce((sum, item) => sum + item.totalPrice, 0);
+            .reduce((sum, item) => sum + Number(item.totalPrice ?? 0), 0);
 
         const otherCharges = lineItems
             .filter(item => item.type === 'OTHER')
-            .reduce((sum, item) => sum + item.totalPrice, 0);
+            .reduce((sum, item) => sum + Number(item.totalPrice ?? 0), 0);
 
         const subtotal = partsTotal + laborTotal + otherCharges;
         const taxAmount = calculateTax(subtotal, taxRate);

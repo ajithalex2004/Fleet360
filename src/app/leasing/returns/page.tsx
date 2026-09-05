@@ -130,7 +130,7 @@ export default function ReturnsPage() {
     );
   }
 
-  const totalDamages = returns.reduce((sum, r) => sum + r.finalCost, 0);
+  const totalDamages = returns.reduce((sum, r) => sum + Number(r.finalCost ?? 0), 0);
 
   return (
     <div className="space-y-8">

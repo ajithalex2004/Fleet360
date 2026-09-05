@@ -178,11 +178,11 @@ export default function TrafficFinesPage() {
 
   const driverLiabilityAed = fines
     .filter((f) => f.assignedTo === 'DRIVER' && f.status === 'UNPAID')
-    .reduce((s, f) => s + f.fineAmount, 0);
+    .reduce((s, f) => s + Number(f.fineAmount ?? 0), 0);
 
   const companyLiabilityAed = fines
     .filter((f) => f.assignedTo === 'COMPANY' && f.status === 'UNPAID')
-    .reduce((s, f) => s + f.fineAmount, 0);
+    .reduce((s, f) => s + Number(f.fineAmount ?? 0), 0);
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">

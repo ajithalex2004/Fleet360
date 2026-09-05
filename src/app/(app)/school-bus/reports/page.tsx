@@ -332,7 +332,7 @@ function TripEfficiencyTab({ data }: { data: ReportData['tripEfficiency'] }) {
               return (
                 <div key={d.date} className="flex flex-col items-center gap-1.5 flex-shrink-0 min-w-[56px]">
                   <span className={`text-xs font-bold ${bad ? 'text-red-400' : 'text-slate-300'}`}>
-                    {d.rate.toFixed(1)}%
+                    {Number(d.rate ?? 0).toFixed(1)}%
                   </span>
                   <div
                     className={`w-10 rounded-t-md transition-all ${bad ? 'bg-red-500/50 border border-red-500/30' : 'bg-emerald-500/50 border border-emerald-500/20'}`}
@@ -687,7 +687,7 @@ function getTabCSV(tab: TabId, data: ReportData): { filename: string; headers: s
     headers: ['Route Code','Route Name','Fee Schedule','Bus Mode','Frequency','Amount (AED)','Riders','Monthly Rev (AED)','Avg per Rider (AED)'],
     rows: data.feeAnalysis.scheduleDetails.map(r => [
       r.routeCode, r.routeName, r.feeName, r.busMode,
-      r.frequency, r.amount.toFixed(2), r.riders,
+      r.frequency, Number(r.amount ?? 0).toFixed(2), r.riders,
       r.monthlyRev.toFixed(2), r.avgPerRider.toFixed(2),
     ]),
   };
@@ -785,7 +785,7 @@ function generatePrintHTML(tab: TabId, data: ReportData, genAt: string | null): 
     ]);
     body += '<h2>Daily Boarding Rates (last 30 days)</h2>';
     body += tableBlock(['Date','Marked','Boarded','Boarding Rate %'],
-      data.tripEfficiency.dailyRates.map(d => [d.date, d.marked, d.boarded, `${d.rate.toFixed(1)}%`]));
+      data.tripEfficiency.dailyRates.map(d => [d.date, d.marked, d.boarded, `${Number(d.rate ?? 0).toFixed(1)}%`]));
     body += '<h2>Efficiency by Route &amp; Trip Type</h2>';
     body += tableBlock(
       ['Route Code','Route Name','Trip Type','Trips','Marked','Boarded','Absent','Own Transport','Boarding Rate %'],
@@ -825,7 +825,7 @@ function generatePrintHTML(tab: TabId, data: ReportData, genAt: string | null): 
       ['Route Code','Route Name','Fee Schedule','Bus Mode','Frequency','Amount (AED)','Riders','Monthly Rev (AED)','Avg/Rider (AED)'],
       data.feeAnalysis.scheduleDetails.map(r => [
         r.routeCode, r.routeName, r.feeName, r.busMode,
-        r.frequency, r.amount.toFixed(2), r.riders,
+        r.frequency, Number(r.amount ?? 0).toFixed(2), r.riders,
         r.monthlyRev.toFixed(2), r.avgPerRider.toFixed(2),
       ]),
       ['','','','','','','','green','']

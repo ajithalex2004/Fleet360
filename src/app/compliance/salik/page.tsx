@@ -115,7 +115,7 @@ export default function SalikPage() {
           <ul className="mt-2 space-y-1">
             {lowBalanceAccounts.map((acc) => (
               <li key={acc.id} className="text-slate-400 text-sm">
-                • {acc.tagNumber} ({acc.vehicle}) - AED {acc.balance.toFixed(2)}
+                • {acc.tagNumber} ({acc.vehicle}) - AED {Number(acc.balance ?? 0).toFixed(2)}
               </li>
             ))}
           </ul>
@@ -142,7 +142,7 @@ export default function SalikPage() {
                   <td className="px-6 py-4 text-sm text-white font-medium">{account.tagNumber}</td>
                   <td className="px-6 py-4 text-sm text-white">{account.vehicle}</td>
                   <td className={`px-6 py-4 text-sm font-medium ${getBalanceColor(account.balance)}`}>
-                    AED {account.balance.toFixed(2)}
+                    AED {Number(account.balance ?? 0).toFixed(2)}
                   </td>
                   <td className="px-6 py-4 text-sm text-white">
                     {account.autoRecharge ? (

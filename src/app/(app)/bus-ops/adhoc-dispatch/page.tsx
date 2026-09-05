@@ -446,7 +446,7 @@ export default function AdhocDispatchPage() {
                                   {cand.tier.replace('_', ' ')}
                                 </span>
                                 <span className="font-mono text-xs font-bold text-[var(--text-main)]">
-                                  AED {cand.estimatedCost.toFixed(2)}
+                                  AED {Number(cand.estimatedCost ?? 0).toFixed(2)}
                                 </span>
                               </div>
 

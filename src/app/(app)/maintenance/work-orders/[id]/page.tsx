@@ -810,7 +810,7 @@ export default function WorkOrderPage() {
     };
 
     const calculateTotalPartsCost = () => {
-        return workOrder?.partsUsed.reduce((sum, part) => sum + part.totalCost, 0) || 0;
+        return workOrder?.partsUsed.reduce((sum, part) => sum + Number(part.totalCost ?? 0), 0) || 0;
     };
 
     const calculateProgress = () => {

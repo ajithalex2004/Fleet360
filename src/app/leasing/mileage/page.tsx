@@ -267,8 +267,8 @@ export default function MileagePage() {
                         <td className="px-4 py-3 text-right">{overage.allowedKm.toLocaleString()}</td>
                         <td className="px-4 py-3 text-right">{overage.actualKm.toLocaleString()}</td>
                         <td className="px-4 py-3 text-right font-semibold">{overage.overage.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right">{overage.ratePerKm.toFixed(2)}</td>
-                        <td className="px-4 py-3 text-right font-semibold">{overage.amount.toFixed(2)}</td>
+                        <td className="px-4 py-3 text-right">{Number(overage.ratePerKm ?? 0).toFixed(2)}</td>
+                        <td className="px-4 py-3 text-right font-semibold">{Number(overage.amount ?? 0).toFixed(2)}</td>
                         <td className="px-4 py-3">
                           <span className={`px-2 py-1 text-xs rounded border ${getStatusBadgeColor(overage.status)}`}>
                             {overage.status}
