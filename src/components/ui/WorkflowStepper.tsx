@@ -33,7 +33,7 @@ export default function WorkflowStepper({ currentStatus, statusTimeline }: Workf
     if (isRejected) {
         return (
             <div className="w-full py-4">
-                <div className="flex items-center justify-center rounded-lg bg-red-50 p-4 text-red-700">
+                <div className="flex items-center justify-center rounded-lg bg-red-500/15 p-4 text-red-400">
                     <span className="font-medium">Request Rejected</span>
                 </div>
             </div>
@@ -53,7 +53,7 @@ export default function WorkflowStepper({ currentStatus, statusTimeline }: Workf
                             {/* Line */}
                             {index !== 0 && (
                                 <div
-                                    className={`absolute right-[50%] top-4 -mr-[50%] h-[2px] w-full ${index <= currentIndex ? 'bg-blue-600' : 'bg-slate-200'
+                                    className={`absolute right-[50%] top-4 -mr-[50%] h-[2px] w-full ${index <= currentIndex ? 'bg-blue-600' : 'bg-[var(--border-subtle)]'
                                         }`}
                                 />
                             )}
@@ -63,8 +63,8 @@ export default function WorkflowStepper({ currentStatus, statusTimeline }: Workf
                                 className={`z-10 flex h-8 w-8 items-center justify-center rounded-full border-2 transition-colors ${isCompleted
                                     ? 'border-blue-600 bg-blue-600 text-white'
                                     : isCurrent
-                                        ? 'border-blue-600 bg-white text-blue-600'
-                                        : 'border-slate-200 bg-white text-slate-300'
+                                        ? 'border-blue-600 bg-[var(--bg-surface)] text-blue-600'
+                                        : 'border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-muted)]'
                                     }`}
                             >
                                 {isCompleted ? (
@@ -79,13 +79,13 @@ export default function WorkflowStepper({ currentStatus, statusTimeline }: Workf
                             {/* Label and Timestamp */}
                             <div className="mt-2 text-center">
                                 <span
-                                    className={`block text-xs font-medium ${isCurrent ? 'text-blue-600' : isCompleted ? 'text-slate-900' : 'text-slate-400'
+                                    className={`block text-xs font-medium ${isCurrent ? 'text-blue-600' : isCompleted ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)]'
                                         }`}
                                 >
                                     {step.label}
                                 </span>
                                 {timestamp && (isCompleted || isCurrent) && (
-                                    <span className="mt-1 block text-[10px] text-slate-500">
+                                    <span className="mt-1 block text-[10px] text-[var(--text-faint)]">
                                         {formatDate(timestamp)}
                                     </span>
                                 )}

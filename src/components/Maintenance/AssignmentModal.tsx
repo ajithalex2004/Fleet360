@@ -23,26 +23,26 @@ export default function AssignmentModal({ isOpen, onClose, onConfirm, title, req
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div className="bg-slate-900 rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200 border border-white/10">
+            <div className="bg-[var(--bg-surface)] rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200 border border-[var(--border-subtle)]">
                 {/* Header */}
-                <div className="px-6 py-4 border-b border-white/10">
-                    <h3 className="text-lg font-bold text-white">{title}</h3>
+                <div className="px-6 py-4 border-b border-[var(--border-subtle)]">
+                    <h3 className="text-lg font-bold text-[var(--text-main)]">{title}</h3>
                 </div>
 
                 {/* Body */}
                 <div className="p-6 space-y-6">
                     {/* Alert Details Section */}
-                    <div className="bg-slate-800/50 rounded-lg p-4 space-y-3 border border-white/10">
-                        <h4 className="font-semibold text-white text-sm">Alert Details</h4>
+                    <div className="bg-[var(--bg-surface)]/50 rounded-lg p-4 space-y-3 border border-[var(--border-subtle)]">
+                        <h4 className="font-semibold text-[var(--text-main)] text-sm">Alert Details</h4>
 
                         <div className="grid grid-cols-2 gap-y-2 text-sm">
-                            <div className="text-slate-400">Title:</div>
-                            <div className="text-right font-medium text-white">{request.serviceType}</div>
+                            <div className="text-[var(--text-muted)]">Title:</div>
+                            <div className="text-right font-medium text-[var(--text-main)]">{request.serviceType}</div>
 
-                            <div className="text-slate-400">Type:</div>
-                            <div className="text-right text-slate-300">{request.serviceType}</div>
+                            <div className="text-[var(--text-muted)]">Type:</div>
+                            <div className="text-right text-[var(--text-muted)]">{request.serviceType}</div>
 
-                            <div className="text-slate-400">Severity:</div>
+                            <div className="text-[var(--text-muted)]">Severity:</div>
                             <div className="text-right">
                                 <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${request.priority === 'High' ? 'bg-red-500/20 text-red-300' :
                                         request.priority === 'Medium' ? 'bg-amber-500/20 text-amber-300' :
@@ -52,20 +52,20 @@ export default function AssignmentModal({ isOpen, onClose, onConfirm, title, req
                                 </span>
                             </div>
 
-                            <div className="text-slate-400">Created:</div>
-                            <div className="text-right text-slate-300">{request.date}</div>
+                            <div className="text-[var(--text-muted)]">Created:</div>
+                            <div className="text-right text-[var(--text-muted)]">{request.date}</div>
                         </div>
 
-                        <div className="pt-2 border-t border-white/10">
-                            <div className="text-slate-400 text-xs mb-1">Description:</div>
-                            <p className="text-sm text-slate-300">{request.description}</p>
+                        <div className="pt-2 border-t border-[var(--border-subtle)]">
+                            <div className="text-[var(--text-muted)] text-xs mb-1">Description:</div>
+                            <p className="text-sm text-[var(--text-muted)]">{request.description}</p>
                         </div>
                     </div>
 
                     {/* Input Section */}
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-1">
+                            <label className="block text-sm font-medium text-[var(--text-muted)] mb-1">
                                 Assign To (Email) <span className="text-red-400">*</span>
                             </label>
                             <input
@@ -74,9 +74,9 @@ export default function AssignmentModal({ isOpen, onClose, onConfirm, title, req
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 placeholder="Enter email address"
-                                className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                                className="w-full px-3 py-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                             />
-                            <p className="mt-1 text-xs text-slate-500">
+                            <p className="mt-1 text-xs text-[var(--text-faint)]">
                                 The alert will be assigned to this person and they will receive a notification.
                             </p>
                         </div>
@@ -86,7 +86,7 @@ export default function AssignmentModal({ isOpen, onClose, onConfirm, title, req
                             <button
                                 type="button"
                                 onClick={onClose}
-                                className="px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10 rounded-lg transition-colors"
+                                className="px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] rounded-lg transition-colors"
                             >
                                 Cancel
                             </button>

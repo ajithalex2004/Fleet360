@@ -2,33 +2,33 @@ import { MaintenanceStatus } from '@/types/maintenance';
 
 const statusStyles: Record<MaintenanceStatus, string> = {
 
-    [MaintenanceStatus.SUBMITTED]: 'bg-blue-50 text-blue-700 border-blue-200',
-    [MaintenanceStatus.REQUESTED]: 'bg-blue-50 text-blue-700 border-blue-200',
-    [MaintenanceStatus.ACCEPTED]: 'bg-green-50 text-green-700 border-green-200',
-    [MaintenanceStatus.REJECTED]: 'bg-red-50 text-red-700 border-red-200',
-    [MaintenanceStatus.RE_ASSIGN]: 'bg-orange-50 text-orange-700 border-orange-200',
-    [MaintenanceStatus.UNDER_ESTIMATION]: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-    [MaintenanceStatus.PENDING_ESTIMATION_APPROVAL]: 'bg-yellow-50 text-yellow-700 border-yellow-200',
-    [MaintenanceStatus.ESTIMATION_APPROVED]: 'bg-lime-50 text-lime-700 border-lime-200',
-    [MaintenanceStatus.PENDING_OPERATIONS_ACK]: 'bg-amber-50 text-amber-700 border-amber-200',
-    [MaintenanceStatus.PENDING_MAINTENANCE_APPROVAL]: 'bg-yellow-50 text-yellow-700 border-yellow-200',
-    [MaintenanceStatus.REJECTED_BY_MAINTENANCE]: 'bg-rose-50 text-rose-700 border-rose-200',
-    [MaintenanceStatus.UNDER_MAINTENANCE]: 'bg-purple-50 text-purple-700 border-purple-200',
-    [MaintenanceStatus.REPAIR_COMPLETED]: 'bg-amber-50 text-amber-700 border-amber-200',
-    [MaintenanceStatus.QUALITY_INSPECTION]: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-    [MaintenanceStatus.INSPECTION_FAILED]: 'bg-red-50 text-red-700 border-red-200',
-    [MaintenanceStatus.READY_FOR_SERVICE]: 'bg-green-50 text-green-700 border-green-200',
-    [MaintenanceStatus.MAINTENANCE_COMPLETED]: 'bg-cyan-50 text-cyan-700 border-cyan-200',
-    [MaintenanceStatus.COMPLETED]: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    [MaintenanceStatus.PENDING_INVOICE]: 'bg-orange-50 text-orange-700 border-orange-200',
-    [MaintenanceStatus.INVOICE_SUBMITTED]: 'bg-teal-50 text-teal-700 border-teal-200',
-    [MaintenanceStatus.CLOSED]: 'bg-gray-50 text-gray-700 border-gray-200',
+    [MaintenanceStatus.SUBMITTED]: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+    [MaintenanceStatus.REQUESTED]: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+    [MaintenanceStatus.ACCEPTED]: 'bg-green-500/15 text-green-400 border-green-500/30',
+    [MaintenanceStatus.REJECTED]: 'bg-red-500/15 text-red-400 border-red-500/30',
+    [MaintenanceStatus.RE_ASSIGN]: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
+    [MaintenanceStatus.UNDER_ESTIMATION]: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30',
+    [MaintenanceStatus.PENDING_ESTIMATION_APPROVAL]: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
+    [MaintenanceStatus.ESTIMATION_APPROVED]: 'bg-lime-500/15 text-lime-400 border-lime-500/30',
+    [MaintenanceStatus.PENDING_OPERATIONS_ACK]: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+    [MaintenanceStatus.PENDING_MAINTENANCE_APPROVAL]: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
+    [MaintenanceStatus.REJECTED_BY_MAINTENANCE]: 'bg-rose-500/15 text-rose-400 border-rose-500/30',
+    [MaintenanceStatus.UNDER_MAINTENANCE]: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
+    [MaintenanceStatus.REPAIR_COMPLETED]: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+    [MaintenanceStatus.QUALITY_INSPECTION]: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30',
+    [MaintenanceStatus.INSPECTION_FAILED]: 'bg-red-500/15 text-red-400 border-red-500/30',
+    [MaintenanceStatus.READY_FOR_SERVICE]: 'bg-green-500/15 text-green-400 border-green-500/30',
+    [MaintenanceStatus.MAINTENANCE_COMPLETED]: 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30',
+    [MaintenanceStatus.COMPLETED]: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+    [MaintenanceStatus.PENDING_INVOICE]: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
+    [MaintenanceStatus.INVOICE_SUBMITTED]: 'bg-teal-500/15 text-teal-400 border-teal-500/30',
+    [MaintenanceStatus.CLOSED]: 'bg-gray-500/15 text-gray-400 border-gray-500/30',
 };
 
 export default function StatusBadge({ status }: { status: MaintenanceStatus }) {
     return (
         <span
-            className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${statusStyles[status] || 'bg-gray-100 text-gray-800'
+            className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${statusStyles[status] || 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'
                 }`}
         >
             {status}
