@@ -433,7 +433,7 @@ function RouteConsolidationPageInner() {
                 {showSkipped ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
               </button>
               {showSkipped && (
-                <div className="border-t border-[var(--border-subtle)] divide-y divide-slate-800">
+                <div className="border-t border-[var(--border-subtle)] divide-y divide-[var(--border-subtle)]">
                   {groupSkipped(result.skipped).map(([reason, pairs]) => (
                     <div key={reason} className="px-4 py-3">
                       <div className="flex items-baseline justify-between">

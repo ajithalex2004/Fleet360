@@ -201,26 +201,26 @@ export default function MergeTripsDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
       <div
-        className="w-full max-w-3xl rounded-2xl border border-slate-800 bg-slate-950 shadow-2xl max-h-[90vh] overflow-hidden flex flex-col"
+        className="w-full max-w-3xl rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] shadow-2xl max-h-[90vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
+        <header className="flex items-center justify-between border-b border-[var(--border-subtle)] px-6 py-4">
           <div>
-            <h2 className="text-lg font-semibold text-white">Merge {sources.length} trips</h2>
-            <p className="mt-0.5 text-xs text-slate-400">
+            <h2 className="text-lg font-semibold text-[var(--text-main)]">Merge {sources.length} trips</h2>
+            <p className="mt-0.5 text-xs text-[var(--text-muted)]">
               Passengers reassigned to the new trip · sources marked MERGED · evaluated by Planning Constraints
             </p>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-main)]"><X className="w-5 h-5" /></button>
         </header>
 
         <div className="overflow-y-auto px-6 py-5 space-y-5">
           {/* Source summary */}
           <section>
             <SectionHeading>Sources</SectionHeading>
-            <div className="rounded-xl border border-slate-800 bg-slate-900/40">
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40">
               <table className="w-full text-sm">
-                <thead className="text-left text-xs uppercase tracking-wider text-slate-500">
+                <thead className="text-left text-xs uppercase tracking-wider text-[var(--text-faint)]">
                   <tr>
                     <th className="px-3 py-2">Trip</th>
                     <th className="px-3 py-2">Route</th>
@@ -228,16 +228,16 @@ export default function MergeTripsDialog({
                     <th className="px-3 py-2 text-right">Passengers</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800 text-slate-200">
+                <tbody className="divide-y divide-[var(--border-subtle)] text-[var(--text-main)]">
                   {sources.map((s) => (
                     <tr key={s.id}>
                       <td className="px-3 py-2 font-medium">{s.tripNumber ?? s.id.slice(0, 8)}</td>
-                      <td className="px-3 py-2 text-slate-400">{s.route?.name ?? s.routeId.slice(0, 8)}</td>
-                      <td className="px-3 py-2 text-slate-400">{fmtDateTime(s.departureTime)}</td>
+                      <td className="px-3 py-2 text-[var(--text-muted)]">{s.route?.name ?? s.routeId.slice(0, 8)}</td>
+                      <td className="px-3 py-2 text-[var(--text-muted)]">{fmtDateTime(s.departureTime)}</td>
                       <td className="px-3 py-2 text-right">{s.confirmedCount ?? 0}</td>
                     </tr>
                   ))}
-                  <tr className="bg-slate-900/60 font-semibold text-white">
+                  <tr className="bg-[var(--bg-surface)]/60 font-semibold text-[var(--text-main)]">
                     <td className="px-3 py-2" colSpan={3}>Total → merged trip</td>
                     <td className="px-3 py-2 text-right">{defaults.totalPassengers}</td>
                   </tr>
@@ -246,7 +246,7 @@ export default function MergeTripsDialog({
             </div>
             {mixedRoutes && (
               <p className="mt-2 text-xs text-amber-400">
-                Sources use different routes — merged trip will run on <code className="rounded bg-slate-800 px-1 py-0.5">{routeId.slice(0, 8)}</code>. Verify stops before applying.
+                Sources use different routes — merged trip will run on <code className="rounded bg-[var(--bg-surface)] px-1 py-0.5">{routeId.slice(0, 8)}</code>. Verify stops before applying.
               </p>
             )}
             {stopsError && (
@@ -307,12 +307,12 @@ export default function MergeTripsDialog({
                   {preview.checks.length > 0 && (
                     <ul className="mt-3 space-y-2">
                       {preview.checks.map((c, i) => (
-                        <li key={i} className="rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2 text-sm">
+                        <li key={i} className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 px-3 py-2 text-sm">
                           <div className="flex items-start gap-2">
                             <OutcomeBadge outcome={c.outcome} />
                             <div>
-                              <div className="font-medium text-slate-200">{c.code}</div>
-                              <div className="mt-0.5 text-slate-400">{c.message}</div>
+                              <div className="font-medium text-[var(--text-main)]">{c.code}</div>
+                              <div className="mt-0.5 text-[var(--text-muted)]">{c.message}</div>
                             </div>
                           </div>
                         </li>
@@ -325,11 +325,11 @@ export default function MergeTripsDialog({
           )}
         </div>
 
-        <footer className="flex items-center justify-end gap-2 border-t border-slate-800 px-6 py-4">
+        <footer className="flex items-center justify-end gap-2 border-t border-[var(--border-subtle)] px-6 py-4">
           <button
             onClick={onClose}
             disabled={applying}
-            className="rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+            className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 px-4 py-2 text-sm text-[var(--text-main)] hover:bg-[var(--bg-surface)] disabled:opacity-50"
           >
             Cancel
           </button>
@@ -402,11 +402,11 @@ function verdictMessage(p: PreviewResult): string {
 // ─── Small building blocks ──────────────────────────────────────────
 
 const inputCls =
-  'w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500';
+  'w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 px-3 py-2 text-sm text-[var(--text-main)] placeholder:text-[var(--text-faint)] focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500';
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">{children}</h3>
+    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">{children}</h3>
   );
 }
 
@@ -414,8 +414,8 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   return (
     <label className="block">
       <div className="mb-1 flex items-baseline justify-between">
-        <span className="text-xs font-medium uppercase tracking-wider text-slate-400">{label}</span>
-        {hint && <span className="text-xs text-slate-500">{hint}</span>}
+        <span className="text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">{label}</span>
+        {hint && <span className="text-xs text-[var(--text-faint)]">{hint}</span>}
       </div>
       {children}
     </label>
@@ -444,7 +444,7 @@ function OutcomeBadge({ outcome }: { outcome: PreviewCheck['outcome'] }) {
     outcome === 'BLOCK' ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
     : outcome === 'WARN' ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
     : outcome === 'PENALTY' ? 'bg-violet-500/20 text-violet-300 border-violet-500/40'
-    : 'bg-slate-500/20 text-slate-300 border-slate-500/40';
+    : 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/40';
   return (
     <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${cls}`}>
       {outcome}

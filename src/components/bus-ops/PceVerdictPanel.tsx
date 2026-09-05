@@ -55,11 +55,11 @@ export interface PceVerdictBody {
 export default function PceVerdictPanel({ body }: { body: PceVerdictBody }) {
   if (body.verdict === 'DISABLED') {
     return (
-      <div className="flex items-start gap-2 rounded-xl border border-slate-700 bg-slate-800/40 px-4 py-3 text-sm text-slate-300">
+      <div className="flex items-start gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 px-4 py-3 text-sm text-[var(--text-muted)]">
         <Info className="w-5 h-5 flex-none opacity-70" />
         <div>
           <div className="font-semibold">Planning Constraints gate disabled</div>
-          <div className="mt-0.5 opacity-80">Set <code className="rounded bg-slate-900 px-1 py-0.5 text-xs">PCE_APPLY_GATE_ENABLED</code> back to <code className="rounded bg-slate-900 px-1 py-0.5 text-xs">true</code> to re-enforce.</div>
+          <div className="mt-0.5 opacity-80">Set <code className="rounded bg-[var(--bg-surface)] px-1 py-0.5 text-xs">PCE_APPLY_GATE_ENABLED</code> back to <code className="rounded bg-[var(--bg-surface)] px-1 py-0.5 text-xs">true</code> to re-enforce.</div>
         </div>
       </div>
     );
@@ -95,12 +95,12 @@ function CheckList({ checks }: { checks: PceCheck[] }) {
   return (
     <ul className="space-y-2">
       {checks.map((c, i) => (
-        <li key={i} className="rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2 text-sm">
+        <li key={i} className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 px-3 py-2 text-sm">
           <div className="flex items-start gap-2">
             <OutcomeBadge outcome={c.outcome} penalty={c.penalty} />
             <div>
-              <div className="font-medium text-slate-200">{c.code}</div>
-              <div className="mt-0.5 text-slate-400">{c.message}</div>
+              <div className="font-medium text-[var(--text-main)]">{c.code}</div>
+              <div className="mt-0.5 text-[var(--text-muted)]">{c.message}</div>
             </div>
           </div>
         </li>
@@ -113,22 +113,22 @@ function TripList({ trips }: { trips: PceTripResult[] }) {
   return (
     <ul className="space-y-2">
       {trips.map((t) => (
-        <li key={t.tripId} className="rounded-lg border border-slate-800 bg-slate-900/40 px-3 py-2">
+        <li key={t.tripId} className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 px-3 py-2">
           <div className="flex items-start gap-2">
             <OutcomeBadge outcome={t.verdict} penalty={t.penalty} />
             <div className="flex-1">
-              <div className="font-mono text-xs text-slate-200">{t.tripId}</div>
+              <div className="font-mono text-xs text-[var(--text-main)]">{t.tripId}</div>
               {t.checks.length > 0 ? (
                 <ul className="mt-2 space-y-1">
                   {t.checks.map((c, i) => (
                     <li key={i} className="text-xs">
-                      <span className="mr-2 text-slate-400">{c.code}</span>
-                      <span className="text-slate-500">{c.message}</span>
+                      <span className="mr-2 text-[var(--text-muted)]">{c.code}</span>
+                      <span className="text-[var(--text-faint)]">{c.message}</span>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <div className="mt-0.5 text-xs text-slate-500">No individual checks fired.</div>
+                <div className="mt-0.5 text-xs text-[var(--text-faint)]">No individual checks fired.</div>
               )}
             </div>
           </div>

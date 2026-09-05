@@ -232,7 +232,7 @@ export default function EsgCarbonDashboard() {
                     <th className="p-3 text-right">Savings %</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60">
+                <tbody className="divide-y divide-[var(--border-subtle)]">
                   {data.departments.map((dept) => (
                     <tr key={dept.department} className="hover:bg-[var(--bg-surface)]/30 transition-colors">
                       <td className="p-3 font-semibold text-[var(--text-main)] flex items-center gap-2">

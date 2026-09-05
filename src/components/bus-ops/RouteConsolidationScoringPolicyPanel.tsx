@@ -112,8 +112,8 @@ export default function RouteConsolidationScoringPolicyPanel() {
   };
 
   return (
-    <details className="group rounded-lg border border-slate-800 bg-slate-900/60">
-      <summary className="cursor-pointer list-none px-3 py-2 text-xs uppercase tracking-wider text-slate-400 hover:text-slate-200 flex items-center justify-between">
+    <details className="group rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60">
+      <summary className="cursor-pointer list-none px-3 py-2 text-xs uppercase tracking-wider text-[var(--text-muted)] hover:text-[var(--text-main)] flex items-center justify-between">
         <span className="inline-flex items-center gap-1.5"><Sliders className="w-3.5 h-3.5" /> Scoring policy</span>
         <span className="text-[10px] font-normal opacity-60 inline-flex items-center gap-1">
           {!editable && <Lock className="w-3 h-3" />}
@@ -121,8 +121,8 @@ export default function RouteConsolidationScoringPolicyPanel() {
         </span>
       </summary>
 
-      <div className="border-t border-slate-800 p-3 space-y-3">
-        {loading && <p className="text-xs text-slate-500">Loading…</p>}
+      <div className="border-t border-[var(--border-subtle)] p-3 space-y-3">
+        {loading && <p className="text-xs text-[var(--text-faint)]">Loading…</p>}
         {error && <p className="text-xs text-rose-400">{error}</p>}
 
         {policy && !loading && (
@@ -147,8 +147,8 @@ export default function RouteConsolidationScoringPolicyPanel() {
                 className={inputCls} />
             </Field>
 
-            <div className="border-t border-slate-700 my-3 pt-3">
-              <p className="text-xs uppercase tracking-wider text-slate-400 mb-1">
+            <div className="border-t border-[var(--border-subtle)] my-3 pt-3">
+              <p className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-1">
                 Benefit weights <span className={benefitSumOk ? 'text-emerald-400' : 'text-rose-400'}>({benefitSum.toFixed(2)} / 1.00)</span>
               </p>
               <WeightField label="Distance saving importance" value={policy.benefitWeights.distance} editable={editable}
@@ -159,8 +159,8 @@ export default function RouteConsolidationScoringPolicyPanel() {
                 onChange={(v) => setPolicy({ ...policy, benefitWeights: { ...policy.benefitWeights, resourceRelease: v } })} />
             </div>
 
-            <div className="border-t border-slate-700 my-3 pt-3">
-              <p className="text-xs uppercase tracking-wider text-slate-400 mb-1">
+            <div className="border-t border-[var(--border-subtle)] my-3 pt-3">
+              <p className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-1">
                 Impact weights <span className={impactSumOk ? 'text-emerald-400' : 'text-rose-400'}>({impactSum.toFixed(2)} / 1.00)</span>
               </p>
               <WeightField label="Passenger impact importance" value={policy.impactWeights.passengerImpact} editable={editable}
@@ -171,12 +171,12 @@ export default function RouteConsolidationScoringPolicyPanel() {
                 onChange={(v) => setPolicy({ ...policy, impactWeights: { ...policy.impactWeights, pcePenalty: v } })} />
             </div>
 
-            <details className="rounded-lg border border-slate-800 bg-slate-950/40">
-              <summary className="cursor-pointer list-none px-3 py-2 text-[11px] uppercase tracking-wider text-slate-500 hover:text-slate-300">
+            <details className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)]/40">
+              <summary className="cursor-pointer list-none px-3 py-2 text-[11px] uppercase tracking-wider text-[var(--text-faint)] hover:text-[var(--text-muted)]">
                 Advanced scoring settings — normalization references
               </summary>
-              <div className="border-t border-slate-800 p-3 space-y-3">
-                <p className="text-[11px] text-slate-500">
+              <div className="border-t border-[var(--border-subtle)] p-3 space-y-3">
+                <p className="text-[11px] text-[var(--text-faint)]">
                   Calibration parameters — the value at which a saving/impact counts as &quot;maximum&quot; (normalized to 1.0). Misconfiguring these skews every ranking.
                 </p>
                 <Field label="Distance reference (km/day)"><input type="number" step="1" disabled={!editable}
@@ -221,14 +221,14 @@ export default function RouteConsolidationScoringPolicyPanel() {
 
 // ─── Small building blocks (local copies — page.tsx keeps its own) ──────────
 
-const inputCls = 'w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 disabled:opacity-50 disabled:cursor-not-allowed';
+const inputCls = 'w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 px-3 py-2 text-sm text-[var(--text-main)] placeholder:text-[var(--text-faint)] focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 disabled:opacity-50 disabled:cursor-not-allowed';
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block">
       <div className="mb-1 flex items-baseline justify-between">
-        <span className="text-xs font-medium uppercase tracking-wider text-slate-400">{label}</span>
-        {hint && <span className="text-[10px] text-slate-500">{hint}</span>}
+        <span className="text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">{label}</span>
+        {hint && <span className="text-[10px] text-[var(--text-faint)]">{hint}</span>}
       </div>
       {children}
     </label>

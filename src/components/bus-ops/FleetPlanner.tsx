@@ -265,48 +265,48 @@ export default function FleetPlanner() {
       <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6">
         {/* Left — inputs */}
         <div className="space-y-4">
-          <div className="rounded-2xl bg-slate-800/60 border border-white/10 p-4 space-y-4">
+          <div className="rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] p-4 space-y-4">
             <div className="grid grid-cols-2 gap-2">
               <label className="block">
-                <div className="text-[11px] uppercase tracking-wider text-slate-400 font-medium mb-1.5">Effective from</div>
+                <div className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-medium mb-1.5">Effective from</div>
                 <input type="date" value={effectiveFrom} onChange={e => setEffectiveFrom(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900/60 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-violet-500 focus:outline-none" />
               </label>
               <label className="block">
-                <div className="text-[11px] uppercase tracking-wider text-slate-400 font-medium mb-1.5">Effective to</div>
+                <div className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-medium mb-1.5">Effective to</div>
                 <input type="date" value={effectiveTo} min={effectiveFrom} onChange={e => setEffectiveTo(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900/60 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none" />
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-violet-500 focus:outline-none" />
               </label>
             </div>
-            <div className="text-[10px] text-slate-500 -mt-2">
+            <div className="text-[10px] text-[var(--text-faint)] -mt-2">
               Solver plans against <span className="font-mono">{effectiveFrom}</span>. Publish will fan the plan out to
               {' '}<span className="text-violet-300 font-semibold">{weekdaysInRange}</span> weekday{weekdaysInRange === 1 ? '' : 's'} (Sat/Sun skipped).
             </div>
 
             <label className="block">
-              <div className="text-[11px] uppercase tracking-wider text-slate-400 font-medium mb-1.5">Solver timeout (seconds)</div>
+              <div className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-medium mb-1.5">Solver timeout (seconds)</div>
               <input type="number" min={5} max={300} value={timeout} onChange={e => setTimeoutSec(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-slate-900/60 border border-white/10 text-white text-sm focus:border-violet-500 focus:outline-none" />
-              <div className="text-[10px] text-slate-500 mt-1">
+                className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-violet-500 focus:outline-none" />
+              <div className="text-[10px] text-[var(--text-faint)] mt-1">
                 Wall-clock budget for the solver. Larger fleets need more.
               </div>
             </label>
 
             <div>
-              <div className="text-[11px] uppercase tracking-wider text-slate-400 font-medium mb-1.5 flex items-center justify-between">
+              <div className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-medium mb-1.5 flex items-center justify-between">
                 <span>Vehicles ({selectedVehicleIds.size || 'all'})</span>
                 <button type="button" onClick={() => setSelectedVehicleIds(new Set())}
-                  className="text-[10px] text-slate-500 hover:text-white">clear</button>
+                  className="text-[10px] text-[var(--text-faint)] hover:text-[var(--text-main)]">clear</button>
               </div>
-              <div className="max-h-64 overflow-y-auto space-y-1 rounded-lg bg-slate-900/60 border border-white/10 p-2">
+              <div className="max-h-64 overflow-y-auto space-y-1 rounded-lg bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] p-2">
                 {vehicles.length === 0 && (
-                  <div className="text-xs text-slate-500 p-2">No vehicles found in the fleet.</div>
+                  <div className="text-xs text-[var(--text-faint)] p-2">No vehicles found in the fleet.</div>
                 )}
                 {vehicles.map(v => {
                   const label = v.licensePlate ?? v.id.slice(0, 8);
                   const seat = v.seatingCapacity != null ? `${v.seatingCapacity} seats` : 'seats unknown';
                   return (
-                    <label key={v.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-white/5 cursor-pointer text-xs text-slate-300">
+                    <label key={v.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-[var(--bg-surface-hover)] cursor-pointer text-xs text-[var(--text-muted)]">
                       <input type="checkbox"
                         checked={selectedVehicleIds.has(v.id)}
                         onChange={() => toggleVehicle(v.id)}
@@ -316,7 +316,7 @@ export default function FleetPlanner() {
                   );
                 })}
               </div>
-              <div className="text-[10px] text-slate-500 mt-1">
+              <div className="text-[10px] text-[var(--text-faint)] mt-1">
                 Leave empty to include every vehicle in the fleet.
               </div>
             </div>
@@ -342,8 +342,8 @@ export default function FleetPlanner() {
 
           {/* Recent runs */}
           {history.length > 0 && (
-            <div className="rounded-2xl bg-slate-800/60 border border-white/10 p-4">
-              <div className="flex items-center gap-2 mb-3 text-xs uppercase tracking-wider text-slate-400 font-medium">
+            <div className="rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] p-4">
+              <div className="flex items-center gap-2 mb-3 text-xs uppercase tracking-wider text-[var(--text-muted)] font-medium">
                 <History className="w-3.5 h-3.5" /> Recent runs ({history.length})
               </div>
               <div className="space-y-1 max-h-72 overflow-y-auto">
@@ -356,15 +356,15 @@ export default function FleetPlanner() {
                       type="button"
                       onClick={() => openRun(h.id)}
                       className={`w-full text-left px-2 py-1.5 rounded-lg text-xs transition-colors ${
-                        active ? 'bg-violet-500/20 border border-violet-500/40' : 'hover:bg-white/5 border border-transparent'
+                        active ? 'bg-violet-500/20 border border-violet-500/40' : 'hover:bg-[var(--bg-surface-hover)] border border-transparent'
                       }`}
                     >
                       <div className="flex items-center gap-2">
                         <cfg.Icon className={`w-3 h-3 shrink-0`} />
-                        <span className="flex-1 truncate text-slate-200">{h.targetDate.slice(0, 10)}</span>
+                        <span className="flex-1 truncate text-[var(--text-main)]">{h.targetDate.slice(0, 10)}</span>
                         {h.publishedAt && <span className="text-[9px] text-violet-300 uppercase">Published</span>}
                       </div>
-                      <div className="text-[10px] text-slate-500 truncate ml-5">
+                      <div className="text-[10px] text-[var(--text-faint)] truncate ml-5">
                         {h.status}
                         {h.metrics?.totalDistanceKm != null ? ` · ${h.metrics.totalDistanceKm} km` : ''}
                         {h.metrics?.unassignedCount != null && h.metrics.unassignedCount > 0 ? ` · ${h.metrics.unassignedCount} unassigned` : ''}
@@ -380,7 +380,7 @@ export default function FleetPlanner() {
         {/* Right — results */}
         <div className="space-y-4">
           {!run && (
-            <div className="rounded-2xl border border-dashed border-white/10 bg-slate-800/30 p-10 text-center text-sm text-slate-400">
+            <div className="rounded-2xl border border-dashed border-[var(--border-subtle)] bg-[var(--bg-surface)]/30 p-10 text-center text-sm text-[var(--text-muted)]">
               Choose a target date and press <span className="font-mono">Solve</span> to run the optimizer.
             </div>
           )}
@@ -412,11 +412,11 @@ export default function FleetPlanner() {
                 </div>
               )}
               {run.routes.length > 0 && (
-                <div className="rounded-2xl bg-slate-800/60 border border-white/10 overflow-hidden">
-                  <div className="px-4 py-2 border-b border-white/5 text-xs uppercase tracking-wider text-slate-400 font-medium">
+                <div className="rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] overflow-hidden">
+                  <div className="px-4 py-2 border-b border-[var(--border-subtle)] text-xs uppercase tracking-wider text-[var(--text-muted)] font-medium">
                     Routes ({run.routes.length})
                   </div>
-                  <div className="divide-y divide-white/5">
+                  <div className="divide-y divide-[var(--border-subtle)]">
                     {run.routes.map((r, i) => <RouteCard key={r.id} route={r} index={i} vehicles={vehicles} />)}
                   </div>
                 </div>
@@ -440,19 +440,19 @@ export default function FleetPlanner() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
           onClick={e => { if (e.target === e.currentTarget && !publishing) setPublishConfirm(false); }}
         >
-          <div className="w-full max-w-md rounded-2xl border border-violet-500/40 bg-slate-900/95 shadow-2xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-white/10 flex items-start gap-3">
+          <div className="w-full max-w-md rounded-2xl border border-violet-500/40 bg-[var(--bg-surface)]/95 shadow-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-[var(--border-subtle)] flex items-start gap-3">
               <div className="w-10 h-10 rounded-full bg-violet-500/15 border border-violet-500/40 flex items-center justify-center shrink-0">
                 <Send className="w-5 h-5 text-violet-300" />
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="text-lg font-bold text-white">Publish to Trip Schedules?</h3>
-                <p className="text-sm text-slate-400 mt-0.5">
+                <h3 className="text-lg font-bold text-[var(--text-main)]">Publish to Trip Schedules?</h3>
+                <p className="text-sm text-[var(--text-muted)] mt-0.5">
                   Creates one TripSchedule per (solved-route × weekday) in the effective range from {new Date(run.targetDate).toLocaleDateString()}. Weekends skipped.
                 </p>
               </div>
             </div>
-            <div className="px-5 py-4 space-y-2 text-sm text-slate-300">
+            <div className="px-5 py-4 space-y-2 text-sm text-[var(--text-muted)]">
               <p>
                 Each solver-route becomes one scheduled trip. The parent route is picked by
                 most-common-passenger — this is a heuristic, not an exact match.
@@ -461,9 +461,9 @@ export default function FleetPlanner() {
                 Existing schedules for the same date are <span className="font-semibold">not</span> cancelled automatically. Review the Schedules page after publish and cancel any duplicates manually.
               </div>
             </div>
-            <div className="px-5 py-4 border-t border-white/10 flex items-center justify-end gap-2">
+            <div className="px-5 py-4 border-t border-[var(--border-subtle)] flex items-center justify-end gap-2">
               <button type="button" onClick={() => setPublishConfirm(false)} disabled={publishing}
-                className="px-4 py-2 rounded-lg border border-white/10 text-slate-300 hover:bg-white/5 text-sm font-medium disabled:opacity-50">
+                className="px-4 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] text-sm font-medium disabled:opacity-50">
                 Cancel
               </button>
               <button type="button" onClick={publish} disabled={publishing}
@@ -502,9 +502,9 @@ function StatusHeader({ run }: { run: Run }) {
 function MetricsHeader({ run }: { run: Run }) {
   const m = run.metrics ?? {};
   const chip = (label: string, value: React.ReactNode) => (
-    <div className="rounded-xl bg-slate-800/60 border border-white/10 px-3 py-2">
-      <div className="text-[10px] uppercase tracking-wider text-slate-500 font-medium">{label}</div>
-      <div className="text-lg font-semibold text-white">{value}</div>
+    <div className="rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] px-3 py-2">
+      <div className="text-[10px] uppercase tracking-wider text-[var(--text-faint)] font-medium">{label}</div>
+      <div className="text-lg font-semibold text-[var(--text-main)]">{value}</div>
     </div>
   );
   return (
@@ -523,22 +523,22 @@ function RouteCard({ route, index, vehicles }: { route: RunRoute; index: number;
   const vehicleLabel = vehicles.find(v => v.id === route.vehicleId)?.licensePlate ?? route.vehicleId.slice(0, 8);
   return (
     <details className="group">
-      <summary className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-white/5">
+      <summary className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-[var(--bg-surface-hover)]">
         <span className={`w-3 h-3 rounded-full ${dot}`} />
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium text-white">Vehicle {vehicleLabel}</div>
-          <div className="text-[11px] text-slate-500">
+          <div className="text-sm font-medium text-[var(--text-main)]">Vehicle {vehicleLabel}</div>
+          <div className="text-[11px] text-[var(--text-faint)]">
             {route.stops.length} stops · {route.totalPassengers} pax · {route.totalDistanceKm} km · {route.totalDurationMin} min
           </div>
         </div>
       </summary>
       <div className="px-4 pb-3 space-y-1">
         {route.stops.map(s => (
-          <div key={s.id} className="flex items-center gap-2 text-xs text-slate-300 py-1">
-            <span className="w-5 h-5 rounded-full bg-slate-700 text-slate-200 text-[10px] flex items-center justify-center font-mono">{s.sequence}</span>
+          <div key={s.id} className="flex items-center gap-2 text-xs text-[var(--text-muted)] py-1">
+            <span className="w-5 h-5 rounded-full bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-[10px] flex items-center justify-center font-mono">{s.sequence}</span>
             <span className="flex-1 truncate">{s.label}</span>
-            <span className="text-slate-500">{s.passengerCount} pax</span>
-            <span className="text-slate-500 tabular-nums">{new Date(s.arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            <span className="text-[var(--text-faint)]">{s.passengerCount} pax</span>
+            <span className="text-[var(--text-faint)] tabular-nums">{new Date(s.arrivalTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
           </div>
         ))}
       </div>
@@ -580,7 +580,7 @@ function statusStyle(status: RunStatus) {
     case 'FAILED':
       return { title: 'Failed', Icon: XCircle, wrap: 'border-rose-500/40 bg-rose-500/10 text-rose-200' };
     case 'CANCELLED':
-      return { title: 'Cancelled', Icon: Ban, wrap: 'border-slate-500/40 bg-slate-500/10 text-slate-200' };
+      return { title: 'Cancelled', Icon: Ban, wrap: 'border-slate-500/40 bg-slate-500/10 text-[var(--text-main)]' };
     case 'PUBLISHED':
       return { title: 'Published to schedules', Icon: Clock, wrap: 'border-violet-500/40 bg-violet-500/10 text-violet-200' };
   }

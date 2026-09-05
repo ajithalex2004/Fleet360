@@ -341,7 +341,7 @@ export default function ShiftSlaMonitorPage() {
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className="divide-y divide-[var(--border-subtle)]">
               {loading ? (
                 <tr>
                   <td colSpan={10} className="py-12 text-center text-[var(--text-faint)]">

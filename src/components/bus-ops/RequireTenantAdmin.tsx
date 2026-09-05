@@ -40,15 +40,15 @@ export default function RequireTenantAdmin({ resource, children }: { resource: s
   const { allowed, loading } = useBusOpsAdminAccess(resource);
 
   if (loading) {
-    return <div className="p-10 text-center text-slate-500 text-sm">Checking access…</div>;
+    return <div className="p-10 text-center text-[var(--text-faint)] text-sm">Checking access…</div>;
   }
 
   if (!allowed) {
     return (
-      <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/40 p-12 text-center">
-        <ShieldAlert className="mx-auto h-10 w-10 text-slate-600 mb-3" />
-        <p className="text-slate-300">This feature is restricted to Tenant Administrators.</p>
-        <p className="mt-1 text-xs text-slate-500">Contact your tenant admin if you need access.</p>
+      <div className="rounded-2xl border border-dashed border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-12 text-center">
+        <ShieldAlert className="mx-auto h-10 w-10 text-[var(--text-faint)] mb-3" />
+        <p className="text-[var(--text-muted)]">This feature is restricted to Tenant Administrators.</p>
+        <p className="mt-1 text-xs text-[var(--text-faint)]">Contact your tenant admin if you need access.</p>
       </div>
     );
   }

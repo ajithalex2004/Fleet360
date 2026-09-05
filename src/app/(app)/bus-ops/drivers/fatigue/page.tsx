@@ -232,7 +232,7 @@ export default function DriverFatigueDashboard() {
                       <th className="p-3 text-right">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/60">
+                  <tbody className="divide-y divide-[var(--border-subtle)]">
                     {filteredEvaluations.map((item) => {
                       const restHours = item.metrics.restTimeSinceLastShiftHours;
                       const isBlock = item.severity === 'BLOCK';

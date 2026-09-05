@@ -458,15 +458,15 @@ export default function RoutesBulkImportModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl max-h-[92vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-4xl max-h-[92vh] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)]">
           <div>
-            <h2 className="text-xl font-bold text-white">Import Routes</h2>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <h2 className="text-xl font-bold text-[var(--text-main)]">Import Routes</h2>
+            <p className="text-xs text-[var(--text-muted)] mt-0.5">
               Each row becomes two routes (morning outbound + evening inbound). Origin/destination lat/lng go on RouteStop rows so the Fleet Planner can use them immediately.
             </p>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white">
+          <button onClick={onClose} className="p-1 rounded-lg hover:bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--text-main)]">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -475,7 +475,7 @@ export default function RoutesBulkImportModal({
           <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="inline-flex items-center gap-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white px-4 py-2 text-sm font-semibold"
+              className="inline-flex items-center gap-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-[var(--text-main)] px-4 py-2 text-sm font-semibold"
             >
               <Upload className="w-4 h-4" /> Choose file (.csv or .xlsx)
             </button>
@@ -488,17 +488,17 @@ export default function RoutesBulkImportModal({
             />
             <button
               onClick={downloadTemplateXlsx}
-              className="inline-flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 text-sm"
+              className="inline-flex items-center gap-2 rounded-xl bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] px-3 py-2 text-sm"
             >
               <Download className="w-4 h-4" /> Download Template (.xlsx)
             </button>
             <button
               onClick={downloadTemplateCsv}
-              className="inline-flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 text-sm"
+              className="inline-flex items-center gap-2 rounded-xl bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] px-3 py-2 text-sm"
             >
               <Download className="w-4 h-4" /> Download Template (.csv)
             </button>
-            {fileName && <span className="text-xs text-slate-400 truncate">{fileName}</span>}
+            {fileName && <span className="text-xs text-[var(--text-muted)] truncate">{fileName}</span>}
           </div>
 
           {error && (
@@ -542,13 +542,13 @@ export default function RoutesBulkImportModal({
               )}
 
               {validRows.length > 0 && (
-                <div className="rounded-lg border border-slate-700 overflow-hidden">
-                  <div className="px-3 py-2 border-b border-slate-700 text-xs text-slate-400 flex items-center justify-between">
+                <div className="rounded-lg border border-[var(--border-subtle)] overflow-hidden">
+                  <div className="px-3 py-2 border-b border-[var(--border-subtle)] text-xs text-[var(--text-muted)] flex items-center justify-between">
                     <span>Preview — will create {validRows.length * 2} routes ({validRows.length} outbound + {validRows.length} inbound)</span>
                   </div>
                   <div className="max-h-56 overflow-auto">
                     <table className="w-full text-xs">
-                      <thead className="bg-slate-800/60 text-slate-300 sticky top-0">
+                      <thead className="bg-[var(--bg-surface)]/60 text-[var(--text-muted)] sticky top-0">
                         <tr>
                           <th className="text-left px-2 py-1.5">Row</th>
                           <th className="text-left px-2 py-1.5">From → Unit</th>
@@ -558,19 +558,19 @@ export default function RoutesBulkImportModal({
                           <th className="text-left px-2 py-1.5">Days</th>
                         </tr>
                       </thead>
-                      <tbody className="text-slate-200">
+                      <tbody className="text-[var(--text-main)]">
                         {validRows.slice(0, 100).map(r => (
-                          <tr key={r.__row} className="border-t border-slate-800">
-                            <td className="px-2 py-1 font-mono text-slate-500">{r.__row}</td>
+                          <tr key={r.__row} className="border-t border-[var(--border-subtle)]">
+                            <td className="px-2 py-1 font-mono text-[var(--text-faint)]">{r.__row}</td>
                             <td className="px-2 py-1 truncate max-w-[220px]">{r.fromLocation} → {r.unitName}</td>
                             <td className="px-2 py-1">{r.pickupTime} → {r.dropOffTime}</td>
                             <td className="px-2 py-1">{r.returnPickupTime}{r.returnArrivalTime ? ` → ${r.returnArrivalTime}` : ''}</td>
                             <td className="px-2 py-1">{r.capacity ?? '—'}</td>
-                            <td className="px-2 py-1 text-slate-400">{r.daysOfWeek ?? '—'}</td>
+                            <td className="px-2 py-1 text-[var(--text-muted)]">{r.daysOfWeek ?? '—'}</td>
                           </tr>
                         ))}
                         {validRows.length > 100 && (
-                          <tr><td colSpan={6} className="px-2 py-1.5 text-slate-500 text-center">…and {validRows.length - 100} more rows</td></tr>
+                          <tr><td colSpan={6} className="px-2 py-1.5 text-[var(--text-faint)] text-center">…and {validRows.length - 100} more rows</td></tr>
                         )}
                       </tbody>
                     </table>
@@ -638,15 +638,15 @@ export default function RoutesBulkImportModal({
           )}
         </div>
 
-        <div className="border-t border-slate-800 px-6 py-4 flex items-center justify-between gap-3 bg-slate-900/70">
-          <div className="text-xs text-slate-500">
+        <div className="border-t border-[var(--border-subtle)] px-6 py-4 flex items-center justify-between gap-3 bg-[var(--bg-surface)]/70">
+          <div className="text-xs text-[var(--text-faint)]">
             {rows.length > 0 ? `${validRows.length}/${rows.length} rows ready` : 'No file loaded'}
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={runPreview}
               disabled={validRows.length === 0 || committing}
-              className="px-3 py-2 text-sm rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="px-3 py-2 text-sm rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Server preview
             </button>
@@ -660,7 +660,7 @@ export default function RoutesBulkImportModal({
             </button>
             <button
               onClick={onClose}
-              className="px-3 py-2 text-sm rounded-lg text-slate-300 hover:bg-slate-800"
+              className="px-3 py-2 text-sm rounded-lg text-[var(--text-muted)] hover:bg-[var(--bg-surface)]"
             >
               {commitResult ? 'Close' : 'Cancel'}
             </button>
@@ -673,7 +673,7 @@ export default function RoutesBulkImportModal({
 
 function StatTile({ label, value, tone }: { label: string; value: number; tone: 'slate' | 'emerald' | 'rose' }) {
   const toneMap = {
-    slate: 'border-slate-700 bg-slate-800/40 text-slate-100',
+    slate: 'border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 text-[var(--text-main)]',
     emerald: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
     rose: 'border-rose-500/30 bg-rose-500/10 text-rose-200',
   } as const;

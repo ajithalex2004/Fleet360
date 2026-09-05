@@ -10,8 +10,8 @@
  *
  * Generic over the row type. Columns declare an `accessor` (used for sorting,
  * filtering, search and CSV) and an optional `render` for the cell. Pure client
- * state — no server round-trips, no external grid library. Dark-themed to match
- * Bus Ops and platform modules.
+ * state — no server round-trips, no external grid library. Styled with the
+ * app's CSS custom properties so it follows the Light/Dark toggle.
  */
 import React, { useMemo, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
@@ -150,13 +150,13 @@ interface DataGridProps<T> {
 }
 
 const KPI_ACCENTS: Record<KpiAccent, { bg: string; text: string }> = {
-  default: { bg: 'bg-slate-500/15',   text: 'text-slate-200'   },
+  default: { bg: 'bg-slate-500/15',   text: 'text-[var(--text-main)]'   },
   violet:  { bg: 'bg-violet-500/15',  text: 'text-violet-300'  },
   emerald: { bg: 'bg-emerald-500/15', text: 'text-emerald-300' },
   sky:     { bg: 'bg-sky-500/15',     text: 'text-sky-300'     },
   amber:   { bg: 'bg-amber-500/15',   text: 'text-amber-300'   },
   rose:    { bg: 'bg-rose-500/15',    text: 'text-rose-300'    },
-  slate:   { bg: 'bg-slate-500/15',   text: 'text-slate-400'   },
+  slate:   { bg: 'bg-slate-500/15',   text: 'text-[var(--text-muted)]'   },
 };
 
 const cmp = (a: unknown, b: unknown): number => {
@@ -362,9 +362,9 @@ export default function FleetDataGrid<T>({
             const a = KPI_ACCENTS[k.accent ?? 'default'];
             const Icon = k.icon;
             return (
-              <div key={i} className="rounded-2xl bg-slate-900/60 border border-white/10 p-4 hover:border-white/20 transition-colors">
+              <div key={i} className="rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] p-4 hover:border-[var(--border-strong)] transition-colors">
                 <div className="flex items-start justify-between gap-2 mb-2">
-                  <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">{k.label}</span>
+                  <span className="text-[11px] uppercase tracking-wider text-[var(--text-faint)] font-medium">{k.label}</span>
                   {Icon && (
                     <div className={`w-7 h-7 rounded-lg ${a.bg} flex items-center justify-center`}>
                       <Icon className={`w-3.5 h-3.5 ${a.text}`} strokeWidth={2} />
@@ -372,7 +372,7 @@ export default function FleetDataGrid<T>({
                   )}
                 </div>
                 <div className={`text-3xl font-bold ${a.text}`}>{k.value}</div>
-                {k.sub && <div className="text-xs text-slate-500 mt-1">{k.sub}</div>}
+                {k.sub && <div className="text-xs text-[var(--text-faint)] mt-1">{k.sub}</div>}
               </div>
             );
           })}
@@ -383,8 +383,8 @@ export default function FleetDataGrid<T>({
       {filterChips && filterChips.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           {filterChips.map(chip => (
-            <div key={chip.key} className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-slate-900/50 px-2 py-1">
-              <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium mr-0.5">{chip.label}</span>
+            <div key={chip.key} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 px-2 py-1">
+              <span className="text-[11px] uppercase tracking-wider text-[var(--text-faint)] font-medium mr-0.5">{chip.label}</span>
               {chip.options.map(opt => {
                 const active = chipValues[chip.key]?.has(opt.value) ?? false;
                 return (
@@ -392,7 +392,7 @@ export default function FleetDataGrid<T>({
                     className={`px-2 py-0.5 rounded-md text-xs transition-colors ${
                       active
                         ? 'bg-violet-500/25 text-violet-100 border border-violet-500/60'
-                        : 'bg-slate-800/50 text-slate-300 border border-white/10 hover:bg-slate-800'
+                        : 'bg-[var(--bg-surface)]/50 text-[var(--text-muted)] border border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]'
                     }`}
                   >
                     {opt.label}
@@ -404,19 +404,19 @@ export default function FleetDataGrid<T>({
         </div>
       )}
 
-      <div className={`rounded-2xl border border-white/10 bg-slate-900/50 overflow-hidden`}>
+      <div className={`rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 overflow-hidden`}>
       {/* Toolbar */}
-      <div className="flex items-center gap-2 flex-wrap px-3 py-2.5 border-b border-white/10 bg-slate-900/60">
-        {title && <span className="text-sm font-semibold text-white mr-1">{title}</span>}
-        <span className="text-xs text-slate-500">{processed.length} of {rows.length}</span>
+      <div className="flex items-center gap-2 flex-wrap px-3 py-2.5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/60">
+        {title && <span className="text-sm font-semibold text-[var(--text-main)] mr-1">{title}</span>}
+        <span className="text-xs text-[var(--text-faint)]">{processed.length} of {rows.length}</span>
 
         <div className="flex-1" />
 
         {tb.search && (
-          <div className="flex items-center gap-1.5 bg-slate-950/60 border border-white/10 rounded-lg px-2.5 py-1.5 focus-within:border-violet-500/40 w-44">
-            <SearchIcon className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+          <div className="flex items-center gap-1.5 bg-[var(--bg-canvas)]/60 border border-[var(--border-subtle)] rounded-lg px-2.5 py-1.5 focus-within:border-violet-500/40 w-44">
+            <SearchIcon className="w-3.5 h-3.5 text-[var(--text-faint)] shrink-0" />
             <input value={globalSearch} onChange={e => setGlobalSearch(e.target.value)} placeholder="Search…"
-              className="flex-1 min-w-0 bg-transparent border-0 outline-none p-0 text-sm text-white placeholder-slate-600" />
+              className="flex-1 min-w-0 bg-transparent border-0 outline-none p-0 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)]" />
           </div>
         )}
 
@@ -441,21 +441,21 @@ export default function FleetDataGrid<T>({
             {sortMenuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setSortMenuOpen(false)} />
-                <div className="absolute right-0 mt-1 z-20 w-56 rounded-xl border border-white/10 bg-slate-900 shadow-xl p-1.5">
-                  <div className="text-[10px] uppercase tracking-wider text-slate-500 px-2 py-1">Sort by</div>
+                <div className="absolute right-0 mt-1 z-20 w-56 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-xl p-1.5">
+                  <div className="text-[10px] uppercase tracking-wider text-[var(--text-faint)] px-2 py-1">Sort by</div>
                   {sortableColumns.map(c => {
                     const isThisCol = sort?.key === c.key;
                     return (
                       <div key={c.key} className="flex items-center gap-1">
                         <button type="button"
                           onClick={() => { setSort({ key: c.key, dir: 'asc' }); setSortMenuOpen(false); }}
-                          className={`flex-1 text-left px-2 py-1.5 rounded-lg text-sm hover:bg-white/5 ${isThisCol && sort!.dir === 'asc' ? 'text-violet-200' : 'text-slate-300'}`}
+                          className={`flex-1 text-left px-2 py-1.5 rounded-lg text-sm hover:bg-[var(--bg-surface-hover)] ${isThisCol && sort!.dir === 'asc' ? 'text-violet-200' : 'text-[var(--text-muted)]'}`}
                         >
                           <ArrowUp className="inline w-3 h-3 mr-1" />{c.header}
                         </button>
                         <button type="button"
                           onClick={() => { setSort({ key: c.key, dir: 'desc' }); setSortMenuOpen(false); }}
-                          className={`px-2 py-1.5 rounded-lg text-sm hover:bg-white/5 ${isThisCol && sort!.dir === 'desc' ? 'text-violet-200' : 'text-slate-400'}`}
+                          className={`px-2 py-1.5 rounded-lg text-sm hover:bg-[var(--bg-surface-hover)] ${isThisCol && sort!.dir === 'desc' ? 'text-violet-200' : 'text-[var(--text-muted)]'}`}
                           title={`Sort ${c.header} descending`}
                         >
                           <ArrowDown className="w-3 h-3" />
@@ -465,7 +465,7 @@ export default function FleetDataGrid<T>({
                   })}
                   {sort && (
                     <button type="button" onClick={() => { setSort(null); setSortMenuOpen(false); }}
-                      className="w-full mt-1 text-xs text-slate-400 hover:text-white px-2 py-1.5 rounded-lg hover:bg-white/5 border-t border-white/5">
+                      className="w-full mt-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] px-2 py-1.5 rounded-lg hover:bg-[var(--bg-surface-hover)] border-t border-[var(--border-subtle)]">
                       Clear sort
                     </button>
                   )}
@@ -483,9 +483,9 @@ export default function FleetDataGrid<T>({
             {colMenuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setColMenuOpen(false)} />
-                <div className="absolute right-0 mt-1 z-20 w-52 rounded-xl border border-white/10 bg-slate-900 shadow-xl p-1.5">
+                <div className="absolute right-0 mt-1 z-20 w-52 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-xl p-1.5">
                   {columns.map(c => (
-                    <label key={c.key} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer text-sm text-slate-300">
+                    <label key={c.key} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[var(--bg-surface-hover)] cursor-pointer text-sm text-[var(--text-muted)]">
                       <input type="checkbox" checked={!hidden.has(c.key)} onChange={() => setHidden(prev => {
                         const next = new Set(prev);
                         if (next.has(c.key)) next.delete(c.key); else next.add(c.key);
@@ -513,7 +513,7 @@ export default function FleetDataGrid<T>({
         )}
 
         {activeFilterCount > 0 && (
-          <button type="button" onClick={clearAll} className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-white px-2 py-1.5">
+          <button type="button" onClick={clearAll} className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] px-2 py-1.5">
             <X className="w-3.5 h-3.5" /> Clear
           </button>
         )}
@@ -525,7 +525,7 @@ export default function FleetDataGrid<T>({
       <div className="overflow-x-auto">
         <table className="w-full text-sm" style={{ tableLayout: 'auto' }}>
           <thead>
-            <tr className="border-b border-white/10 text-slate-500 text-[11px] uppercase tracking-wider bg-slate-900/40">
+            <tr className="border-b border-[var(--border-subtle)] text-[var(--text-faint)] text-[11px] uppercase tracking-wider bg-[var(--bg-surface)]/40">
               {expandable && (
                 <th className="px-3 py-2.5 w-8" />
               )}
@@ -550,14 +550,14 @@ export default function FleetDataGrid<T>({
                 const isSorted = sort?.key === c.key;
                 return (
                   <th key={c.key} style={c.width ? { width: c.width } : undefined}
-                    className={`${alignClass(c.align)} px-3 py-2.5 font-medium select-none ${c.headerClassName ?? ''} ${sortable ? 'cursor-pointer hover:text-slate-300' : ''}`}
+                    className={`${alignClass(c.align)} px-3 py-2.5 font-medium select-none ${c.headerClassName ?? ''} ${sortable ? 'cursor-pointer hover:text-[var(--text-muted)]' : ''}`}
                     onClick={sortable ? () => toggleSort(c.key) : undefined}>
                     <span className="inline-flex items-center gap-1">
                       {c.header}
                       {sortable && (
                         isSorted
                           ? (sort!.dir === 'asc' ? <ArrowUp className="w-3 h-3 text-violet-300" /> : <ArrowDown className="w-3 h-3 text-violet-300" />)
-                          : <ChevronsUpDown className="w-3 h-3 text-slate-600" />
+                          : <ChevronsUpDown className="w-3 h-3 text-[var(--text-faint)]" />
                       )}
                     </span>
                   </th>
@@ -566,7 +566,7 @@ export default function FleetDataGrid<T>({
             </tr>
 
             {showFilters && (
-              <tr className="border-b border-white/10 bg-slate-950/40">
+              <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-canvas)]/40">
                 {expandable && <th className="px-2 py-1.5" />}
                 {numbered && <th className="px-2 py-1.5" />}
                 {selectable && <th className="px-2 py-1.5" />}
@@ -576,14 +576,14 @@ export default function FleetDataGrid<T>({
                     <th key={c.key} className="px-2 py-1.5">
                       {!filterable ? null : c.filter === 'select' ? (
                         <select value={colFilters[c.key] ?? ''} onChange={e => setColFilters(f => ({ ...f, [c.key]: e.target.value }))}
-                          className="w-full bg-slate-900/70 border border-white/10 rounded-md px-2 py-1 text-xs text-slate-200 font-normal normal-case focus:outline-none focus:border-violet-500/40">
+                          className="w-full bg-[var(--bg-surface)]/70 border border-[var(--border-subtle)] rounded-md px-2 py-1 text-xs text-[var(--text-main)] font-normal normal-case focus:outline-none focus:border-violet-500/40">
                           <option value="">All</option>
                           {(selectValues[c.key] ?? []).map(v => <option key={v} value={v}>{v}</option>)}
                         </select>
                       ) : (
                         <input value={colFilters[c.key] ?? ''} onChange={e => setColFilters(f => ({ ...f, [c.key]: e.target.value }))}
                           placeholder="Filter…"
-                          className="w-full bg-slate-900/70 border border-white/10 rounded-md px-2 py-1 text-xs text-slate-200 font-normal normal-case placeholder-slate-600 focus:outline-none focus:border-violet-500/40" />
+                          className="w-full bg-[var(--bg-surface)]/70 border border-[var(--border-subtle)] rounded-md px-2 py-1 text-xs text-[var(--text-main)] font-normal normal-case placeholder-[var(--text-faint)] focus:outline-none focus:border-violet-500/40" />
                       )}
                     </th>
                   );
@@ -592,13 +592,13 @@ export default function FleetDataGrid<T>({
             )}
           </thead>
 
-          <tbody className="divide-y divide-white/5">
+          <tbody className="divide-y divide-[var(--border-subtle)]">
             {loading ? (
               [...Array(6)].map((_, i) => (
-                <tr key={i}><td colSpan={totalColCount} className="px-3 py-2"><div className="h-6 bg-slate-800/50 rounded animate-pulse" /></td></tr>
+                <tr key={i}><td colSpan={totalColCount} className="px-3 py-2"><div className="h-6 bg-[var(--bg-surface)]/50 rounded animate-pulse" /></td></tr>
               ))
             ) : processed.length === 0 ? (
-              <tr><td colSpan={totalColCount} className="text-center text-slate-500 py-12">{emptyMessage}</td></tr>
+              <tr><td colSpan={totalColCount} className="text-center text-[var(--text-faint)] py-12">{emptyMessage}</td></tr>
             ) : processed.map((row, i) => {
               const id = getRowId(row);
               const isSelected = selection.has(id);
@@ -615,12 +615,12 @@ export default function FleetDataGrid<T>({
                       rowClassName ? rowClassName(row) : (selectedId === id ? 'bg-violet-500/10' : isSelected ? 'bg-violet-500/5' : 'hover:bg-white/[0.03]')
                     }`}>
                     {expandable && (
-                      <td className={`px-3 ${pad} text-slate-500`} onClick={isExpandableRow ? e => { e.stopPropagation(); toggleExpanded(id); } : undefined}>
+                      <td className={`px-3 ${pad} text-[var(--text-faint)]`} onClick={isExpandableRow ? e => { e.stopPropagation(); toggleExpanded(id); } : undefined}>
                         {isExpandableRow && (isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />)}
                       </td>
                     )}
                     {numbered && (
-                      <td className={`px-3 ${pad} text-left text-slate-500 tabular-nums`}>{numberRender ? numberRender(row, i + 1) : i + 1}</td>
+                      <td className={`px-3 ${pad} text-left text-[var(--text-faint)] tabular-nums`}>{numberRender ? numberRender(row, i + 1) : i + 1}</td>
                     )}
                     {selectable && (
                       <td className={`px-3 ${pad}`} onClick={e => e.stopPropagation()}>
@@ -634,14 +634,14 @@ export default function FleetDataGrid<T>({
                       </td>
                     )}
                     {visibleColumns.map(c => (
-                      <td key={c.key} className={`px-3 ${pad} ${alignClass(c.align)} ${c.cellClassName ?? 'text-slate-300'}`}>
+                      <td key={c.key} className={`px-3 ${pad} ${alignClass(c.align)} ${c.cellClassName ?? 'text-[var(--text-muted)]'}`}>
                         {c.render ? c.render(row) : (() => { const v = c.accessor?.(row); return v == null || v === '' ? '—' : String(v); })()}
                       </td>
                     ))}
                   </tr>
                   {isExpanded && (
                     <tr>
-                      <td colSpan={totalColCount} className="bg-slate-900/60 px-6 py-4">{detail}</td>
+                      <td colSpan={totalColCount} className="bg-[var(--bg-surface)]/60 px-6 py-4">{detail}</td>
                     </tr>
                   )}
                 </React.Fragment>
@@ -659,7 +659,7 @@ function ToolbarButton({ active, onClick, title, children }: { active?: boolean;
   return (
     <button type="button" onClick={onClick} title={title}
       className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition-colors ${
-        active ? 'border-violet-500/40 bg-violet-500/10 text-violet-200' : 'border-white/10 text-slate-300 hover:bg-white/5'
+        active ? 'border-violet-500/40 bg-violet-500/10 text-violet-200' : 'border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]'
       }`}>
       {children}
     </button>

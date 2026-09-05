@@ -86,7 +86,7 @@ export default function RowActionsMenu({
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
-        className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"
+        className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-main)]"
       >
         <MoreHorizontal className="h-4 w-4" />
       </button>
@@ -97,7 +97,7 @@ export default function RowActionsMenu({
           role="menu"
           onClick={(e) => e.stopPropagation()}
           style={{ position: 'fixed', top: pos.top, left: pos.left, width }}
-          className="z-50 rounded-xl border border-white/10 bg-slate-950 py-1 shadow-2xl"
+          className="z-50 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] py-1 shadow-2xl"
         >
           {actions.map((a) => (
             <button
@@ -110,7 +110,7 @@ export default function RowActionsMenu({
                 a.onClick();
               }}
               className={`block w-full px-3 py-2 text-left text-sm disabled:opacity-40 disabled:cursor-not-allowed ${
-                a.tone === 'danger' ? 'text-rose-300 hover:bg-rose-500/10' : 'text-slate-200 hover:bg-white/5'
+                a.tone === 'danger' ? 'text-rose-300 hover:bg-rose-500/10' : 'text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]'
               }`}
             >
               {a.label}

@@ -21,8 +21,8 @@ interface ExistingStop { name: string; lat: number; lng: number; landmark: strin
 const MapView = dynamic(() => import('./GoogleRouteOptimizerMap'), {
   ssr: false,
   loading: () => (
-    <div className="h-96 rounded-2xl bg-slate-900/60 border border-white/10 flex items-center justify-center">
-      <div className="text-slate-500 text-sm animate-pulse">Loading map…</div>
+    <div className="h-96 rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] flex items-center justify-center">
+      <div className="text-[var(--text-faint)] text-sm animate-pulse">Loading map…</div>
     </div>
   ),
 });
@@ -93,7 +93,7 @@ const MODE_CONFIG = {
     accent:      'text-amber-400',
     border:      'border-amber-500/30',
     bg:          'bg-amber-500/10',
-    btnBg:       'bg-amber-500 hover:bg-amber-400 text-white',
+    btnBg:       'bg-amber-500 hover:bg-amber-400 text-[var(--text-main)]',
     stopLabel:   'Delivery Stop',
     originLabel: 'Pickup / Origin Warehouse',
     destLabel:   'Final Destination',
@@ -106,7 +106,7 @@ const MODE_CONFIG = {
     accent:      'text-purple-400',
     border:      'border-purple-500/30',
     bg:          'bg-purple-500/10',
-    btnBg:       'bg-purple-600 hover:bg-purple-500 text-white',
+    btnBg:       'bg-purple-600 hover:bg-purple-500 text-[var(--text-main)]',
     stopLabel:   'Pickup Zone/Stop Point',
     originLabel: 'Origin/Start Point',
     destLabel:   'Destination',
@@ -168,19 +168,19 @@ function AddressSearch({
 
   return (
     <div className="relative">
-      <div className="flex items-center gap-2 bg-slate-800/60 border border-white/10 rounded-xl px-3 py-2.5 focus-within:border-white/30 transition-colors">
-        <span className="text-slate-500 text-sm">📍</span>
+      <div className="flex items-center gap-2 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 focus-within:border-[var(--border-strong)] transition-colors">
+        <span className="text-[var(--text-faint)] text-sm">📍</span>
         <input
           type="text"
           value={query}
           onChange={e => { setQuery(e.target.value); search(e.target.value); }}
           placeholder={placeholder}
-          className="flex-1 bg-transparent text-sm text-white placeholder-slate-500 focus:outline-none"
+          className="flex-1 bg-transparent text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none"
         />
         {loading && <span className="w-3 h-3 border border-slate-500 border-t-white rounded-full animate-spin" />}
       </div>
       {open && results.length > 0 && (
-        <div className="absolute z-50 left-0 right-0 mt-1 bg-slate-800 border border-white/10 rounded-xl shadow-xl overflow-hidden">
+        <div className="absolute z-50 left-0 right-0 mt-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl shadow-xl overflow-hidden">
           {results.map((r, i) => (
             <button key={i}
               onClick={() => {
@@ -192,7 +192,7 @@ function AddressSearch({
                 setQuery(clearOnSelect ? '' : r.label);
                 setOpen(false);
               }}
-              className="w-full text-left px-4 py-2.5 text-sm text-slate-200 hover:bg-slate-700 transition-colors border-b border-white/5 last:border-0">
+              className="w-full text-left px-4 py-2.5 text-sm text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] transition-colors border-b border-[var(--border-subtle)] last:border-0">
               <span className="block truncate">{r.label}</span>
               <span className={`text-xs ${r.source === 'google' ? 'text-blue-400' : 'text-amber-400'}`}>
                 via {r.source === 'google' ? 'Google' : 'Mapbox'}
@@ -368,8 +368,8 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
       <div className="flex items-center gap-3">
         <span className="text-3xl">{cfg.icon}</span>
         <div>
-          <h2 className="text-lg font-bold text-white">{cfg.title}</h2>
-          <p className="text-slate-400 text-xs">{cfg.desc}</p>
+          <h2 className="text-lg font-bold text-[var(--text-main)]">{cfg.title}</h2>
+          <p className="text-[var(--text-muted)] text-xs">{cfg.desc}</p>
         </div>
       </div>
 
@@ -384,7 +384,7 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
           {/* Origin — search box + Google Map picker button. Either fills
               the origin slot via addWaypoint('origin', …). */}
           <div>
-            <label className="text-xs text-slate-400 uppercase tracking-wider font-medium mb-1.5 block">
+            <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider font-medium mb-1.5 block">
               🟢 {cfg.originLabel}
             </label>
             <div className="flex gap-1.5">
@@ -399,7 +399,7 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
                 type="button"
                 onClick={() => setPickerTarget('origin')}
                 title={`Pick ${cfg.originLabel.toLowerCase()} on Google Maps`}
-                className="inline-flex items-center justify-center px-3 rounded-xl border border-white/10 bg-slate-800/60 text-slate-300 hover:bg-slate-700 hover:text-white shrink-0"
+                className="inline-flex items-center justify-center px-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)] shrink-0"
               >
                 <MapPin className="w-4 h-4" />
               </button>
@@ -408,7 +408,7 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
                   type="button"
                   onClick={() => { setExistingStopSearch(''); setListPickerTarget('origin'); }}
                   title="Choose from existing Geofences / Stops"
-                  className="inline-flex items-center justify-center px-3 rounded-xl border border-white/10 bg-slate-800/60 text-slate-300 hover:bg-slate-700 hover:text-white shrink-0"
+                  className="inline-flex items-center justify-center px-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)] shrink-0"
                 >
                   <ListChecks className="w-4 h-4" />
                 </button>
@@ -428,7 +428,7 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
               multi-add flow obvious. */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs text-slate-400 uppercase tracking-wider font-medium">
+              <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider font-medium">
                 📍 {cfg.stopLabel}s
                 {stops.length > 0 && (
                   <span className={`ml-1.5 inline-flex items-center justify-center rounded-full text-[10px] font-bold px-2 py-0.5 ${cfg.bg} ${cfg.accent}`}>
@@ -437,7 +437,7 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
                 )}
               </label>
               {stops.length > 0 && (
-                <span className="text-[10px] text-slate-500 italic">Add as many zones as needed</span>
+                <span className="text-[10px] text-[var(--text-faint)] italic">Add as many zones as needed</span>
               )}
             </div>
             <div className="flex gap-1.5">
@@ -455,7 +455,7 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
                 type="button"
                 onClick={() => setPickerTarget('stop')}
                 title="Pick a stop location on Google Maps"
-                className="inline-flex items-center justify-center px-3 rounded-xl border border-white/10 bg-slate-800/60 text-slate-300 hover:bg-slate-700 hover:text-white shrink-0"
+                className="inline-flex items-center justify-center px-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)] shrink-0"
               >
                 <MapPin className="w-4 h-4" />
               </button>
@@ -464,7 +464,7 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
                   type="button"
                   onClick={() => { setExistingStopSearch(''); setListPickerTarget('stop'); }}
                   title="Add from existing Geofences / Stops"
-                  className="inline-flex items-center justify-center px-3 rounded-xl border border-white/10 bg-slate-800/60 text-slate-300 hover:bg-slate-700 hover:text-white shrink-0"
+                  className="inline-flex items-center justify-center px-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)] shrink-0"
                 >
                   <ListChecks className="w-4 h-4" />
                 </button>
@@ -476,11 +476,11 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
               <div className="mt-2 space-y-1.5">
                 {stops.map((wp, i) => (
                   <div key={wp.id}
-                    className={`flex items-center gap-2 bg-slate-800/60 border ${cfg.border} rounded-xl px-3 py-2`}>
+                    className={`flex items-center gap-2 bg-[var(--bg-surface)]/60 border ${cfg.border} rounded-xl px-3 py-2`}>
                     <span className={`w-6 h-6 rounded-full ${cfg.bg} ${cfg.accent} flex items-center justify-center text-xs font-bold flex-shrink-0`}>
                       {i + 1}
                     </span>
-                    <span className="flex-1 text-xs text-slate-300 truncate" title={wp.label}>{wp.label}</span>
+                    <span className="flex-1 text-xs text-[var(--text-muted)] truncate" title={wp.label}>{wp.label}</span>
                     <div className="flex gap-1 flex-shrink-0">
                       {/* Edit — opens the Google Map picker in "replace this
                           stop" mode. Coords + label swap in place, sequence
@@ -488,7 +488,7 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
                           stop without deleting + re-adding. */}
                       <button onClick={() => setPickerTarget({ editStopId: wp.id })}
                         title="Edit this stop on Google Maps"
-                        className="text-slate-500 hover:text-violet-300 text-xs px-1"
+                        className="text-[var(--text-faint)] hover:text-violet-300 text-xs px-1"
                         aria-label="Edit stop">
                         <MapPin className="w-3 h-3" />
                       </button>
@@ -496,17 +496,17 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
                         <button
                           onClick={() => { setExistingStopSearch(''); setListPickerTarget({ editStopId: wp.id }); }}
                           title="Replace with an existing Geofence / Stop"
-                          className="text-slate-500 hover:text-violet-300 text-xs px-1"
+                          className="text-[var(--text-faint)] hover:text-violet-300 text-xs px-1"
                           aria-label="Replace stop from list">
                           <ListChecks className="w-3 h-3" />
                         </button>
                       )}
                       <button onClick={() => moveStop(wp.id, 'up')}
                         disabled={i === 0}
-                        className="text-slate-600 hover:text-white disabled:opacity-20 text-xs px-1">▲</button>
+                        className="text-[var(--text-faint)] hover:text-[var(--text-main)] disabled:opacity-20 text-xs px-1">▲</button>
                       <button onClick={() => moveStop(wp.id, 'down')}
                         disabled={i === stops.length - 1}
-                        className="text-slate-600 hover:text-white disabled:opacity-20 text-xs px-1">▼</button>
+                        className="text-[var(--text-faint)] hover:text-[var(--text-main)] disabled:opacity-20 text-xs px-1">▼</button>
                       <button onClick={() => removeStop(wp.id)}
                         className="text-red-500 hover:text-red-400 text-xs px-1">✕</button>
                     </div>
@@ -518,7 +518,7 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
 
           {/* Destination — search box + Google Map picker button. */}
           <div>
-            <label className="text-xs text-slate-400 uppercase tracking-wider font-medium mb-1.5 block">
+            <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider font-medium mb-1.5 block">
               🔴 {cfg.destLabel}
             </label>
             <div className="flex gap-1.5">
@@ -533,7 +533,7 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
                 type="button"
                 onClick={() => setPickerTarget('destination')}
                 title={`Pick ${cfg.destLabel.toLowerCase()} on Google Maps`}
-                className="inline-flex items-center justify-center px-3 rounded-xl border border-white/10 bg-slate-800/60 text-slate-300 hover:bg-slate-700 hover:text-white shrink-0"
+                className="inline-flex items-center justify-center px-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)] shrink-0"
               >
                 <MapPin className="w-4 h-4" />
               </button>
@@ -542,7 +542,7 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
                   type="button"
                   onClick={() => { setExistingStopSearch(''); setListPickerTarget('destination'); }}
                   title="Choose from existing Geofences / Stops"
-                  className="inline-flex items-center justify-center px-3 rounded-xl border border-white/10 bg-slate-800/60 text-slate-300 hover:bg-slate-700 hover:text-white shrink-0"
+                  className="inline-flex items-center justify-center px-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)] shrink-0"
                 >
                   <ListChecks className="w-4 h-4" />
                 </button>
@@ -574,7 +574,7 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
           {/* ── Route stats ── */}
           {routeResult && (
             <div className={`${cfg.bg} border ${cfg.border} rounded-2xl p-4 space-y-3`}>
-              <p className="text-xs font-semibold text-white uppercase tracking-wider">📊 Route Summary</p>
+              <p className="text-xs font-semibold text-[var(--text-main)] uppercase tracking-wider">📊 Route Summary</p>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { icon: '📍', label: 'Stops',    value: routeResult.summary.stops },
@@ -582,24 +582,24 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
                   { icon: '⏱️', label: 'Duration', value: routeResult.summary.durationHuman },
                   { icon: '⛽', label: 'Fuel Est.', value: `${routeResult.summary.fuelLitres}L · AED ${routeResult.summary.fuelCostAED}` },
                 ].map(s => (
-                  <div key={s.label} className="bg-slate-900/40 rounded-xl p-3">
+                  <div key={s.label} className="bg-[var(--bg-surface)]/40 rounded-xl p-3">
                     <p className="text-lg">{s.icon}</p>
                     <p className={`text-base font-bold ${cfg.accent}`}>{s.value}</p>
-                    <p className="text-xs text-slate-500">{s.label}</p>
+                    <p className="text-xs text-[var(--text-faint)]">{s.label}</p>
                   </div>
                 ))}
               </div>
 
               {/* Leg details toggle */}
               <button onClick={() => setShowLegs(p => !p)}
-                className="text-xs text-slate-400 hover:text-white transition-colors">
+                className="text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors">
                 {showLegs ? '▲ Hide' : '▼ Show'} leg breakdown
               </button>
               {showLegs && (
                 <div className="space-y-2 mt-1">
                   {routeResult.legs.map((leg, i) => (
                     <div key={i} className="flex items-start gap-2 text-xs">
-                      <span className="text-slate-600 flex-shrink-0 mt-0.5">{i + 1}.</span>
+                      <span className="text-[var(--text-faint)] flex-shrink-0 mt-0.5">{i + 1}.</span>
                       {/* min-w-0 lets the flex child SHRINK below its content
                           size (default is auto = content-width, which pushes
                           the row wider than the parent and clips at the map
@@ -607,12 +607,12 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
                           names wrap onto multiple lines instead of being
                           truncated by the "truncate" utility we removed. */}
                       <div className="flex-1 min-w-0">
-                        <p className="text-slate-300 break-words leading-snug">
+                        <p className="text-[var(--text-muted)] break-words leading-snug">
                           <span>{leg.from}</span>
-                          <span className="text-slate-500 mx-1">→</span>
+                          <span className="text-[var(--text-faint)] mx-1">→</span>
                           <span>{leg.to}</span>
                         </p>
-                        <p className="text-slate-500 mt-0.5">{leg.distanceKm} km · {leg.durationMin} min</p>
+                        <p className="text-[var(--text-faint)] mt-0.5">{leg.distanceKm} km · {leg.durationMin} min</p>
                       </div>
                     </div>
                   ))}
@@ -653,7 +653,7 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
             className="flex-1 min-h-[480px]"
           />
           {waypoints.length === 0 && (
-            <p className="text-center text-xs text-slate-600 mt-2">
+            <p className="text-center text-xs text-[var(--text-faint)] mt-2">
               Add waypoints on the left to see them on the map
             </p>
           )}
@@ -711,9 +711,9 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
           above so the operator can pick from either source into any slot. */}
       {listPickerTarget !== null && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg max-h-[80vh] flex flex-col bg-slate-800/95 border border-white/10 rounded-2xl overflow-hidden">
-            <div className="flex items-center justify-between p-5 border-b border-white/10">
-              <h2 className="text-lg font-bold text-white">
+          <div className="w-full max-w-lg max-h-[80vh] flex flex-col bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
+            <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)]">
+              <h2 className="text-lg font-bold text-[var(--text-main)]">
                 {listPickerTarget === 'origin'      ? `Pick ${cfg.originLabel} from Geofences/Stops` :
                  listPickerTarget === 'destination' ? `Pick ${cfg.destLabel} from Geofences/Stops` :
                  listPickerTarget === 'stop'        ? `Add ${cfg.stopLabel} from Geofences/Stops` :
@@ -724,26 +724,26 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
               <button
                 type="button"
                 onClick={() => setListPickerTarget(null)}
-                className="text-slate-400 hover:text-white"
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)]"
                 aria-label="Close"
               >
                 ✕
               </button>
             </div>
-            <div className="p-5 border-b border-white/10">
+            <div className="p-5 border-b border-[var(--border-subtle)]">
               <input
                 type="text"
                 value={existingStopSearch}
                 onChange={e => setExistingStopSearch(e.target.value)}
                 placeholder="Search stops by name or route…"
                 autoFocus
-                className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none text-sm"
+                className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none text-sm"
               />
-              <div className="text-[11px] text-slate-500 mt-1.5">{existingStops.length} unique stops across all routes</div>
+              <div className="text-[11px] text-[var(--text-faint)] mt-1.5">{existingStops.length} unique stops across all routes</div>
             </div>
             <div className="flex-1 overflow-y-auto p-3">
               {existingStops.length === 0 ? (
-                <div className="text-center text-sm text-slate-400 py-8">
+                <div className="text-center text-sm text-[var(--text-muted)] py-8">
                   No stops with GPS coords yet. Add some via the Routes page, or use the map picker (📍) instead.
                 </div>
               ) : (
@@ -757,7 +757,7 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
                         (s.landmark ?? '').toLowerCase().includes(q),
                       );
                   if (filtered.length === 0) {
-                    return <div className="text-center text-sm text-slate-500 py-6">No matches for &ldquo;{existingStopSearch}&rdquo;.</div>;
+                    return <div className="text-center text-sm text-[var(--text-faint)] py-6">No matches for &ldquo;{existingStopSearch}&rdquo;.</div>;
                   }
                   return (
                     <ul className="space-y-1">
@@ -783,14 +783,14 @@ export default function RouteOptimizerPanel({ mode, vehicleType = 'van', onSave,
                               }
                               setListPickerTarget(null);
                             }}
-                            className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-white/5 transition-colors"
+                            className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-[var(--bg-surface-hover)] transition-colors"
                           >
-                            <div className="text-sm font-medium text-white">{s.name}</div>
-                            <div className="text-[11px] text-slate-400 mt-0.5">
-                              <span className="text-slate-500">Route:</span> {s.routeName}
-                              {s.landmark && <span className="ml-2 text-slate-500">·</span>}
+                            <div className="text-sm font-medium text-[var(--text-main)]">{s.name}</div>
+                            <div className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                              <span className="text-[var(--text-faint)]">Route:</span> {s.routeName}
+                              {s.landmark && <span className="ml-2 text-[var(--text-faint)]">·</span>}
                               {s.landmark && <span className="ml-2">{s.landmark}</span>}
-                              <span className="ml-2 text-slate-500 font-mono text-[10px]">{s.lat.toFixed(4)}, {s.lng.toFixed(4)}</span>
+                              <span className="ml-2 text-[var(--text-faint)] font-mono text-[10px]">{s.lat.toFixed(4)}, {s.lng.toFixed(4)}</span>
                             </div>
                           </button>
                         </li>

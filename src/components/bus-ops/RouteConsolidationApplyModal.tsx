@@ -256,22 +256,22 @@ export default function RouteConsolidationApplyModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="w-full max-w-4xl rounded-2xl border border-slate-800 bg-slate-950 shadow-2xl max-h-[92vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <header className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
+      <div className="w-full max-w-4xl rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] shadow-2xl max-h-[92vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <header className="flex items-center justify-between border-b border-[var(--border-subtle)] px-6 py-4">
           <div>
-            <h2 className="text-lg font-semibold text-white">Apply consolidation</h2>
-            <p className="mt-0.5 text-xs text-slate-400">
-              Merge <span className="font-medium text-slate-300">{recommendation.routeA.name}</span> + <span className="font-medium text-slate-300">{recommendation.routeB.name}</span> · sources will retire, enrolments migrate, audit lineage written
+            <h2 className="text-lg font-semibold text-[var(--text-main)]">Apply consolidation</h2>
+            <p className="mt-0.5 text-xs text-[var(--text-muted)]">
+              Merge <span className="font-medium text-[var(--text-muted)]">{recommendation.routeA.name}</span> + <span className="font-medium text-[var(--text-muted)]">{recommendation.routeB.name}</span> · sources will retire, enrolments migrate, audit lineage written
             </p>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-surface)] hover:text-[var(--text-main)]"><X className="w-5 h-5" /></button>
         </header>
 
         <div className="overflow-y-auto px-6 py-5 space-y-5">
           {loadError && <Banner tone="rose" text={loadError} />}
 
           {!sources ? (
-            <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-8 text-center text-slate-400 animate-pulse">Loading source routes…</div>
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-8 text-center text-[var(--text-muted)] animate-pulse">Loading source routes…</div>
           ) : (
             <>
               {/* Merged route form */}
@@ -291,24 +291,24 @@ export default function RouteConsolidationApplyModal({
               <section className="space-y-3">
                 <SectionHeading>
                   <span className="mr-2">Merged stop order</span>
-                  <span className="text-xs font-normal text-slate-500">— suggested via nearest-neighbor from source stops; reorder as needed</span>
+                  <span className="text-xs font-normal text-[var(--text-faint)]">— suggested via nearest-neighbor from source stops; reorder as needed</span>
                 </SectionHeading>
-                <div className="rounded-xl border border-slate-800 bg-slate-900/40 overflow-hidden">
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 overflow-hidden">
                   {stopOrder.length === 0 ? (
-                    <div className="px-4 py-3 text-sm text-slate-500">No stops selected.</div>
+                    <div className="px-4 py-3 text-sm text-[var(--text-faint)]">No stops selected.</div>
                   ) : (
-                    <ul className="divide-y divide-slate-800">
+                    <ul className="divide-y divide-[var(--border-subtle)]">
                       {stopOrder.map((sid, i) => {
                         const stop = allStops.find((s) => s.id === sid);
                         return (
                           <li key={sid} className="flex items-center gap-2 px-3 py-2 text-sm">
-                            <span className="w-6 text-center text-xs text-slate-500">{i + 1}</span>
-                            <span className="flex-1 text-slate-200">{stop?.stopName ?? sid.slice(0, 8)}</span>
-                            <span className="text-[10px] text-slate-500">from {sources.find((r) => r.id === stop?.routeId)?.name}</span>
+                            <span className="w-6 text-center text-xs text-[var(--text-faint)]">{i + 1}</span>
+                            <span className="flex-1 text-[var(--text-main)]">{stop?.stopName ?? sid.slice(0, 8)}</span>
+                            <span className="text-[10px] text-[var(--text-faint)]">from {sources.find((r) => r.id === stop?.routeId)?.name}</span>
                             <div className="inline-flex items-center gap-1">
-                              <button onClick={() => moveStop(i, -1)} disabled={i === 0} className="rounded p-1 text-slate-400 hover:bg-slate-800 disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
-                              <button onClick={() => moveStop(i, 1)} disabled={i === stopOrder.length - 1} className="rounded p-1 text-slate-400 hover:bg-slate-800 disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
-                              <button onClick={() => removeStop(i)} className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-rose-300 text-xs">✕</button>
+                              <button onClick={() => moveStop(i, -1)} disabled={i === 0} className="rounded p-1 text-[var(--text-muted)] hover:bg-[var(--bg-surface)] disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => moveStop(i, 1)} disabled={i === stopOrder.length - 1} className="rounded p-1 text-[var(--text-muted)] hover:bg-[var(--bg-surface)] disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => removeStop(i)} className="rounded p-1 text-[var(--text-muted)] hover:bg-[var(--bg-surface)] hover:text-rose-300 text-xs">✕</button>
                             </div>
                           </li>
                         );
@@ -317,11 +317,11 @@ export default function RouteConsolidationApplyModal({
                   )}
                 </div>
                 {allStops.filter((s) => !stopOrder.includes(s.id)).length > 0 && (
-                  <div className="rounded-lg border border-slate-800 bg-slate-900/20 p-3">
-                    <div className="text-xs uppercase tracking-wider text-slate-500 mb-2">Add source stop</div>
+                  <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/20 p-3">
+                    <div className="text-xs uppercase tracking-wider text-[var(--text-faint)] mb-2">Add source stop</div>
                     <div className="flex flex-wrap gap-1.5">
                       {allStops.filter((s) => !stopOrder.includes(s.id)).map((s) => (
-                        <button key={s.id} onClick={() => addStop(s.id)} className="text-xs px-2 py-1 rounded border border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700">
+                        <button key={s.id} onClick={() => addStop(s.id)} className="text-xs px-2 py-1 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]">
                           + {s.stopName ?? s.id.slice(0, 8)}
                         </button>
                       ))}
@@ -348,15 +348,15 @@ export default function RouteConsolidationApplyModal({
                           <li key={g.code} className="flex items-start gap-2 text-xs">
                             <GuardBadge status={g.status} />
                             <div>
-                              <span className="font-mono text-slate-300">{g.code}</span>
-                              <span className="ml-2 text-slate-500">{g.message}</span>
+                              <span className="font-mono text-[var(--text-muted)]">{g.code}</span>
+                              <span className="ml-2 text-[var(--text-faint)]">{g.message}</span>
                             </div>
                           </li>
                         ))}
                       </ul>
                       {preview.pce.checks.length > 0 && (
-                        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
-                          <div className="text-xs uppercase tracking-wider text-slate-500 mb-2">Planning Constraints</div>
+                        <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-3">
+                          <div className="text-xs uppercase tracking-wider text-[var(--text-faint)] mb-2">Planning Constraints</div>
                           <PceVerdictPanel body={{ verdict: preview.pce.verdict, checks: preview.pce.checks, totalPenalty: preview.pce.totalPenalty }} />
                         </div>
                       )}
@@ -369,13 +369,13 @@ export default function RouteConsolidationApplyModal({
               {unresolvedEnrollments.length > 0 && (
                 <section className="space-y-3">
                   <SectionHeading>Unresolved enrolments ({unresolvedEnrollments.length})</SectionHeading>
-                  <p className="text-xs text-slate-400">Pick a merged-route stop for each unresolved side. Apply is blocked until all are resolved.</p>
+                  <p className="text-xs text-[var(--text-muted)]">Pick a merged-route stop for each unresolved side. Apply is blocked until all are resolved.</p>
                   <ul className="space-y-2">
                     {unresolvedEnrollments.map((p) => {
                       const stopOptions = stopOrder.map((sid) => allStops.find((s) => s.id === sid)).filter((s): s is StopRow => Boolean(s));
                       return (
-                        <li key={p.key} className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
-                          <div className="font-mono text-[10px] text-slate-500 mb-2">{p.key}</div>
+                        <li key={p.key} className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-3">
+                          <div className="font-mono text-[10px] text-[var(--text-faint)] mb-2">{p.key}</div>
                           <div className="grid grid-cols-2 gap-3">
                             {p.oldPickupStopId && p.pickupMapping.newStopId == null && (
                               <Field label={`Pickup was ${p.oldPickupStopId.slice(0, 8)}…`}>
@@ -418,8 +418,8 @@ export default function RouteConsolidationApplyModal({
           )}
         </div>
 
-        <footer className="flex items-center justify-end gap-2 border-t border-slate-800 px-6 py-4">
-          <button onClick={onClose} disabled={applying} className="rounded-xl border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-50">Cancel</button>
+        <footer className="flex items-center justify-end gap-2 border-t border-[var(--border-subtle)] px-6 py-4">
+          <button onClick={onClose} disabled={applying} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 px-4 py-2 text-sm text-[var(--text-main)] hover:bg-[var(--bg-surface)] disabled:opacity-50">Cancel</button>
           <button onClick={runPreview} disabled={!canPreview} className="inline-flex items-center gap-1.5 rounded-xl border border-violet-600 bg-violet-600/20 px-4 py-2 text-sm font-medium text-violet-200 hover:bg-violet-600/30 disabled:opacity-50">
             {previewing ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlayCircle className="w-4 h-4" />} {previewing ? 'Previewing…' : 'Preview'}
           </button>
@@ -450,18 +450,18 @@ function suggestOrder(sources: SourceRouteMeta[]): string[] {
   return out;
 }
 
-const inputCls = 'w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500';
+const inputCls = 'w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 px-3 py-2 text-sm text-[var(--text-main)] placeholder:text-[var(--text-faint)] focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500';
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
-  return <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300">{children}</h3>;
+  return <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)]">{children}</h3>;
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block">
       <div className="mb-1 flex items-baseline justify-between">
-        <span className="text-xs font-medium uppercase tracking-wider text-slate-400">{label}</span>
-        {hint && <span className="text-[10px] text-slate-500">{hint}</span>}
+        <span className="text-xs font-medium uppercase tracking-wider text-[var(--text-muted)]">{label}</span>
+        {hint && <span className="text-[10px] text-[var(--text-faint)]">{hint}</span>}
       </div>
       {children}
     </label>

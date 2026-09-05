@@ -198,10 +198,10 @@ export default function GeofenceMap({
   }, [drawMode, onDraw]);
 
   return (
-    <div className={`relative rounded-2xl border border-white/10 overflow-hidden bg-slate-900 ${className}`}>
+    <div className={`relative rounded-2xl border border-[var(--border-subtle)] overflow-hidden bg-[var(--bg-surface)] ${className}`}>
       <div ref={containerRef} className="absolute inset-0" />
       {loading && !error && (
-        <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-400 bg-slate-800/40">
+        <div className="absolute inset-0 flex items-center justify-center text-xs text-[var(--text-muted)] bg-[var(--bg-surface)]/40">
           Loading map…
         </div>
       )}

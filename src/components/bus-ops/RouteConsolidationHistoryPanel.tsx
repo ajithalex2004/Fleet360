@@ -115,26 +115,26 @@ export default function RouteConsolidationHistoryPanel() {
       render: r => (
         <div>
           <div className="font-medium">{r.mergedRoute?.name ?? '(no merged route)'}</div>
-          <div className="font-mono text-[10px] text-slate-500">{r.mergedRoute?.id.slice(0, 8) ?? '—'}</div>
+          <div className="font-mono text-[10px] text-[var(--text-faint)]">{r.mergedRoute?.id.slice(0, 8) ?? '—'}</div>
         </div>
       ) },
     { key: 'sources', header: 'Sources', accessor: r => r.sources.map(s => s.name ?? s.id).join(' + '),
-      render: r => <span className="text-xs text-slate-400">{r.sources.map((s) => s.name ?? s.id.slice(0, 8)).join(' + ')}</span> },
+      render: r => <span className="text-xs text-[var(--text-muted)]">{r.sources.map((s) => s.name ?? s.id.slice(0, 8)).join(' + ')}</span> },
     { key: 'applied', header: 'Applied', accessor: r => r.appliedAt,
       render: r => (
         <div className="text-xs">
-          <div className="text-slate-300">{new Date(r.appliedAt).toLocaleString()}</div>
-          <div className="text-slate-500">by {r.appliedBy}</div>
+          <div className="text-[var(--text-muted)]">{new Date(r.appliedAt).toLocaleString()}</div>
+          <div className="text-[var(--text-faint)]">by {r.appliedBy}</div>
         </div>
       ) },
     { key: 'reverted', header: 'Reverted', accessor: r => r.revertedAt,
       render: r => r.revertedAt ? (
         <div className="text-xs">
-          <div className="text-slate-300">{new Date(r.revertedAt).toLocaleString()}</div>
-          <div className="text-slate-500">by {r.revertedBy}</div>
-          {r.revertReason && <div className="text-slate-500 mt-0.5 italic">{r.revertReason}</div>}
+          <div className="text-[var(--text-muted)]">{new Date(r.revertedAt).toLocaleString()}</div>
+          <div className="text-[var(--text-faint)]">by {r.revertedBy}</div>
+          {r.revertReason && <div className="text-[var(--text-faint)] mt-0.5 italic">{r.revertReason}</div>}
         </div>
-      ) : <span className="text-slate-600">—</span> },
+      ) : <span className="text-[var(--text-faint)]">—</span> },
     { key: 'rowActions', header: 'Actions', align: 'right', filter: false, sortable: false,
       render: r => {
         const withinWindow = revertEligibleWindow(r);
@@ -152,14 +152,14 @@ export default function RouteConsolidationHistoryPanel() {
             <Undo2 className="w-3.5 h-3.5" /> Revert
           </button>
         ) : r.status === 'APPLIED' && !withinWindow ? (
-          <span className="text-xs text-slate-500" title={`Revert window (${REVERT_WINDOW_HOURS}h) elapsed`}>outside window</span>
+          <span className="text-xs text-[var(--text-faint)]" title={`Revert window (${REVERT_WINDOW_HOURS}h) elapsed`}>outside window</span>
         ) : (
           // REVERTED — the merge is already undone, so there is nothing left
           // to revert. The row is an audit record; deleting it is permanent.
           <button
             onClick={() => setDeleting([r])}
             title="Permanently delete this reverted consolidation's audit record"
-            className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/60 px-2 py-1 text-xs text-slate-300 hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-200"
+            className="inline-flex items-center gap-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 px-2 py-1 text-xs text-[var(--text-muted)] hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-200"
           >
             <Trash2 className="w-3.5 h-3.5" /> Delete
           </button>
@@ -176,10 +176,10 @@ export default function RouteConsolidationHistoryPanel() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)] flex items-center gap-2">
           <History className="w-4 h-4" /> Applied consolidations
         </h3>
-        <button onClick={load} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800">
+        <button onClick={load} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 px-3 py-1.5 text-xs text-[var(--text-main)] hover:bg-[var(--bg-surface)]">
           <RefreshCw className="w-3.5 h-3.5" /> Refresh
         </button>
       </div>
@@ -189,12 +189,12 @@ export default function RouteConsolidationHistoryPanel() {
       )}
 
       {loading && rows.length === 0 ? (
-        <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-10 text-center text-slate-400 animate-pulse">Loading history…</div>
+        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-10 text-center text-[var(--text-muted)] animate-pulse">Loading history…</div>
       ) : rows.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-10 text-center text-slate-400">
-          <History className="mx-auto h-10 w-10 text-slate-600 mb-3" />
+        <div className="rounded-xl border border-dashed border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-10 text-center text-[var(--text-muted)]">
+          <History className="mx-auto h-10 w-10 text-[var(--text-faint)] mb-3" />
           <p>No consolidations applied yet in this tenant.</p>
-          <p className="mt-1 text-xs text-slate-500">Apply a recommendation from the Recommendations tab to populate this view.</p>
+          <p className="mt-1 text-xs text-[var(--text-faint)]">Apply a recommendation from the Recommendations tab to populate this view.</p>
         </div>
       ) : (
         <FleetDataGrid
@@ -230,12 +230,12 @@ export default function RouteConsolidationHistoryPanel() {
                   </button>
                 )}
                 {selectedBlocked > 0 && (
-                  <span className="text-slate-500">
+                  <span className="text-[var(--text-faint)]">
                     ({selectedBlocked} still applied — revert first)
                   </span>
                 )}
                 <button type="button" onClick={() => setSelectedIds(new Set())}
-                  className="text-slate-400 hover:text-white underline underline-offset-2">
+                  className="text-[var(--text-muted)] hover:text-[var(--text-main)] underline underline-offset-2">
                   Clear
                 </button>
               </span>
@@ -254,25 +254,25 @@ export default function RouteConsolidationHistoryPanel() {
 
       {deleting && deleting.length > 0 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 p-5 shadow-xl">
+          <div className="w-full max-w-lg rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5 shadow-xl">
             <h4 className="flex items-center gap-2 text-sm font-semibold text-rose-200">
               <Trash2 className="h-4 w-4" />
               Delete {deleting.length} reverted consolidation{deleting.length === 1 ? '' : 's'}?
             </h4>
 
-            <p className="mt-3 text-sm text-slate-300">
+            <p className="mt-3 text-sm text-[var(--text-muted)]">
               This permanently removes the audit record and its source and
               enrolment-migration rows. It cannot be undone.
             </p>
-            <p className="mt-2 text-xs text-slate-400">
+            <p className="mt-2 text-xs text-[var(--text-muted)]">
               The merges themselves were already reverted — routes and enrolments
               are unaffected. Only the history entry is removed.
             </p>
 
-            <ul className="mt-3 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/60 p-2 text-xs text-slate-400">
+            <ul className="mt-3 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)]/60 p-2 text-xs text-[var(--text-muted)]">
               {deleting.map(r => (
                 <li key={r.id} className="truncate">
-                  <span className="font-mono text-slate-500">{r.id.slice(0, 8)}</span>
+                  <span className="font-mono text-[var(--text-faint)]">{r.id.slice(0, 8)}</span>
                   {' · '}
                   {r.mergedRoute?.name ?? '(merged route removed)'}
                 </li>
@@ -290,7 +290,7 @@ export default function RouteConsolidationHistoryPanel() {
                 type="button"
                 disabled={deleteBusy}
                 onClick={() => { setDeleting(null); setDeleteError(null); }}
-                className="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+                className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 px-3 py-1.5 text-xs text-[var(--text-main)] hover:bg-[var(--bg-surface)] disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -314,7 +314,7 @@ export default function RouteConsolidationHistoryPanel() {
 function StatusPill({ status }: { status: 'APPLIED' | 'REVERTED' }) {
   const cls = status === 'APPLIED'
     ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-    : 'bg-slate-500/20 text-slate-300 border-slate-500/40';
+    : 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/40';
   const Icon = status === 'APPLIED' ? CheckCircle2 : XCircle;
   return (
     <span className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold ${cls}`}>

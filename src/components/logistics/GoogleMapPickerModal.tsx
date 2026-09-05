@@ -429,24 +429,24 @@ export default function GoogleMapPickerModal({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="w-full max-w-3xl max-h-[90vh] flex flex-col bg-slate-900 border border-white/10 rounded-2xl overflow-hidden">
-        <div className="flex items-center justify-between p-4 border-b border-white/10">
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">
+      <div className="w-full max-w-3xl max-h-[90vh] flex flex-col bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b border-[var(--border-subtle)]">
+          <h2 className="text-lg font-bold text-[var(--text-main)] flex items-center gap-2">
             <MapPin className="w-5 h-5 text-violet-400" />
             {title}
           </h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-1"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] p-1"><X className="w-4 h-4" /></button>
         </div>
 
         {!JS_KEY ? (
           <div className="p-6 text-sm text-amber-300 bg-amber-500/10 border-t border-amber-500/30">
-            Google Maps API key not configured. Set <code className="text-white">NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> in your environment
+            Google Maps API key not configured. Set <code className="text-[var(--text-main)]">NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> in your environment
             (Maps JavaScript API + Places API enabled, restricted to your app&rsquo;s HTTP referrers).
           </div>
         ) : (
           <>
-            <div className="p-3 border-b border-white/10 relative">
-              <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
+            <div className="p-3 border-b border-[var(--border-subtle)] relative">
+              <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-faint)] pointer-events-none" />
               <input
                 ref={searchInputRef}
                 // Pre-fill with initialSearchQuery when the caller has a
@@ -454,15 +454,15 @@ export default function GoogleMapPickerModal({
                 // `value`) so Google's Autocomplete widget can take control.
                 defaultValue={initialSearchQuery || undefined}
                 placeholder="Search a place, address, landmark…"
-                className="w-full pl-9 pr-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500"
+                className="w-full pl-9 pr-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-violet-500"
                 autoFocus
               />
             </div>
 
-            <div className="relative flex-1 min-h-[350px] bg-slate-800">
+            <div className="relative flex-1 min-h-[350px] bg-[var(--bg-surface)]">
               <div ref={mapDivRef} className="absolute inset-0" />
               {loading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-slate-900/60 text-slate-300 text-sm">
+                <div className="absolute inset-0 flex items-center justify-center bg-[var(--bg-surface)]/60 text-[var(--text-muted)] text-sm">
                   Loading Google Maps…
                 </div>
               )}
@@ -473,13 +473,13 @@ export default function GoogleMapPickerModal({
               )}
             </div>
 
-            <div className="p-4 border-t border-white/10 space-y-2">
-              <div className="text-[11px] uppercase tracking-wide text-slate-500">Selected location</div>
-              <div className="text-sm text-white font-medium truncate">{name || <span className="text-slate-500">— Click on the map to drop a pin —</span>}</div>
-              <div className="text-xs text-slate-400 truncate">{geocoding ? 'Getting address…' : (address || (coords ? `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}` : ''))}</div>
+            <div className="p-4 border-t border-[var(--border-subtle)] space-y-2">
+              <div className="text-[11px] uppercase tracking-wide text-[var(--text-faint)]">Selected location</div>
+              <div className="text-sm text-[var(--text-main)] font-medium truncate">{name || <span className="text-[var(--text-faint)]">— Click on the map to drop a pin —</span>}</div>
+              <div className="text-xs text-[var(--text-muted)] truncate">{geocoding ? 'Getting address…' : (address || (coords ? `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}` : ''))}</div>
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={onClose}
-                  className="px-4 py-2 rounded-lg border border-white/10 text-slate-300 hover:bg-white/5 text-sm">
+                  className="px-4 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] text-sm">
                   Cancel
                 </button>
                 <button
@@ -494,7 +494,7 @@ export default function GoogleMapPickerModal({
                       lng: coords.lng,
                     });
                   }}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-semibold">
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-[var(--text-main)] text-sm font-semibold">
                   <MapPin className="w-4 h-4" /> Use this location
                 </button>
               </div>
