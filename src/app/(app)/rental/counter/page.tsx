@@ -98,7 +98,16 @@ export default function CounterPage() {
   useEffect(() => {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       if (process.env.NODE_ENV === 'production') {
-        navigator.serviceWorker.register('/counter-sw.js').catch(() => {/* ignore */});
+        // Explicit scope is load-bearing: counter-sw.js is served from the
+        // site root, so an unscoped register() defaults to controlling the
+        // ENTIRE origin — every route on the site, not just this counter
+        // screen. That silently made this worker cache-first every full-page
+        // navigation app-wide (it only excludes /_next/ and /api/ from its
+        // own fetch handler), so any tab that ever visited /rental/counter
+        // kept getting served a stale HTML shell referencing chunk files a
+        // newer deploy had already deleted — a ChunkLoadError that looked
+        // like a deployment problem but was actually this scope bug.
+        navigator.serviceWorker.register('/counter-sw.js', { scope: '/rental/counter' }).catch(() => {/* ignore */});
       } else {
         // In dev a cache-first SW serves stale /_next chunks across the whole
         // app (the "X is not defined" ghost). Never register it here, and clear

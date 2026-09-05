@@ -32,6 +32,11 @@ self.addEventListener('fetch', (event) => {
   // Cache shell + same-origin navigations only.
   if (event.request.method !== 'GET') return;
   if (url.origin !== self.location.origin) return;
+  // Belt-and-braces: registration is scoped to /rental/counter so the
+  // browser won't invoke this handler outside it anyway, but don't rely on
+  // that alone — cache-first-serving a stale HTML shell for an unrelated
+  // route is exactly the bug that motivated this file's rewrite.
+  if (event.request.mode === 'navigate' && !url.pathname.startsWith('/rental/counter')) return;
 
   event.respondWith(
     caches.match(event.request).then((cached) =>
