@@ -68,7 +68,7 @@ export default function LaneProfitabilityPanel() {
     return () => { cancelled = true; };
   }, []);
 
-  if (loading) return <div className="h-44 rounded-2xl bg-slate-800/60 animate-pulse" />;
+  if (loading) return <div className="h-44 rounded-2xl bg-[var(--bg-surface)]/60 animate-pulse" />;
   if (error || !data) return null; // Fail-silent
 
   const { totals, topByMargin, topLossMakers, period } = data;
@@ -83,7 +83,7 @@ export default function LaneProfitabilityPanel() {
       accent={marginPctAccent}
     >
       {noData ? (
-        <div className="text-sm text-slate-500 italic py-4">
+        <div className="text-sm text-[var(--text-faint)] italic py-4">
           No priced shipments in this period yet. The rate engine populates
           customer_rate_amount + margin_amount on each new shipment — once
           you have a handful, this panel fills in.
@@ -92,29 +92,29 @@ export default function LaneProfitabilityPanel() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           {/* ── Headline totals ─────────────────────────────────────────── */}
           <div className="flex flex-col gap-2">
-            <div className="text-[11px] uppercase tracking-wider text-slate-500">Overall margin</div>
+            <div className="text-[11px] uppercase tracking-wider text-[var(--text-faint)]">Overall margin</div>
             <div className={`text-5xl font-bold ${marginPctText}`}>{totals.marginPct}%</div>
-            <div className="text-xs text-slate-400">
+            <div className="text-xs text-[var(--text-muted)]">
               {fmt(totals.margin)} margin on {fmt(totals.revenue)} revenue
             </div>
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-[var(--text-faint)]">
               {totals.shipments.toLocaleString()} shipments across {totals.lanes} lane{totals.lanes === 1 ? '' : 's'}
             </div>
           </div>
 
           {/* ── Top earning lanes ──────────────────────────────────────── */}
           <div>
-            <div className="text-[11px] uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
+            <div className="text-[11px] uppercase tracking-wider text-[var(--text-faint)] mb-2 flex items-center gap-1.5">
               <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
               Top earning lanes
             </div>
             {topByMargin.length === 0 ? (
-              <div className="text-xs text-slate-500 italic">No positive-margin lanes yet.</div>
+              <div className="text-xs text-[var(--text-faint)] italic">No positive-margin lanes yet.</div>
             ) : (
               <ul className="space-y-1.5">
                 {topByMargin.map(l => (
                   <li key={`${l.origin}-${l.destination}`} className="flex items-center justify-between text-xs">
-                    <span className="text-slate-300 truncate mr-2">
+                    <span className="text-[var(--text-muted)] truncate mr-2">
                       {l.origin} → {l.destination}
                     </span>
                     <span className="text-emerald-300 whitespace-nowrap font-medium">
@@ -128,7 +128,7 @@ export default function LaneProfitabilityPanel() {
 
           {/* ── Loss-making lanes ──────────────────────────────────────── */}
           <div>
-            <div className="text-[11px] uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
+            <div className="text-[11px] uppercase tracking-wider text-[var(--text-faint)] mb-2 flex items-center gap-1.5">
               <TrendingDown className="w-3.5 h-3.5 text-rose-400" />
               Loss-making lanes
             </div>
@@ -140,7 +140,7 @@ export default function LaneProfitabilityPanel() {
               <ul className="space-y-1.5">
                 {topLossMakers.map(l => (
                   <li key={`${l.origin}-${l.destination}`} className="flex items-center justify-between text-xs">
-                    <span className="text-slate-300 truncate mr-2">
+                    <span className="text-[var(--text-muted)] truncate mr-2">
                       {l.origin} → {l.destination}
                     </span>
                     <span className="text-rose-300 whitespace-nowrap font-medium">

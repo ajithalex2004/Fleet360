@@ -160,13 +160,13 @@ export default function ControlTowerPage() {
     { key: 'destination', header: 'Destination', accessor: r => r.destinationName ?? '' },
     {
       key: 'mustArriveBy', header: 'Must arrive by', accessor: r => r.deliveryWindowTo ?? '', filter: false,
-      render: r => <span className="text-slate-400 text-xs whitespace-nowrap">{dt(r.deliveryWindowTo)}</span>,
+      render: r => <span className="text-[var(--text-muted)] text-xs whitespace-nowrap">{dt(r.deliveryWindowTo)}</span>,
     },
     {
       key: 'comment', header: 'Latest comment', accessor: r => r.latestComment?.text ?? '', sortable: false,
       render: r => r.latestComment?.text
-        ? <span className="text-xs"><span className="text-slate-500">{relTime(r.latestComment.at)}</span> <span className="text-slate-300">{r.latestComment.text}</span></span>
-        : <span className="text-slate-600 text-xs">—</span>,
+        ? <span className="text-xs"><span className="text-[var(--text-faint)]">{relTime(r.latestComment.at)}</span> <span className="text-[var(--text-muted)]">{r.latestComment.text}</span></span>
+        : <span className="text-[var(--text-faint)] text-xs">—</span>,
     },
     {
       key: 'status', header: 'Status', accessor: r => slaLabel(r.slaStatus), filter: 'select',
@@ -181,16 +181,16 @@ export default function ControlTowerPage() {
       {/* Breadcrumb + heading */}
       <div className="flex items-end justify-between flex-wrap gap-3">
         <div>
-          <div className="text-xs text-slate-500 flex items-center gap-1.5">
-            <span className="text-slate-300 font-medium">Control Tower</span>
+          <div className="text-xs text-[var(--text-faint)] flex items-center gap-1.5">
+            <span className="text-[var(--text-muted)] font-medium">Control Tower</span>
             <ArrowRight className="w-3 h-3" /> <span>{activeLabel}</span>
           </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight mt-0.5">
-            {activeLabel} <span className="text-slate-500 font-semibold">({viewRows.length})</span>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] tracking-tight mt-0.5">
+            {activeLabel} <span className="text-[var(--text-faint)] font-semibold">({viewRows.length})</span>
           </h1>
         </div>
-        <div className="flex items-center gap-2 text-xs text-slate-500">
-          <button type="button" onClick={() => void load()} className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1.5 text-slate-300 hover:bg-white/5">
+        <div className="flex items-center gap-2 text-xs text-[var(--text-faint)]">
+          <button type="button" onClick={() => void load()} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] px-2.5 py-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]">
             <RefreshCw className="w-3.5 h-3.5" /> Refresh
           </button>
           {lastUpdated && <span>Last updated {relTime(lastUpdated.toISOString())}</span>}
@@ -198,14 +198,14 @@ export default function ControlTowerPage() {
       </div>
 
       {/* Segment tabs */}
-      <div className="flex items-center gap-1 flex-wrap border-b border-white/10 pb-px">
+      <div className="flex items-center gap-1 flex-wrap border-b border-[var(--border-subtle)] pb-px">
         {VIEWS.map(v => (
           <button key={v.key} type="button" onClick={() => setView(v.key)}
             className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              view === v.key ? 'border-emerald-400 text-white' : 'border-transparent text-slate-400 hover:text-slate-200'
+              view === v.key ? 'border-emerald-400 text-[var(--text-main)]' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'
             }`}>
             {v.label}
-            <span className={`ml-1.5 text-xs ${v.key === 'BREACHED' && counts[v.key] > 0 ? 'text-rose-400' : 'text-slate-500'}`}>{counts[v.key]}</span>
+            <span className={`ml-1.5 text-xs ${v.key === 'BREACHED' && counts[v.key] > 0 ? 'text-rose-400' : 'text-[var(--text-faint)]'}`}>{counts[v.key]}</span>
           </button>
         ))}
       </div>
@@ -291,25 +291,25 @@ function DetailDrawer({ id, seed, onClose }: { id: string; seed: TowerRow | null
   const s = detail?.shipment ?? seedShipment;
 
   return (
-    <aside className="fixed top-0 right-0 z-[60] h-full w-full max-w-lg bg-slate-950 border-l border-white/10 shadow-2xl shadow-black/60 overflow-y-auto">
+    <aside className="fixed top-0 right-0 z-[60] h-full w-full max-w-lg bg-[var(--bg-canvas)] border-l border-[var(--border-subtle)] shadow-2xl shadow-black/60 overflow-y-auto">
         {/* Header */}
-        <div className="sticky top-0 bg-slate-950/95 backdrop-blur border-b border-white/10 px-5 pt-4 pb-0 z-10">
+        <div className="sticky top-0 bg-[var(--bg-canvas)]/95 backdrop-blur border-b border-[var(--border-subtle)] px-5 pt-4 pb-0 z-10">
           <div className="flex items-start justify-between">
             <div className="min-w-0">
               {s && <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-sky-500/15 text-sky-300 border border-sky-500/30">{(s.status ?? '').replace(/_/g, ' ')}</span>}
-              <h2 className="text-lg font-bold text-white mt-1 flex items-center gap-2">
-                {s?.shipmentNo ?? '…'} <Star className="w-4 h-4 text-slate-600" />
+              <h2 className="text-lg font-bold text-[var(--text-main)] mt-1 flex items-center gap-2">
+                {s?.shipmentNo ?? '…'} <Star className="w-4 h-4 text-[var(--text-faint)]" />
               </h2>
             </div>
             <button type="button" onClick={onClose} aria-label="Close"
-              className="shrink-0 inline-flex items-center gap-1 rounded-lg border border-white/10 px-2 py-1.5 text-xs text-slate-300 hover:bg-white/10 hover:text-white">
+              className="shrink-0 inline-flex items-center gap-1 rounded-lg border border-[var(--border-subtle)] px-2 py-1.5 text-xs text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]">
               <X className="w-4 h-4" /> Close
             </button>
           </div>
           <div className="flex items-center gap-4 mt-3 text-sm">
             {(['status', 'details', 'comments', 'documents'] as const).map(t => (
               <button key={t} type="button" onClick={() => setTab(t)}
-                className={`pb-2.5 border-b-2 -mb-px capitalize transition-colors ${tab === t ? 'border-emerald-400 text-white' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
+                className={`pb-2.5 border-b-2 -mb-px capitalize transition-colors ${tab === t ? 'border-emerald-400 text-[var(--text-main)]' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
                 {t}
               </button>
             ))}
@@ -317,14 +317,14 @@ function DetailDrawer({ id, seed, onClose }: { id: string; seed: TowerRow | null
         </div>
 
         <div className="p-5 space-y-5">
-          {!s && loading && <div className="text-center text-slate-500 py-8 animate-pulse">Loading shipment…</div>}
+          {!s && loading && <div className="text-center text-[var(--text-faint)] py-8 animate-pulse">Loading shipment…</div>}
           {error && <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-rose-200 text-sm">{error}</div>}
 
           {!error && s && (
             <>
               {tab === 'status' && (
                 <>
-                  <div className="rounded-xl overflow-hidden border border-white/10">
+                  <div className="rounded-xl overflow-hidden border border-[var(--border-subtle)]">
                     <GoogleRouteMap
                       origin={s.originAddress || s.originName}
                       destination={s.destinationAddress || s.destinationName}
@@ -339,11 +339,11 @@ function DetailDrawer({ id, seed, onClose }: { id: string; seed: TowerRow | null
                   </div>
 
                   <div>
-                    <h3 className="text-xs uppercase tracking-wider text-slate-500 font-medium mb-2">Shipment progress</h3>
+                    <h3 className="text-xs uppercase tracking-wider text-[var(--text-faint)] font-medium mb-2">Shipment progress</h3>
                     {!detail ? (
-                      <p className="text-sm text-slate-500 animate-pulse">Loading timeline…</p>
+                      <p className="text-sm text-[var(--text-faint)] animate-pulse">Loading timeline…</p>
                     ) : detail.stops.length === 0 ? (
-                      <p className="text-sm text-slate-500">No stops recorded.</p>
+                      <p className="text-sm text-[var(--text-faint)]">No stops recorded.</p>
                     ) : (
                       <ol className="space-y-3">
                         {detail.stops.map(st => {
@@ -352,14 +352,14 @@ function DetailDrawer({ id, seed, onClose }: { id: string; seed: TowerRow | null
                             : null;
                           return (
                             <li key={st.id} className="relative pl-6">
-                              <span className={`absolute left-0 top-1 w-3 h-3 rounded-full border-2 ${st.actualArrivalAt ? 'bg-emerald-400 border-emerald-400' : 'bg-slate-800 border-slate-600'}`} />
+                              <span className={`absolute left-0 top-1 w-3 h-3 rounded-full border-2 ${st.actualArrivalAt ? 'bg-emerald-400 border-emerald-400' : 'bg-[var(--bg-surface)] border-[var(--border-strong)]'}`} />
                               <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{st.stopType}</span>
-                                <span className="text-sm text-white font-medium">{st.locationName ?? st.address ?? `Stop ${st.sequenceNo}`}</span>
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-faint)]">{st.stopType}</span>
+                                <span className="text-sm text-[var(--text-main)] font-medium">{st.locationName ?? st.address ?? `Stop ${st.sequenceNo}`}</span>
                               </div>
-                              <div className="text-xs text-slate-500 mt-0.5">Planned {dt(st.plannedArrivalAt)}{st.plannedDepartAt ? ` – ${dt(st.plannedDepartAt)}` : ''}</div>
+                              <div className="text-xs text-[var(--text-faint)] mt-0.5">Planned {dt(st.plannedArrivalAt)}{st.plannedDepartAt ? ` – ${dt(st.plannedDepartAt)}` : ''}</div>
                               {st.actualArrivalAt && (
-                                <div className="text-xs text-slate-400 mt-0.5 flex items-center gap-1.5">
+                                <div className="text-xs text-[var(--text-muted)] mt-0.5 flex items-center gap-1.5">
                                   Arrived {dt(st.actualArrivalAt)}
                                   {onTime != null && (
                                     <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] border ${onTime ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-rose-500/15 text-rose-300 border-rose-500/30'}`}>
@@ -395,7 +395,7 @@ function DetailDrawer({ id, seed, onClose }: { id: string; seed: TowerRow | null
                   <Field icon={FileText} label="Customer rate" value={s.customerRateAmount != null ? `${s.currency ?? 'AED'} ${s.customerRateAmount.toLocaleString()}` : null} />
                   <Field icon={Activity} label="Priority" value={s.priority} />
                   {s.notes && <div className="col-span-2"><Field icon={FileText} label="Notes" value={s.notes} /></div>}
-                  {!detail && loading && <div className="col-span-2 text-xs text-slate-500 animate-pulse">Loading full details…</div>}
+                  {!detail && loading && <div className="col-span-2 text-xs text-[var(--text-faint)] animate-pulse">Loading full details…</div>}
                 </div>
                 </div>
               )}
@@ -403,16 +403,16 @@ function DetailDrawer({ id, seed, onClose }: { id: string; seed: TowerRow | null
               {tab === 'comments' && (
                 <div className="space-y-3">
                   {!detail ? (
-                    <p className="text-sm text-slate-500 animate-pulse">Loading comments…</p>
+                    <p className="text-sm text-[var(--text-faint)] animate-pulse">Loading comments…</p>
                   ) : detail.events.filter(e => e.notes).length === 0 ? (
-                    <p className="text-sm text-slate-500">No comments yet.</p>
+                    <p className="text-sm text-[var(--text-faint)]">No comments yet.</p>
                   ) : detail.events.filter(e => e.notes).map(e => (
-                    <div key={e.id} className="rounded-xl border border-white/10 bg-slate-900/50 px-4 py-3">
-                      <div className="flex items-center justify-between text-xs text-slate-500">
+                    <div key={e.id} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 px-4 py-3">
+                      <div className="flex items-center justify-between text-xs text-[var(--text-faint)]">
                         <span className="inline-flex items-center gap-1.5"><MessageSquare className="w-3.5 h-3.5" /> {e.type.replace(/_/g, ' ')}</span>
                         <span>{relTime(e.at)}</span>
                       </div>
-                      <p className="text-sm text-slate-200 mt-1">{e.notes}</p>
+                      <p className="text-sm text-[var(--text-main)] mt-1">{e.notes}</p>
                     </div>
                   ))}
                 </div>
@@ -421,16 +421,16 @@ function DetailDrawer({ id, seed, onClose }: { id: string; seed: TowerRow | null
               {tab === 'documents' && (
                 <div className="space-y-3">
                   {!detail ? (
-                    <p className="text-sm text-slate-500 animate-pulse">Loading documents…</p>
+                    <p className="text-sm text-[var(--text-faint)] animate-pulse">Loading documents…</p>
                   ) : detail.pods.length === 0 ? (
-                    <p className="text-sm text-slate-500">No proof-of-delivery documents yet.</p>
+                    <p className="text-sm text-[var(--text-faint)]">No proof-of-delivery documents yet.</p>
                   ) : detail.pods.map(p => (
-                    <div key={p.id} className="rounded-xl border border-white/10 bg-slate-900/50 px-4 py-3 space-y-2">
+                    <div key={p.id} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 px-4 py-3 space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-white font-medium">{p.status.replace(/_/g, ' ')}</span>
-                        <span className="text-xs text-slate-500">{dt(p.deliveredAt ?? p.createdAt)}</span>
+                        <span className="text-sm text-[var(--text-main)] font-medium">{p.status.replace(/_/g, ' ')}</span>
+                        <span className="text-xs text-[var(--text-faint)]">{dt(p.deliveredAt ?? p.createdAt)}</span>
                       </div>
-                      {p.recipientName && <div className="text-xs text-slate-400">Received by {p.recipientName}</div>}
+                      {p.recipientName && <div className="text-xs text-[var(--text-muted)]">Received by {p.recipientName}</div>}
                       <div className="flex flex-wrap gap-2">
                         {p.signatureUrl && <DocLink href={p.signatureUrl} label="Signature" />}
                         {p.photoUrls.map((u, i) => <DocLink key={`ph${i}`} href={u} label={`Photo ${i + 1}`} />)}
@@ -450,15 +450,15 @@ function DetailDrawer({ id, seed, onClose }: { id: string; seed: TowerRow | null
 function Field({ icon: Icon, label, value }: { icon: typeof MapPin; label: string; value: string | null | undefined }) {
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wider text-slate-500 flex items-center gap-1"><Icon className="w-3 h-3" /> {label}</div>
-      <div className="text-slate-200 mt-0.5 break-words">{value || '—'}</div>
+      <div className="text-[10px] uppercase tracking-wider text-[var(--text-faint)] flex items-center gap-1"><Icon className="w-3 h-3" /> {label}</div>
+      <div className="text-[var(--text-main)] mt-0.5 break-words">{value || '—'}</div>
     </div>
   );
 }
 function DocLink({ href, label }: { href: string; label: string }) {
   return (
     <a href={href} target="_blank" rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-slate-800/60 px-2.5 py-1 text-xs text-sky-300 hover:bg-slate-800">
+      className="inline-flex items-center gap-1 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 px-2.5 py-1 text-xs text-sky-300 hover:bg-[var(--bg-surface)]">
       <FileText className="w-3 h-3" /> {label}
     </a>
   );

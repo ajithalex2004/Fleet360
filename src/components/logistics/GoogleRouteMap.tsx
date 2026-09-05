@@ -42,7 +42,7 @@ export default function GoogleRouteMap({
 
   if (!src) {
     return (
-      <div className={`flex items-center justify-center bg-slate-900 text-slate-500 text-sm ${className}`}>
+      <div className={`flex items-center justify-center bg-[var(--bg-surface)] text-[var(--text-faint)] text-sm ${className}`}>
         No location to map
       </div>
     );

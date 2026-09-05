@@ -117,8 +117,8 @@ function formFromContract(c: Contract): FormState {
 }
 
 const inputCls =
-  'w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/40';
-const labelCls = 'text-[11px] uppercase tracking-wider text-slate-500 font-medium';
+  'w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-amber-500/40';
+const labelCls = 'text-[11px] uppercase tracking-wider text-[var(--text-faint)] font-medium';
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -252,16 +252,16 @@ export default function RateContractsPage() {
               type="button"
               onClick={() => void load()}
               aria-label="Refresh"
-              className="text-slate-400 hover:text-white"
+              className="text-[var(--text-muted)] hover:text-[var(--text-main)]"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
           }
         >
           {listError && <LogisticsMessage type="error" message={listError} />}
-          {!listError && loading && <p className="text-sm text-slate-500">Loading…</p>}
+          {!listError && loading && <p className="text-sm text-[var(--text-faint)]">Loading…</p>}
           {!loading && contracts.length === 0 && !listError && (
-            <p className="text-sm text-slate-500">No contracts yet. Create one with “New contract”.</p>
+            <p className="text-sm text-[var(--text-faint)]">No contracts yet. Create one with “New contract”.</p>
           )}
           <div className="space-y-1.5 max-h-[60vh] overflow-y-auto pr-1">
             {contracts.map((c) => {
@@ -275,17 +275,17 @@ export default function RateContractsPage() {
                   className={`w-full text-left rounded-xl border px-3 py-2.5 transition-colors ${
                     active
                       ? 'bg-amber-500/10 border-amber-500/40'
-                      : 'bg-slate-800/40 border-white/10 hover:border-white/20'
+                      : 'bg-[var(--bg-surface)]/40 border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium text-white truncate">{c.contractNo}</span>
+                    <span className="text-sm font-medium text-[var(--text-main)] truncate">{c.contractNo}</span>
                     <StatusPill status={c.status} />
                   </div>
-                  <div className="text-xs text-slate-400 truncate mt-0.5">
+                  <div className="text-xs text-[var(--text-muted)] truncate mt-0.5">
                     {c.laneOrigin} → {c.laneDestination}
                   </div>
-                  <div className="text-[11px] text-slate-600 mt-1 flex items-center gap-2">
+                  <div className="text-[11px] text-[var(--text-faint)] mt-1 flex items-center gap-2">
                     <span>{c.customerName || 'Any customer'}</span>
                     {mode === 'per_km' && <span className="text-amber-300/80">· per km</span>}
                     {mode === 'per_kg' && <span className="text-amber-300/80">· per kg</span>}
@@ -389,7 +389,7 @@ export default function RateContractsPage() {
             </div>
 
             {/* Pricing */}
-            <div className="grid grid-cols-3 gap-3 pt-1 border-t border-white/5">
+            <div className="grid grid-cols-3 gap-3 pt-1 border-t border-[var(--border-subtle)]">
               <div className="pt-4">
                 <label className={labelCls}>{isQty ? 'Base rate · flat fallback' : 'Base rate'}</label>
                 <input
@@ -429,7 +429,7 @@ export default function RateContractsPage() {
             </div>
 
             {/* Rate basis */}
-            <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-4">
+            <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-4">
               <RateBasisEditor
                 value={form.rateBasis}
                 onChange={(v) => set('rateBasis', v)}
@@ -480,7 +480,7 @@ export default function RateContractsPage() {
               <button
                 type="button"
                 onClick={startNew}
-                className="rounded-xl border border-white/10 text-slate-300 px-4 py-2.5 text-sm hover:bg-slate-800"
+                className="rounded-xl border border-[var(--border-subtle)] text-[var(--text-muted)] px-4 py-2.5 text-sm hover:bg-[var(--bg-surface)]"
               >
                 Clear
               </button>
@@ -488,7 +488,7 @@ export default function RateContractsPage() {
                 type="button"
                 onClick={() => void submit()}
                 disabled={saving}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 text-slate-950 font-medium px-4 py-2.5 text-sm hover:bg-amber-400 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 text-white font-medium px-4 py-2.5 text-sm hover:bg-amber-400 disabled:opacity-50"
               >
                 <Save className="w-4 h-4" /> {saving ? 'Saving…' : 'Save contract'}
               </button>

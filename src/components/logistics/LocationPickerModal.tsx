@@ -167,60 +167,60 @@ export default function LocationPickerModal({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-3xl rounded-2xl border border-white/10 bg-slate-950 p-5 shadow-2xl">
+      <div className="w-full max-w-3xl rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-5 shadow-2xl">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="flex items-center gap-2 text-lg font-bold text-white"><MapPin className="h-5 w-5 text-amber-300" /> {title}</h2>
-          <button type="button" onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-white/5 hover:text-white"><X className="h-5 w-5" /></button>
+          <h2 className="flex items-center gap-2 text-lg font-bold text-[var(--text-main)]"><MapPin className="h-5 w-5 text-amber-300" /> {title}</h2>
+          <button type="button" onClick={onClose} className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]"><X className="h-5 w-5" /></button>
         </div>
 
         {!token ? (
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
             Map unavailable — <code className="rounded bg-black/30 px-1">NEXT_PUBLIC_MAPBOX_TOKEN</code> is not configured. Type the address manually in the form instead.
-            <div className="mt-3 flex justify-end"><button type="button" onClick={onClose} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-slate-200 hover:bg-white/5">Close</button></div>
+            <div className="mt-3 flex justify-end"><button type="button" onClick={onClose} className="rounded-xl border border-[var(--border-subtle)] px-4 py-2 text-sm text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]">Close</button></div>
           </div>
         ) : (
           <>
             <div className="relative mb-3">
               <div className="flex gap-2">
                 <div className="relative flex-1">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-faint)]" />
                   <input
                     value={query}
                     onChange={e => setQuery(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void runSearch(); } }}
                     placeholder="Search a place or address…"
-                    className="w-full rounded-xl border border-white/10 bg-slate-900 py-2 pl-9 pr-3 text-sm text-white outline-none focus:border-amber-500/40"
+                    className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] py-2 pl-9 pr-3 text-sm text-[var(--text-main)] outline-none focus:border-amber-500/40"
                   />
                 </div>
-                <button type="button" onClick={() => void runSearch()} disabled={searching} className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400 disabled:opacity-50">{searching ? '…' : 'Search'}</button>
+                <button type="button" onClick={() => void runSearch()} disabled={searching} className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-400 disabled:opacity-50">{searching ? '…' : 'Search'}</button>
               </div>
               {results.length > 0 && (
-                <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-white/10 bg-slate-900 shadow-xl">
+                <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-xl">
                   {results.map((r, i) => (
-                    <button type="button" key={i} onClick={() => chooseResult(r)} className="block w-full px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/5">
-                      <span className="text-white">{r.text}</span><span className="text-slate-500"> — {r.place_name}</span>
+                    <button type="button" key={i} onClick={() => chooseResult(r)} className="block w-full px-3 py-2 text-left text-sm text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]">
+                      <span className="text-[var(--text-main)]">{r.text}</span><span className="text-[var(--text-faint)]"> — {r.place_name}</span>
                     </button>
                   ))}
                 </div>
               )}
             </div>
 
-            <div ref={containerRef} className="h-80 w-full overflow-hidden rounded-xl border border-white/10" />
+            <div ref={containerRef} className="h-80 w-full overflow-hidden rounded-xl border border-[var(--border-subtle)]" />
 
-            <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-400"><Crosshair className="h-3.5 w-3.5" /> Click the map or drag the pin to set the exact point.</p>
+            <p className="mt-2 flex items-center gap-1.5 text-xs text-[var(--text-muted)]"><Crosshair className="h-3.5 w-3.5" /> Click the map or drag the pin to set the exact point.</p>
 
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              <label className="block"><span className="mb-1 block text-[11px] uppercase tracking-wide text-slate-500">Place name</span>
-                <input value={name} onChange={e => setName(e.target.value)} className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-amber-500/40" /></label>
-              <label className="block"><span className="mb-1 block text-[11px] uppercase tracking-wide text-slate-500">Address {geocoding && <span className="text-slate-600">· locating…</span>}</span>
-                <input value={address} onChange={e => setAddress(e.target.value)} className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-amber-500/40" /></label>
+              <label className="block"><span className="mb-1 block text-[11px] uppercase tracking-wide text-[var(--text-faint)]">Place name</span>
+                <input value={name} onChange={e => setName(e.target.value)} className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-main)] outline-none focus:border-amber-500/40" /></label>
+              <label className="block"><span className="mb-1 block text-[11px] uppercase tracking-wide text-[var(--text-faint)]">Address {geocoding && <span className="text-[var(--text-faint)]">· locating…</span>}</span>
+                <input value={address} onChange={e => setAddress(e.target.value)} className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-main)] outline-none focus:border-amber-500/40" /></label>
             </div>
-            {coords && <p className="mt-1 text-[11px] text-slate-500">Lat {coords[1].toFixed(5)}, Lng {coords[0].toFixed(5)}</p>}
+            {coords && <p className="mt-1 text-[11px] text-[var(--text-faint)]">Lat {coords[1].toFixed(5)}, Lng {coords[0].toFixed(5)}</p>}
 
             <div className="mt-4 flex justify-end gap-2">
-              <button type="button" onClick={onClose} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-slate-300 hover:bg-white/5">Cancel</button>
+              <button type="button" onClick={onClose} className="rounded-xl border border-[var(--border-subtle)] px-4 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]">Cancel</button>
               <button type="button" disabled={!coords} onClick={() => coords && onPick({ name: name || address, address, lat: coords[1], lng: coords[0] })}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400 disabled:opacity-50"><MapPin className="h-4 w-4" /> Use this location</button>
+                className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-400 disabled:opacity-50"><MapPin className="h-4 w-4" /> Use this location</button>
             </div>
           </>
         )}

@@ -53,7 +53,7 @@ export default function RateCoveragePanel() {
   }, []);
 
   if (loading) {
-    return <div className="h-44 rounded-2xl bg-slate-800/60 animate-pulse" />;
+    return <div className="h-44 rounded-2xl bg-[var(--bg-surface)]/60 animate-pulse" />;
   }
 
   if (error || !data) {
@@ -79,13 +79,13 @@ export default function RateCoveragePanel() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* ── Headline ───────────────────────────────────────────────── */}
         <div className="flex flex-col items-start gap-2">
-          <div className="text-[11px] uppercase tracking-wider text-slate-500">Quoted from contract</div>
+          <div className="text-[11px] uppercase tracking-wider text-[var(--text-faint)]">Quoted from contract</div>
           <div className={`text-5xl font-bold ${accentText}`}>{pct}%</div>
-          <div className="text-xs text-slate-400">
+          <div className="text-xs text-[var(--text-muted)]">
             {totals.withContract.toLocaleString()} of {totals.total.toLocaleString()} shipments
           </div>
           {totals.withoutContract > 0 && (
-            <div className="text-xs text-slate-500">
+            <div className="text-xs text-[var(--text-faint)]">
               {totals.withoutContract.toLocaleString()} priced manually
             </div>
           )}
@@ -93,20 +93,20 @@ export default function RateCoveragePanel() {
 
         {/* ── Top contracts in use ──────────────────────────────────── */}
         <div>
-          <div className="text-[11px] uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
+          <div className="text-[11px] uppercase tracking-wider text-[var(--text-faint)] mb-2 flex items-center gap-1.5">
             <FileText className="w-3.5 h-3.5" />
             Most-used contracts
           </div>
           {byContract.length === 0 ? (
-            <div className="text-xs text-slate-500 italic">
+            <div className="text-xs text-[var(--text-faint)] italic">
               No shipments priced from a contract this period.
             </div>
           ) : (
             <ul className="space-y-1.5">
               {byContract.slice(0, 5).map(c => (
                 <li key={c.contractId} className="flex items-center justify-between text-xs">
-                  <span className="font-mono text-slate-300 truncate mr-2">{c.contractNo}</span>
-                  <span className="text-slate-400 whitespace-nowrap">
+                  <span className="font-mono text-[var(--text-muted)] truncate mr-2">{c.contractNo}</span>
+                  <span className="text-[var(--text-muted)] whitespace-nowrap">
                     {c.count}× · {c.currency} {c.totalRevenue.toLocaleString('en-AE')}
                   </span>
                 </li>
@@ -117,7 +117,7 @@ export default function RateCoveragePanel() {
 
         {/* ── Uncontracted lanes (the actionable list) ──────────────── */}
         <div>
-          <div className="text-[11px] uppercase tracking-wider text-slate-500 mb-2 flex items-center gap-1.5">
+          <div className="text-[11px] uppercase tracking-wider text-[var(--text-faint)] mb-2 flex items-center gap-1.5">
             <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
             Uncontracted lanes
           </div>
@@ -129,7 +129,7 @@ export default function RateCoveragePanel() {
             <ul className="space-y-1.5">
               {uncontractedLanes.slice(0, 5).map(lane => (
                 <li key={`${lane.origin}-${lane.destination}`} className="flex items-center justify-between text-xs">
-                  <span className="text-slate-300 truncate mr-2">
+                  <span className="text-[var(--text-muted)] truncate mr-2">
                     {lane.origin} → {lane.destination}
                   </span>
                   <span className="text-amber-400 whitespace-nowrap font-medium">

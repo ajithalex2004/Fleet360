@@ -60,7 +60,7 @@ const DEFAULT_VEHICLE_TYPE_OPTIONS: LogisticsMasterDataItem[] = VEHICLE_TYPES.ma
 }));
 
 const STATUS_BADGE: Record<string, string> = {
-  DRAFT:    'bg-slate-500/20 text-slate-400 border-slate-500/30',
+  DRAFT:    'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30',
   SENT:     'bg-blue-500/20 text-blue-400 border-blue-500/30',
   ACCEPTED: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
   REJECTED: 'bg-red-500/20 text-red-400 border-red-500/30',
@@ -186,7 +186,7 @@ function QuoteCalculator({ onSaved }: { onSaved: () => void }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* ── Left: Input form ──── */}
         <div className="space-y-4">
-          <h2 className="text-sm font-semibold text-white">Customer & Route</h2>
+          <h2 className="text-sm font-semibold text-[var(--text-main)]">Customer & Route</h2>
           <div className="hidden grid-cols-2 gap-3">
             {[
               { k: 'customerName',  l: 'Customer Name',   p: 'Company or contact name', span: true },
@@ -196,45 +196,45 @@ function QuoteCalculator({ onSaved }: { onSaved: () => void }) {
               { k: 'destination',   l: 'Destination',     p: 'Delivery address',   span: true },
             ].map(f => (
               <div key={f.k} className={f.span ? 'col-span-2' : ''}>
-                <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">{f.l}</label>
+                <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1 block">{f.l}</label>
                 <input value={form[f.k as keyof typeof form] as string}
                   onChange={e => set(f.k, e.target.value)} placeholder={f.p}
-                  className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/40" />
+                  className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-amber-500/40" />
               </div>
             ))}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Customer / Shipper</label>
+              <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1 block">Customer / Shipper</label>
               <select value={form.customerName} onChange={e => set('customerName', e.target.value)}
-                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/40">
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] focus:outline-none focus:border-amber-500/40">
                 <option value="">{masterData.loading ? 'Loading customers...' : 'Select customer / shipper'}</option>
                 {customerOptions.map(item => <option key={`${item.type}-${item.code}`} value={masterValue(item)}>{masterLabel(item)}</option>)}
               </select>
             </div>
             <div>
-              <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Email</label>
+              <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1 block">Email</label>
               <input value={form.customerEmail} onChange={e => set('customerEmail', e.target.value)} placeholder="customer@company.com"
-                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/40" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-amber-500/40" />
             </div>
             <div>
-              <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Phone</label>
+              <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1 block">Phone</label>
               <input value={form.customerPhone} onChange={e => set('customerPhone', e.target.value)} placeholder="+971 50 000 0000"
-                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/40" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-amber-500/40" />
             </div>
             <div>
-              <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Origin</label>
+              <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1 block">Origin</label>
               <select value={form.origin} onChange={e => set('origin', e.target.value)}
-                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/40">
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] focus:outline-none focus:border-amber-500/40">
                 <option value="">Select origin</option>
                 {locationOptions.map(item => <option key={`origin-${item.type}-${item.code}`} value={masterValue(item)}>{masterLabel(item)}</option>)}
               </select>
             </div>
             <div>
-              <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Destination</label>
+              <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1 block">Destination</label>
               <select value={form.destination} onChange={e => set('destination', e.target.value)}
-                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/40">
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] focus:outline-none focus:border-amber-500/40">
                 <option value="">Select destination</option>
                 {locationOptions.map(item => <option key={`destination-${item.type}-${item.code}`} value={masterValue(item)}>{masterLabel(item)}</option>)}
               </select>
@@ -264,46 +264,46 @@ function QuoteCalculator({ onSaved }: { onSaved: () => void }) {
             requiresCustoms={form.requiresCustoms}
           />
 
-          <h2 className="text-sm font-semibold text-white pt-2">Shipment Details</h2>
+          <h2 className="text-sm font-semibold text-[var(--text-main)] pt-2">Shipment Details</h2>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Distance (km) *</label>
+              <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1 block">Distance (km) *</label>
               <input type="number" value={form.distanceKm} onChange={e => set('distanceKm', e.target.value)}
                 placeholder="250"
-                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/40" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-amber-500/40" />
             </div>
             <div>
-              <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Weight (tonnes) *</label>
+              <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1 block">Weight (tonnes) *</label>
               <input type="number" value={form.weightTonnes} onChange={e => set('weightTonnes', e.target.value)}
                 placeholder="5.0" step="0.1"
-                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/40" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-amber-500/40" />
             </div>
             <div>
-              <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Shipment Type *</label>
+              <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1 block">Shipment Type *</label>
               <select value={form.shipmentType} onChange={e => set('shipmentType', e.target.value)}
-                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/40">
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] focus:outline-none focus:border-amber-500/40">
                 {(serviceTypeOptions.length ? serviceTypeOptions : SHIPMENT_TYPES.map(code => ({ id: code, type: 'SERVICE_TYPE', code, label: code, status: 'ACTIVE' }))).map(item => (
                   <option key={`${item.type}-${item.code}`} value={item.code}>{masterLabel(item)}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Vehicle Type</label>
+              <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1 block">Vehicle Type</label>
               <select value={form.vehicleType} onChange={e => set('vehicleType', e.target.value)}
-                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/40">
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] focus:outline-none focus:border-amber-500/40">
                 {vehicleTypeOptions.map(item => <option key={`${item.type}-${item.id}`} value={masterValue(item)}>{masterLabel(item)}</option>)}
               </select>
             </div>
             <div>
-              <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Cargo Value (AED)</label>
+              <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1 block">Cargo Value (AED)</label>
               <input type="number" value={form.cargoValueAED} onChange={e => set('cargoValueAED', e.target.value)}
                 placeholder="50000"
-                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/40" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-amber-500/40" />
             </div>
             <div>
-              <label className="text-xs text-slate-400 uppercase tracking-wider mb-1 block">Valid (days)</label>
+              <label className="text-xs text-[var(--text-muted)] uppercase tracking-wider mb-1 block">Valid (days)</label>
               <input type="number" value={form.validDays} onChange={e => set('validDays', e.target.value)}
-                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/40" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] focus:outline-none focus:border-amber-500/40" />
             </div>
           </div>
 
@@ -319,12 +319,12 @@ function QuoteCalculator({ onSaved }: { onSaved: () => void }) {
                 className={`flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition-colors text-xs ${
                   form[t.k as keyof typeof form]
                     ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
-                    : 'border-white/10 text-slate-400 hover:border-white/20'
+                    : 'border-[var(--border-subtle)] text-[var(--text-muted)] hover:border-[var(--border-strong)]'
                 }`}>
                 <input type="checkbox" checked={!!form[t.k as keyof typeof form]}
                   onChange={e => set(t.k, e.target.checked)} className="sr-only" />
                 <span className={`w-3 h-3 rounded border flex-shrink-0 flex items-center justify-center text-xs ${
-                  form[t.k as keyof typeof form] ? 'border-amber-400 bg-amber-500' : 'border-slate-600'
+                  form[t.k as keyof typeof form] ? 'border-amber-400 bg-amber-500' : 'border-[var(--border-strong)]'
                 }`}>{form[t.k as keyof typeof form] ? '✓' : ''}</span>
                 {t.l}
               </label>
@@ -360,8 +360,8 @@ function QuoteCalculator({ onSaved }: { onSaved: () => void }) {
         {/* ── Right: Cost breakdown ──── */}
         <div>
           {!calc ? (
-            <div className="h-full flex items-center justify-center border border-dashed border-white/10 rounded-2xl">
-              <div className="text-center text-slate-600">
+            <div className="h-full flex items-center justify-center border border-dashed border-[var(--border-subtle)] rounded-2xl">
+              <div className="text-center text-[var(--text-faint)]">
                 <div className="text-5xl mb-3">💰</div>
                 <p className="text-sm">Fill in shipment details and click Calculate</p>
               </div>
@@ -370,43 +370,43 @@ function QuoteCalculator({ onSaved }: { onSaved: () => void }) {
             <div className="space-y-4">
               {/* Total */}
               <div className="bg-gradient-to-br from-amber-500/20 to-orange-500/10 border border-amber-500/30 rounded-2xl p-6 text-center">
-                <p className="text-slate-400 text-xs uppercase tracking-wider mb-2">Total Freight Cost</p>
+                <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Total Freight Cost</p>
                 <p className="text-4xl font-bold text-amber-400">{fmt(calc.totalAED)}</p>
-                <p className="text-slate-500 text-xs mt-2">
+                <p className="text-[var(--text-faint)] text-xs mt-2">
                   {form.distanceKm} km · {form.weightTonnes} t · {form.shipmentType}
                 </p>
               </div>
 
               {/* Breakdown */}
-              <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-4 space-y-2">
-                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Cost Breakdown</h3>
+              <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4 space-y-2">
+                <h3 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Cost Breakdown</h3>
                 {calc.breakdown.map((item, i) => (
                   <div key={i} className="flex items-center justify-between text-sm">
-                    <span className={`text-slate-300 ${i === calc.breakdown.length - 1 ? 'font-semibold text-white' : ''}`}>
+                    <span className={`text-[var(--text-muted)] ${i === calc.breakdown.length - 1 ? 'font-semibold text-[var(--text-main)]' : ''}`}>
                       {item.label}
                     </span>
-                    <span className={`font-mono ${i === calc.breakdown.length - 1 ? 'text-amber-400 font-bold' : 'text-slate-400'}`}>
+                    <span className={`font-mono ${i === calc.breakdown.length - 1 ? 'text-amber-400 font-bold' : 'text-[var(--text-muted)]'}`}>
                       {fmt(item.amount)}
                     </span>
                   </div>
                 ))}
-                <div className="border-t border-white/10 pt-2 flex items-center justify-between text-sm font-bold">
-                  <span className="text-white">Total</span>
+                <div className="border-t border-[var(--border-subtle)] pt-2 flex items-center justify-between text-sm font-bold">
+                  <span className="text-[var(--text-main)]">Total</span>
                   <span className="text-amber-400 font-mono text-lg">{fmt(calc.totalAED)}</span>
                 </div>
               </div>
 
               {/* Rate info */}
-              <div className="bg-slate-800/40 border border-white/5 rounded-xl p-3 text-xs text-slate-500 space-y-1">
-                <p>📏 Cost per km: <span className="text-slate-300">{fmt(Math.round(calc.totalAED / parseFloat(form.distanceKm || '1')))}</span></p>
-                <p>⚖️ Cost per tonne: <span className="text-slate-300">{fmt(Math.round(calc.totalAED / parseFloat(form.weightTonnes || '1')))}</span></p>
-                <p className="text-slate-600 mt-1">*Rates include 8% fuel surcharge. Final pricing subject to confirmation.</p>
+              <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-xl p-3 text-xs text-[var(--text-faint)] space-y-1">
+                <p>📏 Cost per km: <span className="text-[var(--text-muted)]">{fmt(Math.round(calc.totalAED / parseFloat(form.distanceKm || '1')))}</span></p>
+                <p>⚖️ Cost per tonne: <span className="text-[var(--text-muted)]">{fmt(Math.round(calc.totalAED / parseFloat(form.weightTonnes || '1')))}</span></p>
+                <p className="text-[var(--text-faint)] mt-1">*Rates include 8% fuel surcharge. Final pricing subject to confirmation.</p>
               </div>
 
               {/* Save quote button */}
               <div className="grid grid-cols-2 gap-3">
                 <button onClick={() => setCalc(null)}
-                  className="py-2.5 rounded-xl border border-white/10 text-slate-300 text-sm hover:bg-slate-800 transition-colors">
+                  className="py-2.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-muted)] text-sm hover:bg-[var(--bg-surface)] transition-colors">
                   Recalculate
                 </button>
                 <button onClick={handleSave} disabled={saving}
@@ -426,21 +426,21 @@ function QuoteCalculator({ onSaved }: { onSaved: () => void }) {
 
 function QuotesList({ quotes, loading }: { quotes: Quote[]; loading: boolean }) {
   if (loading) {
-    return <div className="space-y-2">{[...Array(4)].map((_, i) => <div key={i} className="h-16 bg-slate-800/60 rounded-xl animate-pulse" />)}</div>;
+    return <div className="space-y-2">{[...Array(4)].map((_, i) => <div key={i} className="h-16 bg-[var(--bg-surface)]/60 rounded-xl animate-pulse" />)}</div>;
   }
   if (!quotes.length) {
     return (
-      <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-10 text-center">
+      <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-10 text-center">
         <div className="text-4xl mb-3">📋</div>
-        <p className="text-slate-400 text-sm">No quotes yet — create your first quote above</p>
+        <p className="text-[var(--text-muted)] text-sm">No quotes yet — create your first quote above</p>
       </div>
     );
   }
   return (
-    <div className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden overflow-x-auto">
+    <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden overflow-x-auto">
       <table className="w-full text-sm min-w-[700px]">
         <thead>
-          <tr className="border-b border-white/10 text-slate-400 text-xs uppercase tracking-wider">
+          <tr className="border-b border-[var(--border-subtle)] text-[var(--text-muted)] text-xs uppercase tracking-wider">
             <th className="text-left px-5 py-3">Quote No.</th>
             <th className="text-left px-4 py-3">Customer</th>
             <th className="text-left px-4 py-3">Route</th>
@@ -452,10 +452,10 @@ function QuotesList({ quotes, loading }: { quotes: Quote[]; loading: boolean }) 
         </thead>
         <tbody>
           {quotes.map(q => (
-            <tr key={q.id} className="border-b border-white/5 last:border-0 hover:bg-slate-800/40 transition-colors">
-              <td className="px-5 py-3 font-mono text-xs text-white">{q.quote_no}</td>
-              <td className="px-4 py-3 text-slate-300 text-xs">{q.customer_name ?? '—'}</td>
-              <td className="px-4 py-3 text-slate-400 text-xs truncate max-w-xs">
+            <tr key={q.id} className="border-b border-[var(--border-subtle)] last:border-0 hover:bg-[var(--bg-surface)]/40 transition-colors">
+              <td className="px-5 py-3 font-mono text-xs text-[var(--text-main)]">{q.quote_no}</td>
+              <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{q.customer_name ?? '—'}</td>
+              <td className="px-4 py-3 text-[var(--text-muted)] text-xs truncate max-w-xs">
                 {q.origin && q.destination ? `${q.origin} → ${q.destination}` : q.origin ?? q.destination ?? '—'}
               </td>
               <td className="px-4 py-3">
@@ -473,7 +473,7 @@ function QuotesList({ quotes, loading }: { quotes: Quote[]; loading: boolean }) 
                   {q.status}
                 </span>
               </td>
-              <td className="px-4 py-3 text-slate-500 text-xs">
+              <td className="px-4 py-3 text-[var(--text-faint)] text-xs">
                 {new Date(q.created_at).toLocaleDateString('en-AE')}
               </td>
             </tr>
@@ -509,12 +509,12 @@ export default function LogisticsQuotesPage() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white">Freight Quotes</h1>
-          <p className="text-slate-400 text-xs mt-0.5">Calculate, save, and manage logistics freight quotations</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Freight Quotes</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Calculate, save, and manage logistics freight quotations</p>
         </div>
         <div className="flex items-center gap-3">
           {quotes.length > 0 && (
-            <div className="text-xs text-slate-400 bg-slate-800 border border-white/10 px-3 py-1.5 rounded-lg">
+            <div className="text-xs text-[var(--text-muted)] bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-3 py-1.5 rounded-lg">
               {quotes.length} quotes · <span className="text-amber-400">{fmt(Math.round(totalQuotedAED))}</span> total
             </div>
           )}
@@ -528,7 +528,7 @@ export default function LogisticsQuotesPage() {
             className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
               tab === t
                 ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                : 'text-slate-400 border-white/10 hover:border-white/20 hover:text-white'
+                : 'text-[var(--text-muted)] border-[var(--border-subtle)] hover:border-[var(--border-strong)] hover:text-[var(--text-main)]'
             }`}>
             {t === 'calculator' ? '🧮 New Quote' : `📋 All Quotes (${quotes.length})`}
           </button>

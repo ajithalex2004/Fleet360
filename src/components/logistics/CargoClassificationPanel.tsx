@@ -67,12 +67,12 @@ export default function CargoClassificationPanel({ metadata }: Props) {
 
   const haulageChip = haulage === 'CROSS_BORDER'
     ? <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border bg-blue-500/20 text-blue-300 border-blue-500/40"><Globe2 className="w-3 h-3" /> Cross-Border</span>
-    : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border bg-slate-500/20 text-slate-300 border-slate-500/40"><Globe2 className="w-3 h-3" /> Inland</span>;
+    : <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border bg-slate-500/20 text-[var(--text-muted)] border-slate-500/40"><Globe2 className="w-3 h-3" /> Inland</span>;
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 space-y-3">
+    <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 p-4 space-y-3">
       <div className="flex items-center gap-2">
-        <span className="text-[11px] uppercase tracking-wider text-slate-500">Cargo classification</span>
+        <span className="text-[11px] uppercase tracking-wider text-[var(--text-faint)]">Cargo classification</span>
         {haulageChip}
         {hasHazmat && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border bg-amber-500/20 text-amber-200 border-amber-500/40"><ShieldAlert className="w-3 h-3" /> Hazardous</span>}
       </div>
@@ -111,8 +111,8 @@ export default function CargoClassificationPanel({ metadata }: Props) {
 function Kv({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-[9px] uppercase tracking-wider text-slate-500">{label}</div>
-      <div className="text-slate-200 truncate">{value}</div>
+      <div className="text-[9px] uppercase tracking-wider text-[var(--text-faint)]">{label}</div>
+      <div className="text-[var(--text-main)] truncate">{value}</div>
     </div>
   );
 }

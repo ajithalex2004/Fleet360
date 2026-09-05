@@ -116,9 +116,9 @@ export default function LogisticsCustomerTrackingPage() {
 
       <Panel title="Lookup Filters" icon={Search} accent="cyan">
         <div className="grid gap-3 md:grid-cols-4">
-          <input value={shipmentNo} onChange={event => setShipmentNo(event.target.value)} placeholder="Shipment number" className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none" />
-          <input value={customerId} onChange={event => setCustomerId(event.target.value)} placeholder="Customer ID" className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none" />
-          <input value={trackingToken} onChange={event => setTrackingToken(event.target.value)} placeholder="Tracking token" className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none" />
+          <input value={shipmentNo} onChange={event => setShipmentNo(event.target.value)} placeholder="Shipment number" className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 py-2 text-sm text-[var(--text-main)] outline-none" />
+          <input value={customerId} onChange={event => setCustomerId(event.target.value)} placeholder="Customer ID" className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 py-2 text-sm text-[var(--text-main)] outline-none" />
+          <input value={trackingToken} onChange={event => setTrackingToken(event.target.value)} placeholder="Tracking token" className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 py-2 text-sm text-[var(--text-main)] outline-none" />
           <button onClick={loadData} className="btn-primary inline-flex items-center justify-center gap-2"><Send className="h-4 w-4" /> Apply</button>
         </div>
       </Panel>
@@ -126,19 +126,19 @@ export default function LogisticsCustomerTrackingPage() {
       <Panel title="Customer Shipment Timeline" subtitle={loading ? 'Loading tracking feed...' : `${shipments.length} shipment(s)`} icon={MapPinned} accent="cyan">
         <div className="grid gap-4 lg:grid-cols-2">
           {shipments.map(row => (
-            <div key={row.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <div key={row.id} className="rounded-2xl border border-[var(--border-subtle)] bg-white/[0.03] p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="font-semibold text-white">{row.shipmentNo}</div>
-                  <div className="text-sm text-slate-400">{row.customerName ?? 'Customer'} · {row.originName ?? '-'} → {row.destinationName ?? '-'}</div>
+                  <div className="font-semibold text-[var(--text-main)]">{row.shipmentNo}</div>
+                  <div className="text-sm text-[var(--text-muted)]">{row.customerName ?? 'Customer'} · {row.originName ?? '-'} → {row.destinationName ?? '-'}</div>
                 </div>
                 <StatusPill status={row.status === 'DELIVERED' ? 'active' : 'info'} label={row.status} />
               </div>
-              <div className="mt-4 grid gap-3 text-sm text-slate-300 sm:grid-cols-2">
-                <div><span className="text-slate-500">ETA</span><br />{dateLabel(row.latestEtaAt ?? row.deliveryWindowTo)}</div>
-                <div><span className="text-slate-500">Last event</span><br />{row.latestEventType ?? '-'} · {dateLabel(row.latestEventAt)}</div>
-                <div><span className="text-slate-500">POD</span><br />{row.podStatus ?? '-'} · {dateLabel(row.podDeliveredAt)}</div>
-                <div><span className="text-slate-500">Location</span><br />{row.latestLatitude && row.latestLongitude ? `${row.latestLatitude}, ${row.latestLongitude}` : '-'}</div>
+              <div className="mt-4 grid gap-3 text-sm text-[var(--text-muted)] sm:grid-cols-2">
+                <div><span className="text-[var(--text-faint)]">ETA</span><br />{dateLabel(row.latestEtaAt ?? row.deliveryWindowTo)}</div>
+                <div><span className="text-[var(--text-faint)]">Last event</span><br />{row.latestEventType ?? '-'} · {dateLabel(row.latestEventAt)}</div>
+                <div><span className="text-[var(--text-faint)]">POD</span><br />{row.podStatus ?? '-'} · {dateLabel(row.podDeliveredAt)}</div>
+                <div><span className="text-[var(--text-faint)]">Location</span><br />{row.latestLatitude && row.latestLongitude ? `${row.latestLatitude}, ${row.latestLongitude}` : '-'}</div>
               </div>
 
               <button
@@ -151,7 +151,7 @@ export default function LogisticsCustomerTrackingPage() {
               {mapOpenId === row.id && (
                 <div className="mt-3">
                   <ShipmentTrackingMap shipmentId={row.id} className="w-full" />
-                  <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-slate-500">
+                  <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-[var(--text-faint)]">
                     <span><span className="inline-block h-2 w-2 rounded-full align-middle" style={{ background: '#10b981' }} /> Pickup zone</span>
                     <span><span className="inline-block h-2 w-2 rounded-full align-middle" style={{ background: '#ef4444' }} /> Delivery zone</span>
                     <span><span className="inline-block h-2 w-2 rounded-full align-middle" style={{ background: '#38bdf8' }} /> GPS trail</span>
@@ -161,7 +161,7 @@ export default function LogisticsCustomerTrackingPage() {
               )}
             </div>
           ))}
-          {!loading && shipments.length === 0 && <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center text-slate-500">No customer-visible shipments found.</div>}
+          {!loading && shipments.length === 0 && <div className="rounded-2xl border border-dashed border-[var(--border-subtle)] p-8 text-center text-[var(--text-faint)]">No customer-visible shipments found.</div>}
         </div>
       </Panel>
     </div>

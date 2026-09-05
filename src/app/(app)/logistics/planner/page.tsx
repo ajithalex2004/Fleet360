@@ -61,8 +61,8 @@ export default function LogisticsPlannerPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Route Optimization</h1>
-          <p className="text-slate-400 text-xs mt-0.5">
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Route Optimization</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">
             Plan and optimize multi-drop delivery routes — powered by Mapbox + Google Maps
           </p>
         </div>

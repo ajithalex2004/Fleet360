@@ -59,13 +59,13 @@ const STATUS_LABEL: Record<string, string> = {
 // ── KPI Card ──────────────────────────────────────────────────────────────────
 
 function KpiCard({
-  icon, label, value, sub, color = 'text-white', ring,
+  icon, label, value, sub, color = 'text-[var(--text-main)]', ring,
 }: {
   icon: string; label: string; value: string | number; sub?: string;
   color?: string; ring?: number;
 }) {
   return (
-    <div className="glass-card rounded-2xl p-5 border border-white/10 space-y-2">
+    <div className="glass-card rounded-2xl p-5 border border-[var(--border-subtle)] space-y-2">
       <div className="flex items-start justify-between">
         <span className="text-2xl">{icon}</span>
         {ring != null && (
@@ -82,8 +82,8 @@ function KpiCard({
         )}
       </div>
       <div className={`text-3xl font-bold ${color}`}>{value}</div>
-      <div className="text-sm font-medium text-white">{label}</div>
-      {sub && <div className="text-xs text-slate-500">{sub}</div>}
+      <div className="text-sm font-medium text-[var(--text-main)]">{label}</div>
+      {sub && <div className="text-xs text-[var(--text-faint)]">{sub}</div>}
     </div>
   );
 }
@@ -93,10 +93,10 @@ function KpiCard({
 function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-slate-900 border border-white/20 rounded-xl px-3 py-2 text-xs shadow-xl">
-      {label && <p className="text-slate-400 mb-1">{label}</p>}
+    <div className="bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded-xl px-3 py-2 text-xs shadow-xl">
+      {label && <p className="text-[var(--text-muted)] mb-1">{label}</p>}
       {payload.map((p, i) => (
-        <p key={i} style={{ color: p.color }}>{p.name}: <span className="font-bold text-white">{p.value}</span></p>
+        <p key={i} style={{ color: p.color }}>{p.name}: <span className="font-bold text-[var(--text-main)]">{p.value}</span></p>
       ))}
     </div>
   );
@@ -122,12 +122,12 @@ export default function LogisticsAnalyticsPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="h-8 bg-slate-800/60 rounded-xl w-64 animate-pulse" />
+        <div className="h-8 bg-[var(--bg-surface)]/60 rounded-xl w-64 animate-pulse" />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[...Array(8)].map((_, i) => <div key={i} className="h-28 bg-slate-800/60 rounded-2xl animate-pulse" />)}
+          {[...Array(8)].map((_, i) => <div key={i} className="h-28 bg-[var(--bg-surface)]/60 rounded-2xl animate-pulse" />)}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[...Array(4)].map((_, i) => <div key={i} className="h-64 bg-slate-800/60 rounded-2xl animate-pulse" />)}
+          {[...Array(4)].map((_, i) => <div key={i} className="h-64 bg-[var(--bg-surface)]/60 rounded-2xl animate-pulse" />)}
         </div>
       </div>
     );
@@ -137,7 +137,7 @@ export default function LogisticsAnalyticsPage() {
     return (
       <div className="text-center py-20">
         <div className="text-5xl mb-4">📊</div>
-        <p className="text-slate-400">No analytics data available</p>
+        <p className="text-[var(--text-muted)]">No analytics data available</p>
       </div>
     );
   }
@@ -154,8 +154,8 @@ export default function LogisticsAnalyticsPage() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white">Logistics Analytics</h1>
-          <p className="text-xs text-slate-400 mt-1">KPI dashboard &amp; fleet performance metrics</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Logistics Analytics</h1>
+          <p className="text-xs text-[var(--text-muted)] mt-1">KPI dashboard &amp; fleet performance metrics</p>
         </div>
         <div className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-full">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -176,11 +176,11 @@ export default function LogisticsAnalyticsPage() {
           color="text-red-400" sub={`${data.cancellationRate}% cancellation rate`} />
         <KpiCard icon="⏱️" label="On-Time Rate"
           value={data.onTimeRate != null ? `${data.onTimeRate}%` : 'N/A'}
-          color={data.onTimeRate != null ? (data.onTimeRate >= 80 ? 'text-emerald-400' : data.onTimeRate >= 60 ? 'text-amber-400' : 'text-red-400') : 'text-slate-400'}
+          color={data.onTimeRate != null ? (data.onTimeRate >= 80 ? 'text-emerald-400' : data.onTimeRate >= 60 ? 'text-amber-400' : 'text-red-400') : 'text-[var(--text-muted)]'}
           sub="Trips delivered by deadline" />
         <KpiCard icon="🚛" label="Fleet Size" value={data.totalVehicles}
           sub={`${data.availableVehicles} available · ${data.maintenanceVehicles} in maintenance`} />
-        <div className="glass-card rounded-2xl p-5 border border-white/10">
+        <div className="glass-card rounded-2xl p-5 border border-[var(--border-subtle)]">
           <div className="flex items-start justify-between mb-3">
             <span className="text-2xl">📈</span>
             <span className={`text-sm font-bold ${
@@ -189,12 +189,12 @@ export default function LogisticsAnalyticsPage() {
               : 'text-red-400'
             }`}>{data.fleetUtilization}%</span>
           </div>
-          <div className="h-2 bg-slate-700 rounded-full overflow-hidden mb-2">
+          <div className="h-2 bg-[var(--bg-surface-hover)] rounded-full overflow-hidden mb-2">
             <div className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full transition-all"
               style={{ width: `${data.fleetUtilization}%` }} />
           </div>
-          <div className="text-sm font-medium text-white">Fleet Utilization</div>
-          <div className="text-xs text-slate-500 mt-0.5">Active vs total vehicles</div>
+          <div className="text-sm font-medium text-[var(--text-main)]">Fleet Utilization</div>
+          <div className="text-xs text-[var(--text-faint)] mt-0.5">Active vs total vehicles</div>
         </div>
       </div>
 
@@ -202,10 +202,10 @@ export default function LogisticsAnalyticsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         {/* Daily completed trips (14-day line chart) */}
-        <div className="glass-card rounded-2xl p-5 border border-white/10">
-          <h2 className="text-sm font-semibold text-white mb-4">Completed Trips — Last 14 Days</h2>
+        <div className="glass-card rounded-2xl p-5 border border-[var(--border-subtle)]">
+          <h2 className="text-sm font-semibold text-[var(--text-main)] mb-4">Completed Trips — Last 14 Days</h2>
           {data.dailyCompleted.length === 0 ? (
-            <div className="h-48 flex items-center justify-center text-slate-600 text-sm">No completion data yet</div>
+            <div className="h-48 flex items-center justify-center text-[var(--text-faint)] text-sm">No completion data yet</div>
           ) : (
             <ResponsiveContainer width="100%" height={200}>
               <LineChart data={data.dailyCompleted} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
@@ -222,10 +222,10 @@ export default function LogisticsAnalyticsPage() {
         </div>
 
         {/* Status distribution (pie) */}
-        <div className="glass-card rounded-2xl p-5 border border-white/10">
-          <h2 className="text-sm font-semibold text-white mb-4">Trip Status Distribution</h2>
+        <div className="glass-card rounded-2xl p-5 border border-[var(--border-subtle)]">
+          <h2 className="text-sm font-semibold text-[var(--text-main)] mb-4">Trip Status Distribution</h2>
           {statusData.length === 0 ? (
-            <div className="h-48 flex items-center justify-center text-slate-600 text-sm">No data</div>
+            <div className="h-48 flex items-center justify-center text-[var(--text-faint)] text-sm">No data</div>
           ) : (
             <div className="flex items-center gap-4">
               <ResponsiveContainer width="60%" height={200}>
@@ -244,9 +244,9 @@ export default function LogisticsAnalyticsPage() {
                   <div key={i} className="flex items-center justify-between gap-2 text-xs">
                     <div className="flex items-center gap-1.5 truncate">
                       <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.color }} />
-                      <span className="text-slate-400 truncate">{s.label}</span>
+                      <span className="text-[var(--text-muted)] truncate">{s.label}</span>
                     </div>
-                    <span className="text-white font-medium flex-shrink-0">{s.count}</span>
+                    <span className="text-[var(--text-main)] font-medium flex-shrink-0">{s.count}</span>
                   </div>
                 ))}
               </div>
@@ -259,10 +259,10 @@ export default function LogisticsAnalyticsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         {/* Trips by day of week (bar chart) */}
-        <div className="glass-card rounded-2xl p-5 border border-white/10">
-          <h2 className="text-sm font-semibold text-white mb-4">Trips by Day of Week</h2>
+        <div className="glass-card rounded-2xl p-5 border border-[var(--border-subtle)]">
+          <h2 className="text-sm font-semibold text-[var(--text-main)] mb-4">Trips by Day of Week</h2>
           {data.tripsByDow.length === 0 ? (
-            <div className="h-48 flex items-center justify-center text-slate-600 text-sm">No data yet</div>
+            <div className="h-48 flex items-center justify-center text-[var(--text-faint)] text-sm">No data yet</div>
           ) : (
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={data.tripsByDow} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
@@ -277,10 +277,10 @@ export default function LogisticsAnalyticsPage() {
         </div>
 
         {/* Shipment type breakdown (horizontal bar) */}
-        <div className="glass-card rounded-2xl p-5 border border-white/10">
-          <h2 className="text-sm font-semibold text-white mb-4">Shipment Type Breakdown</h2>
+        <div className="glass-card rounded-2xl p-5 border border-[var(--border-subtle)]">
+          <h2 className="text-sm font-semibold text-[var(--text-main)] mb-4">Shipment Type Breakdown</h2>
           {data.shipmentTypes.length === 0 ? (
-            <div className="h-48 flex items-center justify-center text-slate-600 text-sm">
+            <div className="h-48 flex items-center justify-center text-[var(--text-faint)] text-sm">
               No shipment type data — set shipmentType when creating bookings
             </div>
           ) : (
@@ -302,8 +302,8 @@ export default function LogisticsAnalyticsPage() {
       </div>
 
       {/* ── Fleet utilization progress bars ─────────────────────────────────── */}
-      <div className="glass-card rounded-2xl p-5 border border-white/10">
-        <h2 className="text-sm font-semibold text-white mb-5">Fleet Status Breakdown</h2>
+      <div className="glass-card rounded-2xl p-5 border border-[var(--border-subtle)]">
+        <h2 className="text-sm font-semibold text-[var(--text-main)] mb-5">Fleet Status Breakdown</h2>
         <div className="space-y-4">
           {[
             { label: 'Available',    value: data.availableVehicles,     total: data.totalVehicles, color: 'bg-emerald-500' },
@@ -311,14 +311,14 @@ export default function LogisticsAnalyticsPage() {
             { label: 'Maintenance',  value: data.maintenanceVehicles,   total: data.totalVehicles, color: 'bg-amber-500' },
           ].map(row => (
             <div key={row.label} className="flex items-center gap-4">
-              <span className="text-xs text-slate-400 w-24 flex-shrink-0">{row.label}</span>
-              <div className="flex-1 bg-slate-800 rounded-full h-2 overflow-hidden">
+              <span className="text-xs text-[var(--text-muted)] w-24 flex-shrink-0">{row.label}</span>
+              <div className="flex-1 bg-[var(--bg-surface)] rounded-full h-2 overflow-hidden">
                 <div
                   className={`h-full ${row.color} rounded-full transition-all`}
                   style={{ width: row.total > 0 ? `${Math.max(0, (row.value / row.total) * 100)}%` : '0%' }}
                 />
               </div>
-              <span className="text-xs text-white font-medium w-16 text-right flex-shrink-0">
+              <span className="text-xs text-[var(--text-main)] font-medium w-16 text-right flex-shrink-0">
                 {Math.max(0, row.value)} / {row.total}
               </span>
             </div>

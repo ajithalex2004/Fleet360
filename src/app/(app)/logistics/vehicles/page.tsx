@@ -28,7 +28,7 @@ const STATUS_BADGE: Record<string, string> = {
   RENTED:      'bg-blue-500/20 text-blue-400 border-blue-500/30',
   MAINTENANCE: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
   RESERVED:    'bg-purple-500/20 text-purple-400 border-purple-500/30',
-  INACTIVE:    'bg-slate-500/20 text-slate-400 border-slate-500/30',
+  INACTIVE:    'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30',
 };
 
 function isExpiringSoon(date: string | null) {
@@ -43,11 +43,11 @@ function isExpired(date: string | null) {
 }
 
 function ExpiryCell({ date }: { date: string | null }) {
-  if (!date) return <span className="text-slate-600">—</span>;
+  if (!date) return <span className="text-[var(--text-faint)]">—</span>;
   const expired  = isExpired(date);
   const expiring = isExpiringSoon(date);
   return (
-    <span className={`text-xs font-medium ${expired ? 'text-red-400' : expiring ? 'text-amber-400' : 'text-slate-400'}`}>
+    <span className={`text-xs font-medium ${expired ? 'text-red-400' : expiring ? 'text-amber-400' : 'text-[var(--text-muted)]'}`}>
       {expired ? '⚠️ ' : expiring ? '⏰ ' : ''}
       {new Date(date).toLocaleDateString('en-AE')}
     </span>
@@ -116,8 +116,8 @@ export default function LogisticsVehiclesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Logistics Fleet</h1>
-          <p className="text-slate-400 text-xs mt-0.5">Vehicles assigned to logistics operations</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Logistics Fleet</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Vehicles assigned to logistics operations</p>
         </div>
         <div className="flex items-center gap-3">
           {expiryAlerts > 0 && (
@@ -125,15 +125,15 @@ export default function LogisticsVehiclesPage() {
               ⚠️ {expiryAlerts} expiry alert{expiryAlerts > 1 ? 's' : ''}
             </div>
           )}
-          <div className="flex items-center gap-1 text-xs text-slate-400 bg-slate-800 border border-white/10 px-3 py-1.5 rounded-lg">
+          <div className="flex items-center gap-1 text-xs text-[var(--text-muted)] bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-3 py-1.5 rounded-lg">
             {vehicles.filter(v => v.status === 'AVAILABLE').length} available of {vehicles.length}
           </div>
           {/* View toggle */}
-          <div className="flex bg-slate-800 border border-white/10 rounded-lg overflow-hidden">
+          <div className="flex bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg overflow-hidden">
             {(['table', 'grid'] as const).map(v => (
               <button key={v} onClick={() => setView(v)}
                 className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                  view === v ? 'bg-amber-500/20 text-amber-300' : 'text-slate-400 hover:text-white'
+                  view === v ? 'bg-amber-500/20 text-amber-300' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                 }`}>
                 {v === 'table' ? '☰' : '⊞'}
               </button>
@@ -149,7 +149,7 @@ export default function LogisticsVehiclesPage() {
             className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
               statusFilter === s
                 ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                : 'text-slate-400 border-white/10 hover:text-white'
+                : 'text-[var(--text-muted)] border-[var(--border-subtle)] hover:text-[var(--text-main)]'
             }`}>
             {s} {s !== 'ALL' && (
               <span className="ml-0.5 opacity-60">({vehicles.filter(v => v.status === s).length})</span>
@@ -164,25 +164,25 @@ export default function LogisticsVehiclesPage() {
         placeholder="Search by plate, make, model…"
         value={search}
         onChange={e => setSearch(e.target.value)}
-        className="w-full bg-slate-800/60 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/40"
+        className="w-full bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-amber-500/40"
       />
 
       {loading ? (
         <div className="space-y-2">
-          {[...Array(6)].map((_, i) => <div key={i} className="h-12 bg-slate-800/60 rounded-xl animate-pulse" />)}
+          {[...Array(6)].map((_, i) => <div key={i} className="h-12 bg-[var(--bg-surface)]/60 rounded-xl animate-pulse" />)}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-16 text-center">
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-16 text-center">
           <div className="text-5xl mb-3">🚛</div>
-          <p className="text-slate-400">No logistics vehicles found</p>
-          <p className="text-slate-600 text-xs mt-1">Vehicles with vehicle_usage = LOGISTICS appear here</p>
+          <p className="text-[var(--text-muted)]">No logistics vehicles found</p>
+          <p className="text-[var(--text-faint)] text-xs mt-1">Vehicles with vehicle_usage = LOGISTICS appear here</p>
         </div>
       ) : view === 'table' ? (
         /* ── Table View ──────────────────────────────────────────────────── */
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden overflow-x-auto">
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden overflow-x-auto">
           <table className="w-full text-sm min-w-[900px]">
             <thead>
-              <tr className="border-b border-white/10 text-slate-400 text-xs uppercase tracking-wider">
+              <tr className="border-b border-[var(--border-subtle)] text-[var(--text-muted)] text-xs uppercase tracking-wider">
                 <th className="text-left px-5 py-3">Vehicle</th>
                 <th className="text-left px-4 py-3">Status</th>
                 <th className="text-left px-4 py-3">Fuel</th>
@@ -197,16 +197,16 @@ export default function LogisticsVehiclesPage() {
               {filtered.map(v => {
                 const cap = parseCapacity(v.notes);
                 return (
-                  <tr key={v.id} className="border-b border-white/5 last:border-0 hover:bg-slate-800/40 transition-colors">
+                  <tr key={v.id} className="border-b border-[var(--border-subtle)] last:border-0 hover:bg-[var(--bg-surface)]/40 transition-colors">
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-sm">
                           🚛
                         </div>
                         <div>
-                          <p className="text-white font-bold text-sm">{v.plate_number ?? v.registration_no ?? 'No Plate'}</p>
-                          <p className="text-slate-400 text-xs">{[v.year, v.make, v.model].filter(Boolean).join(' ')}</p>
-                          {v.color && <p className="text-slate-600 text-xs">{v.color}</p>}
+                          <p className="text-[var(--text-main)] font-bold text-sm">{v.plate_number ?? v.registration_no ?? 'No Plate'}</p>
+                          <p className="text-[var(--text-muted)] text-xs">{[v.year, v.make, v.model].filter(Boolean).join(' ')}</p>
+                          {v.color && <p className="text-[var(--text-faint)] text-xs">{v.color}</p>}
                         </div>
                       </div>
                     </td>
@@ -215,10 +215,10 @@ export default function LogisticsVehiclesPage() {
                         {v.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-300">
-                      {v.fuel_type ? <span>{fuelIcon(v.fuel_type)} {v.fuel_type}</span> : <span className="text-slate-600">—</span>}
+                    <td className="px-4 py-3 text-xs text-[var(--text-muted)]">
+                      {v.fuel_type ? <span>{fuelIcon(v.fuel_type)} {v.fuel_type}</span> : <span className="text-[var(--text-faint)]">—</span>}
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-400 text-right font-mono">
+                    <td className="px-4 py-3 text-xs text-[var(--text-muted)] text-right font-mono">
                       {v.current_mileage != null ? `${v.current_mileage.toLocaleString()} km` : '—'}
                     </td>
                     <td className="px-4 py-3"><ExpiryCell date={v.insurance_expiry} /></td>
@@ -228,20 +228,20 @@ export default function LogisticsVehiclesPage() {
                         <div>
                           <ExpiryCell date={v.next_service_date} />
                           {v.next_service_mileage != null && (
-                            <p className="text-slate-600 text-xs mt-0.5">@ {v.next_service_mileage.toLocaleString()} km</p>
+                            <p className="text-[var(--text-faint)] text-xs mt-0.5">@ {v.next_service_mileage.toLocaleString()} km</p>
                           )}
                         </div>
-                      ) : <span className="text-slate-600">—</span>}
+                      ) : <span className="text-[var(--text-faint)]">—</span>}
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-300">
+                    <td className="px-4 py-3 text-xs text-[var(--text-muted)]">
                       {cap.weightKg || cap.cbm ? (
                         <div className="space-y-0.5">
                           {cap.weightKg && <p>⚖️ {cap.weightKg.toLocaleString()} kg</p>}
                           {cap.cbm      && <p>📦 {cap.cbm} m³</p>}
                         </div>
                       ) : v.seating_capacity ? (
-                        <span className="text-slate-400">💺 {v.seating_capacity} seats</span>
-                      ) : <span className="text-slate-600">—</span>}
+                        <span className="text-[var(--text-muted)]">💺 {v.seating_capacity} seats</span>
+                      ) : <span className="text-[var(--text-faint)]">—</span>}
                     </td>
                   </tr>
                 );
@@ -259,7 +259,7 @@ export default function LogisticsVehiclesPage() {
             const regExpired    = isExpired(v.registration_expiry);
             const svcDue        = isExpiringSoon(v.next_service_date) || isExpired(v.next_service_date);
             return (
-              <div key={v.id} className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 hover:border-white/20 transition-all space-y-3">
+              <div key={v.id} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5 hover:border-[var(--border-strong)] transition-all space-y-3">
                 <div className="flex items-start justify-between">
                   <div className="text-2xl">🚛</div>
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_BADGE[v.status] ?? STATUS_BADGE.INACTIVE}`}>
@@ -267,44 +267,44 @@ export default function LogisticsVehiclesPage() {
                   </span>
                 </div>
                 <div>
-                  <p className="text-white font-bold text-lg">{v.plate_number ?? v.registration_no ?? 'No Plate'}</p>
-                  <p className="text-slate-400 text-sm">{[v.year, v.make, v.model].filter(Boolean).join(' ')}</p>
-                  {v.color && <p className="text-slate-600 text-xs">{v.color}</p>}
+                  <p className="text-[var(--text-main)] font-bold text-lg">{v.plate_number ?? v.registration_no ?? 'No Plate'}</p>
+                  <p className="text-[var(--text-muted)] text-sm">{[v.year, v.make, v.model].filter(Boolean).join(' ')}</p>
+                  {v.color && <p className="text-[var(--text-faint)] text-xs">{v.color}</p>}
                 </div>
 
                 {/* Specs row */}
                 <div className="flex flex-wrap gap-2 text-xs">
                   {v.fuel_type && (
-                    <span className="bg-slate-800 border border-white/10 rounded-lg px-2 py-1">
+                    <span className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2 py-1">
                       {fuelIcon(v.fuel_type)} {v.fuel_type}
                     </span>
                   )}
                   {v.current_mileage != null && (
-                    <span className="bg-slate-800 border border-white/10 rounded-lg px-2 py-1 font-mono text-slate-400">
+                    <span className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2 py-1 font-mono text-[var(--text-muted)]">
                       {v.current_mileage.toLocaleString()} km
                     </span>
                   )}
                   {cap.weightKg && (
-                    <span className="bg-slate-800 border border-white/10 rounded-lg px-2 py-1">⚖️ {cap.weightKg.toLocaleString()} kg</span>
+                    <span className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2 py-1">⚖️ {cap.weightKg.toLocaleString()} kg</span>
                   )}
                   {cap.cbm && (
-                    <span className="bg-slate-800 border border-white/10 rounded-lg px-2 py-1">📦 {cap.cbm} m³</span>
+                    <span className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2 py-1">📦 {cap.cbm} m³</span>
                   )}
                 </div>
 
                 {/* Compliance */}
-                <div className="space-y-1 border-t border-white/5 pt-2">
+                <div className="space-y-1 border-t border-[var(--border-subtle)] pt-2">
                   <div className="flex justify-between text-xs">
-                    <span className="text-slate-500">Insurance</span>
+                    <span className="text-[var(--text-faint)]">Insurance</span>
                     <ExpiryCell date={v.insurance_expiry} />
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span className="text-slate-500">Registration</span>
+                    <span className="text-[var(--text-faint)]">Registration</span>
                     <ExpiryCell date={v.registration_expiry} />
                   </div>
                   {v.next_service_date && (
                     <div className="flex justify-between text-xs">
-                      <span className="text-slate-500">Next Service</span>
+                      <span className="text-[var(--text-faint)]">Next Service</span>
                       <ExpiryCell date={v.next_service_date} />
                     </div>
                   )}

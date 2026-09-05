@@ -116,7 +116,7 @@ export default function AccessorialPreviewPanel(props: AccessorialPreviewPanelPr
 
   if (loading && !result) {
     return (
-      <div className="rounded-xl border border-white/10 bg-slate-900/50 px-5 py-4 text-sm text-slate-400 animate-pulse">
+      <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 px-5 py-4 text-sm text-[var(--text-muted)] animate-pulse">
         Computing accessorials…
       </div>
     );
@@ -134,11 +134,11 @@ export default function AccessorialPreviewPanel(props: AccessorialPreviewPanelPr
 
   if (result.applied.length === 0) {
     return (
-      <div className="rounded-xl border border-white/5 bg-slate-900/30 px-5 py-4 text-sm">
+      <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/30 px-5 py-4 text-sm">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <div className="text-slate-300 font-medium">No auto-applied accessorials</div>
-            <div className="text-slate-500 text-xs mt-0.5">
+            <div className="text-[var(--text-muted)] font-medium">No auto-applied accessorials</div>
+            <div className="text-[var(--text-faint)] text-xs mt-0.5">
               The active catalog has no rules that fire on this shipment. Add or edit rules
               in <Link href="/logistics/accessorials" className="text-amber-300 hover:text-amber-200">Accessorials</Link>.
             </div>

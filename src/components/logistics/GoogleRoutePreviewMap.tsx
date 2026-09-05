@@ -134,10 +134,10 @@ export default function GoogleRoutePreviewMap({
   ]);
 
   return (
-    <div className={`relative rounded-xl overflow-hidden border border-white/10 ${className ?? ''}`} style={{ height: heightPx }}>
+    <div className={`relative rounded-xl overflow-hidden border border-[var(--border-subtle)] ${className ?? ''}`} style={{ height: heightPx }}>
       <div ref={containerRef} className="absolute inset-0" />
       {!encodedPolyline && !error && (
-        <div className="absolute inset-0 flex items-center justify-center text-xs text-slate-500 bg-slate-800/40">
+        <div className="absolute inset-0 flex items-center justify-center text-xs text-[var(--text-faint)] bg-[var(--bg-surface)]/40">
           Route preview will appear here once origin + destination are set.
         </div>
       )}
@@ -151,8 +151,8 @@ export default function GoogleRoutePreviewMap({
           scroll/drag the underlying map, but visually dims the tiles + shows
           a spinner so it's clear the map they see is about to update. */}
       {recomputing && encodedPolyline && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-slate-900/40">
-          <div className="pointer-events-auto flex items-center gap-2 rounded-full bg-slate-900/90 border border-violet-500/40 px-3 py-1.5 text-xs text-violet-200 shadow-lg">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-[var(--bg-surface)]/40">
+          <div className="pointer-events-auto flex items-center gap-2 rounded-full bg-[var(--bg-surface)]/90 border border-violet-500/40 px-3 py-1.5 text-xs text-violet-200 shadow-lg">
             <span className="inline-block w-2 h-2 rounded-full bg-violet-400 animate-pulse" />
             Recomputing route…
           </div>

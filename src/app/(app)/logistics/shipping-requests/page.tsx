@@ -50,7 +50,7 @@ const chipColor = (s: string): string => {
     case 'SUBMITTED': return 'bg-blue-500/20 text-blue-300 border-blue-500/40';
     case 'UNDER_REVIEW': return 'bg-amber-500/20 text-amber-300 border-amber-500/40';
     case 'REJECTED': return 'bg-rose-500/20 text-rose-300 border-rose-500/40';
-    default: return 'bg-slate-600/30 text-slate-300 border-slate-500/40';
+    default: return 'bg-[var(--bg-surface-hover)]/30 text-[var(--text-muted)] border-slate-500/40';
   }
 };
 function Chip({ value }: { value: string }) {
@@ -136,14 +136,14 @@ export default function ShippingRequestsPage() {
   const columns = useMemo<DataGridColumn<ShippingRequest>[]>(() => [
     {
       key: 'request', header: 'Request', accessor: r => r.requestNo,
-      render: r => (<div><div className="font-mono text-xs text-white">{r.requestNo}</div><div className="text-xs text-slate-500">{r.shipmentType ?? '—'}{r.referenceNo ? ` · ${r.referenceNo}` : ''}</div></div>),
+      render: r => (<div><div className="font-mono text-xs text-[var(--text-main)]">{r.requestNo}</div><div className="text-xs text-[var(--text-faint)]">{r.shipmentType ?? '—'}{r.referenceNo ? ` · ${r.referenceNo}` : ''}</div></div>),
     },
     { key: 'shipper', header: 'Shipper', accessor: r => r.shipperName ?? '' },
     {
       key: 'lane', header: 'Lane', accessor: r => `${r.originName ?? ''} → ${r.destinationName ?? ''}`,
-      render: r => (<span><span className="text-white">{r.originName ?? '—'}</span><ArrowRight className="w-3 h-3 inline mx-1 text-slate-600" /><span className="text-white">{r.destinationName ?? '—'}</span></span>),
+      render: r => (<span><span className="text-[var(--text-main)]">{r.originName ?? '—'}</span><ArrowRight className="w-3 h-3 inline mx-1 text-[var(--text-faint)]" /><span className="text-[var(--text-main)]">{r.destinationName ?? '—'}</span></span>),
     },
-    { key: 'pickup', header: 'Pickup', accessor: r => r.pickupWindowFrom ?? '', filter: false, render: r => <span className="text-slate-400 text-xs">{dt(r.pickupWindowFrom)}</span> },
+    { key: 'pickup', header: 'Pickup', accessor: r => r.pickupWindowFrom ?? '', filter: false, render: r => <span className="text-[var(--text-muted)] text-xs">{dt(r.pickupWindowFrom)}</span> },
     { key: 'status', header: 'Status', accessor: r => r.status, filter: 'select', render: r => <Chip value={r.status} /> },
   ], []);
 
@@ -182,7 +182,7 @@ export default function ShippingRequestsPage() {
           exportName: 'shipping-requests',
           actions: (
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-              className="bg-slate-950/60 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-emerald-500/40">
+              className="bg-[var(--bg-canvas)]/60 border border-[var(--border-subtle)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text-muted)] focus:outline-none focus:border-emerald-500/40">
               {STATUS_FILTERS.map(s => <option key={s} value={s}>{s ? s.replace(/_/g, ' ') : 'All statuses'}</option>)}
             </select>
           ),
@@ -228,10 +228,10 @@ function RequestDrawer({
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative w-full max-w-md bg-slate-950 border-l border-white/10 h-full overflow-y-auto p-6 space-y-4">
+      <div className="relative w-full max-w-md bg-[var(--bg-canvas)] border-l border-[var(--border-subtle)] h-full overflow-y-auto p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-white flex items-center gap-2"><Inbox className="w-5 h-5 text-emerald-300" /> New shipping request</h2>
-          <button type="button" onClick={onClose} className="text-slate-500 hover:text-white"><X className="w-5 h-5" /></button>
+          <h2 className="text-lg font-bold text-[var(--text-main)] flex items-center gap-2"><Inbox className="w-5 h-5 text-emerald-300" /> New shipping request</h2>
+          <button type="button" onClick={onClose} className="text-[var(--text-faint)] hover:text-[var(--text-main)]"><X className="w-5 h-5" /></button>
         </div>
         {error && <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">{error}</div>}
 
@@ -284,7 +284,7 @@ function RequestDrawer({
             className="flex-1 rounded-xl bg-emerald-600 text-white font-medium px-4 py-2.5 text-sm hover:bg-emerald-500 disabled:opacity-50">
             {saving ? 'Filing…' : 'File request'}
           </button>
-          <button type="button" onClick={onClose} className="rounded-xl border border-white/10 text-slate-300 px-4 py-2.5 text-sm hover:bg-slate-800">Cancel</button>
+          <button type="button" onClick={onClose} className="rounded-xl border border-[var(--border-subtle)] text-[var(--text-muted)] px-4 py-2.5 text-sm hover:bg-[var(--bg-surface)]">Cancel</button>
         </div>
       </div>
     </div>
@@ -336,21 +336,21 @@ function RequestDetail({
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative w-full max-w-md bg-slate-950 border-l border-white/10 h-full overflow-y-auto p-6 space-y-5">
+      <div className="relative w-full max-w-md bg-[var(--bg-canvas)] border-l border-[var(--border-subtle)] h-full overflow-y-auto p-6 space-y-5">
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-lg font-bold text-white font-mono">{request.requestNo}</h2>
+            <h2 className="text-lg font-bold text-[var(--text-main)] font-mono">{request.requestNo}</h2>
             <div className="mt-1"><Chip value={request.status} /></div>
           </div>
-          <button type="button" onClick={onClose} className="text-slate-500 hover:text-white"><X className="w-5 h-5" /></button>
+          <button type="button" onClick={onClose} className="text-[var(--text-faint)] hover:text-[var(--text-main)]"><X className="w-5 h-5" /></button>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 space-y-3">
+        <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 p-4 space-y-3">
           <div className="flex items-start gap-2 text-sm">
             <MapPin className="w-4 h-4 text-emerald-300 mt-0.5 shrink-0" />
-            <span className="text-white font-medium">{request.originName ?? '—'}</span>
-            <ArrowRight className="w-3.5 h-3.5 text-slate-600 mt-0.5" />
-            <span className="text-white font-medium">{request.destinationName ?? '—'}</span>
+            <span className="text-[var(--text-main)] font-medium">{request.originName ?? '—'}</span>
+            <ArrowRight className="w-3.5 h-3.5 text-[var(--text-faint)] mt-0.5" />
+            <span className="text-[var(--text-main)] font-medium">{request.destinationName ?? '—'}</span>
           </div>
           <div className="grid grid-cols-2 gap-3 text-sm">
             <Info icon={Building2} label="Shipper" value={request.shipperName} />
@@ -362,8 +362,8 @@ function RequestDetail({
             <Info icon={FileText} label="Reference" value={request.referenceNo} />
             <Info icon={Package} label="Value" value={request.cargoValueAmount != null ? `${request.currency ?? ''} ${request.cargoValueAmount.toLocaleString()}` : null} />
           </div>
-          {request.goodsDescription && <div className="text-xs text-slate-400">Goods: {request.goodsDescription}</div>}
-          {request.specialInstructions && <div className="text-xs text-slate-400">Instructions: {request.specialInstructions}</div>}
+          {request.goodsDescription && <div className="text-xs text-[var(--text-muted)]">Goods: {request.goodsDescription}</div>}
+          {request.specialInstructions && <div className="text-xs text-[var(--text-muted)]">Instructions: {request.specialInstructions}</div>}
         </div>
 
         <CargoClassificationPanel metadata={request.metadata} />
@@ -406,16 +406,16 @@ function RequestDetail({
    pair of compact panels so the operator sees the regulatory context at review
    time. Renders nothing when no data is present (defaults preserved). */
 /* ── small bits ───────────────────────────────────────────────────────────── */
-const inputCls = 'w-full bg-slate-950/60 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500/40 mt-1';
+const inputCls = 'w-full bg-[var(--bg-canvas)]/60 border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-emerald-500/40 mt-1';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div><label className="text-[11px] uppercase tracking-wider text-slate-500">{label}</label>{children}</div>;
+  return <div><label className="text-[11px] uppercase tracking-wider text-[var(--text-faint)]">{label}</label>{children}</div>;
 }
 function Info({ icon: Icon, label, value }: { icon: typeof Package; label: string; value: string | null }) {
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-wider text-slate-500 flex items-center gap-1"><Icon className="w-3 h-3" /> {label}</div>
-      <div className="text-slate-200 mt-0.5 truncate">{value || '—'}</div>
+      <div className="text-[10px] uppercase tracking-wider text-[var(--text-faint)] flex items-center gap-1"><Icon className="w-3 h-3" /> {label}</div>
+      <div className="text-[var(--text-main)] mt-0.5 truncate">{value || '—'}</div>
     </div>
   );
 }
@@ -423,7 +423,7 @@ const TONES: Record<string, string> = {
   emerald: 'bg-emerald-600/90 hover:bg-emerald-500 text-white',
   amber: 'bg-amber-600/90 hover:bg-amber-500 text-white',
   rose: 'border border-rose-500/40 text-rose-300 hover:bg-rose-500/10',
-  slate: 'border border-white/10 text-slate-300 hover:bg-slate-800',
+  slate: 'border border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface)]',
 };
 function ActionBtn({ onClick, busy, label, tone }: { onClick: () => void; busy: boolean; label: string; tone: string }) {
   return (

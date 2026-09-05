@@ -159,9 +159,9 @@ const MODES: Array<{ key: RateBasisMode; label: string; icon: typeof Equal }> = 
 ];
 
 const inputCls =
-  'w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/40';
+  'w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-amber-500/40';
 const cellCls =
-  'w-full bg-slate-800 border border-white/10 rounded-lg px-2.5 py-1.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-500/40';
+  'w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2.5 py-1.5 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-amber-500/40';
 
 export default function RateBasisEditor({ value, onChange, fallbackFlat, currency }: Props) {
   const [sampleQty, setSampleQty] = useState<number>(600);
@@ -188,8 +188,8 @@ export default function RateBasisEditor({ value, onChange, fallbackFlat, currenc
           <Calculator className="w-4 h-4 text-amber-300" strokeWidth={2} />
         </div>
         <div>
-          <p className="text-sm font-medium text-white">Pricing basis</p>
-          <p className="text-xs text-slate-500">How this contract derives its line-haul base rate</p>
+          <p className="text-sm font-medium text-[var(--text-main)]">Pricing basis</p>
+          <p className="text-xs text-[var(--text-faint)]">How this contract derives its line-haul base rate</p>
         </div>
       </div>
 
@@ -206,7 +206,7 @@ export default function RateBasisEditor({ value, onChange, fallbackFlat, currenc
               className={`flex flex-col items-center gap-1 rounded-xl border px-3 py-2.5 transition-colors ${
                 active
                   ? 'bg-amber-500/10 border-amber-500/50 text-amber-300'
-                  : 'bg-slate-800 border-white/10 text-slate-300 hover:border-white/20'
+                  : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-muted)] hover:border-[var(--border-strong)]'
               }`}
             >
               <Icon className="w-4 h-4" strokeWidth={2} />
@@ -217,18 +217,18 @@ export default function RateBasisEditor({ value, onChange, fallbackFlat, currenc
       </div>
 
       {value.mode === 'flat' ? (
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-[var(--text-faint)]">
           The contract&rsquo;s base rate is used as the line-haul base. Switch to per&nbsp;km or
           per&nbsp;kg to price by shipment distance or weight.
         </p>
       ) : (
         <>
           <div>
-            <label className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">
+            <label className="text-[11px] uppercase tracking-wider text-[var(--text-faint)] font-medium">
               Rate per {unit} · floor
             </label>
             <div className="relative mt-1.5">
-              <span className="absolute left-3 top-2.5 text-sm text-slate-500">{currency}</span>
+              <span className="absolute left-3 top-2.5 text-sm text-[var(--text-faint)]">{currency}</span>
               <input
                 type="number"
                 min={0}
@@ -240,7 +240,7 @@ export default function RateBasisEditor({ value, onChange, fallbackFlat, currenc
                 className={`${inputCls} pl-12`}
               />
             </div>
-            <p className="text-[11px] text-slate-600 mt-1">
+            <p className="text-[11px] text-[var(--text-faint)] mt-1">
               Used when a shipment&rsquo;s {unit === 'km' ? 'distance' : 'weight'} is below every
               breakpoint. The base rate field above is the flat fallback when {unit === 'km' ? 'distance' : 'weight'} is
               unknown at quote time.
@@ -249,8 +249,8 @@ export default function RateBasisEditor({ value, onChange, fallbackFlat, currenc
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-medium text-slate-300">
-                Breakpoints <span className="text-slate-600 font-normal">· optional tiered rate table</span>
+              <p className="text-xs font-medium text-[var(--text-muted)]">
+                Breakpoints <span className="text-[var(--text-faint)] font-normal">· optional tiered rate table</span>
               </p>
               <button
                 type="button"
@@ -262,14 +262,14 @@ export default function RateBasisEditor({ value, onChange, fallbackFlat, currenc
             </div>
 
             {value.breakpoints.length === 0 ? (
-              <p className="text-[11px] text-slate-600 rounded-lg border border-white/5 bg-slate-900/40 px-3 py-2">
+              <p className="text-[11px] text-[var(--text-faint)] rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 px-3 py-2">
                 No tiers — every shipment uses the floor rate above. Add a tier to charge a different
                 rate (or a flat amount) past a {unit} threshold. The matching tier&rsquo;s rate applies to
                 the whole {unit === 'km' ? 'distance' : 'weight'}.
               </p>
             ) : (
-              <div className="rounded-xl border border-white/10 overflow-hidden">
-                <div className="grid grid-cols-[1.1fr_1fr_1fr_28px] gap-2 px-3 py-2 text-[10px] uppercase tracking-wider text-slate-500 border-b border-white/5">
+              <div className="rounded-xl border border-[var(--border-subtle)] overflow-hidden">
+                <div className="grid grid-cols-[1.1fr_1fr_1fr_28px] gap-2 px-3 py-2 text-[10px] uppercase tracking-wider text-[var(--text-faint)] border-b border-[var(--border-subtle)]">
                   <div>From ({unit})</div>
                   <div>Rate / {unit}</div>
                   <div>or Flat amount</div>
@@ -278,7 +278,7 @@ export default function RateBasisEditor({ value, onChange, fallbackFlat, currenc
                 {value.breakpoints.map((t, i) => (
                   <div
                     key={i}
-                    className="grid grid-cols-[1.1fr_1fr_1fr_28px] gap-2 px-3 py-2 items-center border-b border-white/5 last:border-b-0"
+                    className="grid grid-cols-[1.1fr_1fr_1fr_28px] gap-2 px-3 py-2 items-center border-b border-[var(--border-subtle)] last:border-b-0"
                   >
                     <input
                       type="number"
@@ -318,7 +318,7 @@ export default function RateBasisEditor({ value, onChange, fallbackFlat, currenc
                       type="button"
                       onClick={() => removeTier(i)}
                       aria-label={`Remove tier ${i + 1}`}
-                      className="text-slate-500 hover:text-red-300"
+                      className="text-[var(--text-faint)] hover:text-red-300"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -326,8 +326,8 @@ export default function RateBasisEditor({ value, onChange, fallbackFlat, currenc
                 ))}
               </div>
             )}
-            <p className="text-[11px] text-slate-600 mt-1.5">
-              Fill a rate per {unit} <span className="text-slate-500">or</span> a flat amount per tier — if
+            <p className="text-[11px] text-[var(--text-faint)] mt-1.5">
+              Fill a rate per {unit} <span className="text-[var(--text-faint)]">or</span> a flat amount per tier — if
               both, the flat amount wins.
             </p>
           </div>
@@ -336,11 +336,11 @@ export default function RateBasisEditor({ value, onChange, fallbackFlat, currenc
             <FlaskConical className="w-4 h-4 text-emerald-300 shrink-0" />
             <div className="text-xs text-emerald-200/90">
               Preview:{' '}
-              <span className="text-white font-medium">
+              <span className="text-[var(--text-main)] font-medium">
                 {fmt(sampleQty)} {unit}
               </span>{' '}
               → base{' '}
-              <span className="text-white font-medium">
+              <span className="text-[var(--text-main)] font-medium">
                 {currency} {preview.base.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>{' '}
               <span className={preview.applied ? 'text-emerald-300' : 'text-amber-300/80'}>{preview.note}</span>
@@ -353,7 +353,7 @@ export default function RateBasisEditor({ value, onChange, fallbackFlat, currenc
               value={sampleQty}
               onChange={(e) => setSampleQty(Number(e.target.value) || 0)}
               aria-label="Sample quantity for preview"
-              className="ml-auto w-20 bg-slate-900/60 border border-emerald-500/30 rounded-lg px-2 py-1 text-xs text-white text-right focus:outline-none focus:border-emerald-400/50"
+              className="ml-auto w-20 bg-[var(--bg-surface)]/60 border border-emerald-500/30 rounded-lg px-2 py-1 text-xs text-[var(--text-main)] text-right focus:outline-none focus:border-emerald-400/50"
             />
           </div>
 

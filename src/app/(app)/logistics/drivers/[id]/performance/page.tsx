@@ -61,8 +61,8 @@ function ScoreGauge({ score }: { score: number }) {
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-3xl font-bold text-white">{score}</span>
-          <span className="text-xs text-slate-500">/ 100</span>
+          <span className="text-3xl font-bold text-[var(--text-main)]">{score}</span>
+          <span className="text-xs text-[var(--text-faint)]">/ 100</span>
         </div>
       </div>
       <span className={`text-sm font-semibold ${scoreColor(score).text}`}>{label}</span>
@@ -76,10 +76,10 @@ function KpiCard({ icon, label, value, sub, color }: {
   icon: string; label: string; value: string | number; sub?: string; color?: string;
 }) {
   return (
-    <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-4 space-y-1">
-      <p className="text-xs text-slate-500 flex items-center gap-1.5">{icon} {label}</p>
-      <p className={`text-2xl font-bold ${color ?? 'text-white'}`}>{value}</p>
-      {sub && <p className="text-xs text-slate-600">{sub}</p>}
+    <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4 space-y-1">
+      <p className="text-xs text-[var(--text-faint)] flex items-center gap-1.5">{icon} {label}</p>
+      <p className={`text-2xl font-bold ${color ?? 'text-[var(--text-main)]'}`}>{value}</p>
+      {sub && <p className="text-xs text-[var(--text-faint)]">{sub}</p>}
     </div>
   );
 }
@@ -90,8 +90,8 @@ function KpiCard({ icon, label, value, sub, color }: {
 function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-slate-800 border border-white/10 rounded-xl p-3 text-xs space-y-1">
-      <p className="text-slate-300 font-medium">{label}</p>
+    <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3 text-xs space-y-1">
+      <p className="text-[var(--text-muted)] font-medium">{label}</p>
       {payload.map((p: { color: string; name: string; value: number }) => (
         <p key={p.name} style={{ color: p.color }}>{p.name}: {p.value}</p>
       ))}
@@ -105,10 +105,10 @@ function MetricBar({ label, value, color }: { label: string; value: number; colo
   return (
     <div className="space-y-1.5">
       <div className="flex justify-between text-xs">
-        <span className="text-slate-400">{label}</span>
+        <span className="text-[var(--text-muted)]">{label}</span>
         <span className={`font-semibold ${color}`}>{value}%</span>
       </div>
-      <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+      <div className="h-2 bg-[var(--bg-surface)] rounded-full overflow-hidden">
         <div className={`h-full rounded-full transition-all duration-700 ${
           value >= 85 ? 'bg-emerald-500' : value >= 70 ? 'bg-amber-500' : value >= 50 ? 'bg-orange-500' : 'bg-red-500'
         }`} style={{ width: `${value}%` }} />
@@ -145,10 +145,10 @@ export default function DriverPerformancePage() {
   if (loading) {
     return (
       <div className="space-y-4 animate-pulse">
-        <div className="h-10 w-64 bg-slate-800 rounded-xl" />
-        <div className="h-40 bg-slate-800 rounded-2xl" />
+        <div className="h-10 w-64 bg-[var(--bg-surface)] rounded-xl" />
+        <div className="h-40 bg-[var(--bg-surface)] rounded-2xl" />
         <div className="grid grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => <div key={i} className="h-24 bg-slate-800 rounded-2xl" />)}
+          {[...Array(4)].map((_, i) => <div key={i} className="h-24 bg-[var(--bg-surface)] rounded-2xl" />)}
         </div>
       </div>
     );
@@ -158,7 +158,7 @@ export default function DriverPerformancePage() {
     return (
       <div className="text-center py-20 space-y-3">
         <div className="text-5xl">👤</div>
-        <p className="text-slate-400">Driver not found or no data available.</p>
+        <p className="text-[var(--text-muted)]">Driver not found or no data available.</p>
         <Link href="/logistics/drivers" className="text-amber-400 text-sm hover:text-amber-300">← Back to Drivers</Link>
       </div>
     );
@@ -175,8 +175,8 @@ export default function DriverPerformancePage() {
             {stats.firstName[0]}{stats.lastName[0]}
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-white">{stats.firstName} {stats.lastName}</h1>
-            <p className="text-slate-400 text-xs mt-0.5 space-x-3">
+            <h1 className="text-2xl font-bold text-[var(--text-main)]">{stats.firstName} {stats.lastName}</h1>
+            <p className="text-[var(--text-muted)] text-xs mt-0.5 space-x-3">
               {stats.phone && <span>📞 {stats.phone}</span>}
               {stats.licenseNumber && <span>🪪 {stats.licenseNumber}</span>}
             </p>
@@ -189,13 +189,13 @@ export default function DriverPerformancePage() {
               className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${
                 days === d
                   ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                  : 'text-slate-500 border-white/10 hover:border-white/20 hover:text-white'
+                  : 'text-[var(--text-faint)] border-[var(--border-subtle)] hover:border-[var(--border-strong)] hover:text-[var(--text-main)]'
               }`}>
               {d}d
             </button>
           ))}
           <Link href="/logistics/drivers"
-            className="text-xs text-slate-500 hover:text-slate-300 border border-white/10 px-3 py-1.5 rounded-lg transition-colors">
+            className="text-xs text-[var(--text-faint)] hover:text-[var(--text-muted)] border border-[var(--border-subtle)] px-3 py-1.5 rounded-lg transition-colors">
             ← Drivers
           </Link>
         </div>
@@ -204,11 +204,11 @@ export default function DriverPerformancePage() {
       {/* Score + overview */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Score gauge */}
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-6 flex flex-col items-center gap-4">
-          <p className="text-xs text-slate-500 uppercase tracking-wider font-medium">Performance Score</p>
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-6 flex flex-col items-center gap-4">
+          <p className="text-xs text-[var(--text-faint)] uppercase tracking-wider font-medium">Performance Score</p>
           <ScoreGauge score={stats.score} />
           <div className="text-center">
-            <p className="text-xs text-slate-600">Last {days} days · {stats.totalTrips} trips</p>
+            <p className="text-xs text-[var(--text-faint)]">Last {days} days · {stats.totalTrips} trips</p>
             {stats.lastTripDate && (
               <p className="text-xs text-slate-700 mt-0.5">Last trip: {fmt(stats.lastTripDate)}</p>
             )}
@@ -216,8 +216,8 @@ export default function DriverPerformancePage() {
         </div>
 
         {/* Metric bars */}
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 space-y-4 md:col-span-2">
-          <p className="text-xs text-slate-500 uppercase tracking-wider font-medium mb-2">Performance Metrics</p>
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5 space-y-4 md:col-span-2">
+          <p className="text-xs text-[var(--text-faint)] uppercase tracking-wider font-medium mb-2">Performance Metrics</p>
           <MetricBar label="Completion Rate"    value={stats.completionRate}   color={sc.text} />
           <MetricBar label="On-Time Delivery"   value={stats.onTimeRate}       color={sc.text} />
           <MetricBar label="No-Cancellation"    value={100 - stats.cancellationRate} color={sc.text} />
@@ -226,19 +226,19 @@ export default function DriverPerformancePage() {
 
       {/* KPI grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard icon="📦" label="Total Trips"   value={stats.totalTrips}    color="text-white" />
+        <KpiCard icon="📦" label="Total Trips"   value={stats.totalTrips}    color="text-[var(--text-main)]" />
         <KpiCard icon="✅" label="Completed"     value={stats.completedTrips}
           sub={`${stats.completionRate}% of total`}      color="text-emerald-400" />
         <KpiCard icon="⏰" label="On Time"       value={stats.onTimeTrips}
           sub={`${stats.onTimeRate}% of completed`}      color="text-amber-400" />
         <KpiCard icon="❌" label="Cancelled"     value={stats.cancelledTrips}
-          sub={`${stats.cancellationRate}% of total`}    color={stats.cancellationRate > 10 ? 'text-red-400' : 'text-slate-400'} />
+          sub={`${stats.cancellationRate}% of total`}    color={stats.cancellationRate > 10 ? 'text-red-400' : 'text-[var(--text-muted)]'} />
       </div>
 
       {stats.avgTripHours !== null && (
-        <div className="bg-slate-900/40 border border-white/5 rounded-xl px-5 py-3 flex items-center gap-3 text-sm">
-          <span className="text-slate-500">⏱ Average trip duration:</span>
-          <span className="text-white font-semibold">
+        <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-xl px-5 py-3 flex items-center gap-3 text-sm">
+          <span className="text-[var(--text-faint)]">⏱ Average trip duration:</span>
+          <span className="text-[var(--text-main)] font-semibold">
             {stats.avgTripHours >= 24
               ? `${Math.round(stats.avgTripHours / 24)} days`
               : `${stats.avgTripHours} hours`}
@@ -248,8 +248,8 @@ export default function DriverPerformancePage() {
 
       {/* Weekly activity chart */}
       {stats.weekly && stats.weekly.length > 0 && (
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5">
-          <p className="text-xs text-slate-500 uppercase tracking-wider font-medium mb-4">Weekly Trip Activity (12 weeks)</p>
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5">
+          <p className="text-xs text-[var(--text-faint)] uppercase tracking-wider font-medium mb-4">Weekly Trip Activity (12 weeks)</p>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={stats.weekly} barGap={2} barCategoryGap="35%">
               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
@@ -264,21 +264,21 @@ export default function DriverPerformancePage() {
       )}
 
       {/* Score breakdown explanation */}
-      <div className="bg-slate-900/40 border border-white/5 rounded-2xl p-5">
-        <p className="text-xs text-slate-500 uppercase tracking-wider font-medium mb-3">Score Calculation</p>
-        <div className="grid grid-cols-3 gap-4 text-xs text-slate-400">
+      <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl p-5">
+        <p className="text-xs text-[var(--text-faint)] uppercase tracking-wider font-medium mb-3">Score Calculation</p>
+        <div className="grid grid-cols-3 gap-4 text-xs text-[var(--text-muted)]">
           <div className="space-y-1">
-            <p className="text-slate-300 font-medium">Completion Rate</p>
+            <p className="text-[var(--text-muted)] font-medium">Completion Rate</p>
             <p>50% of score</p>
             <p className="text-amber-400 font-semibold">{stats.completionRate}% × 0.5 = {Math.round(stats.completionRate * 0.5)}</p>
           </div>
           <div className="space-y-1">
-            <p className="text-slate-300 font-medium">On-Time Delivery</p>
+            <p className="text-[var(--text-muted)] font-medium">On-Time Delivery</p>
             <p>30% of score</p>
             <p className="text-amber-400 font-semibold">{stats.onTimeRate}% × 0.3 = {Math.round(stats.onTimeRate * 0.3)}</p>
           </div>
           <div className="space-y-1">
-            <p className="text-slate-300 font-medium">No Cancellations</p>
+            <p className="text-[var(--text-muted)] font-medium">No Cancellations</p>
             <p>20% of score</p>
             <p className="text-amber-400 font-semibold">{100 - stats.cancellationRate}% × 0.2 = {Math.round((100 - stats.cancellationRate) * 0.2)}</p>
           </div>

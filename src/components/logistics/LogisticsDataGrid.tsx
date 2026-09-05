@@ -174,19 +174,19 @@ export default function LogisticsDataGrid<T>({
   const alignClass = (a?: string) => a === 'right' ? 'text-right' : a === 'center' ? 'text-center' : 'text-left';
 
   return (
-    <div className={`rounded-2xl border border-white/10 bg-slate-900/50 overflow-hidden ${className}`}>
+    <div className={`rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 overflow-hidden ${className}`}>
       {/* Toolbar */}
-      <div className="flex items-center gap-2 flex-wrap px-3 py-2.5 border-b border-white/10 bg-slate-900/60">
-        {tb.title && <span className="text-sm font-semibold text-white mr-1">{tb.title}</span>}
-        <span className="text-xs text-slate-500">{processed.length} of {rows.length}</span>
+      <div className="flex items-center gap-2 flex-wrap px-3 py-2.5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/60">
+        {tb.title && <span className="text-sm font-semibold text-[var(--text-main)] mr-1">{tb.title}</span>}
+        <span className="text-xs text-[var(--text-faint)]">{processed.length} of {rows.length}</span>
 
         <div className="flex-1" />
 
         {tb.search && (
-          <div className="flex items-center gap-1.5 bg-slate-950/60 border border-white/10 rounded-lg px-2.5 py-1.5 focus-within:border-emerald-500/40 w-44">
-            <SearchIcon className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+          <div className="flex items-center gap-1.5 bg-[var(--bg-canvas)]/60 border border-[var(--border-subtle)] rounded-lg px-2.5 py-1.5 focus-within:border-emerald-500/40 w-44">
+            <SearchIcon className="w-3.5 h-3.5 text-[var(--text-faint)] shrink-0" />
             <input value={globalSearch} onChange={e => setGlobalSearch(e.target.value)} placeholder="Search…"
-              className="flex-1 min-w-0 bg-transparent border-0 outline-none p-0 text-sm text-white placeholder-slate-600" />
+              className="flex-1 min-w-0 bg-transparent border-0 outline-none p-0 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)]" />
           </div>
         )}
 
@@ -205,9 +205,9 @@ export default function LogisticsDataGrid<T>({
             {colMenuOpen && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setColMenuOpen(false)} />
-                <div className="absolute right-0 mt-1 z-20 w-52 rounded-xl border border-white/10 bg-slate-900 shadow-xl p-1.5">
+                <div className="absolute right-0 mt-1 z-20 w-52 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] shadow-xl p-1.5">
                   {columns.map(c => (
-                    <label key={c.key} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer text-sm text-slate-300">
+                    <label key={c.key} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[var(--bg-surface-hover)] cursor-pointer text-sm text-[var(--text-muted)]">
                       <input type="checkbox" checked={!hidden.has(c.key)} onChange={() => setHidden(prev => {
                         const next = new Set(prev);
                         if (next.has(c.key)) next.delete(c.key); else next.add(c.key);
@@ -235,7 +235,7 @@ export default function LogisticsDataGrid<T>({
         )}
 
         {activeFilterCount > 0 && (
-          <button type="button" onClick={clearAll} className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-white px-2 py-1.5">
+          <button type="button" onClick={clearAll} className="inline-flex items-center gap-1 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] px-2 py-1.5">
             <X className="w-3.5 h-3.5" /> Clear
           </button>
         )}
@@ -247,20 +247,20 @@ export default function LogisticsDataGrid<T>({
       <div className="overflow-x-auto">
         <table className="w-full text-sm" style={{ tableLayout: 'auto' }}>
           <thead>
-            <tr className="border-b border-white/10 text-slate-500 text-[11px] uppercase tracking-wider bg-slate-900/40">
+            <tr className="border-b border-[var(--border-subtle)] text-[var(--text-faint)] text-[11px] uppercase tracking-wider bg-[var(--bg-surface)]/40">
               {visibleColumns.map(c => {
                 const sortable = c.sortable ?? !!c.accessor;
                 const isSorted = sort?.key === c.key;
                 return (
                   <th key={c.key} style={c.width ? { width: c.width } : undefined}
-                    className={`${alignClass(c.align)} px-3 py-2.5 font-medium select-none ${c.headerClassName ?? ''} ${sortable ? 'cursor-pointer hover:text-slate-300' : ''}`}
+                    className={`${alignClass(c.align)} px-3 py-2.5 font-medium select-none ${c.headerClassName ?? ''} ${sortable ? 'cursor-pointer hover:text-[var(--text-muted)]' : ''}`}
                     onClick={sortable ? () => toggleSort(c.key) : undefined}>
                     <span className="inline-flex items-center gap-1">
                       {c.header}
                       {sortable && (
                         isSorted
                           ? (sort!.dir === 'asc' ? <ArrowUp className="w-3 h-3 text-emerald-300" /> : <ArrowDown className="w-3 h-3 text-emerald-300" />)
-                          : <ChevronsUpDown className="w-3 h-3 text-slate-600" />
+                          : <ChevronsUpDown className="w-3 h-3 text-[var(--text-faint)]" />
                       )}
                     </span>
                   </th>
@@ -269,21 +269,21 @@ export default function LogisticsDataGrid<T>({
             </tr>
 
             {showFilters && (
-              <tr className="border-b border-white/10 bg-slate-950/40">
+              <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-canvas)]/40">
                 {visibleColumns.map(c => {
                   const filterable = c.filter !== false && (c.filter !== undefined || !!c.accessor);
                   return (
                     <th key={c.key} className="px-2 py-1.5">
                       {!filterable ? null : c.filter === 'select' ? (
                         <select value={colFilters[c.key] ?? ''} onChange={e => setColFilters(f => ({ ...f, [c.key]: e.target.value }))}
-                          className="w-full bg-slate-900/70 border border-white/10 rounded-md px-2 py-1 text-xs text-slate-200 font-normal normal-case focus:outline-none focus:border-emerald-500/40">
+                          className="w-full bg-[var(--bg-surface)]/70 border border-[var(--border-subtle)] rounded-md px-2 py-1 text-xs text-[var(--text-main)] font-normal normal-case focus:outline-none focus:border-emerald-500/40">
                           <option value="">All</option>
                           {(selectValues[c.key] ?? []).map(v => <option key={v} value={v}>{v}</option>)}
                         </select>
                       ) : (
                         <input value={colFilters[c.key] ?? ''} onChange={e => setColFilters(f => ({ ...f, [c.key]: e.target.value }))}
                           placeholder="Filter…"
-                          className="w-full bg-slate-900/70 border border-white/10 rounded-md px-2 py-1 text-xs text-slate-200 font-normal normal-case placeholder-slate-600 focus:outline-none focus:border-emerald-500/40" />
+                          className="w-full bg-[var(--bg-surface)]/70 border border-[var(--border-subtle)] rounded-md px-2 py-1 text-xs text-[var(--text-main)] font-normal normal-case placeholder-[var(--text-faint)] focus:outline-none focus:border-emerald-500/40" />
                       )}
                     </th>
                   );
@@ -295,17 +295,17 @@ export default function LogisticsDataGrid<T>({
           <tbody className="divide-y divide-white/5">
             {loading ? (
               [...Array(6)].map((_, i) => (
-                <tr key={i}><td colSpan={visibleColumns.length} className="px-3 py-2"><div className="h-6 bg-slate-800/50 rounded animate-pulse" /></td></tr>
+                <tr key={i}><td colSpan={visibleColumns.length} className="px-3 py-2"><div className="h-6 bg-[var(--bg-surface)]/50 rounded animate-pulse" /></td></tr>
               ))
             ) : processed.length === 0 ? (
-              <tr><td colSpan={visibleColumns.length} className="text-center text-slate-500 py-12">{emptyMessage}</td></tr>
+              <tr><td colSpan={visibleColumns.length} className="text-center text-[var(--text-faint)] py-12">{emptyMessage}</td></tr>
             ) : processed.map(row => {
               const id = getRowId(row);
               return (
                 <tr key={id} onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  className={`${onRowClick ? 'cursor-pointer' : ''} transition-colors ${selectedId === id ? 'bg-emerald-500/10' : 'hover:bg-white/[0.03]'}`}>
+                  className={`${onRowClick ? 'cursor-pointer' : ''} transition-colors ${selectedId === id ? 'bg-emerald-500/10' : 'hover:bg-[var(--bg-surface-hover)]'}`}>
                   {visibleColumns.map(c => (
-                    <td key={c.key} className={`px-3 ${pad} ${alignClass(c.align)} ${c.cellClassName ?? 'text-slate-300'}`}>
+                    <td key={c.key} className={`px-3 ${pad} ${alignClass(c.align)} ${c.cellClassName ?? 'text-[var(--text-muted)]'}`}>
                       {c.render ? c.render(row) : (() => { const v = c.accessor?.(row); return v == null || v === '' ? '—' : String(v); })()}
                     </td>
                   ))}
@@ -323,7 +323,7 @@ function ToolbarButton({ active, onClick, title, children }: { active?: boolean;
   return (
     <button type="button" onClick={onClick} title={title}
       className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs transition-colors ${
-        active ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200' : 'border-white/10 text-slate-300 hover:bg-white/5'
+        active ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200' : 'border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]'
       }`}>
       {children}
     </button>

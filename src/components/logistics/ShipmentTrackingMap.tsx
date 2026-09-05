@@ -193,15 +193,15 @@ export default function ShipmentTrackingMap({ shipmentId, className }: { shipmen
   }, [data]);
 
   if (!process.env.NEXT_PUBLIC_MAPBOX_TOKEN) {
-    return <div className={`flex items-center justify-center rounded-xl border border-white/10 bg-slate-900/50 text-sm text-slate-500 ${className ?? ''}`} style={{ minHeight: 280 }}>Map unavailable — NEXT_PUBLIC_MAPBOX_TOKEN not configured.</div>;
+    return <div className={`flex items-center justify-center rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 text-sm text-[var(--text-faint)] ${className ?? ''}`} style={{ minHeight: 280 }}>Map unavailable — NEXT_PUBLIC_MAPBOX_TOKEN not configured.</div>;
   }
   if (error) {
     return <div className={`flex items-center justify-center rounded-xl border border-red-500/30 bg-red-500/10 text-sm text-red-300 ${className ?? ''}`} style={{ minHeight: 280 }}>{error}</div>;
   }
   return (
-    <div className={`relative overflow-hidden rounded-xl border border-white/10 ${className ?? ''}`} style={{ minHeight: 320 }}>
+    <div className={`relative overflow-hidden rounded-xl border border-[var(--border-subtle)] ${className ?? ''}`} style={{ minHeight: 320 }}>
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
-      {!data && <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-500">Loading map…</div>}
+      {!data && <div className="absolute inset-0 flex items-center justify-center text-sm text-[var(--text-faint)]">Loading map…</div>}
     </div>
   );
 }

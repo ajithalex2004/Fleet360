@@ -131,7 +131,7 @@ export default function ContractedRateLookup(props: ContractedRateLookupProps) {
 
   if (!props.origin?.trim() || !props.destination?.trim()) {
     return (
-      <div className="rounded-xl border border-white/5 bg-slate-900/30 px-5 py-4 text-sm text-slate-500">
+      <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/30 px-5 py-4 text-sm text-[var(--text-faint)]">
         Enter pickup and delivery locations to preview the contracted rate.
       </div>
     );
@@ -139,7 +139,7 @@ export default function ContractedRateLookup(props: ContractedRateLookupProps) {
 
   if (loading) {
     return (
-      <div className="rounded-xl border border-white/10 bg-slate-900/50 px-5 py-4 text-sm text-slate-400 animate-pulse">
+      <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 px-5 py-4 text-sm text-[var(--text-muted)] animate-pulse">
         Looking up contracted rate…
       </div>
     );

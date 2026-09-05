@@ -212,25 +212,25 @@ export default function LogisticsTripsPage() {
   const columns = useMemo<DataGridColumn<Shipment>[]>(() => [
     {
       key: 'shipment', header: 'Shipment', accessor: s => s.shipmentNo ?? '',
-      render: s => <div><div className="font-mono text-xs text-white">{s.shipmentNo ?? s.id.slice(0, 8)}</div>{s.legacyBookingId && <div className="text-[10px] text-amber-300/80">legacy linked</div>}</div>,
+      render: s => <div><div className="font-mono text-xs text-[var(--text-main)]">{s.shipmentNo ?? s.id.slice(0, 8)}</div>{s.legacyBookingId && <div className="text-[10px] text-amber-300/80">legacy linked</div>}</div>,
     },
     { key: 'status', header: 'Status', accessor: s => s.status, filter: 'select' },
     { key: 'marketplace', header: 'Marketplace', accessor: s => s.marketplaceStatus ?? '', filter: 'select' },
     {
       key: 'lane', header: 'Lane', accessor: s => `${s.originName ?? s.originAddress ?? ''} ${s.destinationName ?? s.destinationAddress ?? ''}`,
-      render: s => <span><span className="text-white">{s.originName ?? s.originAddress ?? '-'}</span><ArrowRight className="mx-1 inline h-3 w-3 text-slate-600" /><span className="text-white">{s.destinationName ?? s.destinationAddress ?? '-'}</span></span>,
+      render: s => <span><span className="text-[var(--text-main)]">{s.originName ?? s.originAddress ?? '-'}</span><ArrowRight className="mx-1 inline h-3 w-3 text-[var(--text-faint)]" /><span className="text-[var(--text-main)]">{s.destinationName ?? s.destinationAddress ?? '-'}</span></span>,
     },
     { key: 'customer', header: 'Customer', accessor: s => s.cargoOwnerName ?? '' },
-    { key: 'pickup', header: 'Pickup', accessor: s => s.pickupWindowFrom ?? '', filter: false, render: s => <span className="text-xs text-slate-400">{dt(s.pickupWindowFrom)}</span> },
+    { key: 'pickup', header: 'Pickup', accessor: s => s.pickupWindowFrom ?? '', filter: false, render: s => <span className="text-xs text-[var(--text-muted)]">{dt(s.pickupWindowFrom)}</span> },
     {
       key: 'actions', header: '', accessor: s => s.id, sortable: false, filter: false, align: 'right',
       render: s => (
         <div className="flex justify-end gap-3">
           <Link href={`/logistics/control-tower?shipment=${encodeURIComponent(s.id)}`} className="text-xs text-sky-300 hover:text-sky-200">Tower</Link>
           <Link href={`/logistics/shipments/${s.id}/manifest`} className="text-xs text-amber-300 hover:text-amber-200">Manifest</Link>
-          <Link href={`/logistics/shipments/${s.id}/documents`} className="text-xs text-slate-400 hover:text-white">Docs</Link>
+          <Link href={`/logistics/shipments/${s.id}/documents`} className="text-xs text-[var(--text-muted)] hover:text-[var(--text-main)]">Docs</Link>
           <Link href={`/logistics/shipments/${s.id}/pod`} className="text-xs text-emerald-300 hover:text-emerald-200">ePOD</Link>
-          <Link href={`/shipper-portal/shipments/${s.id}`} className="text-xs text-slate-400 hover:text-white">Portal view</Link>
+          <Link href={`/shipper-portal/shipments/${s.id}`} className="text-xs text-[var(--text-muted)] hover:text-[var(--text-main)]">Portal view</Link>
         </div>
       ),
     },
@@ -240,21 +240,21 @@ export default function LogisticsTripsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white">Shipment orders</h1>
-          <p className="mt-0.5 text-xs text-slate-400">Canonical freight trips from logistics_shipment_orders.</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Shipment orders</h1>
+          <p className="mt-0.5 text-xs text-[var(--text-muted)]">Canonical freight trips from logistics_shipment_orders.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => void load()} className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-300 hover:bg-white/5"><RefreshCw className="h-4 w-4" /> Refresh</button>
+          <button type="button" onClick={() => void load()} className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"><RefreshCw className="h-4 w-4" /> Refresh</button>
           <button type="button" onClick={() => void backfill()} className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-200 hover:bg-amber-500/20"><DatabaseZap className="h-4 w-4" /> Backfill legacy</button>
-          <button type="button" onClick={openNew} className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400"><Plus className="h-4 w-4" /> New shipment</button>
+          <button type="button" onClick={openNew} className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-400"><Plus className="h-4 w-4" /> New shipment</button>
         </div>
       </div>
 
-      {message && <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-sm text-slate-200">{message}</div>}
+      {message && <div className="rounded-xl border border-[var(--border-subtle)] bg-white/[0.03] p-3 text-sm text-[var(--text-main)]">{message}</div>}
 
       <div className="flex flex-wrap gap-2">
         {TAB_GROUPS.map(item => (
-          <button key={item.key} type="button" onClick={() => setTab(item.key)} className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${tab === item.key ? 'border-amber-500/30 bg-amber-500/20 text-amber-300' : 'border-white/10 text-slate-400 hover:bg-white/5 hover:text-white'}`}>
+          <button key={item.key} type="button" onClick={() => setTab(item.key)} className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${tab === item.key ? 'border-amber-500/30 bg-amber-500/20 text-amber-300' : 'border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]'}`}>
             {item.label} <span className="ml-1 opacity-70">{counts[item.key]}</span>
           </button>
         ))}
@@ -264,10 +264,10 @@ export default function LogisticsTripsPage() {
 
       {showNew && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-slate-950 p-5 shadow-2xl">
+          <div className="w-full max-w-2xl rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-5 shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="flex items-center gap-2 text-lg font-bold text-white"><Truck className="h-5 w-5 text-amber-300" /> New shipment order</h2>
-              <button type="button" onClick={() => setShowNew(false)} className="rounded-lg p-1 text-slate-400 hover:bg-white/5 hover:text-white"><X className="h-5 w-5" /></button>
+              <h2 className="flex items-center gap-2 text-lg font-bold text-[var(--text-main)]"><Truck className="h-5 w-5 text-amber-300" /> New shipment order</h2>
+              <button type="button" onClick={() => setShowNew(false)} className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]"><X className="h-5 w-5" /></button>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               {customers.length > 0 ? (
@@ -293,8 +293,8 @@ export default function LogisticsTripsPage() {
               <Input label="Rate (AED)" type="number" value={form.customerRateAmount} onChange={v => setForm(f => ({ ...f, customerRateAmount: v }))} />
             </div>
             <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setShowNew(false)} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-slate-300 hover:bg-white/5">Cancel</button>
-              <button type="button" disabled={saving} onClick={() => void create()} className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400 disabled:opacity-50"><Map className="h-4 w-4" /> {saving ? 'Creating...' : 'Create shipment'}</button>
+              <button type="button" onClick={() => setShowNew(false)} className="rounded-xl border border-[var(--border-subtle)] px-4 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]">Cancel</button>
+              <button type="button" disabled={saving} onClick={() => void create()} className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-400 disabled:opacity-50"><Map className="h-4 w-4" /> {saving ? 'Creating...' : 'Create shipment'}</button>
             </div>
           </div>
         </div>
@@ -321,13 +321,13 @@ export default function LogisticsTripsPage() {
 }
 
 function Input({ label, value, onChange, type = 'text' }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
-  return <label className="block"><span className="mb-1 block text-[11px] uppercase tracking-wide text-slate-500">{label}</span><input type={type} value={value} onChange={e => onChange(e.target.value)} className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-amber-500/40" /></label>;
+  return <label className="block"><span className="mb-1 block text-[11px] uppercase tracking-wide text-[var(--text-faint)]">{label}</span><input type={type} value={value} onChange={e => onChange(e.target.value)} className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-main)] outline-none focus:border-amber-500/40" /></label>;
 }
 
 function Select({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: Array<{ value: string; label: string }> }) {
   return (
-    <label className="block"><span className="mb-1 block text-[11px] uppercase tracking-wide text-slate-500">{label}</span>
-      <select value={value} onChange={e => onChange(e.target.value)} className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-amber-500/40">
+    <label className="block"><span className="mb-1 block text-[11px] uppercase tracking-wide text-[var(--text-faint)]">{label}</span>
+      <select value={value} onChange={e => onChange(e.target.value)} className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-main)] outline-none focus:border-amber-500/40">
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     </label>
@@ -336,11 +336,11 @@ function Select({ label, value, onChange, options }: { label: string; value: str
 
 function LocationField({ label, name, hasCoords, onName, onPick }: { label: string; name: string; hasCoords: boolean; onName: (value: string) => void; onPick: () => void }) {
   return (
-    <label className="block"><span className="mb-1 block text-[11px] uppercase tracking-wide text-slate-500">{label}</span>
+    <label className="block"><span className="mb-1 block text-[11px] uppercase tracking-wide text-[var(--text-faint)]">{label}</span>
       <div className="flex gap-2">
-        <input value={name} onChange={e => onName(e.target.value)} placeholder="Type or pick on map" className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-amber-500/40" />
+        <input value={name} onChange={e => onName(e.target.value)} placeholder="Type or pick on map" className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-main)] outline-none focus:border-amber-500/40" />
         <button type="button" onClick={onPick} title="Pick on map"
-          className={`inline-flex items-center justify-center rounded-xl border px-2.5 ${hasCoords ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-white/10 text-slate-300 hover:bg-white/5'}`}>
+          className={`inline-flex items-center justify-center rounded-xl border px-2.5 ${hasCoords ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' : 'border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]'}`}>
           <Map className="h-4 w-4" />
         </button>
       </div>
@@ -352,13 +352,13 @@ function WeightField({ label, value, onChange }: { label: string; value: string;
   const kg = Number(value);
   const tonnes = value !== '' && !Number.isNaN(kg) ? kg / 1000 : null;
   return (
-    <label className="block"><span className="mb-1 block text-[11px] uppercase tracking-wide text-slate-500">{label}</span>
+    <label className="block"><span className="mb-1 block text-[11px] uppercase tracking-wide text-[var(--text-faint)]">{label}</span>
       <div className="flex items-stretch gap-2">
-        <div className="flex min-w-[66px] flex-col items-center justify-center rounded-xl border border-white/10 bg-slate-800/60 px-2 py-1 text-center" title="Converted to tonnes">
+        <div className="flex min-w-[66px] flex-col items-center justify-center rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 px-2 py-1 text-center" title="Converted to tonnes">
           <span className="text-sm font-semibold text-amber-300">{tonnes != null ? tonnes.toFixed(2) : '—'}</span>
-          <span className="text-[9px] uppercase tracking-wide text-slate-500">tonnes</span>
+          <span className="text-[9px] uppercase tracking-wide text-[var(--text-faint)]">tonnes</span>
         </div>
-        <input type="number" min="0" step="any" value={value} onChange={e => onChange(e.target.value)} placeholder="kg" className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-amber-500/40" />
+        <input type="number" min="0" step="any" value={value} onChange={e => onChange(e.target.value)} placeholder="kg" className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-main)] outline-none focus:border-amber-500/40" />
       </div>
     </label>
   );

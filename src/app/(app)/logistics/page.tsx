@@ -82,7 +82,7 @@ export default function LogisticsDashboard() {
 
       {loading ? (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[...Array(8)].map((_, i) => <div key={i} className="h-28 bg-slate-800/60 rounded-2xl animate-pulse" />)}
+          {[...Array(8)].map((_, i) => <div key={i} className="h-28 bg-[var(--bg-surface)]/60 rounded-2xl animate-pulse" />)}
         </div>
       ) : (
         <>
@@ -126,7 +126,7 @@ export default function LogisticsDashboard() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-white/10 text-slate-500 text-[11px] uppercase tracking-wider">
+                    <tr className="border-b border-[var(--border-subtle)] text-[var(--text-faint)] text-[11px] uppercase tracking-wider">
                       <th className="text-left py-2 font-medium">Booking</th>
                       <th className="text-left py-2 font-medium">Status</th>
                       <th className="text-left py-2 font-medium">Route</th>
@@ -136,16 +136,16 @@ export default function LogisticsDashboard() {
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {stats.recentTrips.map(trip => (
-                      <tr key={trip.id} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="py-3 font-mono text-xs text-white">{trip.booking_ref}</td>
+                      <tr key={trip.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
+                        <td className="py-3 font-mono text-xs text-[var(--text-main)]">{trip.booking_ref}</td>
                         <td className="py-3"><StatusPill status={trip.status} /></td>
-                        <td className="py-3 text-slate-300">
+                        <td className="py-3 text-[var(--text-muted)]">
                           {trip.origin_location && trip.destination
                             ? `${trip.origin_location} → ${trip.destination}`
                             : trip.origin_location ?? trip.destination ?? '—'}
                         </td>
-                        <td className="py-3 text-slate-300">{trip.customer_name ?? '—'}</td>
-                        <td className="py-3 text-slate-400 text-xs">
+                        <td className="py-3 text-[var(--text-muted)]">{trip.customer_name ?? '—'}</td>
+                        <td className="py-3 text-[var(--text-muted)] text-xs">
                           {trip.start_date ? new Date(trip.start_date).toLocaleDateString('en-AE') : '—'}
                         </td>
                       </tr>
@@ -155,9 +155,9 @@ export default function LogisticsDashboard() {
               </div>
             ) : (
               <div className="text-center py-8">
-                <Truck className="w-10 h-10 text-slate-600 mx-auto mb-2" />
-                <p className="text-slate-400 text-sm">No logistics shipments found</p>
-                <p className="text-slate-600 text-xs mt-1">Shipment orders will appear here</p>
+                <Truck className="w-10 h-10 text-[var(--text-faint)] mx-auto mb-2" />
+                <p className="text-[var(--text-muted)] text-sm">No logistics shipments found</p>
+                <p className="text-[var(--text-faint)] text-xs mt-1">Shipment orders will appear here</p>
               </div>
             )}
           </Panel>
@@ -176,12 +176,12 @@ export default function LogisticsDashboard() {
               const Icon = link.icon;
               return (
                 <Link key={link.href} href={link.href}
-                  className="rounded-2xl bg-slate-900/60 border border-white/10 hover:border-amber-500/30 hover:bg-amber-500/5 transition-all p-5 group block">
+                  className="rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] hover:border-amber-500/30 hover:bg-amber-500/5 transition-all p-5 group block">
                   <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center mb-3">
                     <Icon className="w-5 h-5 text-amber-300" />
                   </div>
-                  <h3 className="text-sm font-semibold text-white group-hover:text-amber-300 transition-colors">{link.label}</h3>
-                  <p className="text-xs text-slate-500 mt-1">{link.desc}</p>
+                  <h3 className="text-sm font-semibold text-[var(--text-main)] group-hover:text-amber-300 transition-colors">{link.label}</h3>
+                  <p className="text-xs text-[var(--text-faint)] mt-1">{link.desc}</p>
                 </Link>
               );
             })}

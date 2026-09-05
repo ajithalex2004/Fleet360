@@ -25,7 +25,7 @@ interface Driver {
 
 const STATUS_BADGE: Record<string, string> = {
   ACTIVE:     'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-  INACTIVE:   'bg-slate-500/20 text-slate-400 border-slate-500/30',
+  INACTIVE:   'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30',
   SUSPENDED:  'bg-red-500/20 text-red-400 border-red-500/30',
   ON_LEAVE:   'bg-amber-500/20 text-amber-400 border-amber-500/30',
 };
@@ -90,10 +90,10 @@ export default function LogisticsDriversPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Logistics Drivers</h1>
-          <p className="text-slate-400 text-xs mt-0.5">Drivers assigned to logistics fleet</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Logistics Drivers</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Drivers assigned to logistics fleet</p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-800 border border-white/10 px-3 py-1.5 rounded-lg">
+        <div className="flex items-center gap-2 text-xs text-[var(--text-muted)] bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-3 py-1.5 rounded-lg">
           {drivers.filter(d => d.status === 'ACTIVE').length} active of {drivers.length}
         </div>
       </div>
@@ -103,22 +103,22 @@ export default function LogisticsDriversPage() {
         placeholder="Search by name, employee ID, phone…"
         value={search}
         onChange={e => setSearch(e.target.value)}
-        className="w-full bg-slate-800/60 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/40"
+        className="w-full bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-amber-500/40"
       />
 
       {loading ? (
-        <div className="space-y-2">{[...Array(5)].map((_, i) => <div key={i} className="h-16 bg-slate-800/60 rounded-xl animate-pulse" />)}</div>
+        <div className="space-y-2">{[...Array(5)].map((_, i) => <div key={i} className="h-16 bg-[var(--bg-surface)]/60 rounded-xl animate-pulse" />)}</div>
       ) : filtered.length === 0 ? (
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-16 text-center">
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-16 text-center">
           <div className="text-5xl mb-3">👤</div>
-          <p className="text-slate-400">No logistics drivers found</p>
-          <p className="text-slate-600 text-xs mt-1">Drivers with assignment_type = LOGISTICS appear here</p>
+          <p className="text-[var(--text-muted)]">No logistics drivers found</p>
+          <p className="text-[var(--text-faint)] text-xs mt-1">Drivers with assignment_type = LOGISTICS appear here</p>
         </div>
       ) : (
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden">
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/10 text-slate-400 text-xs uppercase tracking-wider">
+              <tr className="border-b border-[var(--border-subtle)] text-[var(--text-muted)] text-xs uppercase tracking-wider">
                 <th className="text-left px-5 py-3">Driver</th>
                 <th className="text-left px-5 py-3">Employee ID</th>
                 <th className="text-left px-5 py-3">Status</th>
@@ -135,28 +135,28 @@ export default function LogisticsDriversPage() {
                 const expiring  = isExpiringSoon(d.license_expiry);
                 const dStat     = stats[d.id];
                 return (
-                  <tr key={d.id} className="border-b border-white/5 last:border-0 hover:bg-slate-800/40 transition-colors">
+                  <tr key={d.id} className="border-b border-[var(--border-subtle)] last:border-0 hover:bg-[var(--bg-surface)]/40 transition-colors">
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-xs font-bold text-white">
                           {(d.first_name ?? '?')[0]}{(d.last_name ?? '')[0]}
                         </div>
                         <div>
-                          <p className="text-white font-medium">{d.first_name ?? ''} {d.last_name ?? ''}</p>
-                          {d.phone && <p className="text-slate-500 text-xs">{d.phone}</p>}
+                          <p className="text-[var(--text-main)] font-medium">{d.first_name ?? ''} {d.last_name ?? ''}</p>
+                          {d.phone && <p className="text-[var(--text-faint)] text-xs">{d.phone}</p>}
                         </div>
                       </div>
                     </td>
-                    <td className="px-5 py-3 font-mono text-xs text-slate-400">{d.employee_id ?? '—'}</td>
+                    <td className="px-5 py-3 font-mono text-xs text-[var(--text-muted)]">{d.employee_id ?? '—'}</td>
                     <td className="px-5 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_BADGE[d.status ?? ''] ?? STATUS_BADGE.INACTIVE}`}>
                         {d.status ?? 'UNKNOWN'}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-slate-300 text-xs">{d.license_number ?? '—'}</td>
+                    <td className="px-5 py-3 text-[var(--text-muted)] text-xs">{d.license_number ?? '—'}</td>
                     <td className="px-5 py-3 text-xs">
                       {d.license_expiry ? (
-                        <span className={expired ? 'text-red-400 font-medium' : expiring ? 'text-amber-400 font-medium' : 'text-slate-400'}>
+                        <span className={expired ? 'text-red-400 font-medium' : expiring ? 'text-amber-400 font-medium' : 'text-[var(--text-muted)]'}>
                           {expired ? '⚠️ ' : expiring ? '⏰ ' : ''}
                           {new Date(d.license_expiry).toLocaleDateString('en-AE')}
                         </span>
@@ -167,10 +167,10 @@ export default function LogisticsDriversPage() {
                         <span className={`text-sm font-bold ${scoreColor(dStat.score)}`}>{dStat.score}</span>
                       ) : <span className="text-slate-700 text-xs">N/A</span>}
                     </td>
-                    <td className="px-5 py-3 text-xs text-slate-400">
+                    <td className="px-5 py-3 text-xs text-[var(--text-muted)]">
                       {dStat ? (
                         <span>{dStat.completedTrips}/{dStat.totalTrips}
-                          <span className="text-slate-600 ml-1">({dStat.onTimeRate}% on-time)</span>
+                          <span className="text-[var(--text-faint)] ml-1">({dStat.onTimeRate}% on-time)</span>
                         </span>
                       ) : '—'}
                     </td>

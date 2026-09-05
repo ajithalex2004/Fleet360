@@ -413,7 +413,7 @@ export default function MarketplacePage() {
               type="button"
               onClick={() => void loadRfqs()}
               aria-label="Refresh"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 text-slate-300 px-3 py-2 text-sm hover:bg-slate-800"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-muted)] px-3 py-2 text-sm hover:bg-[var(--bg-surface)]"
             >
               <RefreshCw className={`w-4 h-4 ${loadingRfqs ? 'animate-spin' : ''}`} /> Refresh
             </button>
@@ -436,18 +436,18 @@ export default function MarketplacePage() {
           icon={Plus}
           accent="amber"
           actions={
-            <button type="button" onClick={() => setShowPost(false)} aria-label="Close" className="text-slate-400 hover:text-white">
+            <button type="button" onClick={() => setShowPost(false)} aria-label="Close" className="text-[var(--text-muted)] hover:text-[var(--text-main)]">
               <X className="w-4 h-4" />
             </button>
           }
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="text-[11px] uppercase tracking-wider text-slate-500">Shipment *</label>
+              <label className="text-[11px] uppercase tracking-wider text-[var(--text-faint)]">Shipment *</label>
               <select
                 value={postShipmentId}
                 onChange={e => setPostShipmentId(e.target.value)}
-                className="w-full mt-1.5 bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/40"
+                className="w-full mt-1.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] focus:outline-none focus:border-amber-500/40"
               >
                 <option value="">Select a postable shipment…</option>
                 {shipments.map(s => (
@@ -456,19 +456,19 @@ export default function MarketplacePage() {
                   </option>
                 ))}
               </select>
-              {shipments.length === 0 && <p className="text-[11px] text-slate-600 mt-1">No postable shipments (all are already on the marketplace or delivered).</p>}
+              {shipments.length === 0 && <p className="text-[11px] text-[var(--text-faint)] mt-1">No postable shipments (all are already on the marketplace or delivered).</p>}
             </div>
             <div>
-              <label className="text-[11px] uppercase tracking-wider text-slate-500">Bid deadline</label>
+              <label className="text-[11px] uppercase tracking-wider text-[var(--text-faint)]">Bid deadline</label>
               <input
                 type="datetime-local"
                 value={postDeadline}
                 onChange={e => setPostDeadline(e.target.value)}
-                className="w-full mt-1.5 bg-slate-800 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/40"
+                className="w-full mt-1.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] focus:outline-none focus:border-amber-500/40"
               />
             </div>
             <div className="md:col-span-2">
-              <label className="text-[11px] uppercase tracking-wider text-slate-500">Who can bid</label>
+              <label className="text-[11px] uppercase tracking-wider text-[var(--text-faint)]">Who can bid</label>
               <div className="flex items-center gap-2 mt-1.5">
                 {(['SELECTED_CARRIERS', 'ALL_ACTIVE_CARRIERS'] as const).map(s => (
                   <button
@@ -476,7 +476,7 @@ export default function MarketplacePage() {
                     type="button"
                     onClick={() => setPostScope(s)}
                     className={`rounded-lg px-3 py-1.5 text-xs font-medium border ${
-                      postScope === s ? 'bg-amber-500/15 border-amber-500/40 text-amber-200' : 'bg-slate-800/40 border-white/10 text-slate-400 hover:text-white'
+                      postScope === s ? 'bg-amber-500/15 border-amber-500/40 text-amber-200' : 'bg-[var(--bg-surface)]/40 border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)]'
                     }`}
                   >
                     {s === 'SELECTED_CARRIERS' ? 'Selected carriers' : 'All active carriers'}
@@ -486,9 +486,9 @@ export default function MarketplacePage() {
             </div>
             {postScope === 'SELECTED_CARRIERS' && (
               <div className="md:col-span-2">
-                <label className="text-[11px] uppercase tracking-wider text-slate-500">Invite carriers ({postCarrierIds.size} selected)</label>
-                <div className="mt-1.5 max-h-40 overflow-y-auto rounded-xl border border-white/10 bg-slate-900/40 divide-y divide-white/5">
-                  {carriers.length === 0 && <p className="text-xs text-slate-600 px-3 py-2">No active carriers found.</p>}
+                <label className="text-[11px] uppercase tracking-wider text-[var(--text-faint)]">Invite carriers ({postCarrierIds.size} selected)</label>
+                <div className="mt-1.5 max-h-40 overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 divide-y divide-white/5">
+                  {carriers.length === 0 && <p className="text-xs text-[var(--text-faint)] px-3 py-2">No active carriers found.</p>}
                   {carriers.map(c => {
                     const on = postCarrierIds.has(c.id);
                     return (
@@ -496,9 +496,9 @@ export default function MarketplacePage() {
                         key={c.id}
                         type="button"
                         onClick={() => setPostCarrierIds(prev => { const n = new Set(prev); if (n.has(c.id)) n.delete(c.id); else n.add(c.id); return n; })}
-                        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-slate-800/40"
+                        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--bg-surface)]/40"
                       >
-                        <span className="text-slate-200 truncate">{c.name || c.id.slice(0, 8)}{c.carrierCode ? ` · ${c.carrierCode}` : ''}</span>
+                        <span className="text-[var(--text-main)] truncate">{c.name || c.id.slice(0, 8)}{c.carrierCode ? ` · ${c.carrierCode}` : ''}</span>
                         {on && <CheckCircle2 className="w-4 h-4 text-amber-300 shrink-0" />}
                       </button>
                     );
@@ -511,12 +511,12 @@ export default function MarketplacePage() {
           {postError && <div className="mt-3"><LogisticsMessage type="error" message={postError} /></div>}
 
           <div className="flex items-center justify-end gap-2 mt-4">
-            <button type="button" onClick={() => setShowPost(false)} className="rounded-xl border border-white/10 text-slate-300 px-4 py-2.5 text-sm hover:bg-slate-800">Cancel</button>
+            <button type="button" onClick={() => setShowPost(false)} className="rounded-xl border border-[var(--border-subtle)] text-[var(--text-muted)] px-4 py-2.5 text-sm hover:bg-[var(--bg-surface)]">Cancel</button>
             <button
               type="button"
               onClick={() => void postLoad()}
               disabled={posting}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 text-slate-950 font-medium px-4 py-2.5 text-sm hover:bg-amber-400 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 text-white font-medium px-4 py-2.5 text-sm hover:bg-amber-400 disabled:opacity-50"
             >
               <Plus className="w-4 h-4" /> {posting ? 'Posting…' : 'Post load'}
             </button>
@@ -534,7 +534,7 @@ export default function MarketplacePage() {
             className={`rounded-lg px-3 py-1.5 text-xs font-medium border transition-colors ${
               statusFilter === s
                 ? 'bg-amber-500/15 border-amber-500/40 text-amber-200'
-                : 'bg-slate-800/40 border-white/10 text-slate-400 hover:text-white'
+                : 'bg-[var(--bg-surface)]/40 border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)]'
             }`}
           >
             {s === 'ALL' ? 'All' : s.charAt(0) + s.slice(1).toLowerCase()}
@@ -546,9 +546,9 @@ export default function MarketplacePage() {
         {/* Load board */}
         <Panel title="Open loads" icon={Gavel} accent="amber">
           {listError && <LogisticsMessage type="error" message={listError} />}
-          {!listError && loadingRfqs && <p className="text-sm text-slate-500">Loading…</p>}
+          {!listError && loadingRfqs && <p className="text-sm text-[var(--text-faint)]">Loading…</p>}
           {!loadingRfqs && rfqs.length === 0 && !listError && (
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-[var(--text-faint)]">
               No {statusFilter === 'ALL' ? '' : statusFilter.toLowerCase()} RFQs. Loads posted to the
               marketplace from a shipment appear here.
             </p>
@@ -565,19 +565,19 @@ export default function MarketplacePage() {
                   type="button"
                   onClick={() => select(r)}
                   className={`w-full text-left rounded-xl border px-3 py-2.5 transition-colors ${
-                    active ? 'bg-amber-500/10 border-amber-500/40' : 'bg-slate-800/40 border-white/10 hover:border-white/20'
+                    active ? 'bg-amber-500/10 border-amber-500/40' : 'bg-[var(--bg-surface)]/40 border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium text-white truncate">{r.rfqNo}</span>
+                    <span className="text-sm font-medium text-[var(--text-main)] truncate">{r.rfqNo}</span>
                     <StatusPill status={r.status} />
                   </div>
-                  <div className="text-xs text-slate-300 truncate mt-0.5">{lane}</div>
-                  <div className="text-[11px] text-slate-500 mt-1 flex items-center gap-2 flex-wrap">
+                  <div className="text-xs text-[var(--text-muted)] truncate mt-0.5">{lane}</div>
+                  <div className="text-[11px] text-[var(--text-faint)] mt-1 flex items-center gap-2 flex-wrap">
                     <span>{r.shipment?.customerName || 'Customer n/a'}</span>
-                    {r.shipment?.vehicleType && <span className="text-slate-600">· {r.shipment.vehicleType}</span>}
+                    {r.shipment?.vehicleType && <span className="text-[var(--text-faint)]">· {r.shipment.vehicleType}</span>}
                     <span className="text-amber-300/80">· {r.bidCount} bid{r.bidCount === 1 ? '' : 's'}</span>
-                    {r.bidDeadlineAt && <span className="text-slate-600">· due {fmtDate(r.bidDeadlineAt)}</span>}
+                    {r.bidDeadlineAt && <span className="text-[var(--text-faint)]">· due {fmtDate(r.bidDeadlineAt)}</span>}
                   </div>
                 </button>
               );
@@ -593,7 +593,7 @@ export default function MarketplacePage() {
           accent="amber"
         >
           {!selected ? (
-            <div className="h-48 flex items-center justify-center text-sm text-slate-600 border border-dashed border-white/10 rounded-2xl">
+            <div className="h-48 flex items-center justify-center text-sm text-[var(--text-faint)] border border-dashed border-[var(--border-subtle)] rounded-2xl">
               Pick a load from the board to compare carrier bids.
             </div>
           ) : (
@@ -615,15 +615,15 @@ export default function MarketplacePage() {
 
               {/* Invite a carrier (generate a magic link) */}
               {canAward && (
-                <div className="rounded-xl border border-white/10 bg-slate-900/40 px-3.5 py-3">
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 px-3.5 py-3">
                   <div className="flex items-center gap-2 flex-wrap">
                     <Link2 className="w-4 h-4 text-amber-300 shrink-0" />
-                    <span className="text-xs text-slate-400">Invite a carrier to bid:</span>
+                    <span className="text-xs text-[var(--text-muted)]">Invite a carrier to bid:</span>
                     <select
                       value={inviteCarrierId}
                       onChange={e => { setInviteCarrierId(e.target.value); setInviteLink(null); }}
                       onFocus={() => void ensureFormData()}
-                      className="bg-slate-800 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500/40"
+                      className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--text-main)] focus:outline-none focus:border-amber-500/40"
                     >
                       <option value="">Choose carrier…</option>
                       {carriers.map(c => <option key={c.id} value={c.id}>{c.name || c.id.slice(0, 8)}</option>)}
@@ -639,7 +639,7 @@ export default function MarketplacePage() {
                   </div>
                   {inviteLink && (
                     <div className="mt-2 flex items-center gap-2">
-                      <input readOnly value={inviteLink} className="flex-1 bg-slate-800 border border-white/10 rounded-lg px-2.5 py-1.5 text-[11px] text-slate-300 font-mono" />
+                      <input readOnly value={inviteLink} className="flex-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2.5 py-1.5 text-[11px] text-[var(--text-muted)] font-mono" />
                       <button
                         type="button"
                         onClick={() => { void navigator.clipboard?.writeText(inviteLink); }}
@@ -685,17 +685,17 @@ export default function MarketplacePage() {
                         </div>
                       )}
                       {candidates.length > 0 && (
-                        <div className="rounded-lg border border-white/10 bg-slate-900/40 divide-y divide-white/5">
+                        <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 divide-y divide-white/5">
                           {candidates.map(c => {
                             const on = bcSelected.has(c.carrierId);
                             return (
                               <button key={c.carrierId} type="button"
                                 onClick={() => setBcSelected(prev => { const n = new Set(prev); if (n.has(c.carrierId)) n.delete(c.carrierId); else n.add(c.carrierId); return n; })}
-                                className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-slate-800/40">
-                                <span className="flex items-center gap-1.5 text-slate-200">
+                                className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-[var(--bg-surface)]/40">
+                                <span className="flex items-center gap-1.5 text-[var(--text-main)]">
                                   <MapPin className="w-3 h-3 text-sky-300" />
                                   {c.carrierName || c.carrierId.slice(0, 8)}
-                                  <span className="text-[11px] text-slate-500">· {c.distanceKm != null ? `${c.distanceKm} km` : '—'}{c.vehicleType ? ` · ${c.vehicleType}` : ''}</span>
+                                  <span className="text-[11px] text-[var(--text-faint)]">· {c.distanceKm != null ? `${c.distanceKm} km` : '—'}{c.vehicleType ? ` · ${c.vehicleType}` : ''}</span>
                                 </span>
                                 {on && <CheckCircle2 className="w-4 h-4 text-sky-300 shrink-0" />}
                               </button>
@@ -703,26 +703,26 @@ export default function MarketplacePage() {
                           })}
                         </div>
                       )}
-                      {candidates.length === 0 && !candidateNote && <p className="text-[11px] text-slate-500">No idle drivers nearby right now.</p>}
+                      {candidates.length === 0 && !candidateNote && <p className="text-[11px] text-[var(--text-faint)]">No idle drivers nearby right now.</p>}
 
                       <div className="flex items-end gap-2 flex-wrap">
                         <div>
-                          <label className="text-[10px] uppercase tracking-wider text-slate-500">Fixed offer</label>
+                          <label className="text-[10px] uppercase tracking-wider text-[var(--text-faint)]">Fixed offer</label>
                           <input type="number" min={0} step="0.01" value={bcAmount} onChange={e => setBcAmount(e.target.value)} placeholder="AED 0.00"
-                            className="w-28 mt-1 bg-slate-800 border border-white/10 rounded-lg px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-sky-500/40" />
+                            className="w-28 mt-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2.5 py-1.5 text-sm text-[var(--text-main)] focus:outline-none focus:border-sky-500/40" />
                         </div>
                         <div>
-                          <label className="text-[10px] uppercase tracking-wider text-slate-500">Window (min)</label>
+                          <label className="text-[10px] uppercase tracking-wider text-[var(--text-faint)]">Window (min)</label>
                           <input type="number" min={1} value={bcWindow} onChange={e => setBcWindow(e.target.value)}
-                            className="w-20 mt-1 bg-slate-800 border border-white/10 rounded-lg px-2.5 py-1.5 text-sm text-white focus:outline-none focus:border-sky-500/40" />
+                            className="w-20 mt-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2.5 py-1.5 text-sm text-[var(--text-main)] focus:outline-none focus:border-sky-500/40" />
                         </div>
                         <button type="button" onClick={() => void doBroadcast()} disabled={broadcasting || bcSelected.size === 0}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-sky-500 text-slate-950 font-medium px-3 py-1.5 text-sm hover:bg-sky-400 disabled:opacity-50">
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-sky-500 text-white font-medium px-3 py-1.5 text-sm hover:bg-sky-400 disabled:opacity-50">
                           <Radio className="w-4 h-4" /> {broadcasting ? 'Broadcasting…' : `Broadcast to ${bcSelected.size}`}
                         </button>
-                        <button type="button" onClick={() => setShowBroadcast(false)} className="text-xs text-slate-400 hover:text-white px-2 py-1.5">Cancel</button>
+                        <button type="button" onClick={() => setShowBroadcast(false)} className="text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] px-2 py-1.5">Cancel</button>
                       </div>
-                      <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+                      <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] cursor-pointer">
                         <input type="checkbox" checked={bcAutoAssign} onChange={e => setBcAutoAssign(e.target.checked)} className="accent-sky-500" />
                         Auto-assign the first driver who accepts (skips manual confirm)
                       </label>
@@ -732,22 +732,22 @@ export default function MarketplacePage() {
 
                   {/* Live offer responses (Phase 2 adds the Assign action) */}
                   {activeBroadcast && activeBroadcast.offers.length > 0 && (
-                    <div className="mt-3 rounded-lg border border-white/10 bg-slate-900/40">
-                      <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-slate-500 border-b border-white/5">
+                    <div className="mt-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40">
+                      <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--text-faint)] border-b border-[var(--border-subtle)]">
                         Broadcast {activeBroadcast.status.toLowerCase()} · {activeBroadcast.currency} {activeBroadcast.amount.toLocaleString('en-AE')}
                       </div>
                       {activeBroadcast.offers.map(o => {
                         const broadcastAssigned = activeBroadcast.status === 'ASSIGNED';
                         return (
-                          <div key={o.id} className={`flex items-center justify-between gap-2 px-3 py-2 text-sm border-b border-white/5 last:border-b-0 ${o.status === 'ASSIGNED' ? 'bg-emerald-500/10' : ''}`}>
-                            <span className="text-slate-200">{o.carrierName || o.carrierId?.slice?.(0, 8)}<span className="text-[11px] text-slate-500">{o.distanceKm != null ? ` · ${o.distanceKm} km` : ''}</span></span>
+                          <div key={o.id} className={`flex items-center justify-between gap-2 px-3 py-2 text-sm border-b border-[var(--border-subtle)] last:border-b-0 ${o.status === 'ASSIGNED' ? 'bg-emerald-500/10' : ''}`}>
+                            <span className="text-[var(--text-main)]">{o.carrierName || o.carrierId?.slice?.(0, 8)}<span className="text-[11px] text-[var(--text-faint)]">{o.distanceKm != null ? ` · ${o.distanceKm} km` : ''}</span></span>
                             {o.status === 'ASSIGNED' ? (
                               <span className="inline-flex items-center gap-1 text-xs text-emerald-300"><CheckCircle2 className="w-3.5 h-3.5" /> Assigned</span>
                             ) : o.status === 'ACCEPTED' && !broadcastAssigned ? (
                               <button type="button" onClick={() => void assignBroadcastOffer(o.id)}
-                                className="text-xs font-medium px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 hover:bg-emerald-400">Assign</button>
+                                className="text-xs font-medium px-2.5 py-1 rounded-lg bg-emerald-500 text-white hover:bg-emerald-400">Assign</button>
                             ) : (
-                              <span className={`text-xs ${['DECLINED', 'TIMEOUT', 'SUPERSEDED'].includes(o.status) ? 'text-slate-500' : 'text-amber-300'}`}>{o.status.toLowerCase()}</span>
+                              <span className={`text-xs ${['DECLINED', 'TIMEOUT', 'SUPERSEDED'].includes(o.status) ? 'text-[var(--text-faint)]' : 'text-amber-300'}`}>{o.status.toLowerCase()}</span>
                             )}
                           </div>
                         );
@@ -757,14 +757,14 @@ export default function MarketplacePage() {
                 </div>
               )}
 
-              {loadingBids && <p className="text-sm text-slate-500">Loading bids…</p>}
+              {loadingBids && <p className="text-sm text-[var(--text-faint)]">Loading bids…</p>}
               {!loadingBids && bids.length === 0 && (
-                <p className="text-sm text-slate-500">No bids on this load yet.</p>
+                <p className="text-sm text-[var(--text-faint)]">No bids on this load yet.</p>
               )}
 
               {bids.length > 0 && (
-                <div className="rounded-xl border border-white/10 overflow-hidden">
-                  <div className="grid grid-cols-[1.4fr_1fr_0.8fr_0.9fr_auto] gap-2 px-3 py-2 text-[10px] uppercase tracking-wider text-slate-500 border-b border-white/5">
+                <div className="rounded-xl border border-[var(--border-subtle)] overflow-hidden">
+                  <div className="grid grid-cols-[1.4fr_1fr_0.8fr_0.9fr_auto] gap-2 px-3 py-2 text-[10px] uppercase tracking-wider text-[var(--text-faint)] border-b border-[var(--border-subtle)]">
                     <div>Carrier</div><div>Bid</div><div>Transit</div><div>Status</div><div />
                   </div>
                   {bids.map(b => {
@@ -774,20 +774,20 @@ export default function MarketplacePage() {
                     return (
                       <div
                         key={b.id}
-                        className={`grid grid-cols-[1.4fr_1fr_0.8fr_0.9fr_auto] gap-2 px-3 py-2.5 items-center border-b border-white/5 last:border-b-0 ${
+                        className={`grid grid-cols-[1.4fr_1fr_0.8fr_0.9fr_auto] gap-2 px-3 py-2.5 items-center border-b border-[var(--border-subtle)] last:border-b-0 ${
                           isAwarded ? 'bg-emerald-500/10' : ''
                         }`}
                       >
                         <div className="min-w-0">
-                          <div className="text-sm text-white truncate flex items-center gap-1.5">
+                          <div className="text-sm text-[var(--text-main)] truncate flex items-center gap-1.5">
                             {isAwarded && <Trophy className="w-3.5 h-3.5 text-emerald-300 shrink-0" />}
                             {b.carrierName || b.carrierId.slice(0, 8)}
                           </div>
                           {isCheapest && <div className="text-[10px] text-emerald-300/80">Best price</div>}
-                          {b.bidNo && <div className="text-[10px] text-slate-600 font-mono">{b.bidNo}</div>}
+                          {b.bidNo && <div className="text-[10px] text-[var(--text-faint)] font-mono">{b.bidNo}</div>}
                         </div>
-                        <div className="text-sm font-mono text-white">{money(b.amount, b.currency)}</div>
-                        <div className="text-xs text-slate-400 flex items-center gap-1">
+                        <div className="text-sm font-mono text-[var(--text-main)]">{money(b.amount, b.currency)}</div>
+                        <div className="text-xs text-[var(--text-muted)] flex items-center gap-1">
                           <Clock className="w-3 h-3" /> {b.transitTimeHours != null ? `${b.transitTimeHours}h` : '—'}
                         </div>
                         <div><StatusPill status={b.status} /></div>
@@ -803,14 +803,14 @@ export default function MarketplacePage() {
                                   type="button"
                                   disabled={awarding}
                                   onClick={() => void award(selected.id, b.id)}
-                                  className="text-xs font-medium px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 hover:bg-emerald-400 disabled:opacity-50"
+                                  className="text-xs font-medium px-2.5 py-1 rounded-lg bg-emerald-500 text-white hover:bg-emerald-400 disabled:opacity-50"
                                 >
                                   {awarding ? '…' : 'Confirm'}
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => setConfirmBidId(null)}
-                                  className="text-xs text-slate-400 hover:text-white"
+                                  className="text-xs text-[var(--text-muted)] hover:text-[var(--text-main)]"
                                 >
                                   Cancel
                                 </button>
@@ -825,7 +825,7 @@ export default function MarketplacePage() {
                               </button>
                             )
                           ) : (
-                            <span className="text-xs text-slate-600">—</span>
+                            <span className="text-xs text-[var(--text-faint)]">—</span>
                           )}
                         </div>
                       </div>
@@ -835,7 +835,7 @@ export default function MarketplacePage() {
               )}
 
               {!canAward && bids.length > 0 && (
-                <p className="text-[11px] text-slate-500">
+                <p className="text-[11px] text-[var(--text-faint)]">
                   This RFQ is {selected.status.toLowerCase()} — bids can no longer be awarded.
                 </p>
               )}

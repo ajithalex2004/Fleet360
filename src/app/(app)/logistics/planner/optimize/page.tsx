@@ -238,7 +238,7 @@ export default function VrpPlannerPage() {
         icon={RouteIcon}
         accent="violet"
         actions={
-          <Link href="/logistics/planner" className="text-sm text-slate-400 hover:text-white">
+          <Link href="/logistics/planner" className="text-sm text-[var(--text-muted)] hover:text-[var(--text-main)]">
             Single-route calculator →
           </Link>
         }
@@ -256,9 +256,9 @@ export default function VrpPlannerPage() {
           <Panel title="Vehicles" icon={Truck} accent="amber"
             subtitle={`${selectedVehicles.size} of ${vehicles.length} selected`}>
             {loadingInputs ? (
-              <div className="text-sm text-slate-500">Loading vehicles…</div>
+              <div className="text-sm text-[var(--text-faint)]">Loading vehicles…</div>
             ) : vehicles.length === 0 ? (
-              <div className="text-sm text-slate-500">
+              <div className="text-sm text-[var(--text-faint)]">
                 No logistics vehicles with payload capacity configured. Set
                 payload_capacity_kg + depot coordinates on vehicles first.
               </div>
@@ -267,17 +267,17 @@ export default function VrpPlannerPage() {
                 {vehicles.map(v => (
                   <label key={v.id}
                     className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors ${
-                      selectedVehicles.has(v.id) ? 'bg-amber-500/15 border border-amber-500/30' : 'border border-white/5 hover:bg-white/5'
+                      selectedVehicles.has(v.id) ? 'bg-amber-500/15 border border-amber-500/30' : 'border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]'
                     }`}>
                     <span className="flex items-center gap-2">
                       <input type="checkbox" checked={selectedVehicles.has(v.id)}
                         onChange={() => setSelectedVehicles(s => toggle(s, v.id))} className="sr-only" />
                       <span className={`w-4 h-4 rounded border flex items-center justify-center text-xs ${
-                        selectedVehicles.has(v.id) ? 'bg-amber-500 border-amber-400 text-white' : 'border-slate-600'
+                        selectedVehicles.has(v.id) ? 'bg-amber-500 border-amber-400 text-white' : 'border-[var(--border-strong)]'
                       }`}>{selectedVehicles.has(v.id) ? '✓' : ''}</span>
                       {v.label}
                     </span>
-                    <span className="text-xs text-slate-500">{v.capacityKg ? `${v.capacityKg.toLocaleString()}kg` : '—'}</span>
+                    <span className="text-xs text-[var(--text-faint)]">{v.capacityKg ? `${v.capacityKg.toLocaleString()}kg` : '—'}</span>
                   </label>
                 ))}
               </div>
@@ -287,25 +287,25 @@ export default function VrpPlannerPage() {
           <Panel title="Shipments" icon={Package} accent="cyan"
             subtitle={`${selectedShipments.size} of ${shipments.length} selected`}>
             {loadingInputs ? (
-              <div className="text-sm text-slate-500">Loading shipments…</div>
+              <div className="text-sm text-[var(--text-faint)]">Loading shipments…</div>
             ) : shipments.length === 0 ? (
-              <div className="text-sm text-slate-500">No pending shipments to plan.</div>
+              <div className="text-sm text-[var(--text-faint)]">No pending shipments to plan.</div>
             ) : (
               <div className="space-y-1.5 max-h-56 overflow-y-auto">
                 {shipments.map(s => (
                   <label key={s.id}
                     className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer text-sm transition-colors ${
-                      selectedShipments.has(s.id) ? 'bg-cyan-500/15 border border-cyan-500/30' : 'border border-white/5 hover:bg-white/5'
+                      selectedShipments.has(s.id) ? 'bg-cyan-500/15 border border-cyan-500/30' : 'border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]'
                     }`}>
                     <span className="flex items-center gap-2">
                       <input type="checkbox" checked={selectedShipments.has(s.id)}
                         onChange={() => setSelectedShipments(st => toggle(st, s.id))} className="sr-only" />
                       <span className={`w-4 h-4 rounded border flex items-center justify-center text-xs ${
-                        selectedShipments.has(s.id) ? 'bg-cyan-500 border-cyan-400 text-white' : 'border-slate-600'
+                        selectedShipments.has(s.id) ? 'bg-cyan-500 border-cyan-400 text-white' : 'border-[var(--border-strong)]'
                       }`}>{selectedShipments.has(s.id) ? '✓' : ''}</span>
                       {s.label}
                     </span>
-                    <span className="text-xs text-slate-500">{s.weightKg ? `${s.weightKg.toLocaleString()}kg` : '—'}</span>
+                    <span className="text-xs text-[var(--text-faint)]">{s.weightKg ? `${s.weightKg.toLocaleString()}kg` : '—'}</span>
                   </label>
                 ))}
               </div>
@@ -348,18 +348,18 @@ export default function VrpPlannerPage() {
           <div className="lg:col-span-2 space-y-3">
             {plan.result.routes.length === 0 && (
               <Panel title="Routes" icon={RouteIcon} accent="violet">
-                <div className="text-sm text-slate-500">No routes produced — see unassigned shipments.</div>
+                <div className="text-sm text-[var(--text-faint)]">No routes produced — see unassigned shipments.</div>
               </Panel>
             )}
             {plan.result.routes.map((route, idx) => {
               const hasViolations = route.violations.length > 0;
               return (
                 <div key={route.vehicleId}
-                  className={`rounded-2xl bg-slate-900/60 border p-4 ${hasViolations ? 'border-amber-500/30' : 'border-white/10'}`}
+                  className={`rounded-2xl bg-[var(--bg-surface)]/60 border p-4 ${hasViolations ? 'border-amber-500/30' : 'border-[var(--border-subtle)]'}`}
                   style={{ borderLeftWidth: 3, borderLeftColor: hasViolations ? '#BA7517' : '#1D9E75' }}>
                   <div className="flex items-center justify-between mb-2">
-                    <div className="font-semibold text-sm text-white">
-                      Vehicle {idx + 1} <span className="font-mono text-xs text-slate-500">{route.vehicleId.slice(0, 8)}</span>
+                    <div className="font-semibold text-sm text-[var(--text-main)]">
+                      Vehicle {idx + 1} <span className="font-mono text-xs text-[var(--text-faint)]">{route.vehicleId.slice(0, 8)}</span>
                     </div>
                     {hasViolations ? (
                       <span className="inline-flex items-center gap-1 text-xs bg-amber-500/15 text-amber-300 px-2 py-0.5 rounded-full">
@@ -371,11 +371,11 @@ export default function VrpPlannerPage() {
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-slate-400 mb-3 flex items-center justify-between">
+                  <div className="text-xs text-[var(--text-muted)] mb-3 flex items-center justify-between">
                     <span>
                       {route.totalDistanceKm}km · {fmtDuration(route.totalDurationMin)} · {route.capacityUtilization.weightPct}% capacity · AED {route.estimatedCost.toLocaleString()}
                     </span>
-                    {!committed && <span className="text-slate-600 text-[10px]">drag to reorder</span>}
+                    {!committed && <span className="text-[var(--text-faint)] text-[10px]">drag to reorder</span>}
                   </div>
                   <ol className={`space-y-1 text-xs ${editing ? 'opacity-50 pointer-events-none' : ''}`}>
                     {route.stops.map(stop => (
@@ -386,19 +386,19 @@ export default function VrpPlannerPage() {
                         onDrop={e => { e.preventDefault(); handleDropBefore(route.vehicleId, stop.stopId); }}
                         className={`group flex items-center gap-2 rounded px-1 py-0.5 ${stop.onTime ? '' : 'text-amber-300'} ${
                           drag?.stopId === stop.stopId ? 'opacity-40' : ''
-                        } ${!committed ? 'hover:bg-white/5 cursor-grab' : ''}`}>
-                        {!committed && <GripVertical className="w-3 h-3 text-slate-600 flex-shrink-0" />}
-                        <span className="font-mono text-slate-500 w-4">{stop.sequence}</span>
+                        } ${!committed ? 'hover:bg-[var(--bg-surface-hover)] cursor-grab' : ''}`}>
+                        {!committed && <GripVertical className="w-3 h-3 text-[var(--text-faint)] flex-shrink-0" />}
+                        <span className="font-mono text-[var(--text-faint)] w-4">{stop.sequence}</span>
                         <span className={`w-1.5 h-1.5 rounded-full ${stop.type === 'PICKUP' ? 'bg-cyan-400' : 'bg-emerald-400'}`} />
-                        <span className="text-slate-300">{stop.type === 'PICKUP' ? 'Pickup' : 'Drop'}</span>
-                        <span className="font-mono text-slate-500">{stop.shipmentId.slice(0, 8)}</span>
-                        <span className="text-slate-500">{fmtTime(stop.arriveMin)}</span>
+                        <span className="text-[var(--text-muted)]">{stop.type === 'PICKUP' ? 'Pickup' : 'Drop'}</span>
+                        <span className="font-mono text-[var(--text-faint)]">{stop.shipmentId.slice(0, 8)}</span>
+                        <span className="text-[var(--text-faint)]">{fmtTime(stop.arriveMin)}</span>
                         {!stop.onTime && <AlertTriangle className="w-3 h-3 text-amber-400" />}
                         {!committed && stop.type === 'PICKUP' && (
                           <button
                             onClick={() => unassignShipment(stop.shipmentId, route.vehicleId)}
                             title="Remove shipment from route"
-                            className="ml-auto opacity-0 group-hover:opacity-100 text-slate-500 hover:text-rose-400 transition-opacity">
+                            className="ml-auto opacity-0 group-hover:opacity-100 text-[var(--text-faint)] hover:text-rose-400 transition-opacity">
                             <X className="w-3 h-3" />
                           </button>
                         )}
@@ -406,7 +406,7 @@ export default function VrpPlannerPage() {
                     ))}
                   </ol>
                   {hasViolations && (
-                    <ul className="mt-2 pt-2 border-t border-white/5 space-y-0.5">
+                    <ul className="mt-2 pt-2 border-t border-[var(--border-subtle)] space-y-0.5">
                       {route.violations.map((v, i) => (
                         <li key={i} className="text-xs text-amber-300/80">⚠ {v.detail}</li>
                       ))}
@@ -421,7 +421,7 @@ export default function VrpPlannerPage() {
                 <ul className="space-y-1 text-xs">
                   {plan.result.unassigned.map(u => (
                     <li key={u.shipmentId} className="flex items-center justify-between">
-                      <span className="font-mono text-slate-400">{u.shipmentId.slice(0, 8)}</span>
+                      <span className="font-mono text-[var(--text-muted)]">{u.shipmentId.slice(0, 8)}</span>
                       <span className="text-rose-300">{u.reason}{u.detail ? ` — ${u.detail}` : ''}</span>
                     </li>
                   ))}
@@ -451,7 +451,7 @@ export default function VrpPlannerPage() {
                   Commit plan
                 </button>
                 <button onClick={discard}
-                  className="w-full py-2 rounded-xl border border-white/10 text-slate-300 text-sm hover:bg-slate-800 transition-colors">
+                  className="w-full py-2 rounded-xl border border-[var(--border-subtle)] text-[var(--text-muted)] text-sm hover:bg-[var(--bg-surface)] transition-colors">
                   Discard
                 </button>
               </div>
@@ -464,10 +464,10 @@ export default function VrpPlannerPage() {
 }
 
 function SummaryRow({ label, value, accent }: { label: string; value: string; accent?: 'rose' | 'amber' }) {
-  const valueColor = accent === 'rose' ? 'text-rose-300' : accent === 'amber' ? 'text-amber-300' : 'text-white';
+  const valueColor = accent === 'rose' ? 'text-rose-300' : accent === 'amber' ? 'text-amber-300' : 'text-[var(--text-main)]';
   return (
     <div className="flex items-center justify-between">
-      <dt className="text-slate-400 text-xs">{label}</dt>
+      <dt className="text-[var(--text-muted)] text-xs">{label}</dt>
       <dd className={`font-semibold ${valueColor}`}>{value}</dd>
     </div>
   );

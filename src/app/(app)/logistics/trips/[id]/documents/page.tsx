@@ -11,5 +11,5 @@ export default function LegacyTripDocumentsRedirect() {
     if (id) router.replace(`/logistics/shipments/${id}/documents`);
   }, [id, router]);
 
-  return <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-6 text-sm text-slate-400">Redirecting to shipment documents...</div>;
+  return <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 p-6 text-sm text-[var(--text-muted)]">Redirecting to shipment documents...</div>;
 }

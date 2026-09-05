@@ -174,12 +174,12 @@ function LiveTrackingMap({
 
   if (noToken) {
     return (
-      <div className="w-full h-full flex items-center justify-center bg-slate-900/60 border border-white/10 rounded-2xl">
-        <div className="text-center text-slate-500 p-8">
+      <div className="w-full h-full flex items-center justify-center bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl">
+        <div className="text-center text-[var(--text-faint)] p-8">
           <div className="text-4xl mb-3">🗺️</div>
-          <p className="font-medium text-slate-400">Map requires Mapbox token</p>
+          <p className="font-medium text-[var(--text-muted)]">Map requires Mapbox token</p>
           <p className="text-xs mt-2">Add <code className="text-amber-400">NEXT_PUBLIC_MAPBOX_TOKEN</code> to .env.local</p>
-          <p className="text-xs mt-1 text-slate-600">Shipment list is shown on the right panel</p>
+          <p className="text-xs mt-1 text-[var(--text-faint)]">Shipment list is shown on the right panel</p>
         </div>
       </div>
     );
@@ -203,13 +203,13 @@ function TripPanel({ trip, isSelected, onSelect }: {
       className={`w-full text-left p-3 rounded-xl border transition-all ${
         isSelected
           ? 'border-amber-500/40 bg-amber-500/10'
-          : 'border-white/5 bg-slate-900/40 hover:border-white/10 hover:bg-slate-800/40'
+          : 'border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 hover:border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]/40'
       }`}>
       <div className="flex items-start gap-2">
         <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ background: color }} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-1">
-            <span className="font-mono text-xs text-white font-semibold truncate">
+            <span className="font-mono text-xs text-[var(--text-main)] font-semibold truncate">
               {trip.bookingRef ?? trip.id.slice(0, 8)}
             </span>
             <span className="text-xs flex-shrink-0" style={{ color }}>{label}</span>
@@ -217,7 +217,7 @@ function TripPanel({ trip, isSelected, onSelect }: {
           {trip.vehiclePlate && <p className="text-xs text-amber-400 mt-0.5">🚛 {trip.vehiclePlate}</p>}
           {trip.driverName   && <p className="text-xs text-blue-400">👤 {trip.driverName}</p>}
           {(trip.origin || trip.destination) && (
-            <p className="text-xs text-slate-500 mt-0.5 truncate">
+            <p className="text-xs text-[var(--text-faint)] mt-0.5 truncate">
               {trip.origin} {trip.origin && trip.destination ? '→' : ''} {trip.destination}
             </p>
           )}
@@ -264,8 +264,8 @@ export default function LogisticsTrackingPage() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white">Live Fleet Tracking</h1>
-          <p className="text-slate-400 text-xs mt-0.5">
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Live Fleet Tracking</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">
             {trips.length} active shipment{trips.length !== 1 ? 's' : ''} · Auto-refresh every 15s
           </p>
         </div>
@@ -275,7 +275,7 @@ export default function LogisticsTrackingPage() {
             {lastRefresh.toLocaleTimeString()}
           </div>
           <button onClick={load}
-            className="text-xs text-slate-400 border border-white/10 px-3 py-1.5 rounded-lg hover:border-white/20 hover:text-white transition-colors">
+            className="text-xs text-[var(--text-muted)] border border-[var(--border-subtle)] px-3 py-1.5 rounded-lg hover:border-[var(--border-strong)] hover:text-[var(--text-main)] transition-colors">
             ↺ Refresh
           </button>
         </div>
@@ -288,7 +288,7 @@ export default function LogisticsTrackingPage() {
             className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
               filter === s
                 ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                : 'text-slate-400 border-white/10 hover:border-white/20 hover:text-white'
+                : 'text-[var(--text-muted)] border-[var(--border-subtle)] hover:border-[var(--border-strong)] hover:text-[var(--text-main)]'
             }`}>
             {s === 'ALL' ? 'All Active' : STATUS_LABEL[s] ?? s}
             <span className="ml-1 opacity-60">
@@ -303,7 +303,7 @@ export default function LogisticsTrackingPage() {
         {/* Map */}
         <div className="flex-1 min-w-0">
           {loading ? (
-            <div className="w-full h-full bg-slate-800/60 rounded-2xl animate-pulse flex items-center justify-center text-slate-600">
+            <div className="w-full h-full bg-[var(--bg-surface)]/60 rounded-2xl animate-pulse flex items-center justify-center text-[var(--text-faint)]">
               Loading map…
             </div>
           ) : (
@@ -315,10 +315,10 @@ export default function LogisticsTrackingPage() {
         <div className="w-72 flex-shrink-0 flex flex-col gap-2 overflow-y-auto">
           {loading ? (
             <div className="space-y-2">
-              {[...Array(4)].map((_, i) => <div key={i} className="h-20 bg-slate-800/60 rounded-xl animate-pulse" />)}
+              {[...Array(4)].map((_, i) => <div key={i} className="h-20 bg-[var(--bg-surface)]/60 rounded-xl animate-pulse" />)}
             </div>
           ) : filtered.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center text-center text-slate-600 p-6">
+            <div className="flex-1 flex items-center justify-center text-center text-[var(--text-faint)] p-6">
               <div>
                 <div className="text-4xl mb-3">🚛</div>
                 <p className="text-sm">No active shipments in transit</p>
@@ -338,8 +338,8 @@ export default function LogisticsTrackingPage() {
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-4 text-xs text-slate-600 border-t border-white/5 pt-3">
-        <span className="font-medium text-slate-500">Position sources:</span>
+      <div className="flex items-center gap-4 text-xs text-[var(--text-faint)] border-t border-[var(--border-subtle)] pt-3">
+        <span className="font-medium text-[var(--text-faint)]">Position sources:</span>
         {[
           { color: '#4ade80', label: 'Driver GPS update' },
           { color: '#22d3ee', label: 'ePOD GPS' },

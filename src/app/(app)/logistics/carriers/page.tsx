@@ -127,15 +127,15 @@ export default function LogisticsCarriersPage() {
   const columns = useMemo<DataGridColumn<Carrier>[]>(() => [
     {
       key: 'carrier', header: 'Carrier', accessor: r => r.name,
-      render: r => <div><div className="font-medium text-white">{r.name}</div><div className="text-xs text-slate-500 font-mono">{r.carrierCode ?? r.id.slice(0, 8)}</div></div>,
+      render: r => <div><div className="font-medium text-[var(--text-main)]">{r.name}</div><div className="text-xs text-[var(--text-faint)] font-mono">{r.carrierCode ?? r.id.slice(0, 8)}</div></div>,
     },
     {
       key: 'type', header: 'Type', accessor: r => typeLabel(r.carrierType), filter: 'select',
-      render: r => <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${r.carrierType === 'OWNER_OPERATOR' ? 'bg-sky-500/15 text-sky-300 border-sky-500/30' : r.carrierType === 'BROKER' ? 'bg-violet-500/15 text-violet-300 border-violet-500/30' : 'bg-slate-500/15 text-slate-300 border-slate-500/30'}`}>{typeLabel(r.carrierType)}</span>,
+      render: r => <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${r.carrierType === 'OWNER_OPERATOR' ? 'bg-sky-500/15 text-sky-300 border-sky-500/30' : r.carrierType === 'BROKER' ? 'bg-violet-500/15 text-violet-300 border-violet-500/30' : 'bg-slate-500/15 text-[var(--text-muted)] border-slate-500/30'}`}>{typeLabel(r.carrierType)}</span>,
     },
     {
       key: 'contact', header: 'Contact', accessor: r => r.contactEmail ?? '',
-      render: r => <div><div className="text-slate-300">{r.contactName ?? '-'}</div><div className="text-xs text-slate-500">{r.contactEmail ?? r.contactPhone ?? '-'}</div></div>,
+      render: r => <div><div className="text-[var(--text-muted)]">{r.contactName ?? '-'}</div><div className="text-xs text-[var(--text-faint)]">{r.contactEmail ?? r.contactPhone ?? '-'}</div></div>,
     },
     { key: 'onboarding', header: 'Onboarding', accessor: r => r.onboardingStatus, filter: 'select', render: r => <Pill value={r.onboardingStatus} /> },
     { key: 'compliance', header: 'Compliance', accessor: r => r.complianceStatus, filter: 'select', render: r => <Pill value={r.complianceStatus} /> },
@@ -159,7 +159,7 @@ export default function LogisticsCarriersPage() {
         accent="emerald"
         actions={
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => void load()} className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-300 hover:bg-white/5"><RefreshCw className="h-4 w-4" /> Refresh</button>
+            <button type="button" onClick={() => void load()} className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"><RefreshCw className="h-4 w-4" /> Refresh</button>
             <button type="button" onClick={openForm} className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500"><Plus className="h-4 w-4" /> Add carrier</button>
           </div>
         }
@@ -182,10 +182,10 @@ export default function LogisticsCarriersPage() {
 
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-slate-950 p-5 shadow-2xl">
+          <div className="w-full max-w-2xl rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)] p-5 shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white">Add carrier</h2>
-              <button type="button" onClick={() => setShowForm(false)} className="rounded-lg p-1 text-slate-400 hover:bg-white/5 hover:text-white"><X className="h-5 w-5" /></button>
+              <h2 className="text-lg font-bold text-[var(--text-main)]">Add carrier</h2>
+              <button type="button" onClick={() => setShowForm(false)} className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]"><X className="h-5 w-5" /></button>
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <LabeledSelect label="Carrier type" value={form.carrierType} options={CARRIER_TYPES} onChange={v => setForm(f => ({ ...f, carrierType: v, carrierCode: nextCarrierCode(v) }))} />
@@ -200,7 +200,7 @@ export default function LogisticsCarriersPage() {
             </div>
             {error && <p className="mt-3 text-sm text-rose-300">{error}</p>}
             <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setShowForm(false)} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-slate-300 hover:bg-white/5">Cancel</button>
+              <button type="button" onClick={() => setShowForm(false)} className="rounded-xl border border-[var(--border-subtle)] px-4 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]">Cancel</button>
               <button type="button" disabled={saving} onClick={() => void save()} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50">{saving ? 'Saving...' : 'Save carrier'}</button>
             </div>
           </div>
@@ -215,13 +215,13 @@ function Pill({ value }: { value: string }) {
 }
 
 function Input({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return <label className="block"><span className="mb-1 block text-[11px] uppercase tracking-wide text-slate-500">{label}</span><input value={value} onChange={e => onChange(e.target.value)} className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500/40" /></label>;
+  return <label className="block"><span className="mb-1 block text-[11px] uppercase tracking-wide text-[var(--text-faint)]">{label}</span><input value={value} onChange={e => onChange(e.target.value)} className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-main)] outline-none focus:border-emerald-500/40" /></label>;
 }
 
 function Select({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
-  return <label className="block"><span className="mb-1 block text-[11px] uppercase tracking-wide text-slate-500">{label}</span><select value={value} onChange={e => onChange(e.target.value)} className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500/40">{options.map(o => <option key={o}>{o}</option>)}</select></label>;
+  return <label className="block"><span className="mb-1 block text-[11px] uppercase tracking-wide text-[var(--text-faint)]">{label}</span><select value={value} onChange={e => onChange(e.target.value)} className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-main)] outline-none focus:border-emerald-500/40">{options.map(o => <option key={o}>{o}</option>)}</select></label>;
 }
 
 function LabeledSelect({ label, value, options, onChange }: { label: string; value: string; options: ReadonlyArray<{ value: string; label: string }>; onChange: (value: string) => void }) {
-  return <label className="block"><span className="mb-1 block text-[11px] uppercase tracking-wide text-slate-500">{label}</span><select value={value} onChange={e => onChange(e.target.value)} className="w-full rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500/40">{options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>;
+  return <label className="block"><span className="mb-1 block text-[11px] uppercase tracking-wide text-[var(--text-faint)]">{label}</span><select value={value} onChange={e => onChange(e.target.value)} className="w-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-main)] outline-none focus:border-emerald-500/40">{options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>;
 }

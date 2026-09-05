@@ -83,11 +83,11 @@ export default function LogisticsSettlementsPage() {
   const columns = useMemo<DataGridColumn<SettlementRow>[]>(() => [
     {
       key: 'shipment', header: 'Shipment', accessor: r => r.shipmentNo,
-      render: r => <div><div className="font-mono text-xs text-white">{r.shipmentNo}</div><div className="text-xs text-slate-500">{r.customerName ?? '-'}</div></div>,
+      render: r => <div><div className="font-mono text-xs text-[var(--text-main)]">{r.shipmentNo}</div><div className="text-xs text-[var(--text-faint)]">{r.customerName ?? '-'}</div></div>,
     },
     { key: 'status', header: 'Status', accessor: r => r.status, filter: 'select' },
-    { key: 'customer', header: 'Customer charges', accessor: r => r.customerCharges, align: 'right', render: r => <span className="font-mono text-slate-200">{money(r.currency, r.customerCharges)}</span> },
-    { key: 'carrier', header: 'Carrier payable', accessor: r => r.carrierCharges, align: 'right', render: r => <span className="font-mono text-slate-200">{money(r.currency, r.carrierCharges)}</span> },
+    { key: 'customer', header: 'Customer charges', accessor: r => r.customerCharges, align: 'right', render: r => <span className="font-mono text-[var(--text-main)]">{money(r.currency, r.customerCharges)}</span> },
+    { key: 'carrier', header: 'Carrier payable', accessor: r => r.carrierCharges, align: 'right', render: r => <span className="font-mono text-[var(--text-main)]">{money(r.currency, r.carrierCharges)}</span> },
     {
       key: 'reconcile', header: 'Reconciliation', accessor: r => `${r.customerReconciled}-${r.carrierReconciled}`,
       render: r => (
@@ -100,7 +100,7 @@ export default function LogisticsSettlementsPage() {
     {
       key: 'actions', header: '', accessor: r => r.shipmentOrderId, sortable: false, filter: false, align: 'right',
       render: r => (
-        <button type="button" disabled={postingId === r.shipmentOrderId || (r.customerReconciled && r.carrierReconciled)} onClick={() => void post(r.shipmentOrderId)} className="inline-flex items-center gap-1 rounded-lg bg-amber-500 px-2.5 py-1 text-xs font-semibold text-slate-950 hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-45">
+        <button type="button" disabled={postingId === r.shipmentOrderId || (r.customerReconciled && r.carrierReconciled)} onClick={() => void post(r.shipmentOrderId)} className="inline-flex items-center gap-1 rounded-lg bg-amber-500 px-2.5 py-1 text-xs font-semibold text-white hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-45">
           <Send className="h-3.5 w-3.5" /> {postingId === r.shipmentOrderId ? 'Posting...' : 'Post'}
         </button>
       ),
@@ -114,7 +114,7 @@ export default function LogisticsSettlementsPage() {
         subtitle="Move awarded loads through customer invoice, carrier payable, driver payout, commission, and reconciliation."
         icon={WalletCards}
         accent="amber"
-        actions={<button type="button" onClick={() => void load()} className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-300 hover:bg-white/5"><RefreshCw className="h-4 w-4" /> Refresh</button>}
+        actions={<button type="button" onClick={() => void load()} className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"><RefreshCw className="h-4 w-4" /> Refresh</button>}
       />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -124,7 +124,7 @@ export default function LogisticsSettlementsPage() {
         <KpiCard label="Unreconciled" value={(summary?.unreconciledCustomer ?? 0) + (summary?.unreconciledCarrier ?? 0)} sub="Needs posting" icon={CheckCircle2} accent="rose" />
       </div>
 
-      {message && <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-sm text-slate-200">{message}</div>}
+      {message && <div className="rounded-xl border border-[var(--border-subtle)] bg-white/[0.03] p-3 text-sm text-[var(--text-main)]">{message}</div>}
 
       <LogisticsDataGrid rows={rows} columns={columns} getRowId={r => r.shipmentOrderId} loading={loading} emptyMessage="No settlement rows found" initialSort={{ key: 'shipment', dir: 'desc' }} toolbar={{ exportName: 'logistics-settlements' }} />
     </div>
