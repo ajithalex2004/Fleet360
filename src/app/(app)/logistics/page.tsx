@@ -2,10 +2,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  Truck, CheckCircle2, MapPin, Inbox, ClipboardCheck, Wrench,
-  TrendingUp, Plus, Map, Gavel, Building2, WalletCards,
+  Truck, MapPin, Inbox,
+  Plus, Map, Gavel, Building2, WalletCards,
 } from 'lucide-react';
-import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
+import { PageHeader, Panel, StatusPill } from '@/components/ui/page-theme';
 import ChauffeurDriverIcon from '@/components/icons/ChauffeurDriverIcon';
 import { fetchCached } from '@/lib/fetch-cache';
 import RateCoveragePanel from '@/components/logistics/RateCoveragePanel';
@@ -87,29 +87,32 @@ export default function LogisticsDashboard() {
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <KpiCard label="Fleet vehicles"   value={stats?.totalVehicles ?? 0}     sub="Logistics fleet"        icon={Truck}          accent="amber"   />
-            <KpiCard label="Available now"    value={stats?.availableVehicles ?? 0} sub="Ready to dispatch"      icon={CheckCircle2}   accent="emerald" />
-            <KpiCard label="Active shipments" value={stats?.activeTrips ?? 0}       sub="In transit"             icon={MapPin}         accent="cyan"    />
-            <KpiCard label="Pending"          value={stats?.pendingBookings ?? 0}   sub="Awaiting dispatch"      icon={Inbox}          accent="amber"   />
-            <KpiCard label="Completed today"  value={stats?.completedToday ?? 0}    sub="Shipments finished"     icon={ClipboardCheck} accent="emerald" />
-            <KpiCard label="In maintenance"   value={stats?.inMaintenance ?? 0}     sub="Out of service"         icon={Wrench}         accent="rose"    />
-            <KpiCard label="Drivers"          value={stats?.drivers ?? 0}           sub="Logistics-assigned"     icon={ChauffeurDriverIcon}        accent="cyan"    />
+            {[
+              { label: 'Fleet vehicles',   value: stats?.totalVehicles ?? 0,     sub: 'Logistics fleet',   tone: 'from-amber-500 to-orange-600' },
+              { label: 'Available now',    value: stats?.availableVehicles ?? 0, sub: 'Ready to dispatch', tone: 'from-emerald-500 to-teal-600' },
+              { label: 'Active shipments', value: stats?.activeTrips ?? 0,       sub: 'In transit',        tone: 'from-cyan-500 to-blue-600' },
+              { label: 'Pending',          value: stats?.pendingBookings ?? 0,   sub: 'Awaiting dispatch', tone: 'from-orange-500 to-red-600' },
+              { label: 'Completed today',  value: stats?.completedToday ?? 0,    sub: 'Shipments finished',tone: 'from-green-500 to-emerald-600' },
+              { label: 'In maintenance',   value: stats?.inMaintenance ?? 0,     sub: 'Out of service',    tone: 'from-rose-500 to-pink-600' },
+              { label: 'Drivers',          value: stats?.drivers ?? 0,           sub: 'Logistics-assigned',tone: 'from-violet-500 to-purple-600' },
+            ].map(card => (
+              <div key={card.label} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.tone} p-4 shadow-sm`}>
+                <p className="text-[11px] uppercase tracking-wider text-white/80 font-medium">{card.label}</p>
+                <p className="mt-2 text-3xl font-bold text-white">{card.value}</p>
+                <p className="text-xs text-white/60 mt-1">{card.sub}</p>
+              </div>
+            ))}
 
             {/* Utilisation tile with progress bar */}
-            <div className="rounded-2xl bg-slate-900/60 border border-white/10 p-4 hover:border-white/20 transition-colors">
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <span className="text-[11px] uppercase tracking-wider text-slate-500 font-medium">Utilisation</span>
-                <div className="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                  <TrendingUp className="w-3.5 h-3.5 text-amber-300" />
-                </div>
+            <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br p-4 shadow-sm ${
+              utilPct >= 70 ? 'from-emerald-500 to-teal-600' : utilPct >= 40 ? 'from-amber-500 to-orange-600' : 'from-rose-500 to-pink-600'
+            }`}>
+              <p className="text-[11px] uppercase tracking-wider text-white/80 font-medium">Utilisation</p>
+              <p className="mt-2 text-3xl font-bold text-white">{utilPct}%</p>
+              <div className="h-1.5 bg-white/20 rounded-full overflow-hidden mt-2">
+                <div className="h-full bg-white rounded-full transition-all" style={{ width: `${utilPct}%` }} />
               </div>
-              <div className={`text-3xl font-bold ${utilPct >= 70 ? 'text-emerald-300' : utilPct >= 40 ? 'text-amber-300' : 'text-rose-300'}`}>
-                {utilPct}%
-              </div>
-              <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden mt-2">
-                <div className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full transition-all" style={{ width: `${utilPct}%` }} />
-              </div>
-              <div className="text-xs text-slate-500 mt-1">Active vs available</div>
+              <p className="text-xs text-white/60 mt-1">Active vs available</p>
             </div>
           </div>
 

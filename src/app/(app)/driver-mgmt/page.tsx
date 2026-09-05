@@ -5,7 +5,7 @@ import {
   UserCog, Users, CheckCircle2, Clock, AlertOctagon, Activity, RefreshCw, Plus,
   IdCard, Calendar, BarChart3, FileWarning, Check, X, Minus, AlertTriangle,
 } from 'lucide-react';
-import { PageHeader, KpiCard, Panel } from '@/components/ui/page-theme';
+import { PageHeader, Panel } from '@/components/ui/page-theme';
 
 interface ComplianceSummary {
   total: number;
@@ -131,10 +131,17 @@ export default function DriverDashboard() {
       ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <KpiCard label="Total drivers"         value={s.total}                  icon={Users}        accent="default" />
-            <KpiCard label="Compliant (OK)"        value={s.ok}                     icon={CheckCircle2} accent="emerald" />
-            <KpiCard label="Expiring soon"         value={s.warning}                icon={Clock}        accent="amber"   />
-            <KpiCard label="Critical / Expired"    value={s.critical + s.incomplete} icon={AlertOctagon} accent={s.critical + s.incomplete > 0 ? 'rose' : 'slate'} />
+            {[
+              { label: 'Total drivers',      value: s.total,                   tone: 'from-blue-500 to-indigo-600' },
+              { label: 'Compliant (OK)',     value: s.ok,                      tone: 'from-emerald-500 to-teal-600' },
+              { label: 'Expiring soon',      value: s.warning,                 tone: 'from-amber-500 to-orange-600' },
+              { label: 'Critical / Expired', value: s.critical + s.incomplete, tone: s.critical + s.incomplete > 0 ? 'from-rose-500 to-pink-600' : 'from-slate-500 to-slate-700' },
+            ].map(card => (
+              <div key={card.label} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.tone} p-5 shadow-sm`}>
+                <p className="text-sm font-medium text-white/80">{card.label}</p>
+                <p className="mt-3 text-3xl font-bold text-white">{card.value}</p>
+              </div>
+            ))}
           </div>
 
           <Panel title="Fleet compliance health" icon={Activity} accent="cyan"

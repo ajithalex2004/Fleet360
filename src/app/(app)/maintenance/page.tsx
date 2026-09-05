@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
-import { Wrench, Inbox, Clock, DollarSign, Activity, Plus } from 'lucide-react';
-import { PageHeader, KpiCard, Panel } from '@/components/ui/page-theme';
+import { Wrench, Activity, Plus } from 'lucide-react';
+import { PageHeader, Panel } from '@/components/ui/page-theme';
 
 export default function MaintenanceDashboard() {
   return (
@@ -22,9 +22,17 @@ export default function MaintenanceDashboard() {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        <KpiCard label="Active requests"   value={12}      sub="↑ 2 since last week"     icon={Inbox}      accent="blue"   />
-        <KpiCard label="Pending approvals" value={4}       sub="Requires attention"      icon={Clock}      accent="amber"  />
-        <KpiCard label="Monthly cost"      value="AED 8,450" sub="↑ 12% vs last month"   icon={DollarSign} accent="emerald"/>
+        {[
+          { label: 'Active requests',   value: 12,           sub: '↑ 2 since last week',   tone: 'from-blue-500 to-indigo-600' },
+          { label: 'Pending approvals', value: 4,            sub: 'Requires attention',     tone: 'from-amber-500 to-orange-600' },
+          { label: 'Monthly cost',      value: 'AED 8,450',  sub: '↑ 12% vs last month',    tone: 'from-emerald-500 to-teal-600' },
+        ].map(card => (
+          <div key={card.label} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.tone} p-5 shadow-sm`}>
+            <p className="text-sm font-medium text-white/80">{card.label}</p>
+            <p className="mt-3 text-3xl font-bold text-white">{card.value}</p>
+            <p className="mt-1 text-xs text-white/60">{card.sub}</p>
+          </div>
+        ))}
       </div>
 
       <Panel title="Recent activity" subtitle="Service requests and work-order events" icon={Activity} accent="blue">

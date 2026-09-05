@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Scale, CheckCircle2, Clock, AlertTriangle, ClipboardList } from 'lucide-react';
-import { PageHeader, KpiCard, Panel } from '@/components/ui/page-theme';
+import { Scale, CheckCircle2, ClipboardList } from 'lucide-react';
+import { PageHeader, Panel } from '@/components/ui/page-theme';
 
 interface ComplianceSummary {
   compliantCount: number;
@@ -65,9 +65,17 @@ export default function ComplianceDashboard() {
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <KpiCard label="Compliant"     value={summary?.compliantCount ?? 0} sub="Documents / vehicles"     icon={CheckCircle2}   accent="emerald" />
-            <KpiCard label="Expiring soon" value={summary?.expiringCount ?? 0}  sub="Within 30 days"           icon={Clock}          accent="amber"   />
-            <KpiCard label="Expired"       value={summary?.expiredCount ?? 0}   sub="Immediate action needed"  icon={AlertTriangle}  accent="rose"    />
+            {[
+              { label: 'Compliant',     value: summary?.compliantCount ?? 0, sub: 'Documents / vehicles',    tone: 'from-emerald-500 to-teal-600' },
+              { label: 'Expiring soon', value: summary?.expiringCount ?? 0,  sub: 'Within 30 days',          tone: 'from-amber-500 to-orange-600' },
+              { label: 'Expired',       value: summary?.expiredCount ?? 0,   sub: 'Immediate action needed', tone: 'from-rose-500 to-pink-600' },
+            ].map(card => (
+              <div key={card.label} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.tone} p-5 shadow-sm`}>
+                <p className="text-sm font-medium text-white/80">{card.label}</p>
+                <p className="mt-3 text-3xl font-bold text-white">{card.value}</p>
+                <p className="mt-1 text-xs text-white/60">{card.sub}</p>
+              </div>
+            ))}
           </div>
 
           <Panel title="Critical expirations" subtitle="Next 10 documents nearing expiry" icon={ClipboardList} accent="rose">

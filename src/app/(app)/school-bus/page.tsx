@@ -2,10 +2,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  School, CheckCircle2, Map, Calendar, Activity, Wrench, UserCog, Users,
-  AlertTriangle, Bus, Siren,
+  School, Map, Calendar, Users,
+  AlertTriangle, Siren,
 } from 'lucide-react';
-import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
+import { PageHeader, Panel, StatusPill } from '@/components/ui/page-theme';
 import { useFetchedData } from '@/hooks/useFetchedData';
 
 interface SchoolBusStats {
@@ -75,14 +75,22 @@ export default function SchoolBusDashboard() {
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <KpiCard label="School buses"     value={stats?.totalVehicles ?? 0}     sub="Total fleet"             icon={Bus}            accent="amber"   />
-            <KpiCard label="Available"        value={stats?.availableVehicles ?? 0} sub="Ready for trips"         icon={CheckCircle2}   accent="emerald" />
-            <KpiCard label="Active routes"    value={stats?.activeRoutes ?? 0}      sub="Bus routes"              icon={Map}            accent="cyan"    />
-            <KpiCard label="Today's trips"    value={stats?.todaySchedules ?? 0}    sub="Scheduled today"         icon={Calendar}       accent="default" />
-            <KpiCard label="In transit"       value={stats?.inTransit ?? 0}         sub="Currently on route"      icon={Activity}       accent={(stats?.inTransit ?? 0) > 0 ? 'amber' : 'slate'} />
-            <KpiCard label="In maintenance"   value={stats?.inMaintenance ?? 0}     sub="Buses under service"     icon={Wrench}         accent="rose"    />
-            <KpiCard label="Drivers"          value={stats?.drivers ?? 0}           sub="School bus drivers"      icon={UserCog}        accent="cyan"    />
-            <KpiCard label="Students"         value={0}                              sub="Registered students"     icon={Users}          accent="default" />
+            {[
+              { label: 'School buses',   value: stats?.totalVehicles ?? 0,     sub: 'Total fleet',         tone: 'from-amber-500 to-orange-600' },
+              { label: 'Available',      value: stats?.availableVehicles ?? 0, sub: 'Ready for trips',     tone: 'from-emerald-500 to-teal-600' },
+              { label: 'Active routes',  value: stats?.activeRoutes ?? 0,      sub: 'Bus routes',          tone: 'from-cyan-500 to-blue-600' },
+              { label: "Today's trips",  value: stats?.todaySchedules ?? 0,    sub: 'Scheduled today',     tone: 'from-blue-500 to-indigo-600' },
+              { label: 'In transit',     value: stats?.inTransit ?? 0,         sub: 'Currently on route',  tone: (stats?.inTransit ?? 0) > 0 ? 'from-amber-500 to-orange-600' : 'from-slate-500 to-slate-700' },
+              { label: 'In maintenance', value: stats?.inMaintenance ?? 0,     sub: 'Buses under service', tone: 'from-rose-500 to-pink-600' },
+              { label: 'Drivers',        value: stats?.drivers ?? 0,           sub: 'School bus drivers',  tone: 'from-violet-500 to-purple-600' },
+              { label: 'Students',       value: 0,                              sub: 'Registered students', tone: 'from-teal-500 to-cyan-600' },
+            ].map(card => (
+              <div key={card.label} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.tone} p-4 shadow-sm`}>
+                <p className="text-[11px] uppercase tracking-wider text-white/80 font-medium">{card.label}</p>
+                <p className="mt-2 text-3xl font-bold text-white">{card.value}</p>
+                <p className="text-xs text-white/60 mt-1">{card.sub}</p>
+              </div>
+            ))}
           </div>
 
           <div className="rounded-2xl bg-amber-500/10 border border-amber-500/30 p-5 flex items-start gap-3">

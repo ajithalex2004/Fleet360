@@ -184,11 +184,11 @@ export default function CustomerPage() {
   const displayed = customers.filter(c => showInactive || c.status !== 'INACTIVE');
 
   const STAT_CARDS = [
-    { label:'TOTAL',    value:stats.total,    color:'bg-blue-600',    textColor:'text-white', icon:'T' },
-    { label:'ACTIVE',   value:stats.active,   color:'bg-emerald-600', textColor:'text-white', icon:'A' },
-    { label:'INACTIVE', value:stats.inactive, color:'bg-rose-600',    textColor:'text-white', icon:'I' },
-    { label:'WALK-IN',  value:stats.walkIn,   color:'bg-cyan-600',    textColor:'text-white', icon:'W' },
-    { label:'VIP',      value:stats.vip,      color:'bg-yellow-500',  textColor:'text-slate-900', icon:'V' },
+    { label:'TOTAL',    value:stats.total,    color:'bg-gradient-to-br from-blue-500 to-indigo-600',    textColor:'text-white', icon:'T' },
+    { label:'ACTIVE',   value:stats.active,   color:'bg-gradient-to-br from-emerald-500 to-teal-600',   textColor:'text-white', icon:'A' },
+    { label:'INACTIVE', value:stats.inactive, color:'bg-gradient-to-br from-rose-500 to-pink-600',      textColor:'text-white', icon:'I' },
+    { label:'WALK-IN',  value:stats.walkIn,   color:'bg-gradient-to-br from-cyan-500 to-blue-600',      textColor:'text-white', icon:'W' },
+    { label:'VIP',      value:stats.vip,      color:'bg-gradient-to-br from-amber-500 to-orange-600',   textColor:'text-white', icon:'V' },
   ];
 
   const TABS: {id:ModalTab; label:string}[] = [

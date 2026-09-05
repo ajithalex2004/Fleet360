@@ -102,34 +102,32 @@ function KPICard({
   icon: string; color?: string; trend?: number;
 }) {
   const colors: Record<string, string> = {
-    emerald: 'from-emerald-600 to-green-700',
-    blue:    'from-blue-600 to-blue-700',
-    purple:  'from-purple-600 to-violet-700',
+    emerald: 'from-emerald-500 to-teal-600',
+    blue:    'from-blue-500 to-indigo-600',
+    purple:  'from-violet-500 to-purple-600',
     amber:   'from-amber-500 to-orange-600',
-    teal:    'from-teal-600 to-cyan-700',
-    rose:    'from-rose-600 to-pink-700',
+    teal:    'from-teal-500 to-cyan-600',
+    rose:    'from-rose-500 to-pink-600',
   };
   return (
-    <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 flex flex-col gap-3 hover:border-white/20 transition-colors">
+    <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${colors[color] ?? colors.emerald} p-5 flex flex-col gap-3 shadow-sm`}>
       <div className="flex items-start justify-between">
-        <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${colors[color] ?? colors.emerald} flex items-center justify-center text-xl shadow-lg`}>
+        <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-xl">
           {icon}
         </div>
         {trend !== undefined && (
-          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-            trend > 0 ? 'text-emerald-400 bg-emerald-500/10' : trend < 0 ? 'text-red-400 bg-red-500/10' : 'text-slate-400 bg-slate-800'
-          }`}>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full text-white bg-white/20">
             {trend > 0 ? '↑' : trend < 0 ? '↓' : '—'} {Math.abs(trend)}%
           </span>
         )}
       </div>
       <div>
-        <p className="text-slate-400 text-xs uppercase tracking-wider mb-1">{label}</p>
+        <p className="text-white/80 text-xs uppercase tracking-wider mb-1">{label}</p>
         <div className="flex items-baseline gap-1.5">
           <span className="text-2xl font-bold text-white">{value}</span>
-          {unit && <span className="text-sm text-slate-400">{unit}</span>}
+          {unit && <span className="text-sm text-white/70">{unit}</span>}
         </div>
-        {sub && <p className="text-xs text-slate-500 mt-1">{sub}</p>}
+        {sub && <p className="text-xs text-white/60 mt-1">{sub}</p>}
       </div>
     </div>
   );

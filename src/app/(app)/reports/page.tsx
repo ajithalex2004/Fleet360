@@ -110,23 +110,17 @@ export default function ReportsDashboard() {
 
       {/* KPI Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
-          <p className="text-[var(--text-muted)] text-sm font-medium mb-2">Reports Generated</p>
-          <p className="text-3xl font-bold text-blue-400">{stats.generated}</p>
-          <p className="text-[var(--text-faint)] text-xs mt-2">This month</p>
-        </div>
-
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
-          <p className="text-[var(--text-muted)] text-sm font-medium mb-2">Data Records Analyzed</p>
-          <p className="text-3xl font-bold text-indigo-400">{stats.analyzed.toLocaleString()}</p>
-          <p className="text-[var(--text-faint)] text-xs mt-2">Total records</p>
-        </div>
-
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6">
-          <p className="text-[var(--text-muted)] text-sm font-medium mb-2">Scheduled Reports</p>
-          <p className="text-3xl font-bold text-violet-400">{stats.scheduled}</p>
-          <p className="text-[var(--text-faint)] text-xs mt-2">Active schedules</p>
-        </div>
+        {[
+          { label: 'Reports Generated',      value: stats.generated,               sub: 'This month',     tone: 'from-blue-500 to-indigo-600' },
+          { label: 'Data Records Analyzed',  value: stats.analyzed.toLocaleString(), sub: 'Total records',  tone: 'from-cyan-500 to-blue-600' },
+          { label: 'Scheduled Reports',      value: stats.scheduled,               sub: 'Active schedules',tone: 'from-violet-500 to-purple-600' },
+        ].map(card => (
+          <div key={card.label} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.tone} p-6 shadow-sm`}>
+            <p className="text-white/80 text-sm font-medium mb-2">{card.label}</p>
+            <p className="text-3xl font-bold text-white">{card.value}</p>
+            <p className="text-white/60 text-xs mt-2">{card.sub}</p>
+          </div>
+        ))}
       </div>
 
       {/* Report Categories */}

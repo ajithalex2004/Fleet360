@@ -2,9 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
-  Package, DollarSign, AlertTriangle, Ban, Gem, Radio,
+  Package,
 } from 'lucide-react';
-import { PageHeader, KpiCard as ThemeKpiCard } from '@/components/ui/page-theme';
+import { PageHeader } from '@/components/ui/page-theme';
 
 interface AssetStats {
   totalAssets: number;
@@ -81,12 +81,19 @@ export default function AssetsDashboard() {
       />
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <ThemeKpiCard label="Total assets"      value={s.totalAssets?.toLocaleString() ?? '—'}                icon={Package}        accent="cyan"    />
-        <ThemeKpiCard label="Total value AED"   value={`AED ${(s.totalValue ?? 0).toLocaleString()}`}         icon={DollarSign}     accent="amber"   />
-        <ThemeKpiCard label="Low stock"         value={s.lowStockCount ?? 0}                                  icon={AlertTriangle}  accent="amber"   />
-        <ThemeKpiCard label="Out of stock"      value={s.outOfStockCount ?? 0}                                icon={Ban}            accent="rose"    />
-        <ThemeKpiCard label="HVA assets"        value={s.hvaCount ?? 0}                                       icon={Gem}            accent="violet"  />
-        <ThemeKpiCard label="BLE tags active"   value={bleActive}                                             icon={Radio}          accent="emerald" />
+        {[
+          { label: 'Total assets',    value: s.totalAssets?.toLocaleString() ?? '—',        tone: 'from-cyan-500 to-blue-600' },
+          { label: 'Total value AED', value: `AED ${(s.totalValue ?? 0).toLocaleString()}`, tone: 'from-amber-500 to-orange-600' },
+          { label: 'Low stock',       value: s.lowStockCount ?? 0,                          tone: 'from-orange-500 to-red-600' },
+          { label: 'Out of stock',    value: s.outOfStockCount ?? 0,                        tone: 'from-rose-500 to-pink-600' },
+          { label: 'HVA assets',      value: s.hvaCount ?? 0,                               tone: 'from-violet-500 to-purple-600' },
+          { label: 'BLE tags active', value: bleActive,                                     tone: 'from-emerald-500 to-teal-600' },
+        ].map(card => (
+          <div key={card.label} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.tone} p-4 shadow-sm`}>
+            <p className="text-[11px] uppercase tracking-wider text-white/80 font-medium">{card.label}</p>
+            <p className="mt-2 text-3xl font-bold text-white">{card.value}</p>
+          </div>
+        ))}
       </div>
 
       {/* Row 2: Alert Banners */}

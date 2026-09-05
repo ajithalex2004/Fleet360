@@ -154,46 +154,38 @@ export default function FinanceDashboard() {
                 label: 'Total Revenue',
                 value: s.totalRevenue,
                 icon: '📈',
-                color: 'text-emerald-400',
-                bg: 'from-emerald-500/10 to-teal-500/10',
-                border: 'border-emerald-500/20',
+                tone: 'from-emerald-500 to-teal-600',
                 sub: 'Rental + Leasing + General',
               },
               {
                 label: 'Vehicle Costs',
                 value: s.totalCosts,
                 icon: '🔧',
-                color: 'text-amber-400',
-                bg: 'from-amber-500/10 to-yellow-500/10',
-                border: 'border-amber-500/20',
+                tone: 'from-amber-500 to-orange-600',
                 sub: 'Approved maintenance spend',
               },
               {
                 label: 'Gross Profit',
                 value: s.grossProfit,
                 icon: '💰',
-                color: s.grossProfit >= 0 ? 'text-emerald-400' : 'text-red-400',
-                bg: s.grossProfit >= 0 ? 'from-emerald-500/10 to-teal-500/10' : 'from-red-500/10 to-rose-500/10',
-                border: s.grossProfit >= 0 ? 'border-emerald-500/20' : 'border-red-500/20',
+                tone: s.grossProfit >= 0 ? 'from-emerald-500 to-teal-600' : 'from-red-500 to-rose-600',
                 sub: `${s.grossMarginPct}% margin`,
               },
               {
                 label: 'Cash Received',
                 value: mods?.payments.total ?? 0,
                 icon: '💳',
-                color: 'text-blue-400',
-                bg: 'from-blue-500/10 to-indigo-500/10',
-                border: 'border-blue-500/20',
+                tone: 'from-blue-500 to-indigo-600',
                 sub: `${mods?.payments.transactionCount ?? 0} transactions`,
               },
             ].map(card => (
-              <div key={card.label} className={`bg-gradient-to-br ${card.bg} border ${card.border} rounded-2xl p-6`}>
+              <div key={card.label} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.tone} p-6 shadow-sm`}>
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-slate-400 text-sm font-medium">{card.label}</p>
+                  <p className="text-white/80 text-sm font-medium">{card.label}</p>
                   <span className="text-2xl">{card.icon}</span>
                 </div>
-                <p className={`text-3xl font-bold ${card.color}`}>AED {fmt(card.value)}</p>
-                <p className="text-xs text-slate-500 mt-1">{card.sub}</p>
+                <p className="text-3xl font-bold text-white">AED {fmt(card.value)}</p>
+                <p className="text-xs text-white/60 mt-1">{card.sub}</p>
               </div>
             ))}
           </div>

@@ -5,7 +5,7 @@ import {
   BusFront, Map as MapIcon, Calendar, Clock as ClockIcon, Users, AlertTriangle, FileText, ArrowRight, Sparkles,
   Timer, Scale, BarChart3, Layers, Smartphone, Shield, GitMerge, Repeat, Calculator, Zap, Leaf,
 } from 'lucide-react';
-import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/bus-ops/theme';
+import { PageHeader, Panel, StatusPill } from '@/components/bus-ops/theme';
 import { useFetchedData } from '@/hooks/useFetchedData';
 
 export default function BusOpsDashboard() {
@@ -48,12 +48,19 @@ export default function BusOpsDashboard() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-        <Link href="/bus-ops/routes"><KpiCard label="Active Routes"      value={routes.filter((r:any)=>r.isActive).length} icon={MapIcon}        accent="cyan" /></Link>
-        <Link href="/bus-ops/schedules"><KpiCard label="Today's Trips"   value={todayTrips.length}                          icon={Calendar}       accent="emerald" /></Link>
-        <Link href="/bus-ops/schedules"><KpiCard label="In Progress"     value={activeTrips.length}                         icon={ClockIcon}      accent="amber" /></Link>
-        <Link href="/bus-ops/staff"><KpiCard label="Staff Registered"   value={staff.filter((s:any)=>s.isActive).length}  icon={Users}          accent="violet" /></Link>
-        <Link href="/bus-ops/incidents"><KpiCard label="Open Incidents"  value={openIncidents.length}                       icon={AlertTriangle}  accent="rose" /></Link>
-        <Link href="/bus-ops/passengers"><KpiCard label="Pending Requests" value={pendingReqs.length}                       icon={FileText}       accent="slate" /></Link>
+        {[
+          { label: 'Active Routes',      value: routes.filter((r:any)=>r.isActive).length,     href: '/bus-ops/routes',      tone: 'from-cyan-500 to-blue-600' },
+          { label: "Today's Trips",      value: todayTrips.length,                              href: '/bus-ops/schedules',   tone: 'from-emerald-500 to-teal-600' },
+          { label: 'In Progress',        value: activeTrips.length,                             href: '/bus-ops/schedules',   tone: 'from-amber-500 to-orange-600' },
+          { label: 'Staff Registered',   value: staff.filter((s:any)=>s.isActive).length,       href: '/bus-ops/staff',       tone: 'from-violet-500 to-purple-600' },
+          { label: 'Open Incidents',     value: openIncidents.length,                           href: '/bus-ops/incidents',   tone: 'from-rose-500 to-pink-600' },
+          { label: 'Pending Requests',   value: pendingReqs.length,                             href: '/bus-ops/passengers',  tone: 'from-slate-500 to-slate-700' },
+        ].map(card => (
+          <Link key={card.label} href={card.href} className={`block relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.tone} p-4 shadow-sm`}>
+            <p className="text-2xl font-bold text-white">{card.value}</p>
+            <p className="mt-1 text-xs font-medium text-white/80">{card.label}</p>
+          </Link>
+        ))}
       </div>
 
       {/* Today's Trips */}

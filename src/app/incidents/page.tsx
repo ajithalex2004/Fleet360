@@ -2,10 +2,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import {
-  Siren, AlertTriangle, ClipboardList, CheckCircle2, Ambulance, ShieldAlert,
+  Siren, AlertTriangle, ClipboardList, CheckCircle2, Ambulance,
   Activity, Plus, FileText,
 } from 'lucide-react';
-import { PageHeader, KpiCard, Panel, StatusPill } from '@/components/ui/page-theme';
+import { PageHeader, Panel, StatusPill } from '@/components/ui/page-theme';
 
 interface IncidentStats {
   totalIncidents: number;
@@ -87,12 +87,20 @@ export default function IncidentsDashboard() {
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <KpiCard label="Open incidents"     value={data?.openIncidents ?? 0}     sub="Requires attention"     icon={AlertTriangle} accent={data && data.openIncidents > 0 ? 'rose' : 'slate'} />
-            <KpiCard label="Total incidents"    value={data?.totalIncidents ?? 0}    sub="All time"               icon={ClipboardList} accent="default" />
-            <KpiCard label="Resolved today"     value={data?.resolvedToday ?? 0}     sub="Closed this session"    icon={CheckCircle2}  accent="emerald" />
-            <KpiCard label="Ambulance fleet"    value={data?.ambulanceVehicles ?? 0} sub="Total vehicles"         icon={Ambulance}     accent="default" />
-            <KpiCard label="Ambulance ready"    value={data?.ambulanceAvailable ?? 0} sub="Ready to dispatch"     icon={Ambulance}     accent="emerald" />
-            <KpiCard label="Critical alerts"    value={data?.criticalAlerts ?? 0}    sub="Unresolved critical"    icon={ShieldAlert}   accent={data && data.criticalAlerts > 0 ? 'rose' : 'slate'} />
+            {[
+              { label: 'Open incidents',  value: data?.openIncidents ?? 0,      sub: 'Requires attention',   tone: data && data.openIncidents > 0 ? 'from-rose-500 to-pink-600' : 'from-slate-500 to-slate-700' },
+              { label: 'Total incidents', value: data?.totalIncidents ?? 0,     sub: 'All time',              tone: 'from-blue-500 to-indigo-600' },
+              { label: 'Resolved today',  value: data?.resolvedToday ?? 0,      sub: 'Closed this session',   tone: 'from-emerald-500 to-teal-600' },
+              { label: 'Ambulance fleet', value: data?.ambulanceVehicles ?? 0,  sub: 'Total vehicles',        tone: 'from-cyan-500 to-blue-600' },
+              { label: 'Ambulance ready', value: data?.ambulanceAvailable ?? 0, sub: 'Ready to dispatch',     tone: 'from-teal-500 to-emerald-600' },
+              { label: 'Critical alerts', value: data?.criticalAlerts ?? 0,     sub: 'Unresolved critical',   tone: data && data.criticalAlerts > 0 ? 'from-rose-500 to-pink-600' : 'from-slate-500 to-slate-700' },
+            ].map(card => (
+              <div key={card.label} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.tone} p-4 shadow-sm`}>
+                <p className="text-[11px] uppercase tracking-wider text-white/80 font-medium">{card.label}</p>
+                <p className="mt-2 text-3xl font-bold text-white">{card.value}</p>
+                <p className="text-xs text-white/60 mt-1">{card.sub}</p>
+              </div>
+            ))}
           </div>
 
           {(data?.ambulanceVehicles ?? 0) > 0 && (
