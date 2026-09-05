@@ -235,7 +235,7 @@ export default function InvoicesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0c1a3e] text-[var(--text-main)] p-6">
+    <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-main)] p-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold">Invoice Management</h1>

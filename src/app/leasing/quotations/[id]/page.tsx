@@ -224,7 +224,7 @@ export default function QuotationDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0c1a3e] p-8 flex items-center justify-center">
+      <div className="min-h-screen bg-[var(--bg-canvas)] p-8 flex items-center justify-center">
         <div className="text-[var(--text-muted)]">Loading quotation...</div>
       </div>
     );
@@ -232,7 +232,7 @@ export default function QuotationDetailPage() {
 
   if (notFound || !quotation) {
     return (
-      <div className="min-h-screen bg-[#0c1a3e] p-8 flex items-center justify-center">
+      <div className="min-h-screen bg-[var(--bg-canvas)] p-8 flex items-center justify-center">
         <div className="text-[var(--text-muted)]">Quotation not found.</div>
       </div>
     );
