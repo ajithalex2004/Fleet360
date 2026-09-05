@@ -2,10 +2,17 @@
  * Agent Infrastructure Schema
  * ----------------------------
  * Tables that back the entire agent system:
- *   agent_runs                  — immutable audit log of every agent execution
- *   fleet_risk_scores           — latest risk score per vehicle (upserted on each run)
- *   agent_anomaly_flags         — flagged financial records awaiting review / 1-click action
+ *   agent_runs                   — immutable audit log of every agent execution with granular tokens, costs & savings
+ *   agent_evaluation_metrics     — decision quality & outcome evaluations (acceptance, accuracy, overrides)
+ *   agent_roi_metrics            — aggregated daily/monthly ROI per tenant and agent
+ *   fleet_risk_scores            — latest risk score per vehicle (upserted on each run)
+ *   agent_anomaly_flags          — flagged financial records awaiting review / 1-click action
  *   bus_ops_plan_recommendations — AI staff transport plan recommendations
+ *   route_optimisation_results   — route consolidation recommendations
+ *   incident_triage_assessments  — triage classifications
+ *   dispatch_optimiser_recommendations — dispatch candidate scoring
+ *   driver_coaching_plans        — driver performance coaching plans
+ *   demand_forecasts             — predictive fleet demand
  */
 import { prisma } from '@/lib/prisma';
 
@@ -26,26 +33,103 @@ async function _doInit(): Promise<void> {
     BEGIN
       -- ── agent_runs ─────────────────────────────────────────────────────────────
       CREATE TABLE IF NOT EXISTS agent_runs (
-        id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        agent_id          TEXT NOT NULL,
-        tenant_id         TEXT NOT NULL DEFAULT 'default',
-        event_type        TEXT NOT NULL,
-        entity_id         TEXT,
-        input             JSONB,
-        output            JSONB,
-        risk_score        NUMERIC(5,3),
-        action_taken      TEXT,
-        items_processed   INT DEFAULT 0,
-        actions_created   INT DEFAULT 0,
-        duration_ms       INT,
-        status            TEXT NOT NULL DEFAULT 'COMPLETED',
-        error_text        TEXT,
-        created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        agent_id                 TEXT NOT NULL,
+        tenant_id                TEXT NOT NULL DEFAULT 'default',
+        event_type               TEXT NOT NULL,
+        entity_id                TEXT,
+        input                    JSONB,
+        output                   JSONB,
+        risk_score               NUMERIC(5,3),
+        action_taken             TEXT,
+        items_processed          INT DEFAULT 0,
+        actions_created          INT DEFAULT 0,
+        duration_ms              INT,
+        status                   TEXT NOT NULL DEFAULT 'COMPLETED',
+        error_text               TEXT,
+        model_alias              TEXT,
+        model_provider           TEXT,
+        input_tokens             INT DEFAULT 0,
+        output_tokens            INT DEFAULT 0,
+        cached_tokens            INT DEFAULT 0,
+        tool_calls_count         INT DEFAULT 0,
+        agent_hops_count         INT DEFAULT 0,
+        matrix_elements_queried  INT DEFAULT 0,
+        solver_duration_ms       INT DEFAULT 0,
+        cost_usd                 NUMERIC(10,5) DEFAULT 0,
+        cost_aed                 NUMERIC(10,4) DEFAULT 0,
+        estimated_savings_aed    NUMERIC(12,2) DEFAULT 0,
+        actual_savings_aed       NUMERIC(12,2) DEFAULT 0,
+        business_outcome         TEXT,
+        decision_quality_score   NUMERIC(5,3),
+        human_feedback           TEXT,
+        created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+
+      -- Column migrations for existing agent_runs table instances
+      ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS model_alias TEXT;
+      ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS model_provider TEXT;
+      ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS input_tokens INT DEFAULT 0;
+      ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS output_tokens INT DEFAULT 0;
+      ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS cached_tokens INT DEFAULT 0;
+      ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS tool_calls_count INT DEFAULT 0;
+      ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS agent_hops_count INT DEFAULT 0;
+      ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS matrix_elements_queried INT DEFAULT 0;
+      ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS solver_duration_ms INT DEFAULT 0;
+      ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS cost_usd NUMERIC(10,5) DEFAULT 0;
+      ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS cost_aed NUMERIC(10,4) DEFAULT 0;
+      ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS estimated_savings_aed NUMERIC(12,2) DEFAULT 0;
+      ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS actual_savings_aed NUMERIC(12,2) DEFAULT 0;
+      ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS business_outcome TEXT;
+      ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS decision_quality_score NUMERIC(5,3);
+      ALTER TABLE agent_runs ADD COLUMN IF NOT EXISTS human_feedback TEXT;
 
       CREATE INDEX IF NOT EXISTS idx_agent_runs_agent_id   ON agent_runs(agent_id);
       CREATE INDEX IF NOT EXISTS idx_agent_runs_created_at ON agent_runs(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_agent_runs_tenant_id  ON agent_runs(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_agent_runs_outcome    ON agent_runs(business_outcome);
+
+      -- ── agent_evaluation_metrics ───────────────────────────────────────────────
+      CREATE TABLE IF NOT EXISTS agent_evaluation_metrics (
+        id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        agent_id            TEXT NOT NULL,
+        tenant_id           TEXT NOT NULL DEFAULT 'default',
+        run_id              UUID,
+        entity_id           TEXT,
+        metric_category     TEXT NOT NULL,
+        metric_name         TEXT NOT NULL,
+        metric_value        NUMERIC(10,4) NOT NULL,
+        is_positive_outcome BOOLEAN NOT NULL DEFAULT true,
+        notes               TEXT,
+        recorded_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_agent_eval_agent_id    ON agent_evaluation_metrics(agent_id);
+      CREATE INDEX IF NOT EXISTS idx_agent_eval_tenant_id   ON agent_evaluation_metrics(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_agent_eval_category    ON agent_evaluation_metrics(metric_category);
+      CREATE INDEX IF NOT EXISTS idx_agent_eval_recorded_at ON agent_evaluation_metrics(recorded_at DESC);
+
+      -- ── agent_roi_metrics ──────────────────────────────────────────────────────
+      CREATE TABLE IF NOT EXISTS agent_roi_metrics (
+        id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id           TEXT NOT NULL DEFAULT 'default',
+        agent_id            TEXT NOT NULL,
+        period_date         DATE NOT NULL DEFAULT CURRENT_DATE,
+        total_executions    INT NOT NULL DEFAULT 0,
+        total_cost_usd      NUMERIC(10,4) NOT NULL DEFAULT 0,
+        total_cost_aed      NUMERIC(12,2) NOT NULL DEFAULT 0,
+        total_savings_aed   NUMERIC(14,2) NOT NULL DEFAULT 0,
+        net_value_aed       NUMERIC(14,2) NOT NULL DEFAULT 0,
+        roi_multiplier      NUMERIC(8,2) NOT NULL DEFAULT 0,
+        acceptance_rate_pct NUMERIC(5,2) NOT NULL DEFAULT 100.0,
+        created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT uq_agent_roi_tenant_agent_date UNIQUE (tenant_id, agent_id, period_date)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_agent_roi_tenant ON agent_roi_metrics(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_agent_roi_agent  ON agent_roi_metrics(agent_id);
+      CREATE INDEX IF NOT EXISTS idx_agent_roi_period ON agent_roi_metrics(period_date DESC);
 
       -- ── fleet_risk_scores ──────────────────────────────────────────────────────
       CREATE TABLE IF NOT EXISTS fleet_risk_scores (
@@ -109,7 +193,6 @@ async function _doInit(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_anomaly_flags_stream      ON ai.agent_anomaly_flags(stream_type);
       CREATE INDEX IF NOT EXISTS idx_anomaly_flags_created_at  ON ai.agent_anomaly_flags(created_at DESC);
       
-      -- Prevent duplicate flags for same entity + detector combo while OPEN
       CREATE UNIQUE INDEX IF NOT EXISTS idx_anomaly_flags_open_dedup
         ON ai.agent_anomaly_flags(entity_id, detector_id)
         WHERE status = 'OPEN';

@@ -1,10 +1,98 @@
 /**
- * Universal Agent Plugin Contract
- * --------------------------------
+ * Universal Agent Plugin Contract & Telemetry Governance
+ * -------------------------------------------------------
  * Any fleet platform (internal or external) sends AgentEvent objects.
  * Every agent returns AgentResult objects.
- * This schema is the stable API surface for the standalone plugin vision.
+ * This schema is the stable API surface for the Fleet360 AI Platform.
  */
+
+// ── Model Capability Aliases (Vendor-Agnostic Abstraction) ────────────────────
+export type ModelCapabilityAlias =
+  | 'DETERMINISTIC_RULES'     // Tier 0: Pure SQL, rules, Math, 0 API tokens
+  | 'LOCAL_STATISTICAL'       // Tier 1: PostGIS, Haversine, Moving Avg, TSP
+  | 'ECONOMY_TEXT'            // Tier 2: e.g. gpt-4o-mini, gemini-flash (Summaries, quick extraction)
+  | 'STANDARD_REASONING'      // Tier 2.5: e.g. gpt-4o standard, claude-3-5-sonnet
+  | 'ADVANCED_REASONING'      // Tier 3: e.g. gpt-5, o1, o3 (deep root cause, scenario comparison)
+  | 'VISION_FAST'             // Fast low-res OCR, KYC classification
+  | 'VISION_HIGH_ACCURACY'    // High-res damage inspection, multi-panel comparison
+  | 'STRUCTURED_EXTRACTION';  // Strict Zod schema JSON extraction
+
+export type ModelProviderType =
+  | 'deterministic'
+  | 'local_solver'
+  | 'openai'
+  | 'anthropic'
+  | 'gemini'
+  | 'thesys';
+
+// ── Business Outcome & Feedback Types ─────────────────────────────────────────
+export type BusinessOutcomeType =
+  | 'VEHICLE_SAVED'
+  | 'OVERTIME_AVOIDED'
+  | 'MILEAGE_REDUCED'
+  | 'INVOICE_ANOMALY_STOPPED'
+  | 'PREVENTIVE_REPAIR_SCHEDULED'
+  | 'SLA_BREACH_PREVENTED'
+  | 'REVENUE_LEAKAGE_RECOVERED'
+  | 'DISPATCH_MATCH_EXECUTED'
+  | 'QUOTE_CONVERTED'
+  | 'NO_ACTION_REQUIRED';
+
+export type HumanFeedbackType =
+  | 'ACCEPTED'
+  | 'EDITED'
+  | 'REJECTED'
+  | 'OVERRIDDEN'
+  | 'AUTO_EXECUTED';
+
+// ── Telemetry & Cost Accounting Metrics ───────────────────────────────────────
+export interface AgentRunTelemetry {
+  modelAlias?: ModelCapabilityAlias;
+  modelProvider?: ModelProviderType;
+  inputTokens?: number;
+  outputTokens?: number;
+  cachedTokens?: number;
+  toolCallsCount?: number;
+  agentHopsCount?: number;
+  matrixElementsQueried?: number;
+  solverDurationMs?: number;
+  costUsd?: number;
+  costAed?: number;
+  estimatedSavingsAed?: number;
+  actualSavingsAed?: number;
+  businessOutcome?: BusinessOutcomeType;
+  decisionQualityScore?: number; // 0.00 to 1.00
+  humanFeedback?: HumanFeedbackType;
+}
+
+// ── Agent Quality Evaluation Event ────────────────────────────────────────────
+export interface AgentEvaluationEvent {
+  id?: string;
+  agentId: AgentId;
+  tenantId: string;
+  runId?: string;
+  entityId?: string;
+  metricCategory: 'ACCURACY' | 'ACCEPTANCE' | 'REASSIGNMENT' | 'FALSE_ALERT' | 'FINANCIAL_RECOVERY';
+  metricName: string;
+  metricValue: number;
+  isPositiveOutcome: boolean;
+  notes?: string;
+  timestamp?: string;
+}
+
+// ── Tenant ROI Summary ────────────────────────────────────────────────────────
+export interface AgentRoiSummary {
+  tenantId: string;
+  agentId: AgentId;
+  periodStart: string;
+  periodEnd: string;
+  totalExecutions: number;
+  totalCostAed: number;
+  totalSavingsAed: number;
+  netValueAed: number;
+  roiMultiplier: number;
+  acceptanceRatePct: number;
+}
 
 // ── Event Types ────────────────────────────────────────────────────────────────
 export type AgentEventType =
@@ -67,13 +155,26 @@ export type AgentId =
   | 'driver-coach'
   | 'demand-forecasting'
   | 'document-intelligence'
+  | 'quotation-copilot'
+  | 'rental-copilot'
+  | 'damage-classifier'
+  | 'doc-classifier'
+  | 'contract-qa'
   // ── Conversational agents ─────────────────────────────────────────────────
   | 'whatsapp-agent'           // Twilio webhook → regex intent → auto-reply
   | 'chat-widget'              // Platform chat widget — TheSys GPT-5, SSE
   | 'ops-assistant';           // Fleet360 Ops Assistant — TheSys GPT-5, 7 tools
 
 /** Distinguishes always-on conversational agents from on-demand batch agents */
-export type AgentType = 'BATCH' | 'CONVERSATIONAL';
+export type AgentType = 'BATCH' | 'CONVERSATIONAL' | 'INTERACTIVE_COPILOT';
+
+// ── Agent Autonomy Levels (L0-L4 Governance) ──────────────────────────────────
+export type AgentAutonomyLevel =
+  | 'L0' // Read / Explain / Stats only
+  | 'L1' // Recommend (shows structured suggestions in UI)
+  | 'L2' // Prepare / Draft (generates draft quotes/work orders)
+  | 'L3' // Execute after Human Approval (1-click commit by authorized user)
+  | 'L4'; // Fully Autonomous (Policy-governed low-risk auto-execution - globally disabled in Phase 1)
 
 // ── Risk Levels ────────────────────────────────────────────────────────────────
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
@@ -118,9 +219,14 @@ export interface MaintenanceRiskFactors {
   repeatSubsystems: string[];
   subsystemRUL: {
     powertrainPct: number;
-    brakeSystemPct: number;
+    brakingPct: number;
     electricalPct: number;
     hvacPct: number;
+    suspensionPct: number;
+    coolingPct: number;
+    fuelSystemPct: number;
+    exhaustAftertreatmentPct: number;
+    tiresWheelsPct: number;
   };
 }
 
@@ -134,59 +240,76 @@ export interface VehicleRiskScore {
   riskLevel: RiskLevel;
   factors: MaintenanceRiskFactors;
   recommendedAction: MaintenanceAction;
-  predictedFailureWindow: string;
-  primaryFailureReason?: string;
+  predictedFailureWindow?: string;
   autoWorkOrderId?: string;
   scoredAt: string;
 }
 
-// ── Route Optimization & Multi-Route Consolidation Contracts ──────────────────
-export interface ConsolidationRecommendationItem {
-  id: string;
+// ── Route Optimisation Types ──────────────────────────────────────────────────
+export interface ConsolidatedRoute {
+  targetRouteId: string;
+  targetRouteName: string;
   sourceRouteIds: string[];
   sourceRouteNames: string[];
-  sourceRouteNumbers: string[];
-  candidateType: 'SIMULTANEOUS_MERGE' | 'TURNAROUND_SEQUENTIAL';
-  direction: string;
-  shift: string;
-  combinedPassengers: number;
-  requiredCapacity: number;
-  operatorScore: number; // 0–100 ranking
-  detourMinutes: number;
-  detourKm: number;
-  dailyDistanceSavedKm: number;
-  weeklySavingsAed: number;
-  monthlySavingsAed: number;
-  vehiclesReleased: number;
-  status: 'SUGGESTED' | 'APPLIED' | 'REJECTED';
+  stopCount: number;
+  passengerCount: number;
+  vehicleCapacity: number;
+  utilizationPct: number;
+  estimatedDurationMin: number;
+  estimatedDistanceKm: number;
+  stops: Array<{
+    stopId: string;
+    stopName: string;
+    lat: number;
+    lng: number;
+    passengerCount: number;
+    originalRouteId: string;
+    originalRouteName: string;
+  }>;
 }
 
-export interface NetworkDesignSummary {
-  currentRoutesCount: number;
-  currentVehiclesCount: number;
-  recommendedRoutesCount: number;
-  recommendedVehiclesCount: number;
+export interface TurnaroundChaining {
+  vehicleId?: string;
+  firstRouteId: string;
+  firstRouteName: string;
+  firstRouteEndTime: string;
+  secondRouteId: string;
+  secondRouteName: string;
+  secondRouteStartTime: string;
+  deadheadDistanceKm: number;
+  deadheadDurationMin: number;
+  turnaroundBufferMin: number;
+  feasible: boolean;
+}
+
+export interface RouteOptimisationResult {
+  id?: string;
+  tenantId: string;
+  totalRoutesAnalyzed: number;
+  routesBefore: number;
+  routesAfter: number;
   vehiclesSaved: number;
-  dailyKmSaved: number;
-  monthlyCostSavedAed: number;
-  annualCostSavedAed: number;
+  monthlyCostSavingsAed: number;
+  dailyDistanceSavedKm: number;
+  monthlyFuelSavedLitres: number;
+  monthlyCo2SavedKg: number;
+  consolidatedRoutes: ConsolidatedRoute[];
+  turnaroundChains: TurnaroundChaining[];
+  status: 'SUGGESTED' | 'APPLIED' | 'REJECTED';
+  appliedAt?: string;
+  appliedBy?: string;
+  agentRunId?: string;
+  createdAt: string;
 }
 
-export interface RouteOptimiserOutput {
-  summary: string;
-  networkDesign: NetworkDesignSummary;
-  consolidations: ConsolidationRecommendationItem[];
-  singleRouteResults: unknown[];
-}
-
-// ── Staff Transport Planning Agent Contracts ──────────────────────────────────
+// ── Staff Transport Planner Types ─────────────────────────────────────────────
 export interface StaffTransportStop {
   stopId: string;
   stopName: string;
   lat: number;
   lng: number;
   passengerCount: number;
-  estimatedPickupTime: string; // "06:15"
+  estimatedPickupTime: string;
   zone: string;
 }
 
@@ -194,21 +317,21 @@ export interface StaffTransportRoutePlan {
   routeId: string;
   routeName: string;
   direction: 'INBOUND' | 'OUTBOUND';
-  shiftName: string; // 'MORNING_0700' | 'AFTERNOON_1500' | 'NIGHT_2300'
-  targetArrivalTime: string; // "07:00"
-  calculatedDepartureTime: string; // "06:05"
+  shiftName: string;
+  targetArrivalTime: string;
+  calculatedDepartureTime: string;
   totalDurationMin: number;
   totalDistanceKm: number;
   totalPassengers: number;
   recommendedVehicleSize: 'VAN_14' | 'COASTER_30' | 'COACH_50';
   recommendedCapacity: number;
   seatUtilizationPct: number;
-  assignedVehicleId?: string;
-  assignedVehicleCode?: string;
   stops: StaffTransportStop[];
   destinationName: string;
   destinationLat: number;
   destinationLng: number;
+  assignedVehicleId?: string;
+  assignedVehicleCode?: string;
 }
 
 export interface VehicleReuseChain {
@@ -216,7 +339,7 @@ export interface VehicleReuseChain {
   vehicleCode: string;
   vehicleType: string;
   capacity: number;
-  chainedRoutes: {
+  chainedRoutes: Array<{
     routeId: string;
     routeName: string;
     shiftName: string;
@@ -226,7 +349,7 @@ export interface VehicleReuseChain {
     endLocation: string;
     deadheadToNextKm: number;
     turnaroundBufferMin: number;
-  }[];
+  }>;
   totalDutyHours: number;
   totalOperatingKm: number;
   totalDeadheadKm: number;
@@ -246,57 +369,52 @@ export interface StaffTransportPlanRecommendation {
   annualCostSavedAed: number;
   routes: StaffTransportRoutePlan[];
   vehicleReuseChains: VehicleReuseChain[];
-  status: 'SUGGESTED' | 'APPLIED' | 'DISCARDED';
+  status: 'SUGGESTED' | 'APPLIED' | 'REJECTED';
   generatedAt: string;
 }
 
-// ── Finance Anomaly Output (8 Comprehensive Streams) ───────────────────────────
+// ── Finance Anomaly Types ─────────────────────────────────────────────────────
+export type AnomalyDetectorId =
+  | 'MAINT_01_REPAIR_COST_SPIKE'
+  | 'MAINT_02_REPEAT_REPAIR'
+  | 'FUEL_01_CONSUMPTION_SURGE'
+  | 'FUEL_02_PRICE_ABNORMALITY'
+  | 'FUEL_03_TANK_CAPACITY_EXCEEDED'
+  | 'FUEL_04_GPS_STATION_MISMATCH'
+  | 'INV_01_DUPLICATE_INVOICE'
+  | 'INV_02_PO_VARIANCE'
+  | 'INV_03_TAX_FTA_5PCT_CALC_ERROR'
+  | 'PARTNER_01_SETTLEMENT_DISPUTE'
+  | 'PARTNER_02_RATE_CARD_MISMATCH'
+  | 'EXP_01_DRIVER_DAILY_LIMIT'
+  | 'EXP_02_UNRECOVERED_SALIK_FINES'
+  | 'TRIP_01_UNBILLED_OFF_CONTRACT_MILEAGE'
+  | 'TRIP_02_EXCESS_MILEAGE_UNBILLED'
+  | 'CONT_01_RATE_LEAKAGE'
+  | 'CONT_02_ESCROW_SHORTFALL'
+  | 'PROC_01_UNMATCHED_GRN'
+  | 'PROC_02_PRICE_DRIFT';
+
+export type AnomalyEntityType =
+  | 'WORK_ORDER'
+  | 'FUEL_LOG'
+  | 'INVOICE'
+  | 'EXPENSE'
+  | 'TRIP'
+  | 'PARTNER_SETTLEMENT'
+  | 'CONTRACT'
+  | 'PURCHASE_ORDER'
+  | 'JOURNAL_ENTRY';
+
 export type FinanceStreamType =
   | 'MAINTENANCE'
   | 'FUEL'
-  | 'VENDOR_INVOICE'
-  | 'PARTNER_SETTLEMENT'
-  | 'DRIVER_EXPENSE'
-  | 'TRIP_COST'
-  | 'CONTRACT'
-  | 'PROCUREMENT';
-
-export type AnomalyDetectorId =
-  | 'duplicate-invoice'
-  | 'amount-outlier'
-  | 'round-number'
-  | 'velocity-spike'
-  | 'category-mismatch'
-  | 'fuel-tank-overfill'
-  | 'fuel-gps-mismatch'
-  | 'fuel-rapid-consecutive'
-  | 'fuel-consumption-spike'
-  | 'maintenance-parts-inflation'
-  | 'maintenance-repeat-repair-warranty'
-  | 'maintenance-labor-srt-overrun'
-  | 'vendor-rate-card-breach'
-  | 'vendor-vat-compliance'
-  | 'partner-quote-divergence'
-  | 'partner-ghost-trip'
-  | 'driver-mileage-inflated'
-  | 'trip-unbilled-salik-tolls'
-  | 'trip-deadhead-surge'
-  | 'contract-off-contract-mileage'
-  | 'contract-unbilled-excess-mileage'
-  | 'contract-unbilled-damage'
-  | 'procurement-po-variance';
-
-export type AnomalyEntityType =
-  | 'INVOICE'
-  | 'EXPENSE'
-  | 'FUEL_LOG'
-  | 'WORK_ORDER'
-  | 'RENTAL_AGREEMENT'
-  | 'EXCHANGE_QUOTATION'
-  | 'DRIVER_SETTLEMENT'
-  | 'SALIK_TOLL'
-  | 'PURCHASE_ORDER'
-  | 'TELEMATICS_TRIP'
+  | 'VENDOR_INVOICES'
+  | 'PARTNER_SETTLEMENTS'
+  | 'DRIVER_EXPENSES'
+  | 'TRIP_COSTS'
+  | 'CONTRACTS'
+  | 'PROCUREMENT'
   | 'JOURNAL_ENTRY';
 
 export interface AnomalyActionRecommendation {
@@ -346,6 +464,7 @@ export interface AgentRunResult {
   actionsCreated: number;
   output: unknown;
   error?: string;
+  telemetry?: AgentRunTelemetry;
 }
 
 // ── Agent Registry Entry ───────────────────────────────────────────────────────
@@ -355,6 +474,7 @@ export interface AgentDefinition {
   description: string;
   version: string;
   agentType: AgentType;
+  autonomyLevel?: AgentAutonomyLevel;
   subscribedEvents: AgentEventType[];
   supportsEntityScan: boolean;
   run: (event: AgentEvent) => Promise<AgentRunResult>;
