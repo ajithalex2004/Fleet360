@@ -231,6 +231,16 @@ export class PolicyService {
   }
 
   /**
+   * Alias for evaluateActionAutonomy
+   */
+  async evaluateActionProposal(
+    tenantId: string,
+    proposal: ActionProposal,
+  ): Promise<AutonomyDecision> {
+    return this.evaluateActionAutonomy(tenantId, proposal);
+  }
+
+  /**
    * Verifies tenant budget quota before executing an agent run.
    */
   async checkBudgetQuota(
@@ -275,12 +285,23 @@ export class PolicyService {
    * Create an approval item in the Human-in-the-Loop review queue.
    */
   async createApprovalItem(
-    proposal: ActionProposal,
-    tenantId: string,
+    arg1: ActionProposal | string,
+    arg2: string | ActionProposal,
     requestedAutonomy: AgentAutonomyLevel = 'L3',
   ): Promise<ApprovalItem> {
     await ensureAgentSchema();
-    const cleanTenant = tenantId?.trim() || 'default';
+    let proposal: ActionProposal;
+    let tenantId: string;
+
+    if (typeof arg1 === 'string') {
+      tenantId = arg1;
+      proposal = arg2 as ActionProposal;
+    } else {
+      proposal = arg1;
+      tenantId = arg2 as string;
+    }
+
+    const cleanTenant = (typeof tenantId === 'string' && tenantId.trim()) ? tenantId.trim() : 'default';
     const id = (await prisma.$queryRawUnsafe<any[]>(`SELECT gen_random_uuid()::text AS id`))[0]?.id || `appr_${Date.now()}`;
 
     await prisma.$executeRawUnsafe(
