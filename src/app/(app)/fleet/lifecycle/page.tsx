@@ -120,16 +120,16 @@ export default function LifecyclePage() {
     }
   };
 
-  const inputCls = 'bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:border-orange-500/50 focus:outline-none w-full';
-  const labelCls = 'block text-xs text-slate-400 mb-1';
+  const inputCls = 'bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:border-orange-500/50 focus:outline-none w-full';
+  const labelCls = 'block text-xs text-[var(--text-muted)] mb-1';
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Fleet Lifecycle Events</h1>
-          <p className="text-slate-400 text-xs mt-1">Track vehicle stage transitions and lifecycle history</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Fleet Lifecycle Events</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-1">Track vehicle stage transitions and lifecycle history</p>
         </div>
         <button
           onClick={openCreate}
@@ -147,25 +147,25 @@ export default function LifecyclePage() {
       )}
 
       {/* Filter Bar */}
-      <div className="bg-slate-800/40 border border-white/5 rounded-2xl p-4 mb-6 flex flex-wrap gap-3">
+      <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl p-4 mb-6 flex flex-wrap gap-3">
         <input
           type="text"
           placeholder="Search description, reference, performed by..."
           value={search}
           onChange={e => { setSearch(e.target.value); setPage(1); }}
-          className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:border-orange-500/50 focus:outline-none flex-1 min-w-[200px] placeholder-slate-500"
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:border-orange-500/50 focus:outline-none flex-1 min-w-[200px] placeholder-[var(--text-faint)]"
         />
         <input
           type="text"
           placeholder="Filter by Vehicle ID..."
           value={vehicleFilter}
           onChange={e => { setVehicleFilter(e.target.value); setPage(1); }}
-          className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:border-orange-500/50 focus:outline-none w-48 placeholder-slate-500"
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:border-orange-500/50 focus:outline-none w-48 placeholder-[var(--text-faint)]"
         />
         <select
           value={typeFilter}
           onChange={e => { setTypeFilter(e.target.value); setPage(1); }}
-          className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:border-orange-500/50 focus:outline-none"
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:border-orange-500/50 focus:outline-none"
         >
           <option value="">All Event Types</option>
           {EVENT_TYPES.map(t => <option key={t}>{t}</option>)}
@@ -173,61 +173,61 @@ export default function LifecyclePage() {
       </div>
 
       {/* Table */}
-      <div className="bg-slate-800/40 border border-white/5 rounded-2xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-800/60 border-b border-white/5">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Event Type</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Vehicle ID</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Event Date</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Stage Transition</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Description</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Cost (AED)</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Reference No.</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Performed By</th>
+              <tr className="bg-[var(--bg-surface)]/60 border-b border-[var(--border-subtle)]">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Event Type</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Vehicle ID</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Event Date</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Stage Transition</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Description</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Cost (AED)</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Reference No.</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Performed By</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-slate-500">Loading lifecycle events...</td>
+                  <td colSpan={8} className="px-4 py-12 text-center text-[var(--text-faint)]">Loading lifecycle events...</td>
                 </tr>
               ) : events.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-slate-500">No lifecycle events found</td>
+                  <td colSpan={8} className="px-4 py-12 text-center text-[var(--text-faint)]">No lifecycle events found</td>
                 </tr>
               ) : (
                 events.map(ev => (
-                  <tr key={ev.id} className="hover:bg-white/5 transition-colors">
+                  <tr key={ev.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                     <td className="px-4 py-3">
-                      {badge(ev.eventType, eventTypeColor[ev.eventType] ?? 'bg-slate-700 text-slate-300')}
+                      {badge(ev.eventType, eventTypeColor[ev.eventType] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]')}
                     </td>
                     <td className="px-4 py-3 text-orange-400 font-medium">{ev.vehicleId}</td>
-                    <td className="px-4 py-3 text-slate-300">
+                    <td className="px-4 py-3 text-[var(--text-muted)]">
                       {ev.eventDate ? new Date(ev.eventDate).toLocaleDateString() : '—'}
                     </td>
                     <td className="px-4 py-3">
                       {ev.fromStage || ev.toStage ? (
                         <span className="flex items-center gap-1.5 text-xs">
                           {ev.fromStage && (
-                            <span className="bg-slate-700 px-2 py-0.5 rounded text-slate-300">{ev.fromStage}</span>
+                            <span className="bg-[var(--bg-surface-hover)] px-2 py-0.5 rounded text-[var(--text-muted)]">{ev.fromStage}</span>
                           )}
                           {ev.fromStage && ev.toStage && (
                             <span className="text-orange-400">→</span>
                           )}
                           {ev.toStage && (
-                            <span className="bg-slate-700 px-2 py-0.5 rounded text-slate-300">{ev.toStage}</span>
+                            <span className="bg-[var(--bg-surface-hover)] px-2 py-0.5 rounded text-[var(--text-muted)]">{ev.toStage}</span>
                           )}
                         </span>
                       ) : (
-                        <span className="text-slate-600">—</span>
+                        <span className="text-[var(--text-faint)]">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-slate-300 max-w-xs truncate" title={ev.description}>{ev.description || '—'}</td>
-                    <td className="px-4 py-3 text-right text-slate-300">{ev.cost ? ev.cost.toLocaleString() : '—'}</td>
-                    <td className="px-4 py-3 text-slate-300 font-mono text-xs">{ev.referenceNo || '—'}</td>
-                    <td className="px-4 py-3 text-slate-300">{ev.performedBy || '—'}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)] max-w-xs truncate" title={ev.description}>{ev.description || '—'}</td>
+                    <td className="px-4 py-3 text-right text-[var(--text-muted)]">{ev.cost ? ev.cost.toLocaleString() : '—'}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)] font-mono text-xs">{ev.referenceNo || '—'}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)]">{ev.performedBy || '—'}</td>
                   </tr>
                 ))
               )}
@@ -237,20 +237,20 @@ export default function LifecyclePage() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-white/5">
-            <span className="text-xs text-slate-500">Page {page} of {totalPages}</span>
+          <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--border-subtle)]">
+            <span className="text-xs text-[var(--text-faint)]">Page {page} of {totalPages}</span>
             <div className="flex gap-2">
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 rounded-lg text-xs text-white transition-colors"
+                className="px-3 py-1 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] disabled:opacity-40 rounded-lg text-xs text-[var(--text-main)] transition-colors"
               >
                 Prev
               </button>
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 rounded-lg text-xs text-white transition-colors"
+                className="px-3 py-1 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] disabled:opacity-40 rounded-lg text-xs text-[var(--text-main)] transition-colors"
               >
                 Next
               </button>
@@ -262,11 +262,11 @@ export default function LifecyclePage() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
-              <h2 className="text-lg font-semibold text-white">Log Lifecycle Event</h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white transition-colors text-xl leading-none">&times;</button>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)]">
+              <h2 className="text-lg font-semibold text-[var(--text-main)]">Log Lifecycle Event</h2>
+              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors text-xl leading-none">&times;</button>
             </div>
 
             {/* Modal Body */}
@@ -351,10 +351,10 @@ export default function LifecyclePage() {
                 </div>
                 {(formData.fromStage || formData.toStage) && (
                   <div className="mt-3 flex items-center gap-2 text-sm">
-                    <span className="text-slate-500 text-xs">Preview:</span>
-                    {formData.fromStage && <span className="bg-slate-700 px-2 py-1 rounded text-slate-300 text-xs">{formData.fromStage}</span>}
+                    <span className="text-[var(--text-faint)] text-xs">Preview:</span>
+                    {formData.fromStage && <span className="bg-[var(--bg-surface-hover)] px-2 py-1 rounded text-[var(--text-muted)] text-xs">{formData.fromStage}</span>}
                     {formData.fromStage && formData.toStage && <span className="text-orange-400">→</span>}
-                    {formData.toStage && <span className="bg-slate-700 px-2 py-1 rounded text-slate-300 text-xs">{formData.toStage}</span>}
+                    {formData.toStage && <span className="bg-[var(--bg-surface-hover)] px-2 py-1 rounded text-[var(--text-muted)] text-xs">{formData.toStage}</span>}
                   </div>
                 )}
               </div>
@@ -417,10 +417,10 @@ export default function LifecyclePage() {
             </div>
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-white/10">
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[var(--border-subtle)]">
               <button
                 onClick={() => setShowModal(false)}
-                className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-sm font-medium transition-colors"
+                className="px-4 py-2.5 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] rounded-xl text-sm font-medium transition-colors"
               >
                 Cancel
               </button>

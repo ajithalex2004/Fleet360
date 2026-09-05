@@ -310,7 +310,7 @@ export default function TelematicsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-[var(--text-main)] flex items-center gap-2">
               <Radio className="w-6 h-6 text-cyan-400" />
               Live Telematics & IoT Gateways
             </h1>
@@ -318,7 +318,7 @@ export default function TelematicsPage() {
               Pattern A: HTTPS Webhook
             </span>
           </div>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-[var(--text-muted)] mt-1">
             Real-time GPS tracking, CAN-bus telemetry, and multi-vendor gateway ingestion (Flespi, Teltonika, Geotab, Traccar).
           </p>
         </div>
@@ -327,7 +327,7 @@ export default function TelematicsPage() {
           <button
             onClick={fetchDevices}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium border border-slate-700 transition"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-sm font-medium border border-[var(--border-subtle)] transition"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
@@ -337,10 +337,10 @@ export default function TelematicsPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-white/10 space-y-1">
-          <p className="text-xs text-slate-400 font-medium">Total Vehicles</p>
-          <p className="text-2xl font-bold text-white">{devices.length}</p>
-          <p className="text-[11px] text-slate-500">Fleet asset registry</p>
+        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] space-y-1">
+          <p className="text-xs text-[var(--text-muted)] font-medium">Total Vehicles</p>
+          <p className="text-2xl font-bold text-[var(--text-main)]">{devices.length}</p>
+          <p className="text-[11px] text-[var(--text-faint)]">Fleet asset registry</p>
         </div>
 
         <div className="p-4 rounded-2xl bg-emerald-950/30 border border-emerald-500/30 space-y-1">
@@ -358,27 +358,27 @@ export default function TelematicsPage() {
           <p className="text-[11px] text-amber-500/80">Ignition ON / Speed 0</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-rose-500/20 space-y-1">
+        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-rose-500/20 space-y-1">
           <p className="text-xs text-rose-400 font-medium">Offline (&gt; 2 hrs)</p>
           <p className="text-2xl font-bold text-rose-300">{offlineCount}</p>
           <p className="text-[11px] text-rose-500/80">No recent ping</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-white/10 space-y-1">
-          <p className="text-xs text-slate-400 font-medium">Unpaired Hardware</p>
-          <p className="text-2xl font-bold text-slate-300">{unpairedCount}</p>
-          <p className="text-[11px] text-slate-500">No IMEI bound</p>
+        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] space-y-1">
+          <p className="text-xs text-[var(--text-muted)] font-medium">Unpaired Hardware</p>
+          <p className="text-2xl font-bold text-[var(--text-muted)]">{unpairedCount}</p>
+          <p className="text-[11px] text-[var(--text-faint)]">No IMEI bound</p>
         </div>
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-2 overflow-x-auto">
+      <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] pb-2 overflow-x-auto">
         <button
           onClick={() => setActiveTab('devices')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition shrink-0 ${
             activeTab === 'devices'
-              ? 'bg-cyan-500 text-slate-950 shadow'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              ? 'bg-cyan-500 text-white shadow'
+              : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface)]/50'
           }`}
         >
           <Cpu className="w-4 h-4" />
@@ -389,8 +389,8 @@ export default function TelematicsPage() {
           onClick={() => setActiveTab('automation')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition shrink-0 ${
             activeTab === 'automation'
-              ? 'bg-emerald-500 text-slate-950 shadow'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              ? 'bg-emerald-500 text-white shadow'
+              : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface)]/50'
           }`}
         >
           <Navigation className="w-4 h-4" />
@@ -401,8 +401,8 @@ export default function TelematicsPage() {
           onClick={() => setActiveTab('safety')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition shrink-0 ${
             activeTab === 'safety'
-              ? 'bg-rose-500 text-slate-950 shadow'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              ? 'bg-rose-500 text-white shadow'
+              : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface)]/50'
           }`}
         >
           <Shield className="w-4 h-4" />
@@ -413,8 +413,8 @@ export default function TelematicsPage() {
           onClick={() => setActiveTab('simulator')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition shrink-0 ${
             activeTab === 'simulator'
-              ? 'bg-amber-500 text-slate-950 shadow'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              ? 'bg-amber-500 text-white shadow'
+              : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface)]/50'
           }`}
         >
           <Terminal className="w-4 h-4" />
@@ -425,8 +425,8 @@ export default function TelematicsPage() {
           onClick={() => setActiveTab('guide')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition shrink-0 ${
             activeTab === 'guide'
-              ? 'bg-violet-500 text-slate-950 shadow'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              ? 'bg-violet-500 text-white shadow'
+              : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface)]/50'
           }`}
         >
           <Zap className="w-4 h-4" />
@@ -446,8 +446,8 @@ export default function TelematicsPage() {
                   onClick={() => setFilter(status)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition ${
                     filter === status
-                      ? 'bg-slate-700 text-white border border-slate-500'
-                      : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-transparent'
+                      ? 'bg-[var(--bg-surface-hover)] text-[var(--text-main)] border border-slate-500'
+                      : 'bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--text-main)] border border-transparent'
                   }`}
                 >
                   {status}
@@ -456,22 +456,22 @@ export default function TelematicsPage() {
             </div>
 
             <div className="relative w-full sm:w-72">
-              <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" />
+              <Search className="w-4 h-4 absolute left-3 top-2.5 text-[var(--text-faint)]" />
               <input
                 type="text"
                 placeholder="Search code, plate, IMEI..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500"
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl pl-9 pr-3 py-1.5 text-sm text-[var(--text-main)] focus:outline-none focus:border-cyan-500"
               />
             </div>
           </div>
 
           {/* Grid Table */}
-          <div className="rounded-2xl border border-white/10 overflow-hidden bg-slate-900/60 shadow-xl">
+          <div className="rounded-2xl border border-[var(--border-subtle)] overflow-hidden bg-[var(--bg-surface)]/60 shadow-xl">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-300">
-                <thead className="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-semibold border-b border-white/10">
+              <table className="w-full text-left text-xs text-[var(--text-muted)]">
+                <thead className="bg-[var(--bg-canvas)]/80 text-[var(--text-muted)] uppercase tracking-wider font-semibold border-b border-[var(--border-subtle)]">
                   <tr>
                     <th className="p-3.5">Vehicle</th>
                     <th className="p-3.5">Hardware IMEI / Device</th>
@@ -486,7 +486,7 @@ export default function TelematicsPage() {
                 <tbody className="divide-y divide-white/5">
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="p-8 text-center text-slate-500">
+                      <td colSpan={8} className="p-8 text-center text-[var(--text-faint)]">
                         No devices found matching filter criteria.
                       </td>
                     </tr>
@@ -497,12 +497,12 @@ export default function TelematicsPage() {
                       const isOffline = d.connectionStatus === 'OFFLINE';
 
                       return (
-                        <tr key={d.vehicleId} className="hover:bg-white/[0.02] transition">
+                        <tr key={d.vehicleId} className="hover:bg-[var(--bg-surface-hover)] transition">
                           <td className="p-3.5 font-medium">
-                            <div className="font-bold text-white text-sm">
+                            <div className="font-bold text-[var(--text-main)] text-sm">
                               {d.vehicleCode || d.licensePlate || 'Unnamed Asset'}
                             </div>
-                            <div className="text-[11px] text-slate-500">
+                            <div className="text-[11px] text-[var(--text-faint)]">
                               {d.licensePlate ? `Plate: ${d.licensePlate}` : ''}{' '}
                               {d.make ? `· ${d.make} ${d.model || ''}` : ''}
                             </div>
@@ -515,13 +515,13 @@ export default function TelematicsPage() {
                                   {d.deviceId}
                                 </span>
                                 {d.simCardNo && (
-                                  <div className="text-[10px] text-slate-500 mt-0.5">
+                                  <div className="text-[10px] text-[var(--text-faint)] mt-0.5">
                                     SIM: {d.simCardNo}
                                   </div>
                                 )}
                               </div>
                             ) : (
-                              <span className="text-slate-600 italic">Unpaired</span>
+                              <span className="text-[var(--text-faint)] italic">Unpaired</span>
                             )}
                           </td>
 
@@ -545,7 +545,7 @@ export default function TelematicsPage() {
                               </span>
                             )}
                             {d.connectionStatus === 'UNPAIRED' && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] bg-slate-800 text-slate-400">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] bg-[var(--bg-surface)] text-[var(--text-muted)]">
                                 NO DEVICE
                               </span>
                             )}
@@ -553,7 +553,7 @@ export default function TelematicsPage() {
 
                           <td className="p-3.5 font-mono">
                             {d.lastPing ? (
-                              <span className={`font-bold ${d.lastPing.speedKmh > 100 ? 'text-amber-400' : 'text-slate-200'}`}>
+                              <span className={`font-bold ${d.lastPing.speedKmh > 100 ? 'text-amber-400' : 'text-[var(--text-main)]'}`}>
                                 {d.lastPing.speedKmh.toFixed(0)} km/h
                               </span>
                             ) : (
@@ -561,14 +561,14 @@ export default function TelematicsPage() {
                             )}
                           </td>
 
-                          <td className="p-3.5 font-mono text-slate-200">
+                          <td className="p-3.5 font-mono text-[var(--text-main)]">
                             {d.odometerKm > 0 ? `${d.odometerKm.toLocaleString()} km` : '—'}
                           </td>
 
                           <td className="p-3.5">
                             {d.fuelLevelPercent !== null ? (
                               <div className="flex items-center gap-2">
-                                <div className="w-16 h-2 bg-slate-800 rounded-full overflow-hidden">
+                                <div className="w-16 h-2 bg-[var(--bg-surface)] rounded-full overflow-hidden">
                                   <div
                                     className={`h-full ${
                                       d.fuelLevelPercent < 20
@@ -580,7 +580,7 @@ export default function TelematicsPage() {
                                     style={{ width: `${d.fuelLevelPercent}%` }}
                                   />
                                 </div>
-                                <span className="font-mono text-[11px] text-slate-300">
+                                <span className="font-mono text-[11px] text-[var(--text-muted)]">
                                   {d.fuelLevelPercent.toFixed(0)}%
                                 </span>
                               </div>
@@ -589,11 +589,11 @@ export default function TelematicsPage() {
                             )}
                           </td>
 
-                          <td className="p-3.5 text-slate-400">
+                          <td className="p-3.5 text-[var(--text-muted)]">
                             {d.lastPing ? (
                               <div>
                                 <div>{new Date(d.lastPing.occurredAt).toLocaleTimeString()}</div>
-                                <div className="text-[10px] text-slate-500">
+                                <div className="text-[10px] text-[var(--text-faint)]">
                                   {new Date(d.lastPing.occurredAt).toLocaleDateString()}
                                 </div>
                               </div>
@@ -609,7 +609,7 @@ export default function TelematicsPage() {
                                 setEditImei(d.deviceId || '');
                                 setEditSim(d.simCardNo || '');
                               }}
-                              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
+                              className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-xs font-semibold border border-[var(--border-subtle)] transition"
                             >
                               {d.deviceId ? 'Edit Pairing' : 'Pair Device'}
                             </button>
@@ -630,12 +630,12 @@ export default function TelematicsPage() {
         <div className="space-y-6">
           {/* Header Summary Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="p-4 rounded-2xl bg-slate-900/60 border border-white/10 space-y-1">
-              <p className="text-xs text-slate-400 font-medium">Active Trips Under Geofence Tracking</p>
+            <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] space-y-1">
+              <p className="text-xs text-[var(--text-muted)] font-medium">Active Trips Under Geofence Tracking</p>
               <p className="text-2xl font-bold text-cyan-400">
                 {automationData?.activeTripsCount ?? 0}
               </p>
-              <p className="text-[11px] text-slate-500">Live approach & arrival detection</p>
+              <p className="text-[11px] text-[var(--text-faint)]">Live approach & arrival detection</p>
             </div>
 
             <div className="p-4 rounded-2xl bg-amber-950/30 border border-amber-500/30 space-y-1">
@@ -657,15 +657,15 @@ export default function TelematicsPage() {
 
           {/* Section 1: Live Trip Stop Progress */}
           <div className="space-y-3">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
+            <h3 className="text-base font-bold text-[var(--text-main)] flex items-center gap-2">
               <Navigation className="w-5 h-5 text-emerald-400" />
               Live Route Stop Visits & Telematics ETA
             </h3>
 
             {automationLoading ? (
-              <div className="p-8 text-center text-slate-500 text-sm">Loading live trip progress...</div>
+              <div className="p-8 text-center text-[var(--text-faint)] text-sm">Loading live trip progress...</div>
             ) : !automationData?.activeTripProgress?.length ? (
-              <div className="rounded-2xl border border-white/10 bg-slate-900/40 p-8 text-center text-slate-500 text-xs">
+              <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-8 text-center text-[var(--text-faint)] text-xs">
                 No active trips currently in transit. Trips will show real-time geofence stop approach/entry once dispatched.
               </div>
             ) : (
@@ -673,28 +673,28 @@ export default function TelematicsPage() {
                 {automationData.activeTripProgress.map((trip: any) => (
                   <div
                     key={trip.tripId}
-                    className="rounded-2xl border border-white/10 bg-slate-900/70 p-5 space-y-4 shadow-lg"
+                    className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 p-5 space-y-4 shadow-lg"
                   >
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/5 pb-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border-subtle)] pb-3">
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-mono font-bold text-cyan-400 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-500/30 text-xs">
                             {trip.tripNumber || 'TRIP'}
                           </span>
-                          <span className="font-bold text-white text-sm">{trip.routeName}</span>
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300">
+                          <span className="font-bold text-[var(--text-main)] text-sm">{trip.routeName}</span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[var(--bg-surface)] text-[var(--text-muted)]">
                             {trip.status}
                           </span>
                         </div>
-                        <p className="text-xs text-slate-400 mt-1">
-                          Vehicle: <span className="text-slate-200 font-medium">{trip.vehicle?.vehicleCode || trip.vehicle?.licensePlate || '—'}</span>
+                        <p className="text-xs text-[var(--text-muted)] mt-1">
+                          Vehicle: <span className="text-[var(--text-main)] font-medium">{trip.vehicle?.vehicleCode || trip.vehicle?.licensePlate || '—'}</span>
                           {trip.driver && ` · Driver: ${trip.driver.firstName} ${trip.driver.lastName}`}
                         </p>
                       </div>
 
                       {trip.estimatedArrival && (
                         <div className="text-right">
-                          <div className="text-[10px] uppercase tracking-wider text-slate-500">
+                          <div className="text-[10px] uppercase tracking-wider text-[var(--text-faint)]">
                             Telemetry Destination ETA
                           </div>
                           <div className="text-sm font-bold font-mono text-emerald-400 flex items-center justify-end gap-1">
@@ -718,12 +718,12 @@ export default function TelematicsPage() {
                               <div
                                 className={`p-2.5 rounded-xl border flex items-center gap-2 text-xs transition ${
                                   isDeparted
-                                    ? 'bg-slate-950/80 border-slate-800 text-slate-400'
+                                    ? 'bg-[var(--bg-canvas)]/80 border-[var(--border-subtle)] text-[var(--text-muted)]'
                                     : isAtStop
                                     ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-200 shadow-md shadow-emerald-500/20'
                                     : isApproaching
                                     ? 'bg-cyan-950/60 border-cyan-500/50 text-cyan-200 animate-pulse'
-                                    : 'bg-slate-950 border-slate-900 text-slate-500'
+                                    : 'bg-[var(--bg-canvas)] border-[var(--border-subtle)] text-[var(--text-faint)]'
                                 }`}
                               >
                                 <span className="font-mono text-[10px] font-bold">#{stop.sequence}</span>
@@ -731,19 +731,19 @@ export default function TelematicsPage() {
 
                                 {isDeparted && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
                                 {isAtStop && (
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-400 text-slate-950">
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-400 text-white">
                                     AT STOP
                                   </span>
                                 )}
                                 {isApproaching && (
-                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-400 text-slate-950">
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-400 text-white">
                                     APPROACHING
                                   </span>
                                 )}
                               </div>
 
                               {idx < trip.stops.length - 1 && (
-                                <ArrowRight className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                                <ArrowRight className="w-3.5 h-3.5 text-[var(--text-faint)] shrink-0" />
                               )}
                             </React.Fragment>
                           );
@@ -758,14 +758,14 @@ export default function TelematicsPage() {
 
           {/* Section 2: Telematics PM Odometer Threshold Table */}
           <div className="space-y-3 pt-2">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
+            <h3 className="text-base font-bold text-[var(--text-main)] flex items-center gap-2">
               <Wrench className="w-5 h-5 text-amber-400" />
               Preventive Maintenance (PM) 10,000 km Countdown
             </h3>
 
-            <div className="rounded-2xl border border-white/10 overflow-hidden bg-slate-900/60 shadow-xl">
-              <table className="w-full text-left text-xs text-slate-300">
-                <thead className="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-semibold border-b border-white/10">
+            <div className="rounded-2xl border border-[var(--border-subtle)] overflow-hidden bg-[var(--bg-surface)]/60 shadow-xl">
+              <table className="w-full text-left text-xs text-[var(--text-muted)]">
+                <thead className="bg-[var(--bg-canvas)]/80 text-[var(--text-muted)] uppercase tracking-wider font-semibold border-b border-[var(--border-subtle)]">
                   <tr>
                     <th className="p-3.5">Vehicle</th>
                     <th className="p-3.5">Current Odometer</th>
@@ -777,7 +777,7 @@ export default function TelematicsPage() {
                 <tbody className="divide-y divide-white/5">
                   {!automationData?.pmStatusList?.length ? (
                     <tr>
-                      <td colSpan={5} className="p-8 text-center text-slate-500">
+                      <td colSpan={5} className="p-8 text-center text-[var(--text-faint)]">
                         No vehicle odometer telemetry records found yet.
                       </td>
                     </tr>
@@ -787,17 +787,17 @@ export default function TelematicsPage() {
                       const isDueSoon = item.status === 'DUE_SOON';
 
                       return (
-                        <tr key={item.vehicleId} className="hover:bg-white/[0.02] transition">
+                        <tr key={item.vehicleId} className="hover:bg-[var(--bg-surface-hover)] transition">
                           <td className="p-3.5 font-medium">
-                            <div className="font-bold text-white">
+                            <div className="font-bold text-[var(--text-main)]">
                               {item.vehicleCode || item.licensePlate}
                             </div>
-                            <div className="text-[10px] text-slate-500 font-mono">
+                            <div className="text-[10px] text-[var(--text-faint)] font-mono">
                               {item.deviceId ? `IMEI: ${item.deviceId}` : item.licensePlate}
                             </div>
                           </td>
 
-                          <td className="p-3.5 font-mono text-slate-200">
+                          <td className="p-3.5 font-mono text-[var(--text-main)]">
                             {item.currentOdometerKm.toLocaleString()} km
                           </td>
 
@@ -811,7 +811,7 @@ export default function TelematicsPage() {
                                 {Math.abs(item.kmRemaining).toLocaleString()} km OVERDUE
                               </span>
                             ) : (
-                              <span className={isDueSoon ? 'text-amber-300 font-bold' : 'text-slate-300'}>
+                              <span className={isDueSoon ? 'text-amber-300 font-bold' : 'text-[var(--text-muted)]'}>
                                 {item.kmRemaining.toLocaleString()} km
                               </span>
                             )}
@@ -853,15 +853,15 @@ export default function TelematicsPage() {
         <div className="space-y-6">
           {/* Header Summary Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="p-4 rounded-2xl bg-slate-900/60 border border-white/10 space-y-1">
-              <p className="text-xs text-slate-400 font-medium">Fleet Driver Safety Index</p>
+            <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] space-y-1">
+              <p className="text-xs text-[var(--text-muted)] font-medium">Fleet Driver Safety Index</p>
               <div className="flex items-center gap-2">
                 <p className="text-2xl font-bold text-emerald-400">
                   {analyticsData?.averageSafetyScore ?? 100} / 100
                 </p>
                 <Award className="w-5 h-5 text-amber-400" />
               </div>
-              <p className="text-[11px] text-slate-500">Based on harsh events & speeding</p>
+              <p className="text-[11px] text-[var(--text-faint)]">Based on harsh events & speeding</p>
             </div>
 
             <div className="p-4 rounded-2xl bg-rose-950/30 border border-rose-500/30 space-y-1">
@@ -889,14 +889,14 @@ export default function TelematicsPage() {
 
           {/* Section 1: Driver Safety & Eco-Driving Leaderboard */}
           <div className="space-y-3">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
+            <h3 className="text-base font-bold text-[var(--text-main)] flex items-center gap-2">
               <Award className="w-5 h-5 text-amber-400" />
               Driver Safety & Eco-Driving Leaderboard
             </h3>
 
-            <div className="rounded-2xl border border-white/10 overflow-hidden bg-slate-900/60 shadow-xl">
-              <table className="w-full text-left text-xs text-slate-300">
-                <thead className="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-semibold border-b border-white/10">
+            <div className="rounded-2xl border border-[var(--border-subtle)] overflow-hidden bg-[var(--bg-surface)]/60 shadow-xl">
+              <table className="w-full text-left text-xs text-[var(--text-muted)]">
+                <thead className="bg-[var(--bg-canvas)]/80 text-[var(--text-muted)] uppercase tracking-wider font-semibold border-b border-[var(--border-subtle)]">
                   <tr>
                     <th className="p-3.5">Rank & Driver</th>
                     <th className="p-3.5">Safety Score (0–100)</th>
@@ -909,13 +909,13 @@ export default function TelematicsPage() {
                 <tbody className="divide-y divide-white/5">
                   {analyticsLoading ? (
                     <tr>
-                      <td colSpan={6} className="p-8 text-center text-slate-500">
+                      <td colSpan={6} className="p-8 text-center text-[var(--text-faint)]">
                         Loading driver safety leaderboard...
                       </td>
                     </tr>
                   ) : !analyticsData?.driverLeaderboard?.length ? (
                     <tr>
-                      <td colSpan={6} className="p-8 text-center text-slate-500">
+                      <td colSpan={6} className="p-8 text-center text-[var(--text-faint)]">
                         No driver telemetry safety scores available yet.
                       </td>
                     </tr>
@@ -925,15 +925,15 @@ export default function TelematicsPage() {
                       const isAmber = d.ragStatus === 'AMBER';
 
                       return (
-                        <tr key={d.driverId} className="hover:bg-white/[0.02] transition">
+                        <tr key={d.driverId} className="hover:bg-[var(--bg-surface-hover)] transition">
                           <td className="p-3.5">
                             <div className="flex items-center gap-2">
-                              <span className="font-mono text-xs font-bold text-slate-400 w-5">
+                              <span className="font-mono text-xs font-bold text-[var(--text-muted)] w-5">
                                 #{index + 1}
                               </span>
                               <div>
-                                <div className="font-bold text-white">{d.driverName}</div>
-                                <div className="text-[10px] text-slate-500">{d.phone || 'No phone'}</div>
+                                <div className="font-bold text-[var(--text-main)]">{d.driverName}</div>
+                                <div className="text-[10px] text-[var(--text-faint)]">{d.phone || 'No phone'}</div>
                               </div>
                             </div>
                           </td>
@@ -951,7 +951,7 @@ export default function TelematicsPage() {
                               >
                                 {d.score}
                               </span>
-                              <div className="w-20 bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                              <div className="w-20 bg-[var(--bg-surface)] rounded-full h-1.5 overflow-hidden">
                                 <div
                                   className={`h-full ${
                                     isGreen ? 'bg-emerald-400' : isAmber ? 'bg-amber-400' : 'bg-rose-400'
@@ -962,9 +962,9 @@ export default function TelematicsPage() {
                             </div>
                           </td>
 
-                          <td className="p-3.5 font-mono text-slate-300">{d.harshBrakes}</td>
-                          <td className="p-3.5 font-mono text-slate-300">{d.harshAccels}</td>
-                          <td className="p-3.5 font-mono text-slate-300">{d.overspeedEvents}</td>
+                          <td className="p-3.5 font-mono text-[var(--text-muted)]">{d.harshBrakes}</td>
+                          <td className="p-3.5 font-mono text-[var(--text-muted)]">{d.harshAccels}</td>
+                          <td className="p-3.5 font-mono text-[var(--text-muted)]">{d.overspeedEvents}</td>
 
                           <td className="p-3.5">
                             <span
@@ -992,14 +992,14 @@ export default function TelematicsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
             {/* Left: Fuel Siphoning & Theft Log */}
             <div className="space-y-3">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <h3 className="text-base font-bold text-[var(--text-main)] flex items-center gap-2">
                 <Flame className="w-5 h-5 text-rose-400" />
                 Fuel Theft & Siphoning Audit Log
               </h3>
 
-              <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 space-y-3">
+              <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 p-4 space-y-3">
                 {!analyticsData?.fuelAlerts?.length ? (
-                  <div className="p-6 text-center text-slate-500 text-xs">
+                  <div className="p-6 text-center text-[var(--text-faint)] text-xs">
                     No fuel theft or siphoning anomalies detected.
                   </div>
                 ) : (
@@ -1010,11 +1010,11 @@ export default function TelematicsPage() {
                     >
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-xs text-rose-300">{a.title}</span>
-                        <span className="text-[10px] text-slate-400">
+                        <span className="text-[10px] text-[var(--text-muted)]">
                           {new Date(a.createdAt).toLocaleDateString()}
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-300">{a.description}</p>
+                      <p className="text-[11px] text-[var(--text-muted)]">{a.description}</p>
                     </div>
                   ))
                 )}
@@ -1023,14 +1023,14 @@ export default function TelematicsPage() {
 
             {/* Right: CAN-bus DTC Diagnostics */}
             <div className="space-y-3">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <h3 className="text-base font-bold text-[var(--text-main)] flex items-center gap-2">
                 <Wrench className="w-5 h-5 text-amber-400" />
                 CAN-bus Engine Fault Diagnostics
               </h3>
 
-              <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 space-y-3">
+              <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 p-4 space-y-3">
                 {!analyticsData?.dtcServiceRequests?.length ? (
-                  <div className="p-6 text-center text-slate-500 text-xs">
+                  <div className="p-6 text-center text-[var(--text-faint)] text-xs">
                     No active DTC engine fault tickets. Vehicle powertrains healthy.
                   </div>
                 ) : (
@@ -1047,7 +1047,7 @@ export default function TelematicsPage() {
                           {sr.status}
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-300">{sr.description}</p>
+                      <p className="text-[11px] text-[var(--text-muted)]">{sr.description}</p>
                     </div>
                   ))
                 )}
@@ -1060,27 +1060,27 @@ export default function TelematicsPage() {
       {/* TAB 4: Webhook Simulator & Tester */}
       {activeTab === 'simulator' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-5 space-y-4">
+          <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 p-5 space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <h3 className="text-base font-bold text-[var(--text-main)] flex items-center gap-2">
                   <Terminal className="w-5 h-5 text-amber-400" />
                   Inbound Webhook Payload Simulator
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">
                   Test and validate raw JSON packets from any telematics vendor.
                 </p>
               </div>
 
-              <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+              <div className="flex items-center gap-1 bg-[var(--bg-canvas)] p-1 rounded-xl border border-[var(--border-subtle)]">
                 {(['flespi', 'teltonika', 'traccar', 'generic'] as const).map((vendor) => (
                   <button
                     key={vendor}
                     onClick={() => setSimVendor(vendor)}
                     className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase transition ${
                       simVendor === vendor
-                        ? 'bg-amber-500 text-slate-950'
-                        : 'text-slate-400 hover:text-slate-200'
+                        ? 'bg-amber-500 text-white'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                     }`}
                   >
                     {vendor}
@@ -1090,25 +1090,25 @@ export default function TelematicsPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+              <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">
                 Raw JSON Webhook Body:
               </label>
               <textarea
                 value={simPayload}
                 onChange={(e) => setSimPayload(e.target.value)}
                 rows={12}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-xs text-amber-200 focus:outline-none focus:border-amber-500 shadow-inner"
+                className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-xl p-3 font-mono text-xs text-amber-200 focus:outline-none focus:border-amber-500 shadow-inner"
               />
             </div>
 
             <div className="flex items-center justify-between pt-2">
-              <span className="text-[11px] text-slate-500 font-mono">
+              <span className="text-[11px] text-[var(--text-faint)] font-mono">
                 Target: POST /api/telematics/webhook
               </span>
               <button
                 onClick={handleSimulateWebhook}
                 disabled={simSubmitting}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow transition disabled:opacity-50"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-white font-bold text-sm shadow transition disabled:opacity-50"
               >
                 <Play className="w-4 h-4 fill-current" />
                 {simSubmitting ? 'Simulating...' : 'Simulate Ingestion'}
@@ -1116,8 +1116,8 @@ export default function TelematicsPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-5 space-y-4">
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
+          <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 p-5 space-y-4">
+            <h3 className="text-base font-bold text-[var(--text-main)] flex items-center gap-2">
               <Activity className="w-5 h-5 text-cyan-400" />
               Ingestion Execution & Parser Result
             </h3>
@@ -1135,12 +1135,12 @@ export default function TelematicsPage() {
                   <span>{simResponse.data.success ? '✓ NORMALIZED & SAVED' : '✗ FAILED'}</span>
                 </div>
 
-                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs text-slate-300 max-h-96 overflow-y-auto">
+                <div className="bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-xl p-4 font-mono text-xs text-[var(--text-muted)] max-h-96 overflow-y-auto">
                   <pre>{JSON.stringify(simResponse.data, null, 2)}</pre>
                 </div>
               </div>
             ) : (
-              <div className="p-12 text-center text-slate-500 text-xs">
+              <div className="p-12 text-center text-[var(--text-faint)] text-xs">
                 Click <strong>"Simulate Ingestion"</strong> on the left to test the webhook and see normalized state updates.
               </div>
             )}
@@ -1150,41 +1150,41 @@ export default function TelematicsPage() {
 
       {/* TAB 3: Gateway Setup Guide */}
       {activeTab === 'guide' && (
-        <div className="rounded-2xl border border-white/10 bg-slate-900/70 p-6 space-y-6">
+        <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 p-6 space-y-6">
           <div>
-            <h3 className="text-lg font-bold text-white">Telematics Gateway Configuration Guide</h3>
-            <p className="text-xs text-slate-400 mt-1">
+            <h3 className="text-lg font-bold text-[var(--text-main)]">Telematics Gateway Configuration Guide</h3>
+            <p className="text-xs text-[var(--text-muted)] mt-1">
               Configure your telematics platform (Flespi stream, Teltonika FOTA WEB, Traccar forwarder) to push telemetry to Fleet360.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+            <div className="p-4 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-2">
               <p className="font-bold text-cyan-400 uppercase tracking-wider">1. Webhook Endpoint URL</p>
-              <div className="flex items-center justify-between p-2 rounded bg-slate-900 font-mono text-slate-200 border border-slate-800">
+              <div className="flex items-center justify-between p-2 rounded bg-[var(--bg-surface)] font-mono text-[var(--text-main)] border border-[var(--border-subtle)]">
                 <span className="truncate">https://your-domain.com/api/telematics/webhook</span>
                 <button
                   onClick={() => handleCopyUrl('https://your-domain.com/api/telematics/webhook')}
-                  className="text-slate-400 hover:text-white ml-2"
+                  className="text-[var(--text-muted)] hover:text-[var(--text-main)] ml-2"
                 >
                   {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                 </button>
               </div>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+            <div className="p-4 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-2">
               <p className="font-bold text-cyan-400 uppercase tracking-wider">2. Webhook Secret Header</p>
-              <div className="p-2 rounded bg-slate-900 font-mono text-slate-200 border border-slate-800">
+              <div className="p-2 rounded bg-[var(--bg-surface)] font-mono text-[var(--text-main)] border border-[var(--border-subtle)]">
                 <span>x-webhook-secret: fleet360-telematics-live</span>
               </div>
             </div>
           </div>
 
           <div className="space-y-2">
-            <p className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+            <p className="text-xs font-bold text-[var(--text-main)] uppercase tracking-wider">
               Sample cURL Test Command:
             </p>
-            <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs text-emerald-400 overflow-x-auto">
+            <div className="bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-xl p-4 font-mono text-xs text-emerald-400 overflow-x-auto">
               <code>{`curl -X POST https://your-domain.com/api/telematics/webhook \\
   -H "Content-Type: application/json" \\
   -H "x-webhook-secret: fleet360-telematics-live" \\
@@ -1208,19 +1208,19 @@ export default function TelematicsPage() {
       {/* Device Pairing Modal */}
       {pairModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl text-xs">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl text-xs">
             <div className="flex items-start justify-between">
               <div>
                 <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">
                   Hardware Pairing
                 </span>
-                <h3 className="text-base font-bold text-white mt-0.5">
+                <h3 className="text-base font-bold text-[var(--text-main)] mt-0.5">
                   {pairModal.vehicleCode || pairModal.licensePlate}
                 </h3>
               </div>
               <button
                 onClick={() => setPairModal(null)}
-                className="text-slate-500 hover:text-slate-300 text-lg leading-none"
+                className="text-[var(--text-faint)] hover:text-[var(--text-muted)] text-lg leading-none"
               >
                 ✕
               </button>
@@ -1228,7 +1228,7 @@ export default function TelematicsPage() {
 
             <form onSubmit={handleSavePairing} className="space-y-3">
               <div>
-                <label className="block text-slate-300 font-medium mb-1">
+                <label className="block text-[var(--text-muted)] font-medium mb-1">
                   Device Hardware IMEI / Tracker ID *
                 </label>
                 <input
@@ -1236,12 +1236,12 @@ export default function TelematicsPage() {
                   placeholder="e.g. 864201047281920"
                   value={editImei}
                   onChange={(e) => setEditImei(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-100 focus:outline-none focus:border-cyan-500 font-mono"
+                  className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg p-2 text-[var(--text-main)] focus:outline-none focus:border-cyan-500 font-mono"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 font-medium mb-1">
+                <label className="block text-[var(--text-muted)] font-medium mb-1">
                   SIM Card Phone Number / ICCID (Optional)
                 </label>
                 <input
@@ -1249,7 +1249,7 @@ export default function TelematicsPage() {
                   placeholder="e.g. +971501234567"
                   value={editSim}
                   onChange={(e) => setEditSim(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-100 focus:outline-none focus:border-cyan-500 font-mono"
+                  className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg p-2 text-[var(--text-main)] focus:outline-none focus:border-cyan-500 font-mono"
                 />
               </div>
 
@@ -1258,14 +1258,14 @@ export default function TelematicsPage() {
                   type="button"
                   onClick={() => setPairModal(null)}
                   disabled={pairingSaving}
-                  className="px-3 py-1.5 text-slate-400 hover:text-slate-200"
+                  className="px-3 py-1.5 text-[var(--text-muted)] hover:text-[var(--text-main)]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={pairingSaving}
-                  className="px-4 py-2 font-bold text-slate-950 bg-cyan-400 hover:bg-cyan-300 rounded-xl shadow transition disabled:opacity-50"
+                  className="px-4 py-2 font-bold text-white bg-cyan-400 hover:bg-cyan-300 rounded-xl shadow transition disabled:opacity-50"
                 >
                   {pairingSaving ? 'Saving...' : 'Save Pairing'}
                 </button>

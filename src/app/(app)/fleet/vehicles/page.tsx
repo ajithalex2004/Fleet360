@@ -110,7 +110,7 @@ const segmentColor: Record<string, string> = {
   LUXURY:        'bg-amber-500/15 text-amber-400 border border-amber-500/20',
   PREMIUM:       'bg-orange-500/15 text-orange-400 border border-orange-500/20',
   SPORTS:        'bg-red-500/15 text-red-400 border border-red-500/20',
-  VAN:           'bg-slate-500/15 text-slate-300 border border-slate-500/20',
+  VAN:           'bg-slate-500/15 text-[var(--text-muted)] border border-slate-500/20',
   PICKUP:        'bg-yellow-500/15 text-yellow-400 border border-yellow-500/20',
   BUS:           'bg-purple-500/15 text-purple-400 border border-purple-500/20',
   SPECIAL:       'bg-pink-500/15 text-pink-400 border border-pink-500/20',
@@ -121,7 +121,7 @@ const statusColor: Record<string, string> = {
   RENTED: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
   MAINTENANCE: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
   RESERVED: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-  INACTIVE: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+  INACTIVE: 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30',
   SOLD: 'bg-rose-500/20 text-rose-400 border-rose-500/30',
 };
 
@@ -347,7 +347,7 @@ export default function VehiclesPage() {
                   </td>
                   <td className="px-4 py-3">
                     {v.category ? (
-                      <span className={`px-2 py-0.5 rounded-md text-[11px] font-semibold ${segmentColor[v.category] ?? 'bg-slate-700/60 text-slate-300'}`}>
+                      <span className={`px-2 py-0.5 rounded-md text-[11px] font-semibold ${segmentColor[v.category] ?? 'bg-[var(--bg-surface-hover)]/60 text-[var(--text-muted)]'}`}>
                         {VEHICLE_SEGMENTS.find(s => s.value === v.category)?.label ?? v.category}
                       </span>
                     ) : <span className="text-[var(--text-muted)] text-xs">—</span>}
@@ -361,7 +361,7 @@ export default function VehiclesPage() {
                     <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)]">{v.lifecycleStage || '—'}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${statusColor[v.status] ?? 'bg-slate-700 text-slate-300'}`}>{v.status}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${statusColor[v.status] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'}`}>{v.status}</span>
                   </td>
                   <td className="px-4 py-3 text-[var(--text-main)] text-xs font-mono">{v.odometerReading?.toLocaleString() ?? 0} km</td>
                   <td className="px-4 py-3">
@@ -380,7 +380,7 @@ export default function VehiclesPage() {
                       >
                         Inspect ↗
                       </button>
-                      <button onClick={() => openEdit(v)} className="px-2.5 py-1 text-xs bg-slate-700/50 hover:bg-slate-700 text-white rounded-lg transition-colors">Edit</button>
+                      <button onClick={() => openEdit(v)} className="px-2.5 py-1 text-xs bg-[var(--bg-surface-hover)]/50 hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] rounded-lg transition-colors">Edit</button>
                       <button onClick={() => handleDelete(v.id)} className="px-2.5 py-1 text-xs bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg transition-colors">Del</button>
                     </div>
                   </td>

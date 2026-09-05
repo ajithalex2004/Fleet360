@@ -40,7 +40,7 @@ const badge = (text: string, color: string) => (
 const statusColor: Record<string, string> = {
   ACTIVE: 'bg-green-500/20 text-green-400',
   EXPIRED: 'bg-red-500/20 text-red-400',
-  CANCELLED: 'bg-slate-700 text-slate-300',
+  CANCELLED: 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]',
 };
 
 const POLICY_TYPES = ['COMPREHENSIVE', 'THIRD_PARTY', 'TPL', 'ENHANCED'];
@@ -174,7 +174,7 @@ export default function InsurancePage() {
   };
 
   const getDaysUntilExpiryDisplay = (endDate: string, status: string) => {
-    if (!endDate) return <span className="text-slate-600">—</span>;
+    if (!endDate) return <span className="text-[var(--text-faint)]">—</span>;
     const days = daysUntilExpiry(endDate);
     if (days < 0 || status === 'EXPIRED') {
       return <span className="text-red-400 font-medium text-xs">{Math.abs(days)}d ago</span>;
@@ -185,16 +185,16 @@ export default function InsurancePage() {
     return <span className="text-green-400 text-xs">{days}d</span>;
   };
 
-  const inputCls = 'bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:border-orange-500/50 focus:outline-none w-full';
-  const labelCls = 'block text-xs text-slate-400 mb-1';
+  const inputCls = 'bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:border-orange-500/50 focus:outline-none w-full';
+  const labelCls = 'block text-xs text-[var(--text-muted)] mb-1';
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Fleet Insurance Policies</h1>
-          <p className="text-slate-400 text-xs mt-1">Manage vehicle insurance coverage and renewals</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Fleet Insurance Policies</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-1">Manage vehicle insurance coverage and renewals</p>
         </div>
         <button
           onClick={openCreate}
@@ -224,18 +224,18 @@ export default function InsurancePage() {
       )}
 
       {/* Filter Bar */}
-      <div className="bg-slate-800/40 border border-white/5 rounded-2xl p-4 mb-6 flex flex-wrap gap-3">
+      <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl p-4 mb-6 flex flex-wrap gap-3">
         <input
           type="text"
           placeholder="Search vehicle, policy number, insurer..."
           value={search}
           onChange={e => { setSearch(e.target.value); setPage(1); }}
-          className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:border-orange-500/50 focus:outline-none flex-1 min-w-[200px] placeholder-slate-500"
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:border-orange-500/50 focus:outline-none flex-1 min-w-[200px] placeholder-[var(--text-faint)]"
         />
         <select
           value={statusFilter}
           onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
-          className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:border-orange-500/50 focus:outline-none"
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:border-orange-500/50 focus:outline-none"
         >
           <option value="">All Statuses</option>
           <option>ACTIVE</option>
@@ -245,7 +245,7 @@ export default function InsurancePage() {
         <select
           value={typeFilter}
           onChange={e => { setTypeFilter(e.target.value); setPage(1); }}
-          className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:border-orange-500/50 focus:outline-none"
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:border-orange-500/50 focus:outline-none"
         >
           <option value="">All Policy Types</option>
           {POLICY_TYPES.map(t => <option key={t}>{t}</option>)}
@@ -253,53 +253,53 @@ export default function InsurancePage() {
       </div>
 
       {/* Table */}
-      <div className="bg-slate-800/40 border border-white/5 rounded-2xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-800/60 border-b border-white/5">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Vehicle ID</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Policy Number</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Insurer</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Policy Type</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Start Date</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">End Date</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Premium (AED)</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Coverage (AED)</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Deductible (AED)</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-slate-400 uppercase tracking-wider">Days Until Expiry</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
+              <tr className="bg-[var(--bg-surface)]/60 border-b border-[var(--border-subtle)]">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Vehicle ID</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Policy Number</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Insurer</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Policy Type</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Start Date</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">End Date</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Premium (AED)</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Coverage (AED)</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Deductible (AED)</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Status</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Days Until Expiry</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {loading ? (
                 <tr>
-                  <td colSpan={12} className="px-4 py-12 text-center text-slate-500">Loading insurance policies...</td>
+                  <td colSpan={12} className="px-4 py-12 text-center text-[var(--text-faint)]">Loading insurance policies...</td>
                 </tr>
               ) : policies.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-4 py-12 text-center text-slate-500">No insurance policies found</td>
+                  <td colSpan={12} className="px-4 py-12 text-center text-[var(--text-faint)]">No insurance policies found</td>
                 </tr>
               ) : (
                 policies.map(policy => (
-                  <tr key={policy.id} className="hover:bg-white/5 transition-colors">
+                  <tr key={policy.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                     <td className="px-4 py-3 text-orange-400 font-medium">{policy.vehicleId}</td>
-                    <td className="px-4 py-3 font-mono text-slate-300 text-xs">{policy.policyNumber}</td>
-                    <td className="px-4 py-3 text-white">{policy.insurer}</td>
-                    <td className="px-4 py-3">{badge(policy.policyType, 'bg-slate-700 text-slate-300')}</td>
-                    <td className="px-4 py-3 text-slate-300">{policy.startDate ? new Date(policy.startDate).toLocaleDateString() : '—'}</td>
-                    <td className="px-4 py-3 text-slate-300">{policy.endDate ? new Date(policy.endDate).toLocaleDateString() : '—'}</td>
-                    <td className="px-4 py-3 text-right text-slate-300">{policy.premiumAmount?.toLocaleString() ?? '—'}</td>
-                    <td className="px-4 py-3 text-right text-slate-300">{policy.coverageAmount?.toLocaleString() ?? '—'}</td>
-                    <td className="px-4 py-3 text-right text-slate-300">{policy.deductible?.toLocaleString() ?? '—'}</td>
-                    <td className="px-4 py-3 text-center">{badge(policy.status, statusColor[policy.status] ?? 'bg-slate-700 text-slate-300')}</td>
+                    <td className="px-4 py-3 font-mono text-[var(--text-muted)] text-xs">{policy.policyNumber}</td>
+                    <td className="px-4 py-3 text-[var(--text-main)]">{policy.insurer}</td>
+                    <td className="px-4 py-3">{badge(policy.policyType, 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]')}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)]">{policy.startDate ? new Date(policy.startDate).toLocaleDateString() : '—'}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)]">{policy.endDate ? new Date(policy.endDate).toLocaleDateString() : '—'}</td>
+                    <td className="px-4 py-3 text-right text-[var(--text-muted)]">{policy.premiumAmount?.toLocaleString() ?? '—'}</td>
+                    <td className="px-4 py-3 text-right text-[var(--text-muted)]">{policy.coverageAmount?.toLocaleString() ?? '—'}</td>
+                    <td className="px-4 py-3 text-right text-[var(--text-muted)]">{policy.deductible?.toLocaleString() ?? '—'}</td>
+                    <td className="px-4 py-3 text-center">{badge(policy.status, statusColor[policy.status] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]')}</td>
                     <td className="px-4 py-3 text-center">{getDaysUntilExpiryDisplay(policy.endDate, policy.status)}</td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex items-center justify-center gap-2">
                         <button
                           onClick={() => openEdit(policy)}
-                          className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs text-white transition-colors"
+                          className="px-3 py-1 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] rounded-lg text-xs text-[var(--text-main)] transition-colors"
                         >
                           Edit
                         </button>
@@ -320,20 +320,20 @@ export default function InsurancePage() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-white/5">
-            <span className="text-xs text-slate-500">Page {page} of {totalPages}</span>
+          <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--border-subtle)]">
+            <span className="text-xs text-[var(--text-faint)]">Page {page} of {totalPages}</span>
             <div className="flex gap-2">
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 rounded-lg text-xs text-white transition-colors"
+                className="px-3 py-1 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] disabled:opacity-40 rounded-lg text-xs text-[var(--text-main)] transition-colors"
               >
                 Prev
               </button>
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 rounded-lg text-xs text-white transition-colors"
+                className="px-3 py-1 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] disabled:opacity-40 rounded-lg text-xs text-[var(--text-main)] transition-colors"
               >
                 Next
               </button>
@@ -345,10 +345,10 @@ export default function InsurancePage() {
       {/* Create / Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
-              <h2 className="text-lg font-semibold text-white">{editingId ? 'Edit Insurance Policy' : 'Add Insurance Policy'}</h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white transition-colors text-xl leading-none">&times;</button>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)]">
+              <h2 className="text-lg font-semibold text-[var(--text-main)]">{editingId ? 'Edit Insurance Policy' : 'Add Insurance Policy'}</h2>
+              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors text-xl leading-none">&times;</button>
             </div>
             <div className="px-6 py-5 space-y-6">
               {formError && (
@@ -431,8 +431,8 @@ export default function InsurancePage() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-white/10">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-sm font-medium transition-colors">Cancel</button>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[var(--border-subtle)]">
+              <button onClick={() => setShowModal(false)} className="px-4 py-2.5 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] rounded-xl text-sm font-medium transition-colors">Cancel</button>
               <button onClick={handleSave} disabled={saving} className="px-6 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition-all">
                 {saving ? 'Saving...' : editingId ? 'Update Policy' : 'Add Policy'}
               </button>

@@ -192,7 +192,7 @@ export default function FleetDocumentsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-[var(--text-main)] flex items-center gap-2">
               <FileCheck2 className="w-6 h-6 text-cyan-400" />
               Document Expiry & Vehicle Auto-Grounding
             </h1>
@@ -200,7 +200,7 @@ export default function FleetDocumentsPage() {
               P0 Compliance
             </span>
           </div>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-[var(--text-muted)] mt-1">
             Automated UAE regulatory sweep: Mulkiya 30d grace evaluation, 0-day insurance enforcement, and automatic asset grounding.
           </p>
         </div>
@@ -209,7 +209,7 @@ export default function FleetDocumentsPage() {
           <button
             onClick={handleRunSweep}
             disabled={sweeping}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-bold shadow transition disabled:opacity-50"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-white text-xs font-bold shadow transition disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${sweeping ? 'animate-spin' : ''}`} />
             {sweeping ? 'Running Sweep...' : 'Run Expiry Sweep'}
@@ -217,7 +217,7 @@ export default function FleetDocumentsPage() {
 
           <button
             onClick={() => setShowModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-xs font-semibold border border-[var(--border-subtle)] transition"
           >
             <Plus className="w-4 h-4" />
             Upload Document
@@ -240,18 +240,18 @@ export default function FleetDocumentsPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-emerald-500/30 space-y-1">
+        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-emerald-500/30 space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-xs text-emerald-400 font-medium">Fully Compliant</span>
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
           </div>
-          <p className="text-2xl font-bold text-white">
+          <p className="text-2xl font-bold text-[var(--text-main)]">
             {sweepSummary?.compliantVehiclesCount || 0}
           </p>
-          <p className="text-[11px] text-slate-500">All mandatory documents valid</p>
+          <p className="text-[11px] text-[var(--text-faint)]">All mandatory documents valid</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-amber-500/30 space-y-1">
+        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-amber-500/30 space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-xs text-amber-400 font-medium">Expiring in 30 Days</span>
             <Clock className="w-4 h-4 text-amber-400" />
@@ -259,10 +259,10 @@ export default function FleetDocumentsPage() {
           <p className="text-2xl font-bold text-amber-300">
             {sweepSummary?.warningVehiclesCount || 0}
           </p>
-          <p className="text-[11px] text-slate-500">Upcoming renewals needed</p>
+          <p className="text-[11px] text-[var(--text-faint)]">Upcoming renewals needed</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-orange-500/30 space-y-1">
+        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-orange-500/30 space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-xs text-orange-400 font-medium">Critical (&le; 7 Days)</span>
             <AlertTriangle className="w-4 h-4 text-orange-400" />
@@ -270,10 +270,10 @@ export default function FleetDocumentsPage() {
           <p className="text-2xl font-bold text-orange-300">
             {sweepSummary?.criticalVehiclesCount || 0}
           </p>
-          <p className="text-[11px] text-slate-500">Immediate action required</p>
+          <p className="text-[11px] text-[var(--text-faint)]">Immediate action required</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-rose-500/40 space-y-1">
+        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-rose-500/40 space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-xs text-rose-400 font-medium">Grounded / Expired</span>
             <ShieldAlert className="w-4 h-4 text-rose-400" />
@@ -304,7 +304,7 @@ export default function FleetDocumentsPage() {
                 key={v.vehicleId}
                 className="p-3 rounded-xl bg-rose-900/40 border border-rose-500/30 text-xs space-y-1"
               >
-                <div className="flex items-center justify-between font-bold text-white">
+                <div className="flex items-center justify-between font-bold text-[var(--text-main)]">
                   <span>{v.vehicleCode}</span>
                   <span className="font-mono text-rose-300">{v.licensePlate}</span>
                 </div>
@@ -324,8 +324,8 @@ export default function FleetDocumentsPage() {
               onClick={() => setActiveTab(tab)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
                 activeTab === tab
-                  ? 'bg-slate-700 text-white border border-slate-500'
-                  : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-transparent'
+                  ? 'bg-[var(--bg-surface-hover)] text-[var(--text-main)] border border-slate-500'
+                  : 'bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--text-main)] border border-transparent'
               }`}
             >
               {tab === 'ALL' && 'All Documents'}
@@ -339,7 +339,7 @@ export default function FleetDocumentsPage() {
           <select
             value={filterDocType}
             onChange={(e) => setFilterDocType(e.target.value)}
-            className="px-3 py-1.5 rounded-xl bg-slate-900 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
+            className="px-3 py-1.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] focus:outline-none focus:border-cyan-500"
           >
             <option value="ALL">All Document Types</option>
             <option value="MULKIYA">Mulkiya (Registration)</option>
@@ -350,23 +350,23 @@ export default function FleetDocumentsPage() {
           </select>
 
           <div className="relative w-full sm:w-64">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
             <input
               type="text"
               placeholder="Search plate, doc #..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-900 border border-white/10 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+              className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-cyan-500"
             />
           </div>
         </div>
       </div>
 
       {/* Document Grid */}
-      <div className="rounded-2xl border border-white/10 overflow-hidden bg-slate-900/60 shadow-xl">
+      <div className="rounded-2xl border border-[var(--border-subtle)] overflow-hidden bg-[var(--bg-surface)]/60 shadow-xl">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-semibold border-b border-white/10">
+          <table className="w-full text-left text-xs text-[var(--text-muted)]">
+            <thead className="bg-[var(--bg-canvas)]/80 text-[var(--text-muted)] uppercase tracking-wider font-semibold border-b border-[var(--border-subtle)]">
               <tr>
                 <th className="p-3.5">Vehicle</th>
                 <th className="p-3.5">Document Type</th>
@@ -380,7 +380,7 @@ export default function FleetDocumentsPage() {
             <tbody className="divide-y divide-white/5">
               {!filteredDocs.length ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-500">
+                  <td colSpan={7} className="p-8 text-center text-[var(--text-faint)]">
                     No documents matching the criteria.
                   </td>
                 </tr>
@@ -391,21 +391,21 @@ export default function FleetDocumentsPage() {
                     : -999;
 
                   return (
-                    <tr key={doc.id} className="hover:bg-white/[0.02] transition">
+                    <tr key={doc.id} className="hover:bg-[var(--bg-surface-hover)] transition">
                       <td className="p-3.5">
-                        <div className="font-bold text-white">{doc.vehicleCode || doc.vehicleId.slice(0, 8)}</div>
-                        <div className="text-[10px] text-slate-400 font-mono">{doc.licensePlate || '—'}</div>
+                        <div className="font-bold text-[var(--text-main)]">{doc.vehicleCode || doc.vehicleId.slice(0, 8)}</div>
+                        <div className="text-[10px] text-[var(--text-muted)] font-mono">{doc.licensePlate || '—'}</div>
                       </td>
 
                       <td className="p-3.5">
-                        <span className="font-semibold text-slate-200">{doc.docType}</span>
+                        <span className="font-semibold text-[var(--text-main)]">{doc.docType}</span>
                       </td>
 
                       <td className="p-3.5 font-mono text-cyan-300">
                         {doc.docNumber || '—'}
                       </td>
 
-                      <td className="p-3.5 text-slate-400">
+                      <td className="p-3.5 text-[var(--text-muted)]">
                         {doc.issuedBy || '—'}
                       </td>
 
@@ -451,7 +451,7 @@ export default function FleetDocumentsPage() {
                             });
                             setShowModal(true);
                           }}
-                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-semibold border border-slate-700 transition"
+                          className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-cyan-300 text-xs font-semibold border border-[var(--border-subtle)] transition"
                         >
                           Renew
                         </button>
@@ -467,16 +467,16 @@ export default function FleetDocumentsPage() {
 
       {/* Upload/Renew Document Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
+        <div className="fixed inset-0 z-50 bg-[var(--bg-canvas)]/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+              <h3 className="text-base font-bold text-[var(--text-main)] flex items-center gap-2">
                 <FileText className="w-5 h-5 text-cyan-400" />
                 Register / Renew Fleet Document
               </h3>
               <button
                 onClick={() => setShowModal(false)}
-                className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition"
+                className="p-1 rounded-lg hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -484,24 +484,24 @@ export default function FleetDocumentsPage() {
 
             <form onSubmit={handleAddDocument} className="space-y-3 text-xs">
               <div>
-                <label className="block text-slate-400 mb-1">Vehicle ID / UUID</label>
+                <label className="block text-[var(--text-muted)] mb-1">Vehicle ID / UUID</label>
                 <input
                   type="text"
                   required
                   placeholder="Vehicle UUID..."
                   value={formData.vehicleId}
                   onChange={(e) => setFormData({ ...formData, vehicleId: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-cyan-500"
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none focus:border-cyan-500"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1">Document Type</label>
+                  <label className="block text-[var(--text-muted)] mb-1">Document Type</label>
                   <select
                     value={formData.docType}
                     onChange={(e) => setFormData({ ...formData, docType: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-cyan-500"
+                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none focus:border-cyan-500"
                   >
                     <option value="MULKIYA">Mulkiya (Registration)</option>
                     <option value="INSURANCE">Insurance Policy</option>
@@ -513,49 +513,49 @@ export default function FleetDocumentsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 mb-1">Document Number</label>
+                  <label className="block text-[var(--text-muted)] mb-1">Document Number</label>
                   <input
                     type="text"
                     required
                     placeholder="e.g. POL-984214"
                     value={formData.docNumber}
                     onChange={(e) => setFormData({ ...formData, docNumber: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-cyan-500"
+                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none focus:border-cyan-500"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1">Issue Date</label>
+                  <label className="block text-[var(--text-muted)] mb-1">Issue Date</label>
                   <input
                     type="date"
                     value={formData.issueDate}
                     onChange={(e) => setFormData({ ...formData, issueDate: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-cyan-500"
+                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none focus:border-cyan-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 mb-1">Expiry Date</label>
+                  <label className="block text-[var(--text-muted)] mb-1">Expiry Date</label>
                   <input
                     type="date"
                     required
                     value={formData.expiryDate}
                     onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-cyan-500"
+                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none focus:border-cyan-500"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">Issued By Authority</label>
+                <label className="block text-[var(--text-muted)] mb-1">Issued By Authority</label>
                 <input
                   type="text"
                   placeholder="e.g. Dubai RTA, Abu Dhabi Police, Sukoon Insurance"
                   value={formData.issuedBy}
                   onChange={(e) => setFormData({ ...formData, issuedBy: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-cyan-500"
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none focus:border-cyan-500"
                 />
               </div>
 
@@ -563,13 +563,13 @@ export default function FleetDocumentsPage() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-semibold hover:bg-slate-700 transition"
+                  className="px-4 py-2 rounded-xl bg-[var(--bg-surface)] text-[var(--text-muted)] font-semibold hover:bg-[var(--bg-surface-hover)] transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-cyan-500 text-slate-950 font-bold hover:bg-cyan-400 transition"
+                  className="px-4 py-2 rounded-xl bg-cyan-500 text-white font-bold hover:bg-cyan-400 transition"
                 >
                   Save & Validate Compliance
                 </button>

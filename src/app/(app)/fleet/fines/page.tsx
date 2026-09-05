@@ -190,7 +190,7 @@ export default function TrafficFinesPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-[var(--text-main)] flex items-center gap-2">
               <Zap className="w-6 h-6 text-amber-400" />
               Traffic Fine & Toll Auto-Matcher
             </h1>
@@ -198,7 +198,7 @@ export default function TrafficFinesPage() {
               P0 Recovery
             </span>
           </div>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-[var(--text-muted)] mt-1">
             Correlates RTA, Police, and Salik/Darb violation timestamps with active DriverShifts for automated payroll recovery.
           </p>
         </div>
@@ -207,7 +207,7 @@ export default function TrafficFinesPage() {
           <button
             onClick={handleRunAutoMatch}
             disabled={matching}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow transition disabled:opacity-50"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-white text-xs font-bold shadow transition disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${matching ? 'animate-spin' : ''}`} />
             {matching ? 'Auto-Matching...' : 'Auto-Match to Shifts'}
@@ -215,7 +215,7 @@ export default function TrafficFinesPage() {
 
           <button
             onClick={() => setShowModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-xs font-semibold border border-[var(--border-subtle)] transition"
           >
             <Plus className="w-4 h-4" />
             Record Fine / Toll
@@ -238,15 +238,15 @@ export default function TrafficFinesPage() {
 
       {/* KPI Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-white/10 space-y-1">
-          <span className="text-xs text-slate-400 font-medium">Total Outstanding</span>
-          <p className="text-2xl font-bold text-white">
+        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] space-y-1">
+          <span className="text-xs text-[var(--text-muted)] font-medium">Total Outstanding</span>
+          <p className="text-2xl font-bold text-[var(--text-main)]">
             AED {(summary?.outstanding || 0).toLocaleString()}
           </p>
-          <p className="text-[11px] text-slate-500">Unpaid violations in system</p>
+          <p className="text-[11px] text-[var(--text-faint)]">Unpaid violations in system</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-cyan-500/30 space-y-1">
+        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-cyan-500/30 space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-xs text-cyan-400 font-medium">Driver Recoverable</span>
             <User className="w-4 h-4 text-cyan-400" />
@@ -257,7 +257,7 @@ export default function TrafficFinesPage() {
           <p className="text-[11px] text-cyan-500/80">Matched & pending payroll deduction</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-amber-500/30 space-y-1">
+        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-amber-500/30 space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-xs text-amber-400 font-medium">Company Liability</span>
             <Building className="w-4 h-4 text-amber-400" />
@@ -265,10 +265,10 @@ export default function TrafficFinesPage() {
           <p className="text-2xl font-bold text-amber-300">
             AED {companyLiabilityAed.toLocaleString()}
           </p>
-          <p className="text-[11px] text-slate-500">Vehicle defects / company permits</p>
+          <p className="text-[11px] text-[var(--text-faint)]">Vehicle defects / company permits</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-emerald-500/30 space-y-1">
+        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-emerald-500/30 space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-xs text-emerald-400 font-medium">Auto-Matched Rate</span>
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
@@ -281,7 +281,7 @@ export default function TrafficFinesPage() {
               : 100}
             %
           </p>
-          <p className="text-[11px] text-slate-500">Shifts temporally correlated</p>
+          <p className="text-[11px] text-[var(--text-faint)]">Shifts temporally correlated</p>
         </div>
       </div>
 
@@ -294,8 +294,8 @@ export default function TrafficFinesPage() {
               onClick={() => setActiveTab(tab)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
                 activeTab === tab
-                  ? 'bg-slate-700 text-white border border-slate-500'
-                  : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-transparent'
+                  ? 'bg-[var(--bg-surface-hover)] text-[var(--text-main)] border border-slate-500'
+                  : 'bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--text-main)] border border-transparent'
               }`}
             >
               {tab === 'ALL' && 'All Violations'}
@@ -307,22 +307,22 @@ export default function TrafficFinesPage() {
         </div>
 
         <div className="relative w-full sm:w-72">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
           <input
             type="text"
             placeholder="Search ref, plate, offence, driver..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-900 border border-white/10 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500"
+            className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-amber-500"
           />
         </div>
       </div>
 
       {/* Fines Table */}
-      <div className="rounded-2xl border border-white/10 overflow-hidden bg-slate-900/60 shadow-xl">
+      <div className="rounded-2xl border border-[var(--border-subtle)] overflow-hidden bg-[var(--bg-surface)]/60 shadow-xl">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-semibold border-b border-white/10">
+          <table className="w-full text-left text-xs text-[var(--text-muted)]">
+            <thead className="bg-[var(--bg-canvas)]/80 text-[var(--text-muted)] uppercase tracking-wider font-semibold border-b border-[var(--border-subtle)]">
               <tr>
                 <th className="p-3.5">Violation Ref / Date</th>
                 <th className="p-3.5">Vehicle</th>
@@ -336,16 +336,16 @@ export default function TrafficFinesPage() {
             <tbody className="divide-y divide-white/5">
               {!filteredFines.length ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-500">
+                  <td colSpan={7} className="p-8 text-center text-[var(--text-faint)]">
                     No traffic violations matching criteria.
                   </td>
                 </tr>
               ) : (
                 filteredFines.map((f) => (
-                  <tr key={f.id} className="hover:bg-white/[0.02] transition">
+                  <tr key={f.id} className="hover:bg-[var(--bg-surface-hover)] transition">
                     <td className="p-3.5">
-                      <div className="font-bold text-white font-mono">{f.fineRef || f.id.slice(0, 8)}</div>
-                      <div className="text-[11px] text-slate-400">
+                      <div className="font-bold text-[var(--text-main)] font-mono">{f.fineRef || f.id.slice(0, 8)}</div>
+                      <div className="text-[11px] text-[var(--text-muted)]">
                         {new Date(f.fineDate).toLocaleString('en-AE', {
                           dateStyle: 'medium',
                           timeStyle: 'short',
@@ -354,13 +354,13 @@ export default function TrafficFinesPage() {
                     </td>
 
                     <td className="p-3.5">
-                      <div className="font-bold text-white">{f.vehicleCode || 'VEH'}</div>
-                      <div className="text-[10px] text-slate-400 font-mono">{f.licensePlate || f.vehicleId?.slice(0, 8)}</div>
+                      <div className="font-bold text-[var(--text-main)]">{f.vehicleCode || 'VEH'}</div>
+                      <div className="text-[10px] text-[var(--text-muted)] font-mono">{f.licensePlate || f.vehicleId?.slice(0, 8)}</div>
                     </td>
 
                     <td className="p-3.5">
-                      <div className="font-semibold text-slate-200">{f.offenceType || 'Driving Violation'}</div>
-                      <div className="text-[10px] text-slate-400">{f.authority || 'RTA Dubai'}</div>
+                      <div className="font-semibold text-[var(--text-main)]">{f.offenceType || 'Driving Violation'}</div>
+                      <div className="text-[10px] text-[var(--text-muted)]">{f.authority || 'RTA Dubai'}</div>
                     </td>
 
                     <td className="p-3.5 font-mono font-bold text-amber-300">
@@ -374,7 +374,7 @@ export default function TrafficFinesPage() {
                           DRIVER PAYROLL
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-700 text-slate-300">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[var(--bg-surface-hover)] text-[var(--text-muted)]">
                           <Building className="w-3 h-3" />
                           COMPANY
                         </span>
@@ -388,7 +388,7 @@ export default function TrafficFinesPage() {
                           <span>{f.driverName || `Driver #${f.driverId.slice(0, 6)}`}</span>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-1 text-slate-500">
+                        <div className="flex items-center gap-1 text-[var(--text-faint)]">
                           <HelpCircle className="w-3.5 h-3.5" />
                           <span>Unmatched</span>
                         </div>
@@ -418,16 +418,16 @@ export default function TrafficFinesPage() {
 
       {/* Record Fine Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
+        <div className="fixed inset-0 z-50 bg-[var(--bg-canvas)]/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+              <h3 className="text-base font-bold text-[var(--text-main)] flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-amber-400" />
                 Record Traffic Violation / Toll
               </h3>
               <button
                 onClick={() => setShowModal(false)}
-                className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition"
+                className="p-1 rounded-lg hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -436,44 +436,44 @@ export default function TrafficFinesPage() {
             <form onSubmit={handleAddFine} className="space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1">Vehicle ID / UUID</label>
+                  <label className="block text-[var(--text-muted)] mb-1">Vehicle ID / UUID</label>
                   <input
                     type="text"
                     required
                     placeholder="Vehicle UUID..."
                     value={formData.vehicleId}
                     onChange={(e) => setFormData({ ...formData, vehicleId: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-amber-500"
+                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none focus:border-amber-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 mb-1">Fine Reference No.</label>
+                  <label className="block text-[var(--text-muted)] mb-1">Fine Reference No.</label>
                   <input
                     type="text"
                     required
                     placeholder="e.g. DXB-FN-98214"
                     value={formData.fineRef}
                     onChange={(e) => setFormData({ ...formData, fineRef: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-amber-500"
+                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none focus:border-amber-500"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1">Violation Timestamp</label>
+                  <label className="block text-[var(--text-muted)] mb-1">Violation Timestamp</label>
                   <input
                     type="datetime-local"
                     required
                     value={formData.fineDate}
                     onChange={(e) => setFormData({ ...formData, fineDate: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-amber-500"
+                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none focus:border-amber-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 mb-1">Fine Amount (AED)</label>
+                  <label className="block text-[var(--text-muted)] mb-1">Fine Amount (AED)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -481,18 +481,18 @@ export default function TrafficFinesPage() {
                     placeholder="e.g. 600"
                     value={formData.fineAmount}
                     onChange={(e) => setFormData({ ...formData, fineAmount: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-amber-500"
+                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none focus:border-amber-500"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1">Offence Type</label>
+                  <label className="block text-[var(--text-muted)] mb-1">Offence Type</label>
                   <select
                     value={formData.offenceType}
                     onChange={(e) => setFormData({ ...formData, offenceType: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-amber-500"
+                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none focus:border-amber-500"
                   >
                     <option value="SPEEDING">Speeding (Radar)</option>
                     <option value="RED_LIGHT">Red Light Violation</option>
@@ -505,11 +505,11 @@ export default function TrafficFinesPage() {
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 mb-1">Authority</label>
+                  <label className="block text-[var(--text-muted)] mb-1">Authority</label>
                   <select
                     value={formData.authority}
                     onChange={(e) => setFormData({ ...formData, authority: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-white/10 text-white focus:outline-none focus:border-amber-500"
+                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none focus:border-amber-500"
                   >
                     <option value="RTA">Dubai RTA</option>
                     <option value="DUBAI_POLICE">Dubai Police</option>
@@ -525,13 +525,13 @@ export default function TrafficFinesPage() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-semibold hover:bg-slate-700 transition"
+                  className="px-4 py-2 rounded-xl bg-[var(--bg-surface)] text-[var(--text-muted)] font-semibold hover:bg-[var(--bg-surface-hover)] transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-amber-500 text-slate-950 font-bold hover:bg-amber-400 transition"
+                  className="px-4 py-2 rounded-xl bg-amber-500 text-white font-bold hover:bg-amber-400 transition"
                 >
                   Save Fine
                 </button>

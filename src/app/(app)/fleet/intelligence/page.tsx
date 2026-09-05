@@ -75,7 +75,7 @@ function ScoreBar({ value, level }: { value: number; level: keyof typeof RISK_CF
   const cfg = RISK_CFG[level];
   return (
     <div className="flex items-center gap-2 min-w-[120px]">
-      <div className="flex-1 h-2 bg-slate-700 rounded-full overflow-hidden">
+      <div className="flex-1 h-2 bg-[var(--bg-surface-hover)] rounded-full overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-500"
           style={{ width: `${Math.round(value * 100)}%`, background: cfg.color }}
@@ -91,11 +91,11 @@ function ScoreBar({ value, level }: { value: number; level: keyof typeof RISK_CF
 function FactorBar({ label, value, color }: { label: string; value: number; color: string }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-[10px] text-slate-500 w-36 shrink-0 truncate">{label}</span>
-      <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+      <span className="text-[10px] text-[var(--text-faint)] w-36 shrink-0 truncate">{label}</span>
+      <div className="flex-1 h-1.5 bg-[var(--bg-surface-hover)] rounded-full overflow-hidden">
         <div className="h-full rounded-full" style={{ width: `${Math.round(value * 100)}%`, background: color }} />
       </div>
-      <span className="text-[10px] text-slate-400 w-6 text-right">{Math.round(value * 100)}</span>
+      <span className="text-[10px] text-[var(--text-muted)] w-6 text-right">{Math.round(value * 100)}</span>
     </div>
   );
 }
@@ -103,13 +103,13 @@ function FactorBar({ label, value, color }: { label: string; value: number; colo
 function SubsystemGauge({ label, value }: { label: string; value: number }) {
   const color = value < 30 ? '#ef4444' : value < 60 ? '#f59e0b' : '#10b981';
   return (
-    <div className="bg-slate-900/60 border border-white/5 rounded-xl p-2.5 text-center">
-      <div className="text-[10px] text-slate-400 font-medium truncate">{label}</div>
+    <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-2.5 text-center">
+      <div className="text-[10px] text-[var(--text-muted)] font-medium truncate">{label}</div>
       <div className="text-base font-bold my-0.5" style={{ color }}>{value}%</div>
-      <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+      <div className="h-1 bg-[var(--bg-surface)] rounded-full overflow-hidden">
         <div className="h-full rounded-full" style={{ width: `${value}%`, background: color }} />
       </div>
-      <div className="text-[9px] text-slate-500 mt-1">RUL Health</div>
+      <div className="text-[9px] text-[var(--text-faint)] mt-1">RUL Health</div>
     </div>
   );
 }
@@ -201,10 +201,10 @@ export default function FleetIntelligencePage() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[var(--text-main)] flex items-center gap-2">
             🧠 Predictive Maintenance &amp; Fleet Intelligence
           </h1>
-          <p className="text-slate-400 text-sm mt-1">
+          <p className="text-[var(--text-muted)] text-sm mt-1">
             9-Signal AI Failure Estimation Engine — CAN-bus DTCs, Sensors, Operating Hours, Thermal &amp; Component RUL
             {lastRun && <span className="ml-2 text-indigo-400">· Last run: {lastRun}</span>}
           </p>
@@ -228,11 +228,11 @@ export default function FleetIntelligencePage() {
       {runResult && (
         <div className="bg-indigo-950/60 border border-indigo-500/30 rounded-xl px-5 py-3 flex items-center gap-4 text-sm">
           <span className="text-indigo-400 font-semibold">✓ Multi-Signal Analysis Complete</span>
-          <span className="text-slate-400">{runResult.itemsProcessed} vehicles analyzed</span>
+          <span className="text-[var(--text-muted)]">{runResult.itemsProcessed} vehicles analyzed</span>
           {runResult.actionsCreated > 0 && (
             <span className="text-red-400 font-semibold">· {runResult.actionsCreated} preventive work orders auto-created</span>
           )}
-          <button onClick={() => setRunResult(null)} className="ml-auto text-slate-500 hover:text-slate-300">✕</button>
+          <button onClick={() => setRunResult(null)} className="ml-auto text-[var(--text-faint)] hover:text-[var(--text-muted)]">✕</button>
         </div>
       )}
 
@@ -247,20 +247,20 @@ export default function FleetIntelligencePage() {
         {kpiCards.map((k) => (
           <div
             key={k.label}
-            className="bg-slate-800/50 border border-white/5 rounded-xl p-4 text-center cursor-pointer hover:border-white/10 transition-all"
+            className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-xl p-4 text-center cursor-pointer hover:border-[var(--border-subtle)] transition-all"
             onClick={() => setFilterLevel(k.label === 'Vehicles Scored' || k.label === 'Healthy (Low)' ? (k.label === 'Healthy (Low)' ? 'LOW' : '') : k.label.replace(' Risk','').toUpperCase())}
           >
             <div className="text-xl mb-1">{k.icon}</div>
             <div className="text-2xl font-bold" style={{ color: k.color }}>{k.value}</div>
-            <div className="text-xs text-slate-500 mt-0.5">{k.label}</div>
+            <div className="text-xs text-[var(--text-faint)] mt-0.5">{k.label}</div>
           </div>
         ))}
       </div>
 
       {/* Risk Distribution Bar */}
       {total > 0 && (
-        <div className="bg-slate-800/50 border border-white/5 rounded-xl p-4">
-          <p className="text-xs text-slate-500 mb-2 font-semibold uppercase tracking-widest">Fleet Breakdown Hazard Breakdown</p>
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-xl p-4">
+          <p className="text-xs text-[var(--text-faint)] mb-2 font-semibold uppercase tracking-widest">Fleet Breakdown Hazard Breakdown</p>
           <div className="flex h-6 rounded-lg overflow-hidden gap-0.5">
             {(['CRITICAL','HIGH','MEDIUM','LOW'] as const).map((level) => {
               const count = summary[level.toLowerCase() as keyof Summary]?.count ?? 0;
@@ -270,7 +270,7 @@ export default function FleetIntelligencePage() {
                 <div
                   key={level}
                   style={{ width: `${pct}%`, background: RISK_CFG[level].color }}
-                  className="flex items-center justify-center text-[10px] font-bold text-white/90 cursor-pointer"
+                  className="flex items-center justify-center text-[10px] font-bold text-[var(--text-main)]/90 cursor-pointer"
                   title={`${RISK_CFG[level].label}: ${count} vehicles (${pct.toFixed(1)}%)`}
                   onClick={() => setFilterLevel(level === filterLevel ? '' : level)}
                 >
@@ -284,7 +284,7 @@ export default function FleetIntelligencePage() {
               const count = summary[level.toLowerCase() as keyof Summary]?.count ?? 0;
               if (count === 0) return null;
               return (
-                <div key={level} className="flex items-center gap-1.5 text-xs text-slate-400">
+                <div key={level} className="flex items-center gap-1.5 text-xs text-[var(--text-muted)]">
                   <div className="w-2.5 h-2.5 rounded-sm" style={{ background: RISK_CFG[level].color }} />
                   {RISK_CFG[level].label}: {count}
                 </div>
@@ -296,7 +296,7 @@ export default function FleetIntelligencePage() {
 
       {/* Filter Bar */}
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs text-slate-500">Filter:</span>
+        <span className="text-xs text-[var(--text-faint)]">Filter:</span>
         {['', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map((level) => (
           <button
             key={level}
@@ -304,7 +304,7 @@ export default function FleetIntelligencePage() {
             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all border ${
               filterLevel === level
                 ? level === '' ? 'bg-indigo-600 text-white border-indigo-500' : `border-transparent text-white`
-                : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-600'
+                : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
             }`}
             style={filterLevel === level && level !== '' ? { background: RISK_CFG[level as keyof typeof RISK_CFG].color } : {}}
           >
@@ -312,7 +312,7 @@ export default function FleetIntelligencePage() {
           </button>
         ))}
         {filterLevel && (
-          <span className="text-xs text-slate-500 ml-2">
+          <span className="text-xs text-[var(--text-faint)] ml-2">
             Showing {scores.length} of {total} vehicles
           </span>
         )}
@@ -322,13 +322,13 @@ export default function FleetIntelligencePage() {
       {loading ? (
         <div className="space-y-2">
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="h-16 bg-slate-800/50 rounded-xl animate-pulse" />
+            <div key={i} className="h-16 bg-[var(--bg-surface)]/50 rounded-xl animate-pulse" />
           ))}
         </div>
       ) : scores.length === 0 ? (
-        <div className="text-center py-16 text-slate-500">
+        <div className="text-center py-16 text-[var(--text-faint)]">
           <div className="text-4xl mb-3">🤖</div>
-          <p className="font-semibold text-slate-400">No risk scores yet</p>
+          <p className="font-semibold text-[var(--text-muted)]">No risk scores yet</p>
           <p className="text-sm mt-1">Click &quot;Run 9-Signal Analysis&quot; to score your fleet.</p>
         </div>
       ) : (
@@ -363,10 +363,10 @@ export default function FleetIntelligencePage() {
 
                   {/* Vehicle Info */}
                   <div className="min-w-[150px]">
-                    <p className="text-sm font-semibold text-white">
+                    <p className="text-sm font-semibold text-[var(--text-main)]">
                       {score.make} {score.model}
                     </p>
-                    <p className="text-xs text-slate-400 font-mono">{score.licensePlate || score.vehicleCode}</p>
+                    <p className="text-xs text-[var(--text-muted)] font-mono">{score.licensePlate || score.vehicleCode}</p>
                   </div>
 
                   {/* Score Bar */}
@@ -395,8 +395,8 @@ export default function FleetIntelligencePage() {
 
                   {/* Action & Window */}
                   <div className="min-w-[180px]">
-                    <p className="text-xs font-semibold text-slate-200">{score.recommendedAction.replace(/_/g,' ')}</p>
-                    <p className="text-[11px] text-slate-500 font-medium">{score.predictedFailureWindow}</p>
+                    <p className="text-xs font-semibold text-[var(--text-main)]">{score.recommendedAction.replace(/_/g,' ')}</p>
+                    <p className="text-[11px] text-[var(--text-faint)] font-medium">{score.predictedFailureWindow}</p>
                   </div>
 
                   {/* Auto WO badge */}
@@ -406,19 +406,19 @@ export default function FleetIntelligencePage() {
                     </span>
                   )}
 
-                  <span className="text-slate-500 text-xs ml-auto shrink-0 font-bold">{isOpen ? '▲' : '▼'}</span>
+                  <span className="text-[var(--text-faint)] text-xs ml-auto shrink-0 font-bold">{isOpen ? '▲' : '▼'}</span>
                 </div>
 
                 {/* Expanded Multi-Signal Breakdown */}
                 {isOpen && (
-                  <div className="px-5 pb-5 border-t border-white/10 pt-4 space-y-4">
+                  <div className="px-5 pb-5 border-t border-[var(--border-subtle)] pt-4 space-y-4">
                     
                     {/* Primary Failure Reason Banner */}
                     {score.primaryFailureReason && (
-                      <div className="bg-slate-900/80 border border-white/10 rounded-xl p-3 flex items-start gap-2.5">
+                      <div className="bg-[var(--bg-surface)]/80 border border-[var(--border-subtle)] rounded-xl p-3 flex items-start gap-2.5">
                         <span className="text-base">🚨</span>
                         <div>
-                          <div className="text-[11px] uppercase tracking-wider text-slate-400 font-bold">Primary Failure Reason</div>
+                          <div className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-bold">Primary Failure Reason</div>
                           <div className="text-xs font-semibold text-amber-300 mt-0.5">{score.primaryFailureReason}</div>
                         </div>
                       </div>
@@ -427,7 +427,7 @@ export default function FleetIntelligencePage() {
                     {/* Subsystem RUL Health Gauges */}
                     {score.factors.subsystemRUL && (
                       <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Component Remaining Useful Life (RUL)</p>
+                        <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest mb-2">Component Remaining Useful Life (RUL)</p>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                           <SubsystemGauge label="Powertrain & Engine" value={score.factors.subsystemRUL.powertrainPct} />
                           <SubsystemGauge label="Brake Subsystem" value={score.factors.subsystemRUL.brakeSystemPct} />
@@ -440,7 +440,7 @@ export default function FleetIntelligencePage() {
                     {/* 9 Factor Breakdown Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-1">
                       <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2.5">9-Signal Degradation Model</p>
+                        <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest mb-2.5">9-Signal Degradation Model</p>
                         <div className="space-y-2">
                           <FactorBar label="1. DTC Faults (22%)"          value={score.factors.dtcFaultScore ?? 0}        color="#ef4444" />
                           <FactorBar label="2. Sensor Telemetry (18%)"    value={score.factors.sensorAnomalyScore ?? 0}   color="#f97316" />
@@ -455,44 +455,44 @@ export default function FleetIntelligencePage() {
                       </div>
 
                       <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2.5">Live Telematics &amp; Diagnostics</p>
-                        <div className="bg-slate-900/50 rounded-xl p-3 border border-white/5 space-y-2 text-xs">
+                        <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest mb-2.5">Live Telematics &amp; Diagnostics</p>
+                        <div className="bg-[var(--bg-surface)]/50 rounded-xl p-3 border border-[var(--border-subtle)] space-y-2 text-xs">
                           <div className="flex justify-between">
-                            <span className="text-slate-400">Active DTC Codes:</span>
-                            <span className="text-white font-mono font-bold">
+                            <span className="text-[var(--text-muted)]">Active DTC Codes:</span>
+                            <span className="text-[var(--text-main)] font-mono font-bold">
                               {(score.factors.activeDtcCodes?.length ?? 0) > 0 ? score.factors.activeDtcCodes?.join(', ') : 'None (0 Clean)'}
                             </span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-slate-400">Coolant Temp / Oil Press:</span>
-                            <span className="text-slate-300 font-medium">
+                            <span className="text-[var(--text-muted)]">Coolant Temp / Oil Press:</span>
+                            <span className="text-[var(--text-muted)] font-medium">
                               {score.factors.coolantTempC ? `${score.factors.coolantTempC}°C` : '—'} / {score.factors.oilPressureKpa ? `${score.factors.oilPressureKpa} kPa` : '—'}
                             </span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-slate-400">Battery / Trans Temp:</span>
-                            <span className="text-slate-300 font-medium">
+                            <span className="text-[var(--text-muted)]">Battery / Trans Temp:</span>
+                            <span className="text-[var(--text-muted)] font-medium">
                               {score.factors.batteryVoltage ? `${score.factors.batteryVoltage}V` : '—'} / {score.factors.transmissionTempC ? `${score.factors.transmissionTempC}°C` : '—'}
                             </span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-slate-400">Engine Operating Hours:</span>
-                            <span className="text-slate-300 font-medium">
+                            <span className="text-[var(--text-muted)]">Engine Operating Hours:</span>
+                            <span className="text-[var(--text-muted)] font-medium">
                               {score.factors.engineOperatingHours ? `${score.factors.engineOperatingHours.toFixed(0)} hrs (Stress: ${score.factors.dutyCycleStressRatio ?? 1}x)` : '—'}
                             </span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-slate-400">Days / KM Since Service:</span>
-                            <span className="text-slate-300 font-medium">{score.factors.serviceOverdueDays} days / {score.factors.serviceOverdueKm?.toFixed(0)} km</span>
+                            <span className="text-[var(--text-muted)]">Days / KM Since Service:</span>
+                            <span className="text-[var(--text-muted)] font-medium">{score.factors.serviceOverdueDays} days / {score.factors.serviceOverdueKm?.toFixed(0)} km</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-slate-400">Fuel Baseline vs Recent:</span>
-                            <span className="text-slate-300 font-medium">
+                            <span className="text-[var(--text-muted)]">Fuel Baseline vs Recent:</span>
+                            <span className="text-[var(--text-muted)] font-medium">
                               {score.factors.fuelConsumptionBaseline > 0 ? `${score.factors.fuelConsumptionBaseline.toFixed(1)} L` : '—'} vs {score.factors.fuelConsumptionRecent > 0 ? `${score.factors.fuelConsumptionRecent.toFixed(1)} L/100km` : '—'}
                             </span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-slate-400">Repeat Subsystems (90d):</span>
+                            <span className="text-[var(--text-muted)]">Repeat Subsystems (90d):</span>
                             <span className="text-purple-400 font-medium">
                               {(score.factors.repeatSubsystems?.length ?? 0) > 0 ? score.factors.repeatSubsystems?.join(', ') : 'None'}
                             </span>
@@ -501,7 +501,7 @@ export default function FleetIntelligencePage() {
                       </div>
                     </div>
 
-                    <div className="flex items-center justify-between text-[10px] text-slate-500 pt-2 border-t border-white/5">
+                    <div className="flex items-center justify-between text-[10px] text-[var(--text-faint)] pt-2 border-t border-[var(--border-subtle)]">
                       <span>Evaluated by Predictive Maintenance Agent v2.0.0</span>
                       <span>Scored {new Date(score.scoredAt).toLocaleString()}</span>
                     </div>

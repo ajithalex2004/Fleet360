@@ -38,7 +38,7 @@ const statusColor: Record<string, string> = {
   PENDING: 'bg-amber-500/20 text-amber-400',
   APPROVED: 'bg-blue-500/20 text-blue-400',
   COMPLETED: 'bg-green-500/20 text-green-400',
-  CANCELLED: 'bg-slate-700 text-slate-300',
+  CANCELLED: 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]',
 };
 
 export default function TransfersPage() {
@@ -128,16 +128,16 @@ export default function TransfersPage() {
     }
   };
 
-  const inputCls = 'bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:border-orange-500/50 focus:outline-none w-full';
-  const labelCls = 'block text-xs text-slate-400 mb-1';
+  const inputCls = 'bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:border-orange-500/50 focus:outline-none w-full';
+  const labelCls = 'block text-xs text-[var(--text-muted)] mb-1';
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Fleet Transfers</h1>
-          <p className="text-slate-400 text-xs mt-1">Manage inter-branch vehicle transfers</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Fleet Transfers</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-1">Manage inter-branch vehicle transfers</p>
         </div>
         <button
           onClick={openCreate}
@@ -155,18 +155,18 @@ export default function TransfersPage() {
       )}
 
       {/* Filter Bar */}
-      <div className="bg-slate-800/40 border border-white/5 rounded-2xl p-4 mb-6 flex flex-wrap gap-3">
+      <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl p-4 mb-6 flex flex-wrap gap-3">
         <input
           type="text"
           placeholder="Search transfer number, vehicle, branch..."
           value={search}
           onChange={e => { setSearch(e.target.value); setPage(1); }}
-          className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:border-orange-500/50 focus:outline-none flex-1 min-w-[200px] placeholder-slate-500"
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:border-orange-500/50 focus:outline-none flex-1 min-w-[200px] placeholder-[var(--text-faint)]"
         />
         <select
           value={statusFilter}
           onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
-          className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:border-orange-500/50 focus:outline-none"
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:border-orange-500/50 focus:outline-none"
         >
           <option value="">All Statuses</option>
           <option>PENDING</option>
@@ -177,46 +177,46 @@ export default function TransfersPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-slate-800/40 border border-white/5 rounded-2xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-800/60 border-b border-white/5">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Transfer No.</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Vehicle ID</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">From Branch</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">To Branch</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Transfer Date</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Requested By</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Approved By</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Mileage (km)</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Fuel (%)</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
+              <tr className="bg-[var(--bg-surface)]/60 border-b border-[var(--border-subtle)]">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Transfer No.</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Vehicle ID</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">From Branch</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">To Branch</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Transfer Date</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Requested By</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Approved By</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Mileage (km)</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Fuel (%)</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Status</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {loading ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-12 text-center text-slate-500">Loading transfers...</td>
+                  <td colSpan={11} className="px-4 py-12 text-center text-[var(--text-faint)]">Loading transfers...</td>
                 </tr>
               ) : transfers.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-12 text-center text-slate-500">No transfers found</td>
+                  <td colSpan={11} className="px-4 py-12 text-center text-[var(--text-faint)]">No transfers found</td>
                 </tr>
               ) : (
                 transfers.map(tr => (
-                  <tr key={tr.id} className="hover:bg-white/5 transition-colors">
+                  <tr key={tr.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                     <td className="px-4 py-3 font-mono text-orange-400 font-medium">{tr.transferNumber}</td>
-                    <td className="px-4 py-3 text-white">{tr.vehicleId}</td>
-                    <td className="px-4 py-3 text-slate-300">{tr.fromBranchName || '—'}</td>
-                    <td className="px-4 py-3 text-slate-300">{tr.toBranchName}</td>
-                    <td className="px-4 py-3 text-slate-300">{tr.transferDate ? new Date(tr.transferDate).toLocaleDateString() : '—'}</td>
-                    <td className="px-4 py-3 text-slate-300">{tr.requestedBy || '—'}</td>
-                    <td className="px-4 py-3 text-slate-300">{tr.approvedBy || '—'}</td>
-                    <td className="px-4 py-3 text-right text-slate-300">{tr.mileageAtTransfer?.toLocaleString() ?? '—'}</td>
-                    <td className="px-4 py-3 text-right text-slate-300">{tr.fuelLevelAtTransfer != null ? `${tr.fuelLevelAtTransfer}%` : '—'}</td>
-                    <td className="px-4 py-3 text-center">{badge(tr.status, statusColor[tr.status] ?? 'bg-slate-700 text-slate-300')}</td>
+                    <td className="px-4 py-3 text-[var(--text-main)]">{tr.vehicleId}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)]">{tr.fromBranchName || '—'}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)]">{tr.toBranchName}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)]">{tr.transferDate ? new Date(tr.transferDate).toLocaleDateString() : '—'}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)]">{tr.requestedBy || '—'}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)]">{tr.approvedBy || '—'}</td>
+                    <td className="px-4 py-3 text-right text-[var(--text-muted)]">{tr.mileageAtTransfer?.toLocaleString() ?? '—'}</td>
+                    <td className="px-4 py-3 text-right text-[var(--text-muted)]">{tr.fuelLevelAtTransfer != null ? `${tr.fuelLevelAtTransfer}%` : '—'}</td>
+                    <td className="px-4 py-3 text-center">{badge(tr.status, statusColor[tr.status] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]')}</td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex items-center justify-center gap-2">
                         {tr.status === 'PENDING' && (
@@ -247,7 +247,7 @@ export default function TransfersPage() {
                           </button>
                         )}
                         {(tr.status === 'COMPLETED' || tr.status === 'CANCELLED') && (
-                          <span className="text-slate-600 text-xs">—</span>
+                          <span className="text-[var(--text-faint)] text-xs">—</span>
                         )}
                       </div>
                     </td>
@@ -260,20 +260,20 @@ export default function TransfersPage() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-white/5">
-            <span className="text-xs text-slate-500">Page {page} of {totalPages}</span>
+          <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--border-subtle)]">
+            <span className="text-xs text-[var(--text-faint)]">Page {page} of {totalPages}</span>
             <div className="flex gap-2">
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 rounded-lg text-xs text-white transition-colors"
+                className="px-3 py-1 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] disabled:opacity-40 rounded-lg text-xs text-[var(--text-main)] transition-colors"
               >
                 Prev
               </button>
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 rounded-lg text-xs text-white transition-colors"
+                className="px-3 py-1 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] disabled:opacity-40 rounded-lg text-xs text-[var(--text-main)] transition-colors"
               >
                 Next
               </button>
@@ -285,10 +285,10 @@ export default function TransfersPage() {
       {/* Create Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
-              <h2 className="text-lg font-semibold text-white">New Transfer</h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white transition-colors text-xl leading-none">&times;</button>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)]">
+              <h2 className="text-lg font-semibold text-[var(--text-main)]">New Transfer</h2>
+              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors text-xl leading-none">&times;</button>
             </div>
             <div className="px-6 py-5 space-y-6">
               {formError && (
@@ -361,8 +361,8 @@ export default function TransfersPage() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-white/10">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-sm font-medium transition-colors">Cancel</button>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[var(--border-subtle)]">
+              <button onClick={() => setShowModal(false)} className="px-4 py-2.5 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] rounded-xl text-sm font-medium transition-colors">Cancel</button>
               <button onClick={handleSave} disabled={saving} className="px-6 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition-all">
                 {saving ? 'Creating...' : 'Create Transfer'}
               </button>

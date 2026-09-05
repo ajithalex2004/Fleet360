@@ -52,7 +52,7 @@ const badge = (text: string, color: string) => (
 );
 
 const statusColor: Record<string, string> = {
-  DRAFT: 'bg-slate-700 text-slate-300',
+  DRAFT: 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]',
   OPEN: 'bg-blue-500/20 text-blue-400',
   IN_PROGRESS: 'bg-amber-500/20 text-amber-400',
   COMPLETED: 'bg-green-500/20 text-green-400',
@@ -186,16 +186,16 @@ export default function WorkOrdersPage() {
 
   const computedVariance = (formData.actualCost ?? 0) - (formData.authorizedPoAmount ?? 0);
 
-  const inputCls = 'bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:border-orange-500/50 focus:outline-none w-full';
-  const labelCls = 'block text-xs text-slate-400 mb-1';
+  const inputCls = 'bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:border-orange-500/50 focus:outline-none w-full';
+  const labelCls = 'block text-xs text-[var(--text-muted)] mb-1';
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Fleet Work Orders</h1>
-          <p className="text-slate-400 text-xs mt-1">Manage maintenance and repair work orders</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Fleet Work Orders</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-1">Manage maintenance and repair work orders</p>
         </div>
         <button
           onClick={openCreate}
@@ -213,18 +213,18 @@ export default function WorkOrdersPage() {
       )}
 
       {/* Filter Bar */}
-      <div className="bg-slate-800/40 border border-white/5 rounded-2xl p-4 mb-6 flex flex-wrap gap-3">
+      <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl p-4 mb-6 flex flex-wrap gap-3">
         <input
           type="text"
           placeholder="Search WO number, vehicle, garage..."
           value={search}
           onChange={e => { setSearch(e.target.value); setPage(1); }}
-          className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:border-orange-500/50 focus:outline-none flex-1 min-w-[200px] placeholder-slate-500"
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:border-orange-500/50 focus:outline-none flex-1 min-w-[200px] placeholder-[var(--text-faint)]"
         />
         <select
           value={statusFilter}
           onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
-          className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:border-orange-500/50 focus:outline-none"
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:border-orange-500/50 focus:outline-none"
         >
           <option value="">All Statuses</option>
           <option>DRAFT</option>
@@ -236,7 +236,7 @@ export default function WorkOrdersPage() {
         <select
           value={typeFilter}
           onChange={e => { setTypeFilter(e.target.value); setPage(1); }}
-          className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:border-orange-500/50 focus:outline-none"
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:border-orange-500/50 focus:outline-none"
         >
           <option value="">All Types</option>
           <option>PREVENTIVE</option>
@@ -247,32 +247,32 @@ export default function WorkOrdersPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-slate-800/40 border border-white/5 rounded-2xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-800/60 border-b border-white/5">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">WO Number</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Vehicle</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Type</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Priority</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Garage</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Scheduled Date</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Auth. PO (AED)</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Actual Cost (AED)</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-slate-400 uppercase tracking-wider">Variance</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
+              <tr className="bg-[var(--bg-surface)]/60 border-b border-[var(--border-subtle)]">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">WO Number</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Vehicle</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Type</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Priority</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Garage</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Scheduled Date</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Auth. PO (AED)</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Actual Cost (AED)</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Variance</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {loading ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-12 text-center text-slate-500">Loading work orders...</td>
+                  <td colSpan={11} className="px-4 py-12 text-center text-[var(--text-faint)]">Loading work orders...</td>
                 </tr>
               ) : workOrders.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-4 py-12 text-center text-slate-500">No work orders found</td>
+                  <td colSpan={11} className="px-4 py-12 text-center text-[var(--text-faint)]">No work orders found</td>
                 </tr>
               ) : (
                 workOrders.map(wo => {
@@ -283,22 +283,22 @@ export default function WorkOrdersPage() {
                     ? badge('OK', 'bg-green-500/20 text-green-400')
                     : badge('UNDER', 'bg-amber-500/20 text-amber-400');
                   return (
-                    <tr key={wo.id} className="hover:bg-white/5 transition-colors">
+                    <tr key={wo.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                       <td className="px-4 py-3 font-mono text-orange-400 font-medium">{wo.woNumber}</td>
-                      <td className="px-4 py-3 text-white">{wo.vehicleId}</td>
-                      <td className="px-4 py-3 text-slate-300">{wo.woType}</td>
-                      <td className="px-4 py-3">{badge(wo.status, statusColor[wo.status] ?? 'bg-slate-700 text-slate-300')}</td>
-                      <td className="px-4 py-3">{badge(wo.priority, priorityColor[wo.priority] ?? 'bg-slate-700 text-slate-300')}</td>
-                      <td className="px-4 py-3 text-slate-300">{wo.garageName}</td>
-                      <td className="px-4 py-3 text-slate-300">{wo.scheduledDate ? new Date(wo.scheduledDate).toLocaleDateString() : '—'}</td>
-                      <td className="px-4 py-3 text-right text-slate-300">{wo.authorizedPoAmount?.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-right text-slate-300">{wo.actualCost?.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-[var(--text-main)]">{wo.vehicleId}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{wo.woType}</td>
+                      <td className="px-4 py-3">{badge(wo.status, statusColor[wo.status] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]')}</td>
+                      <td className="px-4 py-3">{badge(wo.priority, priorityColor[wo.priority] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]')}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{wo.garageName}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{wo.scheduledDate ? new Date(wo.scheduledDate).toLocaleDateString() : '—'}</td>
+                      <td className="px-4 py-3 text-right text-[var(--text-muted)]">{wo.authorizedPoAmount?.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right text-[var(--text-muted)]">{wo.actualCost?.toLocaleString()}</td>
                       <td className="px-4 py-3 text-center">{varianceBadge}</td>
                       <td className="px-4 py-3 text-center">
                         <div className="flex items-center justify-center gap-2">
                           <button
                             onClick={() => openEdit(wo)}
-                            className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs text-white transition-colors"
+                            className="px-3 py-1 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] rounded-lg text-xs text-[var(--text-main)] transition-colors"
                           >
                             Edit
                           </button>
@@ -320,20 +320,20 @@ export default function WorkOrdersPage() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-white/5">
-            <span className="text-xs text-slate-500">Page {page} of {totalPages}</span>
+          <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--border-subtle)]">
+            <span className="text-xs text-[var(--text-faint)]">Page {page} of {totalPages}</span>
             <div className="flex gap-2">
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 rounded-lg text-xs text-white transition-colors"
+                className="px-3 py-1 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] disabled:opacity-40 rounded-lg text-xs text-[var(--text-main)] transition-colors"
               >
                 Prev
               </button>
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 rounded-lg text-xs text-white transition-colors"
+                className="px-3 py-1 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] disabled:opacity-40 rounded-lg text-xs text-[var(--text-main)] transition-colors"
               >
                 Next
               </button>
@@ -345,13 +345,13 @@ export default function WorkOrdersPage() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
-              <h2 className="text-lg font-semibold text-white">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)]">
+              <h2 className="text-lg font-semibold text-[var(--text-main)]">
                 {editingId ? 'Edit Work Order' : 'New Work Order'}
               </h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white transition-colors text-xl leading-none">&times;</button>
+              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors text-xl leading-none">&times;</button>
             </div>
 
             {/* Modal Body */}
@@ -596,10 +596,10 @@ export default function WorkOrdersPage() {
             </div>
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-white/10">
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[var(--border-subtle)]">
               <button
                 onClick={() => setShowModal(false)}
-                className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-sm font-medium transition-colors"
+                className="px-4 py-2.5 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] rounded-xl text-sm font-medium transition-colors"
               >
                 Cancel
               </button>

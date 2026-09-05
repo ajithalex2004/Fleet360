@@ -43,7 +43,7 @@ const badge = (text: string, color: string) => (
 const statusColor: Record<string, string> = {
   ACTIVE: 'bg-amber-500/20 text-amber-400',
   RETURNED: 'bg-green-500/20 text-green-400',
-  CANCELLED: 'bg-slate-700 text-slate-300',
+  CANCELLED: 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]',
 };
 
 export default function AllocationsPage() {
@@ -187,16 +187,16 @@ export default function AllocationsPage() {
   const isOverdue = (alloc: Allocation) =>
     alloc.status === 'ACTIVE' && !!alloc.expectedReturnDate && new Date(alloc.expectedReturnDate) < new Date();
 
-  const inputCls = 'bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:border-orange-500/50 focus:outline-none w-full';
-  const labelCls = 'block text-xs text-slate-400 mb-1';
+  const inputCls = 'bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:border-orange-500/50 focus:outline-none w-full';
+  const labelCls = 'block text-xs text-[var(--text-muted)] mb-1';
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Fleet Allocations</h1>
-          <p className="text-slate-400 text-xs mt-1">Manage vehicle assignments and returns</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Fleet Allocations</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-1">Manage vehicle assignments and returns</p>
         </div>
         <button
           onClick={openCreate}
@@ -208,20 +208,20 @@ export default function AllocationsPage() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        <div className="bg-slate-800/40 border border-white/5 rounded-2xl p-4">
-          <p className="text-xs text-slate-400 mb-1">Total Active</p>
+        <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl p-4">
+          <p className="text-xs text-[var(--text-muted)] mb-1">Total Active</p>
           <p className="text-2xl font-bold text-amber-400">{stats.totalActive}</p>
         </div>
-        <div className="bg-slate-800/40 border border-white/5 rounded-2xl p-4">
-          <p className="text-xs text-slate-400 mb-1">Expected Returns Today</p>
+        <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl p-4">
+          <p className="text-xs text-[var(--text-muted)] mb-1">Expected Returns Today</p>
           <p className="text-2xl font-bold text-blue-400">{stats.returnsToday}</p>
         </div>
-        <div className="bg-slate-800/40 border border-white/5 rounded-2xl p-4">
-          <p className="text-xs text-slate-400 mb-1">Overdue</p>
+        <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl p-4">
+          <p className="text-xs text-[var(--text-muted)] mb-1">Overdue</p>
           <p className="text-2xl font-bold text-red-400">{stats.overdue}</p>
         </div>
-        <div className="bg-slate-800/40 border border-white/5 rounded-2xl p-4">
-          <p className="text-xs text-slate-400 mb-1">Available Vehicles</p>
+        <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl p-4">
+          <p className="text-xs text-[var(--text-muted)] mb-1">Available Vehicles</p>
           <p className="text-2xl font-bold text-green-400">{stats.available}</p>
         </div>
       </div>
@@ -234,18 +234,18 @@ export default function AllocationsPage() {
       )}
 
       {/* Filter Bar */}
-      <div className="bg-slate-800/40 border border-white/5 rounded-2xl p-4 mb-6 flex flex-wrap gap-3">
+      <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl p-4 mb-6 flex flex-wrap gap-3">
         <input
           type="text"
           placeholder="Search vehicle, name, purpose..."
           value={search}
           onChange={e => { setSearch(e.target.value); setPage(1); }}
-          className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:border-orange-500/50 focus:outline-none flex-1 min-w-[200px] placeholder-slate-500"
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:border-orange-500/50 focus:outline-none flex-1 min-w-[200px] placeholder-[var(--text-faint)]"
         />
         <select
           value={statusFilter}
           onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
-          className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:border-orange-500/50 focus:outline-none"
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:border-orange-500/50 focus:outline-none"
         >
           <option value="">All Statuses</option>
           <option>ACTIVE</option>
@@ -255,54 +255,54 @@ export default function AllocationsPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-slate-800/40 border border-white/5 rounded-2xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-800/60 border-b border-white/5">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Vehicle ID</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Allocated To</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Purpose</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Allocation Date</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Expected Return</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Actual Return</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Mileage (Alloc)</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Mileage (Return)</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
+              <tr className="bg-[var(--bg-surface)]/60 border-b border-[var(--border-subtle)]">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Vehicle ID</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Allocated To</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Purpose</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Allocation Date</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Expected Return</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Actual Return</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Mileage (Alloc)</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Mileage (Return)</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Status</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-12 text-center text-slate-500">Loading allocations...</td>
+                  <td colSpan={10} className="px-4 py-12 text-center text-[var(--text-faint)]">Loading allocations...</td>
                 </tr>
               ) : allocations.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-12 text-center text-slate-500">No allocations found</td>
+                  <td colSpan={10} className="px-4 py-12 text-center text-[var(--text-faint)]">No allocations found</td>
                 </tr>
               ) : (
                 allocations.map(alloc => (
                   <tr
                     key={alloc.id}
-                    className={`transition-colors ${isOverdue(alloc) ? 'bg-red-500/5 hover:bg-red-500/10' : 'hover:bg-white/5'}`}
+                    className={`transition-colors ${isOverdue(alloc) ? 'bg-red-500/5 hover:bg-red-500/10' : 'hover:bg-[var(--bg-surface-hover)]'}`}
                   >
                     <td className="px-4 py-3 text-orange-400 font-medium">{alloc.vehicleId}</td>
                     <td className="px-4 py-3">
-                      <div className="text-white text-sm">{alloc.allocatedToName}</div>
-                      <div className="text-slate-500 text-xs">{alloc.allocatedToType}</div>
+                      <div className="text-[var(--text-main)] text-sm">{alloc.allocatedToName}</div>
+                      <div className="text-[var(--text-faint)] text-xs">{alloc.allocatedToType}</div>
                     </td>
-                    <td className="px-4 py-3 text-slate-300 max-w-xs truncate" title={alloc.purpose}>{alloc.purpose || '—'}</td>
-                    <td className="px-4 py-3 text-slate-300">{alloc.allocationDate ? new Date(alloc.allocationDate).toLocaleDateString() : '—'}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)] max-w-xs truncate" title={alloc.purpose}>{alloc.purpose || '—'}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)]">{alloc.allocationDate ? new Date(alloc.allocationDate).toLocaleDateString() : '—'}</td>
                     <td className="px-4 py-3">
-                      <span className={isOverdue(alloc) ? 'text-red-400 font-medium' : 'text-slate-300'}>
+                      <span className={isOverdue(alloc) ? 'text-red-400 font-medium' : 'text-[var(--text-muted)]'}>
                         {alloc.expectedReturnDate ? new Date(alloc.expectedReturnDate).toLocaleDateString() : '—'}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-slate-300">{alloc.actualReturnDate ? new Date(alloc.actualReturnDate).toLocaleDateString() : '—'}</td>
-                    <td className="px-4 py-3 text-right text-slate-300">{alloc.mileageAtAllocation?.toLocaleString() ?? '—'}</td>
-                    <td className="px-4 py-3 text-right text-slate-300">{alloc.mileageAtReturn ? alloc.mileageAtReturn.toLocaleString() : '—'}</td>
-                    <td className="px-4 py-3 text-center">{badge(alloc.status, statusColor[alloc.status] ?? 'bg-slate-700 text-slate-300')}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)]">{alloc.actualReturnDate ? new Date(alloc.actualReturnDate).toLocaleDateString() : '—'}</td>
+                    <td className="px-4 py-3 text-right text-[var(--text-muted)]">{alloc.mileageAtAllocation?.toLocaleString() ?? '—'}</td>
+                    <td className="px-4 py-3 text-right text-[var(--text-muted)]">{alloc.mileageAtReturn ? alloc.mileageAtReturn.toLocaleString() : '—'}</td>
+                    <td className="px-4 py-3 text-center">{badge(alloc.status, statusColor[alloc.status] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]')}</td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex items-center justify-center gap-2">
                         {alloc.status === 'ACTIVE' && (
@@ -322,7 +322,7 @@ export default function AllocationsPage() {
                           </>
                         )}
                         {alloc.status !== 'ACTIVE' && (
-                          <span className="text-slate-600 text-xs">—</span>
+                          <span className="text-[var(--text-faint)] text-xs">—</span>
                         )}
                       </div>
                     </td>
@@ -335,20 +335,20 @@ export default function AllocationsPage() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-white/5">
-            <span className="text-xs text-slate-500">Page {page} of {totalPages}</span>
+          <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--border-subtle)]">
+            <span className="text-xs text-[var(--text-faint)]">Page {page} of {totalPages}</span>
             <div className="flex gap-2">
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 rounded-lg text-xs text-white transition-colors"
+                className="px-3 py-1 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] disabled:opacity-40 rounded-lg text-xs text-[var(--text-main)] transition-colors"
               >
                 Prev
               </button>
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 rounded-lg text-xs text-white transition-colors"
+                className="px-3 py-1 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] disabled:opacity-40 rounded-lg text-xs text-[var(--text-main)] transition-colors"
               >
                 Next
               </button>
@@ -360,10 +360,10 @@ export default function AllocationsPage() {
       {/* Create Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
-              <h2 className="text-lg font-semibold text-white">New Allocation</h2>
-              <button onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-white transition-colors text-xl leading-none">&times;</button>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)]">
+              <h2 className="text-lg font-semibold text-[var(--text-main)]">New Allocation</h2>
+              <button onClick={() => setShowCreateModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors text-xl leading-none">&times;</button>
             </div>
             <div className="px-6 py-5 space-y-6">
               {formError && (
@@ -435,8 +435,8 @@ export default function AllocationsPage() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-white/10">
-              <button onClick={() => setShowCreateModal(false)} className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-sm font-medium transition-colors">Cancel</button>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[var(--border-subtle)]">
+              <button onClick={() => setShowCreateModal(false)} className="px-4 py-2.5 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] rounded-xl text-sm font-medium transition-colors">Cancel</button>
               <button onClick={handleSaveAllocation} disabled={saving} className="px-6 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition-all">
                 {saving ? 'Creating...' : 'Create Allocation'}
               </button>
@@ -448,10 +448,10 @@ export default function AllocationsPage() {
       {/* Return Modal */}
       {showReturnModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-md">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
-              <h2 className="text-lg font-semibold text-white">Process Vehicle Return</h2>
-              <button onClick={() => setShowReturnModal(false)} className="text-slate-400 hover:text-white transition-colors text-xl leading-none">&times;</button>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)]">
+              <h2 className="text-lg font-semibold text-[var(--text-main)]">Process Vehicle Return</h2>
+              <button onClick={() => setShowReturnModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors text-xl leading-none">&times;</button>
             </div>
             <div className="px-6 py-5 space-y-4">
               {returnError && (
@@ -473,8 +473,8 @@ export default function AllocationsPage() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-white/10">
-              <button onClick={() => setShowReturnModal(false)} className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-sm font-medium transition-colors">Cancel</button>
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[var(--border-subtle)]">
+              <button onClick={() => setShowReturnModal(false)} className="px-4 py-2.5 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] rounded-xl text-sm font-medium transition-colors">Cancel</button>
               <button onClick={handleReturn} disabled={returnSaving} className="px-6 py-2.5 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 disabled:opacity-50 text-white rounded-xl text-sm font-semibold transition-all">
                 {returnSaving ? 'Processing...' : 'Confirm Return'}
               </button>

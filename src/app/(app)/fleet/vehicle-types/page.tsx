@@ -188,8 +188,8 @@ export default function VehicleTypesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Vehicle Type Master</h1>
-          <p className="text-slate-400 text-xs mt-0.5">Define vehicle categories, specifications, and cost parameters</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Vehicle Type Master</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Define vehicle categories, specifications, and cost parameters</p>
         </div>
         <button onClick={openNew} className="px-5 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl font-semibold text-sm hover:opacity-90 transition-opacity flex items-center gap-2">
           <span>+</span> New Vehicle Type
@@ -200,47 +200,47 @@ export default function VehicleTypesPage() {
       <div className="flex gap-3 flex-wrap">
         <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
           placeholder="Search code, name, make, model..."
-          className="flex-1 min-w-[220px] bg-slate-800/60 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-orange-500/50" />
+          className="flex-1 min-w-[220px] bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm placeholder-[var(--text-faint)] focus:outline-none focus:border-orange-500/50" />
         <select value={groupFilter} onChange={e => { setGroupFilter(e.target.value); setPage(1); }}
-          className="bg-slate-800/60 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50">
+          className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-orange-500/50">
           <option value="">All Groups</option>
           {VEHICLE_GROUPS.map(g => <option key={g} value={g}>{g.replace(/_/g, ' ')}</option>)}
         </select>
       </div>
 
       {/* Table */}
-      <div className="bg-slate-800/40 border border-white/10 rounded-2xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-slate-800/60 border-b border-white/10">
+            <thead className="bg-[var(--bg-surface)]/60 border-b border-[var(--border-subtle)]">
               <tr>
                 {['Code', 'Name', 'Make / Model', 'Group', 'Class', 'Transmission', 'Fuel', 'Pax', 'Cost/KM', 'Active', ''].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {loading ? (
-                <tr><td colSpan={11} className="px-4 py-12 text-center text-slate-500">Loading…</td></tr>
+                <tr><td colSpan={11} className="px-4 py-12 text-center text-[var(--text-faint)]">Loading…</td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={11} className="px-4 py-12 text-center text-slate-500">No vehicle types found. Click &quot;New Vehicle Type&quot; to add one.</td></tr>
+                <tr><td colSpan={11} className="px-4 py-12 text-center text-[var(--text-faint)]">No vehicle types found. Click &quot;New Vehicle Type&quot; to add one.</td></tr>
               ) : rows.map(vt => (
-                <tr key={vt.id} className="hover:bg-white/5 transition-colors">
+                <tr key={vt.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                   <td className="px-4 py-3">
                     <span className="font-mono text-orange-400 font-semibold text-xs bg-orange-500/10 px-2 py-1 rounded">{vt.code}</span>
                   </td>
-                  <td className="px-4 py-3 text-white font-medium">{vt.name}</td>
-                  <td className="px-4 py-3 text-slate-300">{[vt.make, vt.model].filter(Boolean).join(' ') || '—'}</td>
+                  <td className="px-4 py-3 text-[var(--text-main)] font-medium">{vt.name}</td>
+                  <td className="px-4 py-3 text-[var(--text-muted)]">{[vt.make, vt.model].filter(Boolean).join(' ') || '—'}</td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded-lg text-xs font-semibold ${groupBadgeColor[vt.vehicleGroup] ?? 'bg-slate-700 text-slate-300'}`}>
+                    <span className={`px-2 py-1 rounded-lg text-xs font-semibold ${groupBadgeColor[vt.vehicleGroup] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'}`}>
                       {(vt.vehicleGroup ?? '').replace(/_/g, ' ')}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-slate-300 text-xs">{vt.vehicleClass}</td>
-                  <td className="px-4 py-3 text-slate-300 text-xs">{vt.transmissionType}</td>
-                  <td className="px-4 py-3 text-slate-300 text-xs">{vt.fuelType}</td>
-                  <td className="px-4 py-3 text-slate-300 text-center">{vt.numPassengers}</td>
-                  <td className="px-4 py-3 text-slate-300 text-right">
+                  <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{vt.vehicleClass}</td>
+                  <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{vt.transmissionType}</td>
+                  <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{vt.fuelType}</td>
+                  <td className="px-4 py-3 text-[var(--text-muted)] text-center">{vt.numPassengers}</td>
+                  <td className="px-4 py-3 text-[var(--text-muted)] text-right">
                     {vt.costPerKm ? `AED ${Number(vt.costPerKm).toFixed(3)}` : '—'}
                   </td>
                   <td className="px-4 py-3">
@@ -250,7 +250,7 @@ export default function VehicleTypesPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2 justify-end">
-                      <button onClick={() => openEdit(vt)} className="px-3 py-1.5 text-xs bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors">Edit</button>
+                      <button onClick={() => openEdit(vt)} className="px-3 py-1.5 text-xs bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] rounded-lg transition-colors">Edit</button>
                       <button onClick={() => handleDelete(vt.id)} className="px-3 py-1.5 text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors">Del</button>
                     </div>
                   </td>
@@ -261,11 +261,11 @@ export default function VehicleTypesPage() {
         </div>
         {/* Pagination */}
         {total > limit && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-white/10">
-            <span className="text-xs text-slate-400">Showing {(page - 1) * limit + 1}–{Math.min(page * limit, total)} of {total}</span>
+          <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--border-subtle)]">
+            <span className="text-xs text-[var(--text-muted)]">Showing {(page - 1) * limit + 1}–{Math.min(page * limit, total)} of {total}</span>
             <div className="flex gap-2">
-              <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 text-xs bg-slate-700 disabled:opacity-40 hover:bg-slate-600 text-white rounded-lg">Prev</button>
-              <button disabled={page * limit >= total} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 text-xs bg-slate-700 disabled:opacity-40 hover:bg-slate-600 text-white rounded-lg">Next</button>
+              <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 text-xs bg-[var(--bg-surface-hover)] disabled:opacity-40 hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] rounded-lg">Prev</button>
+              <button disabled={page * limit >= total} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 text-xs bg-[var(--bg-surface-hover)] disabled:opacity-40 hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] rounded-lg">Next</button>
             </div>
           </div>
         )}
@@ -274,10 +274,10 @@ export default function VehicleTypesPage() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
-            <div className="px-6 py-5 border-b border-white/10 flex items-center justify-between sticky top-0 bg-slate-900 z-10">
-              <h2 className="text-lg font-semibold text-white">{editing ? 'Edit Vehicle Type' : 'Create New Vehicle Type'}</h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white text-2xl leading-none">×</button>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="px-6 py-5 border-b border-[var(--border-subtle)] flex items-center justify-between sticky top-0 bg-[var(--bg-surface)] z-10">
+              <h2 className="text-lg font-semibold text-[var(--text-main)]">{editing ? 'Edit Vehicle Type' : 'Create New Vehicle Type'}</h2>
+              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-2xl leading-none">×</button>
             </div>
             <div className="p-6 space-y-6">
               {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl text-sm">{error}</div>}
@@ -302,42 +302,42 @@ export default function VehicleTypesPage() {
                           </div>
                           {/* Row 1: Classification */}
                           <div className="grid grid-cols-4 gap-2 mb-2">
-                            <div className="bg-slate-900/70 rounded-lg px-3 py-2">
-                              <div className="text-xs text-slate-500 mb-0.5">Group</div>
-                              <div className="text-sm font-semibold text-white">{detectedInfo.group.replace(/_/g, ' ')}</div>
+                            <div className="bg-[var(--bg-surface)]/70 rounded-lg px-3 py-2">
+                              <div className="text-xs text-[var(--text-faint)] mb-0.5">Group</div>
+                              <div className="text-sm font-semibold text-[var(--text-main)]">{detectedInfo.group.replace(/_/g, ' ')}</div>
                             </div>
-                            <div className="bg-slate-900/70 rounded-lg px-3 py-2">
-                              <div className="text-xs text-slate-500 mb-0.5">Class</div>
-                              <div className="text-sm font-semibold text-white">{detectedInfo.vehicleClass.replace(/_/g, ' ')}</div>
+                            <div className="bg-[var(--bg-surface)]/70 rounded-lg px-3 py-2">
+                              <div className="text-xs text-[var(--text-faint)] mb-0.5">Class</div>
+                              <div className="text-sm font-semibold text-[var(--text-main)]">{detectedInfo.vehicleClass.replace(/_/g, ' ')}</div>
                             </div>
-                            <div className="bg-slate-900/70 rounded-lg px-3 py-2">
-                              <div className="text-xs text-slate-500 mb-0.5">Fuel Type</div>
-                              <div className="text-sm font-semibold text-white">{ft}</div>
+                            <div className="bg-[var(--bg-surface)]/70 rounded-lg px-3 py-2">
+                              <div className="text-xs text-[var(--text-faint)] mb-0.5">Fuel Type</div>
+                              <div className="text-sm font-semibold text-[var(--text-main)]">{ft}</div>
                             </div>
-                            <div className="bg-slate-900/70 rounded-lg px-3 py-2">
-                              <div className="text-xs text-slate-500 mb-0.5">Passengers</div>
-                              <div className="text-sm font-semibold text-white">{detectedInfo.numPassengers ?? '—'}</div>
+                            <div className="bg-[var(--bg-surface)]/70 rounded-lg px-3 py-2">
+                              <div className="text-xs text-[var(--text-faint)] mb-0.5">Passengers</div>
+                              <div className="text-sm font-semibold text-[var(--text-main)]">{detectedInfo.numPassengers ?? '—'}</div>
                             </div>
                           </div>
                           {/* Row 2: Cost parameters */}
                           {computed && (
                             <div className="grid grid-cols-4 gap-2">
-                              <div className="bg-slate-900/70 rounded-lg px-3 py-2">
-                                <div className="text-xs text-slate-500 mb-0.5">Cost / KM</div>
+                              <div className="bg-[var(--bg-surface)]/70 rounded-lg px-3 py-2">
+                                <div className="text-xs text-[var(--text-faint)] mb-0.5">Cost / KM</div>
                                 <div className="text-sm font-semibold text-amber-300">AED {computed.costPerKm.toFixed(3)}</div>
                               </div>
-                              <div className="bg-slate-900/70 rounded-lg px-3 py-2">
-                                <div className="text-xs text-slate-500 mb-0.5">Idle Fuel (L/hr)</div>
+                              <div className="bg-[var(--bg-surface)]/70 rounded-lg px-3 py-2">
+                                <div className="text-xs text-[var(--text-faint)] mb-0.5">Idle Fuel (L/hr)</div>
                                 <div className="text-sm font-semibold text-amber-300">{computed.idleFuelConsumption}</div>
                               </div>
-                              <div className="bg-slate-900/70 rounded-lg px-3 py-2">
-                                <div className="text-xs text-slate-500 mb-0.5">CO₂ (g/km)</div>
+                              <div className="bg-[var(--bg-surface)]/70 rounded-lg px-3 py-2">
+                                <div className="text-xs text-[var(--text-faint)] mb-0.5">CO₂ (g/km)</div>
                                 <div className={`text-sm font-semibold ${computed.co2EmissionFactor === 0 ? 'text-green-400' : 'text-amber-300'}`}>
                                   {computed.co2EmissionFactor === 0 ? '0 ✓ Electric' : computed.co2EmissionFactor}
                                 </div>
                               </div>
-                              <div className="bg-slate-900/70 rounded-lg px-3 py-2">
-                                <div className="text-xs text-slate-500 mb-0.5">Efficiency (km/L)</div>
+                              <div className="bg-[var(--bg-surface)]/70 rounded-lg px-3 py-2">
+                                <div className="text-xs text-[var(--text-faint)] mb-0.5">Efficiency (km/L)</div>
                                 <div className="text-sm font-semibold text-amber-300">{computed.fuelEfficiencyKml || '—'}</div>
                               </div>
                             </div>
@@ -349,7 +349,7 @@ export default function VehicleTypesPage() {
                             ✓ Apply All
                           </button>
                           <button type="button" onClick={() => setDetectedDismissed(true)}
-                            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs rounded-lg transition-colors whitespace-nowrap">
+                            className="px-4 py-2 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] text-xs rounded-lg transition-colors whitespace-nowrap">
                             Dismiss
                           </button>
                         </div>
@@ -360,49 +360,49 @@ export default function VehicleTypesPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1.5">Code <span className="text-red-400">*</span></label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1.5">Code <span className="text-red-400">*</span></label>
                     <input value={form.code ?? ''} onChange={e => f('code', e.target.value.toUpperCase())}
                       placeholder="e.g. SEDAN-ECO"
-                      className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm font-mono focus:outline-none focus:border-orange-500/50" />
+                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm font-mono focus:outline-none focus:border-orange-500/50" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1.5">Name <span className="text-red-400">*</span></label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1.5">Name <span className="text-red-400">*</span></label>
                     <input value={form.name ?? ''} onChange={e => f('name', e.target.value)}
                       placeholder="e.g. Economy Sedan"
-                      className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50" />
+                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-orange-500/50" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1.5">Make
-                      <span className="ml-1.5 text-slate-600 font-normal normal-case">— triggers smart detection</span>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1.5">Make
+                      <span className="ml-1.5 text-[var(--text-faint)] font-normal normal-case">— triggers smart detection</span>
                     </label>
                     <input
                       list="vt-makes-list"
                       value={form.make ?? ''}
                       onChange={e => f('make', e.target.value)}
                       placeholder="e.g. Toyota"
-                      className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50" />
+                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-orange-500/50" />
                     <datalist id="vt-makes-list">
                       {KNOWN_MAKES.map(m => <option key={m} value={m} />)}
                     </datalist>
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1.5">Model
-                      <span className="ml-1.5 text-slate-600 font-normal normal-case">— triggers smart detection</span>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1.5">Model
+                      <span className="ml-1.5 text-[var(--text-faint)] font-normal normal-case">— triggers smart detection</span>
                     </label>
                     <input
                       list="vt-models-list"
                       value={form.model ?? ''}
                       onChange={e => f('model', e.target.value)}
                       placeholder="e.g. Fortuner"
-                      className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50" />
+                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-orange-500/50" />
                     <datalist id="vt-models-list">
                       {getModelsForMake(form.make ?? '').map(m => <option key={m} value={m} />)}
                     </datalist>
                   </div>
                   <div className="col-span-2">
-                    <label className="block text-xs text-slate-400 mb-1.5">Description</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1.5">Description</label>
                     <textarea value={form.description ?? ''} onChange={e => f('description', e.target.value)} rows={2}
-                      className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50 resize-none" />
+                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-orange-500/50 resize-none" />
                   </div>
                 </div>
               </div>
@@ -412,7 +412,7 @@ export default function VehicleTypesPage() {
                 <h3 className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Classification</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="flex items-center gap-2 text-xs text-slate-400 mb-1.5">
+                    <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
                       Vehicle Group
                       {autoFilledFields.has('vehicleGroup') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled</span>}
                     </label>
@@ -424,12 +424,12 @@ export default function VehicleTypesPage() {
                         setAutoFilledFields(prev => { const s = new Set(prev); s.delete('vehicleGroup'); s.delete('vehicleClass'); return s; });
                         setForm(p => ({ ...p, vehicleGroup: grp, vehicleClass: firstClass }));
                       }}
-                      className={`w-full bg-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none ${autoFilledFields.has('vehicleGroup') ? 'border border-blue-500/50' : 'border border-white/10 focus:border-orange-500/50'}`}>
+                      className={`w-full bg-[var(--bg-surface)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none ${autoFilledFields.has('vehicleGroup') ? 'border border-blue-500/50' : 'border border-[var(--border-subtle)] focus:border-orange-500/50'}`}>
                       {VEHICLE_GROUPS.map(g => <option key={g} value={g}>{g.replace(/_/g, ' ')}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="flex items-center gap-2 text-xs text-slate-400 mb-1.5">
+                    <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
                       Vehicle Class
                       {form.vehicleGroup && !autoFilledFields.has('vehicleClass') && (
                         <span className="text-orange-400/60 normal-case font-normal">
@@ -440,27 +440,27 @@ export default function VehicleTypesPage() {
                     </label>
                     <select value={form.vehicleClass ?? ''}
                       onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('vehicleClass'); return s; }); f('vehicleClass', e.target.value); }}
-                      className={`w-full bg-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none ${autoFilledFields.has('vehicleClass') ? 'border border-blue-500/50' : 'border border-white/10 focus:border-orange-500/50'}`}>
+                      className={`w-full bg-[var(--bg-surface)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none ${autoFilledFields.has('vehicleClass') ? 'border border-blue-500/50' : 'border border-[var(--border-subtle)] focus:border-orange-500/50'}`}>
                       {(GROUP_CLASS_MAP[form.vehicleGroup ?? ''] ?? ALL_VEHICLE_CLASSES).map(c => (
                         <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1.5">Transmission Type</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1.5">Transmission Type</label>
                     <select value={form.transmissionType ?? 'AUTOMATIC'} onChange={e => f('transmissionType', e.target.value)}
-                      className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50">
+                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-orange-500/50">
                       {TRANSMISSIONS.map(t => <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="flex items-center gap-2 text-xs text-slate-400 mb-1.5">
+                    <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
                       Fuel Type
                       {autoFilledFields.has('fuelType') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled · CO₂ recalculates on change</span>}
                     </label>
                     <select value={form.fuelType ?? 'PETROL'}
                       onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('fuelType'); return s; }); f('fuelType', e.target.value); }}
-                      className={`w-full bg-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none ${autoFilledFields.has('fuelType') ? 'border border-blue-500/50' : 'border border-white/10 focus:border-orange-500/50'}`}>
+                      className={`w-full bg-[var(--bg-surface)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none ${autoFilledFields.has('fuelType') ? 'border border-blue-500/50' : 'border border-[var(--border-subtle)] focus:border-orange-500/50'}`}>
                       {FUEL_TYPES.map(ft => <option key={ft} value={ft}>{ft}</option>)}
                     </select>
                   </div>
@@ -472,31 +472,31 @@ export default function VehicleTypesPage() {
                 <h3 className="text-sm font-semibold text-orange-400 uppercase tracking-wider mb-4">Technical Specifications</h3>
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="flex items-center gap-2 text-xs text-slate-400 mb-1.5">
+                    <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
                       Passengers
                       {autoFilledFields.has('numPassengers') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled</span>}
                     </label>
                     <input type="number" value={form.numPassengers ?? 5}
                       onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('numPassengers'); return s; }); f('numPassengers', Number(e.target.value)); }}
-                      className={`w-full bg-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none ${autoFilledFields.has('numPassengers') ? 'border border-blue-500/50' : 'border border-white/10 focus:border-orange-500/50'}`} />
+                      className={`w-full bg-[var(--bg-surface)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none ${autoFilledFields.has('numPassengers') ? 'border border-blue-500/50' : 'border border-[var(--border-subtle)] focus:border-orange-500/50'}`} />
                   </div>
                   <div>
-                    <label className="flex items-center gap-2 text-xs text-slate-400 mb-1.5">
+                    <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
                       Max Speed (km/h)
                       {autoFilledFields.has('maxSpeedKmh') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled</span>}
                     </label>
                     <input type="number" value={form.maxSpeedKmh ?? 0}
                       onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('maxSpeedKmh'); return s; }); f('maxSpeedKmh', Number(e.target.value)); }}
-                      className={`w-full bg-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none ${autoFilledFields.has('maxSpeedKmh') ? 'border border-blue-500/50' : 'border border-white/10 focus:border-orange-500/50'}`} />
+                      className={`w-full bg-[var(--bg-surface)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none ${autoFilledFields.has('maxSpeedKmh') ? 'border border-blue-500/50' : 'border border-[var(--border-subtle)] focus:border-orange-500/50'}`} />
                   </div>
                   <div>
-                    <label className="flex items-center gap-2 text-xs text-slate-400 mb-1.5">
+                    <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
                       Fuel Efficiency (km/L)
                       {autoFilledFields.has('fuelEfficiencyKml') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled</span>}
                     </label>
                     <input type="number" step="0.1" value={form.fuelEfficiencyKml ?? 0}
                       onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('fuelEfficiencyKml'); return s; }); f('fuelEfficiencyKml', Number(e.target.value)); }}
-                      className={`w-full bg-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none ${autoFilledFields.has('fuelEfficiencyKml') ? 'border border-blue-500/50' : 'border border-white/10 focus:border-orange-500/50'}`} />
+                      className={`w-full bg-[var(--bg-surface)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none ${autoFilledFields.has('fuelEfficiencyKml') ? 'border border-blue-500/50' : 'border border-[var(--border-subtle)] focus:border-orange-500/50'}`} />
                   </div>
                 </div>
               </div>
@@ -513,33 +513,33 @@ export default function VehicleTypesPage() {
                 </h3>
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="flex items-center gap-2 text-xs text-slate-400 mb-1.5">
+                    <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
                       Cost per KM (AED)
                       {autoFilledFields.has('costPerKm') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled</span>}
                     </label>
                     <input type="number" step="0.001" value={form.costPerKm ?? 0}
                       onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('costPerKm'); return s; }); f('costPerKm', Number(e.target.value)); }}
-                      className={`w-full bg-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none ${autoFilledFields.has('costPerKm') ? 'border border-blue-500/50' : 'border border-white/10 focus:border-orange-500/50'}`} />
+                      className={`w-full bg-[var(--bg-surface)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none ${autoFilledFields.has('costPerKm') ? 'border border-blue-500/50' : 'border border-[var(--border-subtle)] focus:border-orange-500/50'}`} />
                   </div>
                   <div>
-                    <label className="flex items-center gap-2 text-xs text-slate-400 mb-1.5">
+                    <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
                       Idle Fuel Consumption (L/hr)
                       {autoFilledFields.has('idleFuelConsumption') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled</span>}
                     </label>
                     <input type="number" step="0.1" value={form.idleFuelConsumption ?? 0}
                       onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('idleFuelConsumption'); return s; }); f('idleFuelConsumption', Number(e.target.value)); }}
-                      className={`w-full bg-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none ${autoFilledFields.has('idleFuelConsumption') ? 'border border-blue-500/50' : 'border border-white/10 focus:border-orange-500/50'}`} />
+                      className={`w-full bg-[var(--bg-surface)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none ${autoFilledFields.has('idleFuelConsumption') ? 'border border-blue-500/50' : 'border border-[var(--border-subtle)] focus:border-orange-500/50'}`} />
                   </div>
                   <div>
-                    <label className="flex items-center gap-2 text-xs text-slate-400 mb-1.5">
+                    <label className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1.5">
                       CO₂ Emission Factor (g/km)
                       {autoFilledFields.has('co2EmissionFactor') && <span className="text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded text-xs font-medium">Auto-filled</span>}
                     </label>
                     <input type="number" step="1" value={form.co2EmissionFactor ?? 0}
                       onChange={e => { setAutoFilledFields(prev => { const s = new Set(prev); s.delete('co2EmissionFactor'); return s; }); f('co2EmissionFactor', Number(e.target.value)); }}
-                      className={`w-full bg-slate-800 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none ${autoFilledFields.has('co2EmissionFactor') ? 'border border-blue-500/50' : 'border border-white/10 focus:border-orange-500/50'}`} />
+                      className={`w-full bg-[var(--bg-surface)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none ${autoFilledFields.has('co2EmissionFactor') ? 'border border-blue-500/50' : 'border border-[var(--border-subtle)] focus:border-orange-500/50'}`} />
                     {autoFilledFields.has('co2EmissionFactor') && (
-                      <p className="mt-1 text-xs text-slate-500">Adjusted for {form.fuelType} · Changes automatically if Fuel Type changes</p>
+                      <p className="mt-1 text-xs text-[var(--text-faint)]">Adjusted for {form.fuelType} · Changes automatically if Fuel Type changes</p>
                     )}
                   </div>
                 </div>
@@ -548,24 +548,24 @@ export default function VehicleTypesPage() {
               {/* Notes & Status */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1.5">Notes</label>
+                  <label className="block text-xs text-[var(--text-muted)] mb-1.5">Notes</label>
                   <textarea value={form.notes ?? ''} onChange={e => f('notes', e.target.value)} rows={3}
-                    className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-orange-500/50 resize-none" />
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-orange-500/50 resize-none" />
                 </div>
                 <div className="flex flex-col justify-center">
                   <label className="flex items-center gap-3 cursor-pointer">
-                    <div className={`w-12 h-6 rounded-full transition-colors ${form.isActive ? 'bg-orange-500' : 'bg-slate-600'}`}
+                    <div className={`w-12 h-6 rounded-full transition-colors ${form.isActive ? 'bg-orange-500' : 'bg-[var(--bg-surface-hover)]'}`}
                       onClick={() => f('isActive', !form.isActive)}>
                       <div className={`w-5 h-5 bg-white rounded-full m-0.5 transition-transform ${form.isActive ? 'translate-x-6' : 'translate-x-0'}`} />
                     </div>
-                    <span className="text-sm text-slate-300">Active</span>
+                    <span className="text-sm text-[var(--text-muted)]">Active</span>
                   </label>
                 </div>
               </div>
             </div>
 
-            <div className="px-6 py-4 border-t border-white/10 flex justify-end gap-3 sticky bottom-0 bg-slate-900">
-              <button onClick={() => setShowModal(false)} className="px-5 py-2.5 text-sm text-slate-400 hover:text-white transition-colors">Cancel</button>
+            <div className="px-6 py-4 border-t border-[var(--border-subtle)] flex justify-end gap-3 sticky bottom-0 bg-[var(--bg-surface)]">
+              <button onClick={() => setShowModal(false)} className="px-5 py-2.5 text-sm text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors">Cancel</button>
               <button onClick={handleSave} disabled={saving}
                 className="px-6 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl font-semibold text-sm hover:opacity-90 disabled:opacity-50 transition-opacity">
                 {saving ? 'Saving…' : editing ? 'Update' : 'Create'}

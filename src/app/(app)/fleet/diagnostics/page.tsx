@@ -189,7 +189,7 @@ export default function FleetDiagnosticsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-[var(--text-main)] flex items-center gap-2">
               <Cpu className="w-6 h-6 text-cyan-400" />
               CAN-bus Telematics & DTC Diagnostics
             </h1>
@@ -197,7 +197,7 @@ export default function FleetDiagnosticsPage() {
               Predictive Maintenance
             </span>
           </div>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-[var(--text-muted)] mt-1">
             Real-time OBD-II/CAN-bus PID stream analysis, SAE J2012 fault decoding, and predictive breakdown prevention.
           </p>
         </div>
@@ -205,7 +205,7 @@ export default function FleetDiagnosticsPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => fetchData()}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-xs font-semibold border border-[var(--border-subtle)] transition"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             Refresh Telemetry
@@ -221,7 +221,7 @@ export default function FleetDiagnosticsPage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-cyan-500/30 space-y-1">
+        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-cyan-500/30 space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-xs text-cyan-400 font-medium">Fleet Health Index</span>
             <Activity className="w-4 h-4 text-cyan-400" />
@@ -229,10 +229,10 @@ export default function FleetDiagnosticsPage() {
           <p className="text-2xl font-bold text-cyan-300">
             {summary?.fleetAverageVhi ?? 100}%
           </p>
-          <p className="text-[11px] text-slate-500">Fleet-wide mechanical health mean</p>
+          <p className="text-[11px] text-[var(--text-faint)]">Fleet-wide mechanical health mean</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-rose-500/40 space-y-1">
+        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-rose-500/40 space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-xs text-rose-400 font-medium">Breakdown Hazards</span>
             <AlertOctagon className="w-4 h-4 text-rose-400" />
@@ -243,7 +243,7 @@ export default function FleetDiagnosticsPage() {
           <p className="text-[11px] text-rose-400/80">Critical engine/thermal faults</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-amber-500/30 space-y-1">
+        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-amber-500/30 space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-xs text-amber-400 font-medium">Elevated Risk Assets</span>
             <AlertTriangle className="w-4 h-4 text-amber-400" />
@@ -251,10 +251,10 @@ export default function FleetDiagnosticsPage() {
           <p className="text-2xl font-bold text-amber-300">
             {summary?.elevatedRiskCount ?? 0}
           </p>
-          <p className="text-[11px] text-slate-500">Preventive workshop tickets advised</p>
+          <p className="text-[11px] text-[var(--text-faint)]">Preventive workshop tickets advised</p>
         </div>
 
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-emerald-500/30 space-y-1">
+        <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-emerald-500/30 space-y-1">
           <div className="flex items-center justify-between">
             <span className="text-xs text-emerald-400 font-medium">Optimal Vehicles</span>
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
@@ -262,7 +262,7 @@ export default function FleetDiagnosticsPage() {
           <p className="text-2xl font-bold text-emerald-300">
             {summary?.optimalCount ?? 0}
           </p>
-          <p className="text-[11px] text-slate-500">Zero DTCs & optimal PIDs</p>
+          <p className="text-[11px] text-[var(--text-faint)]">Zero DTCs & optimal PIDs</p>
         </div>
       </div>
 
@@ -285,7 +285,7 @@ export default function FleetDiagnosticsPage() {
                 key={v.vehicleId}
                 className="p-3 rounded-xl bg-rose-900/40 border border-rose-500/30 text-xs space-y-1"
               >
-                <div className="flex items-center justify-between font-bold text-white">
+                <div className="flex items-center justify-between font-bold text-[var(--text-main)]">
                   <span>{v.vehicleCode}</span>
                   <span className="font-mono text-rose-300">VHI: {v.health.vhiScore}%</span>
                 </div>
@@ -300,22 +300,22 @@ export default function FleetDiagnosticsPage() {
       )}
 
       {/* CAN-bus Diagnostic Simulator */}
-      <div className="p-4 rounded-2xl bg-slate-900/70 border border-white/10 space-y-3">
+      <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/70 border border-[var(--border-subtle)] space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+          <h3 className="text-xs font-bold text-[var(--text-main)] uppercase tracking-wider flex items-center gap-2">
             <Radio className="w-4 h-4 text-amber-400" />
             CAN-bus Telemetry Injection Simulator
           </h3>
-          <span className="text-[11px] text-slate-400">Test predictive breakdown prevention</span>
+          <span className="text-[11px] text-[var(--text-muted)]">Test predictive breakdown prevention</span>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
-            <label className="block text-[11px] text-slate-400 mb-1">Target Vehicle</label>
+            <label className="block text-[11px] text-[var(--text-muted)] mb-1">Target Vehicle</label>
             <select
               value={simVehicleId}
               onChange={(e) => setSimVehicleId(e.target.value)}
-              className="w-full px-3 py-1.5 rounded-xl bg-slate-950 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
+              className="w-full px-3 py-1.5 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] focus:outline-none focus:border-cyan-500"
             >
               {data?.vehicles.map((v) => (
                 <option key={v.vehicleId} value={v.vehicleId}>
@@ -326,11 +326,11 @@ export default function FleetDiagnosticsPage() {
           </div>
 
           <div>
-            <label className="block text-[11px] text-slate-400 mb-1">Simulate Fault Scenario</label>
+            <label className="block text-[11px] text-[var(--text-muted)] mb-1">Simulate Fault Scenario</label>
             <select
               value={simFaultPreset}
               onChange={(e) => setSimFaultPreset(e.target.value as any)}
-              className="w-full px-3 py-1.5 rounded-xl bg-slate-950 border border-white/10 text-xs text-slate-200 focus:outline-none focus:border-cyan-500"
+              className="w-full px-3 py-1.5 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] focus:outline-none focus:border-cyan-500"
             >
               <option value="OVERHEAT">P0217 - Engine Coolant Overheat (118°C)</option>
               <option value="OIL_LOSS">P0524 - Critical Oil Pressure Loss (115 kPa)</option>
@@ -343,7 +343,7 @@ export default function FleetDiagnosticsPage() {
             <button
               onClick={handleSimulateInject}
               disabled={simulating || !simVehicleId}
-              className="w-full flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow transition disabled:opacity-50"
+              className="w-full flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-white text-xs font-bold shadow transition disabled:opacity-50"
             >
               <Play className="w-3.5 h-3.5 fill-current" />
               {simulating ? 'Injecting Telemetry...' : 'Inject CAN-bus Frame'}
@@ -368,8 +368,8 @@ export default function FleetDiagnosticsPage() {
                 onClick={() => setSelectedSubsystem(sub)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
                   selectedSubsystem === sub
-                    ? 'bg-slate-700 text-white border border-slate-500'
-                    : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-transparent'
+                    ? 'bg-[var(--bg-surface-hover)] text-[var(--text-main)] border border-slate-500'
+                    : 'bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--text-main)] border border-transparent'
                 }`}
               >
                 {sub === 'ALL' && 'All Subsystems'}
@@ -384,22 +384,22 @@ export default function FleetDiagnosticsPage() {
         </div>
 
         <div className="relative w-full sm:w-72">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
           <input
             type="text"
             placeholder="Search vehicle, plate, DTC code..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-900 border border-white/10 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+            className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-cyan-500"
           />
         </div>
       </div>
 
       {/* Diagnostics Grid */}
-      <div className="rounded-2xl border border-white/10 overflow-hidden bg-slate-900/60 shadow-xl">
+      <div className="rounded-2xl border border-[var(--border-subtle)] overflow-hidden bg-[var(--bg-surface)]/60 shadow-xl">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-semibold border-b border-white/10">
+          <table className="w-full text-left text-xs text-[var(--text-muted)]">
+            <thead className="bg-[var(--bg-canvas)]/80 text-[var(--text-muted)] uppercase tracking-wider font-semibold border-b border-[var(--border-subtle)]">
               <tr>
                 <th className="p-3.5">Vehicle</th>
                 <th className="p-3.5">Health Score (VHI)</th>
@@ -412,7 +412,7 @@ export default function FleetDiagnosticsPage() {
             <tbody className="divide-y divide-white/5">
               {!filteredVehicles.length ? (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-500">
+                  <td colSpan={6} className="p-8 text-center text-[var(--text-faint)]">
                     No vehicles matching diagnostic filter.
                   </td>
                 </tr>
@@ -423,11 +423,11 @@ export default function FleetDiagnosticsPage() {
                   const isRisk = v.health.healthGrade === 'ELEVATED_RISK';
 
                   return (
-                    <tr key={v.vehicleId} className="hover:bg-white/[0.02] transition">
+                    <tr key={v.vehicleId} className="hover:bg-[var(--bg-surface-hover)] transition">
                       <td className="p-3.5">
-                        <div className="font-bold text-white">{v.vehicleCode}</div>
-                        <div className="text-[11px] text-slate-400">{v.makeModel}</div>
-                        <div className="text-[10px] text-slate-500 font-mono">{v.licensePlate}</div>
+                        <div className="font-bold text-[var(--text-main)]">{v.vehicleCode}</div>
+                        <div className="text-[11px] text-[var(--text-muted)]">{v.makeModel}</div>
+                        <div className="text-[10px] text-[var(--text-faint)] font-mono">{v.licensePlate}</div>
                       </td>
 
                       <td className="p-3.5 font-mono">
@@ -458,26 +458,26 @@ export default function FleetDiagnosticsPage() {
                       {/* Sensor Gauges */}
                       <td className="p-3.5 space-y-1 font-mono text-[11px]">
                         <div className="flex items-center gap-2">
-                          <Thermometer className="w-3 h-3 text-slate-400" />
+                          <Thermometer className="w-3 h-3 text-[var(--text-muted)]" />
                           <span
                             className={
-                              v.sensors.coolantTempC >= 105 ? 'text-rose-400 font-bold' : 'text-slate-300'
+                              v.sensors.coolantTempC >= 105 ? 'text-rose-400 font-bold' : 'text-[var(--text-muted)]'
                             }
                           >
                             Coolant: {v.sensors.coolantTempC}°C
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Gauge className="w-3 h-3 text-slate-400" />
+                          <Gauge className="w-3 h-3 text-[var(--text-muted)]" />
                           <span
                             className={
-                              v.sensors.oilPressureKpa < 180 ? 'text-rose-400 font-bold' : 'text-slate-300'
+                              v.sensors.oilPressureKpa < 180 ? 'text-rose-400 font-bold' : 'text-[var(--text-muted)]'
                             }
                           >
                             Oil: {v.sensors.oilPressureKpa} kPa
                           </span>
                         </div>
-                        <div className="flex items-center gap-2 text-slate-400 text-[10px]">
+                        <div className="flex items-center gap-2 text-[var(--text-muted)] text-[10px]">
                           <span>Battery: {v.sensors.batteryVoltage.toFixed(1)}V</span>
                           <span>· DEF: {v.sensors.defLevelPercent}%</span>
                         </div>
@@ -510,7 +510,7 @@ export default function FleetDiagnosticsPage() {
 
                       {/* Predictive Risk Description */}
                       <td className="p-3.5 text-[11px] max-w-xs">
-                        <p className="text-slate-300">{v.health.breakdownRiskDescription}</p>
+                        <p className="text-[var(--text-muted)]">{v.health.breakdownRiskDescription}</p>
                         {v.health.recommendedWorkshopAction && (
                           <p className="text-cyan-400 font-semibold mt-0.5">
                             👉 {v.health.recommendedWorkshopAction}
@@ -521,7 +521,7 @@ export default function FleetDiagnosticsPage() {
                       <td className="p-3.5 text-right">
                         <button
                           onClick={() => setSelectedVehicle(v)}
-                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
+                          className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-xs font-semibold border border-[var(--border-subtle)] transition"
                         >
                           Deep Dive
                         </button>

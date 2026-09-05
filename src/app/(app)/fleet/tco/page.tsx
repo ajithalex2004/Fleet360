@@ -220,7 +220,7 @@ export default function TcoDashboard() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-[var(--text-main)] flex items-center gap-2">
               <PieChart className="w-6 h-6 text-cyan-400" />
               Fleet Total Cost of Ownership (TCO) Engine
             </h1>
@@ -228,21 +228,21 @@ export default function TcoDashboard() {
               7-Pillar Analytics
             </span>
           </div>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-[var(--text-muted)] mt-1">
             Holistic lifecycle cost intelligence, Cost Per Kilometer (CPK) benchmarks, and vehicle replacement advisory.
           </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center bg-slate-900 border border-white/10 rounded-xl p-1">
+          <div className="flex items-center bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-1">
             {MONTHS_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
                 onClick={() => setMonths(opt.value)}
                 className={`px-3 py-1 text-xs font-semibold rounded-lg transition ${
                   months === opt.value
-                    ? 'bg-cyan-500 text-slate-950 font-bold shadow'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'bg-cyan-500 text-white font-bold shadow'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                 }`}
               >
                 {opt.label}
@@ -252,7 +252,7 @@ export default function TcoDashboard() {
 
           <button
             onClick={handleExportCsv}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition shadow"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-xs font-semibold border border-[var(--border-subtle)] transition shadow"
           >
             <Download className="w-3.5 h-3.5" />
             Export CSV
@@ -261,7 +261,7 @@ export default function TcoDashboard() {
       </div>
 
       {loading ? (
-        <div className="p-16 text-center text-slate-500 text-sm">
+        <div className="p-16 text-center text-[var(--text-faint)] text-sm">
           Crunching 7-pillar lifecycle TCO and CPK telemetry...
         </div>
       ) : error ? (
@@ -272,24 +272,24 @@ export default function TcoDashboard() {
         <>
           {/* KPI Summary Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="p-4 rounded-2xl bg-slate-900/60 border border-white/10 space-y-1">
-              <p className="text-xs text-slate-400 font-medium">Fleet Total TCO ({months}M)</p>
-              <p className="text-2xl font-bold text-white">{fmtCurrency(totals?.totalTco || 0)}</p>
-              <p className="text-[11px] text-slate-500">Across {data?.totalVehicles || 0} active assets</p>
+            <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] space-y-1">
+              <p className="text-xs text-[var(--text-muted)] font-medium">Fleet Total TCO ({months}M)</p>
+              <p className="text-2xl font-bold text-[var(--text-main)]">{fmtCurrency(totals?.totalTco || 0)}</p>
+              <p className="text-[11px] text-[var(--text-faint)]">Across {data?.totalVehicles || 0} active assets</p>
             </div>
 
-            <div className="p-4 rounded-2xl bg-slate-900/60 border border-cyan-500/30 space-y-1">
+            <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-cyan-500/30 space-y-1">
               <p className="text-xs text-cyan-400 font-medium">Fleet Average CPK</p>
               <div className="flex items-baseline gap-2">
                 <p className="text-2xl font-bold text-cyan-300">{(totals?.averageCpk || 0).toFixed(2)}</p>
-                <span className="text-xs text-slate-400">AED / km</span>
+                <span className="text-xs text-[var(--text-muted)]">AED / km</span>
               </div>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-[var(--text-faint)]">
                 {fmt(totals?.totalDistanceKm || 0)} km traveled in period
               </p>
             </div>
 
-            <div className="p-4 rounded-2xl bg-slate-900/60 border border-amber-500/20 space-y-1">
+            <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-amber-500/20 space-y-1">
               <p className="text-xs text-amber-400 font-medium">Fuel & Energy Spend</p>
               <p className="text-2xl font-bold text-amber-300">{fmtCurrency(totals?.fuelCost || 0)}</p>
               <p className="text-[11px] text-amber-500/80">
@@ -297,7 +297,7 @@ export default function TcoDashboard() {
               </p>
             </div>
 
-            <div className="p-4 rounded-2xl bg-slate-900/60 border border-rose-500/20 space-y-1">
+            <div className="p-4 rounded-2xl bg-[var(--bg-surface)]/60 border border-rose-500/20 space-y-1">
               <p className="text-xs text-rose-400 font-medium">Maintenance & Repairs</p>
               <p className="text-2xl font-bold text-rose-300">
                 {fmtCurrency(totals?.maintenanceCost || 0)}
@@ -309,19 +309,19 @@ export default function TcoDashboard() {
           </div>
 
           {/* 7-Pillar Cost Distribution Visualizer */}
-          <div className="p-5 rounded-2xl border border-white/10 bg-slate-900/70 space-y-3">
+          <div className="p-5 rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <h3 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
                 <Layers className="w-4 h-4 text-cyan-400" />
                 7-Pillar Lifecycle Cost Distribution
               </h3>
-              <span className="text-xs text-slate-400">
-                Fleet Total: <strong className="text-slate-200">{fmtCurrency(totals?.totalTco || 0)}</strong>
+              <span className="text-xs text-[var(--text-muted)]">
+                Fleet Total: <strong className="text-[var(--text-main)]">{fmtCurrency(totals?.totalTco || 0)}</strong>
               </span>
             </div>
 
             {/* Stacked Multi-Color Progress Bar */}
-            <div className="w-full h-4 rounded-full overflow-hidden flex bg-slate-800">
+            <div className="w-full h-4 rounded-full overflow-hidden flex bg-[var(--bg-surface)]">
               <div
                 style={{ width: `${pillarsPct?.depreciation || 0}%` }}
                 className="bg-indigo-500 h-full"
@@ -363,33 +363,33 @@ export default function TcoDashboard() {
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 pt-2 text-xs">
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 shrink-0" />
-                <span className="text-slate-400">
+                <span className="text-[var(--text-muted)]">
                   Deprec ({pillarsPct?.depreciation || 0}%)
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
-                <span className="text-slate-400">Fuel ({pillarsPct?.fuel || 0}%)</span>
+                <span className="text-[var(--text-muted)]">Fuel ({pillarsPct?.fuel || 0}%)</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
-                <span className="text-slate-400">Maint ({pillarsPct?.maintenance || 0}%)</span>
+                <span className="text-[var(--text-muted)]">Maint ({pillarsPct?.maintenance || 0}%)</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shrink-0" />
-                <span className="text-slate-400">Tires ({pillarsPct?.tires || 0}%)</span>
+                <span className="text-[var(--text-muted)]">Tires ({pillarsPct?.tires || 0}%)</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
-                <span className="text-slate-400">Insur ({pillarsPct?.insurance || 0}%)</span>
+                <span className="text-[var(--text-muted)]">Insur ({pillarsPct?.insurance || 0}%)</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-violet-500 shrink-0" />
-                <span className="text-slate-400">Labor ({pillarsPct?.labor || 0}%)</span>
+                <span className="text-[var(--text-muted)]">Labor ({pillarsPct?.labor || 0}%)</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-pink-500 shrink-0" />
-                <span className="text-slate-400">Fines ({pillarsPct?.fines || 0}%)</span>
+                <span className="text-[var(--text-muted)]">Fines ({pillarsPct?.fines || 0}%)</span>
               </div>
             </div>
           </div>
@@ -429,8 +429,8 @@ export default function TcoDashboard() {
                   onClick={() => setGroupFilter(grp)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
                     groupFilter === grp
-                      ? 'bg-slate-700 text-white border border-slate-500'
-                      : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-transparent'
+                      ? 'bg-[var(--bg-surface-hover)] text-[var(--text-main)] border border-slate-500'
+                      : 'bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--text-main)] border border-transparent'
                   }`}
                 >
                   {grp}
@@ -439,22 +439,22 @@ export default function TcoDashboard() {
             </div>
 
             <div className="relative w-full sm:w-72">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
               <input
                 type="text"
                 placeholder="Search vehicle, plate, code..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-900 border border-white/10 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-xs text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-cyan-500"
               />
             </div>
           </div>
 
           {/* Vehicle TCO Intelligence Grid */}
-          <div className="rounded-2xl border border-white/10 overflow-hidden bg-slate-900/60 shadow-xl">
+          <div className="rounded-2xl border border-[var(--border-subtle)] overflow-hidden bg-[var(--bg-surface)]/60 shadow-xl">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-300">
-                <thead className="bg-slate-950/80 text-slate-400 uppercase tracking-wider font-semibold border-b border-white/10">
+              <table className="w-full text-left text-xs text-[var(--text-muted)]">
+                <thead className="bg-[var(--bg-canvas)]/80 text-[var(--text-muted)] uppercase tracking-wider font-semibold border-b border-[var(--border-subtle)]">
                   <tr>
                     <th className="p-3.5 cursor-pointer" onClick={() => handleSort('vehicleCode')}>
                       Vehicle
@@ -481,7 +481,7 @@ export default function TcoDashboard() {
                 <tbody className="divide-y divide-white/5">
                   {!filteredVehicles.length ? (
                     <tr>
-                      <td colSpan={8} className="p-8 text-center text-slate-500">
+                      <td colSpan={8} className="p-8 text-center text-[var(--text-faint)]">
                         No vehicle TCO records found for the selected criteria.
                       </td>
                     </tr>
@@ -491,14 +491,14 @@ export default function TcoDashboard() {
                       const isUnder = v.fleetBenchmarkVariancePct < -10;
 
                       return (
-                        <tr key={v.vehicleId} className="hover:bg-white/[0.02] transition">
+                        <tr key={v.vehicleId} className="hover:bg-[var(--bg-surface-hover)] transition">
                           <td className="p-3.5">
-                            <div className="font-bold text-white">{v.vehicleCode}</div>
-                            <div className="text-[11px] text-slate-400">{v.vehicleName}</div>
-                            <div className="text-[10px] text-slate-500 font-mono">{v.licensePlate}</div>
+                            <div className="font-bold text-[var(--text-main)]">{v.vehicleCode}</div>
+                            <div className="text-[11px] text-[var(--text-muted)]">{v.vehicleName}</div>
+                            <div className="text-[10px] text-[var(--text-faint)] font-mono">{v.licensePlate}</div>
                           </td>
 
-                          <td className="p-3.5 font-mono font-bold text-white">
+                          <td className="p-3.5 font-mono font-bold text-[var(--text-main)]">
                             {fmtCurrency(v.totalTco)}
                           </td>
 
@@ -506,7 +506,7 @@ export default function TcoDashboard() {
                             <div className="font-bold text-cyan-300 text-sm">{v.costPerKm} AED/km</div>
                             <span
                               className={`inline-flex items-center gap-0.5 text-[10px] font-bold ${
-                                isOver ? 'text-rose-400' : isUnder ? 'text-emerald-400' : 'text-slate-400'
+                                isOver ? 'text-rose-400' : isUnder ? 'text-emerald-400' : 'text-[var(--text-muted)]'
                               }`}
                             >
                               {isOver ? <TrendingUp className="w-3 h-3" /> : isUnder ? <TrendingDown className="w-3 h-3" /> : null}
@@ -516,12 +516,12 @@ export default function TcoDashboard() {
 
                           <td className="p-3.5 font-mono">
                             <div className="text-amber-300">{fmtCurrency(v.fuelCost)}</div>
-                            <div className="text-[10px] text-slate-500">{v.fuelEfficiencyKmL} km/L</div>
+                            <div className="text-[10px] text-[var(--text-faint)]">{v.fuelEfficiencyKmL} km/L</div>
                           </td>
 
                           <td className="p-3.5 font-mono">
                             <div className="text-rose-300">{fmtCurrency(v.maintenanceCost)}</div>
-                            <div className="text-[10px] text-slate-500">
+                            <div className="text-[10px] text-[var(--text-faint)]">
                               {((v.maintenanceCost / Math.max(1, v.totalTco)) * 100).toFixed(0)}% of TCO
                             </div>
                           </td>
@@ -554,7 +554,7 @@ export default function TcoDashboard() {
                           <td className="p-3.5 text-right">
                             <button
                               onClick={() => setSelectedVehicle(v)}
-                              className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
+                              className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-xs font-semibold border border-[var(--border-subtle)] transition"
                             >
                               Deep Dive
                             </button>
@@ -572,21 +572,21 @@ export default function TcoDashboard() {
 
       {/* Vehicle Deep-Dive Modal */}
       {selectedVehicle && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl max-w-2xl w-full p-6 space-y-6 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+        <div className="fixed inset-0 z-50 bg-[var(--bg-canvas)]/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl max-w-2xl w-full p-6 space-y-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-4">
               <div>
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <h3 className="text-lg font-bold text-[var(--text-main)] flex items-center gap-2">
                   <Car className="w-5 h-5 text-cyan-400" />
                   {selectedVehicle.vehicleCode} · {selectedVehicle.vehicleName}
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Plate: <span className="font-mono text-slate-200">{selectedVehicle.licensePlate}</span> · Group: {selectedVehicle.vehicleGroup}
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  Plate: <span className="font-mono text-[var(--text-main)]">{selectedVehicle.licensePlate}</span> · Group: {selectedVehicle.vehicleGroup}
                 </p>
               </div>
               <button
                 onClick={() => setSelectedVehicle(null)}
-                className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition"
+                className="p-1 rounded-lg hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -594,19 +594,19 @@ export default function TcoDashboard() {
 
             {/* Total TCO & CPK Badge */}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              <div className="p-3.5 rounded-xl bg-slate-950/60 border border-white/5 space-y-0.5">
-                <p className="text-[11px] text-slate-400 font-medium">Total TCO ({months}M)</p>
+              <div className="p-3.5 rounded-xl bg-[var(--bg-canvas)]/60 border border-[var(--border-subtle)] space-y-0.5">
+                <p className="text-[11px] text-[var(--text-muted)] font-medium">Total TCO ({months}M)</p>
                 <p className="text-xl font-bold text-cyan-400">{fmtCurrency(selectedVehicle.totalTco)}</p>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-slate-950/60 border border-white/5 space-y-0.5">
-                <p className="text-[11px] text-slate-400 font-medium">Cost Per Km</p>
+              <div className="p-3.5 rounded-xl bg-[var(--bg-canvas)]/60 border border-[var(--border-subtle)] space-y-0.5">
+                <p className="text-[11px] text-[var(--text-muted)] font-medium">Cost Per Km</p>
                 <p className="text-xl font-bold text-emerald-400">{selectedVehicle.costPerKm} AED/km</p>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-slate-950/60 border border-white/5 space-y-0.5 col-span-2 sm:col-span-1">
-                <p className="text-[11px] text-slate-400 font-medium">Distance in Period</p>
-                <p className="text-xl font-bold text-slate-200">
+              <div className="p-3.5 rounded-xl bg-[var(--bg-canvas)]/60 border border-[var(--border-subtle)] space-y-0.5 col-span-2 sm:col-span-1">
+                <p className="text-[11px] text-[var(--text-muted)] font-medium">Distance in Period</p>
+                <p className="text-xl font-bold text-[var(--text-main)]">
                   {fmt(selectedVehicle.distancePeriodKm)} km
                 </p>
               </div>
@@ -614,48 +614,48 @@ export default function TcoDashboard() {
 
             {/* 7-Pillar Breakdown List */}
             <div className="space-y-2">
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+              <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">
                 7-Pillar Itemized Breakdown
               </h4>
-              <div className="divide-y divide-white/5 rounded-xl border border-white/5 bg-slate-950/40 p-2 text-xs">
+              <div className="divide-y divide-white/5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-canvas)]/40 p-2 text-xs">
                 <div className="flex justify-between py-2 px-2">
-                  <span className="text-slate-400">1. Capital Depreciation / Lease Amortization</span>
+                  <span className="text-[var(--text-muted)]">1. Capital Depreciation / Lease Amortization</span>
                   <span className="font-mono font-bold text-indigo-300">
                     {fmtCurrency(selectedVehicle.depreciationCost)}
                   </span>
                 </div>
                 <div className="flex justify-between py-2 px-2">
-                  <span className="text-slate-400">2. Fuel & Energy Spend</span>
+                  <span className="text-[var(--text-muted)]">2. Fuel & Energy Spend</span>
                   <span className="font-mono font-bold text-amber-300">
                     {fmtCurrency(selectedVehicle.fuelCost)}
                   </span>
                 </div>
                 <div className="flex justify-between py-2 px-2">
-                  <span className="text-slate-400">3. Maintenance & Workshop Repairs</span>
+                  <span className="text-[var(--text-muted)]">3. Maintenance & Workshop Repairs</span>
                   <span className="font-mono font-bold text-rose-300">
                     {fmtCurrency(selectedVehicle.maintenanceCost)}
                   </span>
                 </div>
                 <div className="flex justify-between py-2 px-2">
-                  <span className="text-slate-400">4. Tires & Axle Wear</span>
+                  <span className="text-[var(--text-muted)]">4. Tires & Axle Wear</span>
                   <span className="font-mono font-bold text-orange-300">
                     {fmtCurrency(selectedVehicle.tiresCost)}
                   </span>
                 </div>
                 <div className="flex justify-between py-2 px-2">
-                  <span className="text-slate-400">5. Insurance, Registration & Mulkiya</span>
+                  <span className="text-[var(--text-muted)]">5. Insurance, Registration & Mulkiya</span>
                   <span className="font-mono font-bold text-emerald-300">
                     {fmtCurrency(selectedVehicle.insuranceCost)}
                   </span>
                 </div>
                 <div className="flex justify-between py-2 px-2">
-                  <span className="text-slate-400">6. Traffic Fines & Road Tolls</span>
+                  <span className="text-[var(--text-muted)]">6. Traffic Fines & Road Tolls</span>
                   <span className="font-mono font-bold text-pink-300">
                     {fmtCurrency(selectedVehicle.finesCost)}
                   </span>
                 </div>
                 <div className="flex justify-between py-2 px-2">
-                  <span className="text-slate-400">7. Operational Driver Labor Allocation</span>
+                  <span className="text-[var(--text-muted)]">7. Operational Driver Labor Allocation</span>
                   <span className="font-mono font-bold text-violet-300">
                     {fmtCurrency(selectedVehicle.laborCost)}
                   </span>
@@ -664,15 +664,15 @@ export default function TcoDashboard() {
             </div>
 
             {/* Disposition Advisory */}
-            <div className="p-4 rounded-xl bg-slate-950 border border-white/10 space-y-1">
-              <p className="text-xs font-bold text-slate-300">Lifecycle Advisory:</p>
-              <p className="text-xs text-slate-400">{selectedVehicle.dispositionReason}</p>
+            <div className="p-4 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-1">
+              <p className="text-xs font-bold text-[var(--text-muted)]">Lifecycle Advisory:</p>
+              <p className="text-xs text-[var(--text-muted)]">{selectedVehicle.dispositionReason}</p>
             </div>
 
             <div className="flex justify-end">
               <button
                 onClick={() => setSelectedVehicle(null)}
-                className="px-4 py-2 rounded-xl bg-cyan-500 text-slate-950 font-bold text-xs hover:bg-cyan-400 transition"
+                className="px-4 py-2 rounded-xl bg-cyan-500 text-white font-bold text-xs hover:bg-cyan-400 transition"
               >
                 Close
               </button>

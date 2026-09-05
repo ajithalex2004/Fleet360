@@ -71,7 +71,7 @@ export default function FleetDashboard() {
     return (
       <div className="flex items-center justify-center h-full min-h-[200px]">
         <div className="animate-spin">
-          <div className="w-12 h-12 border-4 border-slate-700 border-t-orange-500 rounded-full"></div>
+          <div className="w-12 h-12 border-4 border-[var(--border-subtle)] border-t-orange-500 rounded-full"></div>
         </div>
       </div>
     );
@@ -107,33 +107,33 @@ export default function FleetDashboard() {
       </div>
 
       {/* Fleet Health Summary */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-        <h2 className="text-xl font-bold text-white mb-6">Fleet Health Summary</h2>
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6">
+        <h2 className="text-xl font-bold text-[var(--text-main)] mb-6">Fleet Health Summary</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-slate-400 text-sm">Vehicle Availability</p>
-              <span className="text-white font-medium">92%</span>
+              <p className="text-[var(--text-muted)] text-sm">Vehicle Availability</p>
+              <span className="text-[var(--text-main)] font-medium">92%</span>
             </div>
-            <div className="w-full bg-slate-700 rounded-full h-2">
+            <div className="w-full bg-[var(--bg-surface-hover)] rounded-full h-2">
               <div className="bg-gradient-to-r from-emerald-500 to-green-500 h-2 rounded-full" style={{ width: '92%' }}></div>
             </div>
           </div>
           <div>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-slate-400 text-sm">Maintenance Status</p>
-              <span className="text-white font-medium">88%</span>
+              <p className="text-[var(--text-muted)] text-sm">Maintenance Status</p>
+              <span className="text-[var(--text-main)] font-medium">88%</span>
             </div>
-            <div className="w-full bg-slate-700 rounded-full h-2">
+            <div className="w-full bg-[var(--bg-surface-hover)] rounded-full h-2">
               <div className="bg-gradient-to-r from-blue-500 to-indigo-500 h-2 rounded-full" style={{ width: '88%' }}></div>
             </div>
           </div>
           <div>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-slate-400 text-sm">Compliance Status</p>
-              <span className="text-white font-medium">85%</span>
+              <p className="text-[var(--text-muted)] text-sm">Compliance Status</p>
+              <span className="text-[var(--text-main)] font-medium">85%</span>
             </div>
-            <div className="w-full bg-slate-700 rounded-full h-2">
+            <div className="w-full bg-[var(--bg-surface-hover)] rounded-full h-2">
               <div className="bg-gradient-to-r from-orange-500 to-amber-500 h-2 rounded-full" style={{ width: '85%' }}></div>
             </div>
           </div>
@@ -141,14 +141,14 @@ export default function FleetDashboard() {
       </div>
 
       {/* Risk Heat — top 5 highest-risk vehicles */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            <h2 className="text-xl font-bold text-[var(--text-main)] flex items-center gap-2">
               <Gauge className="w-5 h-5 text-orange-400" />
               Risk Heat
             </h2>
-            <p className="text-slate-400 text-sm mt-0.5">Top 5 highest-risk vehicles — maintenance score 0–100</p>
+            <p className="text-[var(--text-muted)] text-sm mt-0.5">Top 5 highest-risk vehicles — maintenance score 0–100</p>
           </div>
           <Link
             href="/maintenance/risk"
@@ -160,10 +160,10 @@ export default function FleetDashboard() {
 
         {riskLoading ? (
           <div className="flex justify-center py-6">
-            <div className="w-6 h-6 border-2 border-slate-600 border-t-orange-500 rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-[var(--border-strong)] border-t-orange-500 rounded-full animate-spin" />
           </div>
         ) : top5Risk.length === 0 ? (
-          <p className="text-slate-500 text-sm text-center py-6">No vehicle risk data available</p>
+          <p className="text-[var(--text-faint)] text-sm text-center py-6">No vehicle risk data available</p>
         ) : (
           <div className="space-y-2">
             {top5Risk.map((rs, i) => {
@@ -174,17 +174,17 @@ export default function FleetDashboard() {
                 'bg-emerald-500';
               return (
                 <div key={rs.vehicleId} className="flex items-center gap-3">
-                  <span className="text-slate-600 text-xs w-4 text-right">{i + 1}</span>
-                  <span className="text-white text-sm font-medium w-24 truncate">
+                  <span className="text-[var(--text-faint)] text-xs w-4 text-right">{i + 1}</span>
+                  <span className="text-[var(--text-main)] text-sm font-medium w-24 truncate">
                     {rs.vehicleCode}
                   </span>
-                  <div className="flex-1 bg-slate-700 rounded-full h-2">
+                  <div className="flex-1 bg-[var(--bg-surface-hover)] rounded-full h-2">
                     <div
                       className={`${barColor} h-2 rounded-full transition-all`}
                       style={{ width: `${rs.score}%` }}
                     />
                   </div>
-                  <span className="text-sm font-bold text-white w-12 text-right">
+                  <span className="text-sm font-bold text-[var(--text-main)] w-12 text-right">
                     {rs.emoji} {rs.score}
                   </span>
                 </div>
@@ -195,36 +195,36 @@ export default function FleetDashboard() {
       </div>
 
       {/* Document Expiry Alert Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6">
         <div className="mb-6">
-          <h2 className="text-xl font-bold text-white">Document Expiry Alert</h2>
-          <p className="text-slate-400 text-sm mt-1">Top 5 upcoming expirations in the next 30 days</p>
+          <h2 className="text-xl font-bold text-[var(--text-main)]">Document Expiry Alert</h2>
+          <p className="text-[var(--text-muted)] text-sm mt-1">Top 5 upcoming expirations in the next 30 days</p>
         </div>
 
         {expiringDocs.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-4xl mb-3">📭</div>
-            <p className="text-slate-400">No expiring documents in the next 30 days</p>
+            <p className="text-[var(--text-muted)]">No expiring documents in the next 30 days</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-slate-800/50">
-                <tr className="border-b border-white/5">
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Vehicle</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">License Plate</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Document Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Expiry Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400">Days Remaining</th>
+              <thead className="bg-[var(--bg-surface)]/50">
+                <tr className="border-b border-[var(--border-subtle)]">
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Vehicle</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">License Plate</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Document Type</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Expiry Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Days Remaining</th>
                 </tr>
               </thead>
               <tbody>
                 {expiringDocs.map((doc) => (
-                  <tr key={doc.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                    <td className="px-6 py-4 text-sm text-white">{doc.vehicle}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">{doc.licensePlate}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">{doc.docType}</td>
-                    <td className="px-6 py-4 text-sm text-slate-200">
+                  <tr key={doc.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
+                    <td className="px-6 py-4 text-sm text-[var(--text-main)]">{doc.vehicle}</td>
+                    <td className="px-6 py-4 text-sm text-[var(--text-main)]">{doc.licensePlate}</td>
+                    <td className="px-6 py-4 text-sm text-[var(--text-main)]">{doc.docType}</td>
+                    <td className="px-6 py-4 text-sm text-[var(--text-main)]">
                       {new Date(doc.expiryDate).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 text-sm">
