@@ -129,17 +129,17 @@ export default function LeasingDashboard() {
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {[
-          { label: 'Active contracts', value: kpis.activeContracts, sub: `${kpis.totalContracts} total contracts`, color: 'text-blue-600' },
-          { label: 'Monthly revenue', value: moneyShort(kpis.monthlyRevenue, 1000, 'K'), sub: 'active lease run-rate', color: 'text-emerald-600' },
-          { label: 'Portfolio value', value: moneyShort(kpis.portfolioValue, 1000000, 'M'), sub: 'contracted value', color: 'text-indigo-600' },
-          { label: 'Collection rate', value: `${kpis.collectionRate.toFixed(0)}%`, sub: 'finance-owned collections', color: 'text-orange-600' },
+          { label: 'Active contracts', value: kpis.activeContracts, sub: `${kpis.totalContracts} total contracts`, tone: 'from-blue-500 to-indigo-600' },
+          { label: 'Monthly revenue', value: moneyShort(kpis.monthlyRevenue, 1000, 'K'), sub: 'active lease run-rate', tone: 'from-emerald-500 to-teal-600' },
+          { label: 'Portfolio value', value: moneyShort(kpis.portfolioValue, 1000000, 'M'), sub: 'contracted value', tone: 'from-violet-500 to-purple-600' },
+          { label: 'Collection rate', value: `${kpis.collectionRate.toFixed(0)}%`, sub: 'finance-owned collections', tone: 'from-amber-500 to-orange-600' },
         ].map(card => (
-          <div key={card.label} className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5 shadow-sm">
-            <p className="text-sm font-medium text-[var(--text-faint)]">{card.label}</p>
-            <p className={`mt-3 text-3xl font-bold ${card.color}`}>
+          <div key={card.label} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.tone} p-5 shadow-sm`}>
+            <p className="text-sm font-medium text-white/80">{card.label}</p>
+            <p className="mt-3 text-3xl font-bold text-white">
               {loadingAnalytics ? '...' : card.value}
             </p>
-            <p className="mt-1 text-xs text-[var(--text-faint)]">{card.sub}</p>
+            <p className="mt-1 text-xs text-white/60">{card.sub}</p>
           </div>
         ))}
       </section>
