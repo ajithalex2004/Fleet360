@@ -5,6 +5,7 @@ import ClientProviders from "@/components/ClientProviders";
 import GlobalDeferredWidgets from "@/components/GlobalDeferredWidgets";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import CommandPalette from "@/components/navigation/CommandPalette";
+import ChunkErrorReloader from "@/components/ChunkErrorReloader";
 
 export const metadata: Metadata = {
   title: "Fleet360",
@@ -26,6 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: THEME_NO_FLASH }} />
       </head>
       <body className="antialiased min-h-screen bg-[var(--bg-canvas)] text-[var(--text-main)] transition-colors duration-150">
+        <ChunkErrorReloader />
         <ThemeProvider>
           <ClientProviders>
             <ToastProvider>
