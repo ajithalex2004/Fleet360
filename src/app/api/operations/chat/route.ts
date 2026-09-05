@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     apiKey: process.env.THESYS_API_KEY ?? 'missing-key',
   });
 
-  const messageStore = getMessageStore(`ops-${threadId}`);
+  const messageStore = getMessageStore(`ops-${threadId}`, tenantId);
 
   // Inject system prompt on first message
   if (messageStore.messageList.length === 0) {
@@ -64,7 +64,8 @@ export async function POST(req: NextRequest) {
 
   const llmStream = await client.chat.completions.create({
     model: 'c1/openai/gpt-5/v-20250915',
-    messages: messageStore.getOpenAICompatibleMessageList(),
+    messages: messageStore.getOpenAICompatibleMessageList({ maxTotalMessages: 16 }),
+    max_tokens: 1500,
     stream: true,
     tools: [
       // ── 1. Fleet Status ───────────────────────────────────────────────────

@@ -127,11 +127,7 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
   },
 ];
 
-// Simple in-memory history (per-session via threadId, scoped by tenant).
-// threadId alone is client-supplied and not guaranteed unique across tenants -
-// keying by tenantId:threadId keeps one tenant's conversation (which includes
-// real business data from tool calls) from being read or appended to by another.
-const threads = new Map<string, OpenAI.Chat.ChatCompletionMessageParam[]>();
+import { sessionStore } from '@/lib/agents/conversational-guardrails';
 
 function enc(obj: unknown) {
   return 'data: ' + JSON.stringify(obj) + '\n\n';
@@ -152,12 +148,13 @@ export async function POST(req: NextRequest) {
     apiKey: process.env.THESYS_API_KEY ?? '',
   });
 
-  const threadKey = `${tenantId}:${threadId}`;
-  if (!threads.has(threadKey)) {
-    threads.set(threadKey, [{ role: 'system', content: SYSTEM_PROMPT }]);
+  const existing = sessionStore.getMessages(tenantId, threadId);
+  if (existing.length === 0) {
+    sessionStore.addMessage(tenantId, threadId, { role: 'system', content: SYSTEM_PROMPT });
   }
-  const history = threads.get(threadKey)!;
-  history.push({ role: 'user', content: message });
+  sessionStore.addMessage(tenantId, threadId, { role: 'user', content: message });
+
+  const messagesToSend = sessionStore.getOpenAICompatibleMessageList(tenantId, threadId, { maxTotalMessages: 16 });
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -166,8 +163,9 @@ export async function POST(req: NextRequest) {
       try {
         const completion = await client.chat.completions.create({
           model: 'c1/openai/gpt-5/v-20250915',
-          messages: history,
+          messages: messagesToSend,
           tools: TOOLS,
+          max_tokens: 1500,
           stream: true,
         });
 
@@ -198,17 +196,25 @@ export async function POST(req: NextRequest) {
           let args = {};
           try { args = JSON.parse(toolArgsRaw); } catch { /* partial args */ }
           send({ type: 'tool_call', name: toolName, args });
-          history.push({ role: 'assistant', content: null, tool_calls: [{ id: 'tc1', type: 'function', function: { name: toolName, arguments: toolArgsRaw } }] });
-          history.push({ role: 'tool', tool_call_id: 'tc1', content: `[${toolName} displayed to user]` });
+          sessionStore.addMessage(tenantId, threadId, {
+            role: 'assistant',
+            content: null,
+            tool_calls: [{ id: 'tc1', type: 'function', function: { name: toolName, arguments: toolArgsRaw } }],
+          });
+          sessionStore.addMessage(tenantId, threadId, {
+            role: 'tool',
+            tool_call_id: 'tc1',
+            content: `[${toolName} displayed to user]`,
+          });
         } else if (textAccum) {
-          history.push({ role: 'assistant', content: textAccum });
+          sessionStore.addMessage(tenantId, threadId, { role: 'assistant', content: textAccum });
         }
 
         // Log to agent_runs for ecosystem visibility (fire-and-forget)
         logInteraction({
           threadId,
           toolsInvoked: toolName ? [toolName] : [],
-          messageCount: history.length,
+          messageCount: sessionStore.getMessages(tenantId, threadId).length,
           durationMs:   Date.now() - t0,
         });
 

@@ -23,13 +23,14 @@ export async function POST(req: NextRequest) {
     baseURL: "https://api.thesys.dev/v1/embed/",
     apiKey: process.env.THESYS_API_KEY,
   });
-  const messageStore = getMessageStore(threadId);
+  const messageStore = getMessageStore(threadId, tenantId);
 
   messageStore.addMessage(prompt);
 
   const llmStream = await client.chat.completions.create({
     model: "c1/openai/gpt-5/v-20250915",
-    messages: messageStore.getOpenAICompatibleMessageList(),
+    messages: messageStore.getOpenAICompatibleMessageList({ maxTotalMessages: 16 }),
+    max_tokens: 1500,
     stream: true,
     tools: [
       {
