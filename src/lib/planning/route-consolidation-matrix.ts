@@ -1,33 +1,21 @@
 /**
- * Route Consolidation — Stage 2 matrix batching.
+ * Route Consolidation — Stage 2 matrix batching (Phase 3 Routing Intelligence Integration).
  *
  * Runs after the cheap Stage 1 filters (shift/direction/timing/zone/
  * capacity) have already cut candidates down, and before PCE (Stage 3
  * evaluates using these real numbers instead of a coordinate estimate —
  * see synthesizePlanFacts in route-consolidation.ts). Computes real road
  * distance + travel duration for each surviving candidate's endpoint
- * pairings via Google's Routes API matrix, batched to respect the API's
- * hard 625-element (origins × destinations) cap.
+ * pairings via RoutingIntelligenceService with multi-tier caching (STATIC_DISTANCE).
  *
  * Exports only the pure building blocks (buildCase1Pairings,
  * resolveMatrixPairings, pairingKey) — the top-level orchestrator lives
  * in route-consolidation.ts's analyzeConsolidations(), which calls these
- * directly rather than through a wrapper here, to avoid a circular
- * import (this module and route-consolidation.ts would otherwise need
- * each other's types). Stop-endpoint helpers (routePickupStop/
- * routeDropoffStop) live in route-consolidation-facts.ts for the same
- * reason — a neutral lower-level module both sides can import from.
- *
- * Endpoint-pairing abstraction is deliberately explicit and not "compare
- * these two routes" — today's simultaneous-merge model only ever needs
- * PICKUP_TO_PICKUP and DROPOFF_TO_DROPOFF, but the type also carries
- * DROPOFF_TO_PICKUP for the future turnaround/reuse case (Case 2), so
- * that case can reuse this exact batching/clustering machinery without
- * any plumbing changes when it lands.
+ * directly rather than through a wrapper here.
  */
 
 import type { PrismaClient } from '@prisma/client';
-import { getRouteMatrix } from './fleet-routing/matrix-cache';
+import { routingIntelligence } from '@/lib/routing/intelligence-service';
 import type { RouteFacts } from './route-consolidation-facts';
 import { routePickupStop, routeDropoffStop } from './route-consolidation-facts';
 
@@ -53,7 +41,7 @@ export interface MatrixPairingResult {
   durationMin: number;
 }
 
-/** sqrt(625) — cluster chunk side length so a square chunk never exceeds Google's hard 625-element (origins × destinations, TRAFFIC_AWARE, non-transit) per-request cap. */
+/** Chunk side length so a square chunk never exceeds the hard element cap. */
 const MAX_CHUNK_SIDE = 25;
 
 // ── Building pairings (Case 1: same-side comparisons only) ──────────────────
@@ -61,9 +49,7 @@ const MAX_CHUNK_SIDE = 25;
 /**
  * Today's simultaneous-merge model: for each surviving candidate, we need
  * the real distance between the two routes' pickup ends and between their
- * dropoff ends. A pairing is silently omitted (not an error) when a route
- * has no stops with coordinates — the caller already tolerates partial
- * results (matrixRefinement fields stay null for that side).
+ * dropoff ends.
  */
 export function buildCase1Pairings(
   candidates: Array<{ routeIdA: string; routeIdB: string; a: RouteFacts; b: RouteFacts }>,
@@ -92,7 +78,7 @@ function toPoint(s: { lat: number | null; lng: number | null } | undefined): Mat
 
 // ── Clustering + batching ────────────────────────────────────────────────────
 
-/** Rounded to 5dp — matches matrix-cache.ts's own coordinate-hash rounding, so identical points collide correctly. */
+/** Rounded to 5dp — matches coordinate-hash rounding, so identical points collide correctly. */
 function pointKey(p: MatrixPoint): string {
   return `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`;
 }
@@ -129,19 +115,8 @@ function chunkPoints<T>(points: T[], size: number): T[][] {
 }
 
 /**
- * Resolve every pairing's real distance/duration, batched by connected
- * component so unrelated routes never share a matrix call (which would
- * waste elements against the 625 cap for pairs nobody asked about).
- *
- * Known Phase-1 simplification: if a single connected component still
- * exceeds MAX_CHUNK_SIDE points (625 elements), it's split into
- * fixed-size chunks and only within-chunk pairs get resolved — a pairing
- * whose two points land in different chunks of an oversized component is
- * left unresolved (null) rather than triggering extra cross-chunk calls.
- * Acceptable at this engine's stated scale (typical N ≤ 50 routes, and
- * only *surviving* candidates need pairings at all); worth revisiting if
- * a tenant's surviving-candidate set regularly produces components this
- * large.
+ * Resolve every pairing's real distance/duration via RoutingIntelligenceService,
+ * batched by connected component and cached across tiers.
  */
 export async function resolveMatrixPairings(
   prisma: PrismaClient,
@@ -151,12 +126,6 @@ export async function resolveMatrixPairings(
   const results = new Map<string, MatrixPairingResult>();
   if (pairings.length === 0) return results;
 
-  // Same-point pairings (e.g. two routes sharing a literal accommodation
-  // stop) are resolved locally, not sent to Google — the distance between
-  // a point and itself is trivially 0, and Google's matrix API omits
-  // distanceMeters for identical origin/destination (only duration:"0s"
-  // comes back), which would otherwise look like "no route data" rather
-  // than a real zero. Skipping these also saves a billed matrix element.
   const samePointPairings: MatrixPairing[] = [];
   const distinctPairings: MatrixPairing[] = [];
   for (const p of pairings) {
@@ -187,37 +156,41 @@ export async function resolveMatrixPairings(
     else clusters.set(root, [key]);
   }
 
-  // 3. One (or a few, if oversized) getRouteMatrix call per cluster.
-  const departureTime = new Date(Date.now() + 24 * 60 * 60 * 1000); // ~tomorrow — traffic-bucket anchor only
+  // 3. One (or a few, if oversized) matrix call per cluster using RoutingIntelligenceService.
   const distanceLookup = new Map<string, Map<string, MatrixPairingResult>>();
 
   for (const clusterKeys of clusters.values()) {
     const chunks = clusterKeys.length <= MAX_CHUNK_SIDE ? [clusterKeys] : chunkPoints(clusterKeys, MAX_CHUNK_SIDE);
     for (const chunkKeys of chunks) {
-      const points = chunkKeys.map(k => ({ id: k, lat: pointsByKey.get(k)!.lat, lng: pointsByKey.get(k)!.lng }));
+      const points = chunkKeys.map(k => ({
+        id: k,
+        lat: pointsByKey.get(k)!.lat,
+        lng: pointsByKey.get(k)!.lng,
+      }));
+
       try {
-        const { matrix } = await getRouteMatrix({
+        const matrixRes = await routingIntelligence.getMatrix(points, points, {
+          tier: 'STATIC_DISTANCE',
           tenantId,
-          origins: points,
-          destinations: points,
-          routingMode: 'DRIVE',
-          departureTime,
         });
-        for (const el of matrix) {
-          if (el.condition === 'ROUTE_NOT_FOUND' || el.distanceMeters == null || !el.duration) continue;
-          const fromKey = chunkKeys[el.originIndex];
-          const toKey = chunkKeys[el.destinationIndex];
-          const entry: MatrixPairingResult = {
-            distanceKm: Math.round((el.distanceMeters / 1000) * 100) / 100,
-            durationMin: Math.round(Number(el.duration.replace(/s$/, '')) / 60),
-          };
+
+        for (let i = 0; i < points.length; i++) {
+          const fromKey = chunkKeys[i];
           if (!distanceLookup.has(fromKey)) distanceLookup.set(fromKey, new Map());
-          distanceLookup.get(fromKey)!.set(toKey, entry);
+
+          for (let j = 0; j < points.length; j++) {
+            const toKey = chunkKeys[j];
+            const distKm = matrixRes.distances[i]?.[j] ?? 0;
+            const durMin = matrixRes.durations[i]?.[j] ?? 0;
+
+            distanceLookup.get(fromKey)!.set(toKey, {
+              distanceKm: parseFloat(distKm.toFixed(2)),
+              durationMin: Math.round(durMin),
+            });
+          }
         }
       } catch (e) {
-        // Non-fatal — pairings in this chunk stay unresolved (null downstream)
-        // rather than failing the whole analysis over one matrix call.
-        console.warn('[route-consolidation-matrix] getRouteMatrix failed for a chunk:', e);
+        console.warn('[route-consolidation-matrix] routingIntelligence.getMatrix failed for a chunk:', e);
       }
     }
   }

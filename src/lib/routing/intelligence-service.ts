@@ -161,22 +161,29 @@ export class RoutingIntelligenceService {
   canonicalizeLocation(input: {
     canonicalLocationId?: string;
     name?: string;
-    latitude: number;
-    longitude: number;
-    accessPoint?: LatLng;
+    latitude?: number;
+    longitude?: number;
+    lat?: number;
+    lng?: number;
+    accessPoint?: LatLng | { lat: number; lng: number };
     zoneId?: string;
   }): CanonicalLocation {
-    const access = input.accessPoint ?? {
-      latitude: input.latitude,
-      longitude: input.longitude,
+    const latitude = input.latitude ?? input.lat ?? 0;
+    const longitude = input.longitude ?? input.lng ?? 0;
+    const accessLat = (input.accessPoint as any)?.latitude ?? (input.accessPoint as any)?.lat ?? latitude;
+    const accessLng = (input.accessPoint as any)?.longitude ?? (input.accessPoint as any)?.lng ?? longitude;
+
+    const access: LatLng = {
+      latitude: accessLat,
+      longitude: accessLng,
     };
     const geohash = encodeGeohash(access.latitude, access.longitude, 6);
 
     return {
       canonicalLocationId: input.canonicalLocationId,
       name: input.name,
-      latitude: input.latitude,
-      longitude: input.longitude,
+      latitude,
+      longitude,
       geohash,
       accessPoint: access,
       zoneId: input.zoneId,
@@ -189,8 +196,8 @@ export class RoutingIntelligenceService {
    * Expands: 5 km -> 10 km -> 25 km -> Zone boundary if candidate count < minCandidates.
    */
   spatialShortlist<T>(
-    origin: LatLng,
-    candidates: (T & { lat: number; lng: number; zoneId?: string })[],
+    origin: LatLng | { lat: number; lng: number },
+    candidates: (T & { lat?: number; lng?: number; latitude?: number; longitude?: number; zoneId?: string })[],
     options: SpatialShortlistOptions = {},
   ): SpatialShortlistResult<T> {
     const initialRadiusKm = options.initialRadiusKm ?? 5;
@@ -199,16 +206,23 @@ export class RoutingIntelligenceService {
     const minCandidates = options.minCandidates ?? 1;
     const maxCandidates = options.maxCandidates ?? 20;
 
+    const origLat = (origin as any).latitude ?? (origin as any).lat ?? 0;
+    const origLng = (origin as any).longitude ?? (origin as any).lng ?? 0;
+
     let currentRadius = initialRadiusKm;
     let expanded = false;
     let matchedWithDistances: { item: T; distKm: number }[] = [];
 
     // Calculate distances once for all candidates
-    const allCandidatesWithDist = candidates.map((c) => ({
-      item: c,
-      distKm: haversineKm(origin.latitude, origin.longitude, c.lat, c.lng, 1.0),
-      zoneId: c.zoneId,
-    }));
+    const allCandidatesWithDist = candidates.map((c) => {
+      const cLat = c.latitude ?? c.lat ?? 0;
+      const cLng = c.longitude ?? c.lng ?? 0;
+      return {
+        item: c,
+        distKm: haversineKm(origLat, origLng, cLat, cLng, 1.0),
+        zoneId: c.zoneId,
+      };
+    });
 
     // Filter within expanding radius
     while (currentRadius <= maxRadiusKm) {
@@ -625,7 +639,15 @@ export class RoutingIntelligenceService {
     const calc = calculateRoutingCost(provider, elementCount, false);
     return { estimatedUsd: calc.costUsd, estimatedAed: calc.costAed };
   }
+
+  /**
+   * Clear in-memory L1 cache (useful for test resets)
+   */
+  clearL1Cache(): void {
+    MEMORY_L1_CACHE.clear();
+  }
 }
 
 /** Global Shared Singleton Instance */
 export const routingIntelligence = new RoutingIntelligenceService();
+

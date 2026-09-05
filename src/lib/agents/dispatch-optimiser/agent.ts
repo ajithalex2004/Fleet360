@@ -1,21 +1,25 @@
 /**
- * Smart Dispatch Optimiser Agent v2.0.0
+ * Smart Dispatch Optimiser Agent v2.1.0
  * ---------------------------------------
- * Evaluates all pending dispatch jobs and scores every available
- * driver/vehicle combination using the 15-factor scoring model.
+ * Evaluates all pending dispatch jobs and scores driver/vehicle combinations
+ * using the 15-factor scoring model, adaptive spatial shortlisting,
+ * and RoutingIntelligenceService matrix refinement.
  * 
  * Includes:
+ *  - Adaptive Spatial Shortlisting (prunes 200+ candidates to Top-20 with fallback expansion)
+ *  - Top-5 Policy Road Matrix Refinement via RoutingIntelligenceService
  *  - Live Driver HOS (Hours of Service) shifts & fatigue telemetry
  *  - Vehicle Mulkiya, registration & insurance compliance gating
  *  - Driver commercial licensing validity gating
  *  - Predictive maintenance risk score integration
  *  - Proximity & Deadhead distance to depot optimization
  *  - Semi-Autonomous Auto-Dispatch execution for high-confidence matches (score >= 0.85)
+ *  - Avoided routing cost & cache hit telemetry tracking
  *  - Upserting recommendations to `dispatch_optimiser_recommendations`
  */
 import { prisma } from '@/lib/prisma';
 import { AgentDefinition, AgentEvent, AgentRunResult } from '../types';
-import { rankCandidates, DriverCandidate, JobRequirements } from './scoring';
+import { rankCandidatesWithRouting, DriverCandidate, JobRequirements } from './scoring';
 import { ensureDispatchSchema } from '@/lib/dispatch/schema';
 
 interface JobRow {
@@ -229,9 +233,12 @@ async function runDispatchOptimiser(event: AgentEvent): Promise<AgentRunResult> 
 
   let processed = 0;
   let autoDispatchedCount = 0;
+  let totalMatrixElements = 0;
+  let totalCacheHits = 0;
+  let totalCostAvoidedAed = 0;
   const recommendations: Record<string, unknown>[] = [];
 
-  // 6. Score each job and optionally auto-dispatch
+  // 6. Score each job with Spatial Shortlist & Top-5 Road Matrix Refinement
   for (const job of jobs) {
     if (candidates.length === 0) break;
 
@@ -253,8 +260,18 @@ async function runDispatchOptimiser(event: AgentEvent): Promise<AgentRunResult> 
       zoneId:               job.zone_id,
     };
 
-    const ranked = rankCandidates(candidates, jobReq);
+    const routingResult = await rankCandidatesWithRouting(candidates, jobReq, {
+      maxCandidates: 20,
+      topKRefineMatrix: 5,
+      tenantId,
+    });
+
+    const ranked = routingResult.ranked;
     if (ranked.length === 0) continue;
+
+    totalMatrixElements += routingResult.matrixElementsQueried;
+    totalCacheHits += routingResult.cacheHits;
+    totalCostAvoidedAed += routingResult.costAvoidedAed;
 
     const top = ranked[0];
 
@@ -331,6 +348,7 @@ async function runDispatchOptimiser(event: AgentEvent): Promise<AgentRunResult> 
       candidates:         ranked.length,
       distanceKm:         top.distanceKm,
       etaMinutes:         top.etaMinutes,
+      isMatrixRefined:    top.isMatrixRefined ?? false,
       status:             recStatus,
       isBlocked:          top.isBlocked,
       reason:             top.reason,
@@ -343,9 +361,19 @@ async function runDispatchOptimiser(event: AgentEvent): Promise<AgentRunResult> 
     agentId: 'dispatch-optimiser', tenantId, eventType: event.event_type,
     status: 'COMPLETED', durationMs: Date.now() - t0,
     itemsProcessed: jobs.length, actionsCreated: processed,
+    telemetry: {
+      matrixElementsQueried: totalMatrixElements,
+      cacheHits: totalCacheHits,
+      costAvoidedAed: totalCostAvoidedAed,
+    },
     output: {
-      summary: `Evaluated ${jobs.length} job(s) across ${candidates.length} candidates. Generated ${processed} recommendation(s) (${autoDispatchedCount} auto-dispatched).${entityId ? ` [single-job mode: ${entityId}]` : ''}`,
+      summary: `Evaluated ${jobs.length} job(s) across ${candidates.length} candidates (spatially pre-filtered to Top-20 with Top-5 road matrix refinement). Generated ${processed} recommendation(s) (${autoDispatchedCount} auto-dispatched). Avoided ${totalCostAvoidedAed.toFixed(2)} AED in routing matrix calls.${entityId ? ` [single-job mode: ${entityId}]` : ''}`,
       recommendations,
+      routingStats: {
+        matrixElementsQueried: totalMatrixElements,
+        cacheHits: totalCacheHits,
+        costAvoidedAed: totalCostAvoidedAed,
+      },
     },
   };
 }
@@ -353,8 +381,8 @@ async function runDispatchOptimiser(event: AgentEvent): Promise<AgentRunResult> 
 export const DISPATCH_OPTIMISER_AGENT: AgentDefinition = {
   id:          'dispatch-optimiser',
   name:        'Smart Dispatch Optimiser Agent',
-  description: '15-factor statistical scoring model that evaluates live HOS, compliance, deadhead, maintenance risk, and proximity to execute semi-autonomous dispatch.',
-  version:     '2.0.0',
+  description: '15-factor statistical scoring model that evaluates live HOS, compliance, deadhead, maintenance risk, and proximity with spatial shortlisting to execute semi-autonomous dispatch.',
+  version:     '2.1.0',
   agentType:   'BATCH',
   subscribedEvents: ['dispatch.job_created', 'dispatch.job_reassign', 'manual.trigger', 'schedule.hourly'],
   supportsEntityScan: true,

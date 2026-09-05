@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   RoutingIntelligenceService,
   encodeGeohash,
@@ -6,6 +6,14 @@ import {
   getTtlMsForTier,
 } from '../../src/lib/routing/intelligence-service';
 import { computeDistanceMatrix } from '../../src/lib/logistics/distance-matrix';
+
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    $executeRawUnsafe: vi.fn().mockResolvedValue(1),
+    $queryRawUnsafe: vi.fn().mockResolvedValue([]),
+  },
+}));
+
 
 describe('Phase 2: Routing Intelligence Service & Matrix Cache', () => {
   const service = new RoutingIntelligenceService();

@@ -1,8 +1,9 @@
 /**
- * Staff Transport Planning Optimizer Engine v1.0.0
+ * Staff Transport Planning Optimizer Engine v1.1.0
  * --------------------------------------------------
  * Solves multi-shift staff transport routing, vehicle sizing,
- * departure time scheduling, and cross-shift vehicle reuse.
+ * departure time scheduling, and cross-shift vehicle reuse
+ * with spatial shortlisting and routing intelligence.
  *
  * Capabilities:
  *  1. Geoclusters employee accommodations by geographic zone & work destination.
@@ -12,7 +13,7 @@
  *       - COACH_50   (Capacity: 50, luxury heavy coach)
  *  3. Computes optimal waypoint sequence (TSP Nearest-Neighbor / 2-Opt).
  *  4. Calculates exact departure times ensuring on-time arrival within shift window.
- *  5. Chains vehicle reuse across non-overlapping shifts to minimize fleet size.
+ *  5. Chains vehicle reuse across non-overlapping shifts using spatial shortlisting to minimize fleet size.
  *  6. Calculates vehicle, distance, and financial cost savings (AED).
  */
 
@@ -22,6 +23,7 @@ import {
   VehicleReuseChain,
   StaffTransportPlanRecommendation,
 } from '../types';
+import { routingIntelligence } from '@/lib/routing/intelligence-service';
 
 export interface EmployeePickupRequirement {
   id: string;
@@ -340,10 +342,37 @@ export function optimizeStaffTransportPlan(
     let currentEndLng = rootRoute.destinationLng;
     let currentEndLocation = rootRoute.destinationName;
 
-    for (let j = i + 1; j < sortedRoutes.length; j++) {
-      const candidate = sortedRoutes[j];
+    // Filter candidate downstream routes spatially before evaluating time windows
+    const unassignedDownstream = sortedRoutes
+      .slice(i + 1)
+      .filter(r => !assignedRouteIds.has(r.routeId) && r.recommendedCapacity <= rootRoute.recommendedCapacity);
+
+    // Shortlist geographically compatible routes within 40 km deadhead
+    const spatialCandidates = unassignedDownstream.map(r => {
+      const firstStop = r.stops[0] ?? { lat: r.destinationLat, lng: r.destinationLng };
+      return {
+        item: r,
+        lat: firstStop.lat,
+        lng: firstStop.lng,
+      };
+    });
+
+    const shortlisted = routingIntelligence.spatialShortlist(
+      { lat: currentEndLat, lng: currentEndLng },
+      spatialCandidates,
+      {
+        maxCandidates: 15,
+        initialRadiusKm: 25,
+        expansionStepKm: 15,
+        maxRadiusKm: 50,
+        minCandidates: 1,
+        adaptiveExpansion: true,
+      },
+    );
+
+    for (const shortCandidate of shortlisted.selected) {
+      const candidate = shortCandidate.item;
       if (assignedRouteIds.has(candidate.routeId)) continue;
-      if (candidate.recommendedCapacity > rootRoute.recommendedCapacity) continue; // must fit in same vehicle capacity
 
       const candidateStartMin = parseTime(candidate.calculatedDepartureTime);
       const firstStop = candidate.stops[0] ?? { lat: candidate.destinationLat, lng: candidate.destinationLng, stopName: candidate.destinationName };
