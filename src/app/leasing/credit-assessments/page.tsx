@@ -9,11 +9,14 @@ interface CreditAssessment {
   assessmentDate: string;
   creditScore: number;
   riskRating: 'LOW' | 'MEDIUM' | 'HIGH';
-  creditLimit: number;
-  currentExposure: number;
-  recommendedLimit: number;
+  // Decimal columns in Prisma serialize to strings over JSON (and are
+  // nullable) — never call .toFixed() on these directly, wrap with
+  // Number(x ?? 0) first.
+  creditLimit: number | string | null;
+  currentExposure: number | string | null;
+  recommendedLimit: number | string | null;
   paymentHistory: 'EXCELLENT' | 'GOOD' | 'FAIR' | 'POOR';
-  annualRevenue: number;
+  annualRevenue: number | string | null;
   yearsInBusiness: number;
   assessedBy: string;
   validUntil: string;
@@ -149,7 +152,7 @@ export default function CreditAssessmentsPage() {
     ? Math.round(assessments.reduce((sum, a) => sum + a.creditScore, 0) / totalAssessed)
     : 0;
   const highRiskCount = assessments.filter(a => a.riskRating === 'HIGH').length;
-  const totalExposure = assessments.reduce((sum, a) => sum + a.currentExposure, 0);
+  const totalExposure = assessments.reduce((sum, a) => sum + Number(a.currentExposure ?? 0), 0);
 
   return (
     <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-main)] p-6">
@@ -222,9 +225,9 @@ export default function CreditAssessmentsPage() {
                         {assessment.riskRating}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right">{assessment.creditLimit.toFixed(2)} AED</td>
-                    <td className="px-4 py-3 text-right">{assessment.currentExposure.toFixed(2)} AED</td>
-                    <td className="px-4 py-3 text-right text-amber-400 font-medium">{assessment.recommendedLimit.toFixed(2)} AED</td>
+                    <td className="px-4 py-3 text-right">{Number(assessment.creditLimit ?? 0).toFixed(2)} AED</td>
+                    <td className="px-4 py-3 text-right">{Number(assessment.currentExposure ?? 0).toFixed(2)} AED</td>
+                    <td className="px-4 py-3 text-right text-amber-400 font-medium">{Number(assessment.recommendedLimit ?? 0).toFixed(2)} AED</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-1 text-xs rounded border ${getPaymentHistoryBadgeColor(assessment.paymentHistory)}`}>
                         {assessment.paymentHistory}
