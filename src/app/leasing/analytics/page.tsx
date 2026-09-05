@@ -71,7 +71,7 @@ export default function AnalyticsPage() {
 
   if (loading) return (
     <div className="flex items-center justify-center h-full">
-      <div className="text-slate-400 animate-pulse">Loading analytics...</div>
+      <div className="text-[var(--text-muted)] animate-pulse">Loading analytics...</div>
     </div>
   );
 
@@ -104,11 +104,11 @@ export default function AnalyticsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Analytics & BI</h1>
-          <p className="text-slate-400">
+          <h1 className="text-4xl font-bold text-[var(--text-main)] mb-2">Analytics & BI</h1>
+          <p className="text-[var(--text-muted)]">
             Real-time leasing portfolio intelligence
             {lastRefreshed && (
-              <span className="ml-3 text-xs text-slate-500">
+              <span className="ml-3 text-xs text-[var(--text-faint)]">
                 Last refreshed: {lastRefreshed.toLocaleTimeString()}
               </span>
             )}
@@ -116,7 +116,7 @@ export default function AnalyticsPage() {
         </div>
         <button
           onClick={loadData}
-          className="px-5 py-2.5 rounded-xl bg-slate-700 border border-white/10 text-white text-sm font-medium hover:bg-slate-600 transition-all"
+          className="px-5 py-2.5 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm font-medium hover:bg-[var(--bg-surface-hover)] transition-all"
         >
           Refresh
         </button>
@@ -139,19 +139,19 @@ export default function AnalyticsPage() {
           { label: 'Total Lessees',        value: kpis.totalLessees ?? 0,                     sub: `${kpis.corporateLessees ?? 0} corporate`, color: 'from-cyan-500 to-blue-600',  href: '/leasing/lessees' },
         ].map(({ label, value, sub, color, href }) => (
           <Link key={label} href={href} className={`rounded-2xl bg-gradient-to-br ${color} p-5 block hover:scale-[1.02] transition-transform`}>
-            <div className="text-2xl font-bold text-white">{value}</div>
-            <div className="text-sm font-medium text-white/80 mt-1">{label}</div>
-            <div className="text-xs text-white/60 mt-0.5">{sub} <span className="opacity-70">→</span></div>
+            <div className="text-2xl font-bold text-[var(--text-main)]">{value}</div>
+            <div className="text-sm font-medium text-[var(--text-main)]/80 mt-1">{label}</div>
+            <div className="text-xs text-[var(--text-main)]/60 mt-0.5">{sub} <span className="opacity-70">→</span></div>
           </Link>
         ))}
       </div>
 
       {/* Fleet Utilisation — real vehicle-month-based calc */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-lg font-semibold text-white">Fleet Utilisation</h2>
-            <p className="text-xs text-slate-400 mt-1">
+            <h2 className="text-lg font-semibold text-[var(--text-main)]">Fleet Utilisation</h2>
+            <p className="text-xs text-[var(--text-muted)] mt-1">
               Active vehicle-months ÷ available vehicle-months over trailing 6 months
             </p>
           </div>
@@ -162,12 +162,12 @@ export default function AnalyticsPage() {
             }`}>
               {(kpis.utilisationPct ?? 0).toFixed(1)}%
             </div>
-            <div className="text-xs text-slate-400 mt-1">
+            <div className="text-xs text-[var(--text-muted)] mt-1">
               {kpis.activeVehicleMonths ?? 0} / {kpis.totalVehicleMonths ?? 0} vehicle-months
             </div>
           </div>
         </div>
-        <div className="w-full bg-slate-700 rounded-full h-3">
+        <div className="w-full bg-[var(--bg-surface-hover)] rounded-full h-3">
           <div
             className={`h-3 rounded-full transition-all ${
               (kpis.utilisationPct ?? 0) >= 80 ? 'bg-emerald-500' :
@@ -176,7 +176,7 @@ export default function AnalyticsPage() {
             style={{ width: `${Math.min(kpis.utilisationPct ?? 0, 100)}%` }}
           />
         </div>
-        <div className="flex justify-between mt-2 text-xs text-slate-500">
+        <div className="flex justify-between mt-2 text-xs text-[var(--text-faint)]">
           <span>Fleet size: {kpis.fleetSize ?? 0} vehicles under contract</span>
           <span>Target: 85%</span>
         </div>
@@ -196,9 +196,9 @@ export default function AnalyticsPage() {
             </div>
           </div>
         </div>
-        <div className="mt-3 w-full bg-white/20 rounded-full h-2">
+        <div className="mt-3 w-full bg-[var(--bg-surface-hover)] rounded-full h-2">
           <div
-            className="h-2 rounded-full bg-white/70 transition-all"
+            className="h-2 rounded-full bg-[var(--bg-surface-hover)] transition-all"
             style={{ width: `${Math.min(kpis.collectionRate ?? 0, 100)}%` }}
           />
         </div>
@@ -206,10 +206,10 @@ export default function AnalyticsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Revenue by Month */}
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-5">Revenue by Month</h2>
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6">
+          <h2 className="text-lg font-semibold text-[var(--text-main)] mb-5">Revenue by Month</h2>
           {revenueEntries.length === 0 ? (
-            <div className="text-center text-slate-500 py-8">No payment data yet</div>
+            <div className="text-center text-[var(--text-faint)] py-8">No payment data yet</div>
           ) : (
             <div className="space-y-3">
               {revenueEntries.map(([month, amount]) => {
@@ -217,10 +217,10 @@ export default function AnalyticsPage() {
                 return (
                   <div key={month}>
                     <div className="flex justify-between mb-1">
-                      <span className="text-sm text-slate-300">{month}</span>
-                      <span className="text-sm font-semibold text-white">AED {(amount / 1000).toFixed(0)}K</span>
+                      <span className="text-sm text-[var(--text-muted)]">{month}</span>
+                      <span className="text-sm font-semibold text-[var(--text-main)]">AED {(amount / 1000).toFixed(0)}K</span>
                     </div>
-                    <div className="w-full bg-slate-700 rounded-full h-2">
+                    <div className="w-full bg-[var(--bg-surface-hover)] rounded-full h-2">
                       <div className="bg-emerald-500 h-2 rounded-full transition-all" style={{ width: `${pct}%` }} />
                     </div>
                   </div>
@@ -231,10 +231,10 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Contract Status Breakdown */}
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-5">Contract Status Breakdown</h2>
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6">
+          <h2 className="text-lg font-semibold text-[var(--text-main)] mb-5">Contract Status Breakdown</h2>
           {statusEntries.length === 0 ? (
-            <div className="text-center text-slate-500 py-8">No contracts yet</div>
+            <div className="text-center text-[var(--text-faint)] py-8">No contracts yet</div>
           ) : (
             <div className="space-y-3">
               {statusEntries.map(([status, count]) => {
@@ -242,10 +242,10 @@ export default function AnalyticsPage() {
                 return (
                   <div key={status}>
                     <div className="flex justify-between mb-1">
-                      <span className="text-sm text-slate-300">{status}</span>
-                      <span className="text-sm font-semibold text-white">{count} ({pct}%)</span>
+                      <span className="text-sm text-[var(--text-muted)]">{status}</span>
+                      <span className="text-sm font-semibold text-[var(--text-main)]">{count} ({pct}%)</span>
                     </div>
-                    <div className="w-full bg-slate-700 rounded-full h-2">
+                    <div className="w-full bg-[var(--bg-surface-hover)] rounded-full h-2">
                       <div className={`h-2 rounded-full transition-all ${statusColors[status] ?? 'bg-slate-500'}`} style={{ width: `${pct}%` }} />
                     </div>
                   </div>
@@ -257,8 +257,8 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Pending Billing Breakdown */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-        <h2 className="text-lg font-semibold text-white mb-5">Pending Operational Billing</h2>
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6">
+        <h2 className="text-lg font-semibold text-[var(--text-main)] mb-5">Pending Operational Billing</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[
             { label: 'Traffic Fines',    value: billing.fines,         color: 'from-rose-600 to-pink-600' },
@@ -266,24 +266,24 @@ export default function AnalyticsPage() {
             { label: 'Mileage Overage',  value: billing.mileageOverage,color: 'from-violet-600 to-purple-600' },
           ].map(({ label, value, color }) => (
             <div key={label} className={`rounded-xl bg-gradient-to-br ${color} p-5`}>
-              <div className="text-xs font-medium text-white/70 mb-1">{label}</div>
-              <div className="text-2xl font-bold text-white">AED {(value ?? 0).toLocaleString()}</div>
-              <div className="text-xs text-white/60 mt-1">Unbilled to lessees</div>
+              <div className="text-xs font-medium text-[var(--text-main)]/70 mb-1">{label}</div>
+              <div className="text-2xl font-bold text-[var(--text-main)]">AED {(value ?? 0).toLocaleString()}</div>
+              <div className="text-xs text-[var(--text-main)]/60 mt-1">Unbilled to lessees</div>
             </div>
           ))}
         </div>
       </div>
 
       {/* Top contracts by net contribution */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6">
         <div className="flex items-center justify-between mb-5">
           <div>
-            <h2 className="text-lg font-semibold text-white">Top 5 Contracts by Net Contribution (YTD)</h2>
-            <p className="text-xs text-slate-400 mt-1">YTD paid revenue minus unbilled exposure (fines + fuel + overage). Click to drill in.</p>
+            <h2 className="text-lg font-semibold text-[var(--text-main)]">Top 5 Contracts by Net Contribution (YTD)</h2>
+            <p className="text-xs text-[var(--text-muted)] mt-1">YTD paid revenue minus unbilled exposure (fines + fuel + overage). Click to drill in.</p>
           </div>
         </div>
         {(data.topContracts ?? []).length === 0 ? (
-          <div className="text-center text-slate-500 py-8">No active contracts with paid revenue yet.</div>
+          <div className="text-center text-[var(--text-faint)] py-8">No active contracts with paid revenue yet.</div>
         ) : (
           <div className="space-y-2">
             {(data.topContracts ?? []).map((c, i) => {
@@ -294,23 +294,23 @@ export default function AnalyticsPage() {
                 <Link
                   key={c.contractId}
                   href={`/leasing/contracts-v2/${c.contractId}`}
-                  className="block p-3 rounded-xl border border-white/5 bg-slate-900/40 hover:bg-slate-900/70 transition-colors"
+                  className="block p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 hover:bg-[var(--bg-surface)]/70 transition-colors"
                 >
                   <div className="flex items-center justify-between gap-3 mb-2">
                     <div className="flex items-center gap-3 min-w-0">
-                      <span className="text-slate-500 text-xs w-5 text-right">{i + 1}.</span>
+                      <span className="text-[var(--text-faint)] text-xs w-5 text-right">{i + 1}.</span>
                       <span className="font-mono text-cyan-300 text-sm truncate">{c.contractNumber ?? c.contractId.slice(0, 8)}</span>
                     </div>
                     <div className="text-right shrink-0">
                       <div className={`text-base font-semibold ${positive ? 'text-emerald-300' : 'text-rose-300'}`}>
                         AED {c.netContribution.toLocaleString('en-US', { maximumFractionDigits: 0 })}
                       </div>
-                      <div className="text-[10px] text-slate-500">
+                      <div className="text-[10px] text-[var(--text-faint)]">
                         {c.revenue.toLocaleString('en-US', { maximumFractionDigits: 0 })} revenue · {c.exposure.toLocaleString('en-US', { maximumFractionDigits: 0 })} unbilled
                       </div>
                     </div>
                   </div>
-                  <div className="w-full bg-slate-800 rounded-full h-1.5">
+                  <div className="w-full bg-[var(--bg-surface)] rounded-full h-1.5">
                     <div
                       className={`h-1.5 rounded-full ${positive ? 'bg-emerald-500' : 'bg-rose-500'}`}
                       style={{ width: `${pct}%` }}
@@ -325,21 +325,21 @@ export default function AnalyticsPage() {
 
       {/* Lessee portfolio */}
       <div className="grid grid-cols-1 gap-6">
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-2">Lessee Portfolio</h2>
-          <p className="text-slate-400 text-sm mb-4">Active lessee breakdown by type</p>
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6">
+          <h2 className="text-lg font-semibold text-[var(--text-main)] mb-2">Lessee Portfolio</h2>
+          <p className="text-[var(--text-muted)] text-sm mb-4">Active lessee breakdown by type</p>
           <div className="flex items-end gap-6">
             <div>
-              <div className="text-4xl font-bold text-white">{kpis.totalLessees ?? 0}</div>
-              <div className="text-xs text-slate-400 mt-1">Total Lessees</div>
+              <div className="text-4xl font-bold text-[var(--text-main)]">{kpis.totalLessees ?? 0}</div>
+              <div className="text-xs text-[var(--text-muted)] mt-1">Total Lessees</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-blue-400">{kpis.corporateLessees ?? 0}</div>
-              <div className="text-xs text-slate-400 mt-1">Corporate</div>
+              <div className="text-xs text-[var(--text-muted)] mt-1">Corporate</div>
             </div>
             <div>
               <div className="text-2xl font-bold text-violet-400">{(kpis.totalLessees ?? 0) - (kpis.corporateLessees ?? 0)}</div>
-              <div className="text-xs text-slate-400 mt-1">Individual</div>
+              <div className="text-xs text-[var(--text-muted)] mt-1">Individual</div>
             </div>
           </div>
         </div>

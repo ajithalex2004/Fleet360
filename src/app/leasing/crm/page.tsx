@@ -101,7 +101,7 @@ export default function CRMPage() {
       CONVERTED: 'bg-emerald-900 text-emerald-200',
       LOST: 'bg-rose-900 text-rose-200',
     };
-    return colors[status] || 'bg-gray-700 text-gray-200';
+    return colors[status] || 'bg-[var(--bg-surface-hover)] text-[var(--text-main)]';
   };
 
   const pipelineTotal = data ? Object.values(data.pipeline).reduce((a, b) => a + b, 0) : 0;
@@ -109,14 +109,14 @@ export default function CRMPage() {
     (data?.conversionRate || 0) > 0.30 ? 'text-emerald-300' : 'text-amber-300';
 
   return (
-    <div className="min-h-screen bg-gray-900 p-6">
+    <div className="min-h-screen bg-[var(--bg-surface)] p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-white">CRM & Leads</h1>
+          <h1 className="text-3xl font-bold text-[var(--text-main)]">CRM & Leads</h1>
           <Link
             href="/leasing/inquiries"
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition"
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-[var(--text-main)] px-4 py-2 rounded-lg transition"
           >
             +
             New Inquiry
@@ -133,29 +133,29 @@ export default function CRMPage() {
         {/* Pipeline Funnel */}
         {!loading && data && (
           <div className="mb-8">
-            <h2 className="text-lg font-semibold text-white mb-4">Sales Pipeline</h2>
+            <h2 className="text-lg font-semibold text-[var(--text-main)] mb-4">Sales Pipeline</h2>
             <div className="grid grid-cols-5 gap-3">
               {pipelineStages.map((stage) => {
                 const count = data.pipeline[stage] || 0;
                 const percentage = pipelineTotal > 0 ? ((count / pipelineTotal) * 100).toFixed(0) : 0;
                 return (
-                  <div key={stage} className="bg-gray-800 border border-gray-700 rounded-lg p-4 text-center">
-                    <p className="text-gray-400 text-xs font-medium mb-2">{stage.replace('_', ' ')}</p>
-                    <p className="text-2xl font-bold text-white">{count}</p>
-                    <p className="text-xs text-gray-500 mt-1">{percentage}%</p>
+                  <div key={stage} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-4 text-center">
+                    <p className="text-[var(--text-muted)] text-xs font-medium mb-2">{stage.replace('_', ' ')}</p>
+                    <p className="text-2xl font-bold text-[var(--text-main)]">{count}</p>
+                    <p className="text-xs text-[var(--text-faint)] mt-1">{percentage}%</p>
                   </div>
                 );
               })}
             </div>
 
             {/* Conversion Rate */}
-            <div className="mt-6 bg-gradient-to-r from-gray-800 to-gray-700 border border-gray-600 rounded-lg p-6">
-              <p className="text-gray-400 text-sm mb-2">Conversion Rate (to CONVERTED)</p>
+            <div className="mt-6 bg-gradient-to-r from-gray-800 to-gray-700 border border-[var(--border-strong)] rounded-lg p-6">
+              <p className="text-[var(--text-muted)] text-sm mb-2">Conversion Rate (to CONVERTED)</p>
               <div className="flex items-baseline gap-3">
                 <p className={`text-4xl font-bold ${conversionColor}`}>
                   {((data.conversionRate || 0) * 100).toFixed(1)}%
                 </p>
-                <p className="text-gray-400 text-sm">of total inquiries converted</p>
+                <p className="text-[var(--text-muted)] text-sm">of total inquiries converted</p>
               </div>
             </div>
           </div>
@@ -170,8 +170,8 @@ export default function CRMPage() {
                 onClick={() => setStatusFilter(status)}
                 className={`px-4 py-2 rounded-lg transition ${
                   statusFilter === status
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                    ? 'bg-blue-600 text-[var(--text-main)]'
+                    : 'bg-[var(--bg-surface)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]'
                 }`}
               >
                 {status.replace('_', ' ')}
@@ -181,25 +181,25 @@ export default function CRMPage() {
         </div>
 
         {/* Loading */}
-        {loading && <p className="text-gray-400 text-center py-8">Loading inquiries...</p>}
+        {loading && <p className="text-[var(--text-muted)] text-center py-8">Loading inquiries...</p>}
 
         {/* Table */}
         {!loading && filteredInquiries.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-800 border-b border-gray-700">
+              <thead className="bg-[var(--bg-surface)] border-b border-[var(--border-subtle)]">
                 <tr>
-                  <th className="px-4 py-3 text-left text-gray-300 font-semibold">Inquiry No</th>
-                  <th className="px-4 py-3 text-left text-gray-300 font-semibold">Customer / Company</th>
-                  <th className="px-4 py-3 text-left text-gray-300 font-semibold">Vehicle Type</th>
-                  <th className="px-4 py-3 text-left text-gray-300 font-semibold">Count</th>
-                  <th className="px-4 py-3 text-left text-gray-300 font-semibold">Duration</th>
-                  <th className="px-4 py-3 text-left text-gray-300 font-semibold">Lease Type</th>
-                  <th className="px-4 py-3 text-left text-gray-300 font-semibold">Quotations</th>
-                  <th className="px-4 py-3 text-left text-gray-300 font-semibold">Status</th>
-                  <th className="px-4 py-3 text-left text-gray-300 font-semibold">Assigned To</th>
-                  <th className="px-4 py-3 text-left text-gray-300 font-semibold">Created</th>
-                  <th className="px-4 py-3 text-left text-gray-300 font-semibold">Actions</th>
+                  <th className="px-4 py-3 text-left text-[var(--text-muted)] font-semibold">Inquiry No</th>
+                  <th className="px-4 py-3 text-left text-[var(--text-muted)] font-semibold">Customer / Company</th>
+                  <th className="px-4 py-3 text-left text-[var(--text-muted)] font-semibold">Vehicle Type</th>
+                  <th className="px-4 py-3 text-left text-[var(--text-muted)] font-semibold">Count</th>
+                  <th className="px-4 py-3 text-left text-[var(--text-muted)] font-semibold">Duration</th>
+                  <th className="px-4 py-3 text-left text-[var(--text-muted)] font-semibold">Lease Type</th>
+                  <th className="px-4 py-3 text-left text-[var(--text-muted)] font-semibold">Quotations</th>
+                  <th className="px-4 py-3 text-left text-[var(--text-muted)] font-semibold">Status</th>
+                  <th className="px-4 py-3 text-left text-[var(--text-muted)] font-semibold">Assigned To</th>
+                  <th className="px-4 py-3 text-left text-[var(--text-muted)] font-semibold">Created</th>
+                  <th className="px-4 py-3 text-left text-[var(--text-muted)] font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -213,24 +213,24 @@ export default function CRMPage() {
                   const nextStage = nextStageMap[inquiry.status];
 
                   return (
-                    <tr key={inquiry.id} className="border-b border-gray-700 hover:bg-gray-800">
-                      <td className="px-4 py-3 text-white font-mono text-xs">{inquiry.inquiryNo}</td>
-                      <td className="px-4 py-3 text-gray-200">
+                    <tr key={inquiry.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]">
+                      <td className="px-4 py-3 text-[var(--text-main)] font-mono text-xs">{inquiry.inquiryNo}</td>
+                      <td className="px-4 py-3 text-[var(--text-main)]">
                         {inquiry.customerName}
-                        {inquiry.company && <p className="text-xs text-gray-400">{inquiry.company}</p>}
+                        {inquiry.company && <p className="text-xs text-[var(--text-muted)]">{inquiry.company}</p>}
                       </td>
-                      <td className="px-4 py-3 text-gray-300">{inquiry.vehicleType}</td>
-                      <td className="px-4 py-3 text-gray-300">{inquiry.count}</td>
-                      <td className="px-4 py-3 text-gray-300">{inquiry.duration}</td>
-                      <td className="px-4 py-3 text-gray-300">{inquiry.leaseType}</td>
-                      <td className="px-4 py-3 text-gray-300">{inquiry.quotationsLinked}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{inquiry.vehicleType}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{inquiry.count}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{inquiry.duration}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{inquiry.leaseType}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{inquiry.quotationsLinked}</td>
                       <td className="px-4 py-3">
                         <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(inquiry.status)}`}>
                           {inquiry.status.replace('_', ' ')}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-gray-400 text-xs">{inquiry.assignedTo || '-'}</td>
-                      <td className="px-4 py-3 text-gray-400 text-xs">
+                      <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{inquiry.assignedTo || '-'}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)] text-xs">
                         {new Date(inquiry.createdDate).toLocaleDateString()}
                       </td>
                       <td className="px-4 py-3">
@@ -238,7 +238,7 @@ export default function CRMPage() {
                           <button
                             onClick={() => handleAdvanceStage(inquiry.id, inquiry.status)}
                             disabled={updating === inquiry.id}
-                            className="p-1 bg-blue-900 hover:bg-blue-800 disabled:bg-gray-600 text-blue-200 rounded transition"
+                            className="p-1 bg-blue-900 hover:bg-blue-800 disabled:bg-[var(--bg-surface-hover)] text-blue-200 rounded transition"
                             title={`Advance to ${nextStage.replace('_', ' ')}`}
                           >
                             &rarr;
@@ -255,7 +255,7 @@ export default function CRMPage() {
 
         {!loading && filteredInquiries.length === 0 && (
           <div className="text-center py-12">
-            <p className="text-gray-400">No inquiries found in this stage</p>
+            <p className="text-[var(--text-muted)]">No inquiries found in this stage</p>
           </div>
         )}
       </div>

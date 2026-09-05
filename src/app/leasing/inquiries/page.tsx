@@ -338,8 +338,8 @@ export default function LeaseInquiriesPage() {
         {/* Header */}
         <div className="mb-8 flex items-end justify-between">
           <div>
-            <h1 className="text-4xl font-bold text-white">Lease Inquiries</h1>
-            <p className="mt-2 text-slate-400">
+            <h1 className="text-4xl font-bold text-[var(--text-main)]">Lease Inquiries</h1>
+            <p className="mt-2 text-[var(--text-muted)]">
               Capture and track initial customer interest
             </p>
           </div>
@@ -357,26 +357,26 @@ export default function LeaseInquiriesPage() {
           {stats.map((stat) => (
             <div
               key={stat.label}
-              className="bg-slate-800/50 border border-white/10 rounded-2xl p-6"
+              className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6"
             >
-              <p className="text-slate-400 text-sm mb-2">{stat.label}</p>
-              <p className="text-4xl font-bold text-white">{stat.value}</p>
+              <p className="text-[var(--text-muted)] text-sm mb-2">{stat.label}</p>
+              <p className="text-4xl font-bold text-[var(--text-main)]">{stat.value}</p>
             </div>
           ))}
         </div>
 
         {/* Filters */}
-        <div className="mb-6 bg-slate-800/50 border border-white/10 rounded-2xl p-4 space-y-4">
+        <div className="mb-6 bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-4 space-y-4">
           <div className="grid grid-cols-3 gap-4">
             {/* Status Filter */}
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
+              <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
                 Status
               </label>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] focus:outline-none focus:border-blue-500"
               >
                 <option>All</option>
                 <option>NEW</option>
@@ -389,13 +389,13 @@ export default function LeaseInquiriesPage() {
 
             {/* Vehicle Type Filter */}
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
+              <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
                 Vehicle Type
               </label>
               <select
                 value={vehicleTypeFilter}
                 onChange={(e) => setVehicleTypeFilter(e.target.value)}
-                className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] focus:outline-none focus:border-blue-500"
               >
                 <option>All</option>
                 <option>SEDAN</option>
@@ -409,17 +409,17 @@ export default function LeaseInquiriesPage() {
 
             {/* Search */}
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
+              <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
                 Search
               </label>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
                 <input
                   type="text"
                   placeholder="Customer name or company..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl pl-10 pr-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl pl-10 pr-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500"
                 />
               </div>
             </div>
@@ -427,41 +427,41 @@ export default function LeaseInquiriesPage() {
         </div>
 
         {/* Table */}
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-x-auto">
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl overflow-x-auto">
           <table className="w-full min-w-[900px]">
-            <thead className="bg-slate-800/50">
-              <tr className="border-b border-white/5">
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
+            <thead className="bg-[var(--bg-surface)]/50">
+              <tr className="border-b border-[var(--border-subtle)]">
+                <th className="px-3 py-3 text-left text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">
                   Inquiry #
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
+                <th className="px-3 py-3 text-left text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">
                   Customer Name
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
+                <th className="px-3 py-3 text-left text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">
                   Company
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
+                <th className="px-3 py-3 text-left text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">
                   Vehicle Type
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
+                <th className="px-3 py-3 text-left text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">
                   Count
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
+                <th className="px-3 py-3 text-left text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">
                   Lease Type
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
+                <th className="px-3 py-3 text-left text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">
                   Duration
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
+                <th className="px-3 py-3 text-left text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">
                   Start Date
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
+                <th className="px-3 py-3 text-left text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">
                   Status
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
+                <th className="px-3 py-3 text-left text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">
                   Assigned To
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-white whitespace-nowrap bg-blue-900/30">
+                <th className="px-3 py-3 text-left text-xs font-semibold text-[var(--text-main)] whitespace-nowrap bg-blue-900/30">
                   Actions
                 </th>
               </tr>
@@ -470,30 +470,30 @@ export default function LeaseInquiriesPage() {
               {filteredInquiries.map((inquiry) => (
                 <tr
                   key={inquiry.id}
-                  className="border-b border-white/5 hover:bg-white/5 transition-colors"
+                  className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors"
                 >
-                  <td className="px-3 py-3 text-sm text-white font-medium">
+                  <td className="px-3 py-3 text-sm text-[var(--text-main)] font-medium">
                     {inquiry.inquiryNumber}
                   </td>
-                  <td className="px-3 py-3 text-sm text-white">
+                  <td className="px-3 py-3 text-sm text-[var(--text-main)]">
                     {inquiry.customerName}
                   </td>
-                  <td className="px-3 py-3 text-sm text-slate-200">
+                  <td className="px-3 py-3 text-sm text-[var(--text-main)]">
                     {inquiry.companyName}
                   </td>
-                  <td className="px-3 py-3 text-sm text-white">
+                  <td className="px-3 py-3 text-sm text-[var(--text-main)]">
                     {inquiry.vehicleType}
                   </td>
-                  <td className="px-3 py-3 text-sm text-white">
+                  <td className="px-3 py-3 text-sm text-[var(--text-main)]">
                     {inquiry.vehicleCount ?? "-"}
                   </td>
-                  <td className="px-3 py-3 text-sm text-slate-200">
+                  <td className="px-3 py-3 text-sm text-[var(--text-main)]">
                     {inquiry.leaseType}
                   </td>
-                  <td className="px-3 py-3 text-sm text-white">
+                  <td className="px-3 py-3 text-sm text-[var(--text-main)]">
                     {(inquiry as any).durationMonths ?? inquiry.durationMonths ? `${(inquiry as any).durationMonths ?? inquiry.durationMonths} months` : "-"}
                   </td>
-                  <td className="px-3 py-3 text-sm text-slate-200">
+                  <td className="px-3 py-3 text-sm text-[var(--text-main)]">
                     {inquiry.startDate ? new Date(inquiry.startDate).toLocaleDateString() : "-"}
                   </td>
                   <td className="px-3 py-3 text-sm">
@@ -506,7 +506,7 @@ export default function LeaseInquiriesPage() {
                       {inquiry.status}
                     </button>
                   </td>
-                  <td className="px-3 py-3 text-sm text-slate-200">
+                  <td className="px-3 py-3 text-sm text-[var(--text-main)]">
                     {inquiry.assignedTo ?? "-"}
                   </td>
                   <td className="px-3 py-3 text-sm whitespace-nowrap">
@@ -536,12 +536,12 @@ export default function LeaseInquiriesPage() {
       {/* New Inquiry Modal */}
       {showNewModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-800 border border-white/10 rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">New Inquiry</h2>
+              <h2 className="text-2xl font-bold text-[var(--text-main)]">New Inquiry</h2>
               <button
                 onClick={() => setShowNewModal(false)}
-                className="text-slate-400 hover:text-white"
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)]"
               >
                 <X className="h-6 w-6" />
               </button>
@@ -550,7 +550,7 @@ export default function LeaseInquiriesPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
                     Customer Name *
                   </label>
                   <input
@@ -563,12 +563,12 @@ export default function LeaseInquiriesPage() {
                         customerName: e.target.value,
                       })
                     }
-                    className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500"
                     placeholder="Enter customer name"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
                     Customer Email
                   </label>
                   <input
@@ -580,7 +580,7 @@ export default function LeaseInquiriesPage() {
                         customerEmail: e.target.value,
                       })
                     }
-                    className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500"
                     placeholder="email@example.com"
                   />
                 </div>
@@ -588,7 +588,7 @@ export default function LeaseInquiriesPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
                     Customer Phone
                   </label>
                   <input
@@ -600,12 +600,12 @@ export default function LeaseInquiriesPage() {
                         customerPhone: e.target.value,
                       })
                     }
-                    className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500"
                     placeholder="+971 50 123 4567"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
                     Company Name
                   </label>
                   <input
@@ -614,7 +614,7 @@ export default function LeaseInquiriesPage() {
                     onChange={(e) =>
                       setFormData({ ...formData, companyName: e.target.value })
                     }
-                    className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500"
                     placeholder="Company name"
                   />
                 </div>
@@ -622,7 +622,7 @@ export default function LeaseInquiriesPage() {
 
               {/* Vehicle Group Multi-select */}
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Vehicle Group <span className="text-xs text-slate-500">(multi-select)</span></label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Vehicle Group <span className="text-xs text-[var(--text-faint)]">(multi-select)</span></label>
                 <div className="flex flex-wrap gap-2">
                   {VEHICLE_GROUPS.map(g => {
                     const selected = (formData.vehicleGroups ?? []).includes(g.code);
@@ -632,7 +632,7 @@ export default function LeaseInquiriesPage() {
                           const groups = formData.vehicleGroups ?? [];
                           setFormData({ ...formData, vehicleGroups: selected ? groups.filter(x => x !== g.code) : [...groups, g.code] });
                         }}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${selected ? 'bg-blue-500/30 text-blue-300 border-blue-500/50' : 'bg-slate-700 text-slate-400 border-white/10 hover:border-white/20'}`}>
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${selected ? 'bg-blue-500/30 text-blue-300 border-blue-500/50' : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border-[var(--border-subtle)] hover:border-[var(--border-strong)]'}`}>
                         {g.label}
                       </button>
                     );
@@ -641,11 +641,11 @@ export default function LeaseInquiriesPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Vehicle Type <span className="text-xs text-slate-500">(primary)</span></label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Vehicle Type <span className="text-xs text-[var(--text-faint)]">(primary)</span></label>
                   <select
                     value={formData.vehicleType}
                     onChange={(e) => setFormData({ ...formData, vehicleType: e.target.value })}
-                    className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] focus:outline-none focus:border-blue-500"
                   >
                     <option value="SEDAN">Sedan</option>
                     <option value="SUV">SUV</option>
@@ -660,7 +660,7 @@ export default function LeaseInquiriesPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
                     Vehicle Count *
                   </label>
                   <input
@@ -673,7 +673,7 @@ export default function LeaseInquiriesPage() {
                         vehicleCount: parseInt(e.target.value),
                       })
                     }
-                    className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500"
                   />
                 </div>
               </div>
@@ -681,8 +681,8 @@ export default function LeaseInquiriesPage() {
               {/* Make & Model Multi-select */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Make <span className="text-xs text-slate-500">(multi-select)</span></label>
-                  <div className="flex flex-wrap gap-1.5 p-2 rounded-xl bg-slate-700/50 border border-white/10 min-h-[42px] max-h-32 overflow-y-auto">
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Make <span className="text-xs text-[var(--text-faint)]">(multi-select)</span></label>
+                  <div className="flex flex-wrap gap-1.5 p-2 rounded-xl bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] min-h-[42px] max-h-32 overflow-y-auto">
                     {VEHICLE_MAKES.map(m => {
                       const selected = (formData.vehicleMakes ?? []).includes(m.make);
                       return (
@@ -692,7 +692,7 @@ export default function LeaseInquiriesPage() {
                             const newMakes = selected ? makes.filter(x => x !== m.make) : [...makes, m.make];
                             setFormData({ ...formData, vehicleMakes: newMakes, vehicleModels: (formData.vehicleModels ?? []).filter(mo => newMakes.some(mk => VEHICLE_MAKES.find(vm => vm.make === mk)?.models.some(md => md.model === mo))) });
                           }}
-                          className={`px-2 py-1 rounded text-xs font-medium transition-all ${selected ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/40' : 'bg-slate-600 text-slate-300 hover:bg-slate-500'}`}>
+                          className={`px-2 py-1 rounded text-xs font-medium transition-all ${selected ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/40' : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:bg-[var(--border-strong)]'}`}>
                           {m.make}
                         </button>
                       );
@@ -700,12 +700,12 @@ export default function LeaseInquiriesPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    Model <span className="text-xs text-slate-500">(multi-select - select make first)</span>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
+                    Model <span className="text-xs text-[var(--text-faint)]">(multi-select - select make first)</span>
                   </label>
-                  <div className="flex flex-wrap gap-1.5 p-2 rounded-xl bg-slate-700/50 border border-white/10 min-h-[42px] max-h-32 overflow-y-auto">
+                  <div className="flex flex-wrap gap-1.5 p-2 rounded-xl bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] min-h-[42px] max-h-32 overflow-y-auto">
                     {(formData.vehicleMakes ?? []).length === 0
-                      ? <span className="text-xs text-slate-500 p-1">Select a make first</span>
+                      ? <span className="text-xs text-[var(--text-faint)] p-1">Select a make first</span>
                       : (formData.vehicleMakes ?? []).flatMap(mk => getModelsForMake(mk)).map(({ model, groups }) => {
                           const selected = (formData.vehicleModels ?? []).includes(model);
                           const autoGroups = groups;
@@ -724,7 +724,7 @@ export default function LeaseInquiriesPage() {
                                 setFormData({ ...formData, vehicleModels: newModels });
                               }}
                               title={`Belongs to: ${groups.join(', ')}`}
-                              className={`px-2 py-1 rounded text-xs font-medium transition-all ${selected ? 'bg-violet-500/30 text-violet-300 border border-violet-500/40' : 'bg-slate-600 text-slate-300 hover:bg-slate-500'}`}>
+                              className={`px-2 py-1 rounded text-xs font-medium transition-all ${selected ? 'bg-violet-500/30 text-violet-300 border border-violet-500/40' : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:bg-[var(--border-strong)]'}`}>
                               {model}
                             </button>
                           );
@@ -735,7 +735,7 @@ export default function LeaseInquiriesPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
                     Lease Type *
                   </label>
                   <select
@@ -746,7 +746,7 @@ export default function LeaseInquiriesPage() {
                         leaseType: e.target.value as any,
                       })
                     }
-                    className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] focus:outline-none focus:border-blue-500"
                   >
                     <option value="LONG_TERM">LONG_TERM</option>
                     <option value="SHORT_TERM">SHORT_TERM</option>
@@ -755,7 +755,7 @@ export default function LeaseInquiriesPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
                     Duration (months) *
                   </label>
                   <input
@@ -768,13 +768,13 @@ export default function LeaseInquiriesPage() {
                         durationMonths: parseInt(e.target.value),
                       })
                     }
-                    className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
                   Start Date *
                 </label>
                 <input
@@ -784,7 +784,7 @@ export default function LeaseInquiriesPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, startDate: e.target.value })
                   }
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] focus:outline-none focus:border-blue-500"
                 />
               </div>
 
@@ -799,9 +799,9 @@ export default function LeaseInquiriesPage() {
                         requiresDriver: e.target.checked,
                       })
                     }
-                    className="w-4 h-4 rounded border-white/10"
+                    className="w-4 h-4 rounded border-[var(--border-subtle)]"
                   />
-                  <span className="text-sm text-slate-300">
+                  <span className="text-sm text-[var(--text-muted)]">
                     Requires Driver
                   </span>
                 </label>
@@ -815,9 +815,9 @@ export default function LeaseInquiriesPage() {
                         requiresInsurance: e.target.checked,
                       })
                     }
-                    className="w-4 h-4 rounded border-white/10"
+                    className="w-4 h-4 rounded border-[var(--border-subtle)]"
                   />
-                  <span className="text-sm text-slate-300">
+                  <span className="text-sm text-[var(--text-muted)]">
                     Requires Insurance
                   </span>
                 </label>
@@ -831,16 +831,16 @@ export default function LeaseInquiriesPage() {
                         requiresMaintenance: e.target.checked,
                       })
                     }
-                    className="w-4 h-4 rounded border-white/10"
+                    className="w-4 h-4 rounded border-[var(--border-subtle)]"
                   />
-                  <span className="text-sm text-slate-300">
+                  <span className="text-sm text-[var(--text-muted)]">
                     Requires Maintenance
                   </span>
                 </label>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
                   Notes
                 </label>
                 <textarea
@@ -849,13 +849,13 @@ export default function LeaseInquiriesPage() {
                     setFormData({ ...formData, notes: e.target.value })
                   }
                   rows={3}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500"
                   placeholder="Additional notes..."
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
                   Assigned To
                 </label>
                 <input
@@ -864,7 +864,7 @@ export default function LeaseInquiriesPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, assignedTo: e.target.value })
                   }
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500"
                   placeholder="Team member name"
                 />
               </div>
@@ -879,7 +879,7 @@ export default function LeaseInquiriesPage() {
                 <button
                   type="button"
                   onClick={() => setShowNewModal(false)}
-                  className="flex-1 rounded-xl bg-slate-700 border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-600"
+                  className="flex-1 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
                 >
                   Cancel
                 </button>
@@ -891,18 +891,18 @@ export default function LeaseInquiriesPage() {
       {/* -- View & Edit Inquiry Modal --------------------------- */}
       {showDetailModal && selectedInquiry && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-800 border border-white/10 rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h2 className="text-2xl font-bold text-white">
+                <h2 className="text-2xl font-bold text-[var(--text-main)]">
                   {selectedInquiry.inquiryNumber ?? 'Inquiry'}
                 </h2>
-                <p className="text-slate-400 text-sm mt-0.5">
+                <p className="text-[var(--text-muted)] text-sm mt-0.5">
                   {selectedInquiry.customerName}
                   {selectedInquiry.companyName ? ` - ${selectedInquiry.companyName}` : ''}
                 </p>
               </div>
-              <button onClick={() => setShowDetailModal(false)} className="text-slate-400 hover:text-white text-xl">X</button>
+              <button onClick={() => setShowDetailModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">X</button>
             </div>
 
             {/* Inquiry details */}
@@ -921,23 +921,23 @@ export default function LeaseInquiriesPage() {
                 ['Insurance',    selectedInquiry.requiresInsurance ? 'Required' : 'Not required'],
                 ['Maintenance',  selectedInquiry.requiresMaintenance ? 'Required' : 'Not required'],
               ].map(([label, value]) => (
-                <div key={label} className="bg-slate-700/40 rounded-lg p-3">
-                  <div className="text-xs text-slate-400 mb-0.5">{label}</div>
-                  <div className="text-white font-medium">{value}</div>
+                <div key={label} className="bg-[var(--bg-surface-hover)]/40 rounded-lg p-3">
+                  <div className="text-xs text-[var(--text-muted)] mb-0.5">{label}</div>
+                  <div className="text-[var(--text-main)] font-medium">{value}</div>
                 </div>
               ))}
             </div>
 
             {/* Editable fields */}
-            <div className="space-y-4 border-t border-white/10 pt-5">
-              <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider">Update Inquiry</h3>
+            <div className="space-y-4 border-t border-[var(--border-subtle)] pt-5">
+              <h3 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider">Update Inquiry</h3>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Status</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Status</label>
                 <select
                   value={editStatus}
                   onChange={e => setEditStatus(e.target.value)}
-                  className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none"
+                  className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none"
                 >
                   {['NEW','CONTACTED','QUOTATION_SENT','CONVERTED','LOST'].map(s => (
                     <option key={s} value={s}>{s.replace('_', ' ')}</option>
@@ -946,24 +946,24 @@ export default function LeaseInquiriesPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Assigned To</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Assigned To</label>
                 <input
                   type="text"
                   value={editAssignedTo}
                   onChange={e => setEditAssignedTo(e.target.value)}
                   placeholder="Agent name or ID"
-                  className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                  className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Notes</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Notes</label>
                 <textarea
                   value={editNotes}
                   onChange={e => setEditNotes(e.target.value)}
                   rows={3}
                   placeholder="Add internal notes..."
-                  className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                  className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                 />
               </div>
             </div>
@@ -971,7 +971,7 @@ export default function LeaseInquiriesPage() {
             <div className="flex gap-3 justify-end mt-6">
               <button
                 onClick={() => setShowDetailModal(false)}
-                className="px-6 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5"
+                className="px-6 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]"
               >
                 Cancel
               </button>
@@ -981,7 +981,7 @@ export default function LeaseInquiriesPage() {
                   router.push(`/leasing/quotations?fromInquiry=${selectedInquiry.id}`);
                   setShowDetailModal(false);
                 }}
-                className="px-5 py-2 rounded-lg bg-indigo-600 text-white hover:opacity-90 text-sm flex items-center gap-1"
+                className="px-5 py-2 rounded-lg bg-indigo-600 text-[var(--text-main)] hover:opacity-90 text-sm flex items-center gap-1"
               >
                 Convert to Quotation
               </button>

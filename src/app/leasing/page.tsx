@@ -122,7 +122,7 @@ export default function LeasingDashboard() {
       />
 
       {error && (
-        <div className="rounded-2xl border border-amber-300/60 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-400">
           {error} Showing the Leasing workspace with safe fallback values.
         </div>
       )}
@@ -134,25 +134,25 @@ export default function LeasingDashboard() {
           { label: 'Portfolio value', value: moneyShort(kpis.portfolioValue, 1000000, 'M'), sub: 'contracted value', color: 'text-indigo-600' },
           { label: 'Collection rate', value: `${kpis.collectionRate.toFixed(0)}%`, sub: 'finance-owned collections', color: 'text-orange-600' },
         ].map(card => (
-          <div key={card.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm font-medium text-slate-500">{card.label}</p>
+          <div key={card.label} className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5 shadow-sm">
+            <p className="text-sm font-medium text-[var(--text-faint)]">{card.label}</p>
             <p className={`mt-3 text-3xl font-bold ${card.color}`}>
               {loadingAnalytics ? '...' : card.value}
             </p>
-            <p className="mt-1 text-xs text-slate-500">{card.sub}</p>
+            <p className="mt-1 text-xs text-[var(--text-faint)]">{card.sub}</p>
           </div>
         ))}
       </section>
 
       <section className="grid gap-4 lg:grid-cols-3">
         {attentionItems.map(item => (
-          <div key={item.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+          <div key={item.label} className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-slate-900">{item.label}</p>
-                <p className="mt-2 text-2xl font-bold text-slate-950">{loadingAnalytics ? '...' : item.value}</p>
+                <p className="text-sm font-semibold text-[var(--text-main)]">{item.label}</p>
+                <p className="mt-2 text-2xl font-bold text-[var(--text-main)]">{loadingAnalytics ? '...' : item.value}</p>
               </div>
-              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
+              <span className="rounded-full bg-[var(--bg-surface)] px-3 py-1 text-xs font-semibold text-[var(--text-faint)] shadow-sm">
                 {item.state}
               </span>
             </div>
@@ -163,8 +163,8 @@ export default function LeasingDashboard() {
       <section>
         <div className="mb-4 flex items-end justify-between gap-4">
           <div>
-            <h2 className="text-2xl font-bold text-slate-950">Quick Actions</h2>
-            <p className="text-sm text-slate-500">Focused Leasing operations after finance and remarketing cleanup.</p>
+            <h2 className="text-2xl font-bold text-[var(--text-main)]">Quick Actions</h2>
+            <p className="text-sm text-[var(--text-faint)]">Focused Leasing operations after finance and remarketing cleanup.</p>
           </div>
         </div>
 
@@ -175,13 +175,13 @@ export default function LeasingDashboard() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+                className="group rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[var(--border-strong)] hover:shadow-md"
               >
                 <div className={`mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br ${link.tone} text-white shadow-sm`}>
                   <Icon className="h-6 w-6" />
                 </div>
-                <p className="font-semibold text-slate-950">{link.label}</p>
-                <p className="mt-1 text-sm text-slate-500">{link.description}</p>
+                <p className="font-semibold text-[var(--text-main)]">{link.label}</p>
+                <p className="mt-1 text-sm text-[var(--text-faint)]">{link.description}</p>
               </Link>
             );
           })}

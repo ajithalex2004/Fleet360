@@ -156,7 +156,7 @@ export default function EarlyTerminationsPage() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'DRAFT':
-        return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+        return 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30';
       case 'PENDING_APPROVAL':
         return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
       case 'APPROVED':
@@ -166,14 +166,14 @@ export default function EarlyTerminationsPage() {
       case 'CANCELLED':
         return 'bg-rose-500/20 text-rose-400 border-rose-500/30';
       default:
-        return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+        return 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30';
     }
   };
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-slate-400">Loading...</div>
+        <div className="text-[var(--text-muted)]">Loading...</div>
       </div>
     );
   }
@@ -183,8 +183,8 @@ export default function EarlyTerminationsPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Early Terminations</h1>
-          <p className="text-slate-400">Manage contract early termination requests</p>
+          <h1 className="text-4xl font-bold text-[var(--text-main)] mb-2">Early Terminations</h1>
+          <p className="text-[var(--text-muted)]">Manage contract early termination requests</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
@@ -195,11 +195,11 @@ export default function EarlyTerminationsPage() {
       </div>
 
       {/* Calculator Widget */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm">
-        <h3 className="text-lg font-semibold text-white mb-4">Settlement Calculator</h3>
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm">
+        <h3 className="text-lg font-semibold text-[var(--text-main)] mb-4">Settlement Calculator</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-2">Contract ID</label>
+            <label className="block text-xs font-medium text-[var(--text-muted)] mb-2">Contract ID</label>
             <input
               type="text"
               name="contractId"
@@ -224,72 +224,72 @@ export default function EarlyTerminationsPage() {
                 } catch {}
               }}
               placeholder="LC-001 (tab out to auto-fill)"
-              className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none text-sm"
+              className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none text-sm"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-2">Remaining Months</label>
+            <label className="block text-xs font-medium text-[var(--text-muted)] mb-2">Remaining Months</label>
             <input
               type="number"
               name="remainingMonths"
               value={calculatorData.remainingMonths}
               onChange={handleCalculatorChange}
               placeholder="12"
-              className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none text-sm"
+              className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none text-sm"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-2">Monthly Rate</label>
+            <label className="block text-xs font-medium text-[var(--text-muted)] mb-2">Monthly Rate</label>
             <input
               type="number"
               name="monthlyRate"
               value={calculatorData.monthlyRate}
               onChange={handleCalculatorChange}
               placeholder="5000"
-              className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none text-sm"
+              className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none text-sm"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-2">Penalty %</label>
+            <label className="block text-xs font-medium text-[var(--text-muted)] mb-2">Penalty %</label>
             <input
               type="number"
               name="penaltyPct"
               value={calculatorData.penaltyPct}
               onChange={handleCalculatorChange}
               placeholder="20"
-              className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none text-sm"
+              className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none text-sm"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-2">Outstanding Payments</label>
+            <label className="block text-xs font-medium text-[var(--text-muted)] mb-2">Outstanding Payments</label>
             <input
               type="number"
               name="outstandingPayments"
               value={calculatorData.outstandingPayments}
               onChange={handleCalculatorChange}
               placeholder="0"
-              className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none text-sm"
+              className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none text-sm"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-2">Deposit Refund</label>
+            <label className="block text-xs font-medium text-[var(--text-muted)] mb-2">Deposit Refund</label>
             <input
               type="number"
               name="depositRefund"
               value={calculatorData.depositRefund}
               onChange={handleCalculatorChange}
               placeholder="0"
-              className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none text-sm"
+              className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none text-sm"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-2">Penalty Amount</label>
-            <div className="px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white text-sm font-medium">
+            <label className="block text-xs font-medium text-[var(--text-muted)] mb-2">Penalty Amount</label>
+            <div className="px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm font-medium">
               AED {calculatedValues.penaltyAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })}
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-2">Total Settlement</label>
+            <label className="block text-xs font-medium text-[var(--text-muted)] mb-2">Total Settlement</label>
             <div className="px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm font-medium">
               AED {calculatedValues.totalSettlement.toLocaleString('en-US', { maximumFractionDigits: 2 })}
             </div>
@@ -302,7 +302,7 @@ export default function EarlyTerminationsPage() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-blue-500 focus:outline-none transition-all"
+          className="px-4 py-2 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none transition-all"
         >
           <option>All</option>
           <option>DRAFT</option>
@@ -314,42 +314,42 @@ export default function EarlyTerminationsPage() {
       </div>
 
       {/* Terminations Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
         <table className="w-full">
-          <thead className="bg-slate-800/50">
-            <tr className="border-b border-white/5">
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Termination No</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Contract</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Request Date</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Effective Date</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Remaining Months</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Monthly Rate</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Penalty %</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Penalty Amount</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Outstanding</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Deposit Refund</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Settlement Total</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Status</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Actions</th>
+          <thead className="bg-[var(--bg-surface)]/50">
+            <tr className="border-b border-[var(--border-subtle)]">
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Termination No</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Contract</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Request Date</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Effective Date</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Remaining Months</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Monthly Rate</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Penalty %</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Penalty Amount</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Outstanding</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Deposit Refund</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Settlement Total</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Status</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredTerminations.map((term) => (
-              <tr key={term.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                <td className="px-6 py-4 text-sm font-medium text-white">{term.terminationNo}</td>
-                <td className="px-6 py-4 text-sm text-white">{term.contractId}</td>
-                <td className="px-6 py-4 text-sm text-slate-200">{term.requestDate}</td>
-                <td className="px-6 py-4 text-sm text-slate-200">{term.effectiveDate}</td>
-                <td className="px-6 py-4 text-sm text-white">{term.remainingMonths}</td>
-                <td className="px-6 py-4 text-sm text-white font-medium">AED {term.monthlyRate.toLocaleString()}</td>
-                <td className="px-6 py-4 text-sm text-white">{term.penaltyPct}%</td>
-                <td className="px-6 py-4 text-sm text-white font-medium">
+              <tr key={term.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
+                <td className="px-6 py-4 text-sm font-medium text-[var(--text-main)]">{term.terminationNo}</td>
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">{term.contractId}</td>
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">{term.requestDate}</td>
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">{term.effectiveDate}</td>
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">{term.remainingMonths}</td>
+                <td className="px-6 py-4 text-sm text-[var(--text-main)] font-medium">AED {term.monthlyRate.toLocaleString()}</td>
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">{term.penaltyPct}%</td>
+                <td className="px-6 py-4 text-sm text-[var(--text-main)] font-medium">
                   AED {term.penaltyAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                 </td>
-                <td className="px-6 py-4 text-sm text-white font-medium">
+                <td className="px-6 py-4 text-sm text-[var(--text-main)] font-medium">
                   AED {term.outstandingPayments.toLocaleString()}
                 </td>
-                <td className="px-6 py-4 text-sm text-white font-medium">
+                <td className="px-6 py-4 text-sm text-[var(--text-main)] font-medium">
                   AED {term.depositRefund.toLocaleString()}
                 </td>
                 <td className="px-6 py-4 text-sm text-emerald-400 font-medium">
@@ -403,12 +403,12 @@ export default function EarlyTerminationsPage() {
       {/* New Termination Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-800/95 border border-white/10 rounded-2xl p-8">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl p-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">New Early Termination</h2>
+              <h2 className="text-2xl font-bold text-[var(--text-main)]">New Early Termination</h2>
               <button
                 onClick={() => setShowModal(false)}
-                className="text-slate-400 hover:text-white transition-colors"
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
               >
                 X
               </button>
@@ -417,7 +417,7 @@ export default function EarlyTerminationsPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Contract ID</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Contract ID</label>
                   <input
                     type="text"
                     name="contractId"
@@ -425,24 +425,24 @@ export default function EarlyTerminationsPage() {
                     onChange={handleInputChange}
                     required
                     placeholder="LC-001"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Effective Date</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Effective Date</label>
                   <input
                     type="date"
                     name="effectiveDate"
                     value={formData.effectiveDate}
                     onChange={handleInputChange}
                     required
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Remaining Months</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Remaining Months</label>
                   <input
                     type="number"
                     name="remainingMonths"
@@ -450,12 +450,12 @@ export default function EarlyTerminationsPage() {
                     onChange={handleInputChange}
                     required
                     placeholder="12"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Monthly Rate</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Monthly Rate</label>
                   <input
                     type="number"
                     name="monthlyRate"
@@ -463,12 +463,12 @@ export default function EarlyTerminationsPage() {
                     onChange={handleInputChange}
                     required
                     placeholder="5000"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Penalty %</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Penalty %</label>
                   <input
                     type="number"
                     name="penaltyPct"
@@ -476,31 +476,31 @@ export default function EarlyTerminationsPage() {
                     onChange={handleInputChange}
                     required
                     placeholder="20"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Outstanding Payments</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Outstanding Payments</label>
                   <input
                     type="number"
                     name="outstandingPayments"
                     value={formData.outstandingPayments}
                     onChange={handleInputChange}
                     placeholder="0"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Deposit Refund</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Deposit Refund</label>
                   <input
                     type="number"
                     name="depositRefund"
                     value={formData.depositRefund}
                     onChange={handleInputChange}
                     placeholder="0"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
               </div>
@@ -508,14 +508,14 @@ export default function EarlyTerminationsPage() {
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
-                  className="flex-1 rounded-lg bg-blue-600 text-white font-medium py-2 hover:bg-blue-700 transition-colors"
+                  className="flex-1 rounded-lg bg-blue-600 text-[var(--text-main)] font-medium py-2 hover:bg-blue-700 transition-colors"
                 >
                   Create Termination
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 rounded-lg bg-slate-700 text-white font-medium py-2 hover:bg-slate-600 transition-colors"
+                  className="flex-1 rounded-lg bg-[var(--bg-surface-hover)] text-[var(--text-main)] font-medium py-2 hover:bg-[var(--bg-surface-hover)] transition-colors"
                 >
                   Cancel
                 </button>

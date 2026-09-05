@@ -157,7 +157,7 @@ export default function PreBillingPage() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'DRAFT':
-        return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+        return 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30';
       case 'SENT':
         return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
       case 'CONFIRMED':
@@ -167,7 +167,7 @@ export default function PreBillingPage() {
       case 'FINALIZED':
         return 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30';
       default:
-        return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+        return 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30';
     }
   };
 
@@ -182,7 +182,7 @@ export default function PreBillingPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-slate-400">Loading...</div>
+        <div className="text-[var(--text-muted)]">Loading...</div>
       </div>
     );
   }
@@ -192,8 +192,8 @@ export default function PreBillingPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Pre-Billing Statements</h1>
-          <p className="text-slate-400">Generate and manage monthly billing statements</p>
+          <h1 className="text-4xl font-bold text-[var(--text-main)] mb-2">Pre-Billing Statements</h1>
+          <p className="text-[var(--text-muted)]">Generate and manage monthly billing statements</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
@@ -205,25 +205,25 @@ export default function PreBillingPage() {
 
       {/* Status Pipeline */}
       <div className="grid grid-cols-5 gap-4">
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm text-center">
-          <div className="text-2xl font-bold text-slate-400">{statusCounts.DRAFT}</div>
-          <div className="text-xs text-slate-400 mt-2">DRAFT</div>
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm text-center">
+          <div className="text-2xl font-bold text-[var(--text-muted)]">{statusCounts.DRAFT}</div>
+          <div className="text-xs text-[var(--text-muted)] mt-2">DRAFT</div>
         </div>
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm text-center">
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm text-center">
           <div className="text-2xl font-bold text-blue-400">{statusCounts.SENT}</div>
-          <div className="text-xs text-slate-400 mt-2">SENT</div>
+          <div className="text-xs text-[var(--text-muted)] mt-2">SENT</div>
         </div>
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm text-center">
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm text-center">
           <div className="text-2xl font-bold text-emerald-400">{statusCounts.CONFIRMED}</div>
-          <div className="text-xs text-slate-400 mt-2">CONFIRMED</div>
+          <div className="text-xs text-[var(--text-muted)] mt-2">CONFIRMED</div>
         </div>
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm text-center">
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm text-center">
           <div className="text-2xl font-bold text-amber-400">{statusCounts.DISPUTED}</div>
-          <div className="text-xs text-slate-400 mt-2">DISPUTED</div>
+          <div className="text-xs text-[var(--text-muted)] mt-2">DISPUTED</div>
         </div>
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm text-center">
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm text-center">
           <div className="text-2xl font-bold text-indigo-400">{statusCounts.FINALIZED}</div>
-          <div className="text-xs text-slate-400 mt-2">FINALIZED</div>
+          <div className="text-xs text-[var(--text-muted)] mt-2">FINALIZED</div>
         </div>
       </div>
 
@@ -232,7 +232,7 @@ export default function PreBillingPage() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-blue-500 focus:outline-none transition-all"
+          className="px-4 py-2 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none transition-all"
         >
           <option>All</option>
           <option>DRAFT</option>
@@ -244,53 +244,53 @@ export default function PreBillingPage() {
       </div>
 
       {/* Pre-Billing Statements Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
         <table className="w-full">
-          <thead className="bg-slate-800/50">
-            <tr className="border-b border-white/5">
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Statement No</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Contract</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Lessee</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Billing Period</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Due Date</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Base Rent</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Fuel</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Fines</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Overage</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Other</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">VAT</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Total</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Status</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Actions</th>
+          <thead className="bg-[var(--bg-surface)]/50">
+            <tr className="border-b border-[var(--border-subtle)]">
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Statement No</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Contract</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Lessee</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Billing Period</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Due Date</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Base Rent</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Fuel</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Fines</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Overage</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Other</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">VAT</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Total</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Status</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredStatements.map((statement) => (
-              <tr key={statement.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                <td className="px-6 py-4 text-sm font-medium text-white">{statement.statementNo}</td>
-                <td className="px-6 py-4 text-sm text-white">{statement.contractId}</td>
-                <td className="px-6 py-4 text-sm text-white">{statement.lesseeName}</td>
-                <td className="px-6 py-4 text-sm text-slate-200">{statement.billingPeriod}</td>
-                <td className="px-6 py-4 text-sm text-slate-200">{statement.dueDate}</td>
-                <td className="px-6 py-4 text-sm text-white">
+              <tr key={statement.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
+                <td className="px-6 py-4 text-sm font-medium text-[var(--text-main)]">{statement.statementNo}</td>
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">{statement.contractId}</td>
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">{statement.lesseeName}</td>
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">{statement.billingPeriod}</td>
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">{statement.dueDate}</td>
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">
                   AED {statement.baseRent.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                 </td>
-                <td className="px-6 py-4 text-sm text-white">
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">
                   AED {statement.fuelCharges.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                 </td>
-                <td className="px-6 py-4 text-sm text-white">
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">
                   AED {statement.fineCharges.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                 </td>
-                <td className="px-6 py-4 text-sm text-white">
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">
                   AED {statement.overageCharges.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                 </td>
-                <td className="px-6 py-4 text-sm text-white">
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">
                   AED {statement.otherCharges.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                 </td>
-                <td className="px-6 py-4 text-sm text-white">
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">
                   AED {statement.vat.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                 </td>
-                <td className="px-6 py-4 text-sm font-medium text-white">
+                <td className="px-6 py-4 text-sm font-medium text-[var(--text-main)]">
                   AED {statement.total.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                 </td>
                 <td className="px-6 py-4 text-sm">
@@ -355,12 +355,12 @@ export default function PreBillingPage() {
       {/* Generate Statement Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-800/95 border border-white/10 rounded-2xl p-8">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl p-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">Generate Pre-Billing Statement</h2>
+              <h2 className="text-2xl font-bold text-[var(--text-main)]">Generate Pre-Billing Statement</h2>
               <button
                 onClick={() => setShowModal(false)}
-                className="text-slate-400 hover:text-white transition-colors"
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
               >
                 X
               </button>
@@ -369,7 +369,7 @@ export default function PreBillingPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Contract ID</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Contract ID</label>
                   <input
                     type="text"
                     name="contractId"
@@ -377,12 +377,12 @@ export default function PreBillingPage() {
                     onChange={handleInputChange}
                     required
                     placeholder="LC-001"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Billing Period (YYYY-MM)</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Billing Period (YYYY-MM)</label>
                   <input
                     type="text"
                     name="billingPeriod"
@@ -390,24 +390,24 @@ export default function PreBillingPage() {
                     onChange={handleInputChange}
                     required
                     placeholder="2026-04"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Due Date</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Due Date</label>
                   <input
                     type="date"
                     name="dueDate"
                     value={formData.dueDate}
                     onChange={handleInputChange}
                     required
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Base Rent</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Base Rent</label>
                   <input
                     type="number"
                     name="baseRent"
@@ -415,79 +415,79 @@ export default function PreBillingPage() {
                     onChange={handleInputChange}
                     required
                     placeholder="6500"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Fuel Charges</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Fuel Charges</label>
                   <input
                     type="number"
                     name="fuelCharges"
                     value={formData.fuelCharges}
                     onChange={handleInputChange}
                     placeholder="0"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Fine Charges</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Fine Charges</label>
                   <input
                     type="number"
                     name="fineCharges"
                     value={formData.fineCharges}
                     onChange={handleInputChange}
                     placeholder="0"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Maintenance Charges</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Maintenance Charges</label>
                   <input
                     type="number"
                     name="maintenanceCharges"
                     value={formData.maintenanceCharges}
                     onChange={handleInputChange}
                     placeholder="0"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Overage Charges</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Overage Charges</label>
                   <input
                     type="number"
                     name="overageCharges"
                     value={formData.overageCharges}
                     onChange={handleInputChange}
                     placeholder="0"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Other Charges</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Other Charges</label>
                   <input
                     type="number"
                     name="otherCharges"
                     value={formData.otherCharges}
                     onChange={handleInputChange}
                     placeholder="0"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">VAT (5%)</label>
-                  <div className="px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white text-sm font-medium">
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">VAT (5%)</label>
+                  <div className="px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm font-medium">
                     AED {calculatedVAT.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Total</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Total</label>
                   <div className="px-4 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm font-medium">
                     AED {calculatedTotal.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                   </div>
@@ -497,14 +497,14 @@ export default function PreBillingPage() {
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
-                  className="flex-1 rounded-lg bg-blue-600 text-white font-medium py-2 hover:bg-blue-700 transition-colors"
+                  className="flex-1 rounded-lg bg-blue-600 text-[var(--text-main)] font-medium py-2 hover:bg-blue-700 transition-colors"
                 >
                   Generate Statement
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 rounded-lg bg-slate-700 text-white font-medium py-2 hover:bg-slate-600 transition-colors"
+                  className="flex-1 rounded-lg bg-[var(--bg-surface-hover)] text-[var(--text-main)] font-medium py-2 hover:bg-[var(--bg-surface-hover)] transition-colors"
                 >
                   Cancel
                 </button>

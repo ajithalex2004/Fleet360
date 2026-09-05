@@ -357,7 +357,7 @@ export default function LeaseQuotationsPage() {
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       NEW: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-      INTERNAL_APPROVAL: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+      INTERNAL_APPROVAL: 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30',
       SENT_TO_CUSTOMER: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
       CUSTOMER_APPROVED: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
       CREDIT_APPROVAL: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
@@ -365,7 +365,7 @@ export default function LeaseQuotationsPage() {
       DELIVERY_IN_PROGRESS: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
       DELIVERED: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
       REJECTED: 'bg-red-500/20 text-red-400 border-red-500/30',
-      CANCELLED: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
+      CANCELLED: 'bg-gray-500/20 text-[var(--text-muted)] border-gray-500/30',
     };
     return colors[status] || colors.NEW;
   };
@@ -770,18 +770,18 @@ export default function LeaseQuotationsPage() {
                 <div className="flex flex-col items-center relative group min-w-[60px]">
                   <div 
                     className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold z-10 transition-all
-                      ${isCompleted ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 
-                        isCurrent ? 'bg-blue-600 text-white ring-4 ring-blue-600/20' : 
-                        'bg-slate-700 text-slate-500 border border-white/10'}`}
+                      ${isCompleted ? 'bg-emerald-500 text-[var(--text-main)] shadow-lg shadow-emerald-500/20' : 
+                        isCurrent ? 'bg-blue-600 text-[var(--text-main)] ring-4 ring-blue-600/20' : 
+                        'bg-[var(--bg-surface-hover)] text-[var(--text-faint)] border border-[var(--border-subtle)]'}`}
                   >
                     {isCompleted ? <Check className="w-4 h-4" /> : idx + 1}
                   </div>
-                  <span className={`text-[10px] mt-2 font-medium whitespace-nowrap ${isCurrent ? 'text-blue-400' : isCompleted ? 'text-emerald-500' : 'text-slate-500'}`}>
+                  <span className={`text-[10px] mt-2 font-medium whitespace-nowrap ${isCurrent ? 'text-blue-400' : isCompleted ? 'text-emerald-500' : 'text-[var(--text-faint)]'}`}>
                     {stage.label}
                   </span>
                 </div>
                 {idx < stages.length - 1 && (
-                  <div className={`flex-1 h-[2px] mx-1 mb-4 ${idx < currentIdx ? 'bg-emerald-500' : 'bg-slate-700'}`} />
+                  <div className={`flex-1 h-[2px] mx-1 mb-4 ${idx < currentIdx ? 'bg-emerald-500' : 'bg-[var(--bg-surface-hover)]'}`} />
                 )}
               </React.Fragment>
             );
@@ -825,7 +825,7 @@ export default function LeaseQuotationsPage() {
       <div className="mx-auto max-w-7xl">
         {/* Header */}
         <div className="mb-8 flex items-end justify-between">
-          <h1 className="text-4xl font-bold text-white">Lease Quotations</h1>
+          <h1 className="text-4xl font-bold text-[var(--text-main)]">Lease Quotations</h1>
           {prefilling && (
             <span className="text-sm text-blue-400 animate-pulse mr-3">
               Loading inquiry data...
@@ -859,8 +859,8 @@ export default function LeaseQuotationsPage() {
         </div>
 
         {/* Status Pipeline */}
-        <div className="mb-8 bg-slate-800/50 border border-white/10 rounded-2xl p-4">
-          <p className="text-sm font-medium text-slate-300 mb-4">
+        <div className="mb-8 bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-4">
+          <p className="text-sm font-medium text-[var(--text-muted)] mb-4">
             Quotation Pipeline
           </p>
           <div className="flex gap-2 overflow-x-auto pb-2">
@@ -872,8 +872,8 @@ export default function LeaseQuotationsPage() {
                 }
                 className={`px-3 py-2 rounded-lg whitespace-nowrap text-xs font-medium transition-colors ${
                   statusFilter === status
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'
+                    ? 'bg-blue-600 text-[var(--text-main)]'
+                    : 'bg-[var(--bg-surface-hover)]/50 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]'
                 }`}
               >
                 {status.replace(/_/g, ' ')} ({statusCounts[status] || 0})
@@ -883,38 +883,38 @@ export default function LeaseQuotationsPage() {
         </div>
 
         {/* Table */}
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-x-auto">
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl overflow-x-auto">
           <table className="w-full min-w-[760px]">
-            <thead className="bg-slate-800/50">
-              <tr className="border-b border-white/5">
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
+            <thead className="bg-[var(--bg-surface)]/50">
+              <tr className="border-b border-[var(--border-subtle)]">
+                <th className="px-3 py-3 text-left text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">
                   Quotation #
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
+                <th className="px-3 py-3 text-left text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">
                   Lessee / Customer
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
+                <th className="px-3 py-3 text-left text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">
                   Lease Type
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
+                <th className="px-3 py-3 text-left text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">
                   Duration
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
+                <th className="px-3 py-3 text-left text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">
                   Vehicle Count
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
+                <th className="px-3 py-3 text-left text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">
                   Total Monthly
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
+                <th className="px-3 py-3 text-left text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">
                   Total Value
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
+                <th className="px-3 py-3 text-left text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">
                   Status
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
+                <th className="px-3 py-3 text-left text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">
                   Valid Until
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-slate-300 whitespace-nowrap">
+                <th className="px-3 py-3 text-left text-xs font-medium text-[var(--text-muted)] whitespace-nowrap">
                   Actions
                 </th>
               </tr>
@@ -927,21 +927,21 @@ export default function LeaseQuotationsPage() {
                 return (
                   <tr
                     key={quotation.id}
-                    className="border-b border-white/5 hover:bg-white/5 transition-colors"
+                    className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors"
                   >
-                    <td className="px-3 py-3 text-sm text-white font-medium">
+                    <td className="px-3 py-3 text-sm text-[var(--text-main)] font-medium">
                       {quotation.quotationNumber}
                     </td>
-                    <td className="px-3 py-3 text-sm text-white">
+                    <td className="px-3 py-3 text-sm text-[var(--text-main)]">
                       {quotation.lessee?.name || quotation.lesseeName || '-'}
                     </td>
-                    <td className="px-3 py-3 text-sm text-slate-200">
+                    <td className="px-3 py-3 text-sm text-[var(--text-main)]">
                       {quotation.leaseType}
                     </td>
-                    <td className="px-3 py-3 text-sm text-white">
+                    <td className="px-3 py-3 text-sm text-[var(--text-main)]">
                       {quotation.durationMonths ?? quotation.duration} months
                     </td>
-                    <td className="px-3 py-3 text-sm text-white font-semibold">
+                    <td className="px-3 py-3 text-sm text-[var(--text-main)] font-semibold">
                       {totalVehicleCount || quotation.vehicleCount || '0'} units
                     </td>
                     <td className="px-3 py-3 text-sm font-medium text-emerald-400">
@@ -970,14 +970,14 @@ export default function LeaseQuotationsPage() {
                           } catch {}
                         }}
                         onClick={(e) => e.stopPropagation()}
-                        className={`text-xs px-2 py-1.5 rounded-lg border font-medium cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 ${getStatusColor(quotation.status)} bg-slate-800`}
+                        className={`text-xs px-2 py-1.5 rounded-lg border font-medium cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 ${getStatusColor(quotation.status)} bg-[var(--bg-surface)]`}
                       >
                         {STATUS_PIPELINE.map(s => (
-                          <option key={s} value={s} className="bg-slate-800 text-white">{s.replace(/_/g, ' ')}</option>
+                          <option key={s} value={s} className="bg-[var(--bg-surface)] text-[var(--text-main)]">{s.replace(/_/g, ' ')}</option>
                         ))}
                       </select>
                     </td>
-                    <td className="px-3 py-3 text-sm text-slate-200">
+                    <td className="px-3 py-3 text-sm text-[var(--text-main)]">
                       {quotation.validUntil}
                     </td>
                     <td className="px-3 py-3 text-sm">
@@ -1031,24 +1031,24 @@ export default function LeaseQuotationsPage() {
       {/*  New Quotation Modal  */}
       {showNewModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-slate-800 border border-white/10 rounded-2xl w-full max-w-5xl max-h-[95vh] flex flex-col">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-5xl max-h-[95vh] flex flex-col">
 
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-8 py-5 border-b border-white/10 flex-shrink-0">
+            <div className="flex items-center justify-between px-8 py-5 border-b border-[var(--border-subtle)] flex-shrink-0">
               <div>
-                <h2 className="text-2xl font-bold text-white">New Lease Quotation</h2>
-                <p className="text-slate-400 text-sm mt-0.5">
+                <h2 className="text-2xl font-bold text-[var(--text-main)]">New Lease Quotation</h2>
+                <p className="text-[var(--text-muted)] text-sm mt-0.5">
                   {prefilling ? 'Loading inquiry data...' : 'Complete all steps to generate a quotation'}
                 </p>
               </div>
               <button onClick={() => { setShowNewModal(false); setActiveStep(1); }}
-                className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all">
+                className="p-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] transition-all">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             {/* Step Indicator */}
-            <div className="px-8 py-4 border-b border-white/10 flex-shrink-0">
+            <div className="px-8 py-4 border-b border-[var(--border-subtle)] flex-shrink-0">
               <div className="flex items-center gap-0">
                 {[
                   { n:1, label:'Lessee & Terms' },
@@ -1062,17 +1062,17 @@ export default function LeaseQuotationsPage() {
                       onClick={() => setActiveStep(n)}
                       className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all w-full ${ 
                         activeStep === n
-                          ? 'bg-blue-600 text-white'
+                          ? 'bg-blue-600 text-[var(--text-main)]'
                           : activeStep > n
                           ? 'bg-emerald-600/20 text-emerald-400'
-                          : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700'
+                          : 'bg-[var(--bg-surface-hover)]/50 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]'
                       }`}>
                       <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                        activeStep > n ? 'bg-emerald-500 text-white' : activeStep === n ? 'bg-white text-blue-600' : 'bg-slate-600 text-slate-300'
+                        activeStep > n ? 'bg-emerald-500 text-[var(--text-main)]' : activeStep === n ? 'bg-white text-blue-600' : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'
                       }`}>{activeStep > n ? '' : n}</span>
                       <span className="hidden md:inline">{label}</span>
                     </button>
-                    {idx < 3 && <div className="w-4 h-0.5 bg-slate-700 flex-shrink-0 mx-1" />}
+                    {idx < 3 && <div className="w-4 h-0.5 bg-[var(--bg-surface-hover)] flex-shrink-0 mx-1" />}
                   </div>
                 ))}
               </div>
@@ -1086,8 +1086,8 @@ export default function LeaseQuotationsPage() {
                 {activeStep === 1 && (
                   <div className="space-y-6">
                     <div>
-                      <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
-                        <span className="w-6 h-6 rounded bg-blue-600 text-white text-xs flex items-center justify-center">1</span>
+                      <h3 className="text-base font-semibold text-[var(--text-main)] mb-4 flex items-center gap-2">
+                        <span className="w-6 h-6 rounded bg-blue-600 text-[var(--text-main)] text-xs flex items-center justify-center">1</span>
                         Lessee Information
                       </h3>
                       <div className="grid grid-cols-2 gap-4">
@@ -1095,14 +1095,14 @@ export default function LeaseQuotationsPage() {
                           {formData.notes && formData.notes.startsWith('Ref: Inquiry') && (
                             <div className="mb-3 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-start gap-2">
                               <span className="text-emerald-400 text-sm font-semibold flex-shrink-0">Auto-filled</span>
-                              <span className="text-slate-300 text-sm">
+                              <span className="text-[var(--text-muted)] text-sm">
                                 This quotation was pre-populated from the inquiry.
                                 {!formData.lesseeId && ' No matching lessee found - please select one below.'}
                                 {formData.lesseeId && ' Lessee auto-matched from inquiry.'}
                               </span>
                             </div>
                           )}
-                          <label className="block text-sm font-medium text-slate-300 mb-2">Select Lessee *</label>
+                          <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Select Lessee *</label>
                           <select
                             required
                             value={formData.lesseeId}
@@ -1110,7 +1110,7 @@ export default function LeaseQuotationsPage() {
                               const lessee = lessees.find(l => l.id === e.target.value);
                               setFormData({ ...formData, lesseeId: e.target.value, lesseeName: lessee?.name ?? '' });
                             }}
-                            className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-blue-500">
+                            className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-[var(--text-main)] focus:outline-none focus:border-blue-500">
                             <option value="">-- Select Lessee --</option>
                             {lessees.map(l => (
                               <option key={l.id} value={l.id}>
@@ -1123,10 +1123,10 @@ export default function LeaseQuotationsPage() {
                           )}
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-slate-300 mb-2">Lease Type *</label>
+                          <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Lease Type *</label>
                           <select value={formData.leaseType}
                             onChange={e => setFormData({ ...formData, leaseType: e.target.value as any })}
-                            className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-blue-500">
+                            className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-[var(--text-main)] focus:outline-none focus:border-blue-500">
                             <option value="LONG_TERM">Long Term (12+ months)</option>
                             <option value="SHORT_TERM">Short Term (3-12 months)</option>
                             <option value="MONTHLY">Monthly Rolling</option>
@@ -1134,17 +1134,17 @@ export default function LeaseQuotationsPage() {
                           </select>
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-slate-300 mb-2">Duration (months) *</label>
+                          <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Duration (months) *</label>
                           <input type="number" min="1" max="120" required value={formData.duration}
                             onChange={e => {
                               const d = parseInt(e.target.value) || 0;
                               setFormData({ ...formData, duration: d,
                                 endDate: formData.startDate && d ? addMonths(formData.startDate, d) : formData.endDate });
                             }}
-                            className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-blue-500" />
+                            className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-[var(--text-main)] focus:outline-none focus:border-blue-500" />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-slate-300 mb-2">Start Date *</label>
+                          <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Start Date *</label>
                           <input type="date" required value={formData.startDate}
                             onChange={e => {
                               const s = e.target.value;
@@ -1152,26 +1152,26 @@ export default function LeaseQuotationsPage() {
                                 endDate: s && formData.duration ? addMonths(s, formData.duration) : formData.endDate,
                                 validUntil: formData.validUntil || addDays(s, 30) });
                             }}
-                            className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-blue-500" />
+                            className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-[var(--text-main)] focus:outline-none focus:border-blue-500" />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-slate-300 mb-2">
+                          <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
                             End Date <span className="text-xs text-emerald-400">(auto-calculated)</span>
                           </label>
                           <input type="date" value={formData.endDate} readOnly
-                            className="w-full bg-slate-600/30 border border-white/5 rounded-xl px-3 py-2.5 text-emerald-400 cursor-default" />
+                            className="w-full bg-[var(--bg-surface-hover)]/30 border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-emerald-400 cursor-default" />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-slate-300 mb-2">Quotation Valid Until *</label>
+                          <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Quotation Valid Until *</label>
                           <input type="date" required value={formData.validUntil}
                             onChange={e => setFormData({ ...formData, validUntil: e.target.value })}
-                            className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-blue-500" />
+                            className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-[var(--text-main)] focus:outline-none focus:border-blue-500" />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-slate-300 mb-2">Currency</label>
+                          <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Currency</label>
                           <select value={formData.currency}
                             onChange={e => setFormData({ ...formData, currency: e.target.value as any })}
-                            className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-blue-500">
+                            className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-[var(--text-main)] focus:outline-none focus:border-blue-500">
                             <option value="AED">AED - UAE Dirham</option>
                             <option value="USD">USD - US Dollar</option>
                             <option value="EUR">EUR - Euro</option>
@@ -1182,29 +1182,29 @@ export default function LeaseQuotationsPage() {
                     </div>
 
                     <div>
-                      <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
-                        <span className="w-6 h-6 rounded bg-blue-600 text-white text-xs flex items-center justify-center">2</span>
+                      <h3 className="text-base font-semibold text-[var(--text-main)] mb-4 flex items-center gap-2">
+                        <span className="w-6 h-6 rounded bg-blue-600 text-[var(--text-main)] text-xs flex items-center justify-center">2</span>
                         Contract Terms
                       </h3>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-slate-300 mb-2">Mileage Cap (km/month)</label>
+                          <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Mileage Cap (km/month)</label>
                           <input type="number" min="0" value={formData.mileageCap ?? ''} placeholder="e.g. 3000"
                             onChange={e => setFormData({ ...formData, mileageCap: parseInt(e.target.value) || 0 })}
-                            className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500" />
-                          <p className="text-xs text-slate-500 mt-1">Leave 0 for unlimited mileage</p>
+                            className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500" />
+                          <p className="text-xs text-[var(--text-faint)] mt-1">Leave 0 for unlimited mileage</p>
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-slate-300 mb-2">Security Deposit ({formData.currency})</label>
+                          <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Security Deposit ({formData.currency})</label>
                           <input type="number" min="0" value={formData.securityDeposit || ''} placeholder="e.g. 5000"
                             onChange={e => setFormData({ ...formData, securityDeposit: parseFloat(e.target.value) || 0 })}
-                            className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500" />
+                            className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500" />
                         </div>
                         <div className="col-span-2">
-                          <label className="block text-sm font-medium text-slate-300 mb-2">Notes / Special Conditions</label>
+                          <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Notes / Special Conditions</label>
                           <textarea value={formData.notes} rows={3} placeholder="Any special terms, conditions, or notes for this quotation..."
                             onChange={e => setFormData({ ...formData, notes: e.target.value })}
-                            className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500" />
+                            className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500" />
                         </div>
                       </div>
                     </div>
@@ -1215,8 +1215,8 @@ export default function LeaseQuotationsPage() {
                 {activeStep === 2 && (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-base font-semibold text-white flex items-center gap-2">
-                        <span className="w-6 h-6 rounded bg-blue-600 text-white text-xs flex items-center justify-center">2</span>
+                      <h3 className="text-base font-semibold text-[var(--text-main)] flex items-center gap-2">
+                        <span className="w-6 h-6 rounded bg-blue-600 text-[var(--text-main)] text-xs flex items-center justify-center">2</span>
                         Vehicle Configuration
                       </h3>
                       <button type="button" onClick={addVehicleRow}
@@ -1226,12 +1226,12 @@ export default function LeaseQuotationsPage() {
                     </div>
 
                     {(formData.vehicles ?? []).map((vehicle, index) => (
-                      <div key={index} className="bg-slate-700/30 border border-white/10 rounded-2xl p-5">
+                      <div key={index} className="bg-[var(--bg-surface-hover)]/30 border border-[var(--border-subtle)] rounded-2xl p-5">
                         <div className="flex items-center justify-between mb-4">
-                          <span className="text-sm font-semibold text-white">
+                          <span className="text-sm font-semibold text-[var(--text-main)]">
                             Vehicle Line {index + 1}
                             {vehicle.make && vehicle.model && (
-                              <span className="ml-2 text-slate-400 font-normal">{vehicle.make} {vehicle.model}</span>
+                              <span className="ml-2 text-[var(--text-muted)] font-normal">{vehicle.make} {vehicle.model}</span>
                             )}
                           </span>
                           {(formData.vehicles ?? []).length > 1 && (
@@ -1244,41 +1244,41 @@ export default function LeaseQuotationsPage() {
 
                         <div className="grid grid-cols-3 gap-3">
                           <div>
-                            <label className="block text-xs font-medium text-slate-400 mb-1.5">Vehicle Type *</label>
+                            <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Vehicle Type *</label>
                             <select value={vehicle.vehicleType}
                               onChange={e => {
                                 const v = [...formData.vehicles];
                                 v[index] = { ...v[index], vehicleType: e.target.value as any };
                                 setFormData({ ...formData, vehicles: v });
                               }}
-                              className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500">
+                              className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-blue-500">
                               {['SEDAN','HATCHBACK','SUV','CROSSOVER','MINIVAN','VAN','BUS','MINIBUS','PICKUP','TRUCK','LUXURY','EXECUTIVE_SEDAN','LIMOUSINE','AMBULANCE','OTHER'].map(t => (
                                 <option key={t} value={t}>{t.replace('_',' ')}</option>
                               ))}
                             </select>
                           </div>
                           <div>
-                            <label className="block text-xs font-medium text-slate-400 mb-1.5">Make</label>
+                            <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Make</label>
                             <select value={vehicle.make}
                               onChange={e => {
                                 const v = [...formData.vehicles];
                                 v[index] = { ...v[index], make: e.target.value, model: '' };
                                 setFormData({ ...formData, vehicles: v });
                               }}
-                              className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500">
+                              className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-blue-500">
                               <option value="">Any Make</option>
                               {vehicleMakesList.map(m => <option key={m} value={m}>{m}</option>)}
                             </select>
                           </div>
                           <div>
-                            <label className="block text-xs font-medium text-slate-400 mb-1.5">Model</label>
+                            <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Model</label>
                             <select value={vehicle.model}
                               onChange={e => {
                                 const v = [...formData.vehicles];
                                 v[index] = { ...v[index], model: e.target.value };
                                 setFormData({ ...formData, vehicles: v });
                               }}
-                              className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500">
+                              className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-blue-500">
                               <option value="">Any Model</option>
                               {vehicle.make && getModelsForMake(vehicle.make).map(m => (
                                 <option key={m.model} value={m.model}>{m.model}</option>
@@ -1286,31 +1286,31 @@ export default function LeaseQuotationsPage() {
                             </select>
                           </div>
                           <div>
-                            <label className="block text-xs font-medium text-slate-400 mb-1.5">Year</label>
+                            <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Year</label>
                             <select value={vehicle.year}
                               onChange={e => {
                                 const v = [...formData.vehicles];
                                 v[index] = { ...v[index], year: parseInt(e.target.value) };
                                 setFormData({ ...formData, vehicles: v });
                               }}
-                              className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500">
+                              className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-blue-500">
                               {Array.from({ length: 6 }, (_, i) => new Date().getFullYear() + 1 - i).map(y => (
                                 <option key={y} value={y}>{y}</option>
                               ))}
                             </select>
                           </div>
                           <div>
-                            <label className="block text-xs font-medium text-slate-400 mb-1.5">Quantity *</label>
+                            <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Quantity *</label>
                             <input type="number" min="1" value={vehicle.quantity}
                               onChange={e => {
                                 const v = [...formData.vehicles];
                                 v[index] = { ...v[index], quantity: parseInt(e.target.value) || 1 };
                                 setFormData({ ...formData, vehicles: v });
                               }}
-                              className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500" />
+                              className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-blue-500" />
                           </div>
                           <div>
-                            <label className="block text-xs font-medium text-slate-400 mb-1.5">Monthly Rate per Unit ({formData.currency}) *</label>
+                            <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Monthly Rate per Unit ({formData.currency}) *</label>
                             <input type="number" min="0" step="0.01" value={vehicle.monthlyRate || ''}
                               placeholder="e.g. 3500"
                               onChange={e => {
@@ -1318,13 +1318,13 @@ export default function LeaseQuotationsPage() {
                                 v[index] = { ...v[index], monthlyRate: parseFloat(e.target.value) || 0 };
                                 setFormData({ ...formData, vehicles: v });
                               }}
-                              className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500" />
+                              className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-blue-500" />
                           </div>
                         </div>
 
                         {/* Per-vehicle bundled services */}
-                        <div className="mt-4 pt-4 border-t border-white/10">
-                          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Bundled Services for this Vehicle Type</p>
+                        <div className="mt-4 pt-4 border-t border-[var(--border-subtle)]">
+                          <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Bundled Services for this Vehicle Type</p>
                           <div className="grid grid-cols-3 gap-3">
                             {[
                               { flag: 'insuranceIncluded', costKey: 'insuranceCostPerUnit', label: 'Insurance', color: 'blue' },
@@ -1333,22 +1333,22 @@ export default function LeaseQuotationsPage() {
                             ].map(({ flag, costKey, label, color }) => {
                               const isOn = !!(vehicle as any)[flag];
                               return (
-                                <div key={flag} className={`rounded-xl border p-3 transition-all ${isOn ? `border-${color}-500/40 bg-${color}-500/10` : 'border-white/10 bg-slate-800/50'}`}>
+                                <div key={flag} className={`rounded-xl border p-3 transition-all ${isOn ? `border-${color}-500/40 bg-${color}-500/10` : 'border-[var(--border-subtle)] bg-[var(--bg-surface)]/50'}`}>
                                   <div className="flex items-center justify-between mb-2">
-                                    <span className="text-xs font-medium text-white">{label}</span>
+                                    <span className="text-xs font-medium text-[var(--text-main)]">{label}</span>
                                     <button type="button"
                                       onClick={() => {
                                         const v = [...formData.vehicles];
                                         v[index] = { ...v[index], [flag]: !isOn };
                                         setFormData({ ...formData, vehicles: v });
                                       }}
-                                      className={`relative inline-flex h-5 w-9 rounded-full transition-colors flex-shrink-0 ${isOn ? 'bg-blue-600' : 'bg-slate-600'}`}>
+                                      className={`relative inline-flex h-5 w-9 rounded-full transition-colors flex-shrink-0 ${isOn ? 'bg-blue-600' : 'bg-[var(--bg-surface-hover)]'}`}>
                                       <span className={`inline-block h-3 w-3 mt-1 rounded-full bg-white transition-transform ${isOn ? 'translate-x-5' : 'translate-x-1'}`} />
                                     </button>
                                   </div>
                                   {isOn && (
                                     <div>
-                                      <label className="block text-xs text-slate-400 mb-1">Cost per Unit / month ({formData.currency})</label>
+                                      <label className="block text-xs text-[var(--text-muted)] mb-1">Cost per Unit / month ({formData.currency})</label>
                                       <input type="number" min="0" step="0.01"
                                         value={(vehicle as any)[costKey] || ''}
                                         placeholder="0.00"
@@ -1357,9 +1357,9 @@ export default function LeaseQuotationsPage() {
                                           v[index] = { ...v[index], [costKey]: parseFloat(e.target.value) || 0 };
                                           setFormData({ ...formData, vehicles: v });
                                         }}
-                                        className="w-full bg-slate-700 border border-white/10 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:border-blue-500" />
+                                        className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-2 py-1.5 text-[var(--text-main)] text-xs focus:outline-none focus:border-blue-500" />
                                       {(vehicle as any)[costKey] > 0 && (
-                                        <p className="text-xs text-slate-500 mt-1">
+                                        <p className="text-xs text-[var(--text-faint)] mt-1">
                                           Total: {formData.currency} {((Number((vehicle as any)[costKey]) || 0) * (Number(vehicle.quantity) || 0)).toLocaleString('en-AE')} / month
                                         </p>
                                       )}
@@ -1372,8 +1372,8 @@ export default function LeaseQuotationsPage() {
                         </div>
 
                         {/* Per-vehicle subtotal */}
-                        <div className="mt-3 pt-3 border-t border-white/10 flex items-center justify-between">
-                          <span className="text-xs text-slate-400">Line Subtotal (incl. services):</span>
+                        <div className="mt-3 pt-3 border-t border-[var(--border-subtle)] flex items-center justify-between">
+                          <span className="text-xs text-[var(--text-muted)]">Line Subtotal (incl. services):</span>
                           <div className="text-right">
                             <div className="text-sm font-semibold text-emerald-400">
                               {formData.currency} {(
@@ -1385,7 +1385,7 @@ export default function LeaseQuotationsPage() {
                               ).toLocaleString('en-AE')} / month
                             </div>
                             {formData.duration > 0 && (
-                              <div className="text-xs text-slate-400">
+                              <div className="text-xs text-[var(--text-muted)]">
                                 {formData.currency} {(
                                   ((Number(vehicle.monthlyRate) || 0) +
                                   (vehicle.insuranceIncluded ? (Number(vehicle.insuranceCostPerUnit) || 0) : 0) +
@@ -1402,9 +1402,9 @@ export default function LeaseQuotationsPage() {
 
                     {/* Fleet summary */}
                     <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl px-5 py-3 flex items-center justify-between">
-                      <span className="text-sm text-slate-300">
-                        Total Fleet: <strong className="text-white">{formData.vehicles.reduce((s, v) => s + (Number(v.quantity)||0), 0)} vehicles</strong>
-                        {' '}across <strong className="text-white">{formData.vehicles.length} line(s)</strong>
+                      <span className="text-sm text-[var(--text-muted)]">
+                        Total Fleet: <strong className="text-[var(--text-main)]">{formData.vehicles.reduce((s, v) => s + (Number(v.quantity)||0), 0)} vehicles</strong>
+                        {' '}across <strong className="text-[var(--text-main)]">{formData.vehicles.length} line(s)</strong>
                       </span>
                       <span className="text-sm font-bold text-emerald-400">
                         Base: {formData.currency} {formData.vehicles.reduce((s,v) => s+(Number(v.monthlyRate)||0)*(Number(v.quantity)||0), 0).toLocaleString('en-AE')} / month
@@ -1417,8 +1417,8 @@ export default function LeaseQuotationsPage() {
                 {activeStep === 3 && (
                   <div className="space-y-6">
                     <div>
-                      <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
-                        <span className="w-6 h-6 rounded bg-blue-600 text-white text-xs flex items-center justify-center">3</span>
+                      <h3 className="text-base font-semibold text-[var(--text-main)] mb-4 flex items-center gap-2">
+                        <span className="w-6 h-6 rounded bg-blue-600 text-[var(--text-main)] text-xs flex items-center justify-center">3</span>
                         Pricing Adjustments
                       </h3>
                       <div className="grid grid-cols-3 gap-4">
@@ -1429,77 +1429,77 @@ export default function LeaseQuotationsPage() {
                           { label:'Services Cost (monthly)', key:'servicesCost', help:'Monthly cost for additional services' },
                         ].map(({ label, key, help }) => (
                           <div key={key}>
-                            <label className="block text-sm font-medium text-slate-300 mb-1.5">{label}</label>
+                            <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">{label}</label>
                             <input type="number" min="0" step="0.01"
                               value={(formData as any)[key] || ''}
                               placeholder="0"
                               onChange={e => setFormData({ ...formData, [key]: parseFloat(e.target.value) || 0 })}
-                              className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500" />
-                            {help && <p className="text-xs text-slate-500 mt-1">{help}</p>}
+                              className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500" />
+                            {help && <p className="text-xs text-[var(--text-faint)] mt-1">{help}</p>}
                           </div>
                         ))}
                       </div>
                     </div>
 
                     <div>
-                      <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
-                        <span className="w-6 h-6 rounded bg-violet-600 text-white text-xs flex items-center justify-center">+</span>
+                      <h3 className="text-base font-semibold text-[var(--text-main)] mb-4 flex items-center gap-2">
+                        <span className="w-6 h-6 rounded bg-violet-600 text-[var(--text-main)] text-xs flex items-center justify-center">+</span>
                         Bundled Services Breakdown by Vehicle Type
                       </h3>
-                      <div className="bg-slate-700/20 border border-white/10 rounded-xl overflow-hidden">
+                      <div className="bg-[var(--bg-surface-hover)]/20 border border-[var(--border-subtle)] rounded-xl overflow-hidden">
                         <table className="w-full text-sm">
                           <thead>
-                            <tr className="border-b border-white/10 bg-slate-800/50">
-                              <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-400">Vehicle Type / Make</th>
-                              <th className="px-4 py-2.5 text-center text-xs font-semibold text-slate-400">Units</th>
+                            <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/50">
+                              <th className="px-4 py-2.5 text-left text-xs font-semibold text-[var(--text-muted)]">Vehicle Type / Make</th>
+                              <th className="px-4 py-2.5 text-center text-xs font-semibold text-[var(--text-muted)]">Units</th>
                               <th className="px-4 py-2.5 text-center text-xs font-semibold text-blue-400">Insurance</th>
                               <th className="px-4 py-2.5 text-center text-xs font-semibold text-emerald-400">Maintenance</th>
                               <th className="px-4 py-2.5 text-center text-xs font-semibold text-amber-400">Driver</th>
-                              <th className="px-4 py-2.5 text-right text-xs font-semibold text-slate-400">Services Total</th>
+                              <th className="px-4 py-2.5 text-right text-xs font-semibold text-[var(--text-muted)]">Services Total</th>
                             </tr>
                           </thead>
                           <tbody>
                             {totals.vehicleLines.map((line, i) => (
-                              <tr key={i} className="border-b border-white/5 hover:bg-white/3">
+                              <tr key={i} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]">
                                 <td className="px-4 py-3">
-                                  <div className="font-medium text-white">{line.vehicleType.replace('_',' ')}</div>
-                                  {(line.make || line.model) && <div className="text-xs text-slate-400">{line.make} {line.model}</div>}
+                                  <div className="font-medium text-[var(--text-main)]">{line.vehicleType.replace('_',' ')}</div>
+                                  {(line.make || line.model) && <div className="text-xs text-[var(--text-muted)]">{line.make} {line.model}</div>}
                                 </td>
-                                <td className="px-4 py-3 text-center text-white font-medium">{line.quantity}</td>
+                                <td className="px-4 py-3 text-center text-[var(--text-main)] font-medium">{line.quantity}</td>
                                 <td className="px-4 py-3 text-center">
                                   {line.lineIns > 0
-                                    ? <div><div className="text-blue-400 font-medium">{formData.currency} {line.lineIns.toLocaleString('en-AE')}</div><div className="text-xs text-slate-500">{formData.currency} {Number(line.unitIns).toLocaleString('en-AE')}/unit</div></div>
-                                    : <span className="text-slate-600 text-xs">-</span>}
+                                    ? <div><div className="text-blue-400 font-medium">{formData.currency} {line.lineIns.toLocaleString('en-AE')}</div><div className="text-xs text-[var(--text-faint)]">{formData.currency} {Number(line.unitIns).toLocaleString('en-AE')}/unit</div></div>
+                                    : <span className="text-[var(--text-faint)] text-xs">-</span>}
                                 </td>
                                 <td className="px-4 py-3 text-center">
                                   {line.lineMaint > 0
-                                    ? <div><div className="text-emerald-400 font-medium">{formData.currency} {line.lineMaint.toLocaleString('en-AE')}</div><div className="text-xs text-slate-500">{formData.currency} {Number(line.unitMaint).toLocaleString('en-AE')}/unit</div></div>
-                                    : <span className="text-slate-600 text-xs">-</span>}
+                                    ? <div><div className="text-emerald-400 font-medium">{formData.currency} {line.lineMaint.toLocaleString('en-AE')}</div><div className="text-xs text-[var(--text-faint)]">{formData.currency} {Number(line.unitMaint).toLocaleString('en-AE')}/unit</div></div>
+                                    : <span className="text-[var(--text-faint)] text-xs">-</span>}
                                 </td>
                                 <td className="px-4 py-3 text-center">
                                   {line.lineDriver > 0
-                                    ? <div><div className="text-amber-400 font-medium">{formData.currency} {line.lineDriver.toLocaleString('en-AE')}</div><div className="text-xs text-slate-500">{formData.currency} {Number(line.unitDriver).toLocaleString('en-AE')}/unit</div></div>
-                                    : <span className="text-slate-600 text-xs">-</span>}
+                                    ? <div><div className="text-amber-400 font-medium">{formData.currency} {line.lineDriver.toLocaleString('en-AE')}</div><div className="text-xs text-[var(--text-faint)]">{formData.currency} {Number(line.unitDriver).toLocaleString('en-AE')}/unit</div></div>
+                                    : <span className="text-[var(--text-faint)] text-xs">-</span>}
                                 </td>
                                 <td className="px-4 py-3 text-right">
-                                  <div className="font-semibold text-white">{formData.currency} {(line.lineIns + line.lineMaint + line.lineDriver).toLocaleString('en-AE')}</div>
-                                  <div className="text-xs text-slate-400">+ base {formData.currency} {line.lineBase.toLocaleString('en-AE')}</div>
+                                  <div className="font-semibold text-[var(--text-main)]">{formData.currency} {(line.lineIns + line.lineMaint + line.lineDriver).toLocaleString('en-AE')}</div>
+                                  <div className="text-xs text-[var(--text-muted)]">+ base {formData.currency} {line.lineBase.toLocaleString('en-AE')}</div>
                                 </td>
                               </tr>
                             ))}
                             {totals.vehicleServicesTotal > 0 && (
-                              <tr className="bg-slate-800/50 border-t border-white/10">
-                                <td colSpan={2} className="px-4 py-2.5 text-xs font-semibold text-slate-400 uppercase tracking-wider">Totals</td>
+                              <tr className="bg-[var(--bg-surface)]/50 border-t border-[var(--border-subtle)]">
+                                <td colSpan={2} className="px-4 py-2.5 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Totals</td>
                                 <td className="px-4 py-2.5 text-center text-blue-400 font-semibold text-sm">{formData.currency} {totals.totalInsurance.toLocaleString('en-AE')}</td>
                                 <td className="px-4 py-2.5 text-center text-emerald-400 font-semibold text-sm">{formData.currency} {totals.totalMaintenance.toLocaleString('en-AE')}</td>
                                 <td className="px-4 py-2.5 text-center text-amber-400 font-semibold text-sm">{formData.currency} {totals.totalDriver.toLocaleString('en-AE')}</td>
-                                <td className="px-4 py-2.5 text-right text-white font-bold">{formData.currency} {totals.vehicleServicesTotal.toLocaleString('en-AE')}</td>
+                                <td className="px-4 py-2.5 text-right text-[var(--text-main)] font-bold">{formData.currency} {totals.vehicleServicesTotal.toLocaleString('en-AE')}</td>
                               </tr>
                             )}
                           </tbody>
                         </table>
                         {totals.vehicleServicesTotal === 0 && (
-                          <div className="px-4 py-4 text-center text-slate-500 text-sm">
+                          <div className="px-4 py-4 text-center text-[var(--text-faint)] text-sm">
                             No bundled services configured. Go back to Step 2 to enable Insurance, Maintenance, or Driver services per vehicle type.
                           </div>
                         )}
@@ -1507,34 +1507,34 @@ export default function LeaseQuotationsPage() {
                     </div>
 
                     {/* Live Pricing Summary */}
-                    <div className="bg-gradient-to-br from-slate-700/50 to-slate-800/50 border border-white/10 rounded-2xl p-5">
-                      <h4 className="text-sm font-semibold text-slate-300 mb-4 uppercase tracking-wider">Live Pricing Summary</h4>
+                    <div className="bg-gradient-to-br from-slate-700/50 to-slate-800/50 border border-[var(--border-subtle)] rounded-2xl p-5">
+                      <h4 className="text-sm font-semibold text-[var(--text-muted)] mb-4 uppercase tracking-wider">Live Pricing Summary</h4>
                       <div className="space-y-2">
                         {/* Vehicle Base */}
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-slate-400">Vehicle Base ({formData.vehicles.reduce((s,v)=>s+(Number(v.quantity)||0),0)} units)</span>
-                          <span className="text-white">{formData.currency} {Number(totals.baseMonthly ?? 0).toLocaleString('en-AE', { minimumFractionDigits: 2 })}</span>
+                          <span className="text-[var(--text-muted)]">Vehicle Base ({formData.vehicles.reduce((s,v)=>s+(Number(v.quantity)||0),0)} units)</span>
+                          <span className="text-[var(--text-main)]">{formData.currency} {Number(totals.baseMonthly ?? 0).toLocaleString('en-AE', { minimumFractionDigits: 2 })}</span>
                         </div>
                         {/* Per-vehicle service breakdown */}
                         {totals.vehicleLines.map((line, i) => (
                           (line.lineIns > 0 || line.lineMaint > 0 || line.lineDriver > 0) && (
-                            <div key={i} className="ml-3 border-l-2 border-slate-600 pl-3 space-y-1">
-                              <div className="text-xs text-slate-500 font-medium">{line.vehicleType.replace('_',' ')} x{line.quantity}</div>
+                            <div key={i} className="ml-3 border-l-2 border-[var(--border-strong)] pl-3 space-y-1">
+                              <div className="text-xs text-[var(--text-faint)] font-medium">{line.vehicleType.replace('_',' ')} x{line.quantity}</div>
                               {line.lineIns > 0 && (
                                 <div className="flex items-center justify-between text-xs">
-                                  <span className="text-slate-500">Insurance ({formData.currency}{Number(line.unitIns).toLocaleString('en-AE')}/unit)</span>
+                                  <span className="text-[var(--text-faint)]">Insurance ({formData.currency}{Number(line.unitIns).toLocaleString('en-AE')}/unit)</span>
                                   <span className="text-blue-400">{formData.currency} {line.lineIns.toLocaleString('en-AE')}</span>
                                 </div>
                               )}
                               {line.lineMaint > 0 && (
                                 <div className="flex items-center justify-between text-xs">
-                                  <span className="text-slate-500">Maintenance ({formData.currency}{Number(line.unitMaint).toLocaleString('en-AE')}/unit)</span>
+                                  <span className="text-[var(--text-faint)]">Maintenance ({formData.currency}{Number(line.unitMaint).toLocaleString('en-AE')}/unit)</span>
                                   <span className="text-emerald-400">{formData.currency} {line.lineMaint.toLocaleString('en-AE')}</span>
                                 </div>
                               )}
                               {line.lineDriver > 0 && (
                                 <div className="flex items-center justify-between text-xs">
-                                  <span className="text-slate-500">Driver ({formData.currency}{Number(line.unitDriver).toLocaleString('en-AE')}/unit)</span>
+                                  <span className="text-[var(--text-faint)]">Driver ({formData.currency}{Number(line.unitDriver).toLocaleString('en-AE')}/unit)</span>
                                   <span className="text-amber-400">{formData.currency} {line.lineDriver.toLocaleString('en-AE')}</span>
                                 </div>
                               )}
@@ -1544,38 +1544,38 @@ export default function LeaseQuotationsPage() {
                         {/* Adjustments */}
                         {(Number(totals.interestAmount) > 0) && (
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-slate-400">Interest ({formData.interestRate}%)</span>
-                            <span className="text-white">{formData.currency} {Number(totals.interestAmount ?? 0).toLocaleString('en-AE', { minimumFractionDigits: 2 })}</span>
+                            <span className="text-[var(--text-muted)]">Interest ({formData.interestRate}%)</span>
+                            <span className="text-[var(--text-main)]">{formData.currency} {Number(totals.interestAmount ?? 0).toLocaleString('en-AE', { minimumFractionDigits: 2 })}</span>
                           </div>
                         )}
                         {(Number(totals.markupAmount) > 0) && (
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-slate-400">Markup ({formData.markupRate}%)</span>
-                            <span className="text-white">{formData.currency} {Number(totals.markupAmount ?? 0).toLocaleString('en-AE', { minimumFractionDigits: 2 })}</span>
+                            <span className="text-[var(--text-muted)]">Markup ({formData.markupRate}%)</span>
+                            <span className="text-[var(--text-main)]">{formData.currency} {Number(totals.markupAmount ?? 0).toLocaleString('en-AE', { minimumFractionDigits: 2 })}</span>
                           </div>
                         )}
                         {(Number(formData.accessoriesCost) > 0) && (
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-slate-400">Accessories</span>
-                            <span className="text-white">{formData.currency} {Number(formData.accessoriesCost).toLocaleString('en-AE', { minimumFractionDigits: 2 })}</span>
+                            <span className="text-[var(--text-muted)]">Accessories</span>
+                            <span className="text-[var(--text-main)]">{formData.currency} {Number(formData.accessoriesCost).toLocaleString('en-AE', { minimumFractionDigits: 2 })}</span>
                           </div>
                         )}
                         {(Number(formData.servicesCost) > 0) && (
                           <div className="flex items-center justify-between text-sm">
-                            <span className="text-slate-400">Additional Services</span>
-                            <span className="text-white">{formData.currency} {Number(formData.servicesCost).toLocaleString('en-AE', { minimumFractionDigits: 2 })}</span>
+                            <span className="text-[var(--text-muted)]">Additional Services</span>
+                            <span className="text-[var(--text-main)]">{formData.currency} {Number(formData.servicesCost).toLocaleString('en-AE', { minimumFractionDigits: 2 })}</span>
                           </div>
                         )}
-                        <div className="border-t border-white/10 pt-3 mt-3 space-y-2">
+                        <div className="border-t border-[var(--border-subtle)] pt-3 mt-3 space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-base font-semibold text-white">Total Monthly Rate</span>
+                            <span className="text-base font-semibold text-[var(--text-main)]">Total Monthly Rate</span>
                             <span className="text-xl font-bold text-emerald-400">
                               {formData.currency} {Number(totals.totalMonthly ?? 0).toLocaleString('en-AE', { minimumFractionDigits: 2 })}
                             </span>
                           </div>
                           {formData.duration > 0 && (
                             <div className="flex items-center justify-between">
-                              <span className="text-sm text-slate-400">Total Contract Value ({formData.duration} months)</span>
+                              <span className="text-sm text-[var(--text-muted)]">Total Contract Value ({formData.duration} months)</span>
                               <span className="text-lg font-bold text-blue-400">
                                 {formData.currency} {Number(totals.totalValue ?? 0).toLocaleString('en-AE', { minimumFractionDigits: 2 })}
                               </span>
@@ -1583,7 +1583,7 @@ export default function LeaseQuotationsPage() {
                           )}
                           {Number(formData.securityDeposit) > 0 && (
                             <div className="flex items-center justify-between">
-                              <span className="text-sm text-slate-400">Security Deposit</span>
+                              <span className="text-sm text-[var(--text-muted)]">Security Deposit</span>
                               <span className="text-sm font-medium text-amber-400">
                                 {formData.currency} {Number(formData.securityDeposit).toLocaleString('en-AE', { minimumFractionDigits: 2 })}
                               </span>
@@ -1598,46 +1598,46 @@ export default function LeaseQuotationsPage() {
                 {/*  STEP 4: REVIEW & SUBMIT  */}
                 {activeStep === 4 && (
                   <div className="space-y-5">
-                    <h3 className="text-base font-semibold text-white flex items-center gap-2">
-                      <span className="w-6 h-6 rounded bg-emerald-600 text-white text-xs flex items-center justify-center">4</span>
+                    <h3 className="text-base font-semibold text-[var(--text-main)] flex items-center gap-2">
+                      <span className="w-6 h-6 rounded bg-emerald-600 text-[var(--text-main)] text-xs flex items-center justify-center">4</span>
                       Review Before Submission
                     </h3>
 
                     {/* Summary Grid */}
                     <div className="grid grid-cols-2 gap-4">
                       {/* Lessee & Terms */}
-                      <div className="bg-slate-700/30 border border-white/10 rounded-xl p-4">
-                        <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Lessee & Terms</h4>
+                      <div className="bg-[var(--bg-surface-hover)]/30 border border-[var(--border-subtle)] rounded-xl p-4">
+                        <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Lessee & Terms</h4>
                         <div className="space-y-2 text-sm">
-                          <div className="flex justify-between"><span className="text-slate-400">Lessee</span><span className="text-white font-medium">{formData.lesseeName || ''}</span></div>
-                          <div className="flex justify-between"><span className="text-slate-400">Lease Type</span><span className="text-white">{formData.leaseType}</span></div>
-                          <div className="flex justify-between"><span className="text-slate-400">Duration</span><span className="text-white">{formData.duration} months</span></div>
-                          <div className="flex justify-between"><span className="text-slate-400">Start Date</span><span className="text-white">{formData.startDate || ''}</span></div>
-                          <div className="flex justify-between"><span className="text-slate-400">End Date</span><span className="text-emerald-400">{formData.endDate || ''}</span></div>
-                          <div className="flex justify-between"><span className="text-slate-400">Valid Until</span><span className="text-white">{formData.validUntil || ''}</span></div>
-                          <div className="flex justify-between"><span className="text-slate-400">Mileage Cap</span><span className="text-white">{formData.mileageCap ? `${formData.mileageCap.toLocaleString()} km/mo` : 'Unlimited'}</span></div>
-                          <div className="flex justify-between"><span className="text-slate-400">Security Deposit</span><span className="text-amber-400">{formData.currency} {Number(formData.securityDeposit || 0).toLocaleString('en-AE')}</span></div>
+                          <div className="flex justify-between"><span className="text-[var(--text-muted)]">Lessee</span><span className="text-[var(--text-main)] font-medium">{formData.lesseeName || ''}</span></div>
+                          <div className="flex justify-between"><span className="text-[var(--text-muted)]">Lease Type</span><span className="text-[var(--text-main)]">{formData.leaseType}</span></div>
+                          <div className="flex justify-between"><span className="text-[var(--text-muted)]">Duration</span><span className="text-[var(--text-main)]">{formData.duration} months</span></div>
+                          <div className="flex justify-between"><span className="text-[var(--text-muted)]">Start Date</span><span className="text-[var(--text-main)]">{formData.startDate || ''}</span></div>
+                          <div className="flex justify-between"><span className="text-[var(--text-muted)]">End Date</span><span className="text-emerald-400">{formData.endDate || ''}</span></div>
+                          <div className="flex justify-between"><span className="text-[var(--text-muted)]">Valid Until</span><span className="text-[var(--text-main)]">{formData.validUntil || ''}</span></div>
+                          <div className="flex justify-between"><span className="text-[var(--text-muted)]">Mileage Cap</span><span className="text-[var(--text-main)]">{formData.mileageCap ? `${formData.mileageCap.toLocaleString()} km/mo` : 'Unlimited'}</span></div>
+                          <div className="flex justify-between"><span className="text-[var(--text-muted)]">Security Deposit</span><span className="text-amber-400">{formData.currency} {Number(formData.securityDeposit || 0).toLocaleString('en-AE')}</span></div>
                         </div>
                       </div>
 
                       {/* Pricing Summary */}
-                      <div className="bg-slate-700/30 border border-white/10 rounded-xl p-4">
-                        <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Pricing</h4>
+                      <div className="bg-[var(--bg-surface-hover)]/30 border border-[var(--border-subtle)] rounded-xl p-4">
+                        <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Pricing</h4>
                         <div className="space-y-2 text-sm">
-                          <div className="flex justify-between"><span className="text-slate-400">Vehicle Base</span><span className="text-white">{formData.currency} {Number(totals.baseMonthly??0).toLocaleString('en-AE')}</span></div>
-                          {Number(totals.totalInsurance) > 0 && <div className="flex justify-between"><span className="text-slate-400">Insurance (all vehicles)</span><span className="text-blue-400">{formData.currency} {totals.totalInsurance.toLocaleString('en-AE')}</span></div>}
-                          {Number(totals.totalMaintenance) > 0 && <div className="flex justify-between"><span className="text-slate-400">Maintenance (all vehicles)</span><span className="text-emerald-400">{formData.currency} {totals.totalMaintenance.toLocaleString('en-AE')}</span></div>}
-                          {Number(totals.totalDriver) > 0 && <div className="flex justify-between"><span className="text-slate-400">Driver (all vehicles)</span><span className="text-amber-400">{formData.currency} {totals.totalDriver.toLocaleString('en-AE')}</span></div>}
+                          <div className="flex justify-between"><span className="text-[var(--text-muted)]">Vehicle Base</span><span className="text-[var(--text-main)]">{formData.currency} {Number(totals.baseMonthly??0).toLocaleString('en-AE')}</span></div>
+                          {Number(totals.totalInsurance) > 0 && <div className="flex justify-between"><span className="text-[var(--text-muted)]">Insurance (all vehicles)</span><span className="text-blue-400">{formData.currency} {totals.totalInsurance.toLocaleString('en-AE')}</span></div>}
+                          {Number(totals.totalMaintenance) > 0 && <div className="flex justify-between"><span className="text-[var(--text-muted)]">Maintenance (all vehicles)</span><span className="text-emerald-400">{formData.currency} {totals.totalMaintenance.toLocaleString('en-AE')}</span></div>}
+                          {Number(totals.totalDriver) > 0 && <div className="flex justify-between"><span className="text-[var(--text-muted)]">Driver (all vehicles)</span><span className="text-amber-400">{formData.currency} {totals.totalDriver.toLocaleString('en-AE')}</span></div>}
                           {(Number(totals.interestAmount) > 0 || Number(totals.markupAmount) > 0) && (
-                            <div className="flex justify-between"><span className="text-slate-400">Interest + Markup</span><span className="text-white">{formData.currency} {(Number(totals.interestAmount??0)+Number(totals.markupAmount??0)).toLocaleString('en-AE')}</span></div>
+                            <div className="flex justify-between"><span className="text-[var(--text-muted)]">Interest + Markup</span><span className="text-[var(--text-main)]">{formData.currency} {(Number(totals.interestAmount??0)+Number(totals.markupAmount??0)).toLocaleString('en-AE')}</span></div>
                           )}
-                          <div className="border-t border-white/10 pt-2 space-y-1">
+                          <div className="border-t border-[var(--border-subtle)] pt-2 space-y-1">
                             <div className="flex justify-between text-base font-bold">
-                              <span className="text-white">Monthly Total</span>
+                              <span className="text-[var(--text-main)]">Monthly Total</span>
                               <span className="text-emerald-400">{formData.currency} {Number(totals.totalMonthly??0).toLocaleString('en-AE')}</span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-slate-400 text-sm">Contract Total</span>
+                              <span className="text-[var(--text-muted)] text-sm">Contract Total</span>
                               <span className="text-blue-400 font-semibold">{formData.currency} {Number(totals.totalValue??0).toLocaleString('en-AE')}</span>
                             </div>
                           </div>
@@ -1646,28 +1646,28 @@ export default function LeaseQuotationsPage() {
                     </div>
 
                     {/* Vehicles Table */}
-                    <div className="bg-slate-700/30 border border-white/10 rounded-xl overflow-hidden">
-                      <div className="px-4 py-3 border-b border-white/10">
-                        <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Vehicle Lines ({formData.vehicles.reduce((s,v)=>s+(Number(v.quantity)||0),0)} total units)</h4>
+                    <div className="bg-[var(--bg-surface-hover)]/30 border border-[var(--border-subtle)] rounded-xl overflow-hidden">
+                      <div className="px-4 py-3 border-b border-[var(--border-subtle)]">
+                        <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Vehicle Lines ({formData.vehicles.reduce((s,v)=>s+(Number(v.quantity)||0),0)} total units)</h4>
                       </div>
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="border-b border-white/5">
-                            <th className="px-4 py-2 text-left text-xs text-slate-400">Vehicle Type</th>
-                            <th className="px-4 py-2 text-center text-xs text-slate-400">Qty</th>
-                            <th className="px-4 py-2 text-right text-xs text-slate-400">Base/Unit</th>
-                            <th className="px-4 py-2 text-right text-xs text-slate-400">Services/Unit</th>
-                            <th className="px-4 py-2 text-right text-xs text-slate-400">Line Total</th>
+                          <tr className="border-b border-[var(--border-subtle)]">
+                            <th className="px-4 py-2 text-left text-xs text-[var(--text-muted)]">Vehicle Type</th>
+                            <th className="px-4 py-2 text-center text-xs text-[var(--text-muted)]">Qty</th>
+                            <th className="px-4 py-2 text-right text-xs text-[var(--text-muted)]">Base/Unit</th>
+                            <th className="px-4 py-2 text-right text-xs text-[var(--text-muted)]">Services/Unit</th>
+                            <th className="px-4 py-2 text-right text-xs text-[var(--text-muted)]">Line Total</th>
                           </tr>
                         </thead>
                         <tbody>
                           {formData.vehicles.map((v, i) => (
-                            <tr key={i} className="border-b border-white/5">
-                              <td className="px-4 py-2.5 text-white">{v.vehicleType.replace('_',' ')}</td>
-                              <td className="px-4 py-2.5 text-slate-300">{v.make || ''} {v.model || ''}</td>
-                              <td className="px-4 py-2.5 text-slate-300">{v.year}</td>
-                              <td className="px-4 py-2.5 text-center text-white font-medium">{v.quantity}</td>
-                              <td className="px-4 py-2.5 text-right text-slate-300">{Number(v.monthlyRate||0).toLocaleString('en-AE')}</td>
+                            <tr key={i} className="border-b border-[var(--border-subtle)]">
+                              <td className="px-4 py-2.5 text-[var(--text-main)]">{v.vehicleType.replace('_',' ')}</td>
+                              <td className="px-4 py-2.5 text-[var(--text-muted)]">{v.make || ''} {v.model || ''}</td>
+                              <td className="px-4 py-2.5 text-[var(--text-muted)]">{v.year}</td>
+                              <td className="px-4 py-2.5 text-center text-[var(--text-main)] font-medium">{v.quantity}</td>
+                              <td className="px-4 py-2.5 text-right text-[var(--text-muted)]">{Number(v.monthlyRate||0).toLocaleString('en-AE')}</td>
                               <td className="px-4 py-2.5 text-right text-emerald-400 font-medium">{((Number(v.monthlyRate)||0)*(Number(v.quantity)||0)).toLocaleString('en-AE')}</td>
                             </tr>
                           ))}
@@ -1676,32 +1676,32 @@ export default function LeaseQuotationsPage() {
                     </div>
 
                     {formData.notes && (
-                      <div className="bg-slate-700/20 border border-white/10 rounded-xl p-4">
-                        <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Notes</h4>
-                        <p className="text-sm text-slate-300 whitespace-pre-line">{formData.notes}</p>
+                      <div className="bg-[var(--bg-surface-hover)]/20 border border-[var(--border-subtle)] rounded-xl p-4">
+                        <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Notes</h4>
+                        <p className="text-sm text-[var(--text-muted)] whitespace-pre-line">{formData.notes}</p>
                       </div>
                     )}
 
                     {/* Email recipient for Submit mode */}
                     <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-4 space-y-3">
-                      <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
-                        <span className="w-5 h-5 rounded bg-blue-600 text-white text-xs flex items-center justify-center">@</span>
+                      <h3 className="text-sm font-semibold text-[var(--text-muted)] flex items-center gap-2">
+                        <span className="w-5 h-5 rounded bg-blue-600 text-[var(--text-main)] text-xs flex items-center justify-center">@</span>
                         Email Submission
                       </h3>
-                      <p className="text-xs text-slate-500">
+                      <p className="text-xs text-[var(--text-faint)]">
                         &quot;Save &amp; Submit&quot; will update the status to <strong className="text-blue-400">SENT_TO_CUSTOMER</strong> and send
                         this quotation by email. Configure SMTP in Admin &rarr; Notifications to enable email delivery.
                       </p>
                       <div>
-                        <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                          Recipient Email <span className="text-slate-600">(leave blank to use lessee&apos;s email)</span>
+                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">
+                          Recipient Email <span className="text-[var(--text-faint)]">(leave blank to use lessee&apos;s email)</span>
                         </label>
                         <input
                           type="email"
                           value={recipientEmail}
                           onChange={e => setRecipientEmail(e.target.value)}
                           placeholder="customer@company.com"
-                          className="w-full px-3 py-2 rounded-xl bg-slate-700/50 border border-white/10 text-white placeholder-slate-500 text-sm focus:border-blue-500 focus:outline-none"
+                          className="w-full px-3 py-2 rounded-xl bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:border-blue-500 focus:outline-none"
                         />
                       </div>
                     </div>
@@ -1719,18 +1719,18 @@ export default function LeaseQuotationsPage() {
               </div>
 
               {/* Modal Footer - Navigation */}
-              <div className="px-8 py-4 border-t border-white/10 flex items-center justify-between flex-shrink-0">
+              <div className="px-8 py-4 border-t border-[var(--border-subtle)] flex items-center justify-between flex-shrink-0">
                 <button type="button"
                   onClick={() => activeStep > 1 && setActiveStep(activeStep - 1)}
                   disabled={activeStep === 1}
-                  className="px-5 py-2.5 rounded-xl border border-white/10 text-slate-300 hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-all text-sm font-medium">
+                  className="px-5 py-2.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] disabled:opacity-30 disabled:cursor-not-allowed transition-all text-sm font-medium">
                   &larr; Back
                 </button>
 
                 <div className="flex items-center gap-3">
                   <button type="button"
                     onClick={() => { setShowNewModal(false); setActiveStep(1); }}
-                    className="px-5 py-2.5 rounded-xl bg-slate-700 text-slate-300 hover:bg-slate-600 transition-all text-sm">
+                    className="px-5 py-2.5 rounded-xl bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] transition-all text-sm">
                     Cancel
                   </button>
 
@@ -1766,7 +1766,7 @@ export default function LeaseQuotationsPage() {
                         type="submit"
                         disabled={saving}
                         onClick={() => setSubmitMode('draft')}
-                        className="px-5 py-2.5 rounded-xl bg-slate-600 border border-white/20 text-white font-medium hover:bg-slate-500 disabled:opacity-50 transition-all text-sm flex items-center gap-2">
+                        className="px-5 py-2.5 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] text-[var(--text-main)] font-medium hover:bg-[var(--border-strong)] disabled:opacity-50 transition-all text-sm flex items-center gap-2">
                         {saving && submitMode === 'draft'
                           ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                           : <FileText className="h-4 w-4" />
@@ -1796,11 +1796,11 @@ export default function LeaseQuotationsPage() {
       {/*  View Quotation Modal  */}
       {viewQuotation && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-slate-800 border border-white/10 rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-shrink-0">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)] flex-shrink-0">
               <div>
-                <h2 className="text-xl font-bold text-white">{viewQuotation.quotationNumber}</h2>
-                <p className="text-slate-400 text-sm mt-0.5">
+                <h2 className="text-xl font-bold text-[var(--text-main)]">{viewQuotation.quotationNumber}</h2>
+                <p className="text-[var(--text-muted)] text-sm mt-0.5">
                   {viewQuotation.lesseeName || '-'} &bull; {viewQuotation.leaseType} &bull; {viewQuotation.currency}
                 </p>
               </div>
@@ -1808,16 +1808,16 @@ export default function LeaseQuotationsPage() {
                 <span className={`px-3 py-1.5 rounded-full text-xs font-semibold border ${getQuotationStatusStyles(viewQuotation.status)}`}>
                   {viewQuotation.status.replace(/_/g,' ')}
                 </span>
-                <button onClick={() => setViewQuotation(null)} className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5">
+                <button onClick={() => setViewQuotation(null)} className="p-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]">
                   <X className="h-5 w-5" />
                 </button>
               </div>
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
               {/* Visual Workflow Stepper */}
-              <div className="bg-slate-900/40 border border-white/5 rounded-2xl p-4">
+              <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Workflow Progress</h3>
+                  <h3 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">Workflow Progress</h3>
                   <span className="text-[10px] text-blue-400 font-mono">Stage {viewQuotation.status}</span>
                 </div>
                 <StatusStepper currentStatus={viewQuotation.status} />
@@ -1834,9 +1834,9 @@ export default function LeaseQuotationsPage() {
                   { label:'Mileage Cap',   value: viewQuotation.mileageCap ? `${Number(viewQuotation.mileageCap).toLocaleString()} km/mo` : 'Unlimited' },
                   { label:'Currency',      value: viewQuotation.currency },
                 ].map(({ label, value }) => (
-                  <div key={label} className="bg-slate-700/30 border border-white/10 rounded-xl p-3">
-                    <div className="text-xs text-slate-500 mb-0.5">{label}</div>
-                    <div className="text-sm font-medium text-white">{value}</div>
+                  <div key={label} className="bg-[var(--bg-surface-hover)]/30 border border-[var(--border-subtle)] rounded-xl p-3">
+                    <div className="text-xs text-[var(--text-faint)] mb-0.5">{label}</div>
+                    <div className="text-sm font-medium text-[var(--text-main)]">{value}</div>
                   </div>
                 ))}
               </div>
@@ -1850,27 +1850,27 @@ export default function LeaseQuotationsPage() {
 
               {(viewQuotation.vehicles ?? []).length > 0 && (
                 <div>
-                  <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Vehicles</h4>
-                  <div className="overflow-x-auto rounded-xl border border-white/10">
+                  <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Vehicles</h4>
+                  <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b border-white/5 bg-slate-900/40">
-                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-300">Type</th>
-                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-300">Make / Model</th>
-                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-300">Year</th>
-                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-300">Qty</th>
-                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-300">Monthly Rate</th>
-                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-slate-300">Line Total</th>
+                        <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/40">
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-[var(--text-muted)]">Type</th>
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-[var(--text-muted)]">Make / Model</th>
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-[var(--text-muted)]">Year</th>
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-[var(--text-muted)]">Qty</th>
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-[var(--text-muted)]">Monthly Rate</th>
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-[var(--text-muted)]">Line Total</th>
                         </tr>
                       </thead>
                       <tbody>
                         {(viewQuotation.vehicles ?? []).map((v, idx) => (
-                          <tr key={idx} className="border-b border-white/5">
-                            <td className="px-4 py-2.5 text-white">{v.vehicleType}</td>
-                            <td className="px-4 py-2.5 text-white">{v.make} {v.model}</td>
-                            <td className="px-4 py-2.5 text-slate-300">{v.year}</td>
-                            <td className="px-4 py-2.5 text-white font-semibold">{v.quantity}</td>
-                            <td className="px-4 py-2.5 text-white">{Number(v.monthlyRate).toLocaleString()} AED</td>
+                          <tr key={idx} className="border-b border-[var(--border-subtle)]">
+                            <td className="px-4 py-2.5 text-[var(--text-main)]">{v.vehicleType}</td>
+                            <td className="px-4 py-2.5 text-[var(--text-main)]">{v.make} {v.model}</td>
+                            <td className="px-4 py-2.5 text-[var(--text-muted)]">{v.year}</td>
+                            <td className="px-4 py-2.5 text-[var(--text-main)] font-semibold">{v.quantity}</td>
+                            <td className="px-4 py-2.5 text-[var(--text-main)]">{Number(v.monthlyRate).toLocaleString()} AED</td>
                             <td className="px-4 py-2.5 text-emerald-400 font-bold">{(Number(v.monthlyRate) * Number(v.quantity)).toLocaleString()} AED</td>
                           </tr>
                         ))}
@@ -1880,32 +1880,32 @@ export default function LeaseQuotationsPage() {
                 </div>
               )}
 
-              <div className="bg-slate-900/40 border border-white/5 rounded-2xl p-4">
-                <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Financial Summary</h4>
+              <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl p-4">
+                <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Financial Summary</h4>
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
-                    <span className="text-slate-400">Total Monthly Rate</span>
-                    <span className="text-white font-semibold">{Number(viewQuotation.totalMonthlyRate ?? 0).toLocaleString()} {viewQuotation.currency}</span>
+                    <span className="text-[var(--text-muted)]">Total Monthly Rate</span>
+                    <span className="text-[var(--text-main)] font-semibold">{Number(viewQuotation.totalMonthlyRate ?? 0).toLocaleString()} {viewQuotation.currency}</span>
                   </div>
-                  <div className="flex justify-between text-sm border-t border-white/5 pt-2">
-                    <span className="text-slate-400">Total Contract Value</span>
+                  <div className="flex justify-between text-sm border-t border-[var(--border-subtle)] pt-2">
+                    <span className="text-[var(--text-muted)]">Total Contract Value</span>
                     <span className="text-emerald-400 font-bold text-base">{Number(viewQuotation.totalValue ?? viewQuotation.totalContractValue ?? 0).toLocaleString()} {viewQuotation.currency}</span>
                   </div>
                 </div>
               </div>
 
               {getQuotationAction(viewQuotation.status) && (
-                <div className="bg-slate-900/40 border border-violet-500/20 rounded-2xl p-4">
-                  <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Next Action</h4>
+                <div className="bg-[var(--bg-surface)]/40 border border-violet-500/20 rounded-2xl p-4">
+                  <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Next Action</h4>
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <p className="text-white font-semibold text-sm">{getQuotationAction(viewQuotation.status)!.label}</p>
-                      <p className="text-slate-500 text-xs mt-0.5">{getQuotationAction(viewQuotation.status)!.description}</p>
+                      <p className="text-[var(--text-main)] font-semibold text-sm">{getQuotationAction(viewQuotation.status)!.label}</p>
+                      <p className="text-[var(--text-faint)] text-xs mt-0.5">{getQuotationAction(viewQuotation.status)!.description}</p>
                     </div>
                     <button
                       disabled={processingActionId === viewQuotation.id}
                       onClick={() => handleWorkflowAction(viewQuotation.id, getQuotationAction(viewQuotation.status)!.label)}
-                      className="px-5 py-2.5 rounded-xl bg-blue-600 text-white font-semibold text-sm hover:bg-blue-500 transition-all disabled:opacity-50 flex items-center gap-2 flex-shrink-0"
+                      className="px-5 py-2.5 rounded-xl bg-blue-600 text-[var(--text-main)] font-semibold text-sm hover:bg-blue-500 transition-all disabled:opacity-50 flex items-center gap-2 flex-shrink-0"
                     >
                       {processingActionId === viewQuotation.id
                         ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -1917,28 +1917,28 @@ export default function LeaseQuotationsPage() {
               )}
 
               {viewQuotation.notes && (
-                <div className="bg-slate-900/40 border border-white/5 rounded-2xl p-4">
-                  <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Notes</h4>
-                  <p className="text-sm text-slate-300">{viewQuotation.notes}</p>
+                <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl p-4">
+                  <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Notes</h4>
+                  <p className="text-sm text-[var(--text-muted)]">{viewQuotation.notes}</p>
                 </div>
               )}
 
               {loadingHistory ? (
-                <div className="text-slate-500 text-sm animate-pulse py-2">Loading history...</div>
+                <div className="text-[var(--text-faint)] text-sm animate-pulse py-2">Loading history...</div>
               ) : quotationHistory.length > 0 && (
                 <div>
-                  <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Approval History</h4>
+                  <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Approval History</h4>
                   <div className="space-y-2">
                     {quotationHistory.map((h: any, idx: number) => (
-                      <div key={idx} className="flex items-start gap-3 p-3 bg-slate-700/30 border border-white/5 rounded-xl">
+                      <div key={idx} className="flex items-start gap-3 p-3 bg-[var(--bg-surface-hover)]/30 border border-[var(--border-subtle)] rounded-xl">
                         <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${h.action === 'APPROVE' ? 'bg-emerald-400' : h.action === 'REJECT' ? 'bg-rose-400' : 'bg-blue-400'}`} />
                         <div className="flex-1">
                           <div className="flex items-center justify-between">
-                            <p className="text-sm font-semibold text-white">{h.action ?? h.event ?? '-'}</p>
-                            <span className="text-xs text-slate-500">{h.createdAt ? new Date(h.createdAt).toLocaleDateString() : '-'}</span>
+                            <p className="text-sm font-semibold text-[var(--text-main)]">{h.action ?? h.event ?? '-'}</p>
+                            <span className="text-xs text-[var(--text-faint)]">{h.createdAt ? new Date(h.createdAt).toLocaleDateString() : '-'}</span>
                           </div>
-                          {h.comments && <p className="text-xs text-slate-400 mt-0.5 italic">"{h.comments}"</p>}
-                          {h.approverName && <p className="text-xs text-slate-500 mt-0.5">By: {h.approverName}</p>}
+                          {h.comments && <p className="text-xs text-[var(--text-muted)] mt-0.5 italic">"{h.comments}"</p>}
+                          {h.approverName && <p className="text-xs text-[var(--text-faint)] mt-0.5">By: {h.approverName}</p>}
                         </div>
                       </div>
                     ))}
@@ -1947,10 +1947,10 @@ export default function LeaseQuotationsPage() {
               )}
             </div>
 
-            <div className="px-6 py-4 border-t border-white/10 flex-shrink-0 flex justify-end">
+            <div className="px-6 py-4 border-t border-[var(--border-subtle)] flex-shrink-0 flex justify-end">
               <button
                 onClick={() => setViewQuotation(null)}
-                className="px-6 py-2.5 rounded-xl border border-white/10 text-slate-300 hover:bg-white/5 font-medium transition-all text-sm"
+                className="px-6 py-2.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] font-medium transition-all text-sm"
               >
                 Close
               </button>

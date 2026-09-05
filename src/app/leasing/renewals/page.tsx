@@ -140,7 +140,7 @@ export default function RenewalsPage() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'PROPOSED':
-        return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+        return 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30';
       case 'SENT_TO_CUSTOMER':
         return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
       case 'ACCEPTED':
@@ -150,7 +150,7 @@ export default function RenewalsPage() {
       case 'EXPIRED':
         return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
       default:
-        return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+        return 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30';
     }
   };
 
@@ -165,7 +165,7 @@ export default function RenewalsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-slate-400">Loading...</div>
+        <div className="text-[var(--text-muted)]">Loading...</div>
       </div>
     );
   }
@@ -175,8 +175,8 @@ export default function RenewalsPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Renewals</h1>
-          <p className="text-slate-400">Manage contract renewals and extensions</p>
+          <h1 className="text-4xl font-bold text-[var(--text-main)] mb-2">Renewals</h1>
+          <p className="text-[var(--text-muted)]">Manage contract renewals and extensions</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
@@ -188,25 +188,25 @@ export default function RenewalsPage() {
 
       {/* Status Pipeline */}
       <div className="grid grid-cols-5 gap-4">
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm text-center">
-          <div className="text-2xl font-bold text-white">{statusCounts.PROPOSED}</div>
-          <div className="text-xs text-slate-400 mt-2">PROPOSED</div>
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm text-center">
+          <div className="text-2xl font-bold text-[var(--text-main)]">{statusCounts.PROPOSED}</div>
+          <div className="text-xs text-[var(--text-muted)] mt-2">PROPOSED</div>
         </div>
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm text-center">
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm text-center">
           <div className="text-2xl font-bold text-blue-400">{statusCounts.SENT_TO_CUSTOMER}</div>
-          <div className="text-xs text-slate-400 mt-2">SENT TO CUSTOMER</div>
+          <div className="text-xs text-[var(--text-muted)] mt-2">SENT TO CUSTOMER</div>
         </div>
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm text-center">
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm text-center">
           <div className="text-2xl font-bold text-emerald-400">{statusCounts.ACCEPTED}</div>
-          <div className="text-xs text-slate-400 mt-2">ACCEPTED</div>
+          <div className="text-xs text-[var(--text-muted)] mt-2">ACCEPTED</div>
         </div>
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm text-center">
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm text-center">
           <div className="text-2xl font-bold text-rose-400">{statusCounts.REJECTED}</div>
-          <div className="text-xs text-slate-400 mt-2">REJECTED</div>
+          <div className="text-xs text-[var(--text-muted)] mt-2">REJECTED</div>
         </div>
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm text-center">
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm text-center">
           <div className="text-2xl font-bold text-amber-400">{statusCounts.EXPIRED}</div>
-          <div className="text-xs text-slate-400 mt-2">EXPIRED</div>
+          <div className="text-xs text-[var(--text-muted)] mt-2">EXPIRED</div>
         </div>
       </div>
 
@@ -215,7 +215,7 @@ export default function RenewalsPage() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-blue-500 focus:outline-none transition-all"
+          className="px-4 py-2 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none transition-all"
         >
           <option>All</option>
           <option>PROPOSED</option>
@@ -227,36 +227,36 @@ export default function RenewalsPage() {
       </div>
 
       {/* Renewals Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
         <table className="w-full">
-          <thead className="bg-slate-800/50">
-            <tr className="border-b border-white/5">
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Renewal No</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Original Contract</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">New Start</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">New End</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Proposed Rate</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Renewal Type</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Status</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Customer Response Date</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Actions</th>
+          <thead className="bg-[var(--bg-surface)]/50">
+            <tr className="border-b border-[var(--border-subtle)]">
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Renewal No</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Original Contract</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">New Start</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">New End</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Proposed Rate</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Renewal Type</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Status</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Customer Response Date</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredRenewals.map((renewal) => (
-              <tr key={renewal.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                <td className="px-6 py-4 text-sm font-medium text-white">{renewal.renewalNo}</td>
-                <td className="px-6 py-4 text-sm text-white">{renewal.originalContractId}</td>
-                <td className="px-6 py-4 text-sm text-slate-200">{renewal.newStartDate}</td>
-                <td className="px-6 py-4 text-sm text-slate-200">{renewal.newEndDate}</td>
-                <td className="px-6 py-4 text-sm font-medium text-white">AED {renewal.proposedRate.toLocaleString()}</td>
-                <td className="px-6 py-4 text-sm text-white">{renewal.renewalType}</td>
+              <tr key={renewal.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
+                <td className="px-6 py-4 text-sm font-medium text-[var(--text-main)]">{renewal.renewalNo}</td>
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">{renewal.originalContractId}</td>
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">{renewal.newStartDate}</td>
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">{renewal.newEndDate}</td>
+                <td className="px-6 py-4 text-sm font-medium text-[var(--text-main)]">AED {renewal.proposedRate.toLocaleString()}</td>
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">{renewal.renewalType}</td>
                 <td className="px-6 py-4 text-sm">
                   <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(renewal.status)}`}>
                     {renewal.status}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-sm text-slate-200">
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">
                   {renewal.customerResponseDate || '-'}
                 </td>
                 <td className="px-6 py-4 text-sm space-x-2">
@@ -294,12 +294,12 @@ export default function RenewalsPage() {
       {/* Propose Renewal Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-800/95 border border-white/10 rounded-2xl p-8">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl p-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">Propose Renewal</h2>
+              <h2 className="text-2xl font-bold text-[var(--text-main)]">Propose Renewal</h2>
               <button
                 onClick={() => setShowModal(false)}
-                className="text-slate-400 hover:text-white transition-colors"
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
               >
                 X
               </button>
@@ -308,13 +308,13 @@ export default function RenewalsPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Original Contract</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Original Contract</label>
                   <select
                     name="originalContractId"
                     value={formData.originalContractId}
                     onChange={handleInputChange}
                     required
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none"
                   >
                     <option value="">Select a contract</option>
                     {contracts.map((contract) => (
@@ -326,12 +326,12 @@ export default function RenewalsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Renewal Type</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Renewal Type</label>
                   <select
                     name="renewalType"
                     value={formData.renewalType}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none"
                   >
                     <option>SAME_TERMS</option>
                     <option>REVISED_TERMS</option>
@@ -341,31 +341,31 @@ export default function RenewalsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Proposed Start Date</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Proposed Start Date</label>
                   <input
                     type="date"
                     name="proposedStartDate"
                     value={formData.proposedStartDate}
                     onChange={handleInputChange}
                     required
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Proposed End Date</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Proposed End Date</label>
                   <input
                     type="date"
                     name="proposedEndDate"
                     value={formData.proposedEndDate}
                     onChange={handleInputChange}
                     required
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Proposed Monthly Rate</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Proposed Monthly Rate</label>
                   <input
                     type="number"
                     name="proposedMonthlyRate"
@@ -373,12 +373,12 @@ export default function RenewalsPage() {
                     onChange={handleInputChange}
                     required
                     placeholder="6500"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Initiated By</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Initiated By</label>
                   <input
                     type="text"
                     name="initiatedBy"
@@ -386,34 +386,34 @@ export default function RenewalsPage() {
                     onChange={handleInputChange}
                     required
                     placeholder="John Doe"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Notes</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Notes</label>
                 <textarea
                   name="notes"
                   value={formData.notes}
                   onChange={handleInputChange}
                   placeholder="Additional notes..."
                   rows={3}
-                  className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                  className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                 />
               </div>
 
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
-                  className="flex-1 rounded-lg bg-blue-600 text-white font-medium py-2 hover:bg-blue-700 transition-colors"
+                  className="flex-1 rounded-lg bg-blue-600 text-[var(--text-main)] font-medium py-2 hover:bg-blue-700 transition-colors"
                 >
                   Propose Renewal
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 rounded-lg bg-slate-700 text-white font-medium py-2 hover:bg-slate-600 transition-colors"
+                  className="flex-1 rounded-lg bg-[var(--bg-surface-hover)] text-[var(--text-main)] font-medium py-2 hover:bg-[var(--bg-surface-hover)] transition-colors"
                 >
                   Cancel
                 </button>

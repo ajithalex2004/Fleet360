@@ -38,7 +38,7 @@ interface Lessee {
 const getStatusBadgeColor = (status: string) => {
   switch (status) {
     case 'DRAFT':
-      return 'bg-slate-700/30 text-slate-300 border-slate-600';
+      return 'bg-[var(--bg-surface-hover)]/30 text-[var(--text-muted)] border-[var(--border-strong)]';
     case 'SENT':
       return 'bg-blue-900/30 text-blue-200 border-blue-700';
     case 'PAID':
@@ -46,9 +46,9 @@ const getStatusBadgeColor = (status: string) => {
     case 'OVERDUE':
       return 'bg-red-900/30 text-red-200 border-red-700';
     case 'CANCELLED':
-      return 'bg-slate-700/30 text-slate-300 border-slate-600';
+      return 'bg-[var(--bg-surface-hover)]/30 text-[var(--text-muted)] border-[var(--border-strong)]';
     default:
-      return 'bg-slate-700/30 text-slate-300 border-slate-600';
+      return 'bg-[var(--bg-surface-hover)]/30 text-[var(--text-muted)] border-[var(--border-strong)]';
   }
 };
 
@@ -235,7 +235,7 @@ export default function InvoicesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0c1a3e] text-slate-100 p-6">
+    <div className="min-h-screen bg-[#0c1a3e] text-[var(--text-main)] p-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold">Invoice Management</h1>
@@ -269,8 +269,8 @@ export default function InvoicesPage() {
               onClick={() => setStatusFilter(status)}
               className={`px-4 py-2 rounded-lg transition ${
                 statusFilter === status
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  ? 'bg-blue-600 text-[var(--text-main)]'
+                  : 'bg-[var(--bg-surface)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]'
               }`}
             >
               {status}
@@ -281,10 +281,10 @@ export default function InvoicesPage() {
         {loading ? (
           <div className="text-center py-12">Loading invoices...</div>
         ) : (
-          <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-700 bg-slate-900">
+                <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]">
                   <th className="px-4 py-3 text-left w-8"></th>
                   <th className="px-4 py-3 text-left">Invoice No</th>
                   <th className="px-4 py-3 text-left">Lessee</th>
@@ -302,11 +302,11 @@ export default function InvoicesPage() {
               <tbody>
                 {filteredInvoices.map(invoice => (
                   <React.Fragment key={invoice.id}>
-                    <tr className="border-b border-slate-700 hover:bg-slate-750">
+                    <tr className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]">
                       <td className="px-4 py-3">
                         <button
                           onClick={() => toggleRowExpand(invoice.id)}
-                          className="text-slate-200 hover:text-slate-200"
+                          className="text-[var(--text-main)] hover:text-[var(--text-main)]"
                         >
                           {expandedRows.has(invoice.id) ? 'v' : '>'}
                         </button>
@@ -363,14 +363,14 @@ export default function InvoicesPage() {
                       </td>
                     </tr>
                     {expandedRows.has(invoice.id) && (
-                      <tr className="border-b border-slate-700 bg-slate-750/50">
+                      <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]/50">
                         <td colSpan={12} className="px-4 py-4">
                           <div className="ml-4">
                             <h4 className="font-semibold text-sm mb-3">Invoice Line Items</h4>
                             <div className="overflow-x-auto">
                               <table className="w-full text-xs">
                                 <thead>
-                                  <tr className="border-b border-slate-600">
+                                  <tr className="border-b border-[var(--border-strong)]">
                                     <th className="px-2 py-2 text-left">Description</th>
                                     <th className="px-2 py-2 text-left">Type</th>
                                     <th className="px-2 py-2 text-left">Contract</th>
@@ -382,7 +382,7 @@ export default function InvoicesPage() {
                                 </thead>
                                 <tbody>
                                   {invoice.lines.map((line, idx) => (
-                                    <tr key={idx} className="border-b border-slate-700">
+                                    <tr key={idx} className="border-b border-[var(--border-subtle)]">
                                       <td className="px-2 py-2">{line.description}</td>
                                       <td className="px-2 py-2">{line.lineType}</td>
                                       <td className="px-2 py-2">{line.contractId}</td>
@@ -409,12 +409,12 @@ export default function InvoicesPage() {
         {/* New Invoice Modal */}
         {showNewModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 border border-slate-700 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between p-6 border-b border-slate-700">
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between p-6 border-b border-[var(--border-subtle)]">
                 <h2 className="text-xl font-bold">New Invoice</h2>
                 <button
                   onClick={() => setShowNewModal(false)}
-                  className="text-slate-400 hover:text-slate-200 transition"
+                  className="text-[var(--text-muted)] hover:text-[var(--text-main)] transition"
                 >
                   X
                 </button>
@@ -426,7 +426,7 @@ export default function InvoicesPage() {
                     <select
                       value={formData.lesseeId}
                       onChange={e => setFormData({...formData, lesseeId: e.target.value})}
-                      className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)]"
                     >
                       <option value="">Select lessee</option>
                       {lessees.map(l => (
@@ -441,7 +441,7 @@ export default function InvoicesPage() {
                       placeholder="2024-04"
                       value={formData.billingPeriod}
                       onChange={e => setFormData({...formData, billingPeriod: e.target.value})}
-                      className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)]"
                     />
                   </div>
                   <div>
@@ -450,7 +450,7 @@ export default function InvoicesPage() {
                       type="date"
                       value={formData.issueDate}
                       onChange={e => setFormData({...formData, issueDate: e.target.value})}
-                      className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)]"
                     />
                   </div>
                   <div>
@@ -459,7 +459,7 @@ export default function InvoicesPage() {
                       type="date"
                       value={formData.dueDate}
                       onChange={e => setFormData({...formData, dueDate: e.target.value})}
-                      className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)]"
                     />
                   </div>
                   <div>
@@ -468,7 +468,7 @@ export default function InvoicesPage() {
                       type="number"
                       value={formData.vatPct}
                       onChange={e => setFormData({...formData, vatPct: parseFloat(e.target.value)})}
-                      className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)]"
                     />
                   </div>
                 </div>
@@ -485,19 +485,19 @@ export default function InvoicesPage() {
                   </div>
                   <div className="space-y-3 max-h-48 overflow-y-auto">
                     {formData.lines.map((line, idx) => (
-                      <div key={idx} className="bg-slate-900 p-3 rounded border border-slate-600">
+                      <div key={idx} className="bg-[var(--bg-surface)] p-3 rounded border border-[var(--border-strong)]">
                         <div className="grid grid-cols-6 gap-2 mb-2">
                           <input
                             type="text"
                             placeholder="Description"
                             value={line.description}
                             onChange={e => handleLineChange(idx, 'description', e.target.value)}
-                            className="col-span-2 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-slate-100 text-xs"
+                            className="col-span-2 bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-2 py-1 text-[var(--text-main)] text-xs"
                           />
                           <select
                             value={line.lineType}
                             onChange={e => handleLineChange(idx, 'lineType', e.target.value)}
-                            className="col-span-1 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-slate-100 text-xs"
+                            className="col-span-1 bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-2 py-1 text-[var(--text-main)] text-xs"
                           >
                             <option>RENT</option>
                             <option>FUEL</option>
@@ -513,14 +513,14 @@ export default function InvoicesPage() {
                             placeholder="Contract"
                             value={line.contractId}
                             onChange={e => handleLineChange(idx, 'contractId', e.target.value)}
-                            className="col-span-1 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-slate-100 text-xs"
+                            className="col-span-1 bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-2 py-1 text-[var(--text-main)] text-xs"
                           />
                           <input
                             type="text"
                             placeholder="Vehicle"
                             value={line.vehicleRef}
                             onChange={e => handleLineChange(idx, 'vehicleRef', e.target.value)}
-                            className="col-span-1 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-slate-100 text-xs"
+                            className="col-span-1 bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-2 py-1 text-[var(--text-main)] text-xs"
                           />
                         </div>
                         <div className="grid grid-cols-6 gap-2">
@@ -529,16 +529,16 @@ export default function InvoicesPage() {
                             placeholder="Qty"
                             value={line.quantity}
                             onChange={e => handleLineChange(idx, 'quantity', parseInt(e.target.value) || 0)}
-                            className="col-span-1 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-slate-100 text-xs"
+                            className="col-span-1 bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-2 py-1 text-[var(--text-main)] text-xs"
                           />
                           <input
                             type="number"
                             placeholder="Unit Amount"
                             value={line.unitAmount}
                             onChange={e => handleLineChange(idx, 'unitAmount', parseFloat(e.target.value) || 0)}
-                            className="col-span-2 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-slate-100 text-xs"
+                            className="col-span-2 bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-2 py-1 text-[var(--text-main)] text-xs"
                           />
-                          <div className="col-span-2 bg-slate-800 rounded px-2 py-1 text-slate-300 text-xs flex items-center">
+                          <div className="col-span-2 bg-[var(--bg-surface)] rounded px-2 py-1 text-[var(--text-muted)] text-xs flex items-center">
                             Total: {calculateLineTotal(line).toFixed(2)} AED
                           </div>
                           <button
@@ -555,27 +555,27 @@ export default function InvoicesPage() {
                 </div>
 
                 {/* Summary */}
-                <div className="mt-6 pt-4 border-t border-slate-700 space-y-2">
+                <div className="mt-6 pt-4 border-t border-[var(--border-subtle)] space-y-2">
                   <div className="flex justify-end gap-8">
                     <div>
-                      <p className="text-slate-400 text-sm">Subtotal:</p>
+                      <p className="text-[var(--text-muted)] text-sm">Subtotal:</p>
                       <p className="font-semibold">{subtotal.toFixed(2)} AED</p>
                     </div>
                     <div>
-                      <p className="text-slate-400 text-sm">VAT ({formData.vatPct}%):</p>
+                      <p className="text-[var(--text-muted)] text-sm">VAT ({formData.vatPct}%):</p>
                       <p className="font-semibold">{vat.toFixed(2)} AED</p>
                     </div>
                     <div>
-                      <p className="text-slate-400 text-sm">Total:</p>
+                      <p className="text-[var(--text-muted)] text-sm">Total:</p>
                       <p className="text-lg font-bold text-blue-400">{total.toFixed(2)} AED</p>
                     </div>
                   </div>
                 </div>
               </div>
-              <div className="flex gap-3 p-6 border-t border-slate-700">
+              <div className="flex gap-3 p-6 border-t border-[var(--border-subtle)]">
                 <button
                   onClick={() => setShowNewModal(false)}
-                  className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition"
+                  className="flex-1 px-4 py-2 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] rounded-lg transition"
                 >
                   Cancel
                 </button>

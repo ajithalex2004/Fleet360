@@ -91,18 +91,18 @@ function typeBadgeClass(type: string) {
     case 'TERM_EXTENSION':     return 'bg-teal-900/40 text-teal-300 border border-teal-700/50';
     case 'RATE_CHANGE':        return 'bg-amber-900/40 text-amber-300 border border-amber-700/50';
     case 'ADDITIONAL_SERVICE': return 'bg-emerald-900/40 text-emerald-300 border border-emerald-700/50';
-    default:                   return 'bg-slate-700/40 text-slate-300 border border-slate-600/50';
+    default:                   return 'bg-[var(--bg-surface-hover)]/40 text-[var(--text-muted)] border border-[var(--border-strong)]/50';
   }
 }
 
 function statusBadgeClass(status: string) {
   switch (status) {
-    case 'DRAFT':       return 'bg-slate-700/50 text-slate-300 border border-slate-600';
+    case 'DRAFT':       return 'bg-[var(--bg-surface-hover)]/50 text-[var(--text-muted)] border border-[var(--border-strong)]';
     case 'SUBMITTED':   return 'bg-amber-900/40 text-amber-300 border border-amber-700';
     case 'APPROVED':    return 'bg-emerald-900/40 text-emerald-300 border border-emerald-700';
     case 'REJECTED':    return 'bg-red-900/40 text-red-300 border border-red-700';
     case 'IMPLEMENTED': return 'bg-purple-900/40 text-purple-300 border border-purple-700';
-    default:            return 'bg-slate-700/50 text-slate-300 border border-slate-600';
+    default:            return 'bg-[var(--bg-surface-hover)]/50 text-[var(--text-muted)] border border-[var(--border-strong)]';
   }
 }
 
@@ -123,18 +123,18 @@ function fmtDate(d: string | null) {
 
 function KpiCard({ label, value, sub, accent }: { label: string; value: string | number; sub?: string; accent: string }) {
   return (
-    <div className="bg-slate-800/60 border border-white/10 rounded-xl p-5">
-      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{label}</p>
+    <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-5">
+      <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">{label}</p>
       <p className={`text-2xl font-bold mt-1 ${accent}`}>{value}</p>
-      {sub && <p className="text-xs text-slate-500 mt-0.5">{sub}</p>}
+      {sub && <p className="text-xs text-[var(--text-faint)] mt-0.5">{sub}</p>}
     </div>
   );
 }
 
 // ─── Input helpers ───────────────────────────────────────────────────────────
 
-const inputClass = 'w-full px-3 py-2 rounded-lg bg-slate-700/80 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none text-sm';
-const labelClass = 'block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1';
+const inputClass = 'w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)]/80 border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none text-sm';
+const labelClass = 'block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1';
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
@@ -286,8 +286,8 @@ export default function AmendmentsPage() {
       {/* ─── Header ─── */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Contract Amendments</h1>
-          <p className="text-sm text-slate-400 mt-0.5">
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Contract Amendments</h1>
+          <p className="text-sm text-[var(--text-muted)] mt-0.5">
             Track and manage all contract modifications with full approval audit trail
           </p>
         </div>
@@ -306,7 +306,7 @@ export default function AmendmentsPage() {
           label="Total Amendments"
           value={pagination.total}
           sub="All time"
-          accent="text-white"
+          accent="text-[var(--text-main)]"
         />
         <KpiCard
           label="Pending Approval"
@@ -329,27 +329,27 @@ export default function AmendmentsPage() {
       </div>
 
       {/* ─── Status Pipeline Banner ─── */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-xl p-4">
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Amendment Pipeline</p>
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-xl p-4">
+        <p className="text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wider mb-3">Amendment Pipeline</p>
         <div className="flex items-center gap-1 flex-wrap">
           {pipelineStatuses.map((s, i) => (
             <React.Fragment key={s}>
-              <div className="flex items-center gap-2 bg-slate-700/60 rounded-lg px-3 py-2 min-w-[100px]">
+              <div className="flex items-center gap-2 bg-[var(--bg-surface-hover)]/60 rounded-lg px-3 py-2 min-w-[100px]">
                 <span className={`text-xs font-bold ${statusBadgeClass(s).split(' ').filter(c => c.startsWith('text')).join(' ')}`}>
                   {s}
                 </span>
-                <span className="text-lg font-bold text-white ml-auto">
+                <span className="text-lg font-bold text-[var(--text-main)] ml-auto">
                   {summary.byStatus[s] ?? 0}
                 </span>
               </div>
               {i < pipelineStatuses.length - 1 && (
-                <ChevronRight className="w-4 h-4 text-slate-600 flex-shrink-0" />
+                <ChevronRight className="w-4 h-4 text-[var(--text-faint)] flex-shrink-0" />
               )}
             </React.Fragment>
           ))}
           <div className="flex items-center gap-2 bg-red-900/20 border border-red-800/40 rounded-lg px-3 py-2 min-w-[100px] ml-2">
             <span className="text-xs font-bold text-red-400">REJECTED</span>
-            <span className="text-lg font-bold text-white ml-auto">{summary.byStatus['REJECTED'] ?? 0}</span>
+            <span className="text-lg font-bold text-[var(--text-main)] ml-auto">{summary.byStatus['REJECTED'] ?? 0}</span>
           </div>
         </div>
       </div>
@@ -357,7 +357,7 @@ export default function AmendmentsPage() {
       {/* ─── Filters ─── */}
       <div className="flex flex-col sm:flex-row gap-3">
         {/* Status tabs */}
-        <div className="flex gap-1 bg-slate-800/60 border border-white/10 rounded-xl p-1 flex-wrap">
+        <div className="flex gap-1 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-1 flex-wrap">
           {STATUS_TABS.map(s => (
             <button
               key={s}
@@ -365,7 +365,7 @@ export default function AmendmentsPage() {
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 activeStatus === s
                   ? 'bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]'
               }`}
             >
               {s}
@@ -381,7 +381,7 @@ export default function AmendmentsPage() {
           <select
             value={activeType}
             onChange={e => setActiveType(e.target.value)}
-            className="px-3 py-2 rounded-xl bg-slate-800/60 border border-white/10 text-sm text-slate-300 focus:outline-none focus:border-violet-500"
+            className="px-3 py-2 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-sm text-[var(--text-muted)] focus:outline-none focus:border-violet-500"
           >
             <option value="">All Types</option>
             {AMENDMENT_TYPES.map(t => (
@@ -392,26 +392,26 @@ export default function AmendmentsPage() {
           {/* Search */}
           <div className="flex-1 flex gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-faint)]" />
               <input
                 type="text"
                 placeholder="Search by contract, lessee, amendment no…"
                 value={searchInput}
                 onChange={e => setSearchInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && setSearch(searchInput)}
-                className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-800/60 border border-white/10 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-violet-500"
+                className="w-full pl-9 pr-4 py-2 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-violet-500"
               />
             </div>
             <button
               onClick={() => setSearch(searchInput)}
-              className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium transition-colors"
+              className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-[var(--text-main)] text-sm font-medium transition-colors"
             >
               Search
             </button>
             {search && (
               <button
                 onClick={() => { setSearch(''); setSearchInput(''); }}
-                className="px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm transition-colors"
+                className="px-3 py-2 rounded-xl bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] text-sm transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -421,77 +421,77 @@ export default function AmendmentsPage() {
       </div>
 
       {/* ─── Table ─── */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-xl overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-16 text-slate-400 text-sm">Loading amendments…</div>
+          <div className="flex items-center justify-center py-16 text-[var(--text-muted)] text-sm">Loading amendments…</div>
         ) : amendments.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-2">
-            <Filter className="w-8 h-8 text-slate-600" />
-            <p className="text-slate-400 text-sm">No amendments found</p>
-            <p className="text-slate-600 text-xs">Try changing filters or create a new amendment</p>
+            <Filter className="w-8 h-8 text-[var(--text-faint)]" />
+            <p className="text-[var(--text-muted)] text-sm">No amendments found</p>
+            <p className="text-[var(--text-faint)] text-xs">Try changing filters or create a new amendment</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/10 bg-slate-900/50">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Amendment No</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Contract No</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Lessee</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Vehicle</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Description</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Change</th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Impact (AED)</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Effective</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Submitted By</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
+                <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/50">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Amendment No</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Contract No</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Lessee</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Vehicle</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Description</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Change</th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Impact (AED)</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Effective</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Submitted By</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5">
+              <tbody className="divide-y divide-[var(--border-subtle)]">
                 {amendments.map(a => (
-                  <tr key={a.id} className="hover:bg-white/3 transition-colors">
+                  <tr key={a.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                     <td className="px-4 py-3">
                       <span className="font-mono text-violet-300 text-xs font-medium">{a.amendmentNo}</span>
                     </td>
-                    <td className="px-4 py-3 text-slate-300 text-xs">{a.contractNo ?? '—'}</td>
-                    <td className="px-4 py-3 text-white font-medium text-xs">{a.lesseeName}</td>
-                    <td className="px-4 py-3 text-slate-300 text-xs">
+                    <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{a.contractNo ?? '—'}</td>
+                    <td className="px-4 py-3 text-[var(--text-main)] font-medium text-xs">{a.lesseeName}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)] text-xs">
                       <div>{a.vehicleNo ?? '—'}</div>
-                      {a.vehicleName && <div className="text-slate-500 text-[10px]">{a.vehicleName}</div>}
+                      {a.vehicleName && <div className="text-[var(--text-faint)] text-[10px]">{a.vehicleName}</div>}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap ${typeBadgeClass(a.amendmentType)}`}>
                         {typeLabel(a.amendmentType)}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-slate-300 text-xs max-w-[180px]">
+                    <td className="px-4 py-3 text-[var(--text-muted)] text-xs max-w-[180px]">
                       <span className="truncate block" title={a.description}>{a.description}</span>
                     </td>
                     <td className="px-4 py-3 text-xs">
                       {a.originalValue || a.newValue ? (
                         <div className="flex items-center gap-1 whitespace-nowrap">
-                          <span className="text-slate-400">{a.originalValue ?? '—'}</span>
-                          <ArrowRight className="w-3 h-3 text-slate-600 flex-shrink-0" />
-                          <span className="text-white">{a.newValue ?? '—'}</span>
+                          <span className="text-[var(--text-muted)]">{a.originalValue ?? '—'}</span>
+                          <ArrowRight className="w-3 h-3 text-[var(--text-faint)] flex-shrink-0" />
+                          <span className="text-[var(--text-main)]">{a.newValue ?? '—'}</span>
                         </div>
                       ) : (
-                        <span className="text-slate-600">—</span>
+                        <span className="text-[var(--text-faint)]">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className={`font-semibold text-xs ${a.financialImpact > 0 ? 'text-emerald-400' : a.financialImpact < 0 ? 'text-red-400' : 'text-slate-400'}`}>
+                      <span className={`font-semibold text-xs ${a.financialImpact > 0 ? 'text-emerald-400' : a.financialImpact < 0 ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>
                         {a.financialImpact !== 0 ? `${a.financialImpact > 0 ? '+' : ''}AED ${fmt(a.financialImpact)}` : 'No impact'}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-300 whitespace-nowrap">{fmtDate(a.effectiveDate)}</td>
+                    <td className="px-4 py-3 text-xs text-[var(--text-muted)] whitespace-nowrap">{fmtDate(a.effectiveDate)}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusBadgeClass(a.status)}`}>
                         {a.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-400">{a.submittedBy ?? '—'}</td>
+                    <td className="px-4 py-3 text-xs text-[var(--text-muted)]">{a.submittedBy ?? '—'}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {a.status === 'DRAFT' && (
@@ -527,7 +527,7 @@ export default function AmendmentsPage() {
                           </button>
                         )}
                         {['REJECTED', 'IMPLEMENTED'].includes(a.status) && (
-                          <span className="text-slate-600 text-[10px]">—</span>
+                          <span className="text-[var(--text-faint)] text-[10px]">—</span>
                         )}
                       </div>
                     </td>
@@ -540,22 +540,22 @@ export default function AmendmentsPage() {
 
         {/* Pagination */}
         {pagination.totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-white/10">
-            <span className="text-xs text-slate-500">
+          <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--border-subtle)]">
+            <span className="text-xs text-[var(--text-faint)]">
               Page {pagination.page} of {pagination.totalPages} — {pagination.total} amendments
             </span>
             <div className="flex gap-2">
               <button
                 disabled={pagination.page <= 1}
                 onClick={() => fetchAmendments(pagination.page - 1)}
-                className="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="px-3 py-1.5 rounded-lg bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-xs disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 Previous
               </button>
               <button
                 disabled={pagination.page >= pagination.totalPages}
                 onClick={() => fetchAmendments(pagination.page + 1)}
-                className="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="px-3 py-1.5 rounded-lg bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-xs disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 Next
               </button>
@@ -567,13 +567,13 @@ export default function AmendmentsPage() {
       {/* ─── New Amendment Modal ─── */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto bg-slate-900 border border-white/10 rounded-2xl shadow-2xl">
-            <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 bg-slate-900 border-b border-white/10">
+          <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)]">
               <div>
-                <h2 className="text-lg font-bold text-white">New Contract Amendment</h2>
-                <p className="text-xs text-slate-400">Auto-generates LAM-YYYYMM-XXXX</p>
+                <h2 className="text-lg font-bold text-[var(--text-main)]">New Contract Amendment</h2>
+                <p className="text-xs text-[var(--text-muted)]">Auto-generates LAM-YYYYMM-XXXX</p>
               </div>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white transition-colors">
+              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -651,22 +651,22 @@ export default function AmendmentsPage() {
                 <label className={labelClass}>Financial Impact (AED)</label>
                 <input type="number" name="financialImpact" value={form.financialImpact} onChange={handleFormChange}
                   step="0.01" placeholder="0.00" className={inputClass} />
-                <p className="text-xs text-slate-500 mt-1">Enter 0 for administrative changes with no financial impact. Can be negative for reductions.</p>
+                <p className="text-xs text-[var(--text-faint)] mt-1">Enter 0 for administrative changes with no financial impact. Can be negative for reductions.</p>
               </div>
 
               {/* Live VAT / Total */}
-              <div className="bg-slate-800/60 border border-white/10 rounded-xl p-4 space-y-2">
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Financial Summary</p>
+              <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-4 space-y-2">
+                <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Financial Summary</p>
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Financial Impact</span>
-                  <span className="text-white font-medium">AED {fmt(impact)}</span>
+                  <span className="text-[var(--text-muted)]">Financial Impact</span>
+                  <span className="text-[var(--text-main)] font-medium">AED {fmt(impact)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">VAT (5%)</span>
+                  <span className="text-[var(--text-muted)]">VAT (5%)</span>
                   <span className="text-amber-400 font-medium">AED {fmt(vatAmount)}</span>
                 </div>
-                <div className="flex justify-between text-sm border-t border-white/10 pt-2">
-                  <span className="text-white font-semibold">Total Impact</span>
+                <div className="flex justify-between text-sm border-t border-[var(--border-subtle)] pt-2">
+                  <span className="text-[var(--text-main)] font-semibold">Total Impact</span>
                   <span className="text-emerald-400 font-bold">AED {fmt(totalImpact)}</span>
                 </div>
               </div>
@@ -692,7 +692,7 @@ export default function AmendmentsPage() {
                   {saving ? 'Creating…' : 'Create Amendment'}
                 </button>
                 <button type="button" onClick={() => setShowModal(false)}
-                  className="flex-1 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-semibold text-sm transition-colors">
+                  className="flex-1 py-2.5 rounded-xl bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] font-semibold text-sm transition-colors">
                   Cancel
                 </button>
               </div>
@@ -704,18 +704,18 @@ export default function AmendmentsPage() {
       {/* ─── Approve Modal ─── */}
       {showApproveModal && approveTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-slate-900 border border-white/10 rounded-2xl shadow-2xl p-6 space-y-4">
+          <div className="w-full max-w-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl p-6 space-y-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-emerald-600/20 border border-emerald-600/40 flex items-center justify-center">
                 <Check className="w-5 h-5 text-emerald-400" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Approve Amendment</h3>
-                <p className="text-xs text-slate-400">{approveTarget.amendmentNo}</p>
+                <h3 className="text-base font-bold text-[var(--text-main)]">Approve Amendment</h3>
+                <p className="text-xs text-[var(--text-muted)]">{approveTarget.amendmentNo}</p>
               </div>
             </div>
-            <p className="text-sm text-slate-300">
-              Approving: <span className="text-white font-medium">{approveTarget.description}</span>
+            <p className="text-sm text-[var(--text-muted)]">
+              Approving: <span className="text-[var(--text-main)] font-medium">{approveTarget.description}</span>
             </p>
             {approveTarget.financialImpact > 0 && (
               <div className="bg-emerald-900/20 border border-emerald-700/40 rounded-lg px-4 py-3 text-sm text-emerald-300">
@@ -729,11 +729,11 @@ export default function AmendmentsPage() {
             </div>
             <div className="flex gap-3">
               <button onClick={confirmApprove}
-                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm transition-colors">
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-[var(--text-main)] font-semibold text-sm transition-colors">
                 Confirm Approval
               </button>
               <button onClick={() => { setShowApproveModal(false); setApproveTarget(null); }}
-                className="flex-1 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-semibold text-sm transition-colors">
+                className="flex-1 py-2.5 rounded-xl bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] font-semibold text-sm transition-colors">
                 Cancel
               </button>
             </div>
@@ -744,18 +744,18 @@ export default function AmendmentsPage() {
       {/* ─── Reject Modal ─── */}
       {showRejectModal && rejectTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-slate-900 border border-white/10 rounded-2xl shadow-2xl p-6 space-y-4">
+          <div className="w-full max-w-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl p-6 space-y-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-red-600/20 border border-red-600/40 flex items-center justify-center">
                 <X className="w-5 h-5 text-red-400" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Reject Amendment</h3>
-                <p className="text-xs text-slate-400">{rejectTarget.amendmentNo}</p>
+                <h3 className="text-base font-bold text-[var(--text-main)]">Reject Amendment</h3>
+                <p className="text-xs text-[var(--text-muted)]">{rejectTarget.amendmentNo}</p>
               </div>
             </div>
-            <p className="text-sm text-slate-300">
-              Rejecting: <span className="text-white font-medium">{rejectTarget.description}</span>
+            <p className="text-sm text-[var(--text-muted)]">
+              Rejecting: <span className="text-[var(--text-main)] font-medium">{rejectTarget.description}</span>
             </p>
             <div>
               <label className={labelClass}>Rejection Reason <span className="text-red-400">*</span></label>
@@ -772,12 +772,12 @@ export default function AmendmentsPage() {
               <button
                 onClick={confirmReject}
                 disabled={!rejectionReason.trim()}
-                className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-[var(--text-main)] font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 Confirm Rejection
               </button>
               <button onClick={() => { setShowRejectModal(false); setRejectTarget(null); }}
-                className="flex-1 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-semibold text-sm transition-colors">
+                className="flex-1 py-2.5 rounded-xl bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] font-semibold text-sm transition-colors">
                 Cancel
               </button>
             </div>

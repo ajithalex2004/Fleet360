@@ -150,12 +150,12 @@ function statusBadgeClass(status: string) {
     case 'IN_PROGRESS':  return 'bg-amber-900/40 text-amber-300 border border-amber-700';
     case 'COMPLETED':    return 'bg-emerald-900/40 text-emerald-300 border border-emerald-700';
     case 'DISPUTED':     return 'bg-red-900/40 text-red-300 border border-red-700';
-    default:             return 'bg-slate-700/40 text-slate-300 border border-slate-600';
+    default:             return 'bg-[var(--bg-surface-hover)]/40 text-[var(--text-muted)] border border-[var(--border-strong)]';
   }
 }
 
 function conditionStarColor(score: number | null) {
-  if (score === null) return 'text-slate-600';
+  if (score === null) return 'text-[var(--text-faint)]';
   if (score <= 2) return 'text-red-400';
   if (score === 3) return 'text-amber-400';
   return 'text-emerald-400';
@@ -175,38 +175,38 @@ function KpiCard({ label, value, sub, accent }: {
   label: string; value: string | number; sub?: string; accent: string;
 }) {
   return (
-    <div className="bg-slate-800/60 border border-white/10 rounded-xl p-5">
-      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{label}</p>
+    <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-5">
+      <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">{label}</p>
       <p className={`text-2xl font-bold mt-1 ${accent}`}>{value}</p>
-      {sub && <p className="text-xs text-slate-500 mt-0.5">{sub}</p>}
+      {sub && <p className="text-xs text-[var(--text-faint)] mt-0.5">{sub}</p>}
     </div>
   );
 }
 
 function FuelGauge({ level }: { level: number | null }) {
-  if (level === null) return <span className="text-slate-600 text-xs">—</span>;
+  if (level === null) return <span className="text-[var(--text-faint)] text-xs">—</span>;
   return (
     <div className="flex items-center gap-0.5" title={FUEL_LABELS[level]}>
       {Array.from({ length: 8 }, (_, i) => (
         <div
           key={i}
-          className={`w-2.5 h-4 rounded-sm ${i < level ? 'bg-teal-400' : 'bg-slate-600'}`}
+          className={`w-2.5 h-4 rounded-sm ${i < level ? 'bg-teal-400' : 'bg-[var(--bg-surface-hover)]'}`}
         />
       ))}
-      <span className="ml-1.5 text-[10px] text-slate-400">{FUEL_LABELS[level]}</span>
+      <span className="ml-1.5 text-[10px] text-[var(--text-muted)]">{FUEL_LABELS[level]}</span>
     </div>
   );
 }
 
 function ConditionStars({ score }: { score: number | null }) {
-  if (score === null) return <span className="text-slate-600 text-xs">—</span>;
+  if (score === null) return <span className="text-[var(--text-faint)] text-xs">—</span>;
   const color = conditionStarColor(score);
   return (
     <div className="flex items-center gap-0.5" title={CONDITION_LABELS[score]}>
       {Array.from({ length: 5 }, (_, i) => (
         <Star
           key={i}
-          className={`w-3 h-3 ${i < score ? color : 'text-slate-700'}`}
+          className={`w-3 h-3 ${i < score ? color : 'text-[var(--text-faint)]'}`}
           fill={i < score ? 'currentColor' : 'none'}
         />
       ))}
@@ -229,14 +229,14 @@ function FuelSelector({ value, onChange }: { value: number; onChange: (v: number
             className={`flex-1 rounded-t-sm transition-all ${
               i <= value
                 ? 'bg-teal-500 hover:bg-teal-400'
-                : 'bg-slate-700 hover:bg-slate-600'
+                : 'bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)]'
             }`}
             style={{ height: `${16 + i * 4}px` }}
             title={FUEL_LABELS[i]}
           />
         ))}
       </div>
-      <div className="flex justify-between text-[9px] text-slate-500 px-0.5">
+      <div className="flex justify-between text-[9px] text-[var(--text-faint)] px-0.5">
         {FUEL_LABELS.map((l, i) => (
           <span key={i} className={value === i ? 'text-teal-400 font-bold' : ''}>{l}</span>
         ))}
@@ -261,8 +261,8 @@ function ConditionSelector({ value, onChange }: { value: number; onChange: (v: n
             onClick={() => onChange(s)}
             className={`flex-1 py-2 rounded-lg border transition-all flex flex-col items-center gap-1 ${
               active
-                ? `${color} bg-slate-700 border-current`
-                : 'text-slate-600 bg-slate-800/60 border-slate-700 hover:border-slate-500'
+                ? `${color} bg-[var(--bg-surface-hover)] border-current`
+                : 'text-[var(--text-faint)] bg-[var(--bg-surface)]/60 border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
             }`}
           >
             <span className="text-base font-bold">{s}</span>
@@ -298,15 +298,15 @@ function CompleteModal({
     setSaving(false);
   }
 
-  const inputCls = 'w-full px-3 py-2 rounded-lg bg-slate-700/80 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none text-sm';
-  const labelCls = 'block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1';
+  const inputCls = 'w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)]/80 border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none text-sm';
+  const labelCls = 'block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md bg-slate-900 border border-white/10 rounded-2xl shadow-2xl p-6 space-y-4">
+      <div className="w-full max-w-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl p-6 space-y-4">
         <div>
-          <h3 className="text-base font-bold text-white">Complete & Sign Handover</h3>
-          <p className="text-xs text-slate-400">{handover.handoverNo} — {handover.vehicleNo}</p>
+          <h3 className="text-base font-bold text-[var(--text-main)]">Complete & Sign Handover</h3>
+          <p className="text-xs text-[var(--text-muted)]">{handover.handoverNo} — {handover.vehicleNo}</p>
         </div>
 
         <div className="bg-violet-900/20 border border-violet-700/40 rounded-lg px-4 py-3 text-xs text-violet-300 flex items-start gap-2">
@@ -337,7 +337,7 @@ function CompleteModal({
               {saving ? 'Signing…' : 'Complete & Sign'}
             </button>
             <button type="button" onClick={onClose}
-              className="flex-1 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-semibold text-sm transition-colors">
+              className="flex-1 py-2.5 rounded-xl bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] font-semibold text-sm transition-colors">
               Cancel
             </button>
           </div>
@@ -482,8 +482,8 @@ export default function HandoverPage() {
     }
   }
 
-  const inputClass = 'w-full px-3 py-2 rounded-lg bg-slate-700/80 border border-white/10 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none text-sm';
-  const labelClass = 'block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1';
+  const inputClass = 'w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)]/80 border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none text-sm';
+  const labelClass = 'block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1';
 
   const sections = [
     { num: 1, title: 'Contract Details' },
@@ -499,8 +499,8 @@ export default function HandoverPage() {
       {/* ─── Header ─── */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Vehicle Handover & Return</h1>
-          <p className="text-sm text-slate-400 mt-0.5">
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Vehicle Handover & Return</h1>
+          <p className="text-sm text-[var(--text-muted)] mt-0.5">
             Digital handover checklists for vehicle delivery and end-of-lease return
           </p>
         </div>
@@ -558,7 +558,7 @@ export default function HandoverPage() {
       {/* ─── Filters ─── */}
       <div className="flex flex-col sm:flex-row gap-3">
         {/* Type tabs */}
-        <div className="flex gap-1 bg-slate-800/60 border border-white/10 rounded-xl p-1">
+        <div className="flex gap-1 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-1">
           {TYPE_TABS.map(t => (
             <button
               key={t}
@@ -566,11 +566,11 @@ export default function HandoverPage() {
               className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 activeType === t
                   ? t === 'DELIVERY'
-                    ? 'bg-teal-600 text-white shadow-sm'
+                    ? 'bg-teal-600 text-[var(--text-main)] shadow-sm'
                     : t === 'RETURN'
-                    ? 'bg-violet-600 text-white shadow-sm'
+                    ? 'bg-violet-600 text-[var(--text-main)] shadow-sm'
                     : 'bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]'
               }`}
             >
               {t}
@@ -579,15 +579,15 @@ export default function HandoverPage() {
         </div>
 
         {/* Status tabs */}
-        <div className="flex gap-1 bg-slate-800/60 border border-white/10 rounded-xl p-1 flex-wrap">
+        <div className="flex gap-1 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-1 flex-wrap">
           {STATUS_TABS.map(s => (
             <button
               key={s}
               onClick={() => setActiveStatus(s)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 activeStatus === s
-                  ? 'bg-slate-600 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+                  ? 'bg-[var(--bg-surface-hover)] text-[var(--text-main)] shadow-sm'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]'
               }`}
             >
               {s}
@@ -598,26 +598,26 @@ export default function HandoverPage() {
         {/* Search */}
         <div className="flex gap-2 flex-1">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-faint)]" />
             <input
               type="text"
               placeholder="Search vehicle, lessee, handover no…"
               value={searchInput}
               onChange={e => setSearchInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && setSearch(searchInput)}
-              className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-800/60 border border-white/10 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-violet-500"
+              className="w-full pl-9 pr-4 py-2 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-violet-500"
             />
           </div>
           <button
             onClick={() => setSearch(searchInput)}
-            className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium transition-colors"
+            className="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-[var(--text-main)] text-sm font-medium transition-colors"
           >
             Search
           </button>
           {search && (
             <button
               onClick={() => { setSearch(''); setSearchInput(''); }}
-              className="px-3 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm transition-colors"
+              className="px-3 py-2 rounded-xl bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] text-sm transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
@@ -626,37 +626,37 @@ export default function HandoverPage() {
       </div>
 
       {/* ─── Table ─── */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-xl overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-16 text-slate-400 text-sm">Loading handovers…</div>
+          <div className="flex items-center justify-center py-16 text-[var(--text-muted)] text-sm">Loading handovers…</div>
         ) : handovers.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-2">
-            <p className="text-slate-400 text-sm">No handovers found</p>
-            <p className="text-slate-600 text-xs">Schedule a delivery or return to get started</p>
+            <p className="text-[var(--text-muted)] text-sm">No handovers found</p>
+            <p className="text-[var(--text-faint)] text-xs">Schedule a delivery or return to get started</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/10 bg-slate-900/50">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">Handover No</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Contract No</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Lessee</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Vehicle No</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">Date & Time</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Location</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Fuel</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Odometer</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Condition</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Signed By</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
+                <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/50">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider whitespace-nowrap">Handover No</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Type</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Contract No</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Lessee</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Vehicle No</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider whitespace-nowrap">Date & Time</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Location</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Fuel</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Odometer</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Condition</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Signed By</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5">
+              <tbody className="divide-y divide-[var(--border-subtle)]">
                 {handovers.map(h => (
-                  <tr key={h.id} className="hover:bg-white/3 transition-colors">
+                  <tr key={h.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                     <td className="px-4 py-3">
                       <span className="font-mono text-violet-300 text-xs font-medium">{h.handoverNo}</span>
                     </td>
@@ -665,20 +665,20 @@ export default function HandoverPage() {
                         {h.handoverType}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-slate-300 text-xs">{h.contractNo ?? '—'}</td>
-                    <td className="px-4 py-3 text-white font-medium text-xs">{h.lesseeName}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{h.contractNo ?? '—'}</td>
+                    <td className="px-4 py-3 text-[var(--text-main)] font-medium text-xs">{h.lesseeName}</td>
                     <td className="px-4 py-3 text-xs">
-                      <div className="text-white font-medium">{h.vehicleNo}</div>
-                      {h.vehicleName && <div className="text-slate-500 text-[10px]">{h.vehicleName}</div>}
+                      <div className="text-[var(--text-main)] font-medium">{h.vehicleNo}</div>
+                      {h.vehicleName && <div className="text-[var(--text-faint)] text-[10px]">{h.vehicleName}</div>}
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-300 whitespace-nowrap">{fmtDatetime(h.handoverDate)}</td>
-                    <td className="px-4 py-3 text-xs text-slate-400">{h.location ?? '—'}</td>
+                    <td className="px-4 py-3 text-xs text-[var(--text-muted)] whitespace-nowrap">{fmtDatetime(h.handoverDate)}</td>
+                    <td className="px-4 py-3 text-xs text-[var(--text-muted)]">{h.location ?? '—'}</td>
                     <td className="px-4 py-3"><FuelGauge level={h.fuelLevel} /></td>
-                    <td className="px-4 py-3 text-xs text-slate-300">
+                    <td className="px-4 py-3 text-xs text-[var(--text-muted)]">
                       {h.odometerReading ? `${h.odometerReading.toLocaleString()} km` : '—'}
                     </td>
                     <td className="px-4 py-3"><ConditionStars score={h.conditionScore} /></td>
-                    <td className="px-4 py-3 text-xs text-slate-400">{h.signedBy ?? '—'}</td>
+                    <td className="px-4 py-3 text-xs text-[var(--text-muted)]">{h.signedBy ?? '—'}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${statusBadgeClass(h.status)}`}>
                         {h.status.replace('_', ' ')}
@@ -709,22 +709,22 @@ export default function HandoverPage() {
 
         {/* Pagination */}
         {pagination.totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-white/10">
-            <span className="text-xs text-slate-500">
+          <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--border-subtle)]">
+            <span className="text-xs text-[var(--text-faint)]">
               Page {pagination.page} of {pagination.totalPages} — {pagination.total} handovers
             </span>
             <div className="flex gap-2">
               <button
                 disabled={pagination.page <= 1}
                 onClick={() => fetchHandovers(pagination.page - 1)}
-                className="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="px-3 py-1.5 rounded-lg bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-xs disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 Previous
               </button>
               <button
                 disabled={pagination.page >= pagination.totalPages}
                 onClick={() => fetchHandovers(pagination.page + 1)}
-                className="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="px-3 py-1.5 rounded-lg bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-xs disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 Next
               </button>
@@ -736,16 +736,16 @@ export default function HandoverPage() {
       {/* ─── Schedule Handover Modal ─── */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-2xl max-h-[94vh] overflow-y-auto bg-slate-900 border border-white/10 rounded-2xl shadow-2xl">
+          <div className="w-full max-w-2xl max-h-[94vh] overflow-y-auto bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl">
 
             {/* Modal Header */}
-            <div className="sticky top-0 z-10 bg-slate-900 border-b border-white/10 px-6 py-4">
+            <div className="sticky top-0 z-10 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] px-6 py-4">
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <h2 className="text-lg font-bold text-white">Schedule Handover</h2>
-                  <p className="text-xs text-slate-400">Auto-generates LHO-YYYYMM-XXXX</p>
+                  <h2 className="text-lg font-bold text-[var(--text-main)]">Schedule Handover</h2>
+                  <p className="text-xs text-[var(--text-muted)]">Auto-generates LHO-YYYYMM-XXXX</p>
                 </div>
-                <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white">
+                <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">
                   <X className="w-5 h-5" />
                 </button>
               </div>
@@ -760,7 +760,7 @@ export default function HandoverPage() {
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                       activeSection === s.num
                         ? 'bg-gradient-to-r from-violet-600 to-purple-600 text-white'
-                        : 'text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700'
+                        : 'text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)]'
                     }`}
                   >
                     {s.num}. {s.title}
@@ -816,9 +816,9 @@ export default function HandoverPage() {
                             className={`flex-1 py-2 rounded-lg border text-sm font-semibold transition-all ${
                               form.handoverType === t
                                 ? t === 'DELIVERY'
-                                  ? 'bg-teal-600 border-teal-500 text-white'
-                                  : 'bg-violet-600 border-violet-500 text-white'
-                                : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500'
+                                  ? 'bg-teal-600 border-teal-500 text-[var(--text-main)]'
+                                  : 'bg-violet-600 border-violet-500 text-[var(--text-main)]'
+                                : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-muted)] hover:border-[var(--border-strong)]'
                             }`}
                           >
                             {t}
@@ -908,8 +908,8 @@ export default function HandoverPage() {
                           onClick={() => setForm(prev => ({ ...prev, keysCount: n }))}
                           className={`flex-1 py-2.5 rounded-xl border font-semibold text-sm transition-all ${
                             form.keysCount === n
-                              ? 'bg-violet-600 border-violet-500 text-white'
-                              : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500'
+                              ? 'bg-violet-600 border-violet-500 text-[var(--text-main)]'
+                              : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-muted)] hover:border-[var(--border-strong)]'
                           }`}
                         >
                           {n} Key{n > 1 ? 's' : ''}
@@ -934,11 +934,11 @@ export default function HandoverPage() {
                           className={`flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${
                             checked
                               ? 'bg-emerald-900/30 border-emerald-700/60 text-emerald-300'
-                              : 'bg-slate-800/60 border-slate-700 text-slate-400 hover:border-slate-500'
+                              : 'bg-[var(--bg-surface)]/60 border-[var(--border-subtle)] text-[var(--text-muted)] hover:border-[var(--border-strong)]'
                           }`}
                         >
                           <span className="text-sm font-medium">{label}</span>
-                          <span className={`text-xs font-bold ${checked ? 'text-emerald-400' : 'text-slate-600'}`}>
+                          <span className={`text-xs font-bold ${checked ? 'text-emerald-400' : 'text-[var(--text-faint)]'}`}>
                             {checked ? 'YES' : 'NO'}
                           </span>
                         </button>
@@ -962,7 +962,7 @@ export default function HandoverPage() {
                         className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${
                           item.checked
                             ? 'bg-emerald-900/20 border-emerald-700/50 text-emerald-300'
-                            : 'bg-slate-800/60 border-slate-700 text-slate-300 hover:border-slate-500'
+                            : 'bg-[var(--bg-surface)]/60 border-[var(--border-subtle)] text-[var(--text-muted)] hover:border-[var(--border-strong)]'
                         }`}
                       >
                         <input
@@ -978,9 +978,9 @@ export default function HandoverPage() {
                       </label>
                     ))}
                   </div>
-                  <div className="flex justify-between text-xs text-slate-500 bg-slate-800/40 rounded-lg px-4 py-2">
+                  <div className="flex justify-between text-xs text-[var(--text-faint)] bg-[var(--bg-surface)]/40 rounded-lg px-4 py-2">
                     <span>Items checked:</span>
-                    <span className="text-white font-medium">
+                    <span className="text-[var(--text-main)] font-medium">
                       {form.checklist.filter(c => c.checked).length} / {form.checklist.length}
                     </span>
                   </div>
@@ -994,7 +994,7 @@ export default function HandoverPage() {
                     <span className="w-6 h-6 rounded-full bg-violet-600 flex items-center justify-center text-xs">5</span>
                     Completion & Sign-off
                   </h3>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-[var(--text-faint)]">
                     Sign-off can be done now or later via the &quot;Complete &amp; Sign&quot; button on the handover record.
                   </p>
                   <div className="grid grid-cols-2 gap-4">
@@ -1025,12 +1025,12 @@ export default function HandoverPage() {
               )}
 
               {/* ── Navigation + Submit ── */}
-              <div className="flex gap-3 pt-2 border-t border-white/10">
+              <div className="flex gap-3 pt-2 border-t border-[var(--border-subtle)]">
                 {activeSection > 1 && (
                   <button
                     type="button"
                     onClick={() => setActiveSection(s => s - 1)}
-                    className="px-5 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-semibold text-sm transition-colors"
+                    className="px-5 py-2.5 rounded-xl bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] font-semibold text-sm transition-colors"
                   >
                     Back
                   </button>
@@ -1039,7 +1039,7 @@ export default function HandoverPage() {
                   <button
                     type="button"
                     onClick={() => setActiveSection(s => s + 1)}
-                    className="flex-1 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-semibold text-sm transition-colors"
+                    className="flex-1 py-2.5 rounded-xl bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] font-semibold text-sm transition-colors"
                   >
                     Next: {sections[activeSection]?.title}
                   </button>
@@ -1055,7 +1055,7 @@ export default function HandoverPage() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-sm transition-colors"
+                  className="px-5 py-2.5 rounded-xl bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] font-semibold text-sm transition-colors"
                 >
                   Cancel
                 </button>

@@ -121,20 +121,20 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="w-full max-w-6xl max-h-[94vh] flex flex-col bg-slate-800/95 border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+      <div className="w-full max-w-6xl max-h-[94vh] flex flex-col bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-slate-900/60">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/60">
           <div>
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            <h2 className="text-xl font-bold text-[var(--text-main)] flex items-center gap-2">
               <Database className="h-5 w-5" /> Bulk Import
             </h2>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-[var(--text-muted)] mt-1">
               Upload a CSV → review → commit. The preview step never writes to the database.
             </p>
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 hover:bg-white/10 hover:text-white"
+            className="rounded-lg p-2 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]"
             aria-label="Close"
           >
             <X className="h-5 w-5" />
@@ -151,42 +151,42 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
                 onClick={() => { setResource(r); reset(); }}
                 className={`p-4 rounded-xl border text-left transition ${
                   resource === r
-                    ? 'bg-violet-600/20 border-violet-500 text-white'
-                    : 'bg-slate-800/40 border-slate-700 text-slate-300 hover:bg-slate-700/40'
+                    ? 'bg-violet-600/20 border-violet-500 text-[var(--text-main)]'
+                    : 'bg-[var(--bg-surface)]/40 border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]/40'
                 }`}
               >
                 <div className="font-semibold">{RESOURCE_LABELS[r]}</div>
-                <div className="text-xs text-slate-400 mt-1">{r}.csv</div>
+                <div className="text-xs text-[var(--text-muted)] mt-1">{r}.csv</div>
               </button>
             ))}
           </div>
 
           {/* Format hint */}
-          <div className="bg-slate-900/50 border border-slate-700 rounded-xl p-4 text-xs space-y-1">
-            <div className="font-semibold text-slate-300 mb-1">Expected CSV columns:</div>
+          <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-xl p-4 text-xs space-y-1">
+            <div className="font-semibold text-[var(--text-muted)] mb-1">Expected CSV columns:</div>
             {RESOURCE_HINTS[resource].map((line, i) => (
-              <div key={i} className="text-slate-400">• {line}</div>
+              <div key={i} className="text-[var(--text-muted)]">• {line}</div>
             ))}
           </div>
 
           {/* File picker + actions */}
-          <div className="bg-slate-900/50 border border-slate-700 rounded-xl p-4">
+          <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-xl p-4">
             <input
               type="file"
               accept=".csv,text/csv"
               onChange={(e) => { setFile(e.target.files?.[0] ?? null); setPreview(null); setCommitResult(null); }}
-              className="block w-full text-sm text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-slate-700 file:text-slate-200 hover:file:bg-slate-600"
+              className="block w-full text-sm text-[var(--text-muted)] file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-[var(--bg-surface-hover)] file:text-[var(--text-main)] hover:file:bg-[var(--bg-surface-hover)]"
             />
             {file && (
-              <div className="mt-3 text-xs text-slate-400">
-                Selected: <span className="text-slate-200">{file.name}</span> ({(file.size / 1024).toFixed(1)} KB)
+              <div className="mt-3 text-xs text-[var(--text-muted)]">
+                Selected: <span className="text-[var(--text-main)]">{file.name}</span> ({(file.size / 1024).toFixed(1)} KB)
               </div>
             )}
             <div className="mt-4 flex gap-3">
               <button
                 disabled={!file || busy}
                 onClick={() => handleSubmit('preview')}
-                className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium disabled:opacity-50 flex items-center gap-2"
+                className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-[var(--text-main)] text-sm font-medium disabled:opacity-50 flex items-center gap-2"
               >
                 <Upload className="h-4 w-4" />
                 {busy ? 'Working…' : '1. Preview'}
@@ -194,7 +194,7 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
               <button
                 disabled={!preview || preview.validRows === 0 || busy}
                 onClick={() => handleSubmit('commit')}
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium disabled:opacity-40 flex items-center gap-2"
+                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-[var(--text-main)] text-sm font-medium disabled:opacity-40 flex items-center gap-2"
                 title={!preview ? 'Run preview first' : preview.validRows === 0 ? 'Fix errors before committing' : ''}
               >
                 <Send className="h-4 w-4" />
@@ -211,17 +211,17 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
 
           {/* Preview results */}
           {preview && !commitResult && (
-            <div className="bg-slate-900/50 border border-slate-700 rounded-xl p-4 space-y-3">
+            <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-xl p-4 space-y-3">
               <div className="flex items-center gap-4 text-sm">
-                <span className="text-slate-300">
+                <span className="text-[var(--text-muted)]">
                   <FileCheck2 className="inline h-4 w-4 text-emerald-400 mr-1" />
                   {preview.validRows} valid
                 </span>
-                <span className="text-slate-300">
+                <span className="text-[var(--text-muted)]">
                   <FileWarning className="inline h-4 w-4 text-amber-400 mr-1" />
                   {preview.invalidRows} invalid
                 </span>
-                <span className="text-slate-500">/ {preview.totalRows} total rows</span>
+                <span className="text-[var(--text-faint)]">/ {preview.totalRows} total rows</span>
               </div>
 
               {preview.unknownHeaders.length > 0 && (
@@ -233,9 +233,9 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
               {preview.invalidRows > 0 && (
                 <div>
                   <div className="text-sm font-semibold text-rose-300 mb-2">Per-row errors:</div>
-                  <div className="max-h-72 overflow-auto bg-slate-950/60 border border-slate-700 rounded-lg">
+                  <div className="max-h-72 overflow-auto bg-[var(--bg-canvas)]/60 border border-[var(--border-subtle)] rounded-lg">
                     <table className="w-full text-xs">
-                      <thead className="sticky top-0 bg-slate-900 text-slate-300">
+                      <thead className="sticky top-0 bg-[var(--bg-surface)] text-[var(--text-muted)]">
                         <tr>
                           <th className="px-3 py-2 text-left">Row</th>
                           <th className="px-3 py-2 text-left">Field</th>
@@ -246,10 +246,10 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
                         {preview.rows
                           .filter((r) => r.errors.length > 0)
                           .flatMap((r) => r.errors.map((e, i) => (
-                            <tr key={`${r.row}-${i}`} className="border-t border-slate-800">
-                              <td className="px-3 py-1.5 text-slate-400 font-mono">{r.row}</td>
+                            <tr key={`${r.row}-${i}`} className="border-t border-[var(--border-subtle)]">
+                              <td className="px-3 py-1.5 text-[var(--text-muted)] font-mono">{r.row}</td>
                               <td className="px-3 py-1.5 text-amber-300 font-mono">{e.path}</td>
-                              <td className="px-3 py-1.5 text-slate-300">{e.message}</td>
+                              <td className="px-3 py-1.5 text-[var(--text-muted)]">{e.message}</td>
                             </tr>
                           )))}
                       </tbody>
@@ -273,9 +273,9 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
                   <summary className="cursor-pointer text-emerald-200">
                     {commitResult.errors.length} skip reasons
                   </summary>
-                  <div className="mt-2 max-h-48 overflow-auto bg-slate-950/60 rounded">
+                  <div className="mt-2 max-h-48 overflow-auto bg-[var(--bg-canvas)]/60 rounded">
                     {commitResult.errors.map((e, i) => (
-                      <div key={i} className="px-2 py-1 border-t border-slate-800">
+                      <div key={i} className="px-2 py-1 border-t border-[var(--border-subtle)]">
                         Row {e.row} [{e.path}]: {e.message}
                       </div>
                     ))}
@@ -284,7 +284,7 @@ export default function ImportModal({ onClose }: { onClose: () => void }) {
               )}
               <button
                 onClick={reset}
-                className="mt-2 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-100 text-xs"
+                className="mt-2 px-3 py-1.5 rounded-lg bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-xs"
               >
                 Import another file
               </button>

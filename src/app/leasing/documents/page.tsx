@@ -262,7 +262,7 @@ export default function DocumentsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-slate-400">Loading...</div>
+        <div className="text-[var(--text-muted)]">Loading...</div>
       </div>
     );
   }
@@ -270,7 +270,7 @@ export default function DocumentsPage() {
   return (
     <div className="space-y-8">
       <div className="rounded-2xl border border-cyan-500/30 bg-cyan-950/30 px-5 py-4 text-sm text-cyan-100">
-        <div className="font-semibold text-white">Compatibility workspace</div>
+        <div className="font-semibold text-[var(--text-main)]">Compatibility workspace</div>
         <p className="mt-1 text-cyan-100/80">
           Fleet documents are now managed from the Fleet module. Leasing contract and lessee document context remains here temporarily until the shared document vault migration is complete.
         </p>
@@ -282,8 +282,8 @@ export default function DocumentsPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Documents</h1>
-          <p className="text-slate-400">Manage contracts, licenses, and related documents</p>
+          <h1 className="text-4xl font-bold text-[var(--text-main)] mb-2">Documents</h1>
+          <p className="text-[var(--text-muted)]">Manage contracts, licenses, and related documents</p>
         </div>
         <div className="flex gap-3">
           <button
@@ -304,7 +304,7 @@ export default function DocumentsPage() {
       </div>
 
       {sweepResult && (
-        <div className="rounded-lg bg-slate-800/60 border border-slate-700 px-4 py-2 text-sm text-slate-200">
+        <div className="rounded-lg bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] px-4 py-2 text-sm text-[var(--text-main)]">
           {sweepResult}
         </div>
       )}
@@ -317,13 +317,13 @@ export default function DocumentsPage() {
             placeholder="Search documents..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none transition-all"
+            className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none transition-all"
           />
         </div>
         <select
           value={entityTypeFilter}
           onChange={(e) => setEntityTypeFilter(e.target.value)}
-          className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-blue-500 focus:outline-none transition-all"
+          className="px-4 py-2 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none transition-all"
         >
           <option>CONTRACT</option>
           <option>LESSEE</option>
@@ -333,36 +333,36 @@ export default function DocumentsPage() {
       </div>
 
       {/* Documents Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
         <table className="w-full">
-          <thead className="bg-slate-800/50">
-            <tr className="border-b border-white/5">
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Doc Name</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Type</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Entity</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Issue Date</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Expiry Date</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Status</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Uploaded By</th>
-              <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Actions</th>
+          <thead className="bg-[var(--bg-surface)]/50">
+            <tr className="border-b border-[var(--border-subtle)]">
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Doc Name</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Type</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Entity</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Issue Date</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Expiry Date</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Status</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Uploaded By</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold text-[var(--text-muted)]">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredDocuments.map((doc) => (
-              <tr key={doc.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                <td className="px-6 py-4 text-sm font-medium text-white">{doc.docName}</td>
-                <td className="px-6 py-4 text-sm text-white">{doc.type}</td>
-                <td className="px-6 py-4 text-sm text-white">
+              <tr key={doc.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
+                <td className="px-6 py-4 text-sm font-medium text-[var(--text-main)]">{doc.docName}</td>
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">{doc.type}</td>
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">
                   {doc.entityType} - {doc.entityId}
                 </td>
-                <td className="px-6 py-4 text-sm text-slate-200">{doc.issueDate}</td>
-                <td className="px-6 py-4 text-sm text-slate-200">{doc.expiryDate}</td>
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">{doc.issueDate}</td>
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">{doc.expiryDate}</td>
                 <td className="px-6 py-4 text-sm">
                   <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(doc.expiryDate)}`}>
                     {getStatus(doc.expiryDate)}
                   </span>
                 </td>
-                <td className="px-6 py-4 text-sm text-white">{doc.uploadedBy}</td>
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">{doc.uploadedBy}</td>
                 <td className="px-6 py-4 text-sm space-x-2">
                   <a
                     href={doc.fileUrl}
@@ -388,12 +388,12 @@ export default function DocumentsPage() {
       {/* Upload Document Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-800/95 border border-white/10 rounded-2xl p-8">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl p-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">Upload Document</h2>
+              <h2 className="text-2xl font-bold text-[var(--text-main)]">Upload Document</h2>
               <button
                 onClick={() => setShowModal(false)}
-                className="text-slate-400 hover:text-white transition-colors"
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
               >
                 X
               </button>
@@ -402,12 +402,12 @@ export default function DocumentsPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Entity Type</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Entity Type</label>
                   <select
                     name="entityType"
                     value={formData.entityType}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none"
                   >
                     <option>CONTRACT</option>
                     <option>LESSEE</option>
@@ -417,7 +417,7 @@ export default function DocumentsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Entity ID</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Entity ID</label>
                   <input
                     type="text"
                     name="entityId"
@@ -425,17 +425,17 @@ export default function DocumentsPage() {
                     onChange={handleInputChange}
                     required
                     placeholder="LC-001"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Document Type</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Document Type</label>
                   <select
                     name="docType"
                     value={formData.docType}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none"
                   >
                     <option>TRADE_LICENSE</option>
                     <option>EMIRATES_ID</option>
@@ -449,7 +449,7 @@ export default function DocumentsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Document Name</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Document Name</label>
                   <input
                     type="text"
                     name="docName"
@@ -457,24 +457,24 @@ export default function DocumentsPage() {
                     onChange={handleInputChange}
                     required
                     placeholder="Trade License - ABC Corp"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    File <span className="text-slate-500 text-xs">(PDF, image, Office doc — max 25 MB)</span>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
+                    File <span className="text-[var(--text-faint)] text-xs">(PDF, image, Office doc — max 25 MB)</span>
                   </label>
                   <input
                     type="file"
                     accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx,.txt"
                     onChange={(e) => { setSelectedFile(e.target.files?.[0] ?? null); setClassifyHint(null); }}
                     required
-                    className="w-full text-sm text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-slate-600 file:text-white hover:file:bg-slate-500"
+                    className="w-full text-sm text-[var(--text-muted)] file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-[var(--bg-surface-hover)] file:text-[var(--text-main)] hover:file:bg-[var(--border-strong)]"
                   />
                   {selectedFile && (
                     <div className="mt-2 flex items-center justify-between gap-3 flex-wrap">
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-[var(--text-muted)]">
                         {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
                       </p>
                       <button
@@ -496,31 +496,31 @@ export default function DocumentsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Issue Date</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Issue Date</label>
                   <input
                     type="date"
                     name="issueDate"
                     value={formData.issueDate}
                     onChange={handleInputChange}
                     required
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Expiry Date</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Expiry Date</label>
                   <input
                     type="date"
                     name="expiryDate"
                     value={formData.expiryDate}
                     onChange={handleInputChange}
                     required
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Uploaded By</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Uploaded By</label>
                   <input
                     type="text"
                     name="uploadedBy"
@@ -528,20 +528,20 @@ export default function DocumentsPage() {
                     onChange={handleInputChange}
                     required
                     placeholder="John Doe"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Notes</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Notes</label>
                 <textarea
                   name="notes"
                   value={formData.notes}
                   onChange={handleInputChange}
                   placeholder="Additional notes..."
                   rows={3}
-                  className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                  className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                 />
               </div>
 
@@ -549,14 +549,14 @@ export default function DocumentsPage() {
                 <button
                   type="submit"
                   disabled={uploading || !selectedFile}
-                  className="flex-1 rounded-lg bg-blue-600 text-white font-medium py-2 hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  className="flex-1 rounded-lg bg-blue-600 text-[var(--text-main)] font-medium py-2 hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
                   {uploading ? 'Uploading…' : 'Upload'}
                 </button>
                 <button
                   type="button"
                   onClick={() => { setShowModal(false); setSelectedFile(null); }}
-                  className="flex-1 rounded-lg bg-slate-700 text-white font-medium py-2 hover:bg-slate-600 transition-colors"
+                  className="flex-1 rounded-lg bg-[var(--bg-surface-hover)] text-[var(--text-main)] font-medium py-2 hover:bg-[var(--bg-surface-hover)] transition-colors"
                 >
                   Cancel
                 </button>

@@ -44,9 +44,9 @@ const getStatusBadgeColor = (status: string) => {
     case 'PAID':
       return 'bg-emerald-900/30 text-emerald-200 border-emerald-700';
     case 'WAIVED':
-      return 'bg-slate-700/30 text-slate-300 border-slate-600';
+      return 'bg-[var(--bg-surface-hover)]/30 text-[var(--text-muted)] border-[var(--border-strong)]';
     default:
-      return 'bg-slate-700/30 text-slate-300 border-slate-600';
+      return 'bg-[var(--bg-surface-hover)]/30 text-[var(--text-muted)] border-[var(--border-strong)]';
   }
 };
 
@@ -162,7 +162,7 @@ export default function MileagePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0c1a3e] text-slate-100 p-6">
+    <div className="min-h-screen bg-[#0c1a3e] text-[var(--text-main)] p-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold">Mileage Management</h1>
@@ -183,13 +183,13 @@ export default function MileagePage() {
         )}
 
         {/* Tabs */}
-        <div className="flex gap-4 mb-6 border-b border-slate-700">
+        <div className="flex gap-4 mb-6 border-b border-[var(--border-subtle)]">
           <button
             onClick={() => setActiveTab('readings')}
             className={`px-4 py-3 font-medium transition border-b-2 ${
               activeTab === 'readings'
                 ? 'border-blue-500 text-blue-400'
-                : 'border-transparent text-slate-400 hover:text-slate-300'
+                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-muted)]'
             }`}
           >
             Mileage Readings
@@ -199,7 +199,7 @@ export default function MileagePage() {
             className={`px-4 py-3 font-medium transition border-b-2 ${
               activeTab === 'overages'
                 ? 'border-blue-500 text-blue-400'
-                : 'border-transparent text-slate-400 hover:text-slate-300'
+                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-muted)]'
             }`}
           >
             Overage Invoices
@@ -212,10 +212,10 @@ export default function MileagePage() {
           <>
             {/* Readings Tab */}
             {activeTab === 'readings' && (
-              <div className="overflow-x-auto bg-slate-800 rounded-lg border border-slate-700">
+              <div className="overflow-x-auto bg-[var(--bg-surface)] rounded-lg border border-[var(--border-subtle)]">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-slate-700 bg-slate-900">
+                    <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]">
                       <th className="px-4 py-3 text-left">Contract</th>
                       <th className="px-4 py-3 text-left">Vehicle</th>
                       <th className="px-4 py-3 text-left">Date</th>
@@ -227,7 +227,7 @@ export default function MileagePage() {
                   </thead>
                   <tbody>
                     {readings.map(reading => (
-                      <tr key={reading.id} className="border-b border-slate-700 hover:bg-slate-750">
+                      <tr key={reading.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]">
                         <td className="px-4 py-3">{reading.contract}</td>
                         <td className="px-4 py-3">{reading.vehicle}</td>
                         <td className="px-4 py-3 text-sm">{reading.date}</td>
@@ -244,10 +244,10 @@ export default function MileagePage() {
 
             {/* Overages Tab */}
             {activeTab === 'overages' && (
-              <div className="overflow-x-auto bg-slate-800 rounded-lg border border-slate-700">
+              <div className="overflow-x-auto bg-[var(--bg-surface)] rounded-lg border border-[var(--border-subtle)]">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-slate-700 bg-slate-900">
+                    <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]">
                       <th className="px-4 py-3 text-left">Contract</th>
                       <th className="px-4 py-3 text-left">Period</th>
                       <th className="px-4 py-3 text-right">Allowed (km)</th>
@@ -261,7 +261,7 @@ export default function MileagePage() {
                   </thead>
                   <tbody>
                     {overages.map(overage => (
-                      <tr key={overage.id} className="border-b border-slate-700 hover:bg-slate-750">
+                      <tr key={overage.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]">
                         <td className="px-4 py-3">{overage.contract}</td>
                         <td className="px-4 py-3 text-sm">{overage.periodFrom} - {overage.periodTo}</td>
                         <td className="px-4 py-3 text-right">{overage.allowedKm.toLocaleString()}</td>
@@ -299,12 +299,12 @@ export default function MileagePage() {
         {/* New Reading Modal */}
         {showNewReadingModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 border border-slate-700 rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between p-6 border-b border-slate-700">
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between p-6 border-b border-[var(--border-subtle)]">
                 <h2 className="text-xl font-bold">New Mileage Reading</h2>
                 <button
                   onClick={() => setShowNewReadingModal(false)}
-                  className="text-slate-400 hover:text-slate-200 transition"
+                  className="text-[var(--text-muted)] hover:text-[var(--text-main)] transition"
                 >
                   X
                 </button>
@@ -315,7 +315,7 @@ export default function MileagePage() {
                   <select
                     value={readingFormData.contractId}
                     onChange={e => setReadingFormData({...readingFormData, contractId: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)]"
                   >
                     <option value="">Select contract</option>
                     {contracts.map(c => (
@@ -329,7 +329,7 @@ export default function MileagePage() {
                     type="text"
                     value={readingFormData.vehicleId}
                     onChange={e => setReadingFormData({...readingFormData, vehicleId: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)]"
                   />
                 </div>
                 <div>
@@ -338,7 +338,7 @@ export default function MileagePage() {
                     type="date"
                     value={readingFormData.readingDate}
                     onChange={e => setReadingFormData({...readingFormData, readingDate: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)]"
                   />
                 </div>
                 <div>
@@ -347,7 +347,7 @@ export default function MileagePage() {
                     type="number"
                     value={readingFormData.mileage}
                     onChange={e => setReadingFormData({...readingFormData, mileage: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)]"
                   />
                 </div>
                 <div>
@@ -355,7 +355,7 @@ export default function MileagePage() {
                   <select
                     value={readingFormData.readingType}
                     onChange={e => setReadingFormData({...readingFormData, readingType: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)]"
                   >
                     <option>DELIVERY</option>
                     <option>MONTHLY</option>
@@ -370,7 +370,7 @@ export default function MileagePage() {
                     type="text"
                     value={readingFormData.capturedBy}
                     onChange={e => setReadingFormData({...readingFormData, capturedBy: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)]"
                   />
                 </div>
                 <div>
@@ -378,7 +378,7 @@ export default function MileagePage() {
                   <select
                     value={readingFormData.source}
                     onChange={e => setReadingFormData({...readingFormData, source: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)]"
                   >
                     <option>MANUAL</option>
                     <option>GPS</option>
@@ -390,14 +390,14 @@ export default function MileagePage() {
                   <textarea
                     value={readingFormData.notes}
                     onChange={e => setReadingFormData({...readingFormData, notes: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100 h-20"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)] h-20"
                   />
                 </div>
               </div>
-              <div className="flex gap-3 p-6 border-t border-slate-700">
+              <div className="flex gap-3 p-6 border-t border-[var(--border-subtle)]">
                 <button
                   onClick={() => setShowNewReadingModal(false)}
-                  className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition"
+                  className="flex-1 px-4 py-2 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] rounded-lg transition"
                 >
                   Cancel
                 </button>
@@ -415,12 +415,12 @@ export default function MileagePage() {
         {/* Edit Overage Status Modal */}
         {showEditOverageModal && selectedOverage && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 border border-slate-700 rounded-lg max-w-md w-full">
-              <div className="flex items-center justify-between p-6 border-b border-slate-700">
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg max-w-md w-full">
+              <div className="flex items-center justify-between p-6 border-b border-[var(--border-subtle)]">
                 <h2 className="text-xl font-bold">Update Overage Status</h2>
                 <button
                   onClick={() => setShowEditOverageModal(false)}
-                  className="text-slate-400 hover:text-slate-200 transition"
+                  className="text-[var(--text-muted)] hover:text-[var(--text-main)] transition"
                 >
                   X
                 </button>
@@ -431,7 +431,7 @@ export default function MileagePage() {
                   <select
                     value={overageStatus}
                     onChange={e => setOverageStatus(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)]"
                   >
                     <option>PENDING</option>
                     <option>INVOICED</option>
@@ -440,10 +440,10 @@ export default function MileagePage() {
                   </select>
                 </div>
               </div>
-              <div className="flex gap-3 p-6 border-t border-slate-700">
+              <div className="flex gap-3 p-6 border-t border-[var(--border-subtle)]">
                 <button
                   onClick={() => setShowEditOverageModal(false)}
-                  className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition"
+                  className="flex-1 px-4 py-2 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] rounded-lg transition"
                 >
                   Cancel
                 </button>

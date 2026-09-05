@@ -144,7 +144,7 @@ export default function QuotationDetailPage() {
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       NEW: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-      PENDING_APPROVAL: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+      PENDING_APPROVAL: 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30',
       DRAFT_APPROVED: 'bg-violet-500/20 text-violet-400 border-violet-500/30',
       SENT_TO_CUSTOMER: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
       CUSTOMER_APPROVED: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
@@ -155,7 +155,7 @@ export default function QuotationDetailPage() {
       DELIVERY_IN_PROGRESS: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
       DELIVERED: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
       REJECTED: 'bg-red-500/20 text-red-400 border-red-500/30',
-      CANCELLED: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
+      CANCELLED: 'bg-gray-500/20 text-[var(--text-muted)] border-gray-500/30',
     };
     return colors[status] || colors.NEW;
   };
@@ -225,7 +225,7 @@ export default function QuotationDetailPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-[#0c1a3e] p-8 flex items-center justify-center">
-        <div className="text-slate-400">Loading quotation...</div>
+        <div className="text-[var(--text-muted)]">Loading quotation...</div>
       </div>
     );
   }
@@ -233,7 +233,7 @@ export default function QuotationDetailPage() {
   if (notFound || !quotation) {
     return (
       <div className="min-h-screen bg-[#0c1a3e] p-8 flex items-center justify-center">
-        <div className="text-slate-400">Quotation not found.</div>
+        <div className="text-[var(--text-muted)]">Quotation not found.</div>
       </div>
     );
   }
@@ -252,22 +252,22 @@ export default function QuotationDetailPage() {
   const lesseeName = quotation.lessee?.name ?? quotation.lesseeId ?? '—';
 
   return (
-    <div className="min-h-screen bg-[#0c1a3e] p-8 print:bg-white" style={{ colorScheme: 'light' }}>
+    <div className="min-h-screen bg-[var(--bg-canvas)] p-8 print:bg-white">
       <div className="mx-auto max-w-7xl">
         {/* Top Bar */}
         <div className="mb-8 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
               onClick={() => router.back()}
-              className="text-slate-400 hover:text-white print:hidden"
+              className="text-[var(--text-muted)] hover:text-[var(--text-main)] print:hidden"
             >
               <ArrowLeft className="h-6 w-6" />
             </button>
             <div>
-              <h1 className="text-3xl font-bold text-white print:text-black">
+              <h1 className="text-3xl font-bold text-[var(--text-main)] print:text-black">
                 {quotation.quotationNumber ?? '(unnumbered)'}
               </h1>
-              <p className="text-slate-400 print:text-gray-600 text-sm">
+              <p className="text-[var(--text-muted)] print:text-[var(--text-faint)] text-sm">
                 Quotation dated {fmtDate(quotation.createdAt)}
               </p>
             </div>
@@ -282,7 +282,7 @@ export default function QuotationDetailPage() {
             </span>
             <a
               href={`/api/leasing/quotations/${quotation.id}/pdf?lang=en&download=1`}
-              className="rounded-xl bg-emerald-700/80 border border-emerald-500/30 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600 flex items-center gap-2"
+              className="rounded-xl bg-emerald-700/80 border border-emerald-500/30 px-4 py-2 text-sm font-medium text-[var(--text-main)] hover:bg-emerald-600 flex items-center gap-2"
               title="Download bilingual PDF (English layout)"
             >
               <Download className="h-4 w-4" />
@@ -290,7 +290,7 @@ export default function QuotationDetailPage() {
             </a>
             <a
               href={`/api/leasing/quotations/${quotation.id}/pdf?lang=ar&download=1`}
-              className="rounded-xl bg-emerald-700/80 border border-emerald-500/30 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-600 flex items-center gap-2"
+              className="rounded-xl bg-emerald-700/80 border border-emerald-500/30 px-4 py-2 text-sm font-medium text-[var(--text-main)] hover:bg-emerald-600 flex items-center gap-2"
               title="Download bilingual PDF (Arabic layout)"
             >
               <Download className="h-4 w-4" />
@@ -298,7 +298,7 @@ export default function QuotationDetailPage() {
             </a>
             <button
               onClick={() => window.print()}
-              className="rounded-xl bg-slate-700 border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-600 flex items-center gap-2"
+              className="rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] flex items-center gap-2"
             >
               <Printer className="h-4 w-4" />
               Print
@@ -310,64 +310,64 @@ export default function QuotationDetailPage() {
           {/* Left Column */}
           <div className="col-span-2 space-y-6">
             {/* Quotation Header Card */}
-            <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 print:border-gray-300 print:bg-white">
-              <h2 className="text-lg font-semibold text-white print:text-black mb-4">
+            <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 print:border-gray-300 print:bg-white">
+              <h2 className="text-lg font-semibold text-[var(--text-main)] print:text-black mb-4">
                 Quotation Details
               </h2>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <p className="text-slate-400 print:text-gray-600">
+                  <p className="text-[var(--text-muted)] print:text-[var(--text-faint)]">
                     Quotation Number
                   </p>
-                  <p className="text-white print:text-black font-medium">
+                  <p className="text-[var(--text-main)] print:text-black font-medium">
                     {quotation.quotationNumber ?? '(unnumbered)'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-slate-400 print:text-gray-600">
+                  <p className="text-[var(--text-muted)] print:text-[var(--text-faint)]">
                     Issued Date
                   </p>
-                  <p className="text-white print:text-black font-medium">
+                  <p className="text-[var(--text-main)] print:text-black font-medium">
                     {fmtDate(quotation.createdAt)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-slate-400 print:text-gray-600">
+                  <p className="text-[var(--text-muted)] print:text-[var(--text-faint)]">
                     Valid Until
                   </p>
-                  <p className="text-white print:text-black font-medium">
+                  <p className="text-[var(--text-main)] print:text-black font-medium">
                     {fmtDate(quotation.validUntil)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-slate-400 print:text-gray-600">
+                  <p className="text-[var(--text-muted)] print:text-[var(--text-faint)]">
                     Lessee Name
                   </p>
-                  <p className="text-white print:text-black font-medium">
+                  <p className="text-[var(--text-main)] print:text-black font-medium">
                     {lesseeName}
                   </p>
                 </div>
                 <div>
-                  <p className="text-slate-400 print:text-gray-600">
+                  <p className="text-[var(--text-muted)] print:text-[var(--text-faint)]">
                     Lease Type
                   </p>
-                  <p className="text-white print:text-black font-medium">
+                  <p className="text-[var(--text-main)] print:text-black font-medium">
                     {quotation.leaseType ?? '—'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-slate-400 print:text-gray-600">
+                  <p className="text-[var(--text-muted)] print:text-[var(--text-faint)]">
                     Duration
                   </p>
-                  <p className="text-white print:text-black font-medium">
+                  <p className="text-[var(--text-main)] print:text-black font-medium">
                     {quotation.durationMonths ?? '—'} months
                   </p>
                 </div>
                 <div>
-                  <p className="text-slate-400 print:text-gray-600">
+                  <p className="text-[var(--text-muted)] print:text-[var(--text-faint)]">
                     Currency
                   </p>
-                  <p className="text-white print:text-black font-medium">
+                  <p className="text-[var(--text-main)] print:text-black font-medium">
                     {quotation.currency ?? 'AED'}
                   </p>
                 </div>
@@ -375,31 +375,31 @@ export default function QuotationDetailPage() {
             </div>
 
             {/* Vehicle Summary Table */}
-            <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-hidden print:border-gray-300 print:bg-white">
+            <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl overflow-hidden print:border-gray-300 print:bg-white">
               <div className="p-6">
-                <h2 className="text-lg font-semibold text-white print:text-black mb-4">
+                <h2 className="text-lg font-semibold text-[var(--text-main)] print:text-black mb-4">
                   Vehicle Summary
                 </h2>
               </div>
               <table className="w-full">
-                <thead className="bg-slate-800/50 print:bg-gray-100">
-                  <tr className="border-b border-white/5 print:border-gray-300">
-                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 print:text-black">
+                <thead className="bg-[var(--bg-surface)]/50 print:bg-gray-100">
+                  <tr className="border-b border-[var(--border-subtle)] print:border-gray-300">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--text-muted)] print:text-black">
                       Type
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 print:text-black">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--text-muted)] print:text-black">
                       Make
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 print:text-black">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--text-muted)] print:text-black">
                       Model
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 print:text-black">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--text-muted)] print:text-black">
                       Year
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 print:text-black">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--text-muted)] print:text-black">
                       Qty
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 print:text-black">
+                    <th className="px-6 py-3 text-left text-xs font-medium text-[var(--text-muted)] print:text-black">
                       Monthly Rate
                     </th>
                   </tr>
@@ -407,7 +407,7 @@ export default function QuotationDetailPage() {
                 <tbody>
                   {quotation.vehicles.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-6 py-4 text-sm text-slate-500 print:text-gray-500">
+                      <td colSpan={6} className="px-6 py-4 text-sm text-[var(--text-faint)] print:text-[var(--text-faint)]">
                         No vehicles on this quotation.
                       </td>
                     </tr>
@@ -415,24 +415,24 @@ export default function QuotationDetailPage() {
                   {quotation.vehicles.map((vehicle, index) => (
                     <tr
                       key={vehicle.id ?? index}
-                      className="border-b border-white/5 hover:bg-white/5 print:border-gray-300"
+                      className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] print:border-gray-300"
                     >
-                      <td className="px-6 py-4 text-sm text-white print:text-black">
+                      <td className="px-6 py-4 text-sm text-[var(--text-main)] print:text-black">
                         {vehicle.vehicleType}
                       </td>
-                      <td className="px-6 py-4 text-sm text-white print:text-black">
+                      <td className="px-6 py-4 text-sm text-[var(--text-main)] print:text-black">
                         {vehicle.make ?? '—'}
                       </td>
-                      <td className="px-6 py-4 text-sm text-white print:text-black">
+                      <td className="px-6 py-4 text-sm text-[var(--text-main)] print:text-black">
                         {vehicle.model ?? '—'}
                       </td>
-                      <td className="px-6 py-4 text-sm text-white print:text-black">
+                      <td className="px-6 py-4 text-sm text-[var(--text-main)] print:text-black">
                         {vehicle.year ?? '—'}
                       </td>
-                      <td className="px-6 py-4 text-sm text-white print:text-black">
+                      <td className="px-6 py-4 text-sm text-[var(--text-main)] print:text-black">
                         {vehicle.quantity ?? 1}
                       </td>
-                      <td className="px-6 py-4 text-sm text-white print:text-black font-medium">
+                      <td className="px-6 py-4 text-sm text-[var(--text-main)] print:text-black font-medium">
                         {(num(vehicle.monthlyRate) * (vehicle.quantity ?? 1)).toLocaleString('en-AE')}{' '}
                         {quotation.currency ?? 'AED'}
                       </td>
@@ -443,91 +443,91 @@ export default function QuotationDetailPage() {
             </div>
 
             {/* Cost Breakdown Card */}
-            <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 print:border-gray-300 print:bg-white">
-              <h2 className="text-lg font-semibold text-white print:text-black mb-4">
+            <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 print:border-gray-300 print:bg-white">
+              <h2 className="text-lg font-semibold text-[var(--text-main)] print:text-black mb-4">
                 Cost Breakdown
               </h2>
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-slate-400 print:text-gray-600">
+                  <span className="text-[var(--text-muted)] print:text-[var(--text-faint)]">
                     Base Monthly Rate
                   </span>
-                  <span className="text-white print:text-black font-medium">
+                  <span className="text-[var(--text-main)] print:text-black font-medium">
                     {base.toLocaleString('en-AE')} {quotation.currency ?? 'AED'}
                   </span>
                 </div>
                 {interestAmount > 0 && (
                   <div className="flex justify-between">
-                    <span className="text-slate-400 print:text-gray-600">
+                    <span className="text-[var(--text-muted)] print:text-[var(--text-faint)]">
                       Interest ({num(quotation.interestRate)}%)
                     </span>
-                    <span className="text-white print:text-black">
+                    <span className="text-[var(--text-main)] print:text-black">
                       {interestAmount.toLocaleString('en-AE')} {quotation.currency ?? 'AED'}
                     </span>
                   </div>
                 )}
                 {markupAmount > 0 && (
                   <div className="flex justify-between">
-                    <span className="text-slate-400 print:text-gray-600">
+                    <span className="text-[var(--text-muted)] print:text-[var(--text-faint)]">
                       Markup ({num(quotation.markupPct)}%)
                     </span>
-                    <span className="text-white print:text-black">
+                    <span className="text-[var(--text-main)] print:text-black">
                       {markupAmount.toLocaleString('en-AE')} {quotation.currency ?? 'AED'}
                     </span>
                   </div>
                 )}
                 {accessoriesCost > 0 && (
                   <div className="flex justify-between">
-                    <span className="text-slate-400 print:text-gray-600">
+                    <span className="text-[var(--text-muted)] print:text-[var(--text-faint)]">
                       Accessories
                     </span>
-                    <span className="text-white print:text-black">
+                    <span className="text-[var(--text-main)] print:text-black">
                       {accessoriesCost.toLocaleString('en-AE')} {quotation.currency ?? 'AED'}
                     </span>
                   </div>
                 )}
                 {servicesCost > 0 && (
                   <div className="flex justify-between">
-                    <span className="text-slate-400 print:text-gray-600">
+                    <span className="text-[var(--text-muted)] print:text-[var(--text-faint)]">
                       Services
                     </span>
-                    <span className="text-white print:text-black">
+                    <span className="text-[var(--text-main)] print:text-black">
                       {servicesCost.toLocaleString('en-AE')} {quotation.currency ?? 'AED'}
                     </span>
                   </div>
                 )}
                 {quotation.insuranceIncluded && (
                   <div className="flex justify-between">
-                    <span className="text-slate-400 print:text-gray-600">
+                    <span className="text-[var(--text-muted)] print:text-[var(--text-faint)]">
                       Insurance
                     </span>
-                    <span className="text-white print:text-black">
+                    <span className="text-[var(--text-main)] print:text-black">
                       {insuranceCost.toLocaleString('en-AE')} {quotation.currency ?? 'AED'}
                     </span>
                   </div>
                 )}
                 {quotation.maintenanceIncluded && (
                   <div className="flex justify-between">
-                    <span className="text-slate-400 print:text-gray-600">
+                    <span className="text-[var(--text-muted)] print:text-[var(--text-faint)]">
                       Maintenance
                     </span>
-                    <span className="text-white print:text-black">
+                    <span className="text-[var(--text-main)] print:text-black">
                       {maintenanceCost.toLocaleString('en-AE')} {quotation.currency ?? 'AED'}
                     </span>
                   </div>
                 )}
                 {quotation.driverIncluded && (
                   <div className="flex justify-between">
-                    <span className="text-slate-400 print:text-gray-600">
+                    <span className="text-[var(--text-muted)] print:text-[var(--text-faint)]">
                       Driver
                     </span>
-                    <span className="text-white print:text-black">
+                    <span className="text-[var(--text-main)] print:text-black">
                       {driverCost.toLocaleString('en-AE')} {quotation.currency ?? 'AED'}
                     </span>
                   </div>
                 )}
-                <div className="border-t border-white/10 print:border-gray-300 pt-3 mt-3 flex justify-between font-semibold">
-                  <span className="text-white print:text-black">
+                <div className="border-t border-[var(--border-subtle)] print:border-gray-300 pt-3 mt-3 flex justify-between font-semibold">
+                  <span className="text-[var(--text-main)] print:text-black">
                     Total Monthly Rate
                   </span>
                   <span className="text-emerald-400 print:text-green-600 text-lg">
@@ -535,7 +535,7 @@ export default function QuotationDetailPage() {
                   </span>
                 </div>
                 <div className="bg-blue-600/10 print:bg-blue-50 border border-blue-500/30 print:border-blue-300 rounded-lg p-3 flex justify-between items-center">
-                  <span className="text-white print:text-black font-semibold">
+                  <span className="text-[var(--text-main)] print:text-black font-semibold">
                     Total Contract Value
                   </span>
                   <span className="text-blue-400 print:text-blue-600 text-2xl font-bold">
@@ -546,22 +546,22 @@ export default function QuotationDetailPage() {
             </div>
 
             {/* Contract Terms Card */}
-            <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 print:border-gray-300 print:bg-white">
-              <h2 className="text-lg font-semibold text-white print:text-black mb-4">
+            <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 print:border-gray-300 print:bg-white">
+              <h2 className="text-lg font-semibold text-[var(--text-main)] print:text-black mb-4">
                 Contract Terms
               </h2>
               <div className="space-y-4">
                 <div>
-                  <p className="text-slate-400 print:text-gray-600 text-sm mb-1">
+                  <p className="text-[var(--text-muted)] print:text-[var(--text-faint)] text-sm mb-1">
                     Mileage Cap
                   </p>
-                  <p className="text-white print:text-black font-medium">
+                  <p className="text-[var(--text-main)] print:text-black font-medium">
                     {(quotation.mileageCap ?? 0).toLocaleString('en-AE')} km
                   </p>
                 </div>
                 <div className="flex gap-4">
                   <div>
-                    <p className="text-slate-400 print:text-gray-600 text-sm mb-2">
+                    <p className="text-[var(--text-muted)] print:text-[var(--text-faint)] text-sm mb-2">
                       Insurance Included
                     </p>
                     <span className="px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 print:bg-green-100 print:text-green-700 print:border-green-300">
@@ -569,7 +569,7 @@ export default function QuotationDetailPage() {
                     </span>
                   </div>
                   <div>
-                    <p className="text-slate-400 print:text-gray-600 text-sm mb-2">
+                    <p className="text-[var(--text-muted)] print:text-[var(--text-faint)] text-sm mb-2">
                       Maintenance Included
                     </p>
                     <span className="px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 print:bg-green-100 print:text-green-700 print:border-green-300">
@@ -577,7 +577,7 @@ export default function QuotationDetailPage() {
                     </span>
                   </div>
                   <div>
-                    <p className="text-slate-400 print:text-gray-600 text-sm mb-2">
+                    <p className="text-[var(--text-muted)] print:text-[var(--text-faint)] text-sm mb-2">
                       Driver Included
                     </p>
                     <span className="px-3 py-1 rounded-full text-xs font-medium bg-red-500/20 text-red-400 border border-red-500/30 print:bg-red-100 print:text-red-700 print:border-red-300">
@@ -586,10 +586,10 @@ export default function QuotationDetailPage() {
                   </div>
                 </div>
                 <div>
-                  <p className="text-slate-400 print:text-gray-600 text-sm mb-1">
+                  <p className="text-[var(--text-muted)] print:text-[var(--text-faint)] text-sm mb-1">
                     Security Deposit
                   </p>
-                  <p className="text-white print:text-black font-medium">
+                  <p className="text-[var(--text-main)] print:text-black font-medium">
                     {securityDeposit.toLocaleString('en-AE')} {quotation.currency ?? 'AED'}
                   </p>
                 </div>
@@ -600,8 +600,8 @@ export default function QuotationDetailPage() {
           {/* Right Column */}
           <div className="space-y-6 print:hidden">
             {/* Status Timeline */}
-            <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-              <h2 className="text-lg font-semibold text-white mb-4">
+            <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6">
+              <h2 className="text-lg font-semibold text-[var(--text-main)] mb-4">
                 Status Timeline
               </h2>
               <div className="space-y-4">
@@ -618,7 +618,7 @@ export default function QuotationDetailPage() {
                               ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                               : isCurrent
                               ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                              : 'bg-slate-700/50 text-slate-400 border border-slate-600/50'
+                              : 'bg-[var(--bg-surface-hover)]/50 text-[var(--text-muted)] border border-[var(--border-strong)]/50'
                           }`}
                         >
                           {isCompleted ? (
@@ -632,7 +632,7 @@ export default function QuotationDetailPage() {
                             className={`w-0.5 h-8 mt-2 ${
                               isCompleted
                                 ? 'bg-emerald-500/30'
-                                : 'bg-slate-700/50'
+                                : 'bg-[var(--bg-surface-hover)]/50'
                             }`}
                           />
                         )}
@@ -641,8 +641,8 @@ export default function QuotationDetailPage() {
                         <p
                           className={`text-sm font-medium ${
                             isCompleted || isCurrent
-                              ? 'text-white'
-                              : 'text-slate-400'
+                              ? 'text-[var(--text-main)]'
+                              : 'text-[var(--text-muted)]'
                           }`}
                         >
                           {status.replace(/_/g, ' ')}
@@ -663,23 +663,23 @@ export default function QuotationDetailPage() {
             </div>
 
             {/* Approval Steps */}
-            <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-              <h2 className="text-lg font-semibold text-white mb-4">
+            <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6">
+              <h2 className="text-lg font-semibold text-[var(--text-main)] mb-4">
                 Approval Steps
               </h2>
               <div className="space-y-3 max-h-96 overflow-y-auto">
                 {quotation.history.length === 0 && (
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-[var(--text-faint)]">
                     No approval steps recorded yet.
                   </p>
                 )}
                 {quotation.history.map((step) => (
                   <div
                     key={step.id}
-                    className="bg-slate-700/30 border border-white/5 rounded-lg p-3"
+                    className="bg-[var(--bg-surface-hover)]/30 border border-[var(--border-subtle)] rounded-lg p-3"
                   >
                     <div className="flex items-start justify-between mb-2">
-                      <p className="text-sm font-medium text-white">
+                      <p className="text-sm font-medium text-[var(--text-main)]">
                         {step.stepName}
                       </p>
                       <span
@@ -694,11 +694,11 @@ export default function QuotationDetailPage() {
                         {step.status}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-400 mb-1">
+                    <p className="text-xs text-[var(--text-muted)] mb-1">
                       {step.approverName ?? 'Unassigned'}
                     </p>
                     {step.comments && (
-                      <p className="text-xs text-slate-500">{step.comments}</p>
+                      <p className="text-xs text-[var(--text-faint)]">{step.comments}</p>
                     )}
                   </div>
                 ))}
@@ -735,12 +735,12 @@ export default function QuotationDetailPage() {
       {/* Approve Modal */}
       {showApproveModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-800 border border-white/10 rounded-2xl p-6 w-full max-w-md">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-white">Approve Internally</h2>
+              <h2 className="text-xl font-bold text-[var(--text-main)]">Approve Internally</h2>
               <button
                 onClick={() => setShowApproveModal(false)}
-                className="text-slate-400 hover:text-white"
+                className="text-[var(--text-muted)] hover:text-[var(--text-main)]"
               >
                 <X className="h-6 w-6" />
               </button>
@@ -748,7 +748,7 @@ export default function QuotationDetailPage() {
 
             <form onSubmit={handleApproveInternally} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
                   Approver Name *
                 </label>
                 <input
@@ -756,20 +756,20 @@ export default function QuotationDetailPage() {
                   required
                   value={approverName}
                   onChange={(e) => setApproverName(e.target.value)}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500"
                   placeholder="Your name"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
                   Comments
                 </label>
                 <textarea
                   value={approverComment}
                   onChange={(e) => setApproverComment(e.target.value)}
                   rows={3}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-xl px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500"
                   placeholder="Add your comments..."
                 />
               </div>
@@ -789,7 +789,7 @@ export default function QuotationDetailPage() {
                 <button
                   type="button"
                   onClick={() => setShowApproveModal(false)}
-                  className="flex-1 rounded-xl bg-slate-700 border border-white/10 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-600"
+                  className="flex-1 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
                 >
                   Cancel
                 </button>
@@ -812,7 +812,7 @@ export default function QuotationDetailPage() {
           .print\\:text-black {
             color: black !important;
           }
-          .print\\:text-gray-600 {
+          .print\\:text-[var(--text-faint)] {
             color: #4b5563 !important;
           }
           .print\\:border-gray-300 {

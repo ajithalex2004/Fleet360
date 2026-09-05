@@ -36,7 +36,7 @@ const getRiskBadgeColor = (risk: string) => {
     case 'HIGH':
       return 'bg-rose-900/30 text-rose-200 border-rose-700';
     default:
-      return 'bg-slate-700/30 text-slate-300 border-slate-600';
+      return 'bg-[var(--bg-surface-hover)]/30 text-[var(--text-muted)] border-[var(--border-strong)]';
   }
 };
 
@@ -51,7 +51,7 @@ const getPaymentHistoryBadgeColor = (history: string) => {
     case 'POOR':
       return 'bg-red-900/30 text-red-200 border-red-700';
     default:
-      return 'bg-slate-700/30 text-slate-300 border-slate-600';
+      return 'bg-[var(--bg-surface-hover)]/30 text-[var(--text-muted)] border-[var(--border-strong)]';
   }
 };
 
@@ -152,7 +152,7 @@ export default function CreditAssessmentsPage() {
   const totalExposure = assessments.reduce((sum, a) => sum + a.currentExposure, 0);
 
   return (
-    <div className="min-h-screen bg-[#0c1a3e] text-slate-100 p-6">
+    <div className="min-h-screen bg-[#0c1a3e] text-[var(--text-main)] p-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold">Credit Assessments</h1>
@@ -172,20 +172,20 @@ export default function CreditAssessmentsPage() {
 
         {/* Summary Cards */}
         <div className="mb-8 grid grid-cols-4 gap-4">
-          <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-            <p className="text-slate-400 text-sm mb-1">Total Assessed</p>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-6">
+            <p className="text-[var(--text-muted)] text-sm mb-1">Total Assessed</p>
             <p className="text-3xl font-bold text-blue-400">{totalAssessed}</p>
           </div>
-          <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-            <p className="text-slate-400 text-sm mb-1">Avg Credit Score</p>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-6">
+            <p className="text-[var(--text-muted)] text-sm mb-1">Avg Credit Score</p>
             <p className="text-3xl font-bold text-emerald-400">{avgCreditScore}</p>
           </div>
-          <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-            <p className="text-slate-400 text-sm mb-1">High Risk Count</p>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-6">
+            <p className="text-[var(--text-muted)] text-sm mb-1">High Risk Count</p>
             <p className="text-3xl font-bold text-rose-400">{highRiskCount}</p>
           </div>
-          <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-            <p className="text-slate-400 text-sm mb-1">Total Exposure</p>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg p-6">
+            <p className="text-[var(--text-muted)] text-sm mb-1">Total Exposure</p>
             <p className="text-3xl font-bold text-amber-400">{totalExposure.toFixed(2)} AED</p>
           </div>
         </div>
@@ -193,10 +193,10 @@ export default function CreditAssessmentsPage() {
         {loading ? (
           <div className="text-center py-12">Loading assessments...</div>
         ) : (
-          <div className="overflow-x-auto bg-slate-800 rounded-lg border border-slate-700">
+          <div className="overflow-x-auto bg-[var(--bg-surface)] rounded-lg border border-[var(--border-subtle)]">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-slate-700 bg-slate-900">
+                <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]">
                   <th className="px-4 py-3 text-left">Lessee</th>
                   <th className="px-4 py-3 text-left">Type</th>
                   <th className="px-4 py-3 text-left">Assessment Date</th>
@@ -212,7 +212,7 @@ export default function CreditAssessmentsPage() {
               </thead>
               <tbody>
                 {assessments.map(assessment => (
-                  <tr key={assessment.id} className="border-b border-slate-700 hover:bg-slate-750">
+                  <tr key={assessment.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]">
                     <td className="px-4 py-3 font-medium">{assessment.lessee.name}</td>
                     <td className="px-4 py-3 text-sm">{assessment.lessee.type}</td>
                     <td className="px-4 py-3 text-sm">{assessment.assessmentDate}</td>
@@ -231,7 +231,7 @@ export default function CreditAssessmentsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm">{assessment.validUntil}</td>
-                    <td className="px-4 py-3 text-sm text-slate-200">{assessment.status}</td>
+                    <td className="px-4 py-3 text-sm text-[var(--text-main)]">{assessment.status}</td>
                   </tr>
                 ))}
               </tbody>
@@ -242,12 +242,12 @@ export default function CreditAssessmentsPage() {
         {/* New Assessment Modal */}
         {showNewModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 border border-slate-700 rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between p-6 border-b border-slate-700">
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between p-6 border-b border-[var(--border-subtle)]">
                 <h2 className="text-xl font-bold">New Credit Assessment</h2>
                 <button
                   onClick={() => setShowNewModal(false)}
-                  className="text-slate-400 hover:text-slate-200 transition"
+                  className="text-[var(--text-muted)] hover:text-[var(--text-main)] transition"
                 >
                   X
                 </button>
@@ -258,7 +258,7 @@ export default function CreditAssessmentsPage() {
                   <select
                     value={formData.lesseeId}
                     onChange={e => setFormData({...formData, lesseeId: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)]"
                   >
                     <option value="">Select lessee</option>
                     {lessees.map(l => (
@@ -272,7 +272,7 @@ export default function CreditAssessmentsPage() {
                     type="date"
                     value={formData.assessmentDate}
                     onChange={e => setFormData({...formData, assessmentDate: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)]"
                   />
                 </div>
                 <div>
@@ -283,7 +283,7 @@ export default function CreditAssessmentsPage() {
                     max="1000"
                     value={formData.creditScore}
                     onChange={e => setFormData({...formData, creditScore: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)]"
                   />
                 </div>
                 <div>
@@ -291,7 +291,7 @@ export default function CreditAssessmentsPage() {
                   <select
                     value={formData.riskRating}
                     onChange={e => setFormData({...formData, riskRating: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)]"
                   >
                     <option>LOW</option>
                     <option>MEDIUM</option>
@@ -304,7 +304,7 @@ export default function CreditAssessmentsPage() {
                     type="number"
                     value={formData.creditLimit}
                     onChange={e => setFormData({...formData, creditLimit: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)]"
                   />
                 </div>
                 <div>
@@ -313,7 +313,7 @@ export default function CreditAssessmentsPage() {
                     type="number"
                     value={formData.annualRevenue}
                     onChange={e => setFormData({...formData, annualRevenue: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)]"
                   />
                 </div>
                 <div>
@@ -322,7 +322,7 @@ export default function CreditAssessmentsPage() {
                     type="number"
                     value={formData.yearsInBusiness}
                     onChange={e => setFormData({...formData, yearsInBusiness: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)]"
                   />
                 </div>
                 <div>
@@ -330,7 +330,7 @@ export default function CreditAssessmentsPage() {
                   <select
                     value={formData.paymentHistory}
                     onChange={e => setFormData({...formData, paymentHistory: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)]"
                   >
                     <option>EXCELLENT</option>
                     <option>GOOD</option>
@@ -344,7 +344,7 @@ export default function CreditAssessmentsPage() {
                     type="number"
                     value={formData.recommendedLimit}
                     onChange={e => setFormData({...formData, recommendedLimit: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)]"
                   />
                 </div>
                 <div>
@@ -353,7 +353,7 @@ export default function CreditAssessmentsPage() {
                     type="text"
                     value={formData.assessedBy}
                     onChange={e => setFormData({...formData, assessedBy: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)]"
                   />
                 </div>
                 <div>
@@ -362,7 +362,7 @@ export default function CreditAssessmentsPage() {
                     type="date"
                     value={formData.validUntil}
                     onChange={e => setFormData({...formData, validUntil: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)]"
                   />
                 </div>
                 <div>
@@ -370,14 +370,14 @@ export default function CreditAssessmentsPage() {
                   <textarea
                     value={formData.notes}
                     onChange={e => setFormData({...formData, notes: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-slate-100 h-20"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-strong)] rounded px-3 py-2 text-[var(--text-main)] h-20"
                   />
                 </div>
               </div>
-              <div className="flex gap-3 p-6 border-t border-slate-700">
+              <div className="flex gap-3 p-6 border-t border-[var(--border-subtle)]">
                 <button
                   onClick={() => setShowNewModal(false)}
-                  className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition"
+                  className="flex-1 px-4 py-2 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] rounded-lg transition"
                 >
                   Cancel
                 </button>

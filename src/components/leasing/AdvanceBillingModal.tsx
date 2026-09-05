@@ -78,12 +78,12 @@ const STATUS_PIPELINE = ['DRAFT', 'SENT', 'CONFIRMED', 'DISPUTED', 'FINALIZED'];
 
 const getStatusColor = (status: string) => {
   switch (status) {
-    case 'DRAFT': return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+    case 'DRAFT': return 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30';
     case 'SENT': return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
     case 'CONFIRMED': return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
     case 'DISPUTED': return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
     case 'FINALIZED': return 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30';
-    default: return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+    default: return 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30';
   }
 };
 
@@ -193,12 +193,12 @@ export default function AdvanceBillingModal({ onClose }: { onClose: () => void }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="w-full max-w-7xl max-h-[94vh] flex flex-col bg-slate-800/95 border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+      <div className="w-full max-w-7xl max-h-[94vh] flex flex-col bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-white/10 shrink-0">
+        <div className="flex items-center justify-between p-6 border-b border-[var(--border-subtle)] shrink-0">
           <div>
-            <h2 className="text-2xl font-bold text-white">Advance Billing</h2>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <h2 className="text-2xl font-bold text-[var(--text-main)]">Advance Billing</h2>
+            <p className="text-xs text-[var(--text-muted)] mt-0.5">
               Generate monthly billing statements, send to lessee for review, then finalize to release the formal invoice.
             </p>
           </div>
@@ -211,7 +211,7 @@ export default function AdvanceBillingModal({ onClose }: { onClose: () => void }
             </button>
             <button
               onClick={onClose}
-              className="w-9 h-9 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all"
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-all"
               title="Close Advance Billing"
             >
               <X size={18} />
@@ -228,9 +228,9 @@ export default function AdvanceBillingModal({ onClose }: { onClose: () => void }
         {/* Status Pipeline */}
         <div className="grid grid-cols-5 gap-3 p-6 pb-3 shrink-0">
           {STATUS_PIPELINE.map(s => (
-            <div key={s} className="bg-slate-900/60 border border-white/10 rounded-xl p-4 text-center">
-              <div className={`text-2xl font-bold ${s === 'DRAFT' ? 'text-slate-300' : ''}`}>{statusCounts[s] || 0}</div>
-              <div className="text-xs text-slate-400 mt-1">{s}</div>
+            <div key={s} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-4 text-center">
+              <div className={`text-2xl font-bold ${s === 'DRAFT' ? 'text-[var(--text-muted)]' : ''}`}>{statusCounts[s] || 0}</div>
+              <div className="text-xs text-[var(--text-muted)] mt-1">{s}</div>
             </div>
           ))}
         </div>
@@ -243,8 +243,8 @@ export default function AdvanceBillingModal({ onClose }: { onClose: () => void }
               onClick={() => setStatusFilter(s)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                 statusFilter === s
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-700/60 text-slate-300 hover:bg-slate-600/60'
+                  ? 'bg-blue-600 text-[var(--text-main)]'
+                  : 'bg-[var(--bg-surface-hover)]/60 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]/60'
               }`}
             >
               {s}
@@ -255,9 +255,9 @@ export default function AdvanceBillingModal({ onClose }: { onClose: () => void }
         {/* Table */}
         <div className="flex-1 min-h-0 overflow-auto px-6 pb-6">
           {loading ? (
-            <div className="flex items-center justify-center h-64 text-slate-400">Loading advance billing…</div>
+            <div className="flex items-center justify-center h-64 text-[var(--text-muted)]">Loading advance billing…</div>
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-slate-500">
+            <div className="flex flex-col items-center justify-center h-64 text-[var(--text-faint)]">
               <p className="text-sm">No statements match this filter.</p>
               <button
                 onClick={() => setShowGenerate(true)}
@@ -267,30 +267,30 @@ export default function AdvanceBillingModal({ onClose }: { onClose: () => void }
               </button>
             </div>
           ) : (
-            <div className="bg-slate-900/40 border border-white/10 rounded-xl overflow-hidden">
+            <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-xl overflow-hidden">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-white/5 bg-slate-900/60">
+                  <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/60">
                     {['Statement', 'Contract', 'Lessee', 'Period', 'Due', 'Base Rent', 'Fuel', 'Fines', 'Overage', 'Other', 'VAT', 'Total', 'Status', 'Actions'].map(h => (
-                      <th key={h} className="px-3 py-2 text-left font-semibold text-slate-300 whitespace-nowrap">{h}</th>
+                      <th key={h} className="px-3 py-2 text-left font-semibold text-[var(--text-muted)] whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map(s => (
-                    <tr key={s.id} className="border-b border-white/5 hover:bg-white/[0.03]">
-                      <td className="px-3 py-2 font-medium text-white whitespace-nowrap">{s.statementNo}</td>
-                      <td className="px-3 py-2 text-white whitespace-nowrap">{s.contractId}</td>
-                      <td className="px-3 py-2 text-white">{s.lesseeName}</td>
-                      <td className="px-3 py-2 text-slate-200">{s.billingPeriod}</td>
-                      <td className="px-3 py-2 text-slate-200">{s.dueDate}</td>
-                      <td className="px-3 py-2 text-white whitespace-nowrap">{s.baseRent.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
-                      <td className="px-3 py-2 text-white whitespace-nowrap">{s.fuelCharges.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
-                      <td className="px-3 py-2 text-white whitespace-nowrap">{s.fineCharges.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
-                      <td className="px-3 py-2 text-white whitespace-nowrap">{s.overageCharges.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
-                      <td className="px-3 py-2 text-white whitespace-nowrap">{s.otherCharges.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
-                      <td className="px-3 py-2 text-white whitespace-nowrap">{s.vat.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
-                      <td className="px-3 py-2 font-bold text-white whitespace-nowrap">{s.total.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                    <tr key={s.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]">
+                      <td className="px-3 py-2 font-medium text-[var(--text-main)] whitespace-nowrap">{s.statementNo}</td>
+                      <td className="px-3 py-2 text-[var(--text-main)] whitespace-nowrap">{s.contractId}</td>
+                      <td className="px-3 py-2 text-[var(--text-main)]">{s.lesseeName}</td>
+                      <td className="px-3 py-2 text-[var(--text-main)]">{s.billingPeriod}</td>
+                      <td className="px-3 py-2 text-[var(--text-main)]">{s.dueDate}</td>
+                      <td className="px-3 py-2 text-[var(--text-main)] whitespace-nowrap">{s.baseRent.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                      <td className="px-3 py-2 text-[var(--text-main)] whitespace-nowrap">{s.fuelCharges.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                      <td className="px-3 py-2 text-[var(--text-main)] whitespace-nowrap">{s.fineCharges.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                      <td className="px-3 py-2 text-[var(--text-main)] whitespace-nowrap">{s.overageCharges.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                      <td className="px-3 py-2 text-[var(--text-main)] whitespace-nowrap">{s.otherCharges.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                      <td className="px-3 py-2 text-[var(--text-main)] whitespace-nowrap">{s.vat.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                      <td className="px-3 py-2 font-bold text-[var(--text-main)] whitespace-nowrap">{s.total.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
                       <td className="px-3 py-2">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(s.status)}`}>
                           {s.status}
@@ -344,78 +344,78 @@ export default function AdvanceBillingModal({ onClose }: { onClose: () => void }
       {/* Generate Statement sub-modal */}
       {showGenerate && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto bg-slate-800/95 border border-white/10 rounded-2xl p-8 shadow-2xl">
+          <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl p-8 shadow-2xl">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-bold text-white">Generate Advance Billing Statement</h3>
+              <h3 className="text-2xl font-bold text-[var(--text-main)]">Generate Advance Billing Statement</h3>
               <button onClick={() => setShowGenerate(false)}
-                      className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white">
+                      className="w-8 h-8 flex items-center justify-center rounded-full bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)]">
                 <X size={16} />
               </button>
             </div>
             <form onSubmit={handleGenerate} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Contract ID</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Contract ID</label>
                   <input type="text" name="contractId" value={formData.contractId}
                          onChange={handleInputChange} required placeholder="LC-001"
-                         className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none" />
+                         className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Billing Period (YYYY-MM)</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Billing Period (YYYY-MM)</label>
                   <input type="text" name="billingPeriod" value={formData.billingPeriod}
                          onChange={handleInputChange} required placeholder="2026-04"
-                         className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none" />
+                         className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Due Date</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Due Date</label>
                   <input type="date" name="dueDate" value={formData.dueDate}
                          onChange={handleInputChange} required
-                         className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none" />
+                         className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Base Rent</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Base Rent</label>
                   <input type="number" name="baseRent" value={formData.baseRent}
                          onChange={handleInputChange} required placeholder="6500"
-                         className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none" />
+                         className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Fuel Charges</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Fuel Charges</label>
                   <input type="number" name="fuelCharges" value={formData.fuelCharges}
                          onChange={handleInputChange} placeholder="0"
-                         className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none" />
+                         className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Fine Charges</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Fine Charges</label>
                   <input type="number" name="fineCharges" value={formData.fineCharges}
                          onChange={handleInputChange} placeholder="0"
-                         className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none" />
+                         className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Maintenance Charges</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Maintenance Charges</label>
                   <input type="number" name="maintenanceCharges" value={formData.maintenanceCharges}
                          onChange={handleInputChange} placeholder="0"
-                         className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none" />
+                         className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Overage Charges</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Overage Charges</label>
                   <input type="number" name="overageCharges" value={formData.overageCharges}
                          onChange={handleInputChange} placeholder="0"
-                         className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none" />
+                         className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Other Charges</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Other Charges</label>
                   <input type="number" name="otherCharges" value={formData.otherCharges}
                          onChange={handleInputChange} placeholder="0"
-                         className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none" />
+                         className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">VAT (5%)</label>
-                  <div className="px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white text-sm font-medium">
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">VAT (5%)</label>
+                  <div className="px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm font-medium">
                     AED {calculatedVAT.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Total</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Total</label>
                   <div className="px-4 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm font-bold">
                     AED {calculatedTotal.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                   </div>
@@ -423,11 +423,11 @@ export default function AdvanceBillingModal({ onClose }: { onClose: () => void }
               </div>
               <div className="flex gap-3 pt-4">
                 <button type="submit" disabled={submitting}
-                        className="flex-1 rounded-lg bg-blue-600 text-white font-medium py-2 hover:bg-blue-700 transition-colors disabled:opacity-50">
+                        className="flex-1 rounded-lg bg-blue-600 text-[var(--text-main)] font-medium py-2 hover:bg-blue-700 transition-colors disabled:opacity-50">
                   {submitting ? 'Generating…' : 'Generate Statement'}
                 </button>
                 <button type="button" onClick={() => setShowGenerate(false)}
-                        className="flex-1 rounded-lg bg-slate-700 text-white font-medium py-2 hover:bg-slate-600 transition-colors">
+                        className="flex-1 rounded-lg bg-[var(--bg-surface-hover)] text-[var(--text-main)] font-medium py-2 hover:bg-[var(--bg-surface-hover)] transition-colors">
                   Cancel
                 </button>
               </div>

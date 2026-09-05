@@ -69,23 +69,23 @@ export default function LeasingDriversPage() {
     <div className="space-y-8">
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Drivers</h1>
-          <p className="text-slate-400">
+          <h1 className="text-4xl font-bold text-[var(--text-main)] mb-2">Drivers</h1>
+          <p className="text-[var(--text-muted)]">
             {scope === 'allocated'
               ? `Drivers currently allocated to leasing contracts`
               : `All drivers in the platform — allocate via a contract page`}
           </p>
         </div>
-        <div className="inline-flex rounded-xl bg-slate-800/60 border border-white/10 p-1">
+        <div className="inline-flex rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] p-1">
           <button
             onClick={() => setScope('allocated')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium ${scope === 'allocated' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            className={`px-4 py-2 rounded-lg text-sm font-medium ${scope === 'allocated' ? 'bg-emerald-600 text-[var(--text-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
           >
             Allocated
           </button>
           <button
             onClick={() => setScope('all')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium ${scope === 'all' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            className={`px-4 py-2 rounded-lg text-sm font-medium ${scope === 'all' ? 'bg-emerald-600 text-[var(--text-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
           >
             All Drivers
           </button>
@@ -107,18 +107,18 @@ export default function LeasingDriversPage() {
       </div>
 
       {loading ? (
-        <div className="text-slate-500">Loading…</div>
+        <div className="text-[var(--text-faint)]">Loading…</div>
       ) : drivers.length === 0 ? (
-        <div className="p-8 rounded-xl bg-slate-800/40 border border-slate-700 text-center text-slate-400">
+        <div className="p-8 rounded-xl bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] text-center text-[var(--text-muted)]">
           {scope === 'allocated'
             ? 'No drivers currently allocated. Switch to "All Drivers" to see the wider pool, or allocate one from a contract page.'
             : 'No drivers in the platform yet.'}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-white/10">
+        <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
           <table className="w-full text-sm">
-            <thead className="bg-slate-800/60">
-              <tr className="text-left text-xs text-slate-400">
+            <thead className="bg-[var(--bg-surface)]/60">
+              <tr className="text-left text-xs text-[var(--text-muted)]">
                 <th className="px-4 py-3">Name</th>
                 <th className="px-4 py-3">Contact</th>
                 <th className="px-4 py-3">Licence</th>
@@ -130,19 +130,19 @@ export default function LeasingDriversPage() {
             </thead>
             <tbody>
               {drivers.map((d) => (
-                <tr key={d.id} className="border-t border-white/5 hover:bg-white/5">
+                <tr key={d.id} className="border-t border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]">
                   <td className="px-4 py-3">
-                    <div className="text-white font-medium">{displayName(d)}</div>
-                    <div className="text-[11px] text-slate-500">{d.driverType ?? '—'} · {d.nationality ?? '—'}</div>
+                    <div className="text-[var(--text-main)] font-medium">{displayName(d)}</div>
+                    <div className="text-[11px] text-[var(--text-faint)]">{d.driverType ?? '—'} · {d.nationality ?? '—'}</div>
                   </td>
                   <td className="px-4 py-3 text-xs">
-                    <div className="text-slate-200">{d.contactNumber ?? '—'}</div>
-                    <div className="text-slate-500">{d.email ?? ''}</div>
+                    <div className="text-[var(--text-main)]">{d.contactNumber ?? '—'}</div>
+                    <div className="text-[var(--text-faint)]">{d.email ?? ''}</div>
                   </td>
                   <td className="px-4 py-3 text-xs">
-                    <div className="font-mono text-slate-200">{d.licenseNumber ?? '—'}</div>
+                    <div className="font-mono text-[var(--text-main)]">{d.licenseNumber ?? '—'}</div>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-slate-500">{fmt(d.licenseExpiry)}</span>
+                      <span className="text-[var(--text-faint)]">{fmt(d.licenseExpiry)}</span>
                       {d.licenseExpiryStatus && (
                         <span className={`px-1.5 py-0.5 rounded-full text-[10px] border ${EXPIRY_PILL[d.licenseExpiryStatus] ?? ''}`}>
                           {d.licenseExpiryStatus}
@@ -151,7 +151,7 @@ export default function LeasingDriversPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3 text-xs">
-                    <div className="text-slate-200">{fmt(d.emiratesIdExpiry)}</div>
+                    <div className="text-[var(--text-main)]">{fmt(d.emiratesIdExpiry)}</div>
                     {d.emiratesIdExpiryStatus && d.emiratesIdExpiryStatus !== 'OK' && (
                       <span className={`px-1.5 py-0.5 rounded-full text-[10px] border ${EXPIRY_PILL[d.emiratesIdExpiryStatus]}`}>
                         {d.emiratesIdExpiryStatus}
@@ -159,7 +159,7 @@ export default function LeasingDriversPage() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-xs">
-                    <div className="text-slate-200">{fmt(d.visaExpiry)}</div>
+                    <div className="text-[var(--text-main)]">{fmt(d.visaExpiry)}</div>
                     {d.visaExpiryStatus && d.visaExpiryStatus !== 'OK' && (
                       <span className={`px-1.5 py-0.5 rounded-full text-[10px] border ${EXPIRY_PILL[d.visaExpiryStatus]}`}>
                         {d.visaExpiryStatus}
@@ -167,13 +167,13 @@ export default function LeasingDriversPage() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs border ${d.status === 'ACTIVE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-slate-500/20 text-slate-400 border-slate-500/40'}`}>
+                    <span className={`px-2 py-0.5 rounded-full text-xs border ${d.status === 'ACTIVE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/40'}`}>
                       {d.status ?? '—'}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <div className="text-white font-medium">{d.activeAllocations} <span className="text-slate-500 text-xs">active</span></div>
-                    <div className="text-xs text-slate-500">{d.totalAllocations} total</div>
+                    <div className="text-[var(--text-main)] font-medium">{d.activeAllocations} <span className="text-[var(--text-faint)] text-xs">active</span></div>
+                    <div className="text-xs text-[var(--text-faint)]">{d.totalAllocations} total</div>
                   </td>
                 </tr>
               ))}
@@ -182,7 +182,7 @@ export default function LeasingDriversPage() {
         </div>
       )}
 
-      <div className="bg-slate-800/30 border border-white/5 rounded-xl p-5 text-sm text-slate-400">
+      <div className="bg-[var(--bg-surface)]/30 border border-[var(--border-subtle)] rounded-xl p-5 text-sm text-[var(--text-muted)]">
         <p>
           To allocate or release a driver, open a contract from{' '}
           <Link href="/leasing/contracts-v2" className="text-emerald-400 hover:underline">Contracts</Link>.
@@ -196,15 +196,15 @@ export default function LeasingDriversPage() {
 
 function KpiCard({ label, value, accent = 'slate' }: { label: string; value: number; accent?: string }) {
   const accentClass: Record<string, string> = {
-    slate: 'text-white',
+    slate: 'text-[var(--text-main)]',
     emerald: 'text-emerald-300',
     amber: 'text-amber-300',
     rose: 'text-rose-300',
   };
   return (
-    <div className="bg-slate-800/50 border border-white/10 rounded-xl p-5">
+    <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-xl p-5">
       <div className={`text-3xl font-bold ${accentClass[accent]}`}>{value}</div>
-      <div className="text-xs text-slate-400 mt-1">{label}</div>
+      <div className="text-xs text-[var(--text-muted)] mt-1">{label}</div>
     </div>
   );
 }

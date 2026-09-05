@@ -164,14 +164,14 @@ export default function LesseesPage() {
 
   const RISK_COLORS: Record<string,string> = { LOW:'text-emerald-400', MEDIUM:'text-amber-400', HIGH:'text-rose-400' };
 
-  if (loading) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading lessees...</div></div>;
+  if (loading) return <div className="flex items-center justify-center h-full"><div className="text-[var(--text-muted)] animate-pulse">Loading lessees...</div></div>;
 
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Lessees</h1>
-          <p className="text-slate-400">{lessees.filter(l=>l.type==='corporate').length} corporate, {lessees.filter(l=>l.type==='individual').length} individual  -  {lessees.length} total</p>
+          <h1 className="text-4xl font-bold text-[var(--text-main)] mb-2">Lessees</h1>
+          <p className="text-[var(--text-muted)]">{lessees.filter(l=>l.type==='corporate').length} corporate, {lessees.filter(l=>l.type==='individual').length} individual  -  {lessees.length} total</p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -188,20 +188,20 @@ export default function LesseesPage() {
       {inviteMsg && <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl px-4 py-3 text-cyan-300 text-sm break-all">{inviteMsg}</div>}
       <div className="flex gap-4 flex-wrap">
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name, email, trade license..."
-          className="flex-1 min-w-48 max-w-sm px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"/>
+          className="flex-1 min-w-48 max-w-sm px-4 py-2 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"/>
         <select value={typeFilter} onChange={e=>setTypeFilter(e.target.value)}
-          className="px-4 py-2 rounded-lg bg-slate-800/50 border border-white/10 text-white focus:border-blue-500 focus:outline-none">
+          className="px-4 py-2 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none">
           <option value="all">All Types</option>
           <option value="corporate">Corporate</option>
           <option value="individual">Individual</option>
         </select>
       </div>
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
-        {filtered.length===0 ? <div className="text-center text-slate-400 py-12">No lessees found</div> : (
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
+        {filtered.length===0 ? <div className="text-center text-[var(--text-muted)] py-12">No lessees found</div> : (
           <table className="w-full">
-            <thead><tr className="border-b border-white/5">
+            <thead><tr className="border-b border-[var(--border-subtle)]">
               {['Name','Type','KYC ID','Contact / Nationality','Phone','Email','Credit Limit','Risk','Exposure','Docs','Actions'].map(h=>(
-                <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-400">{h}</th>
+                <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">{h}</th>
               ))}
             </tr></thead>
             <tbody>
@@ -209,38 +209,38 @@ export default function LesseesPage() {
                 const credit = creditMap[l.id];
                 const docs   = docMap[l.id];
                 return (
-                  <tr key={l.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                    <td className="px-4 py-4 text-sm font-medium text-white">{l.name}</td>
+                  <tr key={l.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
+                    <td className="px-4 py-4 text-sm font-medium text-[var(--text-main)]">{l.name}</td>
                     <td className="px-4 py-4 text-sm">
                       <span className={`px-2 py-0.5 rounded text-xs font-medium ${l.type==='corporate'?'bg-blue-500/20 text-blue-400':'bg-violet-500/20 text-violet-400'}`}>
                         {l.type.toUpperCase()}
                       </span>
                     </td>
-                    <td className="px-4 py-4 text-sm font-mono text-white">
+                    <td className="px-4 py-4 text-sm font-mono text-[var(--text-main)]">
                       {l.type === 'corporate'
-                        ? (l.tradeLicense ? <><span className="text-slate-500 text-xs mr-1">TL</span>{l.tradeLicense}</> : '—')
-                        : (l.emiratesId ? <><span className="text-slate-500 text-xs mr-1">EID</span>{l.emiratesId}</> : '—')}
+                        ? (l.tradeLicense ? <><span className="text-[var(--text-faint)] text-xs mr-1">TL</span>{l.tradeLicense}</> : '—')
+                        : (l.emiratesId ? <><span className="text-[var(--text-faint)] text-xs mr-1">EID</span>{l.emiratesId}</> : '—')}
                     </td>
-                    <td className="px-4 py-4 text-sm text-white">
+                    <td className="px-4 py-4 text-sm text-[var(--text-main)]">
                       {l.type === 'corporate' ? (l.contactPerson ?? '—') : (l.nationality ?? '—')}
                     </td>
-                    <td className="px-4 py-4 text-sm text-white">{l.phone??'-'}</td>
-                    <td className="px-4 py-4 text-sm text-white">{l.email??'-'}</td>
-                    <td className="px-4 py-4 text-sm font-medium text-white">{credit?.creditLimit?`AED ${Number(credit.creditLimit).toLocaleString()}`:'-'}</td>
-                    <td className="px-4 py-4 text-sm font-bold"><span className={RISK_COLORS[credit?.riskRating??'']||'text-slate-200'}>{credit?.riskRating??'-'}</span></td>
-                    <td className="px-4 py-4 text-sm text-white">{credit?.currentExposure?`AED ${Number(credit.currentExposure).toLocaleString()}`:'-'}</td>
+                    <td className="px-4 py-4 text-sm text-[var(--text-main)]">{l.phone??'-'}</td>
+                    <td className="px-4 py-4 text-sm text-[var(--text-main)]">{l.email??'-'}</td>
+                    <td className="px-4 py-4 text-sm font-medium text-[var(--text-main)]">{credit?.creditLimit?`AED ${Number(credit.creditLimit).toLocaleString()}`:'-'}</td>
+                    <td className="px-4 py-4 text-sm font-bold"><span className={RISK_COLORS[credit?.riskRating??'']||'text-[var(--text-main)]'}>{credit?.riskRating??'-'}</span></td>
+                    <td className="px-4 py-4 text-sm text-[var(--text-main)]">{credit?.currentExposure?`AED ${Number(credit.currentExposure).toLocaleString()}`:'-'}</td>
                     <td className="px-4 py-4 text-sm">
                       {docs ? (
-                        <span className={`text-xs ${docs.expiringSoon>0?'text-amber-400':'text-white'}`}>
+                        <span className={`text-xs ${docs.expiringSoon>0?'text-amber-400':'text-[var(--text-main)]'}`}>
                           {docs.count} docs{docs.expiringSoon>0?` (${docs.expiringSoon} expiring!)`:''}
                         </span>
-                      ) : <span className="text-slate-300 text-xs">None</span>}
+                      ) : <span className="text-[var(--text-muted)] text-xs">None</span>}
                     </td>
                     <td className="px-4 py-4">
                       <div className="flex gap-2 flex-wrap">
                         <button onClick={()=>openEdit(l)} className="text-xs px-2 py-1 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 hover:bg-blue-500/30">Edit</button>
                         <a href={`/leasing/credit-assessments?lesseeId=${l.id}`} className="text-xs px-2 py-1 rounded bg-violet-500/20 text-violet-400 border border-violet-500/30 hover:bg-violet-500/30">Credit</a>
-                        <a href={`/leasing/documents?entityType=LESSEE&entityId=${l.id}`} className="text-xs px-2 py-1 rounded bg-slate-700 text-white border border-white/10 hover:bg-slate-600">Docs</a>
+                        <a href={`/leasing/documents?entityType=LESSEE&entityId=${l.id}`} className="text-xs px-2 py-1 rounded bg-[var(--bg-surface-hover)] text-[var(--text-main)] border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]">Docs</a>
                         <a href={`/api/leasing/lessees/${l.id}/statement?lang=en&download=1`} className="text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30" title="Account statement (last 90 days, EN)">Stmt·EN</a>
                         <a href={`/api/leasing/lessees/${l.id}/statement?lang=ar&download=1`} className="text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30" title="كشف حساب آخر 90 يوماً (AR)">Stmt·AR</a>
                         <button onClick={()=>invitePortal(l)} disabled={invitingId===l.id} className="text-xs px-2 py-1 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30 disabled:opacity-50" title="Invite this lessee to the self-service portal">
@@ -257,20 +257,20 @@ export default function LesseesPage() {
       </div>
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-slate-800/95 border border-white/10 rounded-2xl p-8">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl p-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-white">{editLessee?'Edit Lessee':'New Lessee'}</h2>
-              <button onClick={()=>setShowModal(false)} className="text-slate-400 hover:text-white">X</button>
+              <h2 className="text-2xl font-bold text-[var(--text-main)]">{editLessee?'Edit Lessee':'New Lessee'}</h2>
+              <button onClick={()=>setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">X</button>
             </div>
             {/* Type selector (always visible — the rest of the form depends on this) */}
-            <div className="mb-4 flex gap-2 p-1 bg-slate-900/60 rounded-xl border border-white/5">
+            <div className="mb-4 flex gap-2 p-1 bg-[var(--bg-surface)]/60 rounded-xl border border-[var(--border-subtle)]">
               <button
                 type="button"
                 onClick={() => setForm(p => ({ ...p, type: 'corporate' }))}
                 className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
                   form.type === 'corporate'
-                    ? 'bg-blue-600 text-white shadow-lg'
-                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                    ? 'bg-blue-600 text-[var(--text-main)] shadow-lg'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]'
                 }`}
               >
                 <div className="font-semibold">B2B — Corporate</div>
@@ -281,8 +281,8 @@ export default function LesseesPage() {
                 onClick={() => setForm(p => ({ ...p, type: 'individual' }))}
                 className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-all ${
                   form.type === 'individual'
-                    ? 'bg-violet-600 text-white shadow-lg'
-                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                    ? 'bg-violet-600 text-[var(--text-main)] shadow-lg'
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]'
                 }`}
               >
                 <div className="font-semibold">B2C — Individual</div>
@@ -291,16 +291,16 @@ export default function LesseesPage() {
             </div>
 
             {/* Per-type KYC checklist banner */}
-            <div className="mb-4 px-4 py-3 rounded-lg bg-slate-900/40 border border-white/5 text-xs text-slate-400">
+            <div className="mb-4 px-4 py-3 rounded-lg bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] text-xs text-[var(--text-muted)]">
               {form.type === 'corporate' ? (
                 <>
-                  <span className="font-semibold text-slate-200">Corporate KYC checklist:</span>{' '}
+                  <span className="font-semibold text-[var(--text-main)]">Corporate KYC checklist:</span>{' '}
                   Name, Trade License (required) · Contact person, email, phone (recommended) ·
                   Upload trade license + MoA via the Documents page after creation.
                 </>
               ) : (
                 <>
-                  <span className="font-semibold text-slate-200">Individual KYC checklist:</span>{' '}
+                  <span className="font-semibold text-[var(--text-main)]">Individual KYC checklist:</span>{' '}
                   Full Name, Emirates ID, Nationality (required) · Phone, email (recommended) ·
                   Upload EID + driving license via the Documents page after creation.
                 </>
@@ -310,7 +310,7 @@ export default function LesseesPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
                     {form.type === 'corporate' ? 'Company Name *' : 'Full Name *'}
                   </label>
                   <input
@@ -319,7 +319,7 @@ export default function LesseesPage() {
                     onChange={e=>setForm(p=>({...p,name:e.target.value}))}
                     required
                     placeholder={form.type === 'corporate' ? 'e.g., Acme Trading LLC' : 'e.g., Ahmed Al-Mansouri'}
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
 
@@ -327,7 +327,7 @@ export default function LesseesPage() {
                 {form.type === 'corporate' && (
                   <>
                     <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">
+                      <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
                         Trade License No. <span className="text-rose-400">*</span>
                       </label>
                       <input
@@ -336,17 +336,17 @@ export default function LesseesPage() {
                         onChange={e=>setForm(p=>({...p,tradeLicense:e.target.value}))}
                         required
                         placeholder="CN-1234567"
-                        className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                        className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">Contact Person</label>
+                      <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Contact Person</label>
                       <input
                         type="text"
                         value={form.contactPerson}
                         onChange={e=>setForm(p=>({...p,contactPerson:e.target.value}))}
                         placeholder="Ahmed Al-Mansouri"
-                        className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                        className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                       />
                     </div>
                   </>
@@ -356,7 +356,7 @@ export default function LesseesPage() {
                 {form.type === 'individual' && (
                   <>
                     <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">
+                      <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
                         Emirates ID <span className="text-rose-400">*</span>
                       </label>
                       <input
@@ -365,11 +365,11 @@ export default function LesseesPage() {
                         onChange={e=>setForm(p=>({...p,emiratesId:e.target.value}))}
                         required
                         placeholder="784-1234-1234567-1"
-                        className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none font-mono"
+                        className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none font-mono"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">
+                      <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
                         Nationality <span className="text-rose-400">*</span>
                       </label>
                       <input
@@ -378,17 +378,17 @@ export default function LesseesPage() {
                         onChange={e=>setForm(p=>({...p,nationality:e.target.value}))}
                         required
                         placeholder="UAE"
-                        className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                        className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-300 mb-2">Driving License No.</label>
+                      <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Driving License No.</label>
                       <input
                         type="text"
                         value={form.licenseNo}
                         onChange={e=>setForm(p=>({...p,licenseNo:e.target.value}))}
                         placeholder="DL-1234567"
-                        className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                        className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                       />
                     </div>
                   </>
@@ -396,33 +396,33 @@ export default function LesseesPage() {
 
                 {/* Shared contact fields */}
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Phone</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Phone</label>
                   <input
                     type="tel"
                     value={form.phone}
                     onChange={e=>setForm(p=>({...p,phone:e.target.value}))}
                     placeholder="+971 4 000 0000"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Email</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Email</label>
                   <input
                     type="email"
                     value={form.email}
                     onChange={e=>setForm(p=>({...p,email:e.target.value}))}
                     placeholder={form.type === 'corporate' ? 'finance@company.com' : 'name@example.com'}
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Address</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Address</label>
                   <textarea
                     value={form.address}
                     onChange={e=>setForm(p=>({...p,address:e.target.value}))}
                     rows={2}
                     placeholder="Office / residence address…"
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none"
                   />
                 </div>
               </div>
@@ -431,14 +431,14 @@ export default function LesseesPage() {
                 <button
                   type="button"
                   onClick={()=>setShowModal(false)}
-                  className="px-6 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5"
+                  className="px-6 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className={`px-6 py-2 rounded-lg text-white hover:opacity-90 disabled:opacity-50 ${
+                  className={`px-6 py-2 rounded-lg text-[var(--text-main)] hover:opacity-90 disabled:opacity-50 ${
                     form.type === 'corporate'
                       ? 'bg-gradient-to-r from-blue-600 to-indigo-600'
                       : 'bg-gradient-to-r from-violet-600 to-purple-600'

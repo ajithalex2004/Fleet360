@@ -189,9 +189,9 @@ export default function ContractsV2Page() {
     const map: Record<string, Record<string, string>> = {
       agreement: { MASTER: 'bg-amber-500/20 text-amber-400 border-amber-500/30', INDIVIDUAL: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
       lease: { LONG_TERM: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30', SHORT_TERM: 'bg-teal-500/20 text-teal-400 border-teal-500/30', DAILY: 'bg-orange-500/20 text-orange-400 border-orange-500/30', MONTHLY: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' },
-      status: { Active: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', Draft: 'bg-slate-500/20 text-slate-400 border-slate-500/30', 'Pending Approval': 'bg-amber-500/20 text-amber-400 border-amber-500/30', Expired: 'bg-rose-500/20 text-rose-400 border-rose-500/30', Terminated: 'bg-red-500/20 text-red-400 border-red-500/30' },
+      status: { Active: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', Draft: 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30', 'Pending Approval': 'bg-amber-500/20 text-amber-400 border-amber-500/30', Expired: 'bg-rose-500/20 text-rose-400 border-rose-500/30', Terminated: 'bg-red-500/20 text-red-400 border-red-500/30' },
     };
-    return map[type]?.[value] ?? 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+    return map[type]?.[value] ?? 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30';
   };
 
   const calcDuration = (start: string, end: string) => {
@@ -257,7 +257,7 @@ export default function ContractsV2Page() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-slate-400 animate-pulse">Loading contracts...</div>
+        <div className="text-[var(--text-muted)] animate-pulse">Loading contracts...</div>
       </div>
     );
   }
@@ -271,8 +271,8 @@ export default function ContractsV2Page() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-white mb-1">Lease Agreements</h1>
-          <p className="text-slate-400 text-sm">Manage master and individual lease contracts</p>
+          <h1 className="text-4xl font-bold text-[var(--text-main)] mb-1">Lease Agreements</h1>
+          <p className="text-[var(--text-muted)] text-sm">Manage master and individual lease contracts</p>
         </div>
         <button onClick={() => setShowNewContract(true)}
           className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-sm font-semibold text-white hover:opacity-90 transition-opacity shadow-lg">
@@ -288,20 +288,20 @@ export default function ContractsV2Page() {
           { label: 'Expiring This Month', value: stats.expiring, color: 'from-rose-500 to-pink-600' },
           { label: 'Multi-Vehicle', value: stats.multiVehicle, color: 'from-purple-500 to-indigo-600' },
         ].map((s, i) => (
-          <div key={i} className="bg-slate-800/50 border border-white/10 rounded-2xl p-4">
-            <p className="text-slate-400 text-xs font-medium mb-1">{s.label}</p>
+          <div key={i} className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-4">
+            <p className="text-[var(--text-muted)] text-xs font-medium mb-1">{s.label}</p>
             <p className={`text-2xl font-bold bg-gradient-to-r ${s.color} bg-clip-text text-transparent`}>{s.value}</p>
           </div>
         ))}
       </div>
 
       {/* Filters */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-4 flex gap-4 flex-wrap items-end">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-4 flex gap-4 flex-wrap items-end">
         <div className="flex-1 min-w-[180px]">
-          <label className="block text-xs font-medium text-slate-400 mb-1.5">Search</label>
+          <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Search</label>
           <input type="text" placeholder="Contract # or Lessee" value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            className="w-full px-3 py-2 bg-slate-900/60 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500/50" />
+            className="w-full px-3 py-2 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-blue-500/50" />
         </div>
         {[
           { label: 'Status', val: filterStatus, setVal: setFilterStatus, opts: [['', 'All Status'], ['Active', 'Active'], ['Draft', 'Draft'], ['Pending Approval', 'Pending Approval'], ['Expired', 'Expired']] },
@@ -309,9 +309,9 @@ export default function ContractsV2Page() {
           { label: 'Lease Type', val: filterLeaseType, setVal: setFilterLeaseType, opts: [['', 'All Lease Types'], ['LONG_TERM', 'Long Term'], ['SHORT_TERM', 'Short Term'], ['DAILY', 'Daily'], ['MONTHLY', 'Monthly']] },
         ].map(({ label, val, setVal, opts }) => (
           <div key={label} className="flex-1 min-w-[140px]">
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">{label}</label>
+            <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">{label}</label>
             <select value={val} onChange={e => setVal(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-900/60 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50">
+              className="w-full px-3 py-2 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-blue-500/50">
               {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </div>
@@ -319,41 +319,41 @@ export default function ContractsV2Page() {
       </div>
 
       {/* Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-x-auto">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl overflow-x-auto">
         <table className="w-full">
           <thead>
-            <tr className="border-b border-white/5">
+            <tr className="border-b border-[var(--border-subtle)]">
               {['Contract #', 'Type', 'Lessee', 'Lease Type', 'Vehicles', 'Duration', 'Monthly Rate', 'Status', 'Branch', 'Actions'].map(h => (
-                <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-300 whitespace-nowrap">{h}</th>
+                <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={10} className="px-4 py-12 text-center text-slate-500">No contracts found</td></tr>
+              <tr><td colSpan={10} className="px-4 py-12 text-center text-[var(--text-faint)]">No contracts found</td></tr>
             ) : filtered.map(c => (
               <React.Fragment key={c.id}>
-                <tr className="border-b border-white/5 hover:bg-white/[0.03] transition-colors">
-                  <td className="px-4 py-3.5 text-sm font-bold text-white whitespace-nowrap">{c.contractNumber}</td>
+                <tr className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
+                  <td className="px-4 py-3.5 text-sm font-bold text-[var(--text-main)] whitespace-nowrap">{c.contractNumber}</td>
                   <td className="px-4 py-3.5">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getBadge('agreement', c.agreementType)}`}>{c.agreementType}</span>
                   </td>
-                  <td className="px-4 py-3.5 text-sm text-white">{c.lessee}</td>
+                  <td className="px-4 py-3.5 text-sm text-[var(--text-main)]">{c.lessee}</td>
                   <td className="px-4 py-3.5">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getBadge('lease', c.leaseType)}`}>{c.leaseType.replace('_', ' ')}</span>
                   </td>
                   <td className="px-4 py-3.5">
                     <button onClick={() => setExpandedVehicles(prev => { const n = new Set(prev); n.has(c.id) ? n.delete(c.id) : n.add(c.id); return n; })}
-                      className="px-3 py-1 rounded-full bg-slate-700/60 text-white text-xs font-semibold hover:bg-slate-600/60 transition-colors">
+                      className="px-3 py-1 rounded-full bg-[var(--bg-surface-hover)]/60 text-[var(--text-main)] text-xs font-semibold hover:bg-[var(--bg-surface-hover)]/60 transition-colors">
                       {c.vehicleCount ?? (c.vehicles?.length ?? 0)} unit{(c.vehicleCount ?? 0) !== 1 ? 's' : ''} {expandedVehicles.has(c.id) ? '' : ''}
                     </button>
                   </td>
-                  <td className="px-4 py-3.5 text-sm font-semibold text-white">{calcDuration(c.startDate, c.endDate)}</td>
-                  <td className="px-4 py-3.5 text-sm font-semibold text-white">{(c.monthlyRate ?? 0).toLocaleString()} AED</td>
+                  <td className="px-4 py-3.5 text-sm font-semibold text-[var(--text-main)]">{calcDuration(c.startDate, c.endDate)}</td>
+                  <td className="px-4 py-3.5 text-sm font-semibold text-[var(--text-main)]">{(c.monthlyRate ?? 0).toLocaleString()} AED</td>
                   <td className="px-4 py-3.5">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getBadge('status', c.status)}`}>{c.status}</span>
                   </td>
-                  <td className="px-4 py-3.5 text-sm text-white">{c.branch || '-'}</td>
+                  <td className="px-4 py-3.5 text-sm text-[var(--text-main)]">{c.branch || '-'}</td>
                   <td className="px-4 py-3.5">
                     <div className="flex gap-1.5 flex-wrap">
                       <button
@@ -388,29 +388,29 @@ export default function ContractsV2Page() {
                 </tr>
                 {/* Expanded vehicles */}
                 {expandedVehicles.has(c.id) && (
-                  <tr className="border-b border-white/5 bg-slate-800/30">
+                  <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/30">
                     <td colSpan={10} className="px-6 py-4">
-                      <div className="bg-slate-900/50 rounded-xl p-4">
-                        <p className="text-xs font-semibold text-slate-300 mb-3">Vehicles in {c.contractNumber}:</p>
+                      <div className="bg-[var(--bg-surface)]/50 rounded-xl p-4">
+                        <p className="text-xs font-semibold text-[var(--text-muted)] mb-3">Vehicles in {c.contractNumber}:</p>
                         {(c.vehicles ?? []).length === 0 ? (
-                          <p className="text-slate-500 text-sm">No vehicles linked yet. Use "Add Vehicle" to attach.</p>
+                          <p className="text-[var(--text-faint)] text-sm">No vehicles linked yet. Use "Add Vehicle" to attach.</p>
                         ) : (
                           <table className="w-full text-sm">
                             <thead>
-                              <tr className="border-b border-white/5">
+                              <tr className="border-b border-[var(--border-subtle)]">
                                 {['Type', 'Make / Model', 'License Plate', 'Driver', 'Monthly Rate', 'Status'].map(h => (
-                                  <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-slate-300">{h}</th>
+                                  <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-[var(--text-muted)]">{h}</th>
                                 ))}
                               </tr>
                             </thead>
                             <tbody>
                               {(c.vehicles ?? []).map(v => (
-                                <tr key={v.id} className="border-b border-white/5">
-                                  <td className="px-3 py-2 text-white">{v.type}</td>
-                                  <td className="px-3 py-2 text-white">{v.make} {v.model}</td>
-                                  <td className="px-3 py-2 text-slate-200">{v.licensePlate}</td>
-                                  <td className="px-3 py-2 text-slate-200">{v.driver || '-'}</td>
-                                  <td className="px-3 py-2 text-white font-semibold">{(v.monthlyRate ?? 0).toLocaleString()} AED</td>
+                                <tr key={v.id} className="border-b border-[var(--border-subtle)]">
+                                  <td className="px-3 py-2 text-[var(--text-main)]">{v.type}</td>
+                                  <td className="px-3 py-2 text-[var(--text-main)]">{v.make} {v.model}</td>
+                                  <td className="px-3 py-2 text-[var(--text-main)]">{v.licensePlate}</td>
+                                  <td className="px-3 py-2 text-[var(--text-main)]">{v.driver || '-'}</td>
+                                  <td className="px-3 py-2 text-[var(--text-main)] font-semibold">{(v.monthlyRate ?? 0).toLocaleString()} AED</td>
                                   <td className="px-3 py-2"><span className={`px-2 py-0.5 rounded-full text-xs border ${getBadge('status', v.status)}`}>{v.status}</span></td>
                                 </tr>
                               ))}
@@ -430,13 +430,13 @@ export default function ContractsV2Page() {
       {/*  VIEW CONTRACT MODAL  */}
       {selectedContract && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-slate-800 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
-            <div className="flex items-center justify-between p-6 border-b border-white/10">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between p-6 border-b border-[var(--border-subtle)]">
               <div>
-                <h2 className="text-xl font-bold text-white">{selectedContract.contractNumber}</h2>
-                <p className="text-xs text-slate-400 mt-0.5">{selectedContract.agreementType} &middot; {selectedContract.leaseType.replace('_', ' ')}</p>
+                <h2 className="text-xl font-bold text-[var(--text-main)]">{selectedContract.contractNumber}</h2>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">{selectedContract.agreementType} &middot; {selectedContract.leaseType.replace('_', ' ')}</p>
               </div>
-              <button onClick={() => setSelectedContract(null)} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white text-lg transition-all">x</button>
+              <button onClick={() => setSelectedContract(null)} className="w-8 h-8 flex items-center justify-center rounded-full bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] text-lg transition-all">x</button>
             </div>
             <div className="p-6 space-y-5">
               <div className="grid grid-cols-2 gap-3">
@@ -450,9 +450,9 @@ export default function ContractsV2Page() {
                   { label: 'Status', value: selectedContract.status },
                   { label: 'Vehicle Count', value: `${selectedContract.vehicleCount ?? (selectedContract.vehicles?.length ?? 0)} unit(s)` },
                 ].map(({ label, value }) => (
-                  <div key={label} className="bg-slate-700/30 border border-white/10 rounded-xl p-3">
-                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">{label}</p>
-                    <p className="text-sm font-semibold text-white">{value}</p>
+                  <div key={label} className="bg-[var(--bg-surface-hover)]/30 border border-[var(--border-subtle)] rounded-xl p-3">
+                    <p className="text-xs text-[var(--text-faint)] uppercase tracking-wider mb-1">{label}</p>
+                    <p className="text-sm font-semibold text-[var(--text-main)]">{value}</p>
                   </div>
                 ))}
               </div>
@@ -462,21 +462,21 @@ export default function ContractsV2Page() {
                   { label: 'Maintenance', value: selectedContract.maintenance ? 'Included' : 'Not Included', ok: selectedContract.maintenance },
                   { label: 'Driver', value: selectedContract.driver ? 'Included' : 'Not Included', ok: selectedContract.driver },
                 ].map(({ label, value, ok }) => (
-                  <div key={label} className={`border rounded-xl p-3 ${ok ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-700/30 border-white/10'}`}>
-                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">{label}</p>
-                    <p className={`text-sm font-semibold ${ok ? 'text-emerald-400' : 'text-slate-400'}`}>{value}</p>
+                  <div key={label} className={`border rounded-xl p-3 ${ok ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-[var(--bg-surface-hover)]/30 border-[var(--border-subtle)]'}`}>
+                    <p className="text-xs text-[var(--text-faint)] uppercase tracking-wider mb-1">{label}</p>
+                    <p className={`text-sm font-semibold ${ok ? 'text-emerald-400' : 'text-[var(--text-muted)]'}`}>{value}</p>
                   </div>
                 ))}
               </div>
               {(selectedContract.vehicles ?? []).length > 0 && (
                 <div>
-                  <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Assigned Vehicles</h4>
+                  <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Assigned Vehicles</h4>
                   <div className="space-y-2">
                     {(selectedContract.vehicles ?? []).map(v => (
-                      <div key={v.id} className="bg-slate-700/30 border border-white/10 rounded-xl px-4 py-3 flex items-center justify-between">
+                      <div key={v.id} className="bg-[var(--bg-surface-hover)]/30 border border-[var(--border-subtle)] rounded-xl px-4 py-3 flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-semibold text-white">{v.make} {v.model} <span className="text-slate-400 font-normal text-xs">({v.type})</span></p>
-                          <p className="text-xs text-slate-500">{v.licensePlate}{v.driver && v.driver !== 'N/A' ? `  Driver: ${v.driver}` : ''}</p>
+                          <p className="text-sm font-semibold text-[var(--text-main)]">{v.make} {v.model} <span className="text-[var(--text-muted)] font-normal text-xs">({v.type})</span></p>
+                          <p className="text-xs text-[var(--text-faint)]">{v.licensePlate}{v.driver && v.driver !== 'N/A' ? `  Driver: ${v.driver}` : ''}</p>
                         </div>
                         <span className="text-sm font-bold text-emerald-400">{(v.monthlyRate ?? 0).toLocaleString()} AED</span>
                       </div>
@@ -485,9 +485,9 @@ export default function ContractsV2Page() {
                 </div>
               )}
             </div>
-            <div className="p-6 border-t border-white/10 space-y-3">
+            <div className="p-6 border-t border-[var(--border-subtle)] space-y-3">
               <div>
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Contract actions</p>
+                <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Contract actions</p>
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                   <Link
                     href={`/leasing/vehicle-exchange?contractId=${encodeURIComponent(selectedContract.id)}`}
@@ -524,11 +524,11 @@ export default function ContractsV2Page() {
               <div className="flex gap-3 justify-end">
                 <button
                   onClick={() => { setShowAddVehicle(selectedContract); setSelectedContract(null); setNewVehicleForm({ type: '', make: '', model: '', licensePlate: '', driver: '', monthlyRate: '' }); setAddVehicleMsg(''); }}
-                  className="px-5 py-2.5 rounded-xl bg-indigo-600/80 border border-indigo-500/40 text-white hover:bg-indigo-600 font-medium transition-all text-sm">
+                  className="px-5 py-2.5 rounded-xl bg-indigo-600/80 border border-indigo-500/40 text-[var(--text-main)] hover:bg-indigo-600 font-medium transition-all text-sm">
                   Add Vehicle
                 </button>
                 <button onClick={() => setSelectedContract(null)}
-                  className="px-6 py-2.5 rounded-xl border border-white/10 text-slate-300 hover:bg-white/5 font-medium transition-all text-sm">
+                  className="px-6 py-2.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] font-medium transition-all text-sm">
                   Close
                 </button>
               </div>
@@ -540,13 +540,13 @@ export default function ContractsV2Page() {
       {/*  ADD VEHICLE MODAL  */}
       {showAddVehicle && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-slate-800 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl">
-            <div className="flex items-center justify-between p-6 border-b border-white/10">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-lg shadow-2xl">
+            <div className="flex items-center justify-between p-6 border-b border-[var(--border-subtle)]">
               <div>
-                <h2 className="text-xl font-bold text-white">Add Vehicle</h2>
-                <p className="text-xs text-slate-400 mt-0.5">Contract: {showAddVehicle.contractNumber} &middot; {showAddVehicle.lessee}</p>
+                <h2 className="text-xl font-bold text-[var(--text-main)]">Add Vehicle</h2>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">Contract: {showAddVehicle.contractNumber} &middot; {showAddVehicle.lessee}</p>
               </div>
-              <button onClick={() => setShowAddVehicle(null)} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white text-lg transition-all">x</button>
+              <button onClick={() => setShowAddVehicle(null)} className="w-8 h-8 flex items-center justify-center rounded-full bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] text-lg transition-all">x</button>
             </div>
             <div className="p-6 grid grid-cols-2 gap-4">
               {[
@@ -558,13 +558,13 @@ export default function ContractsV2Page() {
                 { key: 'monthlyRate', label: 'Monthly Rate (AED)', placeholder: '0' },
               ].map(({ key, label, placeholder }) => (
                 <div key={key}>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">{label}</label>
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">{label}</label>
                   <input
                     type={key === 'monthlyRate' ? 'number' : 'text'}
                     placeholder={placeholder}
                     value={(newVehicleForm as any)[key]}
                     onChange={e => setNewVehicleForm(p => ({ ...p, [key]: e.target.value }))}
-                    className="w-full px-3 py-2 bg-slate-900/60 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500" />
+                    className="w-full px-3 py-2 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-blue-500" />
                 </div>
               ))}
             </div>
@@ -573,9 +573,9 @@ export default function ContractsV2Page() {
                 {addVehicleMsg}
               </div>
             )}
-            <div className="p-6 border-t border-white/10 flex gap-3 justify-end">
+            <div className="p-6 border-t border-[var(--border-subtle)] flex gap-3 justify-end">
               <button onClick={() => setShowAddVehicle(null)}
-                className="px-5 py-2.5 rounded-xl border border-white/10 text-slate-300 hover:bg-white/5 font-medium transition-all text-sm">Cancel</button>
+                className="px-5 py-2.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] font-medium transition-all text-sm">Cancel</button>
               <button
                 disabled={addingVehicle || !newVehicleForm.type || !newVehicleForm.licensePlate}
                 onClick={async () => {
@@ -605,7 +605,7 @@ export default function ContractsV2Page() {
                   }
                   setAddingVehicle(false);
                 }}
-                className="px-6 py-2.5 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-500 transition-all disabled:opacity-50 text-sm">
+                className="px-6 py-2.5 rounded-xl bg-indigo-600 text-[var(--text-main)] font-bold hover:bg-indigo-500 transition-all disabled:opacity-50 text-sm">
                 {addingVehicle ? 'Adding...' : 'Add Vehicle'}
               </button>
             </div>
@@ -619,55 +619,55 @@ export default function ContractsV2Page() {
         if (!contract) return null;
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-            <div className="bg-slate-800 border border-white/10 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
-              <div className="flex items-center justify-between p-6 border-b border-white/10">
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
+              <div className="flex items-center justify-between p-6 border-b border-[var(--border-subtle)]">
                 <div>
-                  <h2 className="text-xl font-bold text-white">Payment Schedule</h2>
-                  <p className="text-xs text-slate-400 mt-0.5">{contract.contractNumber} &middot; {contract.lessee}</p>
+                  <h2 className="text-xl font-bold text-[var(--text-main)]">Payment Schedule</h2>
+                  <p className="text-xs text-[var(--text-muted)] mt-0.5">{contract.contractNumber} &middot; {contract.lessee}</p>
                 </div>
                 <button onClick={() => { setShowPaymentSchedule(null); setPaymentPreview([]); }}
-                  className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white text-lg transition-all">x</button>
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] text-lg transition-all">x</button>
               </div>
               <div className="p-6 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">Number of Months</label>
+                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Number of Months</label>
                     <input type="number" min="1" max="60" value={paymentScheduleMonths}
                       onChange={e => setPaymentScheduleMonths(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-900/60 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500" />
+                      className="w-full px-3 py-2 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-blue-500" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">VAT Rate (%)</label>
+                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">VAT Rate (%)</label>
                     <input type="number" min="0" max="30" step="0.5" value={paymentVatRate}
                       onChange={e => setPaymentVatRate(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-900/60 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500" />
+                      className="w-full px-3 py-2 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-blue-500" />
                   </div>
                 </div>
                 <button onClick={generatePaymentPreview}
-                  className="px-5 py-2.5 rounded-xl bg-amber-600 text-white font-semibold hover:bg-amber-500 transition-all text-sm">
+                  className="px-5 py-2.5 rounded-xl bg-amber-600 text-[var(--text-main)] font-semibold hover:bg-amber-500 transition-all text-sm">
                   Generate Preview
                 </button>
                 {paymentPreview.length > 0 && (
                   <div>
                     <div className="flex items-center justify-between mb-3">
-                      <p className="text-sm font-semibold text-white">Payment Schedule Preview</p>
-                      <p className="text-xs text-slate-400">Total: {paymentPreview.reduce((a, p) => a + p.total, 0).toLocaleString()} AED</p>
+                      <p className="text-sm font-semibold text-[var(--text-main)]">Payment Schedule Preview</p>
+                      <p className="text-xs text-[var(--text-muted)]">Total: {paymentPreview.reduce((a, p) => a + p.total, 0).toLocaleString()} AED</p>
                     </div>
-                    <div className="overflow-x-auto rounded-xl border border-white/10">
+                    <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="border-b border-white/5 bg-slate-900/40">
+                          <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/40">
                             {['Month', 'Due Date', 'Amount', 'VAT', 'Total'].map(h => (
-                              <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-slate-300">{h}</th>
+                              <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-[var(--text-muted)]">{h}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
                           {paymentPreview.map(p => (
-                            <tr key={p.month} className="border-b border-white/5 hover:bg-white/[0.02]">
-                              <td className="px-4 py-2.5 text-white font-semibold">{p.month}</td>
-                              <td className="px-4 py-2.5 text-slate-200">{p.dueDate}</td>
-                              <td className="px-4 py-2.5 text-white">{p.amount.toLocaleString()} AED</td>
+                            <tr key={p.month} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]">
+                              <td className="px-4 py-2.5 text-[var(--text-main)] font-semibold">{p.month}</td>
+                              <td className="px-4 py-2.5 text-[var(--text-main)]">{p.dueDate}</td>
+                              <td className="px-4 py-2.5 text-[var(--text-main)]">{p.amount.toLocaleString()} AED</td>
                               <td className="px-4 py-2.5 text-amber-400">{p.vat.toLocaleString(undefined, { maximumFractionDigits: 2 })} AED</td>
                               <td className="px-4 py-2.5 text-emerald-400 font-bold">{p.total.toLocaleString(undefined, { maximumFractionDigits: 2 })} AED</td>
                             </tr>
@@ -688,7 +688,7 @@ export default function ContractsV2Page() {
                             else alert('Failed to save payment schedule');
                           } catch { alert('Error saving payment schedule'); }
                         }}
-                        className="px-6 py-2.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-500 transition-all text-sm">
+                        className="px-6 py-2.5 rounded-xl bg-emerald-600 text-[var(--text-main)] font-bold hover:bg-emerald-500 transition-all text-sm">
                         Confirm &amp; Save
                       </button>
                     </div>
@@ -703,25 +703,25 @@ export default function ContractsV2Page() {
       {/*  NEW CONTRACT MODAL  */}
       {showNewContract && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-slate-800 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl">
-            <div className="flex items-center justify-between p-6 border-b border-white/10">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between p-6 border-b border-[var(--border-subtle)]">
               <div>
-                <h2 className="text-xl font-bold text-white">New Lease Contract</h2>
-                <p className="text-xs text-slate-400 mt-0.5">Step {newContractForm.step} of 3</p>
+                <h2 className="text-xl font-bold text-[var(--text-main)]">New Lease Contract</h2>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">Step {newContractForm.step} of 3</p>
               </div>
               <button onClick={() => setShowNewContract(false)}
-                className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white text-lg transition-all">x</button>
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] text-lg transition-all">x</button>
             </div>
 
             {/* Step bar */}
             <div className="flex gap-1.5 px-6 pt-5 pb-1">
               {[1, 2, 3].map(n => (
-                <div key={n} className={`flex-1 h-1.5 rounded-full ${n <= newContractForm.step ? 'bg-blue-500' : 'bg-slate-700'}`} />
+                <div key={n} className={`flex-1 h-1.5 rounded-full ${n <= newContractForm.step ? 'bg-blue-500' : 'bg-[var(--bg-surface-hover)]'}`} />
               ))}
             </div>
             <div className="flex gap-1.5 px-6 pb-5 pt-1">
               {[['Contract Info', 1], ['Vehicles', 2], ['Inclusions', 3]].map(([label, n]) => (
-                <p key={n} className={`flex-1 text-xs text-center font-medium ${newContractForm.step === n ? 'text-blue-400' : 'text-slate-600'}`}>{label}</p>
+                <p key={n} className={`flex-1 text-xs text-center font-medium ${newContractForm.step === n ? 'text-blue-400' : 'text-[var(--text-faint)]'}`}>{label}</p>
               ))}
             </div>
 
@@ -729,10 +729,10 @@ export default function ContractsV2Page() {
               {/* Step 1 */}
               {newContractForm.step === 1 && (<>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">Lessee</label>
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Lessee</label>
                   <select value={newContractForm.lessee}
                     onChange={e => setNewContractForm(p => ({ ...p, lessee: e.target.value }))}
-                    className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50">
+                    className="w-full px-3 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-blue-500/50">
                     <option value="">Select lessee</option>
                     {lessees.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                   </select>
@@ -742,19 +742,19 @@ export default function ContractsV2Page() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">Agreement Type</label>
+                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Agreement Type</label>
                     <select value={newContractForm.agreementType}
                       onChange={e => setNewContractForm(p => ({ ...p, agreementType: e.target.value as any }))}
-                      className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50">
+                      className="w-full px-3 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-blue-500/50">
                       <option value="INDIVIDUAL">Individual</option>
                       <option value="MASTER">Master</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">Lease Type</label>
+                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Lease Type</label>
                     <select value={newContractForm.leaseType}
                       onChange={e => setNewContractForm(p => ({ ...p, leaseType: e.target.value as any }))}
-                      className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50">
+                      className="w-full px-3 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-blue-500/50">
                       <option value="LONG_TERM">Long Term</option>
                       <option value="SHORT_TERM">Short Term</option>
                       <option value="DAILY">Daily</option>
@@ -764,66 +764,66 @@ export default function ContractsV2Page() {
                 </div>
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">Duration (months)</label>
+                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Duration (months)</label>
                     <input type="number" min="1" placeholder="e.g. 24" value={newContractForm.durationMonths}
                       onChange={e => {
                         const d = parseInt(e.target.value) || 0;
                         const s = newContractForm.startDate;
                         setNewContractForm(p => ({ ...p, durationMonths: e.target.value, endDate: d && s ? addMonths(s, d) : p.endDate }));
                       }}
-                      className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500/50" />
+                      className="w-full px-3 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-blue-500/50" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">Start Date</label>
+                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Start Date</label>
                     <input type="date" value={newContractForm.startDate}
                       onChange={e => {
                         const s = e.target.value;
                         const d = parseInt(newContractForm.durationMonths) || 0;
                         setNewContractForm(p => ({ ...p, startDate: s, endDate: d && s ? addMonths(s, d) : p.endDate }));
                       }}
-                      className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50" />
+                      className="w-full px-3 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-blue-500/50" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">End Date {newContractForm.durationMonths && <span className="text-emerald-400">(auto)</span>}</label>
+                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">End Date {newContractForm.durationMonths && <span className="text-emerald-400">(auto)</span>}</label>
                     <input type="date" value={newContractForm.endDate}
                       onChange={e => setNewContractForm(p => ({ ...p, endDate: e.target.value }))}
-                      className={`w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-sm focus:outline-none focus:border-blue-500/50 ${newContractForm.durationMonths ? 'text-emerald-400' : 'text-white'}`} />
+                      className={`w-full px-3 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg text-sm focus:outline-none focus:border-blue-500/50 ${newContractForm.durationMonths ? 'text-emerald-400' : 'text-[var(--text-main)]'}`} />
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">Monthly Rate</label>
+                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Monthly Rate</label>
                     <input type="number" value={newContractForm.monthlyRate} placeholder="0"
                       onChange={e => setNewContractForm(p => ({ ...p, monthlyRate: e.target.value }))}
-                      className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500/50" />
+                      className="w-full px-3 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-blue-500/50" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">Currency</label>
+                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Currency</label>
                     <select value={newContractForm.currency}
                       onChange={e => setNewContractForm(p => ({ ...p, currency: e.target.value }))}
-                      className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50">
+                      className="w-full px-3 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-blue-500/50">
                       <option>AED</option><option>USD</option><option>EUR</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">Security Deposit</label>
+                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Security Deposit</label>
                     <input type="number" value={newContractForm.securityDeposit} placeholder="0"
                       onChange={e => setNewContractForm(p => ({ ...p, securityDeposit: e.target.value }))}
-                      className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500/50" />
+                      className="w-full px-3 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-blue-500/50" />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">Mileage Cap (annual)</label>
+                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Mileage Cap (annual)</label>
                     <input type="number" value={newContractForm.mileageCap} placeholder="km per year"
                       onChange={e => setNewContractForm(p => ({ ...p, mileageCap: e.target.value }))}
-                      className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500/50" />
+                      className="w-full px-3 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-blue-500/50" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">Branch</label>
+                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Branch</label>
                     <select value={newContractForm.branch}
                       onChange={e => setNewContractForm(p => ({ ...p, branch: e.target.value }))}
-                      className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50">
+                      className="w-full px-3 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-blue-500/50">
                       <option value="">Select branch</option>
                       <option>Dubai HQ</option><option>Abu Dhabi</option><option>Sharjah</option>
                     </select>
@@ -833,11 +833,11 @@ export default function ContractsV2Page() {
 
               {/* Step 2 */}
               {newContractForm.step === 2 && (<>
-                <h3 className="text-sm font-semibold text-white mb-2">Assign Vehicles <span className="text-slate-500 font-normal">(optional  can add later)</span></h3>
+                <h3 className="text-sm font-semibold text-[var(--text-main)] mb-2">Assign Vehicles <span className="text-[var(--text-faint)] font-normal">(optional  can add later)</span></h3>
                 {newContractForm.vehicles.map((v, idx) => (
-                  <div key={v.id} className="bg-slate-900/50 border border-white/10 rounded-xl p-4">
+                  <div key={v.id} className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-xl p-4">
                     <div className="flex justify-between items-center mb-3">
-                      <p className="text-sm font-medium text-slate-300">Vehicle {idx + 1}</p>
+                      <p className="text-sm font-medium text-[var(--text-muted)]">Vehicle {idx + 1}</p>
                       <button onClick={() => setNewContractForm(p => ({ ...p, vehicles: p.vehicles.filter((_, i) => i !== idx) }))}
                         className="text-rose-400 hover:text-rose-300 text-xs font-medium">Remove</button>
                     </div>
@@ -846,7 +846,7 @@ export default function ContractsV2Page() {
                         <input key={f} type={f === 'monthlyRate' ? 'number' : 'text'} placeholder={pl}
                           value={(v as any)[f]}
                           onChange={e => { const up = [...newContractForm.vehicles]; up[idx] = { ...up[idx], [f]: f === 'monthlyRate' ? parseFloat(e.target.value) : e.target.value }; setNewContractForm(p => ({ ...p, vehicles: up })); }}
-                          className="px-3 py-2 bg-slate-800/60 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500/50" />
+                          className="px-3 py-2 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-blue-500/50" />
                       ))}
                     </div>
                   </div>
@@ -859,30 +859,30 @@ export default function ContractsV2Page() {
 
               {/* Step 3 */}
               {newContractForm.step === 3 && (<>
-                <h3 className="text-sm font-semibold text-white mb-3">Bundled Services &amp; Notes</h3>
+                <h3 className="text-sm font-semibold text-[var(--text-main)] mb-3">Bundled Services &amp; Notes</h3>
                 <div className="space-y-3">
                   {[
                     { key: 'insuranceIncluded', label: 'Insurance Included', desc: 'Full comprehensive insurance coverage' },
                     { key: 'maintenanceIncluded', label: 'Maintenance Included', desc: 'Scheduled service and repairs' },
                     { key: 'driverIncluded', label: 'Driver Included', desc: 'Professional driver assigned to vehicle' },
                   ].map(({ key, label, desc }) => (
-                    <label key={key} className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all ${(newContractForm as any)[key] ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-900/40 border-white/10 hover:border-white/20'}`}>
+                    <label key={key} className={`flex items-center gap-4 p-4 rounded-xl border cursor-pointer transition-all ${(newContractForm as any)[key] ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-[var(--bg-surface)]/40 border-[var(--border-subtle)] hover:border-[var(--border-strong)]'}`}>
                       <input type="checkbox" checked={(newContractForm as any)[key]}
                         onChange={e => setNewContractForm(p => ({ ...p, [key]: e.target.checked }))}
                         className="w-4 h-4 accent-emerald-500" />
                       <div>
-                        <p className={`text-sm font-semibold ${(newContractForm as any)[key] ? 'text-emerald-400' : 'text-slate-300'}`}>{label}</p>
-                        <p className="text-xs text-slate-500">{desc}</p>
+                        <p className={`text-sm font-semibold ${(newContractForm as any)[key] ? 'text-emerald-400' : 'text-[var(--text-muted)]'}`}>{label}</p>
+                        <p className="text-xs text-[var(--text-faint)]">{desc}</p>
                       </div>
                     </label>
                   ))}
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">Notes</label>
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Notes</label>
                   <textarea value={newContractForm.notes} rows={3}
                     onChange={e => setNewContractForm(p => ({ ...p, notes: e.target.value }))}
                     placeholder="Additional terms or notes..."
-                    className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500/50 resize-none" />
+                    className="w-full px-3 py-2.5 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-blue-500/50 resize-none" />
                 </div>
               </>)}
             </div>
@@ -891,14 +891,14 @@ export default function ContractsV2Page() {
             <div className="px-6 pb-6 flex gap-3 justify-between">
               {newContractForm.step > 1 ? (
                 <button onClick={() => setNewContractForm(p => ({ ...p, step: (p.step - 1) as any }))}
-                  className="px-5 py-2.5 rounded-xl border border-white/10 text-slate-300 hover:bg-white/5 font-medium transition-all text-sm">Back</button>
+                  className="px-5 py-2.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] font-medium transition-all text-sm">Back</button>
               ) : <span />}
               {newContractForm.step < 3 ? (
                 <button onClick={() => setNewContractForm(p => ({ ...p, step: (p.step + 1) as any }))}
-                  className="px-6 py-2.5 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-500 transition-all text-sm">Next</button>
+                  className="px-6 py-2.5 rounded-xl bg-blue-600 text-[var(--text-main)] font-bold hover:bg-blue-500 transition-all text-sm">Next</button>
               ) : (
                 <button onClick={handleCreateContract} disabled={saving || !newContractForm.lessee}
-                  className="px-6 py-2.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-500 transition-all disabled:opacity-50 text-sm">
+                  className="px-6 py-2.5 rounded-xl bg-emerald-600 text-[var(--text-main)] font-bold hover:bg-emerald-500 transition-all disabled:opacity-50 text-sm">
                   {saving ? 'Creating...' : 'Create Contract'}
                 </button>
               )}

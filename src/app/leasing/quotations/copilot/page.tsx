@@ -138,23 +138,23 @@ export default function QuotationCopilotPage() {
       <div>
         <Link
           href="/leasing/quotations"
-          className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-cyan-400"
+          className="inline-flex items-center gap-1 text-xs text-[var(--text-faint)] hover:text-cyan-400"
         >
           <ChevronLeft className="h-3 w-3" /> Back to quotations
         </Link>
-        <h1 className="text-3xl font-bold text-white mt-2 flex items-center gap-2">
+        <h1 className="text-3xl font-bold text-[var(--text-main)] mt-2 flex items-center gap-2">
           <Sparkles className="h-6 w-6 text-violet-400" />
           AI Quotation Co-pilot
         </h1>
-        <p className="text-sm text-slate-400 mt-1">
+        <p className="text-sm text-[var(--text-muted)] mt-1">
           Describe what the customer needs in plain English or Arabic. The co-pilot
           turns it into a structured quotation you can review and tweak.
         </p>
       </div>
 
       {/* Brief input */}
-      <div className="bg-slate-800/50 border border-violet-500/20 rounded-2xl p-6 backdrop-blur-sm">
-        <label className="block text-sm font-medium text-slate-300 mb-2">
+      <div className="bg-[var(--bg-surface)]/50 border border-violet-500/20 rounded-2xl p-6 backdrop-blur-sm">
+        <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">
           Customer brief
         </label>
         <textarea
@@ -162,16 +162,16 @@ export default function QuotationCopilotPage() {
           onChange={(e) => setBrief(e.target.value)}
           rows={5}
           placeholder='e.g. "3 Toyota SUVs for 24 months, ~30,000 km/year, corporate client, bundled insurance and maintenance, no driver."'
-          className="w-full px-4 py-3 rounded-xl bg-slate-900/60 border border-slate-700 text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none transition resize-none"
+          className="w-full px-4 py-3 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-violet-500 focus:outline-none transition resize-none"
         />
 
         <div className="flex flex-wrap gap-2 mt-3">
-          <span className="text-xs text-slate-500 self-center mr-1">Try an example:</span>
+          <span className="text-xs text-[var(--text-faint)] self-center mr-1">Try an example:</span>
           {EXAMPLES.map((ex) => (
             <button
               key={ex.label}
               onClick={() => setBrief(ex.brief)}
-              className="text-xs px-3 py-1 rounded-full bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 border border-slate-600 transition"
+              className="text-xs px-3 py-1 rounded-full bg-[var(--bg-surface-hover)]/50 hover:bg-[var(--bg-surface-hover)]/50 text-[var(--text-muted)] border border-[var(--border-strong)] transition"
             >
               {ex.label}
             </button>
@@ -179,7 +179,7 @@ export default function QuotationCopilotPage() {
         </div>
 
         <div className="mt-4 flex items-center justify-between">
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-[var(--text-faint)]">
             Powered by GPT-4o · responses typically take 5–15 seconds
           </p>
           <button
@@ -204,7 +204,7 @@ export default function QuotationCopilotPage() {
       {suggestion && (
         <div className="space-y-4">
           {/* Header card */}
-          <div className="bg-slate-800/50 border border-emerald-500/20 rounded-2xl p-6">
+          <div className="bg-[var(--bg-surface)]/50 border border-emerald-500/20 rounded-2xl p-6">
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-5 w-5 text-emerald-400" />
@@ -216,11 +216,11 @@ export default function QuotationCopilotPage() {
                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${CONFIDENCE_COLORS[suggestion.confidence]}`}>
                   {suggestion.confidence} confidence
                 </span>
-                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-700 text-slate-300 border border-slate-600">
+                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border border-[var(--border-strong)]">
                   {suggestion.detectedLanguage.toUpperCase()}
                 </span>
                 {meta && (
-                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-700/50 text-slate-400 border border-slate-700">
+                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--bg-surface-hover)]/50 text-[var(--text-muted)] border border-[var(--border-subtle)]">
                     {meta.durationMs}ms · {meta.promptTokens + meta.completionTokens} tokens
                   </span>
                 )}
@@ -235,36 +235,36 @@ export default function QuotationCopilotPage() {
           </div>
 
           {/* Vehicles */}
-          <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6">
-            <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">
+          <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6">
+            <h3 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-4">
               Suggested vehicles ({suggestion.vehicles.length})
             </h3>
             <div className="space-y-3">
               {suggestion.vehicles.map((v, i) => (
-                <div key={i} className="rounded-xl bg-slate-900/40 border border-slate-700 p-4">
+                <div key={i} className="rounded-xl bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] p-4">
                   <div className="flex items-start justify-between gap-4 flex-wrap">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${VEHICLE_TYPE_COLORS[v.vehicleType] ?? 'bg-slate-700 text-slate-300 border-slate-600'}`}>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${VEHICLE_TYPE_COLORS[v.vehicleType] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border-[var(--border-strong)]'}`}>
                           {v.vehicleType}
                         </span>
-                        <span className="font-semibold text-white">
+                        <span className="font-semibold text-[var(--text-main)]">
                           {v.quantity} × {v.make} {v.model} ({v.year})
                         </span>
                       </div>
                       <p
                         dir={isRtl ? 'rtl' : 'ltr'}
-                        className="text-sm text-slate-400 mt-2"
+                        className="text-sm text-[var(--text-muted)] mt-2"
                       >
                         {v.rationale}
                       </p>
                     </div>
                     <div className="text-right">
-                      <div className="text-xs text-slate-400">Monthly rate</div>
-                      <div className="text-lg font-bold text-white">
+                      <div className="text-xs text-[var(--text-muted)]">Monthly rate</div>
+                      <div className="text-lg font-bold text-[var(--text-main)]">
                         AED {v.monthlyRate.toLocaleString()}
                       </div>
-                      <div className="text-xs text-slate-500 mt-1">
+                      <div className="text-xs text-[var(--text-faint)] mt-1">
                         AED {(v.monthlyRate * v.quantity).toLocaleString()} total/mo
                       </div>
                     </div>
@@ -275,8 +275,8 @@ export default function QuotationCopilotPage() {
           </div>
 
           {/* Bundled services */}
-          <div className="bg-slate-800/50 border border-slate-700 rounded-2xl p-6">
-            <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">
+          <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6">
+            <h3 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-4">
               Bundled services
             </h3>
             <div className="grid grid-cols-3 gap-3">
@@ -287,13 +287,13 @@ export default function QuotationCopilotPage() {
           </div>
 
           {/* Pricing rationale */}
-          <div className="bg-slate-800/50 border border-cyan-500/20 rounded-2xl p-6">
+          <div className="bg-[var(--bg-surface)]/50 border border-cyan-500/20 rounded-2xl p-6">
             <h3 className="text-sm font-semibold text-cyan-300 uppercase tracking-wider mb-2">
               Pricing rationale
             </h3>
             <p
               dir={isRtl ? 'rtl' : 'ltr'}
-              className="text-sm text-slate-300 leading-relaxed"
+              className="text-sm text-[var(--text-muted)] leading-relaxed"
             >
               {suggestion.pricingRationale}
             </p>
@@ -317,7 +317,7 @@ export default function QuotationCopilotPage() {
           <div className="flex gap-3 justify-end">
             <button
               onClick={() => { setSuggestion(null); setMeta(null); }}
-              className="px-4 py-2 rounded-xl bg-slate-700 text-slate-200 hover:bg-slate-600 text-sm"
+              className="px-4 py-2 rounded-xl bg-[var(--bg-surface-hover)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm"
             >
               Try another brief
             </button>
@@ -329,7 +329,7 @@ export default function QuotationCopilotPage() {
             </button>
           </div>
 
-          <p className="text-xs text-slate-500 italic">
+          <p className="text-xs text-[var(--text-faint)] italic">
             The Co-pilot suggests realistic UAE market rates as a starting point. Always
             review pricing against current vendor agreements and customer credit terms
             before sending.
@@ -343,8 +343,8 @@ export default function QuotationCopilotPage() {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <div className="text-xs text-slate-400">{label}</div>
-      <div className="font-semibold text-white mt-0.5">{value}</div>
+      <div className="text-xs text-[var(--text-muted)]">{label}</div>
+      <div className="font-semibold text-[var(--text-main)] mt-0.5">{value}</div>
     </div>
   );
 }
@@ -355,11 +355,11 @@ function BundleCard({ label, included, cost }: { label: string; included: boolea
       className={`p-4 rounded-xl border ${
         included
           ? 'bg-emerald-500/10 border-emerald-500/30'
-          : 'bg-slate-700/30 border-slate-700'
+          : 'bg-[var(--bg-surface-hover)]/30 border-[var(--border-subtle)]'
       }`}
     >
-      <div className="text-xs text-slate-400">{label}</div>
-      <div className={`font-semibold mt-0.5 ${included ? 'text-emerald-300' : 'text-slate-500'}`}>
+      <div className="text-xs text-[var(--text-muted)]">{label}</div>
+      <div className={`font-semibold mt-0.5 ${included ? 'text-emerald-300' : 'text-[var(--text-faint)]'}`}>
         {included ? `AED ${cost.toLocaleString()}/mo` : 'Not included'}
       </div>
     </div>
