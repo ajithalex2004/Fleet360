@@ -94,6 +94,83 @@ export interface AgentRoiSummary {
   acceptanceRatePct: number;
 }
 
+// ── Phase 2 Routing Intelligence Types ─────────────────────────────────────────
+export interface LatLng {
+  latitude: number;
+  longitude: number;
+}
+
+export interface CanonicalLocation {
+  canonicalLocationId?: string; // e.g. 'LOC-MUH-004'
+  name?: string;
+  latitude: number;
+  longitude: number;
+  geohash: string; // 6-7 char geohash
+  accessPoint?: LatLng; // Exact gate/entry coordinates
+  zoneId?: string;
+}
+
+export type RoutingCacheTier =
+  | 'STATIC_DISTANCE'        // 30-day TTL (Permanent road network distance)
+  | 'HISTORICAL_TRAVEL_TIME' // 7-day TTL (Off-peak standard duration)
+  | 'TRAFFIC_DYNAMIC';       // 15-minute TTL (Live traffic dispatch)
+
+export interface SpatialShortlistOptions {
+  initialRadiusKm?: number;      // Default: 5 km
+  expansionStepKm?: number;      // Default: 5 km
+  maxRadiusKm?: number;          // Default: 30 km
+  minCandidates?: number;        // Default: 1 (Ensures operational feasibility)
+  maxCandidates?: number;        // Default: 20 (Candidate cap)
+  zoneId?: string;               // Fallback zone boundary
+}
+
+export interface SpatialShortlistResult<T> {
+  selected: T[];
+  radiusKmUsed: number;
+  expanded: boolean;
+  totalCandidatesEvaluated: number;
+}
+
+export interface MatrixPairResult {
+  originGeohash: string;
+  destGeohash: string;
+  originCanonicalId?: string;
+  destCanonicalId?: string;
+  distanceKm: number;
+  durationMin: number;
+  isCacheHit: boolean;
+  cacheTier: RoutingCacheTier;
+  provider: 'google' | 'mapbox' | 'haversine' | 'osrm';
+}
+
+export interface DistanceMatrixResult {
+  origins: CanonicalLocation[];
+  destinations: CanonicalLocation[];
+  distances: number[][]; // km [i][j]
+  durations: number[][]; // min [i][j]
+  pairs: MatrixPairResult[];
+  elementsQueried: number;
+  cacheHits: number;
+  cacheMisses: number;
+  providerCallsAvoided: number;
+  costUsd: number;
+  costAed: number;
+  costAvoidedUsd: number;
+  costAvoidedAed: number;
+  provider: string;
+}
+
+export interface RouteDetailResult {
+  origin: CanonicalLocation;
+  destination: CanonicalLocation;
+  distanceKm: number;
+  durationMin: number;
+  waypoints?: LatLng[];
+  polyline?: string;
+  isCacheHit: boolean;
+  provider: string;
+}
+
 // ── Event Types ────────────────────────────────────────────────────────────────
 export type AgentEventType =
   | 'vehicle.odometer_updated'

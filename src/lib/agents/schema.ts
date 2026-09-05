@@ -5,6 +5,7 @@
  *   agent_runs                   — immutable audit log of every agent execution with granular tokens, costs & savings
  *   agent_evaluation_metrics     — decision quality & outcome evaluations (acceptance, accuracy, overrides)
  *   agent_roi_metrics            — aggregated daily/monthly ROI per tenant and agent
+ *   route_matrix_cache           — multi-tier TTL road distance matrix cache
  *   fleet_risk_scores            — latest risk score per vehicle (upserted on each run)
  *   agent_anomaly_flags          — flagged financial records awaiting review / 1-click action
  *   bus_ops_plan_recommendations — AI staff transport plan recommendations
@@ -130,6 +131,32 @@ async function _doInit(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_agent_roi_tenant ON agent_roi_metrics(tenant_id);
       CREATE INDEX IF NOT EXISTS idx_agent_roi_agent  ON agent_roi_metrics(agent_id);
       CREATE INDEX IF NOT EXISTS idx_agent_roi_period ON agent_roi_metrics(period_date DESC);
+
+      -- ── route_matrix_cache (Phase 2 Multi-Tier Matrix Cache) ───────────────────
+      CREATE TABLE IF NOT EXISTS route_matrix_cache (
+        cache_key           TEXT PRIMARY KEY,
+        origin_canonical_id TEXT,
+        dest_canonical_id   TEXT,
+        origin_geohash      TEXT NOT NULL,
+        dest_geohash        TEXT NOT NULL,
+        origin_lat          NUMERIC(9,6) NOT NULL,
+        origin_lng          NUMERIC(9,6) NOT NULL,
+        dest_lat            NUMERIC(9,6) NOT NULL,
+        dest_lng            NUMERIC(9,6) NOT NULL,
+        distance_km         NUMERIC(10,3) NOT NULL,
+        duration_min        NUMERIC(8,2) NOT NULL,
+        ttl_tier            TEXT NOT NULL DEFAULT 'HISTORICAL_TRAVEL_TIME',
+        provider            TEXT NOT NULL DEFAULT 'google',
+        hit_count           INT NOT NULL DEFAULT 1,
+        expires_at          TIMESTAMPTZ NOT NULL,
+        created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_matrix_cache_origin_dest ON route_matrix_cache(origin_geohash, dest_geohash);
+      CREATE INDEX IF NOT EXISTS idx_matrix_cache_canonical   ON route_matrix_cache(origin_canonical_id, dest_canonical_id);
+      CREATE INDEX IF NOT EXISTS idx_matrix_cache_expires_at  ON route_matrix_cache(expires_at);
+      CREATE INDEX IF NOT EXISTS idx_matrix_cache_tier        ON route_matrix_cache(ttl_tier);
 
       -- ── fleet_risk_scores ──────────────────────────────────────────────────────
       CREATE TABLE IF NOT EXISTS fleet_risk_scores (
