@@ -51,33 +51,33 @@ function AddBudgetModal({ year, onClose, onSaved }: { year: number; onClose: () 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-md">
-        <div className="flex items-center justify-between p-5 border-b border-white/10">
-          <h2 className="text-lg font-bold text-white">Add Budget Entry — {year}</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-white text-xl">×</button>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-md">
+        <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)]">
+          <h2 className="text-lg font-bold text-[var(--text-main)]">Add Budget Entry — {year}</h2>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">×</button>
         </div>
         <div className="p-5 space-y-3">
           <div>
-            <label className="block text-xs text-slate-400 mb-1">Category</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Category</label>
             <select value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]">
               {Object.keys(CATEGORY_ICON).map(c => <option key={c}>{c}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs text-slate-400 mb-1">Budget Amount (AED)</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Budget Amount (AED)</label>
             <input type="number" value={form.budgetAmount} min={0} step={100}
               onChange={e => setForm(f => ({ ...f, budgetAmount: Number(e.target.value) }))}
-              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
           </div>
           <div>
-            <label className="block text-xs text-slate-400 mb-1">Notes</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Notes</label>
             <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-              rows={2} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white resize-none" />
+              rows={2} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] resize-none" />
           </div>
         </div>
-        <div className="flex gap-2 p-5 border-t border-white/10">
-          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-white/10 text-sm text-slate-400 hover:text-white">Cancel</button>
+        <div className="flex gap-2 p-5 border-t border-[var(--border-subtle)]">
+          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-[var(--border-subtle)] text-sm text-[var(--text-muted)] hover:text-[var(--text-main)]">Cancel</button>
           <button onClick={submit} disabled={saving}
             className="flex-1 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-semibold text-sm disabled:opacity-50">
             {saving ? 'Saving…' : 'Add Budget'}
@@ -94,13 +94,13 @@ function VarianceBar({ entry }: { entry: BudgetEntry }) {
   const color = pct >= 100 ? 'bg-red-500' : pct >= 85 ? 'bg-amber-500' : pct >= 50 ? 'bg-blue-500' : 'bg-emerald-500';
 
   return (
-    <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 hover:border-white/20 transition-colors">
+    <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5 hover:border-[var(--border-strong)] transition-colors">
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2">
           <span className="text-xl">{CATEGORY_ICON[entry.category] ?? '📋'}</span>
           <div>
-            <p className="text-sm font-medium text-white">{entry.category.replace('_', ' ')}</p>
-            {entry.notes && <p className="text-xs text-slate-500">{entry.notes}</p>}
+            <p className="text-sm font-medium text-[var(--text-main)]">{entry.category.replace('_', ' ')}</p>
+            {entry.notes && <p className="text-xs text-[var(--text-faint)]">{entry.notes}</p>}
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -120,7 +120,7 @@ function VarianceBar({ entry }: { entry: BudgetEntry }) {
       </div>
 
       {/* Progress bar */}
-      <div className="relative h-3 bg-slate-700 rounded-full overflow-hidden mb-3">
+      <div className="relative h-3 bg-[var(--bg-surface-hover)] rounded-full overflow-hidden mb-3">
         <div className={`h-full rounded-full transition-all duration-500 ${color}`}
           style={{ width: `${Math.min(100, pct)}%` }} />
         {pct > 100 && (
@@ -131,15 +131,15 @@ function VarianceBar({ entry }: { entry: BudgetEntry }) {
       {/* Numbers */}
       <div className="grid grid-cols-3 gap-2 text-xs">
         <div>
-          <p className="text-slate-500">Budget</p>
-          <p className="text-white font-medium">{fmtAED(entry.budgetAmount)}</p>
+          <p className="text-[var(--text-faint)]">Budget</p>
+          <p className="text-[var(--text-main)] font-medium">{fmtAED(entry.budgetAmount)}</p>
         </div>
         <div>
-          <p className="text-slate-500">Actual</p>
-          <p className={`font-medium ${entry.isOverBudget ? 'text-red-400' : 'text-slate-200'}`}>{fmtAED(entry.actualAmount)}</p>
+          <p className="text-[var(--text-faint)]">Actual</p>
+          <p className={`font-medium ${entry.isOverBudget ? 'text-red-400' : 'text-[var(--text-main)]'}`}>{fmtAED(entry.actualAmount)}</p>
         </div>
         <div>
-          <p className="text-slate-500">Variance</p>
+          <p className="text-[var(--text-faint)]">Variance</p>
           <p className={`font-medium ${entry.isOverBudget ? 'text-red-400' : 'text-emerald-400'}`}>
             {entry.isOverBudget ? '+' : ''}{fmtAED(Math.abs(entry.variance))}
           </p>
@@ -185,20 +185,20 @@ export default function BudgetsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Budget vs Actual</h1>
-          <p className="text-slate-400 text-xs mt-0.5">Live actuals pulled from all operational modules</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Budget vs Actual</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Live actuals pulled from all operational modules</p>
         </div>
         <div className="flex items-center gap-2">
           <select value={month} onChange={e => setMonth(Number(e.target.value))}
-            className="bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white">
+            className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)]">
             {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
           </select>
           <select value={year} onChange={e => setYear(Number(e.target.value))}
-            className="bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white">
+            className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)]">
             {YEARS.map(y => <option key={y}>{y}</option>)}
           </select>
           <button onClick={() => load(true)} disabled={refreshing}
-            className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-sm disabled:opacity-50">
+            className="px-3 py-2 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] rounded-xl text-sm disabled:opacity-50">
             {refreshing ? '⟳' : '⟳'} Refresh
           </button>
           <button onClick={() => setShowAdd(true)}
@@ -211,24 +211,24 @@ export default function BudgetsPage() {
       {/* Summary strip */}
       {summary && (
         <div className="grid grid-cols-4 gap-3">
-          <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-4">
-            <p className="text-xs text-slate-500">Total Budget</p>
-            <p className="text-xl font-bold mt-1 text-white">{fmtAED(summary.totalBudget)}</p>
+          <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
+            <p className="text-xs text-[var(--text-faint)]">Total Budget</p>
+            <p className="text-xl font-bold mt-1 text-[var(--text-main)]">{fmtAED(summary.totalBudget)}</p>
           </div>
-          <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-4">
-            <p className="text-xs text-slate-500">Total Actual</p>
+          <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
+            <p className="text-xs text-[var(--text-faint)]">Total Actual</p>
             <p className={`text-xl font-bold mt-1 ${summary.totalActual > summary.totalBudget ? 'text-red-400' : 'text-emerald-400'}`}>
               {fmtAED(summary.totalActual)}
             </p>
           </div>
-          <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-4">
-            <p className="text-xs text-slate-500">Variance</p>
+          <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
+            <p className="text-xs text-[var(--text-faint)]">Variance</p>
             <p className={`text-xl font-bold mt-1 ${summary.totalVariance > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
               {summary.totalVariance > 0 ? '+' : ''}{fmtAED(Math.abs(summary.totalVariance))}
             </p>
           </div>
-          <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-4">
-            <p className="text-xs text-slate-500">Over Budget</p>
+          <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
+            <p className="text-xs text-[var(--text-faint)]">Over Budget</p>
             <p className={`text-xl font-bold mt-1 ${summary.overBudgetCount > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
               {summary.overBudgetCount} categories
             </p>
@@ -238,20 +238,20 @@ export default function BudgetsPage() {
 
       {/* Overall utilisation bar */}
       {summary && summary.totalBudget > 0 && (
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5">
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5">
           <div className="flex justify-between text-sm mb-2">
-            <span className="text-white font-medium">Overall Budget Utilisation</span>
-            <span className={summary.totalActual > summary.totalBudget ? 'text-red-400 font-bold' : 'text-slate-300'}>
+            <span className="text-[var(--text-main)] font-medium">Overall Budget Utilisation</span>
+            <span className={summary.totalActual > summary.totalBudget ? 'text-red-400 font-bold' : 'text-[var(--text-muted)]'}>
               {Math.round((summary.totalActual / summary.totalBudget) * 100)}%
             </span>
           </div>
-          <div className="h-4 bg-slate-700 rounded-full overflow-hidden">
+          <div className="h-4 bg-[var(--bg-surface-hover)] rounded-full overflow-hidden">
             <div
               className={`h-full rounded-full transition-all duration-700 ${summary.totalActual > summary.totalBudget ? 'bg-red-500' : summary.totalActual / summary.totalBudget > 0.85 ? 'bg-amber-500' : 'bg-emerald-500'}`}
               style={{ width: `${Math.min(100, (summary.totalActual / summary.totalBudget) * 100)}%` }}
             />
           </div>
-          <div className="flex justify-between text-xs text-slate-500 mt-1">
+          <div className="flex justify-between text-xs text-[var(--text-faint)] mt-1">
             <span>AED 0</span>
             <span>{fmtAED(summary.totalBudget)}</span>
           </div>
@@ -272,29 +272,29 @@ export default function BudgetsPage() {
       {/* View toggle */}
       <div className="flex items-center gap-2">
         <button onClick={() => setViewMode('cards')}
-          className={`px-3 py-1.5 rounded-lg text-xs ${viewMode === 'cards' ? 'bg-amber-500 text-black font-semibold' : 'bg-slate-800 text-slate-400'}`}>
+          className={`px-3 py-1.5 rounded-lg text-xs ${viewMode === 'cards' ? 'bg-amber-500 text-black font-semibold' : 'bg-[var(--bg-surface)] text-[var(--text-muted)]'}`}>
           📊 Cards
         </button>
         <button onClick={() => setViewMode('table')}
-          className={`px-3 py-1.5 rounded-lg text-xs ${viewMode === 'table' ? 'bg-amber-500 text-black font-semibold' : 'bg-slate-800 text-slate-400'}`}>
+          className={`px-3 py-1.5 rounded-lg text-xs ${viewMode === 'table' ? 'bg-amber-500 text-black font-semibold' : 'bg-[var(--bg-surface)] text-[var(--text-muted)]'}`}>
           📋 Table
         </button>
-        <span className="text-xs text-slate-500 ml-2">
+        <span className="text-xs text-[var(--text-faint)] ml-2">
           🟢 {underUsed.length} under-utilized · 🔵 {onTrack.length} on track · 🔴 {overBudget.length} over budget
         </span>
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-2 gap-4">{[...Array(6)].map((_,i) => <div key={i} className="h-40 bg-slate-800/60 rounded-2xl animate-pulse" />)}</div>
+        <div className="grid grid-cols-2 gap-4">{[...Array(6)].map((_,i) => <div key={i} className="h-40 bg-[var(--bg-surface)]/60 rounded-2xl animate-pulse" />)}</div>
       ) : viewMode === 'cards' ? (
         <div className="grid grid-cols-2 gap-4">
           {budgets.map(b => <VarianceBar key={b.id} entry={b} />)}
         </div>
       ) : (
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden">
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/10 text-slate-400 text-xs uppercase tracking-wider">
+              <tr className="border-b border-[var(--border-subtle)] text-[var(--text-muted)] text-xs uppercase tracking-wider">
                 <th className="text-left px-5 py-3">Category</th>
                 <th className="text-left px-5 py-3">Source</th>
                 <th className="text-right px-5 py-3">Budget</th>
@@ -305,28 +305,28 @@ export default function BudgetsPage() {
             </thead>
             <tbody>
               {budgets.map(b => (
-                <tr key={b.id} className="border-b border-white/5 last:border-0 hover:bg-slate-800/40 transition-colors">
+                <tr key={b.id} className="border-b border-[var(--border-subtle)] last:border-0 hover:bg-[var(--bg-surface)]/40 transition-colors">
                   <td className="px-5 py-3">
                     <span className="mr-2">{CATEGORY_ICON[b.category] ?? '📋'}</span>
-                    <span className="text-white">{b.category.replace('_',' ')}</span>
+                    <span className="text-[var(--text-main)]">{b.category.replace('_',' ')}</span>
                   </td>
                   <td className="px-5 py-3">
-                    <span className={`text-xs px-1.5 py-0.5 rounded-full border ${b.source === 'LIVE' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-slate-700/30 text-slate-400 border-slate-600/30'}`}>
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full border ${b.source === 'LIVE' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-[var(--bg-surface-hover)]/30 text-[var(--text-muted)] border-[var(--border-strong)]/30'}`}>
                       {b.source}
                     </span>
                   </td>
-                  <td className="px-5 py-3 text-right text-slate-300">{fmtAED(b.budgetAmount)}</td>
-                  <td className={`px-5 py-3 text-right font-medium ${b.isOverBudget ? 'text-red-400' : 'text-white'}`}>{fmtAED(b.actualAmount)}</td>
+                  <td className="px-5 py-3 text-right text-[var(--text-muted)]">{fmtAED(b.budgetAmount)}</td>
+                  <td className={`px-5 py-3 text-right font-medium ${b.isOverBudget ? 'text-red-400' : 'text-[var(--text-main)]'}`}>{fmtAED(b.actualAmount)}</td>
                   <td className={`px-5 py-3 text-right font-semibold ${b.isOverBudget ? 'text-red-400' : 'text-emerald-400'}`}>
                     {b.isOverBudget ? '+' : '-'}{fmtAED(Math.abs(b.variance))}
                   </td>
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-2">
-                      <div className="flex-1 h-2 bg-slate-700 rounded-full">
+                      <div className="flex-1 h-2 bg-[var(--bg-surface-hover)] rounded-full">
                         <div className={`h-full rounded-full ${b.utilizationPct >= 100 ? 'bg-red-500' : b.utilizationPct >= 85 ? 'bg-amber-500' : 'bg-emerald-500'}`}
                           style={{ width: `${Math.min(100, b.utilizationPct)}%` }} />
                       </div>
-                      <span className="text-xs text-slate-400 w-10 text-right">{b.utilizationPct}%</span>
+                      <span className="text-xs text-[var(--text-muted)] w-10 text-right">{b.utilizationPct}%</span>
                     </div>
                   </td>
                 </tr>
@@ -334,14 +334,14 @@ export default function BudgetsPage() {
             </tbody>
             {summary && (
               <tfoot>
-                <tr className="border-t border-white/10 bg-slate-800/40 font-semibold">
-                  <td className="px-5 py-3 text-slate-300" colSpan={2}>TOTAL</td>
-                  <td className="px-5 py-3 text-right text-white">{fmtAED(summary.totalBudget)}</td>
+                <tr className="border-t border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 font-semibold">
+                  <td className="px-5 py-3 text-[var(--text-muted)]" colSpan={2}>TOTAL</td>
+                  <td className="px-5 py-3 text-right text-[var(--text-main)]">{fmtAED(summary.totalBudget)}</td>
                   <td className={`px-5 py-3 text-right ${summary.totalActual > summary.totalBudget ? 'text-red-400' : 'text-emerald-400'}`}>{fmtAED(summary.totalActual)}</td>
                   <td className={`px-5 py-3 text-right ${summary.totalVariance > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
                     {summary.totalVariance > 0 ? '+' : ''}{fmtAED(Math.abs(summary.totalVariance))}
                   </td>
-                  <td className="px-5 py-3 text-slate-400 text-xs">
+                  <td className="px-5 py-3 text-[var(--text-muted)] text-xs">
                     {summary.totalBudget > 0 ? Math.round((summary.totalActual / summary.totalBudget) * 100) : 0}% overall
                   </td>
                 </tr>

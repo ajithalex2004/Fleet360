@@ -21,7 +21,7 @@ const DEPT_ICONS: Record<string,string> = {
   AMBULANCE:'🚑', ADMIN:'🏢', FINANCE:'💰', HR:'👥', IT:'💻',
 };
 const STATUS_STYLE: Record<string,string> = {
-  DRAFT:             'text-slate-400  bg-slate-700/50    border-slate-500/30',
+  DRAFT:             'text-[var(--text-muted)]  bg-[var(--bg-surface-hover)]/50    border-slate-500/30',
   SUBMITTED:         'text-blue-400   bg-blue-900/20    border-blue-500/30',
   FM_REVIEW:         'text-amber-400  bg-amber-900/20   border-amber-500/30',
   CFO_REVIEW:        'text-purple-400 bg-purple-900/20  border-purple-500/30',
@@ -42,7 +42,7 @@ function CreateModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
   });
   const [lineItems, setLineItems] = useState([{ category: '', amount: 0, description: '', justification: '' }]);
   const [saving, setSaving] = useState(false);
-  const inp = 'w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500';
+  const inp = 'w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-purple-500';
 
   const addLine = () => setLineItems(li => [...li, { category: '', amount: 0, description: '', justification: '' }]);
   const remLine = (i: number) => setLineItems(li => li.filter((_,idx) => idx !== i));
@@ -63,34 +63,34 @@ function CreateModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 overflow-y-auto">
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-2xl my-4">
-        <div className="flex items-center justify-between p-5 border-b border-white/10">
-          <h2 className="text-lg font-bold text-white">Submit Budget Request</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-white text-xl">×</button>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl my-4">
+        <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)]">
+          <h2 className="text-lg font-bold text-[var(--text-main)]">Submit Budget Request</h2>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">×</button>
         </div>
         <div className="p-5 space-y-4">
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Fiscal Year</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Fiscal Year</label>
               <select value={form.fiscalYear} onChange={e => setForm(f=>({...f, fiscalYear: parseInt(e.target.value)}))} className={inp}>
                 {[2024,2025,2026,2027].map(y => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Department</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Department</label>
               <select value={form.department} onChange={e => setForm(f=>({...f, department: e.target.value}))} className={inp}>
                 {DEPARTMENTS.map(d => <option key={d} value={d}>{DEPT_ICONS[d]} {d.replace('_',' ')}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Department Head *</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Department Head *</label>
               <input value={form.departmentHead} onChange={e => setForm(f=>({...f, departmentHead: e.target.value}))} placeholder="Full name" className={inp} />
             </div>
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="text-xs text-slate-400">Budget Line Items</label>
+              <label className="text-xs text-[var(--text-muted)]">Budget Line Items</label>
               <button onClick={addLine} className="text-xs text-purple-400 hover:text-purple-300">+ Add Line</button>
             </div>
             <div className="space-y-2">
@@ -104,19 +104,19 @@ function CreateModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
                 </div>
               ))}
             </div>
-            <div className="mt-2 text-right text-sm font-bold text-white">
+            <div className="mt-2 text-right text-sm font-bold text-[var(--text-main)]">
               Total: AED {fmt(total)}
             </div>
           </div>
 
           <div>
-            <label className="block text-xs text-slate-400 mb-1">Notes / Justification</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Notes / Justification</label>
             <textarea value={form.notes} onChange={e => setForm(f=>({...f, notes: e.target.value}))} rows={2}
-              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white resize-none focus:outline-none focus:border-purple-500" />
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] resize-none focus:outline-none focus:border-purple-500" />
           </div>
         </div>
-        <div className="flex gap-2 p-5 border-t border-white/10">
-          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-white/10 text-sm text-slate-400 hover:text-white">Cancel</button>
+        <div className="flex gap-2 p-5 border-t border-[var(--border-subtle)]">
+          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-[var(--border-subtle)] text-sm text-[var(--text-muted)] hover:text-[var(--text-main)]">Cancel</button>
           <button onClick={save} disabled={saving}
             className="flex-1 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-sm disabled:opacity-50">
             {saving ? 'Saving…' : 'Save as Draft'}
@@ -155,28 +155,28 @@ function SubDrawer({ sub, onClose, onRefresh }: { sub: BudgetSub; onClose: () =>
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/50">
-      <div className="w-[600px] bg-slate-900 border-l border-white/10 flex flex-col">
-        <div className="flex items-center justify-between p-5 border-b border-white/10">
+      <div className="w-[600px] bg-[var(--bg-surface)] border-l border-[var(--border-subtle)] flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)]">
           <div>
-            <h2 className="text-lg font-bold text-white">{sub.submission_no}</h2>
-            <p className="text-xs text-slate-400">{DEPT_ICONS[sub.department]} {sub.department.replace('_',' ')} · FY {sub.fiscal_year}</p>
+            <h2 className="text-lg font-bold text-[var(--text-main)]">{sub.submission_no}</h2>
+            <p className="text-xs text-[var(--text-muted)]">{DEPT_ICONS[sub.department]} {sub.department.replace('_',' ')} · FY {sub.fiscal_year}</p>
           </div>
           <div className="flex items-center gap-2">
             <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${STATUS_STYLE[sub.status] ?? ''}`}>{sub.status.replace('_',' ')}</span>
-            <button onClick={onClose} className="text-slate-400 hover:text-white text-xl ml-2">×</button>
+            <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl ml-2">×</button>
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
           {/* Amounts */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-slate-800/60 rounded-xl p-3">
-              <p className="text-xs text-slate-400">Requested</p>
-              <p className="text-xl font-bold text-white">AED {fmt(parseFloat(sub.total_requested))}</p>
+            <div className="bg-[var(--bg-surface)]/60 rounded-xl p-3">
+              <p className="text-xs text-[var(--text-muted)]">Requested</p>
+              <p className="text-xl font-bold text-[var(--text-main)]">AED {fmt(parseFloat(sub.total_requested))}</p>
             </div>
             {sub.total_approved && (
               <div className="bg-emerald-900/20 border border-emerald-500/20 rounded-xl p-3">
-                <p className="text-xs text-slate-400">Approved</p>
+                <p className="text-xs text-[var(--text-muted)]">Approved</p>
                 <p className="text-xl font-bold text-emerald-400">AED {fmt(parseFloat(sub.total_approved))}</p>
               </div>
             )}
@@ -184,16 +184,16 @@ function SubDrawer({ sub, onClose, onRefresh }: { sub: BudgetSub; onClose: () =>
 
           {/* Line Items */}
           {lineItems.length > 0 && (
-            <div className="bg-slate-800/40 rounded-xl overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-white/10 text-xs font-bold text-slate-400 uppercase">Budget Lines</div>
+            <div className="bg-[var(--bg-surface)]/40 rounded-xl overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-[var(--border-subtle)] text-xs font-bold text-[var(--text-muted)] uppercase">Budget Lines</div>
               <table className="w-full text-sm">
-                <thead><tr className="text-slate-500 text-xs"><th className="text-left px-3 py-1.5">Category</th><th className="text-left px-3 py-1.5">Description</th><th className="text-right px-3 py-1.5">Amount</th></tr></thead>
+                <thead><tr className="text-[var(--text-faint)] text-xs"><th className="text-left px-3 py-1.5">Category</th><th className="text-left px-3 py-1.5">Description</th><th className="text-right px-3 py-1.5">Amount</th></tr></thead>
                 <tbody>
                   {lineItems.map((li: Record<string,unknown>, i: number) => (
-                    <tr key={i} className="border-t border-white/5">
-                      <td className="px-3 py-1.5 text-slate-300">{String(li.category)}</td>
-                      <td className="px-3 py-1.5 text-slate-400 text-xs">{String(li.description)}</td>
-                      <td className="px-3 py-1.5 text-right text-slate-200">AED {fmt(parseFloat(String(li.amount)))}</td>
+                    <tr key={i} className="border-t border-[var(--border-subtle)]">
+                      <td className="px-3 py-1.5 text-[var(--text-muted)]">{String(li.category)}</td>
+                      <td className="px-3 py-1.5 text-[var(--text-muted)] text-xs">{String(li.description)}</td>
+                      <td className="px-3 py-1.5 text-right text-[var(--text-main)]">AED {fmt(parseFloat(String(li.amount)))}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -204,21 +204,21 @@ function SubDrawer({ sub, onClose, onRefresh }: { sub: BudgetSub; onClose: () =>
           {/* Comments/Timeline */}
           {detail?.comments && detail.comments.length > 0 && (
             <div>
-              <p className="text-xs font-bold text-slate-400 uppercase mb-2">Approval Trail</p>
+              <p className="text-xs font-bold text-[var(--text-muted)] uppercase mb-2">Approval Trail</p>
               <div className="space-y-2">
                 {detail.comments.map(c => (
                   <div key={c.id} className="flex gap-3">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${c.role === 'CFO' ? 'bg-purple-700' : c.role === 'FM' ? 'bg-blue-700' : 'bg-slate-700'}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${c.role === 'CFO' ? 'bg-purple-700' : c.role === 'FM' ? 'bg-blue-700' : 'bg-[var(--bg-surface-hover)]'}`}>
                       {c.role === 'SYSTEM' ? '⚙' : c.author[0]}
                     </div>
-                    <div className="flex-1 bg-slate-800/40 rounded-xl px-3 py-2">
+                    <div className="flex-1 bg-[var(--bg-surface)]/40 rounded-xl px-3 py-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-white">{c.author}</span>
-                        <span className="text-xs text-slate-500">{c.role}</span>
-                        <span className="text-xs text-slate-600 ml-auto">{c.created_at.slice(0,10)}</span>
+                        <span className="text-xs font-bold text-[var(--text-main)]">{c.author}</span>
+                        <span className="text-xs text-[var(--text-faint)]">{c.role}</span>
+                        <span className="text-xs text-[var(--text-faint)] ml-auto">{c.created_at.slice(0,10)}</span>
                       </div>
                       {c.action && <p className="text-xs text-purple-400 mt-0.5">{c.action.replace('_',' ')}</p>}
-                      <p className="text-sm text-slate-300 mt-1">{c.comment}</p>
+                      <p className="text-sm text-[var(--text-muted)] mt-1">{c.comment}</p>
                     </div>
                   </div>
                 ))}
@@ -233,15 +233,15 @@ function SubDrawer({ sub, onClose, onRefresh }: { sub: BudgetSub; onClose: () =>
               <div className="grid grid-cols-3 gap-2">
                 {['APPROVE','REJECT','REVISION'].map(d => (
                   <button key={d} onClick={() => setDecision(d)}
-                    className={`py-1.5 rounded-lg text-xs font-medium transition-all border ${decision === d ? 'bg-blue-600 text-white border-blue-500' : 'text-slate-400 border-white/10 hover:text-white'}`}>
+                    className={`py-1.5 rounded-lg text-xs font-medium transition-all border ${decision === d ? 'bg-blue-600 text-white border-blue-500' : 'text-[var(--text-muted)] border-[var(--border-subtle)] hover:text-[var(--text-main)]'}`}>
                     {d}
                   </button>
                 ))}
               </div>
               <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder={`Approved amount (default: ${fmt(parseFloat(sub.total_requested))})`}
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-blue-500" />
               <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="FM notes..."
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white resize-none focus:outline-none focus:border-blue-500" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] resize-none focus:outline-none focus:border-blue-500" />
               <button onClick={() => doAction('fm_review', { submissionId: sub.id, decision, notes, approvedAmount: amount || null, reviewedBy: 'Finance Manager' })}
                 disabled={saving}
                 className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl text-sm disabled:opacity-50">
@@ -256,13 +256,13 @@ function SubDrawer({ sub, onClose, onRefresh }: { sub: BudgetSub; onClose: () =>
               <div className="grid grid-cols-2 gap-2">
                 {['APPROVE','REJECT'].map(d => (
                   <button key={d} onClick={() => setDecision(d)}
-                    className={`py-1.5 rounded-lg text-xs font-medium border ${decision === d ? 'bg-purple-600 text-white border-purple-500' : 'text-slate-400 border-white/10 hover:text-white'}`}>
+                    className={`py-1.5 rounded-lg text-xs font-medium border ${decision === d ? 'bg-purple-600 text-white border-purple-500' : 'text-[var(--text-muted)] border-[var(--border-subtle)] hover:text-[var(--text-main)]'}`}>
                     {d}
                   </button>
                 ))}
               </div>
               <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="CFO decision notes..."
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white resize-none focus:outline-none focus:border-purple-500" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] resize-none focus:outline-none focus:border-purple-500" />
               <button onClick={() => doAction('cfo_decision', { submissionId: sub.id, decision, notes, approvedAmount: amount || null, decidedBy: 'CFO' })}
                 disabled={saving}
                 className="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-semibold rounded-xl text-sm disabled:opacity-50">
@@ -316,12 +316,12 @@ export default function BudgetApprovalsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Budget Approvals</h1>
-          <p className="text-slate-400 text-xs mt-0.5">Department budget submissions with FM → CFO approval workflow</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Budget Approvals</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Department budget submissions with FM → CFO approval workflow</p>
         </div>
         <div className="flex items-center gap-3">
           <select value={selectedYear} onChange={e => setSelectedYear(parseInt(e.target.value))}
-            className="bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500">
+            className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-purple-500">
             {[2024,2025,2026].map(y => <option key={y} value={y}>{y}</option>)}
           </select>
           <button onClick={() => setShowCreate(true)}
@@ -332,11 +332,11 @@ export default function BudgetApprovalsPage() {
       </div>
 
       {/* Workflow banner */}
-      <div className="flex items-center gap-2 bg-slate-800/60 border border-white/10 rounded-2xl p-4">
+      <div className="flex items-center gap-2 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
         {['DRAFT → Dept saves draft', 'SUBMITTED → Sent to FM', 'FM_REVIEW → FM approves/rejects', 'CFO_REVIEW → Large budgets (>500K)', 'APPROVED ✓'].map((step, i, arr) => (
           <React.Fragment key={step}>
-            <span className="text-xs text-slate-400">{step}</span>
-            {i < arr.length - 1 && <span className="text-slate-600">→</span>}
+            <span className="text-xs text-[var(--text-muted)]">{step}</span>
+            {i < arr.length - 1 && <span className="text-[var(--text-faint)]">→</span>}
           </React.Fragment>
         ))}
       </div>
@@ -346,13 +346,13 @@ export default function BudgetApprovalsPage() {
         {[
           { label: 'Pending Review', value: pending, color: 'text-amber-400', note: 'Awaiting action' },
           { label: 'Approved', value: approved, color: 'text-emerald-400', note: 'This year' },
-          { label: 'Total Approved', value: `AED ${fmt(totalApproved)}`, color: 'text-white', note: `FY ${selectedYear}` },
+          { label: 'Total Approved', value: `AED ${fmt(totalApproved)}`, color: 'text-[var(--text-main)]', note: `FY ${selectedYear}` },
           { label: 'Submissions', value: subs.length, color: 'text-blue-400', note: 'All statuses' },
         ].map(kpi => (
-          <div key={kpi.label} className="bg-slate-900/60 border border-white/10 rounded-2xl p-4">
-            <p className="text-xs text-slate-400">{kpi.label}</p>
+          <div key={kpi.label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
+            <p className="text-xs text-[var(--text-muted)]">{kpi.label}</p>
             <p className={`text-2xl font-bold mt-1 ${kpi.color}`}>{kpi.value}</p>
-            <p className="text-xs text-slate-500 mt-0.5">{kpi.note}</p>
+            <p className="text-xs text-[var(--text-faint)] mt-0.5">{kpi.note}</p>
           </div>
         ))}
       </div>
@@ -361,18 +361,18 @@ export default function BudgetApprovalsPage() {
       <div className="flex gap-2 flex-wrap">
         {['','DRAFT','SUBMITTED','FM_REVIEW','CFO_REVIEW','APPROVED','REJECTED','REVISION_REQUIRED'].map(s => (
           <button key={s} onClick={() => setStatusFilter(s)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${statusFilter === s ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white bg-slate-800'}`}>
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${statusFilter === s ? 'bg-purple-600 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-surface)]'}`}>
             {s || 'All'}
           </button>
         ))}
       </div>
 
       {/* Table */}
-      {loading ? <div className="h-64 bg-slate-800/60 rounded-2xl animate-pulse" /> : (
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden">
+      {loading ? <div className="h-64 bg-[var(--bg-surface)]/60 rounded-2xl animate-pulse" /> : (
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/10 text-slate-400 text-xs uppercase tracking-wider">
+              <tr className="border-b border-[var(--border-subtle)] text-[var(--text-muted)] text-xs uppercase tracking-wider">
                 <th className="text-left px-4 py-3">Submission No.</th>
                 <th className="text-left px-4 py-3">Department</th>
                 <th className="text-left px-4 py-3">Dept Head</th>
@@ -385,27 +385,27 @@ export default function BudgetApprovalsPage() {
             </thead>
             <tbody>
               {subs.map(sub => (
-                <tr key={sub.id} className="border-b border-white/5 hover:bg-slate-800/40 cursor-pointer" onClick={() => setSelectedSub(sub)}>
+                <tr key={sub.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]/40 cursor-pointer" onClick={() => setSelectedSub(sub)}>
                   <td className="px-4 py-3 font-mono text-xs text-purple-400">{sub.submission_no}</td>
-                  <td className="px-4 py-3 text-sm text-white">{DEPT_ICONS[sub.department]} {sub.department.replace('_',' ')}</td>
-                  <td className="px-4 py-3 text-sm text-slate-300">{sub.department_head}</td>
+                  <td className="px-4 py-3 text-sm text-[var(--text-main)]">{DEPT_ICONS[sub.department]} {sub.department.replace('_',' ')}</td>
+                  <td className="px-4 py-3 text-sm text-[var(--text-muted)]">{sub.department_head}</td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${STATUS_STYLE[sub.status] ?? ''}`}>
                       {sub.status.replace('_',' ')}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right text-sm text-slate-300">AED {fmt(parseFloat(sub.total_requested))}</td>
+                  <td className="px-4 py-3 text-right text-sm text-[var(--text-muted)]">AED {fmt(parseFloat(sub.total_requested))}</td>
                   <td className="px-4 py-3 text-right text-sm text-emerald-400">
                     {sub.total_approved ? `AED ${fmt(parseFloat(sub.total_approved))}` : '—'}
                   </td>
-                  <td className="px-4 py-3 text-xs text-slate-500">{sub.created_at.slice(0,10)}</td>
+                  <td className="px-4 py-3 text-xs text-[var(--text-faint)]">{sub.created_at.slice(0,10)}</td>
                   <td className="px-4 py-3">
-                    <button className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-xs">View</button>
+                    <button className="px-2 py-1 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] rounded-lg text-xs">View</button>
                   </td>
                 </tr>
               ))}
               {subs.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-12 text-center text-slate-500">No budget submissions for FY {selectedYear}</td></tr>
+                <tr><td colSpan={8} className="px-4 py-12 text-center text-[var(--text-faint)]">No budget submissions for FY {selectedYear}</td></tr>
               )}
             </tbody>
           </table>

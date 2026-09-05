@@ -105,12 +105,12 @@ export default function RevenueAnalysisPage() {
   const sortedCustomers = sort(customers, sortKey as keyof Customer);
 
   return (
-    <div className="text-white">
+    <div className="text-[var(--text-main)]">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-white">Revenue Analysis</h1>
-          <p className="text-slate-400 text-xs mt-1">Vehicle profitability · Customer lifetime value · Branch breakdown</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Revenue Analysis</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-1">Vehicle profitability · Customer lifetime value · Branch breakdown</p>
         </div>
         <button onClick={view === 'vehicle' ? exportVehicles : exportCustomers}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-700/40 hover:bg-emerald-700/60 border border-emerald-500/30 text-emerald-300 text-sm font-medium">
@@ -119,10 +119,10 @@ export default function RevenueAnalysisPage() {
       </div>
 
       {/* View tabs */}
-      <div className="flex bg-slate-800 rounded-xl p-1 gap-1 mb-6 w-fit">
+      <div className="flex bg-[var(--bg-surface)] rounded-xl p-1 gap-1 mb-6 w-fit">
         {(['vehicle','customer','branch'] as const).map(v => (
           <button key={v} onClick={() => setView(v)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all ${view === v ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+            className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all ${view === v ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
             {v === 'vehicle' ? '🚗 By Vehicle' : v === 'customer' ? '👥 By Customer' : '🏢 By Branch'}
           </button>
         ))}
@@ -131,27 +131,27 @@ export default function RevenueAnalysisPage() {
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-6">
         <select value={branch} onChange={e => setBranch(e.target.value)}
-          className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2 text-sm text-white">
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-sm text-[var(--text-main)]">
           <option value="">All Branches</option>
           {BRANCHES.filter(Boolean).map(b => <option key={b}>{b}</option>)}
         </select>
         <select value={module} onChange={e => setModule(e.target.value)}
-          className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2 text-sm text-white">
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-sm text-[var(--text-main)]">
           <option value="">All Modules</option>
           {MODULES.filter(Boolean).map(m => <option key={m}>{m}</option>)}
         </select>
         <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
           placeholder="From"
-          className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2 text-sm text-white" />
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-sm text-[var(--text-main)]" />
         <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-          className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2 text-sm text-white" />
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-sm text-[var(--text-main)]" />
         <input value={search} onChange={e => setSearch(e.target.value)}
           placeholder={view === 'vehicle' ? 'Search vehicle no…' : 'Search customer…'}
-          className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder-slate-500 flex-1 min-w-[180px]" />
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] flex-1 min-w-[180px]" />
       </div>
 
       {loading ? (
-        <div className="text-center py-20 text-slate-500">Loading…</div>
+        <div className="text-center py-20 text-[var(--text-faint)]">Loading…</div>
       ) : (
         <>
           {/* ── Vehicle View ──────────────────────────────────────────────── */}
@@ -177,10 +177,10 @@ export default function RevenueAnalysisPage() {
                 </div>
               )}
 
-              <div className="bg-slate-800/60 border border-white/5 rounded-2xl overflow-hidden">
+              <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-white/10">
+                    <tr className="border-b border-[var(--border-subtle)]">
                       {[
                         ['Vehicle No.','vehicle_no'], ['Module','module'], ['Branch','branch'],
                         ['Invoices','invoice_count'], ['Gross Revenue','gross_revenue'],
@@ -188,7 +188,7 @@ export default function RevenueAnalysisPage() {
                         ['Depreciation','depreciation'], ['Net Margin','net_margin'], ['Margin %','margin_pct'],
                       ].map(([label, key]) => (
                         <th key={key} onClick={() => toggleSort(key)}
-                          className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase text-left cursor-pointer hover:text-white">
+                          className="px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase text-left cursor-pointer hover:text-[var(--text-main)]">
                           {label}<SortIcon k={key} />
                         </th>
                       ))}
@@ -196,17 +196,17 @@ export default function RevenueAnalysisPage() {
                   </thead>
                   <tbody>
                     {sortedVehicles.length === 0 ? (
-                      <tr><td colSpan={10} className="text-center py-10 text-slate-500">No vehicle revenue data yet. Link vehicle_no to invoices to see profitability.</td></tr>
+                      <tr><td colSpan={10} className="text-center py-10 text-[var(--text-faint)]">No vehicle revenue data yet. Link vehicle_no to invoices to see profitability.</td></tr>
                     ) : sortedVehicles.map((v, i) => (
-                      <tr key={i} className="border-b border-white/5 hover:bg-white/3">
-                        <td className="px-4 py-3 font-mono text-white font-medium">{v.vehicle_no}</td>
-                        <td className="px-4 py-3"><span className="bg-slate-700 text-slate-300 px-2 py-0.5 rounded text-xs">{v.module}</span></td>
-                        <td className="px-4 py-3 text-slate-400">{v.branch}</td>
-                        <td className="px-4 py-3 text-slate-300">{v.invoice_count}</td>
-                        <td className="px-4 py-3 text-white font-semibold">{fmt(v.gross_revenue)}</td>
+                      <tr key={i} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]">
+                        <td className="px-4 py-3 font-mono text-[var(--text-main)] font-medium">{v.vehicle_no}</td>
+                        <td className="px-4 py-3"><span className="bg-[var(--bg-surface-hover)] text-[var(--text-muted)] px-2 py-0.5 rounded text-xs">{v.module}</span></td>
+                        <td className="px-4 py-3 text-[var(--text-muted)]">{v.branch}</td>
+                        <td className="px-4 py-3 text-[var(--text-muted)]">{v.invoice_count}</td>
+                        <td className="px-4 py-3 text-[var(--text-main)] font-semibold">{fmt(v.gross_revenue)}</td>
                         <td className="px-4 py-3 text-emerald-400">{fmt(v.collected)}</td>
                         <td className="px-4 py-3 text-orange-400">{v.maint_cost > 0 ? fmt(v.maint_cost) : '—'}</td>
-                        <td className="px-4 py-3 text-slate-400">{v.depreciation > 0 ? fmt(v.depreciation) : '—'}</td>
+                        <td className="px-4 py-3 text-[var(--text-muted)]">{v.depreciation > 0 ? fmt(v.depreciation) : '—'}</td>
                         <td className={`px-4 py-3 font-semibold ${v.net_margin >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{fmt(v.net_margin)}</td>
                         <td className={`px-4 py-3 font-bold ${MARGIN_COLOR(v.margin_pct)}`}>{pct(v.margin_pct)}</td>
                       </tr>
@@ -219,10 +219,10 @@ export default function RevenueAnalysisPage() {
 
           {/* ── Customer View ──────────────────────────────────────────────── */}
           {view === 'customer' && (
-            <div className="bg-slate-800/60 border border-white/5 rounded-2xl overflow-hidden">
+            <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-white/10">
+                  <tr className="border-b border-[var(--border-subtle)]">
                     {[
                       ['Customer','client_name'], ['Lifetime Revenue','lifetime_revenue'],
                       ['Total Paid','total_paid'], ['Outstanding','outstanding'],
@@ -231,7 +231,7 @@ export default function RevenueAnalysisPage() {
                       ['Vehicles','vehicles_rented'],
                     ].map(([label, key]) => (
                       <th key={key} onClick={() => toggleSort(key)}
-                        className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase text-left cursor-pointer hover:text-white">
+                        className="px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase text-left cursor-pointer hover:text-[var(--text-main)]">
                         {label}<SortIcon k={key} />
                       </th>
                     ))}
@@ -239,23 +239,23 @@ export default function RevenueAnalysisPage() {
                 </thead>
                 <tbody>
                   {sortedCustomers.length === 0 ? (
-                    <tr><td colSpan={9} className="text-center py-10 text-slate-500">No customer data found</td></tr>
+                    <tr><td colSpan={9} className="text-center py-10 text-[var(--text-faint)]">No customer data found</td></tr>
                   ) : sortedCustomers.map((c, i) => (
-                    <tr key={i} className="border-b border-white/5 hover:bg-white/3">
+                    <tr key={i} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]">
                       <td className="px-4 py-3">
-                        <p className="text-white font-medium">{c.client_name}</p>
-                        <p className="text-slate-500 text-xs">{c.client_email ?? '—'}</p>
+                        <p className="text-[var(--text-main)] font-medium">{c.client_name}</p>
+                        <p className="text-[var(--text-faint)] text-xs">{c.client_email ?? '—'}</p>
                       </td>
                       <td className="px-4 py-3 text-emerald-400 font-semibold">{fmt(c.lifetime_revenue)}</td>
-                      <td className="px-4 py-3 text-white">{fmt(c.total_paid)}</td>
-                      <td className={`px-4 py-3 ${c.outstanding > 0 ? 'text-amber-400' : 'text-slate-500'}`}>
+                      <td className="px-4 py-3 text-[var(--text-main)]">{fmt(c.total_paid)}</td>
+                      <td className={`px-4 py-3 ${c.outstanding > 0 ? 'text-amber-400' : 'text-[var(--text-faint)]'}`}>
                         {c.outstanding > 0 ? fmt(c.outstanding) : '—'}
                       </td>
-                      <td className="px-4 py-3 text-slate-300">{fmt(c.avg_invoice)}</td>
-                      <td className="px-4 py-3 text-slate-300">{c.invoice_count}</td>
-                      <td className="px-4 py-3 text-slate-400">{c.relationship_days}d</td>
-                      <td className="px-4 py-3 text-slate-400 text-xs">{c.module_list}</td>
-                      <td className="px-4 py-3 text-slate-400">{c.vehicles_rented}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{fmt(c.avg_invoice)}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{c.invoice_count}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{c.relationship_days}d</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{c.module_list}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{c.vehicles_rented}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -273,30 +273,30 @@ export default function RevenueAnalysisPage() {
                 const vat    = rows.reduce((s, b) => s + b.vat_amount, 0);
                 const cust   = Math.max(...rows.map(b => b.customer_count));
                 return (
-                  <div key={branchName} className="bg-slate-800/60 border border-white/5 rounded-2xl overflow-hidden">
-                    <div className="flex items-center justify-between px-5 py-3 bg-slate-900/40 border-b border-white/5">
+                  <div key={branchName} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
+                    <div className="flex items-center justify-between px-5 py-3 bg-[var(--bg-surface)]/40 border-b border-[var(--border-subtle)]">
                       <div>
-                        <p className="text-white font-semibold">{branchName}</p>
-                        <p className="text-slate-500 text-xs mt-0.5">{cust} customers</p>
+                        <p className="text-[var(--text-main)] font-semibold">{branchName}</p>
+                        <p className="text-[var(--text-faint)] text-xs mt-0.5">{cust} customers</p>
                       </div>
                       <div className="flex gap-6 text-right">
-                        <div><p className="text-xs text-slate-500">Revenue</p><p className="text-emerald-400 font-bold">{fmt(total)}</p></div>
-                        <div><p className="text-xs text-slate-500">VAT</p><p className="text-amber-400 font-semibold">{fmt(vat)}</p></div>
+                        <div><p className="text-xs text-[var(--text-faint)]">Revenue</p><p className="text-emerald-400 font-bold">{fmt(total)}</p></div>
+                        <div><p className="text-xs text-[var(--text-faint)]">VAT</p><p className="text-amber-400 font-semibold">{fmt(vat)}</p></div>
                       </div>
                     </div>
                     <table className="w-full text-sm">
                       <tbody>
                         {rows.map((r, i) => (
-                          <tr key={i} className="border-b border-white/5 last:border-0">
-                            <td className="px-5 py-3 text-slate-400 text-xs w-32">
-                              <span className="bg-slate-700 px-2 py-0.5 rounded">{r.module}</span>
+                          <tr key={i} className="border-b border-[var(--border-subtle)] last:border-0">
+                            <td className="px-5 py-3 text-[var(--text-muted)] text-xs w-32">
+                              <span className="bg-[var(--bg-surface-hover)] px-2 py-0.5 rounded">{r.module}</span>
                             </td>
-                            <td className="px-4 py-3 text-slate-300">{r.invoice_count} invoices</td>
-                            <td className="px-4 py-3 text-white font-medium">{fmt(r.gross_revenue)}</td>
+                            <td className="px-4 py-3 text-[var(--text-muted)]">{r.invoice_count} invoices</td>
+                            <td className="px-4 py-3 text-[var(--text-main)] font-medium">{fmt(r.gross_revenue)}</td>
                             <td className="px-4 py-3 text-teal-400">{fmt(r.collected)}</td>
                             <td className="px-4 py-3 text-amber-400 text-xs">VAT: {fmt(r.vat_amount)}</td>
                             <td className="px-4 py-3">
-                              <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden w-24">
+                              <div className="h-1.5 bg-[var(--bg-surface-hover)] rounded-full overflow-hidden w-24">
                                 <div className="h-full bg-emerald-500 rounded-full"
                                   style={{ width: `${total > 0 ? (r.gross_revenue / total) * 100 : 0}%` }} />
                               </div>
@@ -309,7 +309,7 @@ export default function RevenueAnalysisPage() {
                 );
               })}
               {branches.length === 0 && (
-                <div className="text-center py-16 text-slate-500">No branch revenue data found</div>
+                <div className="text-center py-16 text-[var(--text-faint)]">No branch revenue data found</div>
               )}
             </div>
           )}

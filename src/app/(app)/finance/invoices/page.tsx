@@ -20,12 +20,12 @@ interface InvoiceDetail extends Invoice { payments: Payment[] }
 
 /* ─────────────────────────── constants ─────────────────────── */
 const STATUS_STYLE: Record<string, string> = {
-  DRAFT:     'bg-slate-500/20 text-slate-300 border-slate-500/30',
+  DRAFT:     'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30',
   SENT:      'bg-blue-500/20  text-blue-300  border-blue-500/30',
   PARTIAL:   'bg-amber-500/20 text-amber-300 border-amber-500/30',
   PAID:      'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
   OVERDUE:   'bg-red-500/20   text-red-300   border-red-500/30',
-  CANCELLED: 'bg-slate-700/20 text-slate-500 border-slate-700/30',
+  CANCELLED: 'bg-[var(--bg-surface-hover)]/20 text-[var(--text-faint)] border-[var(--border-subtle)]/30',
 };
 const MODULES = ['GENERAL','LOGISTICS','RAC','LEASING','STAFF_TRANSPORT','SCHOOL_BUS','AMBULANCE','MAINTENANCE'];
 const MODULE_LABELS: Record<string, string> = {
@@ -115,39 +115,39 @@ function CreateModal({ onClose, onCreated, defaultModule }: { onClose: () => voi
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-5 border-b border-white/10">
-          <h2 className="text-lg font-bold text-white">New Invoice</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-white text-xl leading-none">×</button>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)]">
+          <h2 className="text-lg font-bold text-[var(--text-main)]">New Invoice</h2>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl leading-none">×</button>
         </div>
         <div className="p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <label className="block text-xs text-slate-400 mb-1">Client Name *</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Client Name *</label>
               <input value={form.clientName} onChange={e => setForm(f => ({ ...f, clientName: e.target.value }))}
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" placeholder="Client / Company" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" placeholder="Client / Company" />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Email</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Email</label>
               <input value={form.clientEmail} onChange={e => setForm(f => ({ ...f, clientEmail: e.target.value }))}
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" placeholder="client@email.com" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" placeholder="client@email.com" />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Phone</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Phone</label>
               <input value={form.clientPhone} onChange={e => setForm(f => ({ ...f, clientPhone: e.target.value }))}
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" placeholder="+971 …" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" placeholder="+971 …" />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Module</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Module</label>
               <select value={form.module} onChange={e => handleModuleChange(e.target.value)}
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]">
                 {MODULES.map(m => <option key={m} value={m}>{MODULE_LABELS[m] ?? m}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Service Type</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Service Type</label>
               <input value={form.serviceType} onChange={e => setForm(f => ({ ...f, serviceType: e.target.value }))}
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
             </div>
 
             {/* School Bus specific fields */}
@@ -157,56 +157,56 @@ function CreateModal({ onClose, onCreated, defaultModule }: { onClose: () => voi
                   <span className="text-lg">🏫</span>
                   <p className="text-xs font-semibold text-yellow-400 uppercase tracking-wider">School Bus Transport — UAE EDU Zero Rate (0% VAT)</p>
                 </div>
-                <p className="text-xs text-slate-500">Educational transport invoices are Zero Rated (0%) under UAE VAT Law Article 45. VAT has been automatically set to 0%.</p>
+                <p className="text-xs text-[var(--text-faint)]">Educational transport invoices are Zero Rated (0%) under UAE VAT Law Article 45. VAT has been automatically set to 0%.</p>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Student Grade</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Student Grade</label>
                     <input value={form.sbStudentGrade} onChange={e => setForm(f => ({ ...f, sbStudentGrade: e.target.value }))}
-                      placeholder="e.g. Grade 5" className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-xs text-white" />
+                      placeholder="e.g. Grade 5" className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-xs text-[var(--text-main)]" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Bus Mode</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Bus Mode</label>
                     <select value={form.sbBusMode} onChange={e => setForm(f => ({ ...f, sbBusMode: e.target.value }))}
-                      className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-xs text-white cursor-pointer">
+                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-xs text-[var(--text-main)] cursor-pointer">
                       <option value="TWO_WAY">Two Way</option>
                       <option value="ONE_WAY_PICKUP">Pickup Only</option>
                       <option value="ONE_WAY_DROP">Drop Only</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Billing Period</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Billing Period</label>
                     <input value={form.sbPeriod} onChange={e => setForm(f => ({ ...f, sbPeriod: e.target.value }))}
-                      placeholder="e.g. Term 1 2024-25" className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-xs text-white" />
+                      placeholder="e.g. Term 1 2024-25" className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-xs text-[var(--text-main)]" />
                   </div>
                 </div>
-                <p className="text-[10px] text-slate-600">👤 Use "Client Name" for the student name and "Email/Phone" for parent contact.</p>
+                <p className="text-[10px] text-[var(--text-faint)]">👤 Use "Client Name" for the student name and "Email/Phone" for parent contact.</p>
               </div>
             )}
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Issue Date</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Issue Date</label>
               <input type="date" value={form.issueDate} onChange={e => setForm(f => ({ ...f, issueDate: e.target.value }))}
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Due Date</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Due Date</label>
               <input type="date" value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))}
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
             </div>
             <div className="col-span-2">
-              <label className="block text-xs text-slate-400 mb-1">Description</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Description</label>
               <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                rows={2} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white resize-none" />
+                rows={2} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] resize-none" />
             </div>
           </div>
 
           {/* Line Items */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-white">Line Items</h3>
+              <h3 className="text-sm font-medium text-[var(--text-main)]">Line Items</h3>
               <button onClick={addItem} className="text-xs text-amber-400 hover:text-amber-300">+ Add Item</button>
             </div>
             <div className="space-y-2">
-              <div className="grid grid-cols-12 gap-2 text-xs text-slate-500 px-1">
+              <div className="grid grid-cols-12 gap-2 text-xs text-[var(--text-faint)] px-1">
                 <div className="col-span-6">Description</div>
                 <div className="col-span-2 text-right">Qty</div>
                 <div className="col-span-3 text-right">Unit Price</div>
@@ -216,56 +216,56 @@ function CreateModal({ onClose, onCreated, defaultModule }: { onClose: () => voi
                 <div key={i} className="grid grid-cols-12 gap-2 items-center">
                   <input value={item.description} onChange={e => setItem(i, 'description', e.target.value)}
                     placeholder="Item description"
-                    className="col-span-6 bg-slate-800 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white" />
+                    className="col-span-6 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2 py-1.5 text-xs text-[var(--text-main)]" />
                   <input type="number" value={item.qty} min={1} onChange={e => setItem(i, 'qty', e.target.value)}
-                    className="col-span-2 bg-slate-800 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white text-right" />
+                    className="col-span-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2 py-1.5 text-xs text-[var(--text-main)] text-right" />
                   <input type="number" value={item.unitPrice} min={0} step={0.01} onChange={e => setItem(i, 'unitPrice', e.target.value)}
-                    className="col-span-3 bg-slate-800 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white text-right" />
+                    className="col-span-3 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2 py-1.5 text-xs text-[var(--text-main)] text-right" />
                   <button onClick={() => removeItem(i)} disabled={lineItems.length === 1}
-                    className="col-span-1 text-slate-600 hover:text-red-400 text-center disabled:opacity-30">×</button>
+                    className="col-span-1 text-[var(--text-faint)] hover:text-red-400 text-center disabled:opacity-30">×</button>
                 </div>
               ))}
             </div>
           </div>
 
           {/* Totals */}
-          <div className="bg-slate-800/60 rounded-xl p-4 space-y-2 text-sm">
-            <div className="flex justify-between text-slate-400">
-              <span>Subtotal</span><span className="text-white">{fmtAED(subtotal)}</span>
+          <div className="bg-[var(--bg-surface)]/60 rounded-xl p-4 space-y-2 text-sm">
+            <div className="flex justify-between text-[var(--text-muted)]">
+              <span>Subtotal</span><span className="text-[var(--text-main)]">{fmtAED(subtotal)}</span>
             </div>
-            <div className="flex justify-between items-center text-slate-400">
+            <div className="flex justify-between items-center text-[var(--text-muted)]">
               <span>Discount</span>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500">AED</span>
+                <span className="text-xs text-[var(--text-faint)]">AED</span>
                 <input type="number" value={form.discountAmount} min={0} step={0.01}
                   onChange={e => setForm(f => ({ ...f, discountAmount: Number(e.target.value) }))}
-                  className="w-24 bg-slate-700 border border-white/10 rounded px-2 py-0.5 text-xs text-white text-right" />
+                  className="w-24 bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded px-2 py-0.5 text-xs text-[var(--text-main)] text-right" />
               </div>
             </div>
-            <div className="flex justify-between items-center text-slate-400">
+            <div className="flex justify-between items-center text-[var(--text-muted)]">
               <span>VAT</span>
               <div className="flex items-center gap-2">
                 <input type="number" value={form.vatRate} min={0} max={100} step={0.5}
                   onChange={e => setForm(f => ({ ...f, vatRate: Number(e.target.value) }))}
-                  className="w-16 bg-slate-700 border border-white/10 rounded px-2 py-0.5 text-xs text-white text-right" />
-                <span className="text-xs text-slate-500">%</span>
-                <span className="text-white w-28 text-right">{fmtAED(vatAmount)}</span>
+                  className="w-16 bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded px-2 py-0.5 text-xs text-[var(--text-main)] text-right" />
+                <span className="text-xs text-[var(--text-faint)]">%</span>
+                <span className="text-[var(--text-main)] w-28 text-right">{fmtAED(vatAmount)}</span>
               </div>
             </div>
-            <div className="flex justify-between font-bold text-base border-t border-white/10 pt-2">
-              <span className="text-white">Total</span>
+            <div className="flex justify-between font-bold text-base border-t border-[var(--border-subtle)] pt-2">
+              <span className="text-[var(--text-main)]">Total</span>
               <span className="text-amber-400">{fmtAED(total)}</span>
             </div>
           </div>
 
           <div>
-            <label className="block text-xs text-slate-400 mb-1">Notes</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Notes</label>
             <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-              rows={2} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white resize-none" />
+              rows={2} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] resize-none" />
           </div>
         </div>
-        <div className="flex gap-2 p-5 border-t border-white/10">
-          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-white/10 text-sm text-slate-400 hover:text-white">Cancel</button>
+        <div className="flex gap-2 p-5 border-t border-[var(--border-subtle)]">
+          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-[var(--border-subtle)] text-sm text-[var(--text-muted)] hover:text-[var(--text-main)]">Cancel</button>
           <button onClick={submit} disabled={saving}
             className="flex-1 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-semibold text-sm disabled:opacity-50">
             {saving ? 'Creating…' : 'Create Invoice'}
@@ -297,46 +297,46 @@ function PaymentModal({ invoice, onClose, onPaid }: { invoice: Invoice; onClose:
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-md">
-        <div className="flex items-center justify-between p-5 border-b border-white/10">
-          <h2 className="text-lg font-bold text-white">Record Payment</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-white text-xl">×</button>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-md">
+        <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)]">
+          <h2 className="text-lg font-bold text-[var(--text-main)]">Record Payment</h2>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">×</button>
         </div>
         <div className="p-5 space-y-3">
           <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-sm text-amber-300 flex justify-between">
             <span>Outstanding</span><span className="font-bold">{fmtAED(outstanding)}</span>
           </div>
           <div>
-            <label className="block text-xs text-slate-400 mb-1">Amount (AED) *</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Amount (AED) *</label>
             <input type="number" value={form.amount} min={0.01} step={0.01} max={outstanding}
               onChange={e => setForm(f => ({ ...f, amount: Number(e.target.value) }))}
-              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
           </div>
           <div>
-            <label className="block text-xs text-slate-400 mb-1">Payment Date</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Payment Date</label>
             <input type="date" value={form.paymentDate} onChange={e => setForm(f => ({ ...f, paymentDate: e.target.value }))}
-              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
           </div>
           <div>
-            <label className="block text-xs text-slate-400 mb-1">Method</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Method</label>
             <select value={form.paymentMethod} onChange={e => setForm(f => ({ ...f, paymentMethod: e.target.value }))}
-              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]">
               {PAY_METHODS.map(m => <option key={m}>{m}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-xs text-slate-400 mb-1">Reference / Cheque No.</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Reference / Cheque No.</label>
             <input value={form.reference} onChange={e => setForm(f => ({ ...f, reference: e.target.value }))}
-              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
           </div>
           <div>
-            <label className="block text-xs text-slate-400 mb-1">Notes</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Notes</label>
             <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-              rows={2} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white resize-none" />
+              rows={2} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] resize-none" />
           </div>
         </div>
-        <div className="flex gap-2 p-5 border-t border-white/10">
-          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-white/10 text-sm text-slate-400 hover:text-white">Cancel</button>
+        <div className="flex gap-2 p-5 border-t border-[var(--border-subtle)]">
+          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-[var(--border-subtle)] text-sm text-[var(--text-muted)] hover:text-[var(--text-main)]">Cancel</button>
           <button onClick={submit} disabled={saving}
             className="flex-1 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-sm disabled:opacity-50">
             {saving ? 'Saving…' : 'Record Payment'}
@@ -375,7 +375,7 @@ function InvoiceDrawer({ invoiceId, onClose, onRefresh }: { invoiceId: string; o
   if (!inv) return (
     <>
       <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
-      <div className="fixed inset-y-0 right-0 z-40 w-[480px] bg-slate-950 border-l border-white/10 flex items-center justify-center">
+      <div className="fixed inset-y-0 right-0 z-40 w-[480px] bg-[var(--bg-canvas)] border-l border-[var(--border-subtle)] flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500" />
       </div>
     </>
@@ -388,39 +388,39 @@ function InvoiceDrawer({ invoiceId, onClose, onRefresh }: { invoiceId: string; o
     <>
       {showPay && <PaymentModal invoice={inv} onClose={() => setShowPay(false)} onPaid={() => { load(); onRefresh(); }} />}
       <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
-      <div className="fixed inset-y-0 right-0 z-40 w-[480px] bg-slate-950 border-l border-white/10 overflow-y-auto">
-        <div className="flex items-center justify-between p-5 border-b border-white/10 sticky top-0 bg-slate-950 z-10">
+      <div className="fixed inset-y-0 right-0 z-40 w-[480px] bg-[var(--bg-canvas)] border-l border-[var(--border-subtle)] overflow-y-auto">
+        <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)] sticky top-0 bg-[var(--bg-canvas)] z-10">
           <div>
-            <p className="text-xs text-slate-500">Invoice</p>
-            <h2 className="text-lg font-bold text-white">{inv.invoice_number}</h2>
+            <p className="text-xs text-[var(--text-faint)]">Invoice</p>
+            <h2 className="text-lg font-bold text-[var(--text-main)]">{inv.invoice_number}</h2>
           </div>
           <div className="flex items-center gap-2">
             <StatusBadge status={inv.payment_status} />
-            <button onClick={onClose} className="text-slate-400 hover:text-white text-xl ml-2">×</button>
+            <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl ml-2">×</button>
           </div>
         </div>
 
         <div className="p-5 space-y-5">
-          <div className="bg-slate-900 border border-white/10 rounded-xl p-4 space-y-1.5">
-            <p className="text-white font-semibold">{inv.client_name}</p>
-            {inv.client_email && <p className="text-slate-400 text-sm">{inv.client_email}</p>}
-            {inv.client_phone && <p className="text-slate-400 text-sm">{inv.client_phone}</p>}
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4 space-y-1.5">
+            <p className="text-[var(--text-main)] font-semibold">{inv.client_name}</p>
+            {inv.client_email && <p className="text-[var(--text-muted)] text-sm">{inv.client_email}</p>}
+            {inv.client_phone && <p className="text-[var(--text-muted)] text-sm">{inv.client_phone}</p>}
           </div>
 
           <div className="grid grid-cols-3 gap-3">
             {([['Module', inv.module], ['Issued', fmtDate(inv.issue_date)], ['Due', fmtDate(inv.due_date)]] as [string, string][]).map(([l, v]) => (
-              <div key={l} className="bg-slate-900 border border-white/10 rounded-xl p-3 text-center">
-                <p className="text-xs text-slate-500">{l}</p>
-                <p className="text-sm font-medium text-white">{v}</p>
+              <div key={l} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3 text-center">
+                <p className="text-xs text-[var(--text-faint)]">{l}</p>
+                <p className="text-sm font-medium text-[var(--text-main)]">{v}</p>
               </div>
             ))}
           </div>
 
           {items.length > 0 && (
-            <div className="bg-slate-900 border border-white/10 rounded-xl overflow-hidden">
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-white/10 text-slate-500 text-xs">
+                  <tr className="border-b border-[var(--border-subtle)] text-[var(--text-faint)] text-xs">
                     <th className="text-left px-4 py-2">Description</th>
                     <th className="text-right px-4 py-2">Qty</th>
                     <th className="text-right px-4 py-2">Unit</th>
@@ -429,11 +429,11 @@ function InvoiceDrawer({ invoiceId, onClose, onRefresh }: { invoiceId: string; o
                 </thead>
                 <tbody>
                   {items.map((it, i) => (
-                    <tr key={i} className="border-b border-white/5 last:border-0">
-                      <td className="px-4 py-2 text-slate-300">{it.description}</td>
-                      <td className="px-4 py-2 text-right text-slate-400">{it.qty}</td>
-                      <td className="px-4 py-2 text-right text-slate-400">{fmtAED(it.unitPrice)}</td>
-                      <td className="px-4 py-2 text-right text-white">{fmtAED(it.qty * it.unitPrice)}</td>
+                    <tr key={i} className="border-b border-[var(--border-subtle)] last:border-0">
+                      <td className="px-4 py-2 text-[var(--text-muted)]">{it.description}</td>
+                      <td className="px-4 py-2 text-right text-[var(--text-muted)]">{it.qty}</td>
+                      <td className="px-4 py-2 text-right text-[var(--text-muted)]">{fmtAED(it.unitPrice)}</td>
+                      <td className="px-4 py-2 text-right text-[var(--text-main)]">{fmtAED(it.qty * it.unitPrice)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -441,25 +441,25 @@ function InvoiceDrawer({ invoiceId, onClose, onRefresh }: { invoiceId: string; o
             </div>
           )}
 
-          <div className="bg-slate-900 border border-white/10 rounded-xl p-4 space-y-2 text-sm">
-            <div className="flex justify-between text-slate-400"><span>Subtotal</span><span>{fmtAED(inv.subtotal)}</span></div>
-            {Number(inv.discount_amount) > 0 && <div className="flex justify-between text-slate-400"><span>Discount</span><span>−{fmtAED(inv.discount_amount)}</span></div>}
-            <div className="flex justify-between text-slate-400">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4 space-y-2 text-sm">
+            <div className="flex justify-between text-[var(--text-muted)]"><span>Subtotal</span><span>{fmtAED(inv.subtotal)}</span></div>
+            {Number(inv.discount_amount) > 0 && <div className="flex justify-between text-[var(--text-muted)]"><span>Discount</span><span>−{fmtAED(inv.discount_amount)}</span></div>}
+            <div className="flex justify-between text-[var(--text-muted)]">
               <span className="flex items-center gap-1.5">
                 VAT
                 {inv.module === 'SCHOOL_BUS'
                   ? <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded">0% EDU Zero</span>
-                  : <span className="text-slate-500 text-xs">(5%)</span>}
+                  : <span className="text-[var(--text-faint)] text-xs">(5%)</span>}
               </span>
               <span>{fmtAED(inv.vat_amount)}</span>
             </div>
-            <div className="flex justify-between font-bold text-base border-t border-white/10 pt-2">
-              <span className="text-white">Total</span><span className="text-amber-400">{fmtAED(inv.total_amount)}</span>
+            <div className="flex justify-between font-bold text-base border-t border-[var(--border-subtle)] pt-2">
+              <span className="text-[var(--text-main)]">Total</span><span className="text-amber-400">{fmtAED(inv.total_amount)}</span>
             </div>
-            <div className="flex justify-between text-slate-400"><span>Paid</span><span className="text-emerald-400">{fmtAED(inv.paid_amount)}</span></div>
+            <div className="flex justify-between text-[var(--text-muted)]"><span>Paid</span><span className="text-emerald-400">{fmtAED(inv.paid_amount)}</span></div>
             {outstanding > 0 && (
-              <div className="flex justify-between font-semibold border-t border-white/10 pt-2">
-                <span className="text-white">Outstanding</span><span className="text-red-400">{fmtAED(outstanding)}</span>
+              <div className="flex justify-between font-semibold border-t border-[var(--border-subtle)] pt-2">
+                <span className="text-[var(--text-main)]">Outstanding</span><span className="text-red-400">{fmtAED(outstanding)}</span>
               </div>
             )}
           </div>
@@ -487,14 +487,14 @@ function InvoiceDrawer({ invoiceId, onClose, onRefresh }: { invoiceId: string; o
 
           {inv.payments?.length > 0 && (
             <div>
-              <h3 className="text-sm font-medium text-white mb-2">Payment History</h3>
+              <h3 className="text-sm font-medium text-[var(--text-main)] mb-2">Payment History</h3>
               <div className="space-y-2">
                 {inv.payments.map(p => (
-                  <div key={p.id} className="bg-slate-900 border border-white/10 rounded-xl px-4 py-3 flex items-center justify-between">
+                  <div key={p.id} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-3 flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium text-white">{fmtAED(p.amount)}</p>
-                      <p className="text-xs text-slate-400">{p.payment_method} · {fmtDate(p.payment_date)}</p>
-                      {p.reference && <p className="text-xs text-slate-500">Ref: {p.reference}</p>}
+                      <p className="text-sm font-medium text-[var(--text-main)]">{fmtAED(p.amount)}</p>
+                      <p className="text-xs text-[var(--text-muted)]">{p.payment_method} · {fmtDate(p.payment_date)}</p>
+                      {p.reference && <p className="text-xs text-[var(--text-faint)]">Ref: {p.reference}</p>}
                     </div>
                     <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Received</span>
                   </div>
@@ -504,9 +504,9 @@ function InvoiceDrawer({ invoiceId, onClose, onRefresh }: { invoiceId: string; o
           )}
 
           {inv.notes && (
-            <div className="bg-slate-900 border border-white/10 rounded-xl p-4">
-              <p className="text-xs text-slate-500 mb-1">Notes</p>
-              <p className="text-sm text-slate-300">{inv.notes}</p>
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4">
+              <p className="text-xs text-[var(--text-faint)] mb-1">Notes</p>
+              <p className="text-sm text-[var(--text-muted)]">{inv.notes}</p>
             </div>
           )}
         </div>
@@ -587,12 +587,12 @@ function FinanceInvoicesInner() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Invoices</h1>
-          <p className="text-slate-400 text-xs mt-0.5">Create, manage, and track all invoices</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Invoices</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Create, manage, and track all invoices</p>
         </div>
         <div className="flex gap-3">
           <button onClick={handleExport}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm border border-white/10">
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] text-sm border border-[var(--border-subtle)]">
             ⬇ Export XLSX
           </button>
           <button onClick={() => openCreate(module || undefined)}
@@ -604,13 +604,13 @@ function FinanceInvoicesInner() {
 
       <div className="grid grid-cols-4 gap-3">
         {[
-          { label: 'Total Invoices', value: Object.values(counts).reduce((a,b)=>a+b,0), color: 'text-white' },
+          { label: 'Total Invoices', value: Object.values(counts).reduce((a,b)=>a+b,0), color: 'text-[var(--text-main)]' },
           { label: 'Outstanding', value: fmtAED(totalOutstanding), color: 'text-amber-400' },
           { label: 'Overdue', value: counts['OVERDUE'] ?? 0, color: 'text-red-400' },
           { label: 'Paid', value: counts['PAID'] ?? 0, color: 'text-emerald-400' },
         ].map(k => (
-          <div key={k.label} className="bg-slate-900/60 border border-white/10 rounded-2xl p-4">
-            <p className="text-xs text-slate-500">{k.label}</p>
+          <div key={k.label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
+            <p className="text-xs text-[var(--text-faint)]">{k.label}</p>
             <p className={`text-xl font-bold mt-1 ${k.color}`}>{k.value}</p>
           </div>
         ))}
@@ -618,9 +618,9 @@ function FinanceInvoicesInner() {
 
       <div className="flex gap-3">
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search by invoice #, client…"
-          className="flex-1 bg-slate-800/60 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/40" />
+          className="flex-1 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-amber-500/40" />
         <select value={module} onChange={e => setModule(e.target.value)}
-          className="bg-slate-800/60 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white">
+          className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)]">
           <option value="">All Modules</option>
           {MODULES.map(m => <option key={m} value={m}>{MODULE_LABELS[m] ?? m}</option>)}
         </select>
@@ -629,25 +629,25 @@ function FinanceInvoicesInner() {
       <div className="flex gap-1 flex-wrap">
         {STATUS_TABS.map(t => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${tab === t ? 'bg-amber-500 text-black' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${tab === t ? 'bg-amber-500 text-black' : 'bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
             {t} {tabCount(t) > 0 && <span className="ml-1 opacity-70">({tabCount(t)})</span>}
           </button>
         ))}
       </div>
 
       {loading ? (
-        <div className="space-y-2">{[...Array(6)].map((_, i) => <div key={i} className="h-14 bg-slate-800/60 rounded-xl animate-pulse" />)}</div>
+        <div className="space-y-2">{[...Array(6)].map((_, i) => <div key={i} className="h-14 bg-[var(--bg-surface)]/60 rounded-xl animate-pulse" />)}</div>
       ) : invoices.length === 0 ? (
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-16 text-center">
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-16 text-center">
           <div className="text-5xl mb-3">🧾</div>
-          <p className="text-slate-400">No invoices found</p>
+          <p className="text-[var(--text-muted)]">No invoices found</p>
           <button onClick={() => openCreate(module || undefined)} className="mt-3 text-amber-400 hover:text-amber-300 text-sm">Create your first invoice →</button>
         </div>
       ) : (
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden">
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/10 text-slate-400 text-xs uppercase tracking-wider">
+              <tr className="border-b border-[var(--border-subtle)] text-[var(--text-muted)] text-xs uppercase tracking-wider">
                 <th className="text-left px-5 py-3">Invoice</th>
                 <th className="text-left px-5 py-3">Client</th>
                 <th className="text-left px-5 py-3">Module</th>
@@ -662,32 +662,32 @@ function FinanceInvoicesInner() {
               {invoices.map(inv => {
                 const outstanding = Math.max(0, Number(inv.total_amount) - Number(inv.paid_amount));
                 return (
-                  <tr key={inv.id} className="border-b border-white/5 last:border-0 hover:bg-slate-800/40 transition-colors cursor-pointer"
+                  <tr key={inv.id} className="border-b border-[var(--border-subtle)] last:border-0 hover:bg-[var(--bg-surface)]/40 transition-colors cursor-pointer"
                     onClick={() => setDrawerInvId(inv.id)}>
                     <td className="px-5 py-3">
                       <p className="font-mono text-xs text-amber-400">{inv.invoice_number}</p>
-                      <p className="text-slate-500 text-xs mt-0.5">{fmtDate(inv.issue_date)}</p>
+                      <p className="text-[var(--text-faint)] text-xs mt-0.5">{fmtDate(inv.issue_date)}</p>
                     </td>
                     <td className="px-5 py-3">
-                      <p className="text-white">{inv.client_name}</p>
-                      {inv.client_email && <p className="text-slate-500 text-xs">{inv.client_email}</p>}
+                      <p className="text-[var(--text-main)]">{inv.client_name}</p>
+                      {inv.client_email && <p className="text-[var(--text-faint)] text-xs">{inv.client_email}</p>}
                     </td>
                     <td className="px-5 py-3">
                       {inv.module === 'SCHOOL_BUS'
                         ? <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-400 border border-yellow-500/20">🏫 School Bus</span>
-                        : <span className="text-xs text-slate-400">{MODULE_LABELS[inv.module] ?? inv.module}</span>}
+                        : <span className="text-xs text-[var(--text-muted)]">{MODULE_LABELS[inv.module] ?? inv.module}</span>}
                     </td>
                     <td className="px-5 py-3"><StatusBadge status={inv.payment_status} /></td>
-                    <td className="px-5 py-3 text-right text-white font-medium">{fmtAED(inv.total_amount)}</td>
+                    <td className="px-5 py-3 text-right text-[var(--text-main)] font-medium">{fmtAED(inv.total_amount)}</td>
                     <td className="px-5 py-3 text-right">
                       {Number(inv.paid_amount) > 0
                         ? <span className="text-emerald-400">{fmtAED(inv.paid_amount)}</span>
-                        : <span className="text-slate-600">—</span>}
+                        : <span className="text-[var(--text-faint)]">—</span>}
                     </td>
                     <td className="px-5 py-3 text-xs">
                       {inv.due_date
-                        ? <span className={outstanding > 0 && new Date(inv.due_date) < new Date() ? 'text-red-400' : 'text-slate-400'}>{fmtDate(inv.due_date)}</span>
-                        : <span className="text-slate-600">—</span>}
+                        ? <span className={outstanding > 0 && new Date(inv.due_date) < new Date() ? 'text-red-400' : 'text-[var(--text-muted)]'}>{fmtDate(inv.due_date)}</span>
+                        : <span className="text-[var(--text-faint)]">—</span>}
                     </td>
                     <td className="px-5 py-3 text-right" onClick={e => e.stopPropagation()}>
                       <button onClick={() => setDrawerInvId(inv.id)} className="text-xs text-amber-400 hover:text-amber-300">View →</button>
@@ -703,10 +703,10 @@ function FinanceInvoicesInner() {
       {totalPages > 1 && (
         <div className="flex justify-center gap-2">
           <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-            className="px-3 py-1.5 rounded-lg bg-slate-800 text-sm text-slate-400 disabled:opacity-30">← Prev</button>
-          <span className="px-3 py-1.5 text-sm text-slate-400">Page {page} of {totalPages}</span>
+            className="px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] text-sm text-[var(--text-muted)] disabled:opacity-30">← Prev</button>
+          <span className="px-3 py-1.5 text-sm text-[var(--text-muted)]">Page {page} of {totalPages}</span>
           <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-            className="px-3 py-1.5 rounded-lg bg-slate-800 text-sm text-slate-400 disabled:opacity-30">Next →</button>
+            className="px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] text-sm text-[var(--text-muted)] disabled:opacity-30">Next →</button>
         </div>
       )}
 
@@ -717,15 +717,15 @@ function FinanceInvoicesInner() {
             <span className="text-xl">🏫</span>
             <div>
               <p className="text-sm font-semibold text-yellow-300">School Bus Transport Fees</p>
-              <p className="text-xs text-slate-400">Filtered to school bus invoices · UAE EDU Zero Rate (0% VAT) · All payments tracked here</p>
+              <p className="text-xs text-[var(--text-muted)]">Filtered to school bus invoices · UAE EDU Zero Rate (0% VAT) · All payments tracked here</p>
             </div>
           </div>
           <div className="flex gap-2">
             <button onClick={() => openCreate('SCHOOL_BUS')}
-              className="text-xs bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-semibold px-3 py-1.5 rounded-lg transition-colors">
+              className="text-xs bg-yellow-500 hover:bg-yellow-400 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors">
               + New School Bus Invoice
             </button>
-            <button onClick={() => setModule('')} className="text-xs text-slate-400 hover:text-white px-3 py-1.5 rounded-lg border border-white/10">
+            <button onClick={() => setModule('')} className="text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] px-3 py-1.5 rounded-lg border border-[var(--border-subtle)]">
               View All
             </button>
           </div>
@@ -740,7 +740,7 @@ function FinanceInvoicesInner() {
 
 export default function FinanceInvoicesPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-slate-400">Loading invoices…</div>}>
+    <Suspense fallback={<div className="p-6 text-[var(--text-muted)]">Loading invoices…</div>}>
       <FinanceInvoicesInner />
     </Suspense>
   );

@@ -88,28 +88,28 @@ export default function VATBranchPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-white">VAT Return — Branch Breakdown</h1>
-        <p className="text-slate-400 text-xs mt-1">UAE FTA consolidated VAT return with per-emirate branch contribution · Single TRN filing</p>
+        <h1 className="text-2xl font-bold text-[var(--text-main)]">VAT Return — Branch Breakdown</h1>
+        <p className="text-[var(--text-muted)] text-xs mt-1">UAE FTA consolidated VAT return with per-emirate branch contribution · Single TRN filing</p>
       </div>
 
       {/* Controls */}
       <div className="flex flex-wrap gap-3 items-end">
         <div>
-          <label className="block text-slate-400 text-xs mb-1.5">Tenant</label>
+          <label className="block text-[var(--text-muted)] text-xs mb-1.5">Tenant</label>
           <select
             value={tenantId}
             onChange={e => setTenantId(e.target.value)}
-            className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2 text-white text-sm focus:outline-none min-w-48"
+            className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] text-sm focus:outline-none min-w-48"
           >
             {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-slate-400 text-xs mb-1.5">VAT Period</label>
+          <label className="block text-[var(--text-muted)] text-xs mb-1.5">VAT Period</label>
           <select
             value={quarter}
             onChange={e => setQuarter(e.target.value)}
-            className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2 text-white text-sm focus:outline-none"
+            className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] text-sm focus:outline-none"
           >
             {QUARTERS.map(q => <option key={q} value={q}>{q}</option>)}
           </select>
@@ -129,15 +129,15 @@ export default function VATBranchPage() {
                 <p className="text-white font-bold text-lg">{data.tenant.name}</p>
                 <div className="flex items-center gap-4 mt-1 flex-wrap">
                   <span className="text-emerald-300 text-sm font-mono">TRN: <strong>{data.tenant.trn ?? 'Not set'}</strong></span>
-                  <span className="text-slate-500 text-xs">Period: {data.period.start} → {data.period.end}</span>
-                  {data.period.quarter && <span className="text-slate-500 text-xs">{data.period.quarter}</span>}
+                  <span className="text-emerald-300/60 text-xs">Period: {data.period.start} → {data.period.end}</span>
+                  {data.period.quarter && <span className="text-emerald-300/60 text-xs">{data.period.quarter}</span>}
                 </div>
               </div>
             </div>
             <div className="text-right">
-              <p className="text-slate-400 text-xs">Filing TRN</p>
+              <p className="text-emerald-300/70 text-xs">Filing TRN</p>
               <p className="text-white font-mono font-bold">{data.tenant.trn ?? '—'}</p>
-              <p className="text-slate-500 text-xs mt-1">Covers {lines.length} branch{lines.length !== 1 ? 'es' : ''}</p>
+              <p className="text-emerald-300/60 text-xs mt-1">Covers {lines.length} branch{lines.length !== 1 ? 'es' : ''}</p>
             </div>
           </div>
         </div>
@@ -156,15 +156,15 @@ export default function VATBranchPage() {
 
       {/* Per-branch VAT breakdown */}
       {!loading && lines.length > 0 && (
-        <div className="bg-slate-900 border border-white/10 rounded-2xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-white/10">
-            <h2 className="text-white font-semibold">Per-Branch VAT Contribution</h2>
-            <p className="text-slate-500 text-xs mt-0.5">Internal management view — not submitted to FTA separately</p>
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
+          <div className="px-6 py-4 border-b border-[var(--border-subtle)]">
+            <h2 className="text-[var(--text-main)] font-semibold">Per-Branch VAT Contribution</h2>
+            <p className="text-[var(--text-faint)] text-xs mt-0.5">Internal management view — not submitted to FTA separately</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-slate-800/50 text-xs text-slate-400">
+                <tr className="bg-[var(--bg-surface)]/50 text-xs text-[var(--text-muted)]">
                   <th className="text-left px-6 py-3">Branch / Emirate</th>
                   <th className="text-left px-4 py-3">Trade License</th>
                   <th className="text-right px-4 py-3">Taxable Supplies</th>
@@ -177,34 +177,34 @@ export default function VATBranchPage() {
               </thead>
               <tbody className="divide-y divide-white/5">
                 {lines.map(line => (
-                  <tr key={line.branch_id ?? 'unassigned'} className="hover:bg-white/5 transition-colors">
+                  <tr key={line.branch_id ?? 'unassigned'} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2.5">
                         <span className="text-lg">{line.emirate ? (EMIRATE_FLAGS[line.emirate] ?? '🏢') : '🌐'}</span>
                         <div>
-                          <p className="text-white font-medium">{line.branch_name}</p>
+                          <p className="text-[var(--text-main)] font-medium">{line.branch_name}</p>
                           <div className="flex items-center gap-2 mt-0.5">
-                            {line.emirate && <span className="text-slate-500 text-xs">{EMIRATE_LABELS[line.emirate] ?? line.emirate}</span>}
-                            {line.cost_center_code && <span className="font-mono text-slate-600 text-xs">{line.cost_center_code}</span>}
+                            {line.emirate && <span className="text-[var(--text-faint)] text-xs">{EMIRATE_LABELS[line.emirate] ?? line.emirate}</span>}
+                            {line.cost_center_code && <span className="font-mono text-[var(--text-faint)] text-xs">{line.cost_center_code}</span>}
                           </div>
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-4">
                       <div>
-                        <p className="text-slate-300 text-xs font-mono">{line.trade_license_no ?? '—'}</p>
-                        {line.trade_license_authority && <p className="text-slate-600 text-xs">{line.trade_license_authority}</p>}
+                        <p className="text-[var(--text-muted)] text-xs font-mono">{line.trade_license_no ?? '—'}</p>
+                        {line.trade_license_authority && <p className="text-[var(--text-faint)] text-xs">{line.trade_license_authority}</p>}
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-right text-white">{fmt(line.taxable_supplies)}</td>
+                    <td className="px-4 py-4 text-right text-[var(--text-main)]">{fmt(line.taxable_supplies)}</td>
                     <td className="px-4 py-4 text-right text-emerald-400 font-semibold">{fmt(line.output_vat)}</td>
-                    <td className="px-4 py-4 text-right text-slate-400">{fmt(line.zero_rated_supplies)}</td>
+                    <td className="px-4 py-4 text-right text-[var(--text-muted)]">{fmt(line.zero_rated_supplies)}</td>
                     <td className="px-4 py-4 text-right text-amber-400">{fmt(line.input_vat)}</td>
                     <td className={`px-4 py-4 text-right font-semibold ${line.net_vat_position >= 0 ? 'text-emerald-400' : 'text-blue-400'}`}>
                       {fmt(line.net_vat_position)}
                       {line.net_vat_position < 0 && <span className="text-xs text-blue-500 ml-1">(Refund)</span>}
                     </td>
-                    <td className="px-4 py-4 text-right text-slate-400">{line.invoice_count}</td>
+                    <td className="px-4 py-4 text-right text-[var(--text-muted)]">{line.invoice_count}</td>
                   </tr>
                 ))}
               </tbody>
@@ -215,10 +215,10 @@ export default function VATBranchPage() {
 
       {/* Consolidated FTA Return Box */}
       {cons && (
-        <div className="bg-slate-900 border border-emerald-500/30 rounded-2xl overflow-hidden">
+        <div className="bg-[var(--bg-surface)] border border-emerald-500/30 rounded-2xl overflow-hidden">
           <div className="px-6 py-4 border-b border-emerald-500/20 bg-emerald-500/5 flex items-center justify-between">
             <div>
-              <h2 className="text-white font-bold">🇦🇪 FTA VAT Return — Consolidated</h2>
+              <h2 className="text-[var(--text-main)] font-bold">🇦🇪 FTA VAT Return — Consolidated</h2>
               <p className="text-emerald-400/70 text-xs mt-0.5">Filed under TRN: {data?.tenant.trn ?? '—'} · {data?.period.quarter ?? data?.period.start}</p>
             </div>
             <button
@@ -245,41 +245,41 @@ export default function VATBranchPage() {
 
           <div className="p-6 space-y-0">
             {/* Box 1 — Standard rated supplies */}
-            <div className="border border-white/10 rounded-t-xl overflow-hidden">
-              <div className="bg-slate-800/60 px-5 py-3 flex items-center justify-between">
-                <p className="text-slate-300 text-sm font-medium">Box 1 — Standard-Rated Supplies (5%)</p>
-                <p className="text-white font-bold">{fmt(cons.taxable_supplies)}</p>
+            <div className="border border-[var(--border-subtle)] rounded-t-xl overflow-hidden">
+              <div className="bg-[var(--bg-surface)]/60 px-5 py-3 flex items-center justify-between">
+                <p className="text-[var(--text-muted)] text-sm font-medium">Box 1 — Standard-Rated Supplies (5%)</p>
+                <p className="text-[var(--text-main)] font-bold">{fmt(cons.taxable_supplies)}</p>
               </div>
-              <div className="px-5 py-3 flex items-center justify-between border-t border-white/5">
-                <p className="text-slate-400 text-sm">Output VAT due on Box 1</p>
+              <div className="px-5 py-3 flex items-center justify-between border-t border-[var(--border-subtle)]">
+                <p className="text-[var(--text-muted)] text-sm">Output VAT due on Box 1</p>
                 <p className="text-emerald-400 font-bold">{fmt(cons.output_vat)}</p>
               </div>
             </div>
 
             {/* Box 2 — Zero rated */}
-            <div className="border-x border-b border-white/10">
+            <div className="border-x border-b border-[var(--border-subtle)]">
               <div className="px-5 py-3 flex items-center justify-between">
-                <p className="text-slate-400 text-sm">Box 2 — Zero-Rated Supplies (0%)</p>
-                <p className="text-slate-300 font-semibold">{fmt(cons.zero_rated_supplies)}</p>
+                <p className="text-[var(--text-muted)] text-sm">Box 2 — Zero-Rated Supplies (0%)</p>
+                <p className="text-[var(--text-muted)] font-semibold">{fmt(cons.zero_rated_supplies)}</p>
               </div>
             </div>
 
             {/* Box 3 — Exempt */}
-            <div className="border-x border-b border-white/10">
+            <div className="border-x border-b border-[var(--border-subtle)]">
               <div className="px-5 py-3 flex items-center justify-between">
-                <p className="text-slate-400 text-sm">Box 3 — Exempt Supplies</p>
-                <p className="text-slate-300 font-semibold">{fmt(cons.exempt_supplies)}</p>
+                <p className="text-[var(--text-muted)] text-sm">Box 3 — Exempt Supplies</p>
+                <p className="text-[var(--text-muted)] font-semibold">{fmt(cons.exempt_supplies)}</p>
               </div>
             </div>
 
             {/* Box 9 — Input VAT */}
-            <div className="border-x border-b border-white/10">
+            <div className="border-x border-b border-[var(--border-subtle)]">
               <div className="px-5 py-3 flex items-center justify-between">
-                <p className="text-slate-400 text-sm">Box 9 — Total Value of Taxable Purchases</p>
-                <p className="text-slate-300 font-semibold">{fmt(cons.taxable_purchases)}</p>
+                <p className="text-[var(--text-muted)] text-sm">Box 9 — Total Value of Taxable Purchases</p>
+                <p className="text-[var(--text-muted)] font-semibold">{fmt(cons.taxable_purchases)}</p>
               </div>
-              <div className="px-5 py-3 flex items-center justify-between border-t border-white/5">
-                <p className="text-slate-400 text-sm">Recoverable Input VAT (Box 9)</p>
+              <div className="px-5 py-3 flex items-center justify-between border-t border-[var(--border-subtle)]">
+                <p className="text-[var(--text-muted)] text-sm">Recoverable Input VAT (Box 9)</p>
                 <p className="text-amber-400 font-bold">({fmt(cons.input_vat)})</p>
               </div>
             </div>
@@ -288,10 +288,10 @@ export default function VATBranchPage() {
             <div className={`border rounded-b-xl overflow-hidden ${cons.refund_due ? 'border-blue-500/30' : 'border-emerald-500/30'}`}>
               <div className={`px-5 py-4 flex items-center justify-between ${cons.refund_due ? 'bg-blue-500/10' : 'bg-emerald-500/10'}`}>
                 <div>
-                  <p className={`font-bold text-base ${cons.refund_due ? 'text-blue-300' : 'text-white'}`}>
+                  <p className={`font-bold text-base ${cons.refund_due ? 'text-blue-300' : 'text-[var(--text-main)]'}`}>
                     {cons.refund_due ? 'VAT Refund Due from FTA' : 'Net VAT Payable to FTA'}
                   </p>
-                  <p className="text-slate-500 text-xs mt-0.5">Output VAT {fmt(cons.output_vat)} − Input VAT {fmt(cons.input_vat)}</p>
+                  <p className="text-[var(--text-faint)] text-xs mt-0.5">Output VAT {fmt(cons.output_vat)} − Input VAT {fmt(cons.input_vat)}</p>
                 </div>
                 <p className={`text-3xl font-black ${cons.refund_due ? 'text-blue-400' : 'text-emerald-400'}`}>
                   {fmt(Math.abs(cons.net_vat_payable))}
@@ -301,8 +301,8 @@ export default function VATBranchPage() {
           </div>
 
           {/* Invoice count note */}
-          <div className="px-6 py-3 border-t border-white/10 bg-slate-950/40">
-            <p className="text-slate-600 text-xs">
+          <div className="px-6 py-3 border-t border-[var(--border-subtle)] bg-[var(--bg-canvas)]/40">
+            <p className="text-[var(--text-faint)] text-xs">
               Based on {cons.invoice_count} invoices across {lines.length} branch{lines.length !== 1 ? 'es' : ''} ·
               VAT rate: 5% per UAE Federal Decree-Law No. 8 of 2017 ·
               All amounts in AED
@@ -312,7 +312,7 @@ export default function VATBranchPage() {
       )}
 
       {loading && (
-        <div className="bg-slate-900 border border-white/10 rounded-2xl p-12 text-center text-slate-500 text-sm">
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-12 text-center text-[var(--text-faint)] text-sm">
           Generating VAT return…
         </div>
       )}

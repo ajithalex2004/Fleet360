@@ -10,7 +10,7 @@ const fmtDate = (s: string) => s ? new Date(s).toLocaleDateString('en-AE') : '�
 const MATCH_STYLE: Record<string, string> = {
   UNMATCHED: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
   MATCHED:   'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-  EXCLUDED:  'bg-slate-500/20 text-slate-400 border-slate-500/30',
+  EXCLUDED:  'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30',
 };
 
 /* ── Add Bank Account Modal ── */
@@ -30,32 +30,32 @@ function AddBankModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =
     if (res.ok) { onSaved(); onClose(); } else alert('Failed to add bank account');
   };
 
-  const inp = 'w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500';
+  const inp = 'w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-emerald-500';
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-md">
-        <div className="flex items-center justify-between p-5 border-b border-white/10">
-          <h2 className="text-lg font-bold text-white">Add Bank Account</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-white text-xl">×</button>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-md">
+        <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)]">
+          <h2 className="text-lg font-bold text-[var(--text-main)]">Add Bank Account</h2>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">×</button>
         </div>
         <div className="p-5 space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="block text-xs text-slate-400 mb-1">Bank Name *</label><input value={form.bankName} onChange={s('bankName')} placeholder="Emirates NBD" className={inp} /></div>
-            <div><label className="block text-xs text-slate-400 mb-1">Account Name *</label><input value={form.accountName} onChange={s('accountName')} placeholder="Company Name LLC" className={inp} /></div>
+            <div><label className="block text-xs text-[var(--text-muted)] mb-1">Bank Name *</label><input value={form.bankName} onChange={s('bankName')} placeholder="Emirates NBD" className={inp} /></div>
+            <div><label className="block text-xs text-[var(--text-muted)] mb-1">Account Name *</label><input value={form.accountName} onChange={s('accountName')} placeholder="Company Name LLC" className={inp} /></div>
           </div>
-          <div><label className="block text-xs text-slate-400 mb-1">Account Number *</label><input value={form.accountNumber} onChange={s('accountNumber')} placeholder="1234567890" className={inp} /></div>
-          <div><label className="block text-xs text-slate-400 mb-1">IBAN</label><input value={form.iban} onChange={s('iban')} placeholder="AE070331234567890123456" className={inp} /></div>
+          <div><label className="block text-xs text-[var(--text-muted)] mb-1">Account Number *</label><input value={form.accountNumber} onChange={s('accountNumber')} placeholder="1234567890" className={inp} /></div>
+          <div><label className="block text-xs text-[var(--text-muted)] mb-1">IBAN</label><input value={form.iban} onChange={s('iban')} placeholder="AE070331234567890123456" className={inp} /></div>
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="block text-xs text-slate-400 mb-1">Currency</label><select value={form.currency} onChange={s('currency')} className={inp}><option>AED</option><option>USD</option></select></div>
-            <div><label className="block text-xs text-slate-400 mb-1">Opening Balance</label><input type="number" value={form.currentBalance} onChange={s('currentBalance')} placeholder="0.00" className={inp} /></div>
+            <div><label className="block text-xs text-[var(--text-muted)] mb-1">Currency</label><select value={form.currency} onChange={s('currency')} className={inp}><option>AED</option><option>USD</option></select></div>
+            <div><label className="block text-xs text-[var(--text-muted)] mb-1">Opening Balance</label><input type="number" value={form.currentBalance} onChange={s('currentBalance')} placeholder="0.00" className={inp} /></div>
           </div>
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={form.isDefault} onChange={e => setForm(f => ({ ...f, isDefault: e.target.checked }))} className="w-4 h-4 rounded accent-emerald-500" />
-            <span className="text-sm text-slate-300">Set as default account</span>
+            <span className="text-sm text-[var(--text-muted)]">Set as default account</span>
           </label>
         </div>
-        <div className="flex gap-2 p-5 border-t border-white/10">
-          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-white/10 text-sm text-slate-400 hover:text-white">Cancel</button>
+        <div className="flex gap-2 p-5 border-t border-[var(--border-subtle)]">
+          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-[var(--border-subtle)] text-sm text-[var(--text-muted)] hover:text-[var(--text-main)]">Cancel</button>
           <button onClick={save} disabled={saving} className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm disabled:opacity-50">{saving ? 'Saving…' : '+ Add Account'}</button>
         </div>
       </div>
@@ -115,38 +115,38 @@ function ImportModal({ bankAccountId, onClose, onSaved }: { bankAccountId: strin
     if (res.ok) { onSaved(); onClose(); } else alert('Import failed');
   };
 
-  const inp = 'w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500';
+  const inp = 'w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-emerald-500';
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-5 border-b border-white/10">
-          <h2 className="text-lg font-bold text-white">Import Bank Statement (CSV)</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-white text-xl">×</button>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)]">
+          <h2 className="text-lg font-bold text-[var(--text-main)]">Import Bank Statement (CSV)</h2>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">×</button>
         </div>
         <div className="p-5 space-y-4">
-          <div className="bg-slate-800/60 rounded-xl p-4 border border-dashed border-white/20 text-center cursor-pointer" onClick={() => fileRef.current?.click()}>
+          <div className="bg-[var(--bg-surface)]/60 rounded-xl p-4 border border-dashed border-[var(--border-strong)] text-center cursor-pointer" onClick={() => fileRef.current?.click()}>
             <input type="file" accept=".csv,.txt" ref={fileRef} onChange={onFile} className="hidden" />
-            <p className="text-slate-400 text-sm">📂 Click to upload CSV file</p>
-            <p className="text-xs text-slate-500 mt-1">Expected columns: Date, Description, Reference, Debit, Credit, Balance</p>
+            <p className="text-[var(--text-muted)] text-sm">📂 Click to upload CSV file</p>
+            <p className="text-xs text-[var(--text-faint)] mt-1">Expected columns: Date, Description, Reference, Debit, Credit, Balance</p>
           </div>
           {preview.length > 0 && (
             <div className="overflow-x-auto">
-              <p className="text-xs text-slate-400 mb-2">Preview (first 5 rows, {parseCSV(csvText).length} total)</p>
+              <p className="text-xs text-[var(--text-muted)] mb-2">Preview (first 5 rows, {parseCSV(csvText).length} total)</p>
               <table className="w-full text-xs border-collapse">
-                <thead><tr className="bg-slate-800">{Object.keys(preview[0]).slice(0, 6).map(h => <th key={h} className="px-2 py-1 text-left text-slate-400">{h}</th>)}</tr></thead>
-                <tbody>{preview.map((r, i) => <tr key={i} className="border-t border-white/5">{Object.values(r).slice(0, 6).map((v, j) => <td key={j} className="px-2 py-1 text-slate-300">{String(v)}</td>)}</tr>)}</tbody>
+                <thead><tr className="bg-[var(--bg-surface)]">{Object.keys(preview[0]).slice(0, 6).map(h => <th key={h} className="px-2 py-1 text-left text-[var(--text-muted)]">{h}</th>)}</tr></thead>
+                <tbody>{preview.map((r, i) => <tr key={i} className="border-t border-[var(--border-subtle)]">{Object.values(r).slice(0, 6).map((v, j) => <td key={j} className="px-2 py-1 text-[var(--text-muted)]">{String(v)}</td>)}</tr>)}</tbody>
               </table>
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="block text-xs text-slate-400 mb-1">Period Start *</label><input type="date" value={form.periodStart} onChange={e => setForm(f => ({ ...f, periodStart: e.target.value }))} className={inp} /></div>
-            <div><label className="block text-xs text-slate-400 mb-1">Period End *</label><input type="date" value={form.periodEnd} onChange={e => setForm(f => ({ ...f, periodEnd: e.target.value }))} className={inp} /></div>
-            <div><label className="block text-xs text-slate-400 mb-1">Opening Balance</label><input type="number" value={form.openingBalance} onChange={e => setForm(f => ({ ...f, openingBalance: e.target.value }))} placeholder="0.00" className={inp} /></div>
-            <div><label className="block text-xs text-slate-400 mb-1">Closing Balance</label><input type="number" value={form.closingBalance} onChange={e => setForm(f => ({ ...f, closingBalance: e.target.value }))} placeholder="0.00" className={inp} /></div>
+            <div><label className="block text-xs text-[var(--text-muted)] mb-1">Period Start *</label><input type="date" value={form.periodStart} onChange={e => setForm(f => ({ ...f, periodStart: e.target.value }))} className={inp} /></div>
+            <div><label className="block text-xs text-[var(--text-muted)] mb-1">Period End *</label><input type="date" value={form.periodEnd} onChange={e => setForm(f => ({ ...f, periodEnd: e.target.value }))} className={inp} /></div>
+            <div><label className="block text-xs text-[var(--text-muted)] mb-1">Opening Balance</label><input type="number" value={form.openingBalance} onChange={e => setForm(f => ({ ...f, openingBalance: e.target.value }))} placeholder="0.00" className={inp} /></div>
+            <div><label className="block text-xs text-[var(--text-muted)] mb-1">Closing Balance</label><input type="number" value={form.closingBalance} onChange={e => setForm(f => ({ ...f, closingBalance: e.target.value }))} placeholder="0.00" className={inp} /></div>
           </div>
         </div>
-        <div className="flex gap-2 p-5 border-t border-white/10">
-          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-white/10 text-sm text-slate-400 hover:text-white">Cancel</button>
+        <div className="flex gap-2 p-5 border-t border-[var(--border-subtle)]">
+          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-[var(--border-subtle)] text-sm text-[var(--text-muted)] hover:text-[var(--text-main)]">Cancel</button>
           <button onClick={doImport} disabled={saving || !csvText}
             className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm disabled:opacity-50">
             {saving ? 'Importing…' : `📥 Import ${parseCSV(csvText).length} Lines`}
@@ -222,12 +222,12 @@ export default function BankReconciliationPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Bank Reconciliation</h1>
-          <p className="text-slate-400 text-xs mt-0.5">Import statements, auto-match, and reconcile</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Bank Reconciliation</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Import statements, auto-match, and reconcile</p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => setShowAddBank(true)}
-            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-sm">
+            className="px-4 py-2 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] rounded-xl text-sm">
             + Bank Account
           </button>
           {selectedAccount && (
@@ -241,9 +241,9 @@ export default function BankReconciliationPage() {
 
       {/* Account Selector */}
       {accounts.length === 0 ? (
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-12 text-center">
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-12 text-center">
           <div className="text-4xl mb-3">🏦</div>
-          <p className="text-slate-400">No bank accounts registered</p>
+          <p className="text-[var(--text-muted)]">No bank accounts registered</p>
           <button onClick={() => setShowAddBank(true)} className="mt-3 px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold">Add Your First Bank Account</button>
         </div>
       ) : (
@@ -251,9 +251,9 @@ export default function BankReconciliationPage() {
           <div className="flex gap-3 flex-wrap">
             {accounts.map(acc => (
               <button key={acc.id} onClick={() => { setSelAcc(acc.id); setSelStmt(''); }}
-                className={`px-4 py-3 rounded-2xl border transition-all text-left ${selectedAccount === acc.id ? 'bg-emerald-900/40 border-emerald-500/50' : 'bg-slate-900/60 border-white/10 hover:border-white/20'}`}>
-                <p className="text-sm font-semibold text-white">{acc.bank_name}</p>
-                <p className="text-xs text-slate-400 mt-0.5">{acc.account_name} · {acc.account_number}</p>
+                className={`px-4 py-3 rounded-2xl border transition-all text-left ${selectedAccount === acc.id ? 'bg-emerald-900/40 border-emerald-500/50' : 'bg-[var(--bg-surface)]/60 border-[var(--border-subtle)] hover:border-[var(--border-strong)]'}`}>
+                <p className="text-sm font-semibold text-[var(--text-main)]">{acc.bank_name}</p>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">{acc.account_name} · {acc.account_number}</p>
                 <p className="text-xs text-emerald-400 mt-1 font-medium">{fmtAED(acc.current_balance)}</p>
               </button>
             ))}
@@ -262,10 +262,10 @@ export default function BankReconciliationPage() {
           {/* Statements */}
           {selAccount && (
             <div>
-              <h2 className="text-sm font-semibold text-slate-400 mb-3">STATEMENTS</h2>
+              <h2 className="text-sm font-semibold text-[var(--text-muted)] mb-3">STATEMENTS</h2>
               {statements.length === 0 ? (
-                <div className="bg-slate-900/60 border border-white/10 rounded-xl p-8 text-center">
-                  <p className="text-slate-400 text-sm">No statements imported for this account</p>
+                <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-8 text-center">
+                  <p className="text-[var(--text-muted)] text-sm">No statements imported for this account</p>
                   <button onClick={() => setShowImport(true)} className="mt-2 text-xs text-emerald-400 hover:text-emerald-300">Import first statement →</button>
                 </div>
               ) : (
@@ -276,11 +276,11 @@ export default function BankReconciliationPage() {
                     const pct = total > 0 ? Math.round(matched / total * 100) : 0;
                     return (
                       <button key={s.id} onClick={() => setSelStmt(s.id)}
-                        className={`p-4 rounded-2xl border transition-all text-left ${selectedStatement === s.id ? 'bg-emerald-900/40 border-emerald-500/50' : 'bg-slate-900/60 border-white/10 hover:border-white/20'}`}>
-                        <p className="text-sm font-semibold text-white">{fmtDate(s.period_start)} → {fmtDate(s.period_end)}</p>
-                        <div className="mt-2 h-1.5 bg-slate-700 rounded-full"><div className="h-full bg-emerald-500 rounded-full" style={{ width: `${pct}%` }} /></div>
-                        <p className="text-xs text-slate-400 mt-1">{matched}/{total} matched ({pct}%)</p>
-                        <p className="text-xs text-slate-500 mt-0.5">Close: {fmtAED(s.closing_balance)}</p>
+                        className={`p-4 rounded-2xl border transition-all text-left ${selectedStatement === s.id ? 'bg-emerald-900/40 border-emerald-500/50' : 'bg-[var(--bg-surface)]/60 border-[var(--border-subtle)] hover:border-[var(--border-strong)]'}`}>
+                        <p className="text-sm font-semibold text-[var(--text-main)]">{fmtDate(s.period_start)} → {fmtDate(s.period_end)}</p>
+                        <div className="mt-2 h-1.5 bg-[var(--bg-surface-hover)] rounded-full"><div className="h-full bg-emerald-500 rounded-full" style={{ width: `${pct}%` }} /></div>
+                        <p className="text-xs text-[var(--text-muted)] mt-1">{matched}/{total} matched ({pct}%)</p>
+                        <p className="text-xs text-[var(--text-faint)] mt-0.5">Close: {fmtAED(s.closing_balance)}</p>
                       </button>
                     );
                   })}
@@ -294,20 +294,20 @@ export default function BankReconciliationPage() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <h2 className="text-sm font-semibold text-slate-400">STATEMENT LINES</h2>
+                  <h2 className="text-sm font-semibold text-[var(--text-muted)]">STATEMENT LINES</h2>
                   {lineStats && (
                     <div className="flex items-center gap-2 text-xs">
                       <span className="text-emerald-400">{lineStats.matched} matched</span>
                       <span className="text-amber-400">{lineStats.unmatched} unmatched</span>
-                      <span className="text-slate-500">{lineStats.excluded} excluded</span>
+                      <span className="text-[var(--text-faint)]">{lineStats.excluded} excluded</span>
                     </div>
                   )}
                 </div>
                 <div className="flex gap-2">
-                  <div className="flex bg-slate-800/60 border border-white/10 rounded-xl p-0.5 gap-0.5">
+                  <div className="flex bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-0.5 gap-0.5">
                     {['ALL', 'UNMATCHED', 'MATCHED', 'EXCLUDED'].map(f => (
                       <button key={f} onClick={() => setMatchFilter(f)}
-                        className={`px-2 py-1 rounded-lg text-xs font-medium transition-all ${matchFilter === f ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+                        className={`px-2 py-1 rounded-lg text-xs font-medium transition-all ${matchFilter === f ? 'bg-emerald-600 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
                         {f}
                       </button>
                     ))}
@@ -321,28 +321,28 @@ export default function BankReconciliationPage() {
 
               {/* Reconciliation Progress */}
               {lineStats && (
-                <div className="bg-slate-900/60 border border-white/10 rounded-xl p-4">
+                <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-4">
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs text-slate-400">Reconciliation Progress</p>
-                    <p className="text-xs font-bold text-white">{reconPct}%</p>
+                    <p className="text-xs text-[var(--text-muted)]">Reconciliation Progress</p>
+                    <p className="text-xs font-bold text-[var(--text-main)]">{reconPct}%</p>
                   </div>
-                  <div className="h-2 bg-slate-700 rounded-full">
+                  <div className="h-2 bg-[var(--bg-surface-hover)] rounded-full">
                     <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${reconPct}%` }} />
                   </div>
                 </div>
               )}
 
               {loading ? (
-                <div className="h-48 bg-slate-800/60 rounded-2xl animate-pulse" />
+                <div className="h-48 bg-[var(--bg-surface)]/60 rounded-2xl animate-pulse" />
               ) : lines.length === 0 ? (
-                <div className="bg-slate-900/60 border border-white/10 rounded-xl p-8 text-center">
-                  <p className="text-slate-400 text-sm">No lines found for this filter</p>
+                <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-8 text-center">
+                  <p className="text-[var(--text-muted)] text-sm">No lines found for this filter</p>
                 </div>
               ) : (
-                <div className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden">
+                <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-white/10 text-slate-400 text-xs uppercase tracking-wider">
+                      <tr className="border-b border-[var(--border-subtle)] text-[var(--text-muted)] text-xs uppercase tracking-wider">
                         <th className="text-left px-5 py-3">Date</th>
                         <th className="text-left px-5 py-3">Description</th>
                         <th className="text-left px-5 py-3">Reference</th>
@@ -355,15 +355,15 @@ export default function BankReconciliationPage() {
                     </thead>
                     <tbody>
                       {lines.map(line => (
-                        <tr key={line.id} className="border-b border-white/5 last:border-0 hover:bg-slate-800/40 transition-colors">
-                          <td className="px-5 py-3 text-slate-300 text-xs">{fmtDate(line.txn_date)}</td>
+                        <tr key={line.id} className="border-b border-[var(--border-subtle)] last:border-0 hover:bg-[var(--bg-surface)]/40 transition-colors">
+                          <td className="px-5 py-3 text-[var(--text-muted)] text-xs">{fmtDate(line.txn_date)}</td>
                           <td className="px-5 py-3 text-xs max-w-xs truncate">
-                            <span className="text-white">{line.description}</span>
+                            <span className="text-[var(--text-main)]">{line.description}</span>
                           </td>
-                          <td className="px-5 py-3 text-slate-400 text-xs font-mono">{line.reference ?? '—'}</td>
+                          <td className="px-5 py-3 text-[var(--text-muted)] text-xs font-mono">{line.reference ?? '—'}</td>
                           <td className="px-5 py-3 text-right text-red-400 text-xs">{line.debit ? fmtAED(line.debit) : '—'}</td>
                           <td className="px-5 py-3 text-right text-emerald-400 text-xs">{line.credit ? fmtAED(line.credit) : '—'}</td>
-                          <td className="px-5 py-3 text-right text-slate-300 text-xs">{fmtAED(line.balance)}</td>
+                          <td className="px-5 py-3 text-right text-[var(--text-muted)] text-xs">{fmtAED(line.balance)}</td>
                           <td className="px-5 py-3">
                             <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${MATCH_STYLE[line.match_status] ?? ''}`}>
                               {line.match_status}
@@ -377,7 +377,7 @@ export default function BankReconciliationPage() {
                                   ✓ Match
                                 </button>
                                 <button onClick={() => matchLine(line.id, 'exclude_line', { reason: 'Bank charge / fee' })}
-                                  className="text-xs px-2 py-1 rounded-lg bg-slate-500/20 text-slate-400 hover:bg-slate-500/30">
+                                  className="text-xs px-2 py-1 rounded-lg bg-slate-500/20 text-[var(--text-muted)] hover:bg-slate-500/30">
                                   Exclude
                                 </button>
                               </div>

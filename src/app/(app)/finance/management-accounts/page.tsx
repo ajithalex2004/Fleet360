@@ -90,7 +90,7 @@ function getPresets() {
 function AmtCell({ value, negative = false, className = '' }: { value: number; negative?: boolean; className?: string }) {
   const isNeg = negative || value < 0;
   return (
-    <td className={`px-4 py-1.5 text-right text-sm tabular-nums ${isNeg ? 'text-red-400' : 'text-slate-200'} ${className}`}>
+    <td className={`px-4 py-1.5 text-right text-sm tabular-nums ${isNeg ? 'text-red-400' : 'text-[var(--text-main)]'} ${className}`}>
       {negative || value < 0 ? `(${fmt(Math.abs(value))})` : fmt(value)}
     </td>
   );
@@ -103,7 +103,7 @@ function VarCell({ current, comparison }: { current: number; comparison: number 
   return (
     <td className={`px-3 py-1.5 text-right text-xs tabular-nums ${pos ? 'text-emerald-400' : 'text-red-400'}`}>
       <div>{pos ? '+' : ''}{fmtAmt(diff)}</div>
-      <div className="text-slate-500">{pos ? '+' : ''}{pct.toFixed(1)}%</div>
+      <div className="text-[var(--text-faint)]">{pos ? '+' : ''}{pct.toFixed(1)}%</div>
     </td>
   );
 }
@@ -113,7 +113,7 @@ function IncomeStatement({ data }: { data: IncomeStatementData }) {
   const hasComp = !!comparison && !!compPeriod;
 
   const SectionHeader = ({ label, color }: { label: string; color: string }) => (
-    <tr className="border-t border-white/10 bg-slate-800/20">
+    <tr className="border-t border-[var(--border-subtle)] bg-[var(--bg-surface)]/20">
       <td className={`px-4 py-2 text-xs font-bold uppercase tracking-wider ${color}`}>{label}</td>
       <td />{hasComp && <><td /><td /></>}<td />
     </tr>
@@ -121,14 +121,14 @@ function IncomeStatement({ data }: { data: IncomeStatementData }) {
 
   const TotalRow = ({ label, current, comp, color, size = 'sm', highlight = '' }:
     { label: string; current: number; comp?: number; color: string; size?: string; highlight?: string }) => (
-    <tr className={`border-b border-white/20 ${highlight}`}>
+    <tr className={`border-b border-[var(--border-strong)] ${highlight}`}>
       <td className={`px-4 py-2 font-bold text-${size} ${color}`}>{label}</td>
       <td className={`px-4 py-2 text-right font-bold text-${size} tabular-nums ${color}`}>
         {fmtAmt(current)}
       </td>
       {hasComp && (
         <>
-          <td className={`px-4 py-2 text-right text-${size} tabular-nums text-slate-400`}>
+          <td className={`px-4 py-2 text-right text-${size} tabular-nums text-[var(--text-muted)]`}>
             {comp !== undefined ? fmtAmt(comp) : '—'}
           </td>
           {comp !== undefined
@@ -143,12 +143,12 @@ function IncomeStatement({ data }: { data: IncomeStatementData }) {
 
   const LineRow = ({ label, current, comp, negative = false }:
     { label: string; current: number; comp?: number; negative?: boolean }) => (
-    <tr className="border-b border-white/5 hover:bg-slate-800/20">
-      <td className="px-4 py-1 text-sm text-slate-300" style={{ paddingLeft: '36px' }}>{label}</td>
+    <tr className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]/20">
+      <td className="px-4 py-1 text-sm text-[var(--text-muted)]" style={{ paddingLeft: '36px' }}>{label}</td>
       <AmtCell value={current} negative={negative} />
       {hasComp && (
         <>
-          <td className={`px-4 py-1 text-right text-sm tabular-nums text-slate-500`}>
+          <td className={`px-4 py-1 text-right text-sm tabular-nums text-[var(--text-faint)]`}>
             {comp !== undefined ? (negative || comp < 0 ? `(${fmt(Math.abs(comp))})` : fmt(comp)) : '—'}
           </td>
           {comp !== undefined
@@ -173,23 +173,23 @@ function IncomeStatement({ data }: { data: IncomeStatementData }) {
   const cs    = comparison?.summary;
 
   return (
-    <div className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden">
+    <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-white/10">
-            <th className="text-left px-4 py-3 text-slate-400 text-xs uppercase tracking-wider">Line Item</th>
-            <th className="text-right px-4 py-3 text-slate-400 text-xs uppercase tracking-wider w-40">
+          <tr className="border-b border-[var(--border-subtle)]">
+            <th className="text-left px-4 py-3 text-[var(--text-muted)] text-xs uppercase tracking-wider">Line Item</th>
+            <th className="text-right px-4 py-3 text-[var(--text-muted)] text-xs uppercase tracking-wider w-40">
               {data.period.from.slice(0, 7)} – {data.period.to.slice(0, 7)}
             </th>
             {hasComp && (
               <>
-                <th className="text-right px-4 py-3 text-slate-500 text-xs uppercase tracking-wider w-36">
+                <th className="text-right px-4 py-3 text-[var(--text-faint)] text-xs uppercase tracking-wider w-36">
                   {compPeriod!.from.slice(0, 7)} – {compPeriod!.to.slice(0, 7)}
                 </th>
-                <th className="text-right px-3 py-3 text-slate-500 text-xs uppercase tracking-wider w-28">Variance</th>
+                <th className="text-right px-3 py-3 text-[var(--text-faint)] text-xs uppercase tracking-wider w-28">Variance</th>
               </>
             )}
-            <th className="text-right px-4 py-3 text-slate-400 text-xs uppercase tracking-wider w-20">Margin</th>
+            <th className="text-right px-4 py-3 text-[var(--text-muted)] text-xs uppercase tracking-wider w-20">Margin</th>
           </tr>
         </thead>
         <tbody>
@@ -207,11 +207,11 @@ function IncomeStatement({ data }: { data: IncomeStatementData }) {
             color="text-red-300" highlight="bg-red-900/10" />
 
           {/* Gross Profit */}
-          <tr className="border-b border-white/20 bg-blue-900/10">
+          <tr className="border-b border-[var(--border-strong)] bg-blue-900/10">
             <td className="px-4 py-3 font-bold text-base text-blue-300">Gross Profit</td>
             <td className={`px-4 py-3 text-right font-bold text-base tabular-nums ${summary.grossProfit >= 0 ? 'text-blue-300' : 'text-red-400'}`}>{fmtAmt(summary.grossProfit)}</td>
             {hasComp && <>
-              <td className="px-4 py-3 text-right text-slate-400 tabular-nums">{cs ? fmtAmt(cs.grossProfit) : '—'}</td>
+              <td className="px-4 py-3 text-right text-[var(--text-muted)] tabular-nums">{cs ? fmtAmt(cs.grossProfit) : '—'}</td>
               {cs ? <VarCell current={summary.grossProfit} comparison={cs.grossProfit} /> : <td />}
             </>}
             <td className="px-4 py-3 text-right text-sm font-medium text-blue-400">{summary.grossMarginPct}%</td>
@@ -228,11 +228,11 @@ function IncomeStatement({ data }: { data: IncomeStatementData }) {
           )}
 
           {/* EBITDA */}
-          <tr className="border-b border-white/20 bg-purple-900/10">
+          <tr className="border-b border-[var(--border-strong)] bg-purple-900/10">
             <td className="px-4 py-3 font-bold text-base text-purple-300">EBITDA</td>
             <td className={`px-4 py-3 text-right font-bold text-base tabular-nums ${summary.ebitda >= 0 ? 'text-purple-300' : 'text-red-400'}`}>{fmtAmt(summary.ebitda)}</td>
             {hasComp && <>
-              <td className="px-4 py-3 text-right text-slate-400 tabular-nums">{cs ? fmtAmt(cs.ebitda) : '—'}</td>
+              <td className="px-4 py-3 text-right text-[var(--text-muted)] tabular-nums">{cs ? fmtAmt(cs.ebitda) : '—'}</td>
               {cs ? <VarCell current={summary.ebitda} comparison={cs.ebitda} /> : <td />}
             </>}
             <td className="px-4 py-3 text-right text-sm font-medium text-purple-400">{summary.ebitdaMarginPct}%</td>
@@ -244,11 +244,11 @@ function IncomeStatement({ data }: { data: IncomeStatementData }) {
           )}
 
           {/* EBIT */}
-          <tr className="border-b border-white/20 bg-slate-800/30">
-            <td className="px-4 py-2.5 font-bold text-sm text-slate-200">EBIT (Operating Profit)</td>
-            <td className={`px-4 py-2.5 text-right font-bold text-sm tabular-nums ${summary.ebit >= 0 ? 'text-slate-200' : 'text-red-400'}`}>{fmtAmt(summary.ebit)}</td>
+          <tr className="border-b border-[var(--border-strong)] bg-[var(--bg-surface)]/30">
+            <td className="px-4 py-2.5 font-bold text-sm text-[var(--text-main)]">EBIT (Operating Profit)</td>
+            <td className={`px-4 py-2.5 text-right font-bold text-sm tabular-nums ${summary.ebit >= 0 ? 'text-[var(--text-main)]' : 'text-red-400'}`}>{fmtAmt(summary.ebit)}</td>
             {hasComp && <>
-              <td className="px-4 py-2.5 text-right text-slate-400 tabular-nums">{cs ? fmtAmt(cs.ebit) : '—'}</td>
+              <td className="px-4 py-2.5 text-right text-[var(--text-muted)] tabular-nums">{cs ? fmtAmt(cs.ebit) : '—'}</td>
               {cs ? <VarCell current={summary.ebit} comparison={cs.ebit} /> : <td />}
             </>}
             <td />
@@ -258,8 +258,8 @@ function IncomeStatement({ data }: { data: IncomeStatementData }) {
           {expenses.finance.length > 0 && (
             <>
               {expenses.finance.map(e => <LineRow key={e.code} label={e.label} current={e.amount} comp={cFin[e.code]} negative />)}
-              <tr className="border-b border-white/10">
-                <td className="px-4 py-1.5 text-sm text-slate-400" style={{ paddingLeft: '36px' }}>Total Finance Costs</td>
+              <tr className="border-b border-[var(--border-subtle)]">
+                <td className="px-4 py-1.5 text-sm text-[var(--text-muted)]" style={{ paddingLeft: '36px' }}>Total Finance Costs</td>
                 <AmtCell value={summary.totalFinanceCosts} negative />
                 {hasComp && <><td /><td /></>}
                 <td />
@@ -268,11 +268,11 @@ function IncomeStatement({ data }: { data: IncomeStatementData }) {
           )}
 
           {/* EBT */}
-          <tr className="border-b border-white/20 bg-slate-800/30">
-            <td className="px-4 py-2.5 font-bold text-sm text-slate-200">Profit Before Tax (EBT)</td>
-            <td className={`px-4 py-2.5 text-right font-bold text-sm tabular-nums ${summary.ebt >= 0 ? 'text-slate-200' : 'text-red-400'}`}>{fmtAmt(summary.ebt)}</td>
+          <tr className="border-b border-[var(--border-strong)] bg-[var(--bg-surface)]/30">
+            <td className="px-4 py-2.5 font-bold text-sm text-[var(--text-main)]">Profit Before Tax (EBT)</td>
+            <td className={`px-4 py-2.5 text-right font-bold text-sm tabular-nums ${summary.ebt >= 0 ? 'text-[var(--text-main)]' : 'text-red-400'}`}>{fmtAmt(summary.ebt)}</td>
             {hasComp && <>
-              <td className="px-4 py-2.5 text-right text-slate-400 tabular-nums">{cs ? fmtAmt(cs.ebt) : '—'}</td>
+              <td className="px-4 py-2.5 text-right text-[var(--text-muted)] tabular-nums">{cs ? fmtAmt(cs.ebt) : '—'}</td>
               {cs ? <VarCell current={summary.ebt} comparison={cs.ebt} /> : <td />}
             </>}
             <td />
@@ -289,13 +289,13 @@ function IncomeStatement({ data }: { data: IncomeStatementData }) {
           )}
 
           {/* Net Profit */}
-          <tr className={`border-t-2 border-white/30 ${summary.netProfit >= 0 ? 'bg-emerald-900/20' : 'bg-red-900/20'}`}>
-            <td className="px-4 py-4 font-bold text-lg text-white">Net Profit / (Loss)</td>
+          <tr className={`border-t-2 border-[var(--border-strong)] ${summary.netProfit >= 0 ? 'bg-emerald-900/20' : 'bg-red-900/20'}`}>
+            <td className="px-4 py-4 font-bold text-lg text-[var(--text-main)]">Net Profit / (Loss)</td>
             <td className={`px-4 py-4 text-right font-bold text-xl tabular-nums ${summary.netProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
               AED {fmtAmt(summary.netProfit)}
             </td>
             {hasComp && <>
-              <td className="px-4 py-4 text-right font-semibold text-slate-400 tabular-nums">
+              <td className="px-4 py-4 text-right font-semibold text-[var(--text-muted)] tabular-nums">
                 AED {cs ? fmtAmt(cs.netProfit) : '—'}
               </td>
               {cs ? <VarCell current={summary.netProfit} comparison={cs.netProfit} /> : <td />}
@@ -306,22 +306,22 @@ function IncomeStatement({ data }: { data: IncomeStatementData }) {
           </tr>
 
           {/* VAT Position */}
-          <tr className="border-t border-white/10 bg-slate-800/20">
-            <td colSpan={hasComp ? 5 : 3} className="px-4 pt-4 pb-1 text-xs font-bold text-slate-400 uppercase tracking-wider">VAT Position</td>
+          <tr className="border-t border-[var(--border-subtle)] bg-[var(--bg-surface)]/20">
+            <td colSpan={hasComp ? 5 : 3} className="px-4 pt-4 pb-1 text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider">VAT Position</td>
           </tr>
           {[
             { label: 'Output VAT (5% on revenue)', value: vat.outputVat, neg: false },
             { label: 'Input VAT (recoverable)',    value: vat.inputVat,  neg: true  },
           ].map(row => (
             <tr key={row.label}>
-              <td className="px-4 py-1 text-sm text-slate-400" style={{ paddingLeft: '36px' }}>{row.label}</td>
+              <td className="px-4 py-1 text-sm text-[var(--text-muted)]" style={{ paddingLeft: '36px' }}>{row.label}</td>
               <AmtCell value={row.value} negative={row.neg} />
               {hasComp && <><td /><td /></>}
               <td />
             </tr>
           ))}
-          <tr className="border-b border-white/10">
-            <td className="px-4 py-2 font-bold text-sm text-slate-200" style={{ paddingLeft: '36px' }}>Net VAT Payable to FTA</td>
+          <tr className="border-b border-[var(--border-subtle)]">
+            <td className="px-4 py-2 font-bold text-sm text-[var(--text-main)]" style={{ paddingLeft: '36px' }}>Net VAT Payable to FTA</td>
             <td className="px-4 py-2 text-right font-bold text-sm text-amber-400 tabular-nums">AED {fmt(vat.netVat)}</td>
             {hasComp && <><td /><td /></>}
             <td />
@@ -344,20 +344,20 @@ function CashFlowStatement({ data }: { data: CashFlowData }) {
     total: number; totalLabel: string;
   }) => (
     <>
-      <tr className="border-t border-white/10 bg-slate-800/20">
+      <tr className="border-t border-[var(--border-subtle)] bg-[var(--bg-surface)]/20">
         <td className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider ${color}`}>{title}</td>
         <td />
       </tr>
       {lines.map((line, i) => (
-        <tr key={i} className="border-b border-white/5 hover:bg-slate-800/20">
-          <td className="px-4 py-1.5 text-sm text-slate-300" style={{ paddingLeft: '36px' }}>{line.label}</td>
-          <td className={`px-4 py-1.5 text-right text-sm tabular-nums ${line.value < 0 ? 'text-red-400' : 'text-slate-200'}`}>
+        <tr key={i} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]/20">
+          <td className="px-4 py-1.5 text-sm text-[var(--text-muted)]" style={{ paddingLeft: '36px' }}>{line.label}</td>
+          <td className={`px-4 py-1.5 text-right text-sm tabular-nums ${line.value < 0 ? 'text-red-400' : 'text-[var(--text-main)]'}`}>
             {line.value < 0 ? `(${fmt(Math.abs(line.value))})` : fmt(line.value)}
           </td>
         </tr>
       ))}
-      <tr className="border-b border-white/20 bg-slate-800/30">
-        <td className="px-4 py-2.5 font-bold text-sm text-slate-200">{totalLabel}</td>
+      <tr className="border-b border-[var(--border-strong)] bg-[var(--bg-surface)]/30">
+        <td className="px-4 py-2.5 font-bold text-sm text-[var(--text-main)]">{totalLabel}</td>
         <td className={`px-4 py-2.5 text-right font-bold text-sm tabular-nums ${total >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
           {total < 0 ? `(${fmt(Math.abs(total))})` : fmt(total)}
         </td>
@@ -366,12 +366,12 @@ function CashFlowStatement({ data }: { data: CashFlowData }) {
   );
 
   return (
-    <div className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden">
+    <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-white/10">
-            <th className="text-left px-4 py-3 text-slate-400 text-xs uppercase tracking-wider">Item (Indirect Method)</th>
-            <th className="text-right px-4 py-3 text-slate-400 text-xs uppercase tracking-wider w-48">AED</th>
+          <tr className="border-b border-[var(--border-subtle)]">
+            <th className="text-left px-4 py-3 text-[var(--text-muted)] text-xs uppercase tracking-wider">Item (Indirect Method)</th>
+            <th className="text-right px-4 py-3 text-[var(--text-muted)] text-xs uppercase tracking-wider w-48">AED</th>
           </tr>
         </thead>
         <tbody>
@@ -390,8 +390,8 @@ function CashFlowStatement({ data }: { data: CashFlowData }) {
             { label: 'Lease Repayments',       value: financing.loanRepayments },
             { label: 'Dividends Paid',         value: financing.dividendsPaid },
           ]} />
-          <tr className={`border-t-2 border-white/30 ${summary.netCashFlow >= 0 ? 'bg-emerald-900/20' : 'bg-red-900/20'}`}>
-            <td className="px-4 py-4 font-bold text-lg text-white">Net Change in Cash (A + B + C)</td>
+          <tr className={`border-t-2 border-[var(--border-strong)] ${summary.netCashFlow >= 0 ? 'bg-emerald-900/20' : 'bg-red-900/20'}`}>
+            <td className="px-4 py-4 font-bold text-lg text-[var(--text-main)]">Net Change in Cash (A + B + C)</td>
             <td className={`px-4 py-4 text-right font-bold text-xl tabular-nums ${summary.netCashFlow >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
               AED {summary.netCashFlow < 0 ? `(${fmt(Math.abs(summary.netCashFlow))})` : fmt(summary.netCashFlow)}
             </td>
@@ -407,25 +407,25 @@ function CashFlowStatement({ data }: { data: CashFlowData }) {
 function ModuleBreakdown({ data }: { data: ModuleBreakdownData }) {
   if (!data.modules.length) return null;
   return (
-    <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5">
-      <h3 className="text-sm font-bold text-slate-300 mb-4">Revenue by Business Line</h3>
+    <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5">
+      <h3 className="text-sm font-bold text-[var(--text-muted)] mb-4">Revenue by Business Line</h3>
       <div className="space-y-3">
         {data.modules.map(m => (
           <div key={m.module} className="flex items-center gap-3">
-            <div className="w-28 text-xs text-slate-400 truncate">{m.label}</div>
-            <div className="flex-1 h-5 bg-slate-800 rounded-full overflow-hidden">
+            <div className="w-28 text-xs text-[var(--text-muted)] truncate">{m.label}</div>
+            <div className="flex-1 h-5 bg-[var(--bg-surface)] rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full transition-all duration-700"
                 style={{ width: `${m.pct}%`, backgroundColor: m.color }}
               />
             </div>
-            <div className="w-14 text-right text-xs text-slate-300 tabular-nums">{m.pct}%</div>
-            <div className="w-28 text-right text-xs text-slate-400 tabular-nums">AED {fmt(m.amount)}</div>
+            <div className="w-14 text-right text-xs text-[var(--text-muted)] tabular-nums">{m.pct}%</div>
+            <div className="w-28 text-right text-xs text-[var(--text-muted)] tabular-nums">AED {fmt(m.amount)}</div>
           </div>
         ))}
-        <div className="pt-2 border-t border-white/10 flex justify-between text-xs text-slate-400">
+        <div className="pt-2 border-t border-[var(--border-subtle)] flex justify-between text-xs text-[var(--text-muted)]">
           <span>Total Revenue</span>
-          <span className="text-slate-200 font-bold tabular-nums">AED {fmt(data.total)}</span>
+          <span className="text-[var(--text-main)] font-bold tabular-nums">AED {fmt(data.total)}</span>
         </div>
       </div>
     </div>
@@ -450,7 +450,7 @@ export default function ManagementAccountsPage() {
   const [breakdown, setBreakdown] = useState<ModuleBreakdownData | null>(null);
   const [loading,   setLoading]   = useState(false);
 
-  const inp = 'bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500';
+  const inp = 'bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-purple-500';
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -485,8 +485,8 @@ export default function ManagementAccountsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Management Accounts</h1>
-          <p className="text-slate-400 text-xs mt-0.5">Income Statement (P&amp;L) · Cash Flow · Business Line Analysis</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Management Accounts</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Income Statement (P&amp;L) · Cash Flow · Business Line Analysis</p>
         </div>
         {data && (
           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium border ${
@@ -503,10 +503,10 @@ export default function ManagementAccountsPage() {
       <div className="space-y-3">
         {/* Tab + quick presets */}
         <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex bg-slate-800/60 border border-white/10 rounded-xl p-1 gap-1">
+          <div className="flex bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-1 gap-1">
             {([['income_statement', '📈 Income Statement'], ['cash_flow', '💧 Cash Flow']] as const).map(([key, label]) => (
               <button key={key} onClick={() => setTab(key)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === key ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === key ? 'bg-purple-600 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
                 {label}
               </button>
             ))}
@@ -518,7 +518,7 @@ export default function ManagementAccountsPage() {
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
                   from === p.from && to === p.to
                     ? 'bg-purple-600 border-purple-500 text-white'
-                    : 'border-white/10 text-slate-400 hover:text-white hover:border-white/20'
+                    : 'border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:border-[var(--border-strong)]'
                 }`}>
                 {p.label}
               </button>
@@ -527,29 +527,29 @@ export default function ManagementAccountsPage() {
         </div>
 
         {/* Date row + compare toggle */}
-        <div className="flex items-center gap-3 flex-wrap bg-slate-900/60 border border-white/10 rounded-2xl p-4">
+        <div className="flex items-center gap-3 flex-wrap bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
           <div className="flex items-center gap-2">
-            <label className="text-xs text-slate-400 w-20">Current period</label>
+            <label className="text-xs text-[var(--text-muted)] w-20">Current period</label>
             <input type="date" value={from} onChange={e => setFrom(e.target.value)} className={inp} />
-            <span className="text-slate-500 text-xs">to</span>
+            <span className="text-[var(--text-faint)] text-xs">to</span>
             <input type="date" value={to} onChange={e => setTo(e.target.value)} className={inp} />
           </div>
 
           <div className="flex items-center gap-2 ml-2">
             <label className="flex items-center gap-2 cursor-pointer">
               <div onClick={handleCompareToggle}
-                className={`w-10 h-5 rounded-full transition-colors relative ${compare ? 'bg-purple-600' : 'bg-slate-700'}`}>
+                className={`w-10 h-5 rounded-full transition-colors relative ${compare ? 'bg-purple-600' : 'bg-[var(--bg-surface-hover)]'}`}>
                 <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${compare ? 'left-5' : 'left-0.5'}`} />
               </div>
-              <span className="text-xs text-slate-400">Compare</span>
+              <span className="text-xs text-[var(--text-muted)]">Compare</span>
             </label>
           </div>
 
           {compare && (
             <div className="flex items-center gap-2">
-              <label className="text-xs text-slate-500 w-28">vs. prior period</label>
+              <label className="text-xs text-[var(--text-faint)] w-28">vs. prior period</label>
               <input type="date" value={compFrom} onChange={e => setCompFrom(e.target.value)} className={`${inp} border-purple-500/40`} />
-              <span className="text-slate-500 text-xs">to</span>
+              <span className="text-[var(--text-faint)] text-xs">to</span>
               <input type="date" value={compTo}   onChange={e => setCompTo(e.target.value)}   className={`${inp} border-purple-500/40`} />
             </div>
           )}
@@ -573,12 +573,12 @@ export default function ManagementAccountsPage() {
           ].map(kpi => {
             const delta = kpi.compVal !== undefined ? kpi.value - kpi.compVal : null;
             return (
-              <div key={kpi.label} className="bg-slate-900/60 border border-white/10 rounded-2xl p-4">
-                <p className="text-xs text-slate-400">{kpi.label}</p>
+              <div key={kpi.label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
+                <p className="text-xs text-[var(--text-muted)]">{kpi.label}</p>
                 <p className={`text-base font-bold mt-1 tabular-nums ${kpi.color}`}>
                   AED {kpi.value < 0 ? '(' : ''}{fmt(Math.abs(kpi.value))}{kpi.value < 0 ? ')' : ''}
                 </p>
-                {kpi.pct && <p className="text-xs text-slate-500 mt-0.5">{kpi.pct} margin</p>}
+                {kpi.pct && <p className="text-xs text-[var(--text-faint)] mt-0.5">{kpi.pct} margin</p>}
                 {delta !== null && (
                   <p className={`text-xs mt-1 tabular-nums ${delta >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                     {delta >= 0 ? '▲' : '▼'} AED {fmt(Math.abs(delta))} vs prior
@@ -599,8 +599,8 @@ export default function ManagementAccountsPage() {
             { label: 'Financing Cash Flow',   value: data.financing.netFinancingCashFlow,  color: 'text-amber-400' },
             { label: 'Net Cash Flow',         value: data.summary.netCashFlow,             color: data.summary.netCashFlow >= 0 ? 'text-emerald-400' : 'text-red-400' },
           ].map(kpi => (
-            <div key={kpi.label} className="bg-slate-900/60 border border-white/10 rounded-2xl p-4">
-              <p className="text-xs text-slate-400">{kpi.label}</p>
+            <div key={kpi.label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
+              <p className="text-xs text-[var(--text-muted)]">{kpi.label}</p>
               <p className={`text-base font-bold mt-1 tabular-nums ${kpi.color}`}>
                 AED {kpi.value < 0 ? `(${fmt(Math.abs(kpi.value))})` : fmt(kpi.value)}
               </p>
@@ -611,7 +611,7 @@ export default function ManagementAccountsPage() {
 
       {/* Period info */}
       {data && (
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-[var(--text-faint)]">
           Period: {data.period.from} → {data.period.to} &nbsp;|&nbsp;
           Source: {data.source === 'GL' ? 'General Ledger (posted journal entries)' : 'Operational module tables (no posted JEs)'}
           {data.type === 'income_statement' && data.compPeriod && (
@@ -621,7 +621,7 @@ export default function ManagementAccountsPage() {
       )}
 
       {/* Main report */}
-      {loading && <div className="h-96 bg-slate-800/60 rounded-2xl animate-pulse" />}
+      {loading && <div className="h-96 bg-[var(--bg-surface)]/60 rounded-2xl animate-pulse" />}
       {!loading && data?.type === 'income_statement' && (
         <div className="grid grid-cols-1 gap-6">
           {breakdown && <ModuleBreakdown data={breakdown} />}

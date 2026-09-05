@@ -17,7 +17,7 @@ const STATUSES = ['ALL', 'DRAFT', 'ISSUED', 'APPLIED', 'REFUNDED', 'VOIDED'];
 const REASONS  = ['BILLING_ERROR', 'SERVICE_FAILURE', 'OVERPAYMENT', 'CONTRACT_CANCELLATION', 'RATE_ADJUSTMENT', 'OTHER'];
 const MODULES  = ['RAC', 'LEASING', 'LOGISTICS', 'STAFF', 'SCHOOL', 'GENERAL'];
 const STATUS_STYLE: Record<string, string> = {
-  DRAFT:    'bg-slate-500/20 text-slate-300  border-slate-500/30',
+  DRAFT:    'bg-slate-500/20 text-[var(--text-muted)]  border-slate-500/30',
   ISSUED:   'bg-blue-500/20  text-blue-300   border-blue-500/30',
   APPLIED:  'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
   REFUNDED: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
@@ -48,22 +48,22 @@ function CreateModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
     if (res.ok) { onSaved(); onClose(); } else alert('Failed to create credit note');
   };
 
-  const inp = 'w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500';
+  const inp = 'w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-blue-500';
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-5 border-b border-white/10">
-          <h2 className="text-lg font-bold text-white">New Credit Note</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-white text-xl">×</button>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)]">
+          <h2 className="text-lg font-bold text-[var(--text-main)]">New Credit Note</h2>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">×</button>
         </div>
         <div className="p-5 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Client Name *</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Client Name *</label>
               <input value={form.clientName} onChange={s('clientName')} placeholder="Client name" className={inp} />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Module</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Module</label>
               <select value={form.module} onChange={s('module')} className={inp}>
                 {MODULES.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
@@ -71,54 +71,54 @@ function CreateModal({ onClose, onSaved }: { onClose: () => void; onSaved: () =>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Original Invoice No.</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Original Invoice No.</label>
               <input value={form.originalInvoiceNo} onChange={s('originalInvoiceNo')} placeholder="INV-202401-0001" className={inp} />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Issue Date</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Issue Date</label>
               <input type="date" value={form.issueDate} onChange={s('issueDate')} className={inp} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Reason Code *</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Reason Code *</label>
               <select value={form.reasonCode} onChange={s('reasonCode')} className={inp}>
                 {REASONS.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Issued By</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Issued By</label>
               <input value={form.issuedBy} onChange={s('issuedBy')} placeholder="Your name" className={inp} />
             </div>
           </div>
           <div>
-            <label className="block text-xs text-slate-400 mb-1">Reason Detail</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Reason Detail</label>
             <input value={form.reasonDetail} onChange={s('reasonDetail')} placeholder="Describe the reason…" className={inp} />
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Subtotal *</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Subtotal *</label>
               <input type="number" value={form.subtotal} onChange={s('subtotal')} placeholder="0.00" className={inp} />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">VAT Amount</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">VAT Amount</label>
               <input type="number" value={form.vatAmount} onChange={s('vatAmount')} placeholder="0.00" className={inp} />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Total CN Value</label>
-              <div className="w-full bg-slate-800/60 border border-white/5 rounded-lg px-3 py-2 text-sm text-blue-400 font-semibold">
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Total CN Value</label>
+              <div className="w-full bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-blue-400 font-semibold">
                 AED {total}
               </div>
             </div>
           </div>
           <div>
-            <label className="block text-xs text-slate-400 mb-1">Notes</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Notes</label>
             <textarea value={form.notes} onChange={s('notes')} rows={2}
-              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white resize-none focus:outline-none focus:border-blue-500" />
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] resize-none focus:outline-none focus:border-blue-500" />
           </div>
         </div>
-        <div className="flex gap-2 p-5 border-t border-white/10">
-          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-white/10 text-sm text-slate-400 hover:text-white">Cancel</button>
+        <div className="flex gap-2 p-5 border-t border-[var(--border-subtle)]">
+          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-[var(--border-subtle)] text-sm text-[var(--text-muted)] hover:text-[var(--text-main)]">Cancel</button>
           <button onClick={save} disabled={saving}
             className="flex-1 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm disabled:opacity-50">
             {saving ? 'Saving…' : '✓ Create Credit Note'}
@@ -166,8 +166,8 @@ export default function CreditNotesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Credit Notes</h1>
-          <p className="text-slate-400 text-xs mt-0.5">Issue, apply, and track credit adjustments</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Credit Notes</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Issue, apply, and track credit adjustments</p>
         </div>
         <button onClick={() => setCreate(true)}
           className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl text-sm">
@@ -180,10 +180,10 @@ export default function CreditNotesPage() {
         {STATUSES.filter(s => s !== 'ALL').map(s => {
           const d = countOf(s);
           return (
-            <div key={s} className="bg-slate-900/60 border border-white/10 rounded-xl p-3">
-              <p className="text-xs text-slate-500">{s}</p>
-              <p className="text-xl font-bold text-white mt-0.5">{d?.count ?? 0}</p>
-              <p className="text-xs text-slate-500">{fmtAED(d?.total ?? '0')}</p>
+            <div key={s} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-3">
+              <p className="text-xs text-[var(--text-faint)]">{s}</p>
+              <p className="text-xl font-bold text-[var(--text-main)] mt-0.5">{d?.count ?? 0}</p>
+              <p className="text-xs text-[var(--text-faint)]">{fmtAED(d?.total ?? '0')}</p>
             </div>
           );
         })}
@@ -201,10 +201,10 @@ export default function CreditNotesPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex bg-slate-800/60 border border-white/10 rounded-xl p-1 gap-1 flex-wrap">
+      <div className="flex bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-1 gap-1 flex-wrap">
         {STATUSES.map(s => (
           <button key={s} onClick={() => setTab(s)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${tab === s ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${tab === s ? 'bg-blue-600 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
             {s} {s !== 'ALL' && `(${countOf(s)?.count ?? 0})`}
           </button>
         ))}
@@ -212,17 +212,17 @@ export default function CreditNotesPage() {
 
       {/* Table */}
       {loading ? (
-        <div className="h-64 bg-slate-800/60 rounded-2xl animate-pulse" />
+        <div className="h-64 bg-[var(--bg-surface)]/60 rounded-2xl animate-pulse" />
       ) : cns.length === 0 ? (
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-12 text-center">
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-12 text-center">
           <div className="text-4xl mb-3">📝</div>
-          <p className="text-slate-400">No credit notes found</p>
+          <p className="text-[var(--text-muted)]">No credit notes found</p>
         </div>
       ) : (
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden">
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/10 text-slate-400 text-xs uppercase tracking-wider">
+              <tr className="border-b border-[var(--border-subtle)] text-[var(--text-muted)] text-xs uppercase tracking-wider">
                 <th className="text-left px-5 py-3">CN #</th>
                 <th className="text-left px-5 py-3">Client</th>
                 <th className="text-left px-5 py-3">Invoice</th>
@@ -235,16 +235,16 @@ export default function CreditNotesPage() {
             </thead>
             <tbody>
               {cns.map(cn => (
-                <tr key={cn.id} className="border-b border-white/5 last:border-0 hover:bg-slate-800/40 transition-colors">
-                  <td className="px-5 py-3 text-white font-mono text-xs font-medium">{cn.cn_number}</td>
+                <tr key={cn.id} className="border-b border-[var(--border-subtle)] last:border-0 hover:bg-[var(--bg-surface)]/40 transition-colors">
+                  <td className="px-5 py-3 text-[var(--text-main)] font-mono text-xs font-medium">{cn.cn_number}</td>
                   <td className="px-5 py-3">
-                    <p className="text-white text-xs font-medium">{cn.client_name}</p>
-                    {cn.module && <p className="text-slate-500 text-xs">{cn.module}</p>}
+                    <p className="text-[var(--text-main)] text-xs font-medium">{cn.client_name}</p>
+                    {cn.module && <p className="text-[var(--text-faint)] text-xs">{cn.module}</p>}
                   </td>
-                  <td className="px-5 py-3 text-slate-300 text-xs">{cn.original_invoice_no ?? '—'}</td>
-                  <td className="px-5 py-3 text-slate-400 text-xs">{cn.reason_code.replace(/_/g, ' ')}</td>
+                  <td className="px-5 py-3 text-[var(--text-muted)] text-xs">{cn.original_invoice_no ?? '—'}</td>
+                  <td className="px-5 py-3 text-[var(--text-muted)] text-xs">{cn.reason_code.replace(/_/g, ' ')}</td>
                   <td className="px-5 py-3 text-right font-bold text-blue-400 text-xs">{fmtAED(cn.total_amount)}</td>
-                  <td className="px-5 py-3 text-slate-300 text-xs">{fmtDate(cn.issue_date)}</td>
+                  <td className="px-5 py-3 text-[var(--text-muted)] text-xs">{fmtDate(cn.issue_date)}</td>
                   <td className="px-5 py-3">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_STYLE[cn.status] ?? ''}`}>
                       {cn.status}

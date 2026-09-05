@@ -52,7 +52,7 @@ function TrialBalanceTab({ asOf }: { asOf: string }) {
 
   const filtered = data?.rows.filter(r => typeFilter === 'ALL' || r.account_type === typeFilter) ?? [];
 
-  if (loading) return <div className="h-64 bg-slate-800/60 rounded-2xl animate-pulse mt-4" />;
+  if (loading) return <div className="h-64 bg-[var(--bg-surface)]/60 rounded-2xl animate-pulse mt-4" />;
   if (!data) return null;
 
   return (
@@ -66,7 +66,7 @@ function TrialBalanceTab({ asOf }: { asOf: string }) {
           <p className={`font-bold text-sm ${data.isBalanced ? 'text-emerald-300' : 'text-red-300'}`}>
             {data.isBalanced ? 'Trial Balance is BALANCED' : 'Trial Balance is OUT OF BALANCE'}
           </p>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">
             Total Debits: AED {fmt(data.totalDebits)} &nbsp;|&nbsp; Total Credits: AED {fmt(data.totalCredits)}
             {!data.isBalanced && <span className="text-red-400 ml-2">Difference: AED {fmt(Math.abs(data.totalDebits - data.totalCredits))}</span>}
           </p>
@@ -77,16 +77,16 @@ function TrialBalanceTab({ asOf }: { asOf: string }) {
       <div className="flex gap-2">
         {['ALL','ASSET','LIABILITY','EQUITY','INCOME','EXPENSE'].map(t => (
           <button key={t} onClick={() => setTypeFilter(t)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${typeFilter === t ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white bg-slate-800'}`}>
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${typeFilter === t ? 'bg-purple-600 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-surface)]'}`}>
             {t}
           </button>
         ))}
       </div>
 
-      <div className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-white/10 text-slate-400 text-xs uppercase tracking-wider">
+            <tr className="border-b border-[var(--border-subtle)] text-[var(--text-muted)] text-xs uppercase tracking-wider">
               <th className="text-left px-4 py-3 w-28">Code</th>
               <th className="text-left px-4 py-3">Account Name</th>
               <th className="text-left px-4 py-3 w-24">Type</th>
@@ -97,30 +97,30 @@ function TrialBalanceTab({ asOf }: { asOf: string }) {
           </thead>
           <tbody>
             {filtered.map(row => (
-              <tr key={row.account_code} className="border-b border-white/5 hover:bg-slate-800/40">
-                <td className="px-4 py-2.5 font-mono text-xs text-slate-400">{row.account_code}</td>
-                <td className="px-4 py-2.5 text-sm text-slate-200">{row.account_name}</td>
+              <tr key={row.account_code} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]/40">
+                <td className="px-4 py-2.5 font-mono text-xs text-[var(--text-muted)]">{row.account_code}</td>
+                <td className="px-4 py-2.5 text-sm text-[var(--text-main)]">{row.account_name}</td>
                 <td className="px-4 py-2.5">
-                  <span className={`text-xs font-medium ${TYPE_COLORS[row.account_type] ?? 'text-slate-400'}`}>{row.account_type}</span>
+                  <span className={`text-xs font-medium ${TYPE_COLORS[row.account_type] ?? 'text-[var(--text-muted)]'}`}>{row.account_type}</span>
                 </td>
-                <td className="px-4 py-2.5 text-right text-sm text-slate-300">
+                <td className="px-4 py-2.5 text-right text-sm text-[var(--text-muted)]">
                   {row.total_debit > 0 ? fmt(row.total_debit) : '—'}
                 </td>
-                <td className="px-4 py-2.5 text-right text-sm text-slate-300">
+                <td className="px-4 py-2.5 text-right text-sm text-[var(--text-muted)]">
                   {row.total_credit > 0 ? fmt(row.total_credit) : '—'}
                 </td>
-                <td className={`px-4 py-2.5 text-right text-sm font-medium ${row.balance >= 0 ? 'text-white' : 'text-red-400'}`}>
+                <td className={`px-4 py-2.5 text-right text-sm font-medium ${row.balance >= 0 ? 'text-[var(--text-main)]' : 'text-red-400'}`}>
                   {row.balance < 0 ? '(' : ''}{fmt(row.balance)}{row.balance < 0 ? ')' : ''}
                 </td>
               </tr>
             ))}
           </tbody>
           <tfoot>
-            <tr className="border-t-2 border-white/20 bg-slate-800/40">
-              <td colSpan={3} className="px-4 py-3 text-xs font-bold text-slate-300 uppercase">Totals</td>
-              <td className="px-4 py-3 text-right text-sm font-bold text-white">{fmt(data.totalDebits)}</td>
-              <td className="px-4 py-3 text-right text-sm font-bold text-white">{fmt(data.totalCredits)}</td>
-              <td className="px-4 py-3 text-right text-sm font-bold text-white">—</td>
+            <tr className="border-t-2 border-[var(--border-strong)] bg-[var(--bg-surface)]/40">
+              <td colSpan={3} className="px-4 py-3 text-xs font-bold text-[var(--text-muted)] uppercase">Totals</td>
+              <td className="px-4 py-3 text-right text-sm font-bold text-[var(--text-main)]">{fmt(data.totalDebits)}</td>
+              <td className="px-4 py-3 text-right text-sm font-bold text-[var(--text-main)]">{fmt(data.totalCredits)}</td>
+              <td className="px-4 py-3 text-right text-sm font-bold text-[var(--text-main)]">—</td>
             </tr>
           </tfoot>
         </table>
@@ -154,24 +154,24 @@ function AccountStatementTab() {
     setLoading(false);
   };
 
-  const inp = 'bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500';
+  const inp = 'bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-purple-500';
 
   return (
     <div className="space-y-4 mt-4">
       {/* Filters */}
-      <div className="flex items-end gap-3 bg-slate-900/60 border border-white/10 rounded-2xl p-4">
+      <div className="flex items-end gap-3 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
         <div className="flex-1">
-          <label className="block text-xs text-slate-400 mb-1">Account</label>
+          <label className="block text-xs text-[var(--text-muted)] mb-1">Account</label>
           <select value={selectedCode} onChange={e => setSelectedCode(e.target.value)} className={`w-full ${inp}`}>
             {accounts.map(a => <option key={a.account_code} value={a.account_code}>{a.account_code} — {a.account_name}</option>)}
           </select>
         </div>
         <div>
-          <label className="block text-xs text-slate-400 mb-1">From</label>
+          <label className="block text-xs text-[var(--text-muted)] mb-1">From</label>
           <input type="date" value={from} onChange={e => setFrom(e.target.value)} className={inp} />
         </div>
         <div>
-          <label className="block text-xs text-slate-400 mb-1">To</label>
+          <label className="block text-xs text-[var(--text-muted)] mb-1">To</label>
           <input type="date" value={to} onChange={e => setTo(e.target.value)} className={inp} />
         </div>
         <button onClick={load} disabled={loading}
@@ -183,34 +183,34 @@ function AccountStatementTab() {
       {data && (
         <>
           {/* Account header */}
-          <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-4 flex items-center justify-between">
+          <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4 flex items-center justify-between">
             <div>
-              <p className="text-lg font-bold text-white">{data.account.account_code} — {data.account.account_name}</p>
-              <p className={`text-xs mt-0.5 ${TYPE_COLORS[data.account.account_type] ?? 'text-slate-400'}`}>
+              <p className="text-lg font-bold text-[var(--text-main)]">{data.account.account_code} — {data.account.account_name}</p>
+              <p className={`text-xs mt-0.5 ${TYPE_COLORS[data.account.account_type] ?? 'text-[var(--text-muted)]'}`}>
                 {data.account.account_type} · Normal Balance: {data.account.normal_balance}
               </p>
             </div>
             <div className="flex gap-6 text-right">
               <div>
-                <p className="text-xs text-slate-400">Opening Balance</p>
-                <p className="text-lg font-bold text-white">AED {fmt(data.openingBalance)}</p>
+                <p className="text-xs text-[var(--text-muted)]">Opening Balance</p>
+                <p className="text-lg font-bold text-[var(--text-main)]">AED {fmt(data.openingBalance)}</p>
               </div>
               <div>
-                <p className="text-xs text-slate-400">Closing Balance</p>
+                <p className="text-xs text-[var(--text-muted)]">Closing Balance</p>
                 <p className="text-lg font-bold text-emerald-400">AED {fmt(data.closingBalance)}</p>
               </div>
               <div>
-                <p className="text-xs text-slate-400">Transactions</p>
-                <p className="text-lg font-bold text-white">{data.transactions.length}</p>
+                <p className="text-xs text-[var(--text-muted)]">Transactions</p>
+                <p className="text-lg font-bold text-[var(--text-main)]">{data.transactions.length}</p>
               </div>
             </div>
           </div>
 
           {/* Transactions */}
-          <div className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden">
+          <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/10 text-slate-400 text-xs uppercase tracking-wider">
+                <tr className="border-b border-[var(--border-subtle)] text-[var(--text-muted)] text-xs uppercase tracking-wider">
                   <th className="text-left px-4 py-3 w-28">Date</th>
                   <th className="text-left px-4 py-3 w-36">JE Number</th>
                   <th className="text-left px-4 py-3">Description</th>
@@ -222,36 +222,36 @@ function AccountStatementTab() {
               </thead>
               <tbody>
                 {/* Opening balance row */}
-                <tr className="border-b border-white/5 bg-slate-800/30">
-                  <td className="px-4 py-2.5 text-xs text-slate-500">{data.period.from}</td>
-                  <td className="px-4 py-2.5 text-xs text-slate-500 font-mono">—</td>
-                  <td className="px-4 py-2.5 text-xs text-slate-500 italic">Opening Balance</td>
+                <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/30">
+                  <td className="px-4 py-2.5 text-xs text-[var(--text-faint)]">{data.period.from}</td>
+                  <td className="px-4 py-2.5 text-xs text-[var(--text-faint)] font-mono">—</td>
+                  <td className="px-4 py-2.5 text-xs text-[var(--text-faint)] italic">Opening Balance</td>
                   <td className="px-4 py-2.5"></td>
                   <td className="px-4 py-2.5"></td>
                   <td className="px-4 py-2.5"></td>
-                  <td className="px-4 py-2.5 text-right text-sm text-slate-300">{fmt(data.openingBalance)}</td>
+                  <td className="px-4 py-2.5 text-right text-sm text-[var(--text-muted)]">{fmt(data.openingBalance)}</td>
                 </tr>
                 {data.transactions.map(tx => (
-                  <tr key={tx.id} className="border-b border-white/5 hover:bg-slate-800/40">
-                    <td className="px-4 py-2.5 text-xs text-slate-400">{tx.entry_date}</td>
+                  <tr key={tx.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]/40">
+                    <td className="px-4 py-2.5 text-xs text-[var(--text-muted)]">{tx.entry_date}</td>
                     <td className="px-4 py-2.5 font-mono text-xs text-purple-400">{tx.je_number}</td>
-                    <td className="px-4 py-2.5 text-sm text-slate-300">
+                    <td className="px-4 py-2.5 text-sm text-[var(--text-muted)]">
                       <p>{tx.description || tx.entry_description}</p>
                     </td>
-                    <td className="px-4 py-2.5 text-xs text-slate-500">{tx.reference ?? '—'}</td>
+                    <td className="px-4 py-2.5 text-xs text-[var(--text-faint)]">{tx.reference ?? '—'}</td>
                     <td className="px-4 py-2.5 text-right text-sm text-blue-400">
                       {tx.debit_amount > 0 ? fmt(tx.debit_amount) : ''}
                     </td>
                     <td className="px-4 py-2.5 text-right text-sm text-red-400">
                       {tx.credit_amount > 0 ? fmt(tx.credit_amount) : ''}
                     </td>
-                    <td className="px-4 py-2.5 text-right text-sm font-medium text-white">{fmt(tx.running_balance)}</td>
+                    <td className="px-4 py-2.5 text-right text-sm font-medium text-[var(--text-main)]">{fmt(tx.running_balance)}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
-                <tr className="border-t-2 border-white/20 bg-slate-800/40">
-                  <td colSpan={4} className="px-4 py-3 text-xs font-bold text-slate-300 uppercase">Closing Balance</td>
+                <tr className="border-t-2 border-[var(--border-strong)] bg-[var(--bg-surface)]/40">
+                  <td colSpan={4} className="px-4 py-3 text-xs font-bold text-[var(--text-muted)] uppercase">Closing Balance</td>
                   <td className="px-4 py-3 text-right text-sm font-bold text-blue-400">
                     {fmt(data.transactions.reduce((s, t) => s + t.debit_amount, 0))}
                   </td>
@@ -269,8 +269,8 @@ function AccountStatementTab() {
       )}
 
       {!data && !loading && (
-        <div className="h-48 bg-slate-800/40 border border-white/10 rounded-2xl flex items-center justify-center">
-          <p className="text-slate-500 text-sm">Select an account and click Run to view statement</p>
+        <div className="h-48 bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl flex items-center justify-center">
+          <p className="text-[var(--text-faint)] text-sm">Select an account and click Run to view statement</p>
         </div>
       )}
     </div>
@@ -286,25 +286,25 @@ export default function GeneralLedgerPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">General Ledger</h1>
-          <p className="text-slate-400 text-xs mt-0.5">Trial Balance & Account Statements</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">General Ledger</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Trial Balance & Account Statements</p>
         </div>
         <div className="flex items-center gap-3">
           {tab === 'trial_balance' && (
             <div className="flex items-center gap-2">
-              <label className="text-xs text-slate-400">As of</label>
+              <label className="text-xs text-[var(--text-muted)]">As of</label>
               <input type="date" value={asOf} onChange={e => setAsOf(e.target.value)}
-                className="bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500" />
+                className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-purple-500" />
             </div>
           )}
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex bg-slate-800/60 border border-white/10 rounded-xl p-1 w-fit gap-1">
+      <div className="flex bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-1 w-fit gap-1">
         {([['trial_balance', '⚖️ Trial Balance'], ['account_statement', '📋 Account Statement']] as const).map(([key, label]) => (
           <button key={key} onClick={() => setTab(key)}
-            className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${tab === key ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+            className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${tab === key ? 'bg-purple-600 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
             {label}
           </button>
         ))}

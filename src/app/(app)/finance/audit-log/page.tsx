@@ -27,7 +27,7 @@ const ACTION_COLORS: Record<string,string> = {
   FILED:    'text-teal-400   bg-teal-900/20   border-teal-500/30',
   DISPOSED: 'text-orange-400 bg-orange-900/20 border-orange-500/30',
   DELETED:  'text-red-400    bg-red-900/20    border-red-500/30',
-  UPDATED:  'text-slate-400  bg-slate-700/50  border-slate-500/30',
+  UPDATED:  'text-[var(--text-muted)]  bg-[var(--bg-surface-hover)]/50  border-slate-500/30',
 };
 
 function fmt(n: number) {
@@ -38,7 +38,7 @@ function fmt(n: number) {
 function QuickLogModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [form, setForm] = useState({ module: 'GENERAL', action: 'CREATED', entityType: '', entityId: '', entityRef: '', performedBy: '', description: '', amount: '' });
   const [saving, setSaving] = useState(false);
-  const inp = 'w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500';
+  const inp = 'w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-purple-500';
   const s = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setForm(f => ({...f, [k]: e.target.value}));
 
   const save = async () => {
@@ -53,21 +53,21 @@ function QuickLogModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg">
-        <div className="flex items-center justify-between p-5 border-b border-white/10">
-          <h2 className="text-lg font-bold text-white">Manual Audit Entry</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-white text-xl">×</button>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-lg">
+        <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)]">
+          <h2 className="text-lg font-bold text-[var(--text-main)]">Manual Audit Entry</h2>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">×</button>
         </div>
         <div className="p-5 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Module</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Module</label>
               <select value={form.module} onChange={s('module')} className={inp}>
                 {Object.keys(MODULE_ICONS).map(m => <option key={m} value={m}>{MODULE_ICONS[m]} {m}</option>)}
               </select>
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Action</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Action</label>
               <select value={form.action} onChange={s('action')} className={inp}>
                 {['CREATED','POSTED','APPROVED','REJECTED','VOIDED','REVERSED','LOCKED','FILED','DISPOSED','DELETED','UPDATED'].map(a => <option key={a} value={a}>{a}</option>)}
               </select>
@@ -75,36 +75,36 @@ function QuickLogModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Entity Type</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Entity Type</label>
               <input value={form.entityType} onChange={s('entityType')} placeholder="e.g. JournalEntry" className={inp} />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Entity ID</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Entity ID</label>
               <input value={form.entityId} onChange={s('entityId')} placeholder="UUID or ID" className={inp} />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Reference</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Reference</label>
               <input value={form.entityRef} onChange={s('entityRef')} placeholder="JE-2025-001" className={inp} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Performed By *</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Performed By *</label>
               <input value={form.performedBy} onChange={s('performedBy')} placeholder="User name / system" className={inp} />
             </div>
             <div>
-              <label className="block text-xs text-slate-400 mb-1">Amount (AED)</label>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Amount (AED)</label>
               <input type="number" value={form.amount} onChange={s('amount')} placeholder="Optional" className={inp} />
             </div>
           </div>
           <div>
-            <label className="block text-xs text-slate-400 mb-1">Description *</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Description *</label>
             <textarea value={form.description} onChange={s('description')} rows={2}
-              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white resize-none focus:outline-none focus:border-purple-500" />
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] resize-none focus:outline-none focus:border-purple-500" />
           </div>
         </div>
-        <div className="flex gap-2 p-5 border-t border-white/10">
-          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-white/10 text-sm text-slate-400 hover:text-white">Cancel</button>
+        <div className="flex gap-2 p-5 border-t border-[var(--border-subtle)]">
+          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-[var(--border-subtle)] text-sm text-[var(--text-muted)] hover:text-[var(--text-main)]">Cancel</button>
           <button onClick={save} disabled={saving}
             className="flex-1 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-sm disabled:opacity-50">
             {saving ? 'Logging…' : 'Log Entry'}
@@ -119,13 +119,13 @@ function QuickLogModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
 function DetailDrawer({ entry, onClose }: { entry: AuditEntry; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/50">
-      <div className="w-[480px] bg-slate-900 border-l border-white/10 flex flex-col">
-        <div className="flex items-center justify-between p-5 border-b border-white/10">
+      <div className="w-[480px] bg-[var(--bg-surface)] border-l border-[var(--border-subtle)] flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)]">
           <div>
-            <h2 className="text-base font-bold text-white">{MODULE_ICONS[entry.module]} {entry.module} · {entry.action}</h2>
-            <p className="text-xs text-slate-400">{entry.created_at.slice(0,19).replace('T',' ')}</p>
+            <h2 className="text-base font-bold text-[var(--text-main)]">{MODULE_ICONS[entry.module]} {entry.module} · {entry.action}</h2>
+            <p className="text-xs text-[var(--text-muted)]">{entry.created_at.slice(0,19).replace('T',' ')}</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white text-xl">×</button>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">×</button>
         </div>
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
@@ -135,42 +135,42 @@ function DetailDrawer({ entry, onClose }: { entry: AuditEntry; onClose: () => vo
               ['Reference',    entry.entity_ref ?? '—'],
               ['Performed By', entry.performed_by],
             ].map(([k,v]) => (
-              <div key={k} className="bg-slate-800/60 rounded-xl p-3">
-                <p className="text-xs text-slate-400">{k}</p>
-                <p className="text-sm text-white mt-0.5 break-all">{v}</p>
+              <div key={k} className="bg-[var(--bg-surface)]/60 rounded-xl p-3">
+                <p className="text-xs text-[var(--text-muted)]">{k}</p>
+                <p className="text-sm text-[var(--text-main)] mt-0.5 break-all">{v}</p>
               </div>
             ))}
           </div>
-          <div className="bg-slate-800/60 rounded-xl p-3">
-            <p className="text-xs text-slate-400">Description</p>
-            <p className="text-sm text-white mt-0.5">{entry.description}</p>
+          <div className="bg-[var(--bg-surface)]/60 rounded-xl p-3">
+            <p className="text-xs text-[var(--text-muted)]">Description</p>
+            <p className="text-sm text-[var(--text-main)] mt-0.5">{entry.description}</p>
           </div>
           {entry.amount != null && (
-            <div className="bg-slate-800/60 rounded-xl p-3">
-              <p className="text-xs text-slate-400">Amount</p>
-              <p className="text-base font-bold text-white mt-0.5">AED {fmt(entry.amount)}</p>
+            <div className="bg-[var(--bg-surface)]/60 rounded-xl p-3">
+              <p className="text-xs text-[var(--text-muted)]">Amount</p>
+              <p className="text-base font-bold text-[var(--text-main)] mt-0.5">AED {fmt(entry.amount)}</p>
             </div>
           )}
           {!!entry.old_values && (
             <div>
-              <p className="text-xs font-bold text-slate-400 uppercase mb-1">Before</p>
-              <pre className="bg-slate-800 rounded-xl p-3 text-xs text-slate-300 overflow-x-auto">
+              <p className="text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Before</p>
+              <pre className="bg-[var(--bg-surface)] rounded-xl p-3 text-xs text-[var(--text-muted)] overflow-x-auto">
                 {JSON.stringify(entry.old_values, null, 2)}
               </pre>
             </div>
           )}
           {!!entry.new_values && (
             <div>
-              <p className="text-xs font-bold text-slate-400 uppercase mb-1">After</p>
-              <pre className="bg-slate-800 rounded-xl p-3 text-xs text-emerald-300 overflow-x-auto">
+              <p className="text-xs font-bold text-[var(--text-muted)] uppercase mb-1">After</p>
+              <pre className="bg-[var(--bg-surface)] rounded-xl p-3 text-xs text-emerald-300 overflow-x-auto">
                 {JSON.stringify(entry.new_values, null, 2)}
               </pre>
             </div>
           )}
           {!!entry.metadata && (
             <div>
-              <p className="text-xs font-bold text-slate-400 uppercase mb-1">Metadata</p>
-              <pre className="bg-slate-800 rounded-xl p-3 text-xs text-blue-300 overflow-x-auto">
+              <p className="text-xs font-bold text-[var(--text-muted)] uppercase mb-1">Metadata</p>
+              <pre className="bg-[var(--bg-surface)] rounded-xl p-3 text-xs text-blue-300 overflow-x-auto">
                 {JSON.stringify(entry.metadata, null, 2)}
               </pre>
             </div>
@@ -215,17 +215,17 @@ export default function AuditLogPage() {
   const sf = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setFilters(f => ({...f, [k]: e.target.value, offset: 0}));
 
-  const inp = 'bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500';
+  const inp = 'bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-purple-500';
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Finance Audit Log</h1>
-          <p className="text-slate-400 text-xs mt-0.5">Immutable trail of all financial module actions · {total.toLocaleString()} entries</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Finance Audit Log</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Immutable trail of all financial module actions · {total.toLocaleString()} entries</p>
         </div>
         <button onClick={() => setShowCreate(true)}
-          className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl text-sm">
+          className="px-4 py-2 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] font-semibold rounded-xl text-sm">
           + Manual Entry
         </button>
       </div>
@@ -234,12 +234,12 @@ export default function AuditLogPage() {
       {moduleCounts.length > 0 && (
         <div className="flex gap-2 flex-wrap">
           <button onClick={() => setFilters(f => ({...f, module: '', offset: 0}))}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium ${!filters.module ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium ${!filters.module ? 'bg-purple-600 text-white' : 'bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
             All ({total})
           </button>
           {moduleCounts.map(mc => (
             <button key={mc.module} onClick={() => setFilters(f => ({...f, module: f.module === mc.module ? '' : mc.module, offset: 0}))}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium ${filters.module === mc.module ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'}`}>
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium ${filters.module === mc.module ? 'bg-purple-600 text-white' : 'bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
               {MODULE_ICONS[mc.module] ?? '⚙'} {mc.module} ({mc.count})
             </button>
           ))}
@@ -256,16 +256,16 @@ export default function AuditLogPage() {
             <option key={a} value={a}>{a}</option>)}
         </select>
         <input type="date" value={filters.from} onChange={sf('from')} className={inp} />
-        <span className="text-slate-500 text-xs">to</span>
+        <span className="text-[var(--text-faint)] text-xs">to</span>
         <input type="date" value={filters.to} onChange={sf('to')} className={inp} />
       </div>
 
       {/* Table */}
-      {loading ? <div className="h-64 bg-slate-800/60 rounded-2xl animate-pulse" /> : (
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden">
+      {loading ? <div className="h-64 bg-[var(--bg-surface)]/60 rounded-2xl animate-pulse" /> : (
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/10 text-slate-400 text-xs uppercase tracking-wider">
+              <tr className="border-b border-[var(--border-subtle)] text-[var(--text-muted)] text-xs uppercase tracking-wider">
                 <th className="text-left px-4 py-3 w-40">Timestamp</th>
                 <th className="text-left px-4 py-3 w-28">Module</th>
                 <th className="text-left px-4 py-3 w-28">Action</th>
@@ -278,31 +278,31 @@ export default function AuditLogPage() {
             </thead>
             <tbody>
               {entries.map(entry => (
-                <tr key={entry.id} className="border-b border-white/5 hover:bg-slate-800/40 cursor-pointer" onClick={() => setSelected(entry)}>
-                  <td className="px-4 py-2.5 text-xs text-slate-400 font-mono">
+                <tr key={entry.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]/40 cursor-pointer" onClick={() => setSelected(entry)}>
+                  <td className="px-4 py-2.5 text-xs text-[var(--text-muted)] font-mono">
                     {entry.created_at.slice(0,19).replace('T',' ')}
                   </td>
                   <td className="px-4 py-2.5">
-                    <span className="text-xs text-slate-300">{MODULE_ICONS[entry.module] ?? '⚙'} {entry.module}</span>
+                    <span className="text-xs text-[var(--text-muted)]">{MODULE_ICONS[entry.module] ?? '⚙'} {entry.module}</span>
                   </td>
                   <td className="px-4 py-2.5">
-                    <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${ACTION_COLORS[entry.action] ?? 'text-slate-400 bg-slate-700/50 border-slate-500/30'}`}>
+                    <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${ACTION_COLORS[entry.action] ?? 'text-[var(--text-muted)] bg-[var(--bg-surface-hover)]/50 border-slate-500/30'}`}>
                       {entry.action}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-sm text-slate-300 max-w-xs truncate">{entry.description}</td>
+                  <td className="px-4 py-2.5 text-sm text-[var(--text-muted)] max-w-xs truncate">{entry.description}</td>
                   <td className="px-4 py-2.5 font-mono text-xs text-purple-400">{entry.entity_ref ?? '—'}</td>
-                  <td className="px-4 py-2.5 text-right text-sm text-slate-300">
+                  <td className="px-4 py-2.5 text-right text-sm text-[var(--text-muted)]">
                     {entry.amount != null ? `AED ${fmt(entry.amount)}` : '—'}
                   </td>
-                  <td className="px-4 py-2.5 text-xs text-slate-400">{entry.performed_by}</td>
+                  <td className="px-4 py-2.5 text-xs text-[var(--text-muted)]">{entry.performed_by}</td>
                   <td className="px-4 py-2.5">
-                    <button className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg text-xs">→</button>
+                    <button className="px-2 py-1 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] rounded-lg text-xs">→</button>
                   </td>
                 </tr>
               ))}
               {entries.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-12 text-center text-slate-500">
+                <tr><td colSpan={8} className="px-4 py-12 text-center text-[var(--text-faint)]">
                   No audit entries yet. Financial actions will be logged here automatically.
                 </td></tr>
               )}

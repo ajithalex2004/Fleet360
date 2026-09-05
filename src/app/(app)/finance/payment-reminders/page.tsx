@@ -53,36 +53,36 @@ function ScheduleModal({
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-800 rounded-2xl w-full max-w-xl border border-white/10 overflow-hidden">
+      <div className="bg-[var(--bg-surface)] rounded-2xl w-full max-w-xl border border-[var(--border-subtle)] overflow-hidden">
         <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 flex justify-between items-center">
           <h2 className="font-bold text-white">{form.id ? 'Edit' : 'New'} Reminder Schedule</h2>
           <button onClick={onClose} className="text-white/70 hover:text-white text-xl">✕</button>
         </div>
         <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
           <div>
-            <label className="text-xs text-slate-400 block mb-1">Schedule Name</label>
+            <label className="text-xs text-[var(--text-muted)] block mb-1">Schedule Name</label>
             <input value={form.name ?? ''} onChange={e => set('name', e.target.value)}
-              className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm" />
+              className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm" />
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="text-xs text-slate-400 block mb-1">Trigger</label>
+              <label className="text-xs text-[var(--text-muted)] block mb-1">Trigger</label>
               <select value={form.trigger_type} onChange={e => set('trigger_type', e.target.value)}
-                className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm">
+                className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm">
                 <option value="BEFORE_DUE">Before Due</option>
                 <option value="ON_DUE">On Due Date</option>
                 <option value="AFTER_DUE">After Due</option>
               </select>
             </div>
             <div>
-              <label className="text-xs text-slate-400 block mb-1">Days</label>
+              <label className="text-xs text-[var(--text-muted)] block mb-1">Days</label>
               <input type="number" min={0} value={form.trigger_days ?? 0} onChange={e => set('trigger_days', Number(e.target.value))}
-                className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm" />
+                className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm" />
             </div>
             <div>
-              <label className="text-xs text-slate-400 block mb-1">Channel</label>
+              <label className="text-xs text-[var(--text-muted)] block mb-1">Channel</label>
               <select value={form.channel} onChange={e => set('channel', e.target.value)}
-                className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm">
+                className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm">
                 <option value="EMAIL">Email</option>
                 <option value="SMS">SMS</option>
                 <option value="WHATSAPP">WhatsApp</option>
@@ -91,9 +91,9 @@ function ScheduleModal({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-slate-400 block mb-1">Module Filter (optional)</label>
+              <label className="text-xs text-[var(--text-muted)] block mb-1">Module Filter (optional)</label>
               <select value={form.module_filter ?? ''} onChange={e => set('module_filter', e.target.value || null)}
-                className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm">
+                className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm">
                 <option value="">All Modules</option>
                 <option value="LEASE">Lease</option>
                 <option value="RENTAL">Rental</option>
@@ -101,26 +101,26 @@ function ScheduleModal({
               </select>
             </div>
             <div>
-              <label className="text-xs text-slate-400 block mb-1">Branch Filter (optional)</label>
+              <label className="text-xs text-[var(--text-muted)] block mb-1">Branch Filter (optional)</label>
               <input value={form.branch_filter ?? ''} onChange={e => set('branch_filter', e.target.value || null)}
                 placeholder="e.g. Dubai"
-                className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm" />
+                className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm" />
             </div>
           </div>
           <div>
-            <label className="text-xs text-slate-400 block mb-1">Subject</label>
+            <label className="text-xs text-[var(--text-muted)] block mb-1">Subject</label>
             <input value={form.template_subject ?? ''} onChange={e => set('template_subject', e.target.value)}
-              className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm" />
+              className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm" />
           </div>
           <div>
-            <label className="text-xs text-slate-400 block mb-1">Message Body</label>
+            <label className="text-xs text-[var(--text-muted)] block mb-1">Message Body</label>
             <textarea value={form.template_body ?? ''} onChange={e => set('template_body', e.target.value)}
-              rows={5} className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm resize-none font-mono" />
-            <p className="text-slate-600 text-xs mt-1">Available variables: <span className="text-slate-400 font-mono">{varHelp}</span></p>
+              rows={5} className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm resize-none font-mono" />
+            <p className="text-[var(--text-faint)] text-xs mt-1">Available variables: <span className="text-[var(--text-muted)] font-mono">{varHelp}</span></p>
           </div>
         </div>
         <div className="px-6 pb-6 flex gap-3 justify-end">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-slate-700 text-slate-300 text-sm hover:bg-slate-600">Cancel</button>
+          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] text-[var(--text-muted)] text-sm hover:bg-[var(--bg-surface-hover)]">Cancel</button>
           <button onClick={submit} disabled={saving || !form.name || !form.template_body}
             className="px-5 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-medium disabled:opacity-50">
             {saving ? 'Saving…' : 'Save Schedule'}
@@ -187,16 +187,16 @@ export default function PaymentRemindersPage() {
   const activeCount = schedules.filter(s => s.is_active).length;
 
   return (
-    <div className="text-white">
+    <div className="text-[var(--text-main)]">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-white">Automated Payment Reminders</h1>
-          <p className="text-slate-400 text-xs mt-1">Schedule-based triggers for overdue and upcoming invoices · Email · SMS · WhatsApp</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Automated Payment Reminders</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-1">Schedule-based triggers for overdue and upcoming invoices · Email · SMS · WhatsApp</p>
         </div>
         <div className="flex gap-3">
           <button onClick={() => setEditing(null)}
-            className="px-4 py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium border border-white/10">
+            className="px-4 py-2.5 rounded-xl bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-sm font-medium border border-[var(--border-subtle)]">
             + New Schedule
           </button>
           <button onClick={runAll} disabled={running}
@@ -224,62 +224,62 @@ export default function PaymentRemindersPage() {
 
       {/* Run result */}
       {runResult && (
-        <div className={`mb-6 rounded-xl p-4 border flex items-start gap-3 ${runResult.totalFired > 0 ? 'bg-emerald-900/30 border-emerald-500/20' : 'bg-slate-800/60 border-white/10'}`}>
+        <div className={`mb-6 rounded-xl p-4 border flex items-start gap-3 ${runResult.totalFired > 0 ? 'bg-emerald-900/30 border-emerald-500/20' : 'bg-[var(--bg-surface)]/60 border-[var(--border-subtle)]'}`}>
           <span className="text-2xl">{runResult.totalFired > 0 ? '✅' : '💤'}</span>
           <div>
-            <p className={`font-semibold text-sm ${runResult.totalFired > 0 ? 'text-emerald-300' : 'text-slate-300'}`}>
+            <p className={`font-semibold text-sm ${runResult.totalFired > 0 ? 'text-emerald-300' : 'text-[var(--text-muted)]'}`}>
               {runResult.totalFired > 0 ? `${runResult.totalFired} reminder(s) sent` : 'No reminders due at this time'}
             </p>
             {runResult.results.map((r, i) => (
-              <p key={i} className="text-slate-400 text-xs mt-1">
-                <span className="text-white">{r.schedule}</span>: {r.fired} sent ({r.invoices.join(', ')})
+              <p key={i} className="text-[var(--text-muted)] text-xs mt-1">
+                <span className="text-[var(--text-main)]">{r.schedule}</span>: {r.fired} sent ({r.invoices.join(', ')})
               </p>
             ))}
           </div>
-          <button onClick={() => setRunResult(null)} className="ml-auto text-slate-500 hover:text-white text-lg">✕</button>
+          <button onClick={() => setRunResult(null)} className="ml-auto text-[var(--text-faint)] hover:text-[var(--text-main)] text-lg">✕</button>
         </div>
       )}
 
       {/* Schedules */}
       {loading ? (
-        <div className="text-center py-16 text-slate-500">Loading…</div>
+        <div className="text-center py-16 text-[var(--text-faint)]">Loading…</div>
       ) : (
         <div className="space-y-3">
           {schedules.map(sch => {
             const trigLabel = TRIGGER_LABEL[sch.trigger_type] ?? sch.trigger_type;
             const daysLabel = sch.trigger_type === 'ON_DUE' ? 'On due date' : `${sch.trigger_days} day(s) ${sch.trigger_type === 'BEFORE_DUE' ? 'before' : 'after'}`;
             return (
-              <div key={sch.id} className={`bg-slate-800/60 border rounded-2xl p-5 transition-all ${sch.is_active ? 'border-white/10' : 'border-white/5 opacity-60'}`}>
+              <div key={sch.id} className={`bg-[var(--bg-surface)]/60 border rounded-2xl p-5 transition-all ${sch.is_active ? 'border-[var(--border-subtle)]' : 'border-[var(--border-subtle)] opacity-60'}`}>
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-4">
                     {/* Toggle */}
                     <button onClick={() => toggle(sch)} disabled={toggling === sch.id}
-                      className={`mt-0.5 w-10 h-6 rounded-full transition-all flex-shrink-0 ${sch.is_active ? 'bg-emerald-500' : 'bg-slate-600'} relative`}>
+                      className={`mt-0.5 w-10 h-6 rounded-full transition-all flex-shrink-0 ${sch.is_active ? 'bg-emerald-500' : 'bg-[var(--bg-surface-hover)]'} relative`}>
                       <span className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all ${sch.is_active ? 'left-5' : 'left-1'}`} />
                     </button>
                     <div>
-                      <p className="text-white font-semibold">{sch.name}</p>
+                      <p className="text-[var(--text-main)] font-semibold">{sch.name}</p>
                       <div className="flex flex-wrap items-center gap-2 mt-1">
                         <span className={`text-xs px-2 py-0.5 rounded-full border ${CHANNEL_COLOR[sch.channel] ?? ''}`}>{sch.channel}</span>
-                        <span className="text-slate-400 text-xs">⏱ {daysLabel}</span>
-                        {sch.module_filter && <span className="text-slate-500 text-xs bg-slate-700 px-2 py-0.5 rounded">{sch.module_filter}</span>}
-                        {sch.branch_filter && <span className="text-slate-500 text-xs bg-slate-700 px-2 py-0.5 rounded">📍 {sch.branch_filter}</span>}
+                        <span className="text-[var(--text-muted)] text-xs">⏱ {daysLabel}</span>
+                        {sch.module_filter && <span className="text-[var(--text-faint)] text-xs bg-[var(--bg-surface-hover)] px-2 py-0.5 rounded">{sch.module_filter}</span>}
+                        {sch.branch_filter && <span className="text-[var(--text-faint)] text-xs bg-[var(--bg-surface-hover)] px-2 py-0.5 rounded">📍 {sch.branch_filter}</span>}
                       </div>
-                      <p className="text-slate-500 text-xs mt-1.5 font-mono truncate max-w-lg">{sch.template_subject}</p>
+                      <p className="text-[var(--text-faint)] text-xs mt-1.5 font-mono truncate max-w-lg">{sch.template_subject}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-right">
-                      <p className="text-white text-sm font-semibold">{Number(sch.stats?.total_sent ?? 0)}</p>
-                      <p className="text-slate-500 text-xs">sent</p>
+                      <p className="text-[var(--text-main)] text-sm font-semibold">{Number(sch.stats?.total_sent ?? 0)}</p>
+                      <p className="text-[var(--text-faint)] text-xs">sent</p>
                     </div>
                     <div className="text-right">
                       <p className="text-red-400 text-sm font-semibold">{Number(sch.stats?.failed ?? 0)}</p>
-                      <p className="text-slate-500 text-xs">failed</p>
+                      <p className="text-[var(--text-faint)] text-xs">failed</p>
                     </div>
                     <div className="flex gap-2">
                       <button onClick={() => setEditing(sch)}
-                        className="text-xs px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300">
+                        className="text-xs px-3 py-1.5 rounded-lg bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)]">
                         Edit
                       </button>
                       <button onClick={() => del(sch.id)}
@@ -290,8 +290,8 @@ export default function PaymentRemindersPage() {
                   </div>
                 </div>
                 {/* Preview */}
-                <div className="mt-3 bg-slate-900/60 rounded-xl p-3 border border-white/5">
-                  <p className="text-slate-400 text-xs font-mono whitespace-pre-line line-clamp-3">{sch.template_body}</p>
+                <div className="mt-3 bg-[var(--bg-surface)]/60 rounded-xl p-3 border border-[var(--border-subtle)]">
+                  <p className="text-[var(--text-muted)] text-xs font-mono whitespace-pre-line line-clamp-3">{sch.template_body}</p>
                 </div>
               </div>
             );

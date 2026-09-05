@@ -87,7 +87,7 @@ function ConfidenceBar({ value }: { value: number }) {
   const col = pct >= 85 ? '#ef4444' : pct >= 70 ? '#f97316' : pct >= 55 ? '#f59e0b' : '#22c55e';
   return (
     <div className="flex items-center gap-1.5">
-      <div className="w-16 h-1.5 bg-slate-700/60 rounded-full overflow-hidden">
+      <div className="w-16 h-1.5 bg-[var(--bg-surface-hover)]/60 rounded-full overflow-hidden">
         <div className="h-full rounded-full" style={{ width: `${pct}%`, background: col }} />
       </div>
       <span className="text-[11px] font-semibold tabular-nums" style={{ color: col }}>{pct}%</span>
@@ -264,7 +264,7 @@ export default function FinanceAnomaliesPage() {
               <span>{tab.label}</span>
               {countInfo > 0 && (
                 <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                  isSelected ? 'bg-white/20 text-white' : 'bg-[var(--bg-surface-hover)] text-indigo-400 border border-indigo-500/20'
+                  isSelected ? 'bg-[var(--bg-surface-hover)] text-[var(--text-main)]' : 'bg-[var(--bg-surface-hover)] text-indigo-400 border border-indigo-500/20'
                 }`}>
                   {countInfo}
                 </span>

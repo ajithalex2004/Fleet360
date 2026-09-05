@@ -102,7 +102,7 @@ function NewScheduleModal({ onClose, onSave }: { onClose: () => void; onSave: ()
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-800 rounded-2xl w-full max-w-2xl border border-white/10 overflow-hidden">
+      <div className="bg-[var(--bg-surface)] rounded-2xl w-full max-w-2xl border border-[var(--border-subtle)] overflow-hidden">
         <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 flex justify-between items-center">
           <h2 className="font-bold text-white text-lg">🔁 New Recurring Schedule</h2>
           <button onClick={onClose} className="text-white/70 hover:text-white text-xl">✕</button>
@@ -119,22 +119,22 @@ function NewScheduleModal({ onClose, onSave }: { onClose: () => void; onSave: ()
             ['Amount (excl. VAT)', 'amount', 'number'],
           ].map(([label, key, type]) => (
             <div key={key}>
-              <label className="text-xs text-slate-400 mb-1 block">{label}</label>
+              <label className="text-xs text-[var(--text-muted)] mb-1 block">{label}</label>
               <input type={type} value={(form as unknown as Record<string, string>)[key]} onChange={e => set(key, e.target.value)}
-                className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm" />
+                className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm" />
             </div>
           ))}
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">Contract Type</label>
+            <label className="text-xs text-[var(--text-muted)] mb-1 block">Contract Type</label>
             <select value={form.contract_type} onChange={e => set('contract_type', e.target.value)}
-              className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm">
+              className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm">
               <option>LEASE</option><option>RENTAL</option>
             </select>
           </div>
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">Billing Cycle</label>
+            <label className="text-xs text-[var(--text-muted)] mb-1 block">Billing Cycle</label>
             <select value={form.billing_cycle} onChange={e => set('billing_cycle', e.target.value)}
-              className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm">
+              className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm">
               <option value="WEEKLY">Weekly</option>
               <option value="MONTHLY">Monthly</option>
               <option value="QUARTERLY">Quarterly</option>
@@ -142,41 +142,41 @@ function NewScheduleModal({ onClose, onSave }: { onClose: () => void; onSave: ()
             </select>
           </div>
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">VAT Rate (%)</label>
+            <label className="text-xs text-[var(--text-muted)] mb-1 block">VAT Rate (%)</label>
             <select value={form.vat_rate} onChange={e => set('vat_rate', e.target.value)}
-              className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm">
+              className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm">
               <option value="5">5% (Standard UAE)</option>
               <option value="0">0% (Zero-rated)</option>
             </select>
           </div>
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">Branch</label>
+            <label className="text-xs text-[var(--text-muted)] mb-1 block">Branch</label>
             <select value={form.branch} onChange={e => set('branch', e.target.value)}
-              className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm">
+              className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm">
               {['Dubai','Abu Dhabi','Sharjah','Ajman','Fujairah','Ras Al Khaimah','Umm Al Quwain'].map(b =>
                 <option key={b}>{b}</option>)}
             </select>
           </div>
           <div className="col-span-2">
-            <label className="text-xs text-slate-400 mb-1 block">Description</label>
+            <label className="text-xs text-[var(--text-muted)] mb-1 block">Description</label>
             <input value={form.description} onChange={e => set('description', e.target.value)}
-              className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm" />
+              className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm" />
           </div>
-          <div className="col-span-2 bg-slate-900/60 rounded-xl p-4 border border-white/5">
+          <div className="col-span-2 bg-[var(--bg-surface)]/60 rounded-xl p-4 border border-[var(--border-subtle)]">
             <div className="grid grid-cols-3 gap-4 text-center mb-3">
-              <div><p className="text-xs text-slate-500">Subtotal</p><p className="text-white font-semibold">{fmt(Number(form.amount) || 0)}</p></div>
-              <div><p className="text-xs text-slate-500">VAT ({form.vat_rate}%)</p><p className="text-amber-400 font-semibold">{fmt(vat)}</p></div>
-              <div><p className="text-xs text-slate-500">Total / Invoice</p><p className="text-emerald-400 font-bold">{fmt(total)}</p></div>
+              <div><p className="text-xs text-[var(--text-faint)]">Subtotal</p><p className="text-[var(--text-main)] font-semibold">{fmt(Number(form.amount) || 0)}</p></div>
+              <div><p className="text-xs text-[var(--text-faint)]">VAT ({form.vat_rate}%)</p><p className="text-amber-400 font-semibold">{fmt(vat)}</p></div>
+              <div><p className="text-xs text-[var(--text-faint)]">Total / Invoice</p><p className="text-emerald-400 font-bold">{fmt(total)}</p></div>
             </div>
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={form.auto_approve} onChange={e => set('auto_approve', e.target.checked)}
                 className="w-4 h-4 accent-emerald-500" />
-              <span className="text-sm text-slate-300">Auto-approve generated invoices</span>
+              <span className="text-sm text-[var(--text-muted)]">Auto-approve generated invoices</span>
             </label>
           </div>
         </div>
         <div className="px-6 pb-6 flex gap-3 justify-end">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-slate-700 text-slate-300 text-sm hover:bg-slate-600">Cancel</button>
+          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] text-[var(--text-muted)] text-sm hover:bg-[var(--bg-surface-hover)]">Cancel</button>
           <button onClick={submit} disabled={saving || !form.contract_id || !form.customer_name || !form.amount}
             className="px-5 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-medium disabled:opacity-50">
             {saving ? 'Saving…' : 'Create Schedule'}
@@ -215,27 +215,27 @@ function LogDrawer({ schedule, onClose }: { schedule: Schedule; onClose: () => v
   }
 
   const INV_STATUS: Record<string, string> = {
-    DRAFT:    'bg-slate-500/30 text-slate-300',
+    DRAFT:    'bg-slate-500/30 text-[var(--text-muted)]',
     APPROVED: 'bg-emerald-500/20 text-emerald-300',
     PAID:     'bg-blue-500/20 text-blue-300',
   };
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-end sm:items-center justify-center z-50 p-4">
-      <div className="bg-slate-800 rounded-2xl w-full max-w-2xl border border-white/10 overflow-hidden">
+      <div className="bg-[var(--bg-surface)] rounded-2xl w-full max-w-2xl border border-[var(--border-subtle)] overflow-hidden">
         <div className="bg-gradient-to-r from-slate-700 to-slate-600 px-6 py-4 flex justify-between items-start">
           <div>
             <p className="text-white font-bold">{schedule.schedule_no}</p>
-            <p className="text-slate-400 text-sm">{schedule.customer_name} · {schedule.vehicle_no} · {schedule.billing_cycle}</p>
+            <p className="text-white/70 text-sm">{schedule.customer_name} · {schedule.vehicle_no} · {schedule.billing_cycle}</p>
           </div>
           <button onClick={onClose} className="text-white/70 hover:text-white text-xl">✕</button>
         </div>
 
-        <div className="px-6 py-3 bg-slate-900/40 border-b border-white/5 flex items-center justify-between">
+        <div className="px-6 py-3 bg-[var(--bg-surface)]/40 border-b border-[var(--border-subtle)] flex items-center justify-between">
           <div className="flex gap-6 text-sm">
-            <div><span className="text-slate-500">Next due:</span> <span className={`font-medium ${isDue(schedule.next_invoice_date) ? 'text-red-400' : 'text-white'}`}>{fmtD(schedule.next_invoice_date)}</span></div>
-            <div><span className="text-slate-500">Generated:</span> <span className="text-white">{schedule.invoices_generated}</span></div>
-            <div><span className="text-slate-500">Per invoice:</span> <span className="text-emerald-400 font-semibold">{fmt(schedule.grand_total)}</span></div>
+            <div><span className="text-[var(--text-faint)]">Next due:</span> <span className={`font-medium ${isDue(schedule.next_invoice_date) ? 'text-red-400' : 'text-[var(--text-main)]'}`}>{fmtD(schedule.next_invoice_date)}</span></div>
+            <div><span className="text-[var(--text-faint)]">Generated:</span> <span className="text-[var(--text-main)]">{schedule.invoices_generated}</span></div>
+            <div><span className="text-[var(--text-faint)]">Per invoice:</span> <span className="text-emerald-400 font-semibold">{fmt(schedule.grand_total)}</span></div>
           </div>
           {schedule.status === 'ACTIVE' && (
             <button onClick={generateNow} disabled={generating}
@@ -247,30 +247,30 @@ function LogDrawer({ schedule, onClose }: { schedule: Schedule; onClose: () => v
 
         <div className="p-6 max-h-[50vh] overflow-y-auto">
           {loading ? (
-            <p className="text-slate-500 text-sm text-center py-8">Loading…</p>
+            <p className="text-[var(--text-faint)] text-sm text-center py-8">Loading…</p>
           ) : logs.length === 0 ? (
-            <p className="text-slate-500 text-sm text-center py-8">No invoices generated yet</p>
+            <p className="text-[var(--text-faint)] text-sm text-center py-8">No invoices generated yet</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/10 text-left">
+                <tr className="border-b border-[var(--border-subtle)] text-left">
                   {['Invoice No.','Period','Amount','VAT','Total','Status','By'].map(h => (
-                    <th key={h} className="pb-2 text-xs text-slate-400 font-semibold uppercase">{h}</th>
+                    <th key={h} className="pb-2 text-xs text-[var(--text-muted)] font-semibold uppercase">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {logs.map(l => (
-                  <tr key={l.id} className="border-b border-white/5 hover:bg-white/3">
+                  <tr key={l.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]">
                     <td className="py-2.5 font-mono text-emerald-400 text-xs">{l.invoice_no ?? '—'}</td>
-                    <td className="py-2.5 text-slate-300 text-xs">{fmtD(l.period_start)} – {fmtD(l.period_end)}</td>
-                    <td className="py-2.5 text-white">{fmt(l.amount)}</td>
+                    <td className="py-2.5 text-[var(--text-muted)] text-xs">{fmtD(l.period_start)} – {fmtD(l.period_end)}</td>
+                    <td className="py-2.5 text-[var(--text-main)]">{fmt(l.amount)}</td>
                     <td className="py-2.5 text-amber-400">{fmt(l.vat_amount)}</td>
                     <td className="py-2.5 text-emerald-400 font-medium">{fmt(l.grand_total)}</td>
                     <td className="py-2.5">
                       <span className={`text-xs px-2 py-0.5 rounded-full ${INV_STATUS[l.status] ?? ''}`}>{l.status}</span>
                     </td>
-                    <td className="py-2.5 text-slate-500 text-xs">{l.triggered_by}</td>
+                    <td className="py-2.5 text-[var(--text-faint)] text-xs">{l.triggered_by}</td>
                   </tr>
                 ))}
               </tbody>
@@ -339,12 +339,12 @@ export default function RecurringInvoicesPage() {
   ] : [];
 
   return (
-    <div className="text-white">
+    <div className="text-[var(--text-main)]">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-white">Recurring Invoice Engine</h1>
-          <p className="text-slate-400 text-xs mt-1">Schedule and auto-generate invoices for all active contracts</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Recurring Invoice Engine</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-1">Schedule and auto-generate invoices for all active contracts</p>
         </div>
         <button onClick={() => setShowNew(true)}
           className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-semibold hover:from-emerald-500 hover:to-teal-500 transition-all">
@@ -370,7 +370,7 @@ export default function RecurringInvoicesPage() {
             <span className="text-2xl">⚡</span>
             <div>
               <p className="text-amber-300 font-semibold text-sm">{kpi.due_today} invoice(s) due for generation today</p>
-              <p className="text-slate-400 text-xs mt-0.5">Click Generate Now on each schedule, or use bulk generation.</p>
+              <p className="text-[var(--text-muted)] text-xs mt-0.5">Click Generate Now on each schedule, or use bulk generation.</p>
             </div>
           </div>
           <button onClick={() => setTab('DUE_TODAY')}
@@ -382,59 +382,59 @@ export default function RecurringInvoicesPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-6">
-        <div className="flex bg-slate-800 rounded-xl p-1 gap-1 flex-wrap">
+        <div className="flex bg-[var(--bg-surface)] rounded-xl p-1 gap-1 flex-wrap">
           {TABS.map(t => (
             <button key={t} onClick={() => setTab(t)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${tab === t ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${tab === t ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
               {t === 'DUE_TODAY' ? '⚡ Due Today' : t}
             </button>
           ))}
         </div>
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search customer, vehicle, schedule no…"
-          className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder-slate-500 flex-1 min-w-[200px]" />
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] flex-1 min-w-[200px]" />
       </div>
 
       {/* Table */}
-      <div className="bg-slate-800/60 rounded-2xl border border-white/5 overflow-hidden">
+      <div className="bg-[var(--bg-surface)]/60 rounded-2xl border border-[var(--border-subtle)] overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-white/10 text-left">
+            <tr className="border-b border-[var(--border-subtle)] text-left">
               {['Schedule No.','Customer','Vehicle','Cycle','Amount (incl. VAT)','Branch','Next Invoice','Invoices','Auto','Status','Actions'].map(h => (
-                <th key={h} className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">{h}</th>
+                <th key={h} className="px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={11} className="text-center py-12 text-slate-500">Loading…</td></tr>
+              <tr><td colSpan={11} className="text-center py-12 text-[var(--text-faint)]">Loading…</td></tr>
             ) : schedules.length === 0 ? (
-              <tr><td colSpan={11} className="text-center py-12 text-slate-500">No schedules found</td></tr>
+              <tr><td colSpan={11} className="text-center py-12 text-[var(--text-faint)]">No schedules found</td></tr>
             ) : schedules.map(s => {
               const due      = s.status === 'ACTIVE' && isDue(s.next_invoice_date);
               const busy     = actionId === s.id;
               return (
-                <tr key={s.id} className={`border-b border-white/5 hover:bg-white/3 transition-colors ${due ? 'bg-amber-900/10' : ''}`}>
+                <tr key={s.id} className={`border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors ${due ? 'bg-amber-900/10' : ''}`}>
                   <td className="px-4 py-3 font-mono text-emerald-400 text-xs">{s.schedule_no}</td>
-                  <td className="px-4 py-3 text-white">{s.customer_name}</td>
-                  <td className="px-4 py-3 text-slate-300">{s.vehicle_no}</td>
+                  <td className="px-4 py-3 text-[var(--text-main)]">{s.customer_name}</td>
+                  <td className="px-4 py-3 text-[var(--text-muted)]">{s.vehicle_no}</td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-0.5 rounded-full ${CYCLE_BADGE[s.billing_cycle] ?? ''}`}>{s.billing_cycle}</span>
                   </td>
-                  <td className="px-4 py-3 text-white font-semibold">{fmt(s.grand_total)}</td>
-                  <td className="px-4 py-3 text-slate-400">{s.branch}</td>
-                  <td className={`px-4 py-3 font-medium ${due ? 'text-amber-400' : 'text-white'}`}>
+                  <td className="px-4 py-3 text-[var(--text-main)] font-semibold">{fmt(s.grand_total)}</td>
+                  <td className="px-4 py-3 text-[var(--text-muted)]">{s.branch}</td>
+                  <td className={`px-4 py-3 font-medium ${due ? 'text-amber-400' : 'text-[var(--text-main)]'}`}>
                     {due && <span className="mr-1">⚡</span>}{fmtD(s.next_invoice_date)}
                   </td>
-                  <td className="px-4 py-3 text-slate-300">{s.invoices_generated}</td>
+                  <td className="px-4 py-3 text-[var(--text-muted)]">{s.invoices_generated}</td>
                   <td className="px-4 py-3 text-center">
-                    {s.auto_approve ? <span className="text-emerald-400 text-base">✓</span> : <span className="text-slate-600">—</span>}
+                    {s.auto_approve ? <span className="text-emerald-400 text-base">✓</span> : <span className="text-[var(--text-faint)]">—</span>}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-1 rounded-full ${STATUS_COLOR[s.status] ?? ''}`}>{s.status}</span>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1 flex-wrap">
-                      <button onClick={() => setViewLogs(s)} className="text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-300">
+                      <button onClick={() => setViewLogs(s)} className="text-xs px-2 py-1 rounded bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)]">
                         Log
                       </button>
                       {s.status === 'ACTIVE' && (

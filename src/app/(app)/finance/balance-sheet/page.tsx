@@ -26,23 +26,23 @@ function BSSection({ title, color, lines, subtotal, subtotalLabel }:
   if (lines.length === 0) return null;
   return (
     <>
-      <tr className="border-t border-white/10">
+      <tr className="border-t border-[var(--border-subtle)]">
         <td className={`px-6 py-2 text-xs font-bold uppercase tracking-wider ${color}`} colSpan={2}>{title}</td>
       </tr>
       {lines.map(line => (
-        <tr key={line.code} className="border-b border-white/5 hover:bg-slate-800/20">
-          <td className="px-6 py-1.5 text-sm text-slate-300" style={{ paddingLeft: '36px' }}>
-            <span className="font-mono text-xs text-slate-500 mr-2">{line.code}</span>
+        <tr key={line.code} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]/20">
+          <td className="px-6 py-1.5 text-sm text-[var(--text-muted)]" style={{ paddingLeft: '36px' }}>
+            <span className="font-mono text-xs text-[var(--text-faint)] mr-2">{line.code}</span>
             {line.label}
           </td>
-          <td className={`px-6 py-1.5 text-right text-sm ${line.amount < 0 ? 'text-red-400' : 'text-slate-300'}`}>
+          <td className={`px-6 py-1.5 text-right text-sm ${line.amount < 0 ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>
             {line.amount < 0 ? `(${fmt(Math.abs(line.amount))})` : fmt(line.amount)}
           </td>
         </tr>
       ))}
-      <tr className="border-b border-white/20 bg-slate-800/20">
-        <td className="px-6 py-2 text-sm font-bold text-slate-200" style={{ paddingLeft: '36px' }}>{subtotalLabel}</td>
-        <td className={`px-6 py-2 text-right text-sm font-bold ${subtotal >= 0 ? 'text-white' : 'text-red-400'}`}>
+      <tr className="border-b border-[var(--border-strong)] bg-[var(--bg-surface)]/20">
+        <td className="px-6 py-2 text-sm font-bold text-[var(--text-main)]" style={{ paddingLeft: '36px' }}>{subtotalLabel}</td>
+        <td className={`px-6 py-2 text-right text-sm font-bold ${subtotal >= 0 ? 'text-[var(--text-main)]' : 'text-red-400'}`}>
           {subtotal < 0 ? `(${fmt(Math.abs(subtotal))})` : fmt(subtotal)}
         </td>
       </tr>
@@ -68,8 +68,8 @@ export default function BalanceSheetPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Balance Sheet</h1>
-          <p className="text-slate-400 text-xs mt-0.5">Statement of Financial Position</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Balance Sheet</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Statement of Financial Position</p>
         </div>
         <div className="flex items-center gap-3">
           {data && (
@@ -78,9 +78,9 @@ export default function BalanceSheetPage() {
             </span>
           )}
           <div className="flex items-center gap-2">
-            <label className="text-xs text-slate-400">As of</label>
+            <label className="text-xs text-[var(--text-muted)]">As of</label>
             <input type="date" value={asOf} onChange={e => setAsOf(e.target.value)}
-              className="bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500" />
+              className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-purple-500" />
           </div>
         </div>
       </div>
@@ -95,7 +95,7 @@ export default function BalanceSheetPage() {
             <p className={`font-bold text-sm ${data.summary.isBalanced ? 'text-emerald-300' : 'text-red-300'}`}>
               {data.summary.isBalanced ? 'Balance Sheet BALANCES — Assets = Liabilities + Equity' : 'Balance Sheet DOES NOT BALANCE'}
             </p>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="text-xs text-[var(--text-muted)] mt-0.5">
               Total Assets: AED {fmt(data.summary.totalAssets)} &nbsp;|&nbsp;
               Total Liabilities + Equity: AED {fmt(data.summary.totalLiabEquity)}
               {!data.summary.isBalanced && <span className="text-red-400 ml-2">Difference: AED {fmt(data.summary.difference)}</span>}
@@ -104,15 +104,15 @@ export default function BalanceSheetPage() {
         </div>
       )}
 
-      {loading && <div className="h-96 bg-slate-800/60 rounded-2xl animate-pulse" />}
+      {loading && <div className="h-96 bg-[var(--bg-surface)]/60 rounded-2xl animate-pulse" />}
 
       {data && !loading && (
         <div className="grid grid-cols-2 gap-6">
           {/* LEFT: Assets */}
-          <div className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-white/10 bg-blue-900/10">
+          <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-[var(--border-subtle)] bg-blue-900/10">
               <h2 className="text-base font-bold text-blue-300">ASSETS</h2>
-              <p className="text-xs text-slate-400 mt-0.5">As of {data.asOf}</p>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">As of {data.asOf}</p>
             </div>
             <table className="w-full">
               <tbody>
@@ -139,7 +139,7 @@ export default function BalanceSheetPage() {
                     subtotalLabel="Total Other Assets"
                   />
                 )}
-                <tr className="border-t-2 border-white/30 bg-blue-900/10">
+                <tr className="border-t-2 border-[var(--border-strong)] bg-blue-900/10">
                   <td className="px-6 py-4 font-bold text-base text-blue-200">TOTAL ASSETS</td>
                   <td className="px-6 py-4 text-right font-bold text-xl text-blue-300">
                     AED {fmt(data.assets.totalAssets)}
@@ -150,14 +150,14 @@ export default function BalanceSheetPage() {
           </div>
 
           {/* RIGHT: Liabilities + Equity */}
-          <div className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden">
-            <div className="px-6 py-4 border-b border-white/10 bg-red-900/10">
+          <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-[var(--border-subtle)] bg-red-900/10">
               <h2 className="text-base font-bold text-red-300">LIABILITIES & EQUITY</h2>
-              <p className="text-xs text-slate-400 mt-0.5">As of {data.asOf}</p>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">As of {data.asOf}</p>
             </div>
             <table className="w-full">
               <tbody>
-                <tr className="border-t border-white/10 bg-red-900/5">
+                <tr className="border-t border-[var(--border-subtle)] bg-red-900/5">
                   <td className="px-6 py-2 text-xs font-bold uppercase tracking-wider text-red-400" colSpan={2}>LIABILITIES</td>
                 </tr>
                 <BSSection
@@ -176,7 +176,7 @@ export default function BalanceSheetPage() {
                     subtotalLabel="Total Non-Current Liabilities"
                   />
                 )}
-                <tr className="border-b border-white/20 bg-red-900/10">
+                <tr className="border-b border-[var(--border-strong)] bg-red-900/10">
                   <td className="px-6 py-2 font-bold text-sm text-red-200">Total Liabilities</td>
                   <td className="px-6 py-2 text-right font-bold text-sm text-red-300">
                     {fmt(data.liabilities.totalLiabilities)}
@@ -184,21 +184,21 @@ export default function BalanceSheetPage() {
                 </tr>
 
                 {/* Equity */}
-                <tr className="border-t border-white/10 bg-purple-900/5">
+                <tr className="border-t border-[var(--border-subtle)] bg-purple-900/5">
                   <td className="px-6 py-2 text-xs font-bold uppercase tracking-wider text-purple-400" colSpan={2}>SHAREHOLDERS' EQUITY</td>
                 </tr>
                 {data.equity.lines.map(line => (
-                  <tr key={line.code} className="border-b border-white/5 hover:bg-slate-800/20">
-                    <td className="px-6 py-1.5 text-sm text-slate-300" style={{ paddingLeft: '36px' }}>
-                      <span className="font-mono text-xs text-slate-500 mr-2">{line.code}</span>
+                  <tr key={line.code} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]/20">
+                    <td className="px-6 py-1.5 text-sm text-[var(--text-muted)]" style={{ paddingLeft: '36px' }}>
+                      <span className="font-mono text-xs text-[var(--text-faint)] mr-2">{line.code}</span>
                       {line.label}
                     </td>
-                    <td className={`px-6 py-1.5 text-right text-sm ${line.amount < 0 ? 'text-red-400' : 'text-slate-300'}`}>
+                    <td className={`px-6 py-1.5 text-right text-sm ${line.amount < 0 ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>
                       {line.amount < 0 ? `(${fmt(Math.abs(line.amount))})` : fmt(line.amount)}
                     </td>
                   </tr>
                 ))}
-                <tr className="border-b border-white/20 bg-purple-900/10">
+                <tr className="border-b border-[var(--border-strong)] bg-purple-900/10">
                   <td className="px-6 py-2 font-bold text-sm text-purple-200">Total Shareholders' Equity</td>
                   <td className="px-6 py-2 text-right font-bold text-sm text-purple-300">
                     {fmt(data.equity.totalEquity)}
@@ -206,7 +206,7 @@ export default function BalanceSheetPage() {
                 </tr>
 
                 {/* Total L + E */}
-                <tr className="border-t-2 border-white/30 bg-red-900/10">
+                <tr className="border-t-2 border-[var(--border-strong)] bg-red-900/10">
                   <td className="px-6 py-4 font-bold text-base text-red-200">TOTAL LIABILITIES & EQUITY</td>
                   <td className="px-6 py-4 text-right font-bold text-xl text-red-300">
                     AED {fmt(data.summary.totalLiabEquity)}
@@ -220,8 +220,8 @@ export default function BalanceSheetPage() {
 
       {/* Key Ratios */}
       {data && !loading && (
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5">
-          <h3 className="text-sm font-bold text-white mb-4">Key Financial Ratios</h3>
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5">
+          <h3 className="text-sm font-bold text-[var(--text-main)] mb-4">Key Financial Ratios</h3>
           <div className="grid grid-cols-4 gap-4">
             {(() => {
               const currentRatio = data.liabilities.totalCurrent > 0
@@ -238,9 +238,9 @@ export default function BalanceSheetPage() {
                 { label: 'Equity Ratio', value: `${equityRatio}%`, note: equityRatio >= 50 ? '✓ Strong equity base' : '⚠ Debt-heavy', good: equityRatio >= 50 },
                 { label: 'Debt Ratio', value: `${debtRatio}%`, note: debtRatio <= 50 ? '✓ Low leverage' : '⚠ High leverage', good: debtRatio <= 50 },
               ].map(r => (
-                <div key={r.label} className="bg-slate-800/60 rounded-xl p-3">
-                  <p className="text-xs text-slate-400">{r.label}</p>
-                  <p className="text-xl font-bold text-white mt-1">{r.value}</p>
+                <div key={r.label} className="bg-[var(--bg-surface)]/60 rounded-xl p-3">
+                  <p className="text-xs text-[var(--text-muted)]">{r.label}</p>
+                  <p className="text-xl font-bold text-[var(--text-main)] mt-1">{r.value}</p>
                   <p className={`text-xs mt-1 ${r.good ? 'text-emerald-400' : 'text-amber-400'}`}>{r.note}</p>
                 </div>
               ));

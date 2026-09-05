@@ -60,7 +60,7 @@ const STATUS_COLOR: Record<string, string> = {
 const AGING_COLOR = (days: number) =>
   days > 730 ? 'text-red-400 font-bold' :
   days > 365 ? 'text-amber-400 font-semibold' :
-  days > 180 ? 'text-yellow-400' : 'text-slate-300';
+  days > 180 ? 'text-yellow-400' : 'text-[var(--text-muted)]';
 
 const TABS = ['ALL', 'HELD', 'PARTIALLY_REFUNDED', 'FULLY_REFUNDED', 'FORFEITED'];
 
@@ -88,7 +88,7 @@ function NewDepositModal({ onClose, onSave }: { onClose: () => void; onSave: () 
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-800 rounded-2xl w-full max-w-2xl border border-white/10 overflow-hidden">
+      <div className="bg-[var(--bg-surface)] rounded-2xl w-full max-w-2xl border border-[var(--border-subtle)] overflow-hidden">
         <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 flex justify-between items-center">
           <h2 className="font-bold text-white text-lg">🔒 New Security Deposit</h2>
           <button onClick={onClose} className="text-white/70 hover:text-white text-xl">✕</button>
@@ -105,30 +105,30 @@ function NewDepositModal({ onClose, onSave }: { onClose: () => void; onSave: () 
             ['Bank Name', 'bank_name', 'text'],
           ].map(([label, key, type]) => (
             <div key={key}>
-              <label className="text-xs text-slate-400 mb-1 block">{label}</label>
+              <label className="text-xs text-[var(--text-muted)] mb-1 block">{label}</label>
               <input type={type} value={(form as Record<string, string>)[key]} onChange={e => set(key, e.target.value)}
-                className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm" />
+                className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm" />
             </div>
           ))}
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">Contract Type</label>
+            <label className="text-xs text-[var(--text-muted)] mb-1 block">Contract Type</label>
             <select value={form.contract_type} onChange={e => set('contract_type', e.target.value)}
-              className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm">
+              className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm">
               <option>LEASE</option><option>RENTAL</option>
             </select>
           </div>
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">Branch</label>
+            <label className="text-xs text-[var(--text-muted)] mb-1 block">Branch</label>
             <select value={form.branch} onChange={e => set('branch', e.target.value)}
-              className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm">
+              className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm">
               {['Dubai','Abu Dhabi','Sharjah','Ajman','Fujairah','Ras Al Khaimah','Umm Al Quwain'].map(b =>
                 <option key={b}>{b}</option>)}
             </select>
           </div>
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">Collection Method</label>
+            <label className="text-xs text-[var(--text-muted)] mb-1 block">Collection Method</label>
             <select value={form.collection_method} onChange={e => set('collection_method', e.target.value)}
-              className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm">
+              className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm">
               <option value="BANK_TRANSFER">Bank Transfer</option>
               <option value="CHEQUE">Cheque</option>
               <option value="CASH">Cash</option>
@@ -136,13 +136,13 @@ function NewDepositModal({ onClose, onSave }: { onClose: () => void; onSave: () 
             </select>
           </div>
           <div className="col-span-2">
-            <label className="text-xs text-slate-400 mb-1 block">Notes</label>
+            <label className="text-xs text-[var(--text-muted)] mb-1 block">Notes</label>
             <textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={2}
-              className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm resize-none" />
+              className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm resize-none" />
           </div>
         </div>
         <div className="px-6 pb-6 flex gap-3 justify-end">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-slate-700 text-slate-300 text-sm hover:bg-slate-600">Cancel</button>
+          <button onClick={onClose} className="px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] text-[var(--text-muted)] text-sm hover:bg-[var(--bg-surface-hover)]">Cancel</button>
           <button onClick={submit} disabled={saving}
             className="px-5 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-medium disabled:opacity-50">
             {saving ? 'Saving…' : 'Create Deposit'}
@@ -207,7 +207,7 @@ function DepositDetailModal({ deposit, onClose, onRefresh }: { deposit: Deposit;
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-800 rounded-2xl w-full max-w-2xl border border-white/10 overflow-hidden">
+      <div className="bg-[var(--bg-surface)] rounded-2xl w-full max-w-2xl border border-[var(--border-subtle)] overflow-hidden">
         {/* Header */}
         <div className="bg-gradient-to-r from-emerald-700 to-teal-700 px-6 py-4 flex justify-between items-start">
           <div>
@@ -221,17 +221,17 @@ function DepositDetailModal({ deposit, onClose, onRefresh }: { deposit: Deposit;
         </div>
 
         {/* Amount strip */}
-        <div className="bg-slate-900/60 px-6 py-3 grid grid-cols-3 gap-4 text-center border-b border-white/5">
-          <div><p className="text-xs text-slate-500">Collected</p><p className="text-white font-semibold">{fmt(deposit.collected_amount)}</p></div>
-          <div><p className="text-xs text-slate-500">Deducted</p><p className="text-red-400 font-semibold">{fmt(deposit.total_deducted)}</p></div>
-          <div><p className="text-xs text-slate-500">Net Refundable</p><p className="text-emerald-400 font-semibold">{fmt(net)}</p></div>
+        <div className="bg-[var(--bg-surface)]/60 px-6 py-3 grid grid-cols-3 gap-4 text-center border-b border-[var(--border-subtle)]">
+          <div><p className="text-xs text-[var(--text-faint)]">Collected</p><p className="text-[var(--text-main)] font-semibold">{fmt(deposit.collected_amount)}</p></div>
+          <div><p className="text-xs text-[var(--text-faint)]">Deducted</p><p className="text-red-400 font-semibold">{fmt(deposit.total_deducted)}</p></div>
+          <div><p className="text-xs text-[var(--text-faint)]">Net Refundable</p><p className="text-emerald-400 font-semibold">{fmt(net)}</p></div>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-white/10 px-6 pt-2 gap-1">
+        <div className="flex border-b border-[var(--border-subtle)] px-6 pt-2 gap-1">
           {(['overview','deductions','refund','forfeit'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
-              className={`px-3 py-2 text-sm capitalize rounded-t-lg border-b-2 transition-colors ${tab === t ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-slate-400 hover:text-white'}`}>
+              className={`px-3 py-2 text-sm capitalize rounded-t-lg border-b-2 transition-colors ${tab === t ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
               {t === 'deductions' ? `Deductions (${deposit.deductions.length})` : t.charAt(0).toUpperCase() + t.slice(1)}
             </button>
           ))}
@@ -248,15 +248,15 @@ function DepositDetailModal({ deposit, onClose, onRefresh }: { deposit: Deposit;
                 ['Bank', deposit.bank_name ?? '—'], ['Days Held', <span key="d" className={AGING_COLOR(deposit.held_days)}>{deposit.held_days} days</span>],
                 ['Refund Date', fmtD(deposit.refund_date)], ['Refund Method', deposit.refund_method ?? '—'],
               ].map(([label, value]) => (
-                <div key={String(label)} className="bg-slate-700/40 rounded-lg p-3">
-                  <p className="text-slate-500 text-xs mb-1">{label}</p>
-                  <p className="text-white">{value}</p>
+                <div key={String(label)} className="bg-[var(--bg-surface-hover)]/40 rounded-lg p-3">
+                  <p className="text-[var(--text-faint)] text-xs mb-1">{label}</p>
+                  <p className="text-[var(--text-main)]">{value}</p>
                 </div>
               ))}
               {deposit.notes && (
-                <div className="col-span-2 bg-slate-700/40 rounded-lg p-3">
-                  <p className="text-slate-500 text-xs mb-1">Notes</p>
-                  <p className="text-white">{deposit.notes}</p>
+                <div className="col-span-2 bg-[var(--bg-surface-hover)]/40 rounded-lg p-3">
+                  <p className="text-[var(--text-faint)] text-xs mb-1">Notes</p>
+                  <p className="text-[var(--text-main)]">{deposit.notes}</p>
                 </div>
               )}
             </div>
@@ -266,31 +266,31 @@ function DepositDetailModal({ deposit, onClose, onRefresh }: { deposit: Deposit;
           {tab === 'deductions' && (
             <div className="space-y-3">
               {deposit.deductions.length === 0 && (
-                <p className="text-slate-500 text-sm text-center py-4">No deductions yet</p>
+                <p className="text-[var(--text-faint)] text-sm text-center py-4">No deductions yet</p>
               )}
               {deposit.deductions.map(d => (
-                <div key={d.id} className="flex justify-between items-center bg-slate-700/40 rounded-lg p-3">
+                <div key={d.id} className="flex justify-between items-center bg-[var(--bg-surface-hover)]/40 rounded-lg p-3">
                   <div>
-                    <p className="text-white text-sm">{d.description}</p>
-                    <p className="text-slate-400 text-xs">{d.category} · {fmtD(d.date)}</p>
+                    <p className="text-[var(--text-main)] text-sm">{d.description}</p>
+                    <p className="text-[var(--text-muted)] text-xs">{d.category} · {fmtD(d.date)}</p>
                   </div>
                   <p className="text-red-400 font-semibold text-sm">{fmt(d.amount)}</p>
                 </div>
               ))}
               {deposit.status === 'HELD' || deposit.status === 'PARTIALLY_REFUNDED' ? (
-                <div className="mt-4 bg-slate-900/60 rounded-xl p-4 space-y-3 border border-white/5">
-                  <p className="text-slate-300 text-sm font-semibold">Add Deduction</p>
+                <div className="mt-4 bg-[var(--bg-surface)]/60 rounded-xl p-4 space-y-3 border border-[var(--border-subtle)]">
+                  <p className="text-[var(--text-muted)] text-sm font-semibold">Add Deduction</p>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="col-span-2">
                       <input placeholder="Description" value={deduction.description} onChange={e => setDeduction(d => ({ ...d, description: e.target.value }))}
-                        className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm" />
+                        className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm" />
                     </div>
                     <input type="number" placeholder="Amount (AED)" value={deduction.amount} onChange={e => setDeduction(d => ({ ...d, amount: e.target.value }))}
-                      className="bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm" />
+                      className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm" />
                     <input type="date" value={deduction.date} onChange={e => setDeduction(d => ({ ...d, date: e.target.value }))}
-                      className="bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm" />
+                      className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm" />
                     <select value={deduction.category} onChange={e => setDeduction(d => ({ ...d, category: e.target.value }))}
-                      className="col-span-2 bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm">
+                      className="col-span-2 bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm">
                       <option value="DAMAGE">Damage</option>
                       <option value="CLEANING">Cleaning</option>
                       <option value="TRAFFIC_FINE">Traffic Fine</option>
@@ -311,33 +311,33 @@ function DepositDetailModal({ deposit, onClose, onRefresh }: { deposit: Deposit;
           {tab === 'refund' && (
             <div className="space-y-3">
               {['FULLY_REFUNDED','FORFEITED'].includes(deposit.status) ? (
-                <p className="text-slate-400 text-sm text-center py-6">This deposit has already been closed.</p>
+                <p className="text-[var(--text-muted)] text-sm text-center py-6">This deposit has already been closed.</p>
               ) : (
                 <>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs text-slate-400 mb-1 block">Refund Amount (AED)</label>
+                      <label className="text-xs text-[var(--text-muted)] mb-1 block">Refund Amount (AED)</label>
                       <input type="number" value={refund.refund_amount} onChange={e => setRefund(r => ({ ...r, refund_amount: e.target.value }))}
-                        className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm" />
+                        className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm" />
                     </div>
                     <div>
-                      <label className="text-xs text-slate-400 mb-1 block">Refund Date</label>
+                      <label className="text-xs text-[var(--text-muted)] mb-1 block">Refund Date</label>
                       <input type="date" value={refund.refund_date} onChange={e => setRefund(r => ({ ...r, refund_date: e.target.value }))}
-                        className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm" />
+                        className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm" />
                     </div>
                     <div>
-                      <label className="text-xs text-slate-400 mb-1 block">Refund Method</label>
+                      <label className="text-xs text-[var(--text-muted)] mb-1 block">Refund Method</label>
                       <select value={refund.refund_method} onChange={e => setRefund(r => ({ ...r, refund_method: e.target.value }))}
-                        className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm">
+                        className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm">
                         <option value="BANK_TRANSFER">Bank Transfer</option>
                         <option value="CHEQUE">Cheque</option>
                         <option value="CASH">Cash</option>
                       </select>
                     </div>
                     <div>
-                      <label className="text-xs text-slate-400 mb-1 block">Reference / Cheque No.</label>
+                      <label className="text-xs text-[var(--text-muted)] mb-1 block">Reference / Cheque No.</label>
                       <input value={refund.refund_reference} onChange={e => setRefund(r => ({ ...r, refund_reference: e.target.value }))}
-                        className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm" />
+                        className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm" />
                     </div>
                   </div>
                   <div className="bg-emerald-900/30 border border-emerald-500/20 rounded-lg p-3 text-sm text-emerald-300">
@@ -358,7 +358,7 @@ function DepositDetailModal({ deposit, onClose, onRefresh }: { deposit: Deposit;
               {deposit.status === 'FORFEITED' ? (
                 <div className="bg-red-900/30 border border-red-500/20 rounded-lg p-4">
                   <p className="text-red-300 text-sm font-medium">Deposit Forfeited</p>
-                  <p className="text-slate-400 text-sm mt-1">{deposit.forfeiture_reason ?? '—'}</p>
+                  <p className="text-[var(--text-muted)] text-sm mt-1">{deposit.forfeiture_reason ?? '—'}</p>
                 </div>
               ) : (
                 <>
@@ -366,9 +366,9 @@ function DepositDetailModal({ deposit, onClose, onRefresh }: { deposit: Deposit;
                     ⚠️ Forfeiting will retain the full deposit (<strong>{fmt(deposit.collected_amount)}</strong>) as income. This action cannot be undone.
                   </div>
                   <div>
-                    <label className="text-xs text-slate-400 mb-1 block">Forfeiture Reason *</label>
+                    <label className="text-xs text-[var(--text-muted)] mb-1 block">Forfeiture Reason *</label>
                     <textarea value={forfeitReason} onChange={e => setForfeitReason(e.target.value)} rows={3} placeholder="e.g. Contract default, vehicle damage beyond deposit..."
-                      className="w-full bg-slate-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm resize-none" />
+                      className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm resize-none" />
                   </div>
                   <button onClick={forfeit} disabled={saving || !forfeitReason.trim()}
                     className="w-full py-2.5 rounded-lg bg-red-700 hover:bg-red-600 text-white font-medium disabled:opacity-40">
@@ -417,12 +417,12 @@ export default function DepositsPage() {
   ] : [];
 
   return (
-    <div className="text-white">
+    <div className="text-[var(--text-main)]">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-white">Security Deposit Management</h1>
-          <p className="text-slate-400 text-xs mt-1">Track, deduct & refund security deposits across all contracts</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Security Deposit Management</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-1">Track, deduct & refund security deposits across all contracts</p>
         </div>
         <button onClick={() => setShowNew(true)}
           className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-semibold hover:from-emerald-500 hover:to-teal-500 transition-all">
@@ -447,48 +447,48 @@ export default function DepositsPage() {
           <span className="text-2xl">⏰</span>
           <div>
             <p className="text-amber-300 font-semibold text-sm">{kpi.overdue_count} deposit(s) held over 365 days</p>
-            <p className="text-slate-400 text-xs mt-0.5">Review and process refunds or forfeiture for aging deposits.</p>
+            <p className="text-[var(--text-muted)] text-xs mt-0.5">Review and process refunds or forfeiture for aging deposits.</p>
           </div>
         </div>
       )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-6">
-        <div className="flex bg-slate-800 rounded-xl p-1 gap-1 flex-wrap">
+        <div className="flex bg-[var(--bg-surface)] rounded-xl p-1 gap-1 flex-wrap">
           {TABS.map(t => (
             <button key={t} onClick={() => setTab(t)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${tab === t ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${tab === t ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
               {t.replace('_', ' ')}
             </button>
           ))}
         </div>
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search customer, vehicle, ref…"
-          className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2 text-sm text-white placeholder-slate-500 flex-1 min-w-[200px]" />
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] flex-1 min-w-[200px]" />
       </div>
 
       {/* Table */}
-      <div className="bg-slate-800/60 rounded-2xl border border-white/5 overflow-hidden">
+      <div className="bg-[var(--bg-surface)]/60 rounded-2xl border border-[var(--border-subtle)] overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-white/10 text-left">
+            <tr className="border-b border-[var(--border-subtle)] text-left">
               {['Deposit No.','Customer','Vehicle','Contract','Branch','Collected','Deducted','Net','Held Days','Status',''].map(h => (
-                <th key={h} className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">{h}</th>
+                <th key={h} className="px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={11} className="text-center py-12 text-slate-500">Loading…</td></tr>
+              <tr><td colSpan={11} className="text-center py-12 text-[var(--text-faint)]">Loading…</td></tr>
             ) : deposits.length === 0 ? (
-              <tr><td colSpan={11} className="text-center py-12 text-slate-500">No deposits found</td></tr>
+              <tr><td colSpan={11} className="text-center py-12 text-[var(--text-faint)]">No deposits found</td></tr>
             ) : deposits.map(d => (
-              <tr key={d.id} className="border-b border-white/5 hover:bg-white/3 transition-colors">
+              <tr key={d.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
                 <td className="px-4 py-3 font-mono text-emerald-400 text-xs">{d.deposit_no}</td>
-                <td className="px-4 py-3 text-white">{d.customer_name}</td>
-                <td className="px-4 py-3 text-slate-300">{d.vehicle_no}</td>
-                <td className="px-4 py-3 text-slate-400 text-xs">{d.contract_id} <span className="bg-slate-700 px-1.5 py-0.5 rounded text-slate-500">{d.contract_type}</span></td>
-                <td className="px-4 py-3 text-slate-400">{d.branch}</td>
-                <td className="px-4 py-3 text-white">{fmt(d.collected_amount)}</td>
+                <td className="px-4 py-3 text-[var(--text-main)]">{d.customer_name}</td>
+                <td className="px-4 py-3 text-[var(--text-muted)]">{d.vehicle_no}</td>
+                <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{d.contract_id} <span className="bg-[var(--bg-surface-hover)] px-1.5 py-0.5 rounded text-[var(--text-faint)]">{d.contract_type}</span></td>
+                <td className="px-4 py-3 text-[var(--text-muted)]">{d.branch}</td>
+                <td className="px-4 py-3 text-[var(--text-main)]">{fmt(d.collected_amount)}</td>
                 <td className="px-4 py-3 text-red-400">{d.total_deducted > 0 ? fmt(d.total_deducted) : '—'}</td>
                 <td className="px-4 py-3 text-emerald-400">{fmt(d.collected_amount - d.total_deducted)}</td>
                 <td className={`px-4 py-3 ${AGING_COLOR(d.held_days)}`}>{d.held_days}d</td>

@@ -25,8 +25,8 @@ const STATUS_STYLE: Record<string, string> = {
   ESCALATED:  'bg-orange-500/20 text-orange-300 border-orange-500/30',
   LEGAL:      'bg-red-500/20   text-red-400    border-red-500/30',
   SETTLED:    'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-  WRITTEN_OFF: 'bg-slate-500/20 text-slate-400  border-slate-500/30',
-  CLOSED:     'bg-slate-500/20 text-slate-500  border-slate-500/30',
+  WRITTEN_OFF: 'bg-slate-500/20 text-[var(--text-muted)]  border-slate-500/30',
+  CLOSED:     'bg-slate-500/20 text-[var(--text-faint)]  border-slate-500/30',
 };
 const AGING_STYLE: Record<string, string> = {
   'CURRENT': 'text-emerald-400', '1-30': 'text-amber-400',
@@ -56,27 +56,27 @@ function CaseDrawer({ caseData, onClose, onUpdate }: { caseData: CollectionCase;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60 p-4">
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-5 border-b border-white/10">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)]">
           <div>
-            <h2 className="text-base font-bold text-white">{caseData.case_no}</h2>
-            <p className="text-xs text-slate-400">{caseData.client_name} · {caseData.invoice_no}</p>
+            <h2 className="text-base font-bold text-[var(--text-main)]">{caseData.case_no}</h2>
+            <p className="text-xs text-[var(--text-muted)]">{caseData.client_name} · {caseData.invoice_no}</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white text-xl">×</button>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">×</button>
         </div>
         <div className="p-5 space-y-4">
           {/* Key figures */}
           <div className="grid grid-cols-3 gap-3">
-            <div className="bg-slate-800/60 rounded-xl p-3">
-              <p className="text-xs text-slate-400">Invoice</p>
-              <p className="text-sm font-bold text-white mt-0.5">{fmtAED(caseData.invoice_amount)}</p>
+            <div className="bg-[var(--bg-surface)]/60 rounded-xl p-3">
+              <p className="text-xs text-[var(--text-muted)]">Invoice</p>
+              <p className="text-sm font-bold text-[var(--text-main)] mt-0.5">{fmtAED(caseData.invoice_amount)}</p>
             </div>
-            <div className="bg-slate-800/60 rounded-xl p-3">
-              <p className="text-xs text-slate-400">Outstanding</p>
+            <div className="bg-[var(--bg-surface)]/60 rounded-xl p-3">
+              <p className="text-xs text-[var(--text-muted)]">Outstanding</p>
               <p className="text-sm font-bold text-red-400 mt-0.5">{fmtAED(caseData.outstanding_amount)}</p>
             </div>
-            <div className="bg-slate-800/60 rounded-xl p-3">
-              <p className="text-xs text-slate-400">Days Overdue</p>
+            <div className="bg-[var(--bg-surface)]/60 rounded-xl p-3">
+              <p className="text-xs text-[var(--text-muted)]">Days Overdue</p>
               <p className={`text-sm font-bold mt-0.5 ${caseData.days_overdue > 60 ? 'text-red-400' : caseData.days_overdue > 30 ? 'text-orange-400' : 'text-amber-400'}`}>
                 {caseData.days_overdue}d
               </p>
@@ -86,13 +86,13 @@ function CaseDrawer({ caseData, onClose, onUpdate }: { caseData: CollectionCase;
           {/* Timeline */}
           {caseData.timeline?.length > 0 && (
             <div>
-              <p className="text-xs text-slate-400 mb-2 font-medium">Timeline</p>
+              <p className="text-xs text-[var(--text-muted)] mb-2 font-medium">Timeline</p>
               <div className="space-y-2 max-h-32 overflow-y-auto">
                 {[...caseData.timeline].reverse().map((e, i) => (
                   <div key={i} className="flex gap-3 text-xs">
-                    <span className="text-slate-500 shrink-0">{e.date}</span>
+                    <span className="text-[var(--text-faint)] shrink-0">{e.date}</span>
                     <span className="text-amber-400 shrink-0">{e.action}</span>
-                    <span className="text-slate-300">{e.note}</span>
+                    <span className="text-[var(--text-muted)]">{e.note}</span>
                   </div>
                 ))}
               </div>
@@ -103,7 +103,7 @@ function CaseDrawer({ caseData, onClose, onUpdate }: { caseData: CollectionCase;
           {!['SETTLED','WRITTEN_OFF','CLOSED'].includes(caseData.status) && (
             <>
               <div>
-                <p className="text-xs text-slate-400 mb-2 font-medium">Take Action</p>
+                <p className="text-xs text-[var(--text-muted)] mb-2 font-medium">Take Action</p>
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     { a: 'contact',  l: '📞 Contact', show: true },
@@ -114,7 +114,7 @@ function CaseDrawer({ caseData, onClose, onUpdate }: { caseData: CollectionCase;
                     { a: 'write_off', l: '🗑 Write Off', show: true },
                   ].filter(x => x.show).map(x => (
                     <button key={x.a} onClick={() => setAction(action === x.a ? '' : x.a)}
-                      className={`py-2 px-3 rounded-xl text-xs font-medium transition-all text-white ${action === x.a ? 'bg-emerald-600 ring-2 ring-emerald-400/20' : 'bg-slate-700 hover:bg-slate-600'}`}>
+                      className={`py-2 px-3 rounded-xl text-xs font-medium transition-all text-white ${action === x.a ? 'bg-emerald-600 ring-2 ring-emerald-400/20' : 'bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)]'}`}>
                       {x.l}
                     </button>
                   ))}
@@ -123,22 +123,22 @@ function CaseDrawer({ caseData, onClose, onUpdate }: { caseData: CollectionCase;
               {action === 'promise' && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Promised Pay Date</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Promised Pay Date</label>
                     <input type="date" value={promise.date} onChange={e => setPromise(p => ({ ...p, date: e.target.value }))}
-                      className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500" />
+                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-emerald-500" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Promised Amount</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Promised Amount</label>
                     <input type="number" value={promise.amount} onChange={e => setPromise(p => ({ ...p, amount: e.target.value }))} placeholder="0.00"
-                      className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500" />
+                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-emerald-500" />
                   </div>
                 </div>
               )}
               {action && (
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Note</label>
+                  <label className="block text-xs text-[var(--text-muted)] mb-1">Note</label>
                   <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="Add a note…"
-                    className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white resize-none focus:outline-none focus:border-emerald-500" />
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] resize-none focus:outline-none focus:border-emerald-500" />
                 </div>
               )}
               {action && (
@@ -203,22 +203,22 @@ export default function CollectionsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Collections & Dunning</h1>
-          <p className="text-slate-400 text-xs mt-0.5">AR aging, collection cases, dunning workflow</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Collections & Dunning</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">AR aging, collection cases, dunning workflow</p>
         </div>
       </div>
 
       {/* AR Aging Buckets */}
       <div>
-        <h2 className="text-sm font-semibold text-slate-400 mb-3">AR AGING ANALYSIS</h2>
+        <h2 className="text-sm font-semibold text-[var(--text-muted)] mb-3">AR AGING ANALYSIS</h2>
         <div className="grid grid-cols-5 gap-3">
           {['CURRENT', '1-30', '31-60', '61-90', '90+'].map(bucket => {
             const d = aging.find(a => a.bucket === bucket);
             return (
-              <div key={bucket} className="bg-slate-900/60 border border-white/10 rounded-xl p-4">
-                <p className="text-xs text-slate-500">{bucket === 'CURRENT' ? 'Current' : `${bucket} days`}</p>
+              <div key={bucket} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-4">
+                <p className="text-xs text-[var(--text-faint)]">{bucket === 'CURRENT' ? 'Current' : `${bucket} days`}</p>
                 <p className={`text-2xl font-bold mt-1 ${AGING_STYLE[bucket]}`}>{fmtAED(d?.total ?? '0')}</p>
-                <p className="text-xs text-slate-500 mt-0.5">{d?.count ?? 0} cases</p>
+                <p className="text-xs text-[var(--text-faint)] mt-0.5">{d?.count ?? 0} cases</p>
               </div>
             );
           })}
@@ -228,12 +228,12 @@ export default function CollectionsPage() {
       {/* Total Outstanding Banner */}
       <div className="bg-red-500/10 border border-red-500/20 rounded-xl px-5 py-4 flex items-center justify-between">
         <div>
-          <p className="text-xs text-slate-400">Total Outstanding Receivables</p>
+          <p className="text-xs text-[var(--text-muted)]">Total Outstanding Receivables</p>
           <p className="text-2xl font-bold text-red-400 mt-0.5">{fmtAED(totalOutstanding)}</p>
         </div>
         <div className="text-right">
-          <p className="text-xs text-slate-400">Active Collection Cases</p>
-          <p className="text-2xl font-bold text-white mt-0.5">{cases.filter(c => !['SETTLED','WRITTEN_OFF','CLOSED'].includes(c.status)).length}</p>
+          <p className="text-xs text-[var(--text-muted)]">Active Collection Cases</p>
+          <p className="text-2xl font-bold text-[var(--text-main)] mt-0.5">{cases.filter(c => !['SETTLED','WRITTEN_OFF','CLOSED'].includes(c.status)).length}</p>
         </div>
       </div>
 
@@ -243,10 +243,10 @@ export default function CollectionsPage() {
           <p className="text-sm font-semibold text-amber-300 mb-3">⚠️ Overdue Invoices Without Collection Cases ({overdueInvs.length})</p>
           <div className="space-y-2">
             {overdueInvs.slice(0, 5).map(inv => (
-              <div key={inv.id} className="flex items-center justify-between bg-slate-800/60 rounded-xl px-4 py-3">
+              <div key={inv.id} className="flex items-center justify-between bg-[var(--bg-surface)]/60 rounded-xl px-4 py-3">
                 <div>
-                  <p className="text-sm text-white font-medium">{inv.client_name}</p>
-                  <p className="text-xs text-slate-400">{inv.invoice_number} · Due: {fmtDate(inv.due_date)}</p>
+                  <p className="text-sm text-[var(--text-main)] font-medium">{inv.client_name}</p>
+                  <p className="text-xs text-[var(--text-muted)]">{inv.invoice_number} · Due: {fmtDate(inv.due_date)}</p>
                 </div>
                 <div className="flex items-center gap-3">
                   <p className="text-sm font-bold text-red-400">{fmtAED(parseFloat(inv.total_amount) - parseFloat(inv.paid_amount))}</p>
@@ -262,10 +262,10 @@ export default function CollectionsPage() {
       )}
 
       {/* Status Filter Tabs */}
-      <div className="flex bg-slate-800/60 border border-white/10 rounded-xl p-1 gap-1 flex-wrap">
+      <div className="flex bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-1 gap-1 flex-wrap">
         {STATUSES.map(s => (
           <button key={s} onClick={() => setTab(s)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${tab === s ? 'bg-red-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${tab === s ? 'bg-red-600 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
             {s}
           </button>
         ))}
@@ -273,18 +273,18 @@ export default function CollectionsPage() {
 
       {/* Cases Table */}
       {loading ? (
-        <div className="h-64 bg-slate-800/60 rounded-2xl animate-pulse" />
+        <div className="h-64 bg-[var(--bg-surface)]/60 rounded-2xl animate-pulse" />
       ) : cases.length === 0 ? (
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-12 text-center">
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-12 text-center">
           <div className="text-4xl mb-3">📊</div>
-          <p className="text-slate-400">No collection cases</p>
-          <p className="text-slate-600 text-xs mt-1">Overdue invoices will surface automatically above</p>
+          <p className="text-[var(--text-muted)]">No collection cases</p>
+          <p className="text-[var(--text-faint)] text-xs mt-1">Overdue invoices will surface automatically above</p>
         </div>
       ) : (
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden">
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/10 text-slate-400 text-xs uppercase tracking-wider">
+              <tr className="border-b border-[var(--border-subtle)] text-[var(--text-muted)] text-xs uppercase tracking-wider">
                 <th className="text-left px-5 py-3">Case #</th>
                 <th className="text-left px-5 py-3">Client</th>
                 <th className="text-left px-5 py-3">Invoice</th>
@@ -297,20 +297,20 @@ export default function CollectionsPage() {
             </thead>
             <tbody>
               {cases.map(c => (
-                <tr key={c.id} className="border-b border-white/5 last:border-0 hover:bg-slate-800/40 transition-colors">
-                  <td className="px-5 py-3 text-white font-mono text-xs font-medium">{c.case_no}</td>
+                <tr key={c.id} className="border-b border-[var(--border-subtle)] last:border-0 hover:bg-[var(--bg-surface)]/40 transition-colors">
+                  <td className="px-5 py-3 text-[var(--text-main)] font-mono text-xs font-medium">{c.case_no}</td>
                   <td className="px-5 py-3">
-                    <p className="text-white text-xs font-medium">{c.client_name}</p>
-                    {c.client_email && <p className="text-slate-500 text-xs">{c.client_email}</p>}
+                    <p className="text-[var(--text-main)] text-xs font-medium">{c.client_name}</p>
+                    {c.client_email && <p className="text-[var(--text-faint)] text-xs">{c.client_email}</p>}
                   </td>
-                  <td className="px-5 py-3 text-slate-300 text-xs">{c.invoice_no}</td>
+                  <td className="px-5 py-3 text-[var(--text-muted)] text-xs">{c.invoice_no}</td>
                   <td className="px-5 py-3 text-right font-bold text-red-400 text-xs">{fmtAED(c.outstanding_amount)}</td>
                   <td className="px-5 py-3 text-right text-xs">
                     <span className={c.days_overdue > 60 ? 'text-red-400 font-bold' : c.days_overdue > 30 ? 'text-orange-400' : 'text-amber-400'}>
                       {c.days_overdue}d
                     </span>
                   </td>
-                  <td className="px-5 py-3 text-xs text-slate-400">{c.dunning_stage?.replace('_', ' ') ?? '—'}</td>
+                  <td className="px-5 py-3 text-xs text-[var(--text-muted)]">{c.dunning_stage?.replace('_', ' ') ?? '—'}</td>
                   <td className="px-5 py-3">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_STYLE[c.status] ?? ''}`}>
                       {c.status}
