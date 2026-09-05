@@ -21,7 +21,7 @@ export default function LogisticsLayout({ children }: { children: React.ReactNod
 
   return (
     <ModuleGuard moduleId="logistics" moduleName="Logistics Management" moduleIcon="🚛">
-      <div className="flex h-screen flex-col overflow-hidden bg-slate-950 text-white">
+      <div className="flex h-screen flex-col overflow-hidden bg-[var(--bg-canvas)] text-[var(--text-main)]">
         <PlatformHomeBar moduleName={t('module.logistics')} moduleIcon="🚛" accentColor="from-amber-500 to-orange-600" />
         <div className="relative flex-1 min-h-0 overflow-y-auto p-6">{children}</div>
       </div>

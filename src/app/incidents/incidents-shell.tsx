@@ -14,14 +14,14 @@ export default function IncidentsShell({ children }: { children: React.ReactNode
   if (pathname === '/incidents/ambulance/dispatch') {
     return (
       <ModuleGuard moduleId="incidents" moduleName="Incident & Ambulance" moduleIcon="🚨">
-        <div className="flex h-screen w-full overflow-hidden bg-slate-950">{children}</div>
+        <div className="flex h-screen w-full overflow-hidden bg-[var(--bg-canvas)]">{children}</div>
       </ModuleGuard>
     );
   }
 
   return (
     <ModuleGuard moduleId="incidents" moduleName="Incident & Ambulance" moduleIcon="🚨">
-      <div className="flex h-screen flex-col overflow-hidden bg-slate-950 text-white">
+      <div className="flex h-screen flex-col overflow-hidden bg-[var(--bg-canvas)] text-[var(--text-main)]">
         <PlatformHomeBar moduleName="Incident & Ambulance" moduleIcon="🚨" accentColor="from-red-500 to-rose-600" />
         <AppShell>
           <div className="p-6">{children}</div>
