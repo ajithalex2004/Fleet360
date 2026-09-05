@@ -1,10 +1,11 @@
 /**
- * Agent Registry
- * --------------
+ * Agent Registry (Phase 5 Governance & Dynamic Discovery)
+ * --------------------------------------------------------
  * Single source of truth for all registered agents.
- * New agents are added here and automatically discovered by the orchestrator.
+ * Supports lazy loading, dynamic registration, event-based subscription lookup,
+ * and wildcard event routing.
  */
-import { AgentDefinition, AgentId } from './types';
+import { AgentDefinition, AgentEventType, AgentId } from './types';
 
 // Lazy imports to avoid circular deps at module load time
 async function getPMAgent(): Promise<AgentDefinition> {
@@ -80,14 +81,90 @@ const AGENT_LOADERS: Record<AgentId, () => Promise<AgentDefinition>> = {
   'ops-assistant':              getOpsAssistantAgent,
 };
 
-export async function getAgent(id: AgentId): Promise<AgentDefinition> {
-  const loader = AGENT_LOADERS[id];
+const DYNAMIC_AGENTS = new Map<string, AgentDefinition>();
+
+/**
+ * Register or override an agent definition dynamically at runtime.
+ */
+export function registerAgent(agent: AgentDefinition): void {
+  DYNAMIC_AGENTS.set(agent.id, agent);
+}
+
+/**
+ * Remove a dynamically registered agent.
+ */
+export function unregisterAgent(agentId: string): boolean {
+  return DYNAMIC_AGENTS.delete(agentId);
+}
+
+/**
+ * Clear all dynamically registered agents.
+ */
+export function clearDynamicAgents(): void {
+  DYNAMIC_AGENTS.clear();
+}
+
+/**
+ * Retrieve an agent definition by its unique identifier.
+ */
+export async function getAgent(id: AgentId | string): Promise<AgentDefinition> {
+  if (DYNAMIC_AGENTS.has(id)) {
+    return DYNAMIC_AGENTS.get(id)!;
+  }
+  const loader = AGENT_LOADERS[id as AgentId];
   if (!loader) throw new Error(`Unknown agent: ${id}`);
   return loader();
 }
 
-export function listAgentIds(): AgentId[] {
-  return Object.keys(AGENT_LOADERS) as AgentId[];
+/**
+ * List all known agent IDs (both static loaders and dynamic registrations).
+ */
+export function listAgentIds(): string[] {
+  const staticIds = Object.keys(AGENT_LOADERS);
+  const dynamicIds = Array.from(DYNAMIC_AGENTS.keys());
+  return Array.from(new Set([...staticIds, ...dynamicIds]));
+}
+
+/**
+ * Checks if a registered pattern matches an incoming domain event.
+ * Supports exact matching and wildcards (e.g. `vehicle.*`, `*.created`, `*`).
+ */
+export function matchesEventPattern(pattern: string, eventType: string): boolean {
+  if (pattern === '*' || pattern === eventType) return true;
+  if (pattern.endsWith('.*')) {
+    const prefix = pattern.slice(0, -2);
+    return eventType.startsWith(`${prefix}.`);
+  }
+  if (pattern.startsWith('*.')) {
+    const suffix = pattern.slice(2);
+    return eventType.endsWith(`.${suffix}`);
+  }
+  return false;
+}
+
+/**
+ * Find all registered agents that subscribe to a given event type.
+ */
+export async function getAgentsForEvent(eventType: AgentEventType | string): Promise<AgentDefinition[]> {
+  const matchedAgents: AgentDefinition[] = [];
+  const allIds = listAgentIds();
+
+  for (const id of allIds) {
+    try {
+      const agent = await getAgent(id);
+      const events: string[] = agent.subscribedEvents ?? (agent as any).events ?? [];
+      const isSubscribed = events.some(pattern =>
+        matchesEventPattern(pattern, eventType),
+      );
+      if (isSubscribed) {
+        matchedAgents.push(agent);
+      }
+    } catch {
+      // Ignore uninitialized or planned agents
+    }
+  }
+
+  return matchedAgents;
 }
 
 export const AGENT_CATALOGUE = [

@@ -160,3 +160,7 @@ export async function triggerFullScan(
     event_type: 'manual.trigger',
   });
 }
+
+// Re-export Multi-Tenant Event Dispatcher
+export { eventDispatcher, publishEvent, type PublishEventOptions } from './dispatcher';
+
