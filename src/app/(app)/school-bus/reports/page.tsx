@@ -71,7 +71,7 @@ function fmtDate(s: string): string {
 function HBar({ value, max, color = 'bg-yellow-500/70' }: { value: number; max: number; color?: string }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
   return (
-    <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+    <div className="flex-1 h-2 bg-[var(--bg-surface)] rounded-full overflow-hidden">
       <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
     </div>
   );
@@ -105,7 +105,7 @@ function ModeBadge({ mode }: { mode: string }) {
       ? 'bg-blue-500/15 text-blue-300 border-blue-500/30'
       : m.includes('pickup')
       ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-      : 'bg-slate-700 text-slate-300 border-slate-600';
+      : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border-[var(--border-strong)]';
   return <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${cfg}`}>{mode}</span>;
 }
 
@@ -118,11 +118,11 @@ function KpiCard({
   accent?: string; iconCls?: string; valueSize?: string;
 }) {
   return (
-    <div className={`bg-slate-900 border border-white/8 border-l-4 ${accent} rounded-xl p-5 flex items-start justify-between`}>
+    <div className={`bg-[var(--bg-surface)] border border-white/8 border-l-4 ${accent} rounded-xl p-5 flex items-start justify-between`}>
       <div className="min-w-0 pr-3">
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{title}</p>
-        <p className={`font-bold text-white mt-1 leading-tight break-all ${valueSize}`}>{value}</p>
-        <p className="text-xs text-slate-500 mt-1">{sub}</p>
+        <p className="text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wider">{title}</p>
+        <p className={`font-bold text-[var(--text-main)] mt-1 leading-tight break-all ${valueSize}`}>{value}</p>
+        <p className="text-xs text-[var(--text-faint)] mt-1">{sub}</p>
       </div>
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0 ${iconCls}`}>
         {icon}
@@ -134,10 +134,10 @@ function KpiCard({
 /* ── Section card ── */
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-slate-900 border border-white/8 rounded-xl overflow-hidden">
+    <div className="bg-[var(--bg-surface)] border border-white/8 rounded-xl overflow-hidden">
       {title && (
-        <div className="px-5 py-4 border-b border-white/5">
-          <p className="text-sm font-semibold text-white">{title}</p>
+        <div className="px-5 py-4 border-b border-[var(--border-subtle)]">
+          <p className="text-sm font-semibold text-[var(--text-main)]">{title}</p>
         </div>
       )}
       <div className="p-5">{children}</div>
@@ -147,7 +147,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 
 /* ── Empty state ── */
 function Empty({ msg }: { msg: string }) {
-  return <p className="text-sm text-slate-600 py-8 text-center italic">{msg}</p>;
+  return <p className="text-sm text-[var(--text-faint)] py-8 text-center italic">{msg}</p>;
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -191,9 +191,9 @@ function OverviewTab({ data }: { data: ReportData['overview'] }) {
             <div className="space-y-3">
               {data.routeUtil.slice(0, 8).map(r => (
                 <div key={r.routeCode} className="flex items-center gap-3">
-                  <span className="text-xs text-slate-500 w-20 flex-shrink-0 text-right truncate">{r.routeCode || r.routeName.slice(0, 8)}</span>
+                  <span className="text-xs text-[var(--text-faint)] w-20 flex-shrink-0 text-right truncate">{r.routeCode || r.routeName.slice(0, 8)}</span>
                   <HBar value={r.studentCount} max={maxStudents} color="bg-emerald-500/60" />
-                  <span className="text-sm font-bold text-white w-8 text-right">{r.studentCount}</span>
+                  <span className="text-sm font-bold text-[var(--text-main)] w-8 text-right">{r.studentCount}</span>
                 </div>
               ))}
             </div>
@@ -209,9 +209,9 @@ function OverviewTab({ data }: { data: ReportData['overview'] }) {
                 { label: 'Drop Only',   val: bs.dropOnly,   color: 'bg-slate-500/70'   },
               ].map(m => (
                 <div key={m.label} className="flex items-center gap-3">
-                  <span className="text-xs text-slate-400 w-24 flex-shrink-0">{m.label}</span>
+                  <span className="text-xs text-[var(--text-muted)] w-24 flex-shrink-0">{m.label}</span>
                   <HBar value={m.val} max={bs.total} color={m.color} />
-                  <span className="text-sm font-bold text-white w-28 text-right">
+                  <span className="text-sm font-bold text-[var(--text-main)] w-28 text-right">
                     {m.val} ({bs.total > 0 ? ((m.val / bs.total) * 100).toFixed(1) : '0.0'}%)
                   </span>
                 </div>
@@ -228,9 +228,9 @@ function OverviewTab({ data }: { data: ReportData['overview'] }) {
           <div className="space-y-3">
             {data.revenueByRoute.map(r => (
               <div key={r.routeCode} className="flex items-center gap-3">
-                <span className="text-xs text-slate-500 w-20 flex-shrink-0 text-right">{r.routeCode}</span>
+                <span className="text-xs text-[var(--text-faint)] w-20 flex-shrink-0 text-right">{r.routeCode}</span>
                 <HBar value={r.revenue} max={maxRevenue} color="bg-yellow-500/60" />
-                <span className="text-sm font-bold text-white w-20 text-right">{Math.round(r.revenue).toLocaleString()}</span>
+                <span className="text-sm font-bold text-[var(--text-main)] w-20 text-right">{Math.round(r.revenue).toLocaleString()}</span>
               </div>
             ))}
           </div>
@@ -247,37 +247,37 @@ function RouteUtilizationTab({ data }: { data: ReportData['routeUtilization'] })
   const routes = data.routes;
 
   return (
-    <div className="bg-slate-900 border border-white/8 rounded-xl overflow-hidden">
+    <div className="bg-[var(--bg-surface)] border border-white/8 rounded-xl overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-white/5 bg-slate-800/60">
+            <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/60">
               {['ROUTE','EMIRATE','VEHICLE','TYPE','CAPACITY','STUDENTS','STAFF','TOTAL','UTILIZATION','MONTHLY REV','REV / RIDER'].map(h => (
-                <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wider whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
             {routes.length === 0 ? (
-              <tr><td colSpan={11} className="px-4 py-14 text-center text-slate-600">No active routes found</td></tr>
+              <tr><td colSpan={11} className="px-4 py-14 text-center text-[var(--text-faint)]">No active routes found</td></tr>
             ) : routes.map(r => {
               const uc = utilColor(r.utilPct);
               return (
-                <tr key={r.routeCode} className="hover:bg-slate-800/40 transition-colors">
+                <tr key={r.routeCode} className="hover:bg-[var(--bg-surface)]/40 transition-colors">
                   <td className="px-4 py-4">
-                    <p className="font-bold text-white">{r.routeCode}</p>
-                    <p className="text-xs text-slate-500 mt-0.5 max-w-[160px] truncate">{r.routeName}</p>
+                    <p className="font-bold text-[var(--text-main)]">{r.routeCode}</p>
+                    <p className="text-xs text-[var(--text-faint)] mt-0.5 max-w-[160px] truncate">{r.routeName}</p>
                   </td>
-                  <td className="px-4 py-4 text-slate-400">{r.emirate}</td>
-                  <td className="px-4 py-4 text-slate-300">{r.vehicle || r.vehicleLabel || '—'}</td>
+                  <td className="px-4 py-4 text-[var(--text-muted)]">{r.emirate}</td>
+                  <td className="px-4 py-4 text-[var(--text-muted)]">{r.vehicle || r.vehicleLabel || '—'}</td>
                   <td className="px-4 py-4"><OwnerBadge type={r.vehicleOwnership} /></td>
-                  <td className="px-4 py-4 text-slate-300 font-medium">{r.capacity}</td>
-                  <td className="px-4 py-4 text-slate-300">{r.students}</td>
-                  <td className="px-4 py-4 text-slate-300">{r.staff}</td>
-                  <td className="px-4 py-4 font-bold text-white">{r.total}</td>
+                  <td className="px-4 py-4 text-[var(--text-muted)] font-medium">{r.capacity}</td>
+                  <td className="px-4 py-4 text-[var(--text-muted)]">{r.students}</td>
+                  <td className="px-4 py-4 text-[var(--text-muted)]">{r.staff}</td>
+                  <td className="px-4 py-4 font-bold text-[var(--text-main)]">{r.total}</td>
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-2 min-w-[140px]">
-                      <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+                      <div className="flex-1 h-2 bg-[var(--bg-surface)] rounded-full overflow-hidden">
                         <div className={`h-full rounded-full ${uc.bar}`} style={{ width: `${Math.min(r.utilPct, 100)}%` }} />
                       </div>
                       <span className={`text-xs font-bold ${uc.text} w-12`}>{r.utilPct.toFixed(1)}%</span>
@@ -286,10 +286,10 @@ function RouteUtilizationTab({ data }: { data: ReportData['routeUtilization'] })
                   <td className="px-4 py-4">
                     {r.monthlyRev > 0
                       ? <span className="font-semibold text-emerald-400">AED {r.monthlyRev.toLocaleString()}.00</span>
-                      : <span className="text-slate-600">AED 0.00</span>
+                      : <span className="text-[var(--text-faint)]">AED 0.00</span>
                     }
                   </td>
-                  <td className="px-4 py-4 text-slate-400">
+                  <td className="px-4 py-4 text-[var(--text-muted)]">
                     {r.revPerRider > 0 ? `AED ${r.revPerRider.toLocaleString()}.00` : 'AED 0.00'}
                   </td>
                 </tr>
@@ -298,7 +298,7 @@ function RouteUtilizationTab({ data }: { data: ReportData['routeUtilization'] })
           </tbody>
         </table>
       </div>
-      <div className="px-5 py-3 border-t border-white/5 bg-slate-800/30 flex gap-5 text-xs text-slate-500">
+      <div className="px-5 py-3 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)]/30 flex gap-5 text-xs text-[var(--text-faint)]">
         <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> &lt;70% — Healthy</span>
         <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /> 70–89% — Near capacity</span>
         <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> ≥90% — Over-utilized</span>
@@ -331,7 +331,7 @@ function TripEfficiencyTab({ data }: { data: ReportData['tripEfficiency'] }) {
               const bad = d.rate < 60;
               return (
                 <div key={d.date} className="flex flex-col items-center gap-1.5 flex-shrink-0 min-w-[56px]">
-                  <span className={`text-xs font-bold ${bad ? 'text-red-400' : 'text-slate-300'}`}>
+                  <span className={`text-xs font-bold ${bad ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>
                     {Number(d.rate ?? 0).toFixed(1)}%
                   </span>
                   <div
@@ -339,7 +339,7 @@ function TripEfficiencyTab({ data }: { data: ReportData['tripEfficiency'] }) {
                     style={{ height: `${h}%` }}
                     title={`${d.date}: ${d.boarded}/${d.marked} boarded`}
                   />
-                  <span className="text-[10px] text-slate-600 text-center leading-tight">{fmtDate(d.date)}</span>
+                  <span className="text-[10px] text-[var(--text-faint)] text-center leading-tight">{fmtDate(d.date)}</span>
                 </div>
               );
             })}
@@ -347,47 +347,47 @@ function TripEfficiencyTab({ data }: { data: ReportData['tripEfficiency'] }) {
         )}
       </Card>
 
-      <div className="bg-slate-900 border border-white/8 rounded-xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-white/5">
-          <p className="text-sm font-semibold text-white">Efficiency by Route &amp; Trip Type</p>
+      <div className="bg-[var(--bg-surface)] border border-white/8 rounded-xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-[var(--border-subtle)]">
+          <p className="text-sm font-semibold text-[var(--text-main)]">Efficiency by Route &amp; Trip Type</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/5 bg-slate-800/60">
+              <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/60">
                 {['ROUTE','TRIP TYPE','TRIPS','MARKED','BOARDED','ABSENT','OWN TRANSPORT','BOARDING RATE'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wider whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {data.byRoute.length === 0 ? (
-                <tr><td colSpan={8} className="px-4 py-14 text-center text-slate-600">No trip records found</td></tr>
+                <tr><td colSpan={8} className="px-4 py-14 text-center text-[var(--text-faint)]">No trip records found</td></tr>
               ) : data.byRoute.map((r, i) => {
                 const br = r.boardingRate;
-                const barColor = br >= 80 ? 'bg-red-500' : br >= 60 ? 'bg-amber-400' : 'bg-slate-600';
-                const txtColor = br >= 80 ? 'text-red-400' : br >= 60 ? 'text-amber-400' : 'text-slate-500';
+                const barColor = br >= 80 ? 'bg-red-500' : br >= 60 ? 'bg-amber-400' : 'bg-[var(--bg-surface-hover)]';
+                const txtColor = br >= 80 ? 'text-red-400' : br >= 60 ? 'text-amber-400' : 'text-[var(--text-faint)]';
                 return (
-                  <tr key={i} className="hover:bg-slate-800/40 transition-colors">
+                  <tr key={i} className="hover:bg-[var(--bg-surface)]/40 transition-colors">
                     <td className="px-4 py-4">
-                      <p className="font-bold text-white">{r.routeCode}</p>
-                      <p className="text-xs text-slate-500 mt-0.5 max-w-[160px] truncate">{r.routeName}</p>
+                      <p className="font-bold text-[var(--text-main)]">{r.routeCode}</p>
+                      <p className="text-xs text-[var(--text-faint)] mt-0.5 max-w-[160px] truncate">{r.routeName}</p>
                     </td>
                     <td className="px-4 py-4">
                       <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${
                         r.tripType === 'Pickup'
                           ? 'bg-blue-500/15 text-blue-300 border-blue-500/30'
-                          : 'bg-slate-700 text-slate-300 border-slate-600'
+                          : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border-[var(--border-strong)]'
                       }`}>{r.tripType}</span>
                     </td>
-                    <td className="px-4 py-4 text-slate-400">{r.trips}</td>
-                    <td className="px-4 py-4 text-slate-300">{r.marked}</td>
+                    <td className="px-4 py-4 text-[var(--text-muted)]">{r.trips}</td>
+                    <td className="px-4 py-4 text-[var(--text-muted)]">{r.marked}</td>
                     <td className="px-4 py-4 font-semibold text-emerald-400">{r.boarded}</td>
                     <td className="px-4 py-4 text-red-400">{r.absent}</td>
                     <td className="px-4 py-4 text-amber-400">{r.ownTransport}</td>
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-2 min-w-[120px]">
-                        <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="flex-1 h-1.5 bg-[var(--bg-surface)] rounded-full overflow-hidden">
                           <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.min(br, 100)}%` }} />
                         </div>
                         <span className={`text-xs font-bold ${txtColor} w-12`}>{br.toFixed(1)}%</span>
@@ -425,9 +425,9 @@ function AreaDistributionTab({ data }: { data: ReportData['areaDistribution'] })
             <div className="space-y-3">
               {data.byEmirate.map(e => (
                 <div key={e.emirate} className="flex items-center gap-3">
-                  <span className="text-xs text-slate-400 w-28 flex-shrink-0 text-right">{e.emirate}</span>
+                  <span className="text-xs text-[var(--text-muted)] w-28 flex-shrink-0 text-right">{e.emirate}</span>
                   <HBar value={e.riders} max={maxEmirate} color="bg-blue-500/60" />
-                  <span className="text-sm font-bold text-white w-8 text-right">{e.riders}</span>
+                  <span className="text-sm font-bold text-[var(--text-main)] w-8 text-right">{e.riders}</span>
                 </div>
               ))}
             </div>
@@ -439,9 +439,9 @@ function AreaDistributionTab({ data }: { data: ReportData['areaDistribution'] })
             <div className="space-y-3">
               {data.topAreas.map(a => (
                 <div key={a.area} className="flex items-center gap-3">
-                  <span className="text-xs text-slate-400 w-28 flex-shrink-0 text-right truncate" title={a.area}>{a.area}</span>
+                  <span className="text-xs text-[var(--text-muted)] w-28 flex-shrink-0 text-right truncate" title={a.area}>{a.area}</span>
                   <HBar value={a.riders} max={maxArea} color="bg-emerald-500/60" />
-                  <span className="text-sm font-bold text-white w-8 text-right">{a.riders}</span>
+                  <span className="text-sm font-bold text-[var(--text-main)] w-8 text-right">{a.riders}</span>
                 </div>
               ))}
             </div>
@@ -449,36 +449,36 @@ function AreaDistributionTab({ data }: { data: ReportData['areaDistribution'] })
         </Card>
       </div>
 
-      <div className="bg-slate-900 border border-white/8 rounded-xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-white/5">
-          <p className="text-sm font-semibold text-white">Area Details</p>
+      <div className="bg-[var(--bg-surface)] border border-white/8 rounded-xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-[var(--border-subtle)]">
+          <p className="text-sm font-semibold text-[var(--text-main)]">Area Details</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/5 bg-slate-800/60">
+              <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/60">
                 {['AREA','EMIRATE','ROUTES','STUDENTS','STAFF','TOTAL RIDERS','DISTRIBUTION'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">{h}</th>
+                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {data.areaDetails.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-14 text-center text-slate-600">
+                <tr><td colSpan={7} className="px-4 py-14 text-center text-[var(--text-faint)]">
                   No area data. Assign pickup stop names to seat allocations to see area distribution.
                 </td></tr>
               ) : data.areaDetails.map((a, i) => (
-                <tr key={i} className="hover:bg-slate-800/40 transition-colors">
-                  <td className="px-4 py-4 font-bold text-white">{a.area}</td>
-                  <td className="px-4 py-4 text-slate-400">{a.emirate}</td>
-                  <td className="px-4 py-4 text-slate-400">{a.routes}</td>
-                  <td className="px-4 py-4 text-slate-300">{a.students}</td>
-                  <td className="px-4 py-4 text-slate-300">{a.staff}</td>
-                  <td className="px-4 py-4 font-bold text-white">{a.totalRiders}</td>
+                <tr key={i} className="hover:bg-[var(--bg-surface)]/40 transition-colors">
+                  <td className="px-4 py-4 font-bold text-[var(--text-main)]">{a.area}</td>
+                  <td className="px-4 py-4 text-[var(--text-muted)]">{a.emirate}</td>
+                  <td className="px-4 py-4 text-[var(--text-muted)]">{a.routes}</td>
+                  <td className="px-4 py-4 text-[var(--text-muted)]">{a.students}</td>
+                  <td className="px-4 py-4 text-[var(--text-muted)]">{a.staff}</td>
+                  <td className="px-4 py-4 font-bold text-[var(--text-main)]">{a.totalRiders}</td>
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-blue-400 flex-shrink-0" />
-                      <div className="w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div className="w-24 h-1.5 bg-[var(--bg-surface)] rounded-full overflow-hidden">
                         <div className="h-full bg-blue-500/70 rounded-full" style={{ width: `${a.distribution}%` }} />
                       </div>
                       <span className="text-xs font-bold text-blue-400">{a.distribution.toFixed(1)}%</span>
@@ -518,9 +518,9 @@ function FeeAnalysisTab({ data }: { data: ReportData['feeAnalysis'] }) {
               <div className="space-y-3">
                 {data.revenueByRoute.map(r => (
                   <div key={r.routeCode} className="flex items-center gap-3">
-                    <span className="text-xs text-slate-500 w-20 flex-shrink-0 text-right">{r.routeCode}</span>
+                    <span className="text-xs text-[var(--text-faint)] w-20 flex-shrink-0 text-right">{r.routeCode}</span>
                     <HBar value={r.revenue} max={maxRev} color="bg-emerald-500/60" />
-                    <span className="text-sm font-bold text-white w-20 text-right">{Math.round(r.revenue).toLocaleString()}</span>
+                    <span className="text-sm font-bold text-[var(--text-main)] w-20 text-right">{Math.round(r.revenue).toLocaleString()}</span>
                   </div>
                 ))}
               </div>
@@ -534,9 +534,9 @@ function FeeAnalysisTab({ data }: { data: ReportData['feeAnalysis'] }) {
               <div className="space-y-3">
                 {data.feePerRider.map(r => (
                   <div key={r.routeCode} className="flex items-center gap-3">
-                    <span className="text-xs text-slate-500 w-20 flex-shrink-0 text-right">{r.routeCode}</span>
+                    <span className="text-xs text-[var(--text-faint)] w-20 flex-shrink-0 text-right">{r.routeCode}</span>
                     <HBar value={r.feePerRider} max={maxFeeRider} color="bg-blue-500/60" />
-                    <span className="text-sm font-bold text-white w-16 text-right">{r.feePerRider.toLocaleString()}</span>
+                    <span className="text-sm font-bold text-[var(--text-main)] w-16 text-right">{r.feePerRider.toLocaleString()}</span>
                   </div>
                 ))}
               </div>
@@ -544,42 +544,42 @@ function FeeAnalysisTab({ data }: { data: ReportData['feeAnalysis'] }) {
         </Card>
       </div>
 
-      <div className="bg-slate-900 border border-white/8 rounded-xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-white/5">
-          <p className="text-sm font-semibold text-white">Fee Schedule Details</p>
+      <div className="bg-[var(--bg-surface)] border border-white/8 rounded-xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-[var(--border-subtle)]">
+          <p className="text-sm font-semibold text-[var(--text-main)]">Fee Schedule Details</p>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/5 bg-slate-800/60">
+              <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/60">
                 {['ROUTE','FEE SCHEDULE','BUS MODE','FREQUENCY','AMOUNT','RIDERS','MONTHLY REV','AVG / RIDER'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wider whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {data.scheduleDetails.length === 0 ? (
-                <tr><td colSpan={8} className="px-4 py-14 text-center text-slate-600">
+                <tr><td colSpan={8} className="px-4 py-14 text-center text-[var(--text-faint)]">
                   No fee schedule data. Create School Bus invoices in Finance module.
                 </td></tr>
               ) : data.scheduleDetails.map((r, i) => (
-                <tr key={i} className="hover:bg-slate-800/40 transition-colors">
+                <tr key={i} className="hover:bg-[var(--bg-surface)]/40 transition-colors">
                   <td className="px-4 py-4">
-                    <p className="font-bold text-white">{r.routeCode}</p>
-                    <p className="text-xs text-slate-500 mt-0.5 max-w-[160px] truncate">{r.routeName}</p>
+                    <p className="font-bold text-[var(--text-main)]">{r.routeCode}</p>
+                    <p className="text-xs text-[var(--text-faint)] mt-0.5 max-w-[160px] truncate">{r.routeName}</p>
                   </td>
-                  <td className="px-4 py-4 text-slate-400">{r.feeName}</td>
+                  <td className="px-4 py-4 text-[var(--text-muted)]">{r.feeName}</td>
                   <td className="px-4 py-4"><ModeBadge mode={r.busMode} /></td>
-                  <td className="px-4 py-4 text-slate-400">{r.frequency}</td>
-                  <td className="px-4 py-4 text-slate-300">AED {r.amount.toLocaleString()}.00</td>
-                  <td className="px-4 py-4 text-slate-300">{r.riders}</td>
+                  <td className="px-4 py-4 text-[var(--text-muted)]">{r.frequency}</td>
+                  <td className="px-4 py-4 text-[var(--text-muted)]">AED {r.amount.toLocaleString()}.00</td>
+                  <td className="px-4 py-4 text-[var(--text-muted)]">{r.riders}</td>
                   <td className="px-4 py-4">
                     {r.monthlyRev > 0
                       ? <span className="font-semibold text-emerald-400">AED {r.monthlyRev.toLocaleString()}.00</span>
-                      : <span className="text-slate-600">AED 0.00</span>
+                      : <span className="text-[var(--text-faint)]">AED 0.00</span>
                     }
                   </td>
-                  <td className="px-4 py-4 text-slate-400">AED {r.avgPerRider.toLocaleString()}.00</td>
+                  <td className="px-4 py-4 text-[var(--text-muted)]">AED {r.avgPerRider.toLocaleString()}.00</td>
                 </tr>
               ))}
             </tbody>
@@ -908,14 +908,14 @@ export default function SchoolBusReportsPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">📈 School Bus Reports</h1>
-          <p className="text-slate-400 text-sm mt-0.5">
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">📈 School Bus Reports</h1>
+          <p className="text-[var(--text-muted)] text-sm mt-0.5">
             Operational insights · Route utilization · Trip efficiency · Revenue analysis
           </p>
         </div>
         <div className="flex items-center gap-3">
           {genAt && (
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-[var(--text-faint)]">
               Updated {new Date(genAt).toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
@@ -924,7 +924,7 @@ export default function SchoolBusReportsPage() {
           <button
             onClick={loadReport}
             disabled={loading}
-            className="flex items-center gap-1.5 bg-slate-800 border border-white/10 text-slate-300 text-sm px-4 py-2 rounded-lg hover:bg-slate-700 hover:text-white transition-colors disabled:opacity-50">
+            className="flex items-center gap-1.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-sm px-4 py-2 rounded-lg hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)] transition-colors disabled:opacity-50">
             {loading ? '⏳' : '↻'} Refresh
           </button>
 
@@ -933,16 +933,16 @@ export default function SchoolBusReportsPage() {
             <button
               onClick={() => setExportOpen(p => !p)}
               disabled={!data || loading}
-              className="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-400 disabled:bg-slate-700 disabled:text-slate-500 text-slate-900 font-semibold text-sm px-4 py-2 rounded-lg transition-colors">
+              className="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-400 disabled:bg-[var(--bg-surface-hover)] disabled:text-[var(--text-faint)] text-white font-semibold text-sm px-4 py-2 rounded-lg transition-colors">
               <span>⬇</span> Export
               <span className="text-xs opacity-70">{exportOpen ? '▲' : '▼'}</span>
             </button>
 
             {exportOpen && data && (
-              <div className="absolute right-0 top-full mt-2 w-64 bg-slate-900 border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
+              <div className="absolute right-0 top-full mt-2 w-64 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl shadow-2xl z-50 overflow-hidden">
                 {/* Current tab label */}
-                <div className="px-4 py-2.5 border-b border-white/5 bg-slate-800/60">
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <div className="px-4 py-2.5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/60">
+                  <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">
                     Current tab: {tabLabel}
                   </p>
                 </div>
@@ -950,28 +950,28 @@ export default function SchoolBusReportsPage() {
                 {/* Print */}
                 <button
                   onClick={handlePrint}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-200 hover:bg-slate-800 transition-colors text-left">
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-[var(--text-main)] hover:bg-[var(--bg-surface)] transition-colors text-left">
                   <span className="w-8 h-8 rounded-lg bg-blue-500/15 flex items-center justify-center text-blue-400 text-base flex-shrink-0">🖨️</span>
                   <div>
                     <p className="font-medium">Print / Save as PDF</p>
-                    <p className="text-xs text-slate-500">Opens print dialog</p>
+                    <p className="text-xs text-[var(--text-faint)]">Opens print dialog</p>
                   </div>
                 </button>
 
                 {/* Export CSV */}
                 <button
                   onClick={handleExportCSV}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-200 hover:bg-slate-800 transition-colors text-left border-t border-white/5">
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-[var(--text-main)] hover:bg-[var(--bg-surface)] transition-colors text-left border-t border-[var(--border-subtle)]">
                   <span className="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center text-emerald-400 text-base flex-shrink-0">📊</span>
                   <div>
                     <p className="font-medium">Export as CSV</p>
-                    <p className="text-xs text-slate-500">Download spreadsheet</p>
+                    <p className="text-xs text-[var(--text-faint)]">Download spreadsheet</p>
                   </div>
                 </button>
 
                 {/* Divider + all tabs note */}
-                <div className="px-4 py-2.5 border-t border-white/5 bg-slate-800/40">
-                  <p className="text-xs text-slate-600 italic">Exports data for the active tab only</p>
+                <div className="px-4 py-2.5 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)]/40">
+                  <p className="text-xs text-[var(--text-faint)] italic">Exports data for the active tab only</p>
                 </div>
               </div>
             )}
@@ -980,7 +980,7 @@ export default function SchoolBusReportsPage() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-0 border-b border-white/10">
+      <div className="flex gap-0 border-b border-[var(--border-subtle)]">
         {TABS.map(t => (
           <button
             key={t.id}
@@ -988,7 +988,7 @@ export default function SchoolBusReportsPage() {
             className={`flex items-center gap-1.5 px-5 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
               activeTab === t.id
                 ? 'border-yellow-500 text-yellow-300'
-                : 'border-transparent text-slate-500 hover:text-slate-300 hover:border-slate-600'
+                : 'border-transparent text-[var(--text-faint)] hover:text-[var(--text-muted)] hover:border-[var(--border-strong)]'
             }`}>
             <span className="text-xs opacity-80">{t.icon}</span>
             {t.label}
@@ -1001,15 +1001,15 @@ export default function SchoolBusReportsPage() {
         <div className="space-y-4">
           <div className="grid grid-cols-4 gap-4">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-28 bg-slate-900 rounded-xl animate-pulse border border-white/5" />
+              <div key={i} className="h-28 bg-[var(--bg-surface)] rounded-xl animate-pulse border border-[var(--border-subtle)]" />
             ))}
           </div>
           <div className="grid grid-cols-2 gap-4">
             {Array.from({ length: 2 }).map((_, i) => (
-              <div key={i} className="h-48 bg-slate-900 rounded-xl animate-pulse border border-white/5" />
+              <div key={i} className="h-48 bg-[var(--bg-surface)] rounded-xl animate-pulse border border-[var(--border-subtle)]" />
             ))}
           </div>
-          <div className="h-40 bg-slate-900 rounded-xl animate-pulse border border-white/5" />
+          <div className="h-40 bg-[var(--bg-surface)] rounded-xl animate-pulse border border-[var(--border-subtle)]" />
         </div>
       ) : error ? (
         <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-8 text-center">

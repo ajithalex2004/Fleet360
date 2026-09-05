@@ -100,8 +100,8 @@ export default function ParentTodayPage() {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">Welcome</h1>
-        <div className="rounded-2xl bg-slate-800/60 border border-white/10 p-5">
-          <p className="text-sm text-slate-300 mb-3">
+        <div className="rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] p-5">
+          <p className="text-sm text-[var(--text-muted)] mb-3">
             Pin your guardian phone number first so we can show your child's bus and attendance. Stored on this device only.
           </p>
           <Link href="/school-bus/parent/profile" className="block w-full text-center py-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold">
@@ -112,7 +112,7 @@ export default function ParentTodayPage() {
     );
   }
 
-  if (loading) return <div className="text-slate-500">Loading…</div>;
+  if (loading) return <div className="text-[var(--text-faint)]">Loading…</div>;
 
   if (error) {
     return (
@@ -130,7 +130,7 @@ export default function ParentTodayPage() {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">My Children</h1>
-        <div className="p-6 rounded-2xl bg-slate-800/40 border border-slate-700 text-sm text-slate-400 text-center">
+        <div className="p-6 rounded-2xl bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] text-sm text-[var(--text-muted)] text-center">
           No children found for {phone}. Confirm the number you're registered under matches the school's records, or contact transport ops.
         </div>
         <Link href="/school-bus/parent/profile" className="block text-center text-sm text-amber-400 underline">
@@ -144,22 +144,22 @@ export default function ParentTodayPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold">Today</h1>
-        <p className="text-sm text-slate-400">{data.students.length} child{data.students.length === 1 ? '' : 'ren'} · {phone}</p>
+        <p className="text-sm text-[var(--text-muted)]">{data.students.length} child{data.students.length === 1 ? '' : 'ren'} · {phone}</p>
       </div>
 
       {data.students.map(s => (
-        <div key={s.studentId} className="rounded-2xl bg-slate-800/60 border border-white/10 p-4 space-y-3">
+        <div key={s.studentId} className="rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] p-4 space-y-3">
           <div className="flex items-start gap-3">
             <div className="w-12 h-12 shrink-0 rounded-2xl bg-gradient-to-br from-amber-600 to-orange-600 flex items-center justify-center shadow-lg">
-              <GraduationCap className="w-6 h-6 text-white" />
+              <GraduationCap className="w-6 h-6 text-[var(--text-main)]" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-base font-bold">{[s.firstName, s.lastName].filter(Boolean).join(' ') || s.studentCode}</div>
-              <div className="text-xs text-slate-400 truncate">
+              <div className="text-xs text-[var(--text-muted)] truncate">
                 {s.schoolName ?? '—'}{s.grade ? ` · Grade ${s.grade}${s.section ? `-${s.section}` : ''}` : ''}
               </div>
               {s.pickupStop && (
-                <div className="text-xs text-slate-300 mt-1 inline-flex items-center gap-1">
+                <div className="text-xs text-[var(--text-muted)] mt-1 inline-flex items-center gap-1">
                   <MapPin className="w-3 h-3 text-amber-400" /> {s.pickupStop}
                 </div>
               )}
@@ -174,34 +174,34 @@ export default function ParentTodayPage() {
           {s.trips.length > 0 ? (
             <div className="space-y-2">
               {s.trips.map(t => {
-                const statusClass = STATUS_PILL[t.status] ?? 'bg-slate-500/20 text-slate-300 border-slate-500/40';
+                const statusClass = STATUS_PILL[t.status] ?? 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/40';
                 const att = s.attendance.find(a => a.session_type === t.session_type);
                 return (
-                  <div key={t.id} className="rounded-xl bg-slate-900/40 border border-white/5 p-3">
+                  <div key={t.id} className="rounded-xl bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] p-3">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="text-xs text-slate-400 uppercase tracking-wide flex items-center gap-1">
+                      <div className="text-xs text-[var(--text-muted)] uppercase tracking-wide flex items-center gap-1">
                         <Clock className="w-3 h-3" /> {t.session_type}
                       </div>
                       <span className={`px-2 py-0.5 rounded-full text-[10px] border ${statusClass}`}>{t.status}</span>
                     </div>
                     <div className="grid grid-cols-3 gap-2 mt-2 text-xs">
                       <div>
-                        <div className="text-slate-500 text-[10px] uppercase">Scheduled</div>
-                        <div className="text-slate-200">{fmt(t.scheduled_departure)}</div>
+                        <div className="text-[var(--text-faint)] text-[10px] uppercase">Scheduled</div>
+                        <div className="text-[var(--text-main)]">{fmt(t.scheduled_departure)}</div>
                       </div>
                       <div>
-                        <div className="text-slate-500 text-[10px] uppercase">Departed</div>
-                        <div className="text-slate-200">{fmt(t.actual_departure)}</div>
+                        <div className="text-[var(--text-faint)] text-[10px] uppercase">Departed</div>
+                        <div className="text-[var(--text-main)]">{fmt(t.actual_departure)}</div>
                       </div>
                       <div>
-                        <div className="text-slate-500 text-[10px] uppercase">Arrived</div>
-                        <div className="text-slate-200">{fmt(t.actual_arrival)}</div>
+                        <div className="text-[var(--text-faint)] text-[10px] uppercase">Arrived</div>
+                        <div className="text-[var(--text-main)]">{fmt(t.actual_arrival)}</div>
                       </div>
                     </div>
                     {att && (
-                      <div className="mt-2 flex items-center justify-between gap-2 pt-2 border-t border-white/5">
-                        <span className="text-xs text-slate-400">Attendance</span>
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] border ${STATUS_PILL[att.status] ?? 'bg-slate-500/20 text-slate-300 border-slate-500/40'}`}>
+                      <div className="mt-2 flex items-center justify-between gap-2 pt-2 border-t border-[var(--border-subtle)]">
+                        <span className="text-xs text-[var(--text-muted)]">Attendance</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] border ${STATUS_PILL[att.status] ?? 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/40'}`}>
                           {att.status}{att.boarded_at ? ` · ${fmt(att.boarded_at)}` : ''}
                         </span>
                       </div>
@@ -211,12 +211,12 @@ export default function ParentTodayPage() {
               })}
             </div>
           ) : (
-            <div className="text-xs text-slate-500 italic">No trips scheduled today on this route.</div>
+            <div className="text-xs text-[var(--text-faint)] italic">No trips scheduled today on this route.</div>
           )}
         </div>
       ))}
 
-      <div className="text-xs text-slate-500 text-center pt-2">
+      <div className="text-xs text-[var(--text-faint)] text-center pt-2">
         Notifications go to the WhatsApp number above. <Link href="/school-bus/parent/absence" className="text-amber-400">Mark absence</Link> if your child won't ride.
       </div>
     </div>

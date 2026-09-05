@@ -66,7 +66,7 @@ export default function SchoolBusPreTripPage({ params }: { params: Promise<{ id:
     } finally { setBusy(false); }
   };
 
-  if (loading) return <div className="text-slate-500">Loading checklist…</div>;
+  if (loading) return <div className="text-[var(--text-faint)]">Loading checklist…</div>;
 
   const failCount = checklist.filter(c => results[c.key]?.ok === false).length;
   const blockingFailCount = checklist.filter(c => c.blocking && results[c.key]?.ok === false).length;
@@ -78,7 +78,7 @@ export default function SchoolBusPreTripPage({ params }: { params: Promise<{ id:
       </Link>
       <div>
         <h1 className="text-2xl font-bold">Pre-Trip Safety Check</h1>
-        <p className="text-sm text-slate-400">Walk around the bus. Check each item, mark FAIL only when something is wrong.</p>
+        <p className="text-sm text-[var(--text-muted)]">Walk around the bus. Check each item, mark FAIL only when something is wrong.</p>
       </div>
 
       <div className={`p-3 rounded-xl text-sm ${
@@ -97,24 +97,24 @@ export default function SchoolBusPreTripPage({ params }: { params: Promise<{ id:
         {checklist.map(c => {
           const ok = results[c.key]?.ok ?? true;
           return (
-            <div key={c.key} className={`p-3 rounded-xl border ${ok ? 'bg-slate-800/40 border-white/10' : 'bg-rose-500/10 border-rose-500/40'}`}>
+            <div key={c.key} className={`p-3 rounded-xl border ${ok ? 'bg-[var(--bg-surface)]/40 border-[var(--border-subtle)]' : 'bg-rose-500/10 border-rose-500/40'}`}>
               <div className="flex items-start gap-3">
                 <div className="text-2xl shrink-0">{CATEGORY_ICON[c.category] ?? '🔧'}</div>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium">{c.label}</div>
                   {c.blocking && <div className="text-[10px] text-amber-300 mt-0.5">⚠ Blocks departure if failed</div>}
                 </div>
-                <div className="inline-flex rounded-lg bg-slate-900/60 p-1 shrink-0">
+                <div className="inline-flex rounded-lg bg-[var(--bg-surface)]/60 p-1 shrink-0">
                   <button onClick={() => setOk(c.key, true)}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold ${ok ? 'bg-emerald-600 text-white' : 'text-slate-400'}`}>OK</button>
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold ${ok ? 'bg-emerald-600 text-white' : 'text-[var(--text-muted)]'}`}>OK</button>
                   <button onClick={() => setOk(c.key, false)}
-                    className={`px-3 py-1.5 rounded-md text-xs font-semibold ${!ok ? 'bg-rose-600 text-white' : 'text-slate-400'}`}>FAIL</button>
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold ${!ok ? 'bg-rose-600 text-white' : 'text-[var(--text-muted)]'}`}>FAIL</button>
                 </div>
               </div>
               {!ok && (
                 <input value={results[c.key]?.note ?? ''} onChange={e => setNote(c.key, e.target.value)}
                   placeholder="What's wrong?"
-                  className="mt-2 w-full px-3 py-2 rounded-lg bg-slate-900/60 border border-rose-500/30 text-white text-sm placeholder-slate-500" />
+                  className="mt-2 w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)]/60 border border-rose-500/30 text-[var(--text-main)] text-sm placeholder-[var(--text-faint)]" />
               )}
             </div>
           );
@@ -122,9 +122,9 @@ export default function SchoolBusPreTripPage({ params }: { params: Promise<{ id:
       </div>
 
       <div>
-        <label className="block text-xs uppercase tracking-wide text-slate-400 mb-1.5 font-semibold">Notes</label>
+        <label className="block text-xs uppercase tracking-wide text-[var(--text-muted)] mb-1.5 font-semibold">Notes</label>
         <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
-          className="w-full px-4 py-2 rounded-xl bg-slate-800/60 border border-white/10 text-white" />
+          className="w-full px-4 py-2 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-[var(--text-main)]" />
       </div>
 
       {msg && (

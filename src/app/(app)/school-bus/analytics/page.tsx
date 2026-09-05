@@ -78,7 +78,7 @@ function CongestionBar({ score, level }: { score: number; level: string }) {
   const cfg = CONGESTION_CFG[level] ?? CONGESTION_CFG.LOW;
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+      <div className="flex-1 h-2 bg-[var(--bg-surface)] rounded-full overflow-hidden">
         <div className={`h-full rounded-full transition-all ${
           level === 'LOW' ? 'bg-green-500' : level === 'MEDIUM' ? 'bg-yellow-500' : level === 'HIGH' ? 'bg-orange-500' : 'bg-red-500'
         }`} style={{ width: `${score}%` }} />
@@ -92,11 +92,11 @@ function CongestionBar({ score, level }: { score: number; level: string }) {
 function RouteCard({ r }: { r: RouteMetric }) {
   const cfg = CONGESTION_CFG[r.congestionLevel];
   return (
-    <div className={`bg-slate-900 border rounded-xl p-4 ${cfg.border}`}>
+    <div className={`bg-[var(--bg-surface)] border rounded-xl p-4 ${cfg.border}`}>
       <div className="flex items-start justify-between mb-3">
         <div>
-          <h3 className="text-sm font-semibold text-white">{r.routeName}</h3>
-          <span className="text-xs text-slate-500">{r.session}</span>
+          <h3 className="text-sm font-semibold text-[var(--text-main)]">{r.routeName}</h3>
+          <span className="text-xs text-[var(--text-faint)]">{r.session}</span>
         </div>
         <span className={`text-xs px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.color} ${cfg.border}`}>
           {r.congestionLevel}
@@ -105,24 +105,24 @@ function RouteCard({ r }: { r: RouteMetric }) {
 
       <div className="mb-3">
         <div className="flex justify-between text-xs mb-1">
-          <span className="text-slate-500">Congestion Score</span>
-          <span className={r.congestionLevel === 'SEVERE' ? 'text-red-400' : 'text-slate-400'}>+{r.peakDelayMin}min peak delay</span>
+          <span className="text-[var(--text-faint)]">Congestion Score</span>
+          <span className={r.congestionLevel === 'SEVERE' ? 'text-red-400' : 'text-[var(--text-muted)]'}>+{r.peakDelayMin}min peak delay</span>
         </div>
         <CongestionBar score={r.congestionScore} level={r.congestionLevel} />
       </div>
 
       <div className="grid grid-cols-3 gap-2 text-center text-xs">
-        <div className="bg-slate-800 rounded-lg p-2">
-          <p className="font-bold text-white">{r.avgOnTimeRate}%</p>
-          <p className="text-slate-500">On-time</p>
+        <div className="bg-[var(--bg-surface)] rounded-lg p-2">
+          <p className="font-bold text-[var(--text-main)]">{r.avgOnTimeRate}%</p>
+          <p className="text-[var(--text-faint)]">On-time</p>
         </div>
-        <div className="bg-slate-800 rounded-lg p-2">
-          <p className="font-bold text-white">{r.avgOccupancy}%</p>
-          <p className="text-slate-500">Occupancy</p>
+        <div className="bg-[var(--bg-surface)] rounded-lg p-2">
+          <p className="font-bold text-[var(--text-main)]">{r.avgOccupancy}%</p>
+          <p className="text-[var(--text-faint)]">Occupancy</p>
         </div>
-        <div className="bg-slate-800 rounded-lg p-2">
-          <p className="font-bold text-white">{r.avgSpeed} km/h</p>
-          <p className="text-slate-500">Avg Speed</p>
+        <div className="bg-[var(--bg-surface)] rounded-lg p-2">
+          <p className="font-bold text-[var(--text-main)]">{r.avgSpeed} km/h</p>
+          <p className="text-[var(--text-faint)]">Avg Speed</p>
         </div>
       </div>
 
@@ -170,28 +170,28 @@ export default function AnalyticsPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">📊 System Analytics & Intelligence</h1>
-          <p className="text-slate-400 text-xs mt-0.5">Route congestion · parent engagement · service area coverage · IQ tracker</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">📊 System Analytics & Intelligence</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Route congestion · parent engagement · service area coverage · IQ tracker</p>
         </div>
       </div>
 
       {/* Fleet summary strip */}
       <div className="grid grid-cols-4 gap-3">
-        <div className="bg-slate-900 border border-white/5 rounded-xl p-3 text-center">
-          <p className="text-2xl font-bold text-white">{totalStudents}</p>
-          <p className="text-xs text-slate-500">Total Students Served</p>
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3 text-center">
+          <p className="text-2xl font-bold text-[var(--text-main)]">{totalStudents}</p>
+          <p className="text-xs text-[var(--text-faint)]">Total Students Served</p>
         </div>
-        <div className="bg-slate-900 border border-white/5 rounded-xl p-3 text-center">
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3 text-center">
           <p className="text-2xl font-bold text-yellow-400">{totalRoutes}</p>
-          <p className="text-xs text-slate-500">Active Routes</p>
+          <p className="text-xs text-[var(--text-faint)]">Active Routes</p>
         </div>
         <div className="bg-red-500/10 border border-red-500/10 rounded-xl p-3 text-center">
           <p className="text-2xl font-bold text-red-400">{severeRoutes.length}</p>
-          <p className="text-xs text-slate-500">Severe Congestion Alerts</p>
+          <p className="text-xs text-[var(--text-faint)]">Severe Congestion Alerts</p>
         </div>
         <div className="bg-green-500/10 border border-green-500/10 rounded-xl p-3 text-center">
           <p className="text-2xl font-bold text-green-400">{latestEngagement.satisfactionScore}★</p>
-          <p className="text-xs text-slate-500">Parent Satisfaction (5)</p>
+          <p className="text-xs text-[var(--text-faint)]">Parent Satisfaction (5)</p>
         </div>
       </div>
 
@@ -211,7 +211,7 @@ export default function AnalyticsPage() {
       )}
 
       {/* Tab navigation */}
-      <div className="flex gap-1 border-b border-white/5 pb-0">
+      <div className="flex gap-1 border-b border-[var(--border-subtle)] pb-0">
         {[
           { key: 'congestion', label: '🚦 Route Congestion' },
           { key: 'parent', label: '👨‍👩‍👧 Parent Engagement' },
@@ -221,7 +221,7 @@ export default function AnalyticsPage() {
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
               tab === t.key
                 ? 'text-yellow-400 border-yellow-500'
-                : 'text-slate-400 border-transparent hover:text-white'
+                : 'text-[var(--text-muted)] border-transparent hover:text-[var(--text-main)]'
             }`}>{t.label}</button>
         ))}
       </div>
@@ -230,16 +230,16 @@ export default function AnalyticsPage() {
       {tab === 'congestion' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <p className="text-sm text-slate-400">Route congestion score based on average speed, occupancy, and delay data. 0 = free flow, 100 = gridlock.</p>
+            <p className="text-sm text-[var(--text-muted)]">Route congestion score based on average speed, occupancy, and delay data. 0 = free flow, 100 = gridlock.</p>
           </div>
 
           {/* Congestion heat table */}
-          <div className="bg-slate-900 border border-white/10 rounded-2xl overflow-hidden">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="bg-slate-800/60 border-b border-white/5">
+              <thead className="bg-[var(--bg-surface)]/60 border-b border-[var(--border-subtle)]">
                 <tr>
                   {['Route', 'Session', 'Congestion', 'On-Time', 'Occupancy', 'Avg Speed', 'Peak Delay', 'Trips'].map(h => (
-                    <th key={h} className="text-left py-3 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                    <th key={h} className="text-left py-3 px-4 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -247,9 +247,9 @@ export default function AnalyticsPage() {
                 {MOCK_ROUTE_METRICS.sort((a, b) => b.congestionScore - a.congestionScore).map(r => {
                   const cfg = CONGESTION_CFG[r.congestionLevel];
                   return (
-                    <tr key={r.routeName} className="border-t border-white/5 hover:bg-slate-800/20">
-                      <td className="py-3 px-4 font-semibold text-white">{r.routeName}</td>
-                      <td className="py-3 px-4 text-xs text-slate-400">{r.session}</td>
+                    <tr key={r.routeName} className="border-t border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]/20">
+                      <td className="py-3 px-4 font-semibold text-[var(--text-main)]">{r.routeName}</td>
+                      <td className="py-3 px-4 text-xs text-[var(--text-muted)]">{r.session}</td>
                       <td className="py-3 px-4 min-w-36">
                         <div className="flex items-center gap-2 mb-1">
                           <span className={`text-xs px-1.5 py-0.5 rounded border ${cfg.bg} ${cfg.color} ${cfg.border}`}>{r.congestionLevel}</span>
@@ -262,17 +262,17 @@ export default function AnalyticsPage() {
                         </span>
                       </td>
                       <td className="py-3 px-4">
-                        <span className={`text-sm font-bold ${r.avgOccupancy >= 90 ? 'text-amber-400' : 'text-white'}`}>
+                        <span className={`text-sm font-bold ${r.avgOccupancy >= 90 ? 'text-amber-400' : 'text-[var(--text-main)]'}`}>
                           {r.avgOccupancy}%
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-slate-300">{r.avgSpeed} km/h</td>
+                      <td className="py-3 px-4 text-[var(--text-muted)]">{r.avgSpeed} km/h</td>
                       <td className="py-3 px-4">
-                        <span className={r.peakDelayMin > 15 ? 'text-red-400' : r.peakDelayMin > 8 ? 'text-amber-400' : 'text-slate-400'}>
+                        <span className={r.peakDelayMin > 15 ? 'text-red-400' : r.peakDelayMin > 8 ? 'text-amber-400' : 'text-[var(--text-muted)]'}>
                           +{r.peakDelayMin} min
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-slate-400">{r.totalTrips}</td>
+                      <td className="py-3 px-4 text-[var(--text-muted)]">{r.totalTrips}</td>
                     </tr>
                   );
                 })}
@@ -286,9 +286,9 @@ export default function AnalyticsPage() {
           </div>
 
           {/* Recommendations */}
-          <div className="bg-slate-900 border border-white/10 rounded-xl p-4">
-            <p className="text-sm font-semibold text-white mb-3">💡 Smart Recommendations</p>
-            <div className="space-y-2 text-xs text-slate-400">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4">
+            <p className="text-sm font-semibold text-[var(--text-main)] mb-3">💡 Smart Recommendations</p>
+            <div className="space-y-2 text-xs text-[var(--text-muted)]">
               <div className="flex gap-2"><span className="text-amber-400">→</span><span>JBR Afternoon Route: Consider shifting departure time from 14:00 to 14:30 to avoid peak SZR traffic. Expected congestion improvement: 25%.</span></div>
               <div className="flex gap-2"><span className="text-amber-400">→</span><span>Business Bay Loop: Route passes through Financial District at peak hours. Consider Sheikh Zayed Road alternate via Al Khail.</span></div>
               <div className="flex gap-2"><span className="text-green-400">→</span><span>Deira North Route: Excellent performance. Template timing for other routes operating in similar low-congestion corridors.</span></div>
@@ -301,7 +301,7 @@ export default function AnalyticsPage() {
       {/* Tab: Parent Engagement */}
       {tab === 'parent' && (
         <div className="space-y-4">
-          <p className="text-sm text-slate-400">Monthly parent/guardian engagement metrics: enrollments, withdrawals, fee collections, and satisfaction trends.</p>
+          <p className="text-sm text-[var(--text-muted)]">Monthly parent/guardian engagement metrics: enrollments, withdrawals, fee collections, and satisfaction trends.</p>
 
           {/* Trend cards */}
           <div className="grid grid-cols-4 gap-4">
@@ -315,12 +315,12 @@ export default function AnalyticsPage() {
               const prev   = k.data[k.data.length - 2];
               const delta  = latest - prev;
               return (
-                <div key={k.label} className="bg-slate-900 border border-white/10 rounded-xl p-4">
-                  <p className="text-xs text-slate-500 mb-1">{k.label}</p>
+                <div key={k.label} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4">
+                  <p className="text-xs text-[var(--text-faint)] mb-1">{k.label}</p>
                   <div className="flex items-end justify-between">
                     <div>
-                      <p className="text-2xl font-bold text-white">{k.label === 'Satisfaction' ? (latest / 20).toFixed(1) : latest}</p>
-                      <p className="text-xs text-slate-500">{k.unit}</p>
+                      <p className="text-2xl font-bold text-[var(--text-main)]">{k.label === 'Satisfaction' ? (latest / 20).toFixed(1) : latest}</p>
+                      <p className="text-xs text-[var(--text-faint)]">{k.unit}</p>
                     </div>
                     <Sparkline data={k.data} color={k.color} />
                   </div>
@@ -333,32 +333,32 @@ export default function AnalyticsPage() {
           </div>
 
           {/* Monthly table */}
-          <div className="bg-slate-900 border border-white/10 rounded-2xl overflow-hidden">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="bg-slate-800/60 border-b border-white/5">
+              <thead className="bg-[var(--bg-surface)]/60 border-b border-[var(--border-subtle)]">
                 <tr>
                   {['Month', 'Active', 'New', 'Withdrawn', 'Avg Fee Paid', 'Outstanding', 'Satisfaction'].map(h => (
-                    <th key={h} className="text-left py-3 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">{h}</th>
+                    <th key={h} className="text-left py-3 px-4 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {[...MOCK_ENGAGEMENT].reverse().map(e => (
-                  <tr key={e.month} className="border-t border-white/5 hover:bg-slate-800/20">
-                    <td className="py-3 px-4 text-slate-300 font-medium">{e.month}</td>
-                    <td className="py-3 px-4 text-white font-semibold">{e.activeAllocations}</td>
+                  <tr key={e.month} className="border-t border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]/20">
+                    <td className="py-3 px-4 text-[var(--text-muted)] font-medium">{e.month}</td>
+                    <td className="py-3 px-4 text-[var(--text-main)] font-semibold">{e.activeAllocations}</td>
                     <td className="py-3 px-4 text-green-400">+{e.newEnrollments}</td>
                     <td className="py-3 px-4 text-red-400">−{e.withdrawals}</td>
-                    <td className="py-3 px-4 text-white">AED {e.averageFeesPaid.toLocaleString()}</td>
+                    <td className="py-3 px-4 text-[var(--text-main)]">AED {e.averageFeesPaid.toLocaleString()}</td>
                     <td className="py-3 px-4">
-                      <span className={e.outstandingFees > 20000 ? 'text-amber-400' : 'text-slate-400'}>
+                      <span className={e.outstandingFees > 20000 ? 'text-amber-400' : 'text-[var(--text-muted)]'}>
                         AED {e.outstandingFees.toLocaleString()}
                       </span>
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-1">
                         {'★'.repeat(Math.round(e.satisfactionScore))}{'☆'.repeat(5 - Math.round(e.satisfactionScore))}
-                        <span className="text-xs text-slate-500 ml-1">{e.satisfactionScore}</span>
+                        <span className="text-xs text-[var(--text-faint)] ml-1">{e.satisfactionScore}</span>
                       </div>
                     </td>
                   </tr>
@@ -368,8 +368,8 @@ export default function AnalyticsPage() {
           </div>
 
           {/* Parent IQ Tracker */}
-          <div className="bg-slate-900 border border-white/10 rounded-xl p-4">
-            <p className="text-sm font-semibold text-white mb-3">🧠 Parent IQ Tracker — Key Insights</p>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4">
+            <p className="text-sm font-semibold text-[var(--text-main)] mb-3">🧠 Parent IQ Tracker — Key Insights</p>
             <div className="grid grid-cols-2 gap-3 text-xs">
               {[
                 { label: 'Retention Rate', val: '97.1%', trend: '▲ +1.2%', color: 'text-green-400', note: 'Students retained month-on-month' },
@@ -379,13 +379,13 @@ export default function AnalyticsPage() {
                 { label: 'Late Pickup Incidents', val: '2', trend: '▼', color: 'text-green-400', note: 'Children not collected on arrival this month' },
                 { label: 'Feedback Response Rate', val: '68%', trend: '▲ +8%', color: 'text-blue-400', note: 'Parents responding to surveys' },
               ].map(k => (
-                <div key={k.label} className="bg-slate-800 rounded-lg p-3">
+                <div key={k.label} className="bg-[var(--bg-surface)] rounded-lg p-3">
                   <div className="flex justify-between items-start mb-1">
-                    <span className="text-slate-400">{k.label}</span>
+                    <span className="text-[var(--text-muted)]">{k.label}</span>
                     <span className={`text-xs ${k.color}`}>{k.trend}</span>
                   </div>
                   <p className={`text-xl font-bold ${k.color}`}>{k.val}</p>
-                  <p className="text-slate-600 mt-0.5">{k.note}</p>
+                  <p className="text-[var(--text-faint)] mt-0.5">{k.note}</p>
                 </div>
               ))}
             </div>
@@ -396,7 +396,7 @@ export default function AnalyticsPage() {
       {/* Tab: Service Areas */}
       {tab === 'service-areas' && (
         <div className="space-y-4">
-          <p className="text-sm text-slate-400">Geographic coverage across Emirates → Cities → Areas. Monitor stop density and student distribution.</p>
+          <p className="text-sm text-[var(--text-muted)]">Geographic coverage across Emirates → Cities → Areas. Monitor stop density and student distribution.</p>
 
           {/* Coverage by emirate */}
           <div className="grid grid-cols-3 gap-3">
@@ -406,13 +406,13 @@ export default function AnalyticsPage() {
               const stops    = areas.reduce((s, a) => s + a.stopCount, 0);
               const routes   = areas.reduce((s, a) => s + a.routeCount, 0);
               return (
-                <div key={em} className="bg-slate-900 border border-white/10 rounded-xl p-4">
-                  <p className="text-sm font-bold text-white mb-3">🏙️ {em}</p>
+                <div key={em} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4">
+                  <p className="text-sm font-bold text-[var(--text-main)] mb-3">🏙️ {em}</p>
                   <div className="space-y-1.5 text-xs">
-                    <div className="flex justify-between text-slate-400"><span>Areas served</span><span className="text-white font-semibold">{areas.length}</span></div>
-                    <div className="flex justify-between text-slate-400"><span>Total stops</span><span className="text-white font-semibold">{stops}</span></div>
-                    <div className="flex justify-between text-slate-400"><span>Students</span><span className="text-white font-semibold">{students}</span></div>
-                    <div className="flex justify-between text-slate-400"><span>Routes</span><span className="text-white font-semibold">{routes}</span></div>
+                    <div className="flex justify-between text-[var(--text-muted)]"><span>Areas served</span><span className="text-[var(--text-main)] font-semibold">{areas.length}</span></div>
+                    <div className="flex justify-between text-[var(--text-muted)]"><span>Total stops</span><span className="text-[var(--text-main)] font-semibold">{stops}</span></div>
+                    <div className="flex justify-between text-[var(--text-muted)]"><span>Students</span><span className="text-[var(--text-main)] font-semibold">{students}</span></div>
+                    <div className="flex justify-between text-[var(--text-muted)]"><span>Routes</span><span className="text-[var(--text-main)] font-semibold">{routes}</span></div>
                   </div>
                 </div>
               );
@@ -420,12 +420,12 @@ export default function AnalyticsPage() {
           </div>
 
           {/* Area table */}
-          <div className="bg-slate-900 border border-white/10 rounded-2xl overflow-hidden">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="bg-slate-800/60 border-b border-white/5">
+              <thead className="bg-[var(--bg-surface)]/60 border-b border-[var(--border-subtle)]">
                 <tr>
                   {['Emirate', 'Area', 'Stops', 'Students', 'Routes', 'Avg Dist to Stop', 'Density'].map(h => (
-                    <th key={h} className="text-left py-3 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">{h}</th>
+                    <th key={h} className="text-left py-3 px-4 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -433,19 +433,19 @@ export default function AnalyticsPage() {
                 {MOCK_SERVICE_AREAS.map(a => {
                   const studentsPerStop = a.stopCount > 0 ? Math.round(a.studentCount / a.stopCount) : 0;
                   return (
-                    <tr key={`${a.emirate}-${a.area}`} className="border-t border-white/5 hover:bg-slate-800/20">
-                      <td className="py-3 px-4 text-slate-400">{a.emirate}</td>
-                      <td className="py-3 px-4 font-semibold text-white">{a.area}</td>
-                      <td className="py-3 px-4 text-slate-300">{a.stopCount}</td>
-                      <td className="py-3 px-4 text-white font-semibold">{a.studentCount}</td>
-                      <td className="py-3 px-4 text-slate-300">{a.routeCount}</td>
-                      <td className="py-3 px-4 text-slate-400">{a.avgDistanceToStop} km</td>
+                    <tr key={`${a.emirate}-${a.area}`} className="border-t border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]/20">
+                      <td className="py-3 px-4 text-[var(--text-muted)]">{a.emirate}</td>
+                      <td className="py-3 px-4 font-semibold text-[var(--text-main)]">{a.area}</td>
+                      <td className="py-3 px-4 text-[var(--text-muted)]">{a.stopCount}</td>
+                      <td className="py-3 px-4 text-[var(--text-main)] font-semibold">{a.studentCount}</td>
+                      <td className="py-3 px-4 text-[var(--text-muted)]">{a.routeCount}</td>
+                      <td className="py-3 px-4 text-[var(--text-muted)]">{a.avgDistanceToStop} km</td>
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
-                          <div className="w-16 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                          <div className="w-16 h-1.5 bg-[var(--bg-surface)] rounded-full overflow-hidden">
                             <div className="h-full bg-yellow-500 rounded-full" style={{ width: `${Math.min(studentsPerStop * 5, 100)}%` }} />
                           </div>
-                          <span className="text-xs text-slate-400">{studentsPerStop}/stop</span>
+                          <span className="text-xs text-[var(--text-muted)]">{studentsPerStop}/stop</span>
                         </div>
                       </td>
                     </tr>
@@ -458,7 +458,7 @@ export default function AnalyticsPage() {
           {/* Gap analysis */}
           <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4">
             <p className="text-sm font-semibold text-amber-300 mb-2">🔍 Coverage Gap Analysis</p>
-            <div className="space-y-1.5 text-xs text-slate-400">
+            <div className="space-y-1.5 text-xs text-[var(--text-muted)]">
               <div className="flex gap-2"><span className="text-amber-400">→</span><span>Abu Dhabi — Al Reem Island: Only 1 route serving 18 students. Consider adding a second route for redundancy.</span></div>
               <div className="flex gap-2"><span className="text-amber-400">→</span><span>Sharjah — Al Nahda: Average walk-to-stop of 0.6km exceeds 500m guideline. Add 2 intermediate stops.</span></div>
               <div className="flex gap-2"><span className="text-amber-400">→</span><span>Dubai — Palm Jumeirah, Jumeirah 1, Umm Suqeim: No service coverage. Potential demand from {'>'}50 students.</span></div>

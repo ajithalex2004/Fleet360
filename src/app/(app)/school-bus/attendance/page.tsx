@@ -46,7 +46,7 @@ function StatusBtn({ status, current, onSelect }: { status: AttStatus; current: 
   return (
     <button onClick={() => onSelect(status)}
       className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-all ${
-        active ? `${c.bg} ${c.color} ${c.border}` : 'bg-slate-800 text-slate-500 border-white/10 hover:text-slate-300'
+        active ? `${c.bg} ${c.color} ${c.border}` : 'bg-[var(--bg-surface)] text-[var(--text-faint)] border-[var(--border-subtle)] hover:text-[var(--text-muted)]'
       }`}>
       {c.icon} {c.label}
     </button>
@@ -85,27 +85,27 @@ function NotifyModal({ absentStudents, onClose, onNotified }: {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-5 border-b border-white/10">
-          <h2 className="text-white font-semibold">Notify Absent Students' Guardians</h2>
-          <p className="text-slate-400 text-xs mt-1">{unnotified.length} guardian(s) will be notified via WhatsApp/SMS</p>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <div className="px-6 py-5 border-b border-[var(--border-subtle)]">
+          <h2 className="text-[var(--text-main)] font-semibold">Notify Absent Students' Guardians</h2>
+          <p className="text-[var(--text-muted)] text-xs mt-1">{unnotified.length} guardian(s) will be notified via WhatsApp/SMS</p>
         </div>
 
         {done ? (
           <div className="px-6 py-8 text-center">
             <div className="text-4xl mb-3">✅</div>
             <p className="text-emerald-300 font-semibold">{count} guardian{count !== 1 ? 's' : ''} notified</p>
-            <p className="text-slate-400 text-xs mt-1">Notifications sent successfully</p>
+            <p className="text-[var(--text-muted)] text-xs mt-1">Notifications sent successfully</p>
           </div>
         ) : (
           <div className="px-6 py-4 max-h-60 overflow-y-auto space-y-2">
             {unnotified.length === 0 ? (
-              <p className="text-slate-400 text-sm text-center py-4">All absent students have already been notified.</p>
+              <p className="text-[var(--text-muted)] text-sm text-center py-4">All absent students have already been notified.</p>
             ) : unnotified.map(s => (
-              <div key={s.studentId} className="flex items-center justify-between bg-slate-800/60 rounded-xl px-3 py-2">
+              <div key={s.studentId} className="flex items-center justify-between bg-[var(--bg-surface)]/60 rounded-xl px-3 py-2">
                 <div>
-                  <p className="text-sm text-white">{s.fullName}</p>
-                  <p className="text-xs text-slate-500">{s.guardian1Phone ?? 'No phone on file'}</p>
+                  <p className="text-sm text-[var(--text-main)]">{s.fullName}</p>
+                  <p className="text-xs text-[var(--text-faint)]">{s.guardian1Phone ?? 'No phone on file'}</p>
                 </div>
                 <span className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded-full">Absent</span>
               </div>
@@ -113,8 +113,8 @@ function NotifyModal({ absentStudents, onClose, onNotified }: {
           </div>
         )}
 
-        <div className="px-6 py-4 border-t border-white/10 flex justify-end gap-3">
-          <button onClick={onClose} className="text-sm text-slate-400 hover:text-white px-4 py-2 rounded-lg border border-white/10 transition-colors">
+        <div className="px-6 py-4 border-t border-[var(--border-subtle)] flex justify-end gap-3">
+          <button onClick={onClose} className="text-sm text-[var(--text-muted)] hover:text-[var(--text-main)] px-4 py-2 rounded-lg border border-[var(--border-subtle)] transition-colors">
             {done ? 'Close' : 'Cancel'}
           </button>
           {!done && unnotified.length > 0 && (
@@ -123,7 +123,7 @@ function NotifyModal({ absentStudents, onClose, onNotified }: {
               'MORNING',
               unnotified[0]?.routeId ?? ''
             )} disabled={sending}
-              className="text-sm font-semibold bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-900 px-5 py-2 rounded-lg transition-colors">
+              className="text-sm font-semibold bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-white px-5 py-2 rounded-lg transition-colors">
               {sending ? 'Sending…' : `📱 Send ${unnotified.length} Alert${unnotified.length > 1 ? 's' : ''}`}
             </button>
           )}
@@ -220,8 +220,8 @@ export default function SchoolBusAttendancePage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Student Attendance</h1>
-          <p className="text-slate-400 text-xs mt-0.5">Mark boarding & drop-off, notify parents of absences</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Student Attendance</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Mark boarding & drop-off, notify parents of absences</p>
         </div>
         <div className="flex gap-2">
           {absent.filter(s => !s.notifiedAt).length > 0 && (
@@ -230,48 +230,48 @@ export default function SchoolBusAttendancePage() {
               📱 Notify {absent.filter(s => !s.notifiedAt).length} Absent
             </button>
           )}
-          <button onClick={load} className="text-xs text-slate-400 border border-white/10 px-3 py-2 rounded-xl hover:border-white/20 hover:text-white transition-colors">↺ Refresh</button>
+          <button onClick={load} className="text-xs text-[var(--text-muted)] border border-[var(--border-subtle)] px-3 py-2 rounded-xl hover:border-[var(--border-strong)] hover:text-[var(--text-main)] transition-colors">↺ Refresh</button>
         </div>
       </div>
 
       {/* Controls */}
       <div className="flex flex-wrap gap-3 items-end">
         <div className="space-y-1">
-          <label className="text-xs text-slate-400">Date</label>
+          <label className="text-xs text-[var(--text-muted)]">Date</label>
           <input type="date" value={date} onChange={e => setDate(e.target.value)}
-            className="bg-slate-800/60 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-yellow-500/40" />
+            className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] focus:outline-none focus:border-yellow-500/40" />
         </div>
-        <div className="flex bg-slate-800/60 border border-white/10 rounded-xl overflow-hidden">
+        <div className="flex bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl overflow-hidden">
           {(['MORNING', 'AFTERNOON'] as const).map(s => (
             <button key={s} onClick={() => setSessionType(s)}
               className={`px-4 py-2.5 text-sm font-medium transition-colors ${
-                sessionType === s ? 'bg-yellow-500/20 text-yellow-300' : 'text-slate-400 hover:text-white'
+                sessionType === s ? 'bg-yellow-500/20 text-yellow-300' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
               }`}>
               {s === 'MORNING' ? '🌅 Morning' : '🌆 Afternoon'}
             </button>
           ))}
         </div>
         <select value={filterRoute} onChange={e => setFilterRoute(e.target.value)}
-          className="bg-slate-800/60 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none">
+          className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] focus:outline-none">
           <option value="">All Routes</option>
           {routes.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>
         <input type="text" placeholder="Search student…" value={search} onChange={e => setSearch(e.target.value)}
-          className="bg-slate-800/60 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-yellow-500/40" />
+          className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/40" />
       </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
         {[
-          { label: 'Total',       value: summary.total,    color: 'text-white',        icon: '👥' },
+          { label: 'Total',       value: summary.total,    color: 'text-[var(--text-main)]',        icon: '👥' },
           { label: 'Present',     value: summary.present,  color: 'text-emerald-400',  icon: '✅' },
           { label: 'Absent',      value: summary.absent,   color: 'text-red-400',      icon: '❌' },
           { label: 'Late',        value: summary.late,     color: 'text-amber-400',    icon: '⏰' },
           { label: 'Excused',     value: summary.excused,  color: 'text-blue-400',     icon: '📋' },
           { label: 'Attendance %',value: `${attendanceRate}%`, color: attendanceRate >= 80 ? 'text-emerald-400' : attendanceRate >= 60 ? 'text-amber-400' : 'text-red-400', icon: '📊' },
         ].map(s => (
-          <div key={s.label} className="bg-slate-900/60 border border-white/10 rounded-2xl p-3 text-center">
-            <p className="text-xs text-slate-500">{s.icon} {s.label}</p>
+          <div key={s.label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-3 text-center">
+            <p className="text-xs text-[var(--text-faint)]">{s.icon} {s.label}</p>
             <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
           </div>
         ))}
@@ -279,7 +279,7 @@ export default function SchoolBusAttendancePage() {
 
       {/* Bulk actions + filter */}
       <div className="flex flex-wrap items-center gap-3">
-        <span className="text-xs text-slate-500 font-medium">Bulk mark all:</span>
+        <span className="text-xs text-[var(--text-faint)] font-medium">Bulk mark all:</span>
         {(['PRESENT', 'ABSENT', 'EXCUSED'] as AttStatus[]).map(s => (
           <button key={s} disabled={saving === 'bulk'} onClick={() => markAll(s)}
             className={`text-xs px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${STATUS_CFG[s].bg} ${STATUS_CFG[s].color} ${STATUS_CFG[s].border}`}>
@@ -287,13 +287,13 @@ export default function SchoolBusAttendancePage() {
           </button>
         ))}
         <div className="flex-1" />
-        <span className="text-xs text-slate-500">Filter:</span>
+        <span className="text-xs text-[var(--text-faint)]">Filter:</span>
         {(['ALL', 'PRESENT', 'ABSENT', 'LATE', 'EXCUSED'] as const).map(s => (
           <button key={s} onClick={() => setFilterStatus(s)}
             className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${
               filterStatus === s
-                ? s === 'ALL' ? 'bg-slate-700 text-white border-white/20' : `${STATUS_CFG[s as AttStatus].bg} ${STATUS_CFG[s as AttStatus].color} ${STATUS_CFG[s as AttStatus].border}`
-                : 'bg-slate-800 text-slate-500 border-white/10 hover:text-slate-300'
+                ? s === 'ALL' ? 'bg-[var(--bg-surface-hover)] text-[var(--text-main)] border-[var(--border-strong)]' : `${STATUS_CFG[s as AttStatus].bg} ${STATUS_CFG[s as AttStatus].color} ${STATUS_CFG[s as AttStatus].border}`
+                : 'bg-[var(--bg-surface)] text-[var(--text-faint)] border-[var(--border-subtle)] hover:text-[var(--text-muted)]'
             }`}>
             {s === 'ALL' ? '👁 All' : `${STATUS_CFG[s as AttStatus].icon} ${STATUS_CFG[s as AttStatus].label}`}
           </button>
@@ -301,27 +301,27 @@ export default function SchoolBusAttendancePage() {
       </div>
 
       {/* Attendance list */}
-      <div className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden">
-        <div className="px-5 py-3 border-b border-white/10 text-xs text-slate-500 uppercase tracking-wider">
+      <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
+        <div className="px-5 py-3 border-b border-[var(--border-subtle)] text-xs text-[var(--text-faint)] uppercase tracking-wider">
           {filtered.length} student{filtered.length !== 1 ? 's' : ''} — {date} · {sessionType}
         </div>
 
         {loading ? (
           <div className="animate-pulse p-4 space-y-3">
-            {[...Array(6)].map((_, i) => <div key={i} className="h-14 bg-slate-800 rounded-xl" />)}
+            {[...Array(6)].map((_, i) => <div key={i} className="h-14 bg-[var(--bg-surface)] rounded-xl" />)}
           </div>
         ) : filtered.length === 0 ? (
           <div className="py-16 text-center">
             <div className="text-4xl mb-3">📋</div>
-            <p className="text-slate-400 text-sm">No students to display</p>
-            <p className="text-slate-600 text-xs mt-1">Make sure students are enrolled with active status</p>
+            <p className="text-[var(--text-muted)] text-sm">No students to display</p>
+            <p className="text-[var(--text-faint)] text-xs mt-1">Make sure students are enrolled with active status</p>
           </div>
         ) : (
           <div className="divide-y divide-white/5">
             {filtered.map(r => {
               const cfg = STATUS_CFG[r.status];
               return (
-                <div key={r.studentId} className={`px-5 py-3 flex items-center gap-4 hover:bg-white/5 transition-colors ${saving === r.studentId ? 'opacity-50' : ''}`}>
+                <div key={r.studentId} className={`px-5 py-3 flex items-center gap-4 hover:bg-[var(--bg-surface-hover)] transition-colors ${saving === r.studentId ? 'opacity-50' : ''}`}>
                   {/* Avatar */}
                   <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-yellow-400 to-amber-500 flex items-center justify-center text-xs font-bold text-slate-900 flex-shrink-0">
                     {r.firstName[0]}{r.lastName[0]}
@@ -330,17 +330,17 @@ export default function SchoolBusAttendancePage() {
                   {/* Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm text-white font-medium truncate">{r.fullName}</p>
+                      <p className="text-sm text-[var(--text-main)] font-medium truncate">{r.fullName}</p>
                       {r.medicalNotes && <span className="text-xs text-red-400">⚕</span>}
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-slate-500 mt-0.5">
+                    <div className="flex items-center gap-3 text-xs text-[var(--text-faint)] mt-0.5">
                       {r.grade && <span>{r.grade}{r.section ? ` ${r.section}` : ''}</span>}
                       {r.routeName && <span>🗺️ {r.routeName}</span>}
                       {r.pickupStop && <span>📍 {r.pickupStop}</span>}
                       {r.rfidCard && <span className="font-mono text-purple-400">📡 {r.rfidCard}</span>}
                     </div>
                     {r.scannedAt && (
-                      <p className="text-xs text-slate-600 mt-0.5">
+                      <p className="text-xs text-[var(--text-faint)] mt-0.5">
                         Scanned {new Date(r.scannedAt).toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit' })}
                       </p>
                     )}
@@ -359,7 +359,7 @@ export default function SchoolBusAttendancePage() {
                       {cfg.icon} {cfg.label}
                     </span>
                     {r.status === 'ABSENT' && r.notifiedAt && (
-                      <p className="text-xs text-slate-600 mt-0.5">Notified ✓</p>
+                      <p className="text-xs text-[var(--text-faint)] mt-0.5">Notified ✓</p>
                     )}
                   </div>
                 </div>

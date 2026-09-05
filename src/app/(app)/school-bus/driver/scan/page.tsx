@@ -69,13 +69,13 @@ function ScanInner() {
       </Link>
       <div>
         <h1 className="text-2xl font-bold">Scan</h1>
-        <p className="text-sm text-slate-400">Scan a student's RFID card or enter their student code.</p>
+        <p className="text-sm text-[var(--text-muted)]">Scan a student's RFID card or enter their student code.</p>
       </div>
 
       <div>
-        <label className="block text-xs uppercase tracking-wide text-slate-400 mb-1.5 font-semibold">Trip *</label>
+        <label className="block text-xs uppercase tracking-wide text-[var(--text-muted)] mb-1.5 font-semibold">Trip *</label>
         <select required value={tripId} onChange={e => setTripId(e.target.value)}
-          className="w-full px-4 py-3 rounded-xl bg-slate-800/60 border border-white/10 text-white focus:border-rose-500 focus:outline-none">
+          className="w-full px-4 py-3 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-rose-500 focus:outline-none">
           <option value="">Select trip</option>
           {trips.map(t => <option key={t.id} value={t.id}>{t.route_name ?? t.id.slice(0, 8)} · {t.session_type ?? '—'}</option>)}
         </select>
@@ -83,22 +83,22 @@ function ScanInner() {
 
       <div className="grid grid-cols-2 gap-2">
         <button onClick={() => setDirection('BOARDING')}
-          className={`py-2.5 rounded-xl text-sm font-semibold border ${direction === 'BOARDING' ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-slate-800/60 border-white/10 text-slate-300'}`}>
+          className={`py-2.5 rounded-xl text-sm font-semibold border ${direction === 'BOARDING' ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-[var(--bg-surface)]/60 border-[var(--border-subtle)] text-[var(--text-muted)]'}`}>
           ✓ Boarding
         </button>
         <button onClick={() => setDirection('ALIGHTING')}
-          className={`py-2.5 rounded-xl text-sm font-semibold border ${direction === 'ALIGHTING' ? 'bg-cyan-600 border-cyan-500 text-white' : 'bg-slate-800/60 border-white/10 text-slate-300'}`}>
+          className={`py-2.5 rounded-xl text-sm font-semibold border ${direction === 'ALIGHTING' ? 'bg-cyan-600 border-cyan-500 text-white' : 'bg-[var(--bg-surface)]/60 border-[var(--border-subtle)] text-[var(--text-muted)]'}`}>
           Drop off
         </button>
       </div>
 
       <div>
-        <label className="block text-xs uppercase tracking-wide text-slate-400 mb-1.5 font-semibold">RFID card / Student code</label>
+        <label className="block text-xs uppercase tracking-wide text-[var(--text-muted)] mb-1.5 font-semibold">RFID card / Student code</label>
         <input value={code} onChange={e => setCode(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit(); }}
           placeholder="Tap card or type code"
-          className="w-full px-4 py-3 rounded-xl bg-slate-800/60 border border-white/10 text-white text-2xl font-mono focus:border-rose-500 focus:outline-none"
+          className="w-full px-4 py-3 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] text-2xl font-mono focus:border-rose-500 focus:outline-none"
           autoFocus />
-        <p className="text-[11px] text-slate-500 mt-1">Web-NFC card readers send the UID to this field automatically.</p>
+        <p className="text-[11px] text-[var(--text-faint)] mt-1">Web-NFC card readers send the UID to this field automatically.</p>
       </div>
 
       <button onClick={submit} disabled={busy || !tripId || !code}
@@ -131,7 +131,7 @@ function ScanInner() {
 
 export default function ScanPage() {
   return (
-    <Suspense fallback={<div className="text-slate-500">Loading…</div>}>
+    <Suspense fallback={<div className="text-[var(--text-faint)]">Loading…</div>}>
       <ScanInner />
     </Suspense>
   );

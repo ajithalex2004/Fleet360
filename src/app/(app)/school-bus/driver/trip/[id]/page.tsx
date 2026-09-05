@@ -38,7 +38,7 @@ const ATT_PILL: Record<string, string> = {
   ABSENT:  'bg-rose-500/20 text-rose-300 border-rose-500/40',
   EXCUSED: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
   LATE:    'bg-amber-500/20 text-amber-300 border-amber-500/40',
-  PENDING: 'bg-slate-500/20 text-slate-400 border-slate-500/40',
+  PENDING: 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/40',
 };
 
 export default function SchoolBusDriverTripPage({ params }: { params: Promise<{ id: string }> }) {
@@ -89,7 +89,7 @@ export default function SchoolBusDriverTripPage({ params }: { params: Promise<{ 
     }
   };
 
-  if (loading) return <div className="text-slate-500">Loading…</div>;
+  if (loading) return <div className="text-[var(--text-faint)]">Loading…</div>;
   if (!trip) return <div className="text-rose-400 text-sm">Trip not found or not assigned to you.</div>;
 
   const visible = trip.students.filter(s => {
@@ -120,9 +120,9 @@ export default function SchoolBusDriverTripPage({ params }: { params: Promise<{ 
         </div>
       </div>
 
-      <div className="rounded-2xl bg-slate-800/60 border border-white/10 p-4">
+      <div className="rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] p-4">
         <div className="text-base font-bold">{trip.route_name ?? 'Route'}</div>
-        <div className="text-xs text-slate-400">
+        <div className="text-xs text-[var(--text-muted)]">
           {trip.session_type ?? '—'} · depart {new Date(trip.scheduled_departure).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
         </div>
         <div className="grid grid-cols-4 gap-2 mt-3 text-xs">
@@ -133,10 +133,10 @@ export default function SchoolBusDriverTripPage({ params }: { params: Promise<{ 
         </div>
       </div>
 
-      <div className="inline-flex rounded-xl bg-slate-800/60 border border-white/10 p-1 w-full">
+      <div className="inline-flex rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] p-1 w-full">
         {(['pending', 'all', 'medical'] as const).map(f => (
           <button key={f} onClick={() => setFilter(f)}
-            className={`flex-1 py-2 rounded-lg text-xs font-medium ${filter === f ? 'bg-rose-600 text-white' : 'text-slate-400'}`}>
+            className={`flex-1 py-2 rounded-lg text-xs font-medium ${filter === f ? 'bg-rose-600 text-white' : 'text-[var(--text-muted)]'}`}>
             {f === 'pending' ? `Pending (${trip.students.filter(s => s.attendance.status === 'PENDING').length})`
             : f === 'medical' ? `Medical (${trip.medicalAlertCount})`
             : `All (${trip.students.length})`}
@@ -150,7 +150,7 @@ export default function SchoolBusDriverTripPage({ params }: { params: Promise<{ 
       </Link>
 
       {visible.length === 0 ? (
-        <div className="p-6 rounded-xl bg-slate-800/40 border border-slate-700 text-center text-sm text-slate-400">
+        <div className="p-6 rounded-xl bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] text-center text-sm text-[var(--text-muted)]">
           {filter === 'pending' ? '✓ All students accounted for.' : 'No students.'}
         </div>
       ) : (
@@ -160,12 +160,12 @@ export default function SchoolBusDriverTripPage({ params }: { params: Promise<{ 
             const isBusy = busy === s.studentId;
             return (
               <div key={s.studentId}
-                className={`p-3 rounded-xl border ${s.hasMedicalAlert ? 'bg-rose-500/10 border-rose-500/40' : 'bg-slate-800/40 border-white/10'}`}>
+                className={`p-3 rounded-xl border ${s.hasMedicalAlert ? 'bg-rose-500/10 border-rose-500/40' : 'bg-[var(--bg-surface)]/40 border-[var(--border-subtle)]'}`}>
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-medium text-sm">{s.name}</span>
-                      <span className="text-[11px] text-slate-400 font-mono">{s.studentCode}</span>
+                      <span className="text-[11px] text-[var(--text-muted)] font-mono">{s.studentCode}</span>
                       {s.hasMedicalAlert && (
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] bg-rose-500/30 text-rose-200 border border-rose-500/60">
                           <AlertTriangle className="w-2.5 h-2.5" /> MEDICAL
@@ -176,12 +176,12 @@ export default function SchoolBusDriverTripPage({ params }: { params: Promise<{ 
                       <div className="text-[11px] text-rose-200 mt-1 italic">{s.medicalNotes}</div>
                     )}
                     {s.pickupStop && (
-                      <div className="text-[11px] text-slate-400 mt-1 inline-flex items-center gap-1">
+                      <div className="text-[11px] text-[var(--text-muted)] mt-1 inline-flex items-center gap-1">
                         <MapPin className="w-3 h-3 text-amber-400" /> {s.pickupStop}
                       </div>
                     )}
                     {s.guardian1Phone && (
-                      <a href={`tel:${s.guardian1Phone}`} className="text-[11px] text-slate-400 mt-0.5 inline-flex items-center gap-1 hover:text-cyan-400">
+                      <a href={`tel:${s.guardian1Phone}`} className="text-[11px] text-[var(--text-muted)] mt-0.5 inline-flex items-center gap-1 hover:text-cyan-400">
                         <Phone className="w-3 h-3" /> {s.guardian1Name ?? 'Guardian'} {s.guardian1Phone}
                       </a>
                     )}
@@ -193,12 +193,12 @@ export default function SchoolBusDriverTripPage({ params }: { params: Promise<{ 
                     className={`py-2 rounded-lg text-[11px] font-medium border disabled:opacity-50 ${
                       status === 'PRESENT'
                         ? 'bg-emerald-600 border-emerald-500 text-white'
-                        : 'bg-slate-900/40 border-white/10 text-slate-300 hover:bg-emerald-500/20 hover:border-emerald-500/40'
+                        : 'bg-[var(--bg-surface)]/40 border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-emerald-500/20 hover:border-emerald-500/40'
                     }`}>
                     {status === 'PRESENT' ? '✓ Boarded' : '✓ Board'}
                   </button>
                   <button onClick={() => scan(s, 'ALIGHTING')} disabled={isBusy || status !== 'PRESENT'}
-                    className="py-2 rounded-lg text-[11px] font-medium bg-slate-900/40 border border-white/10 text-slate-300 hover:bg-cyan-500/20 hover:border-cyan-500/40 disabled:opacity-50">
+                    className="py-2 rounded-lg text-[11px] font-medium bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-cyan-500/20 hover:border-cyan-500/40 disabled:opacity-50">
                     Drop off
                   </button>
                 </div>
@@ -212,11 +212,11 @@ export default function SchoolBusDriverTripPage({ params }: { params: Promise<{ 
 }
 
 function Stat({ value, label, tone = 'slate' }: { value: number; label: string; tone?: string }) {
-  const cls: Record<string, string> = { slate: 'text-white', emerald: 'text-emerald-300', cyan: 'text-cyan-300', rose: 'text-rose-300' };
+  const cls: Record<string, string> = { slate: 'text-[var(--text-main)]', emerald: 'text-emerald-300', cyan: 'text-cyan-300', rose: 'text-rose-300' };
   return (
-    <div className="rounded-lg bg-slate-900/40 p-2 text-center">
+    <div className="rounded-lg bg-[var(--bg-surface)]/40 p-2 text-center">
       <div className={`text-base font-bold ${cls[tone]}`}>{value}</div>
-      <div className="text-[9px] text-slate-500 uppercase">{label}</div>
+      <div className="text-[9px] text-[var(--text-faint)] uppercase">{label}</div>
     </div>
   );
 }

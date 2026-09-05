@@ -80,17 +80,17 @@ function AttendantModal({ att, onClose, onSaved }: {
 
   const f = (label: string, k: keyof typeof form, type = 'text', ph = '') => (
     <div className="space-y-1">
-      <label className="text-xs text-slate-400">{label}</label>
+      <label className="text-xs text-[var(--text-muted)]">{label}</label>
       <input type={type} value={String(form[k])} onChange={set(k)} placeholder={ph}
-        className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-yellow-500/50" />
+        className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50" />
     </div>
   );
 
   const sel = (label: string, k: keyof typeof form, opts: string[], ph = '') => (
     <div className="space-y-1">
-      <label className="text-xs text-slate-400">{label}</label>
+      <label className="text-xs text-[var(--text-muted)]">{label}</label>
       <select value={String(form[k])} onChange={set(k)}
-        className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-yellow-500/50">
+        className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-yellow-500/50">
         {ph && <option value="">{ph}</option>}
         {opts.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
@@ -99,17 +99,17 @@ function AttendantModal({ att, onClose, onSaved }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
-          <h2 className="text-white font-bold">{isEdit ? 'Edit Attendant' : 'Register New Attendant'}</h2>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)]">
+          <h2 className="text-[var(--text-main)] font-bold">{isEdit ? 'Edit Attendant' : 'Register New Attendant'}</h2>
           {isEdit && <span className="text-xs font-mono text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded">{att!.employee_id}</span>}
-          <button onClick={onClose} className="text-slate-500 hover:text-white text-xl">×</button>
+          <button onClick={onClose} className="text-[var(--text-faint)] hover:text-[var(--text-main)] text-xl">×</button>
         </div>
 
         <div className="p-6 space-y-5">
           {/* Personal Info */}
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Personal Information</p>
+            <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Personal Information</p>
             <div className="grid grid-cols-2 gap-4">
               {f('First Name *', 'firstName', 'text', 'e.g. Fatima')}
               {f('Last Name *',  'lastName',  'text', 'e.g. Al Hassan')}
@@ -121,8 +121,8 @@ function AttendantModal({ att, onClose, onSaved }: {
           </div>
 
           {/* Documents */}
-          <div className="rounded-xl bg-slate-800/50 border border-white/5 p-4 space-y-3">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Documents & Certifications</p>
+          <div className="rounded-xl bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] p-4 space-y-3">
+            <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Documents & Certifications</p>
             <div className="grid grid-cols-2 gap-4">
               {f('Emirates ID Number', 'emiratesId', 'text', '784-XXXX-XXXXXXX-X')}
               {f('Emirates ID Expiry', 'emiratesIdExpiry', 'date')}
@@ -133,7 +133,7 @@ function AttendantModal({ att, onClose, onSaved }: {
 
           {/* Assignment */}
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Route Assignment</p>
+            <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Route Assignment</p>
             <div className="grid grid-cols-2 gap-4">
               {f('Route Name', 'routeName', 'text', 'e.g. Dubai Marina Morning Route')}
               {f('Vehicle ID / Plate', 'assignedVehicleId', 'text', 'e.g. DXB-A-12345')}
@@ -144,20 +144,20 @@ function AttendantModal({ att, onClose, onSaved }: {
 
           {/* Notes */}
           <div className="space-y-1">
-            <label className="text-xs text-slate-400">Notes</label>
+            <label className="text-xs text-[var(--text-muted)]">Notes</label>
             <textarea value={form.notes} onChange={set('notes')} rows={2}
               placeholder="Languages spoken, special requirements…"
-              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-yellow-500/50 resize-none" />
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50 resize-none" />
           </div>
 
           {error && <p className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>}
 
           <div className="flex gap-3 pt-2">
-            <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-slate-800 border border-white/10 text-slate-300 text-sm font-semibold hover:bg-slate-700 transition-all">
+            <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-sm font-semibold hover:bg-[var(--bg-surface-hover)] transition-all">
               Cancel
             </button>
             <button onClick={save} disabled={saving}
-              className="flex-1 py-2.5 rounded-xl bg-yellow-500 text-slate-900 text-sm font-bold hover:bg-yellow-400 transition-all disabled:opacity-50">
+              className="flex-1 py-2.5 rounded-xl bg-yellow-500 text-white text-sm font-bold hover:bg-yellow-400 transition-all disabled:opacity-50">
               {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Register Attendant'}
             </button>
           </div>
@@ -212,13 +212,13 @@ export default function AttendantsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">👩 Attendant Registry</h1>
-          <p className="text-slate-400 text-xs mt-0.5">
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">👩 Attendant Registry</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">
             Bus nannies / female attendants — UAE regulatory requirement
           </p>
         </div>
         <button onClick={() => setModal('new')}
-          className="px-5 py-2.5 rounded-xl bg-yellow-500 text-slate-900 font-bold text-sm hover:bg-yellow-400 transition-all">
+          className="px-5 py-2.5 rounded-xl bg-yellow-500 text-white font-bold text-sm hover:bg-yellow-400 transition-all">
           + Register Attendant
         </button>
       </div>
@@ -228,7 +228,7 @@ export default function AttendantsPage() {
         <span className="text-xl flex-shrink-0">⚠️</span>
         <div>
           <p className="text-amber-300 text-sm font-semibold">UAE Regulatory Requirement</p>
-          <p className="text-slate-400 text-xs mt-0.5">
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">
             All school buses operating in the UAE must have a certified female attendant on board at all times when transporting students.
             Ensure Emirates ID and child safety certifications are up to date.
           </p>
@@ -238,45 +238,45 @@ export default function AttendantsPage() {
       {/* KPI Strip */}
       <div className="grid grid-cols-4 gap-4">
         {[
-          { label:'Total Attendants', value: attendants.length, color:'text-white',       icon:'👩' },
+          { label:'Total Attendants', value: attendants.length, color:'text-[var(--text-main)]',       icon:'👩' },
           { label:'Active',           value: active,            color:'text-emerald-400', icon:'✅' },
           { label:'Route Assigned',   value: assigned,          color:'text-blue-400',    icon:'🚌' },
-          { label:'Docs Expiring',    value: expiring,          color: expiring > 0 ? 'text-red-400' : 'text-slate-400', icon:'⚠️' },
+          { label:'Docs Expiring',    value: expiring,          color: expiring > 0 ? 'text-red-400' : 'text-[var(--text-muted)]', icon:'⚠️' },
         ].map(k => (
-          <div key={k.label} className={`rounded-2xl bg-slate-900 border p-4 ${
-            k.label === 'Docs Expiring' && expiring > 0 ? 'border-red-500/30 bg-red-500/5' : 'border-white/10'
+          <div key={k.label} className={`rounded-2xl bg-[var(--bg-surface)] border p-4 ${
+            k.label === 'Docs Expiring' && expiring > 0 ? 'border-red-500/30 bg-red-500/5' : 'border-[var(--border-subtle)]'
           }`}>
             <div className="flex items-center justify-between">
               <span className="text-xl">{k.icon}</span>
               <span className={`text-2xl font-bold ${k.color}`}>{loading ? '…' : k.value}</span>
             </div>
-            <p className="text-slate-500 text-xs mt-1">{k.label}</p>
+            <p className="text-[var(--text-faint)] text-xs mt-1">{k.label}</p>
           </div>
         ))}
       </div>
 
       {/* Search */}
       <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name, employee ID or phone…"
-        className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-yellow-500/50" />
+        className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50" />
 
       {/* Table */}
-      <div className="rounded-2xl bg-slate-900 border border-white/10 overflow-hidden">
+      <div className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] overflow-hidden">
         {loading ? (
-          <div className="p-8 text-center text-slate-500 text-sm">Loading attendants…</div>
+          <div className="p-8 text-center text-[var(--text-faint)] text-sm">Loading attendants…</div>
         ) : attendants.length === 0 ? (
           <div className="p-12 text-center space-y-3">
             <span className="text-5xl">👩</span>
-            <p className="text-slate-400 font-medium">No attendants registered</p>
-            <p className="text-slate-600 text-xs">Register bus attendants to meet UAE compliance requirements</p>
+            <p className="text-[var(--text-muted)] font-medium">No attendants registered</p>
+            <p className="text-[var(--text-faint)] text-xs">Register bus attendants to meet UAE compliance requirements</p>
             <button onClick={() => setModal('new')}
-              className="mt-2 px-5 py-2.5 rounded-xl bg-yellow-500 text-slate-900 font-bold text-sm hover:bg-yellow-400 transition-all">
+              className="mt-2 px-5 py-2.5 rounded-xl bg-yellow-500 text-white font-bold text-sm hover:bg-yellow-400 transition-all">
               + Register First Attendant
             </button>
           </div>
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/10 text-slate-500 text-xs">
+              <tr className="border-b border-[var(--border-subtle)] text-[var(--text-faint)] text-xs">
                 <th className="px-5 py-3 text-left">Employee</th>
                 <th className="px-4 py-3 text-left">Contact</th>
                 <th className="px-4 py-3 text-left">Documents</th>
@@ -287,45 +287,45 @@ export default function AttendantsPage() {
             </thead>
             <tbody className="divide-y divide-white/5">
               {attendants.map(a => (
-                <tr key={a.id} className="hover:bg-white/[0.02] transition-colors">
+                <tr key={a.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                   <td className="px-5 py-3">
-                    <p className="text-white font-semibold">{a.first_name} {a.last_name}</p>
-                    <p className="text-slate-500 text-xs font-mono">{a.employee_id}</p>
-                    {a.nationality && <p className="text-slate-600 text-xs">{a.nationality}</p>}
+                    <p className="text-[var(--text-main)] font-semibold">{a.first_name} {a.last_name}</p>
+                    <p className="text-[var(--text-faint)] text-xs font-mono">{a.employee_id}</p>
+                    {a.nationality && <p className="text-[var(--text-faint)] text-xs">{a.nationality}</p>}
                   </td>
-                  <td className="px-4 py-3 text-xs text-slate-400 space-y-0.5">
+                  <td className="px-4 py-3 text-xs text-[var(--text-muted)] space-y-0.5">
                     {a.phone && <p>📞 {a.phone}</p>}
                     {a.email && <p>✉️ {a.email}</p>}
                   </td>
                   <td className="px-4 py-3 text-xs space-y-1">
                     {a.emirates_id ? (
-                      <div className={`flex items-center gap-1 ${a.eid_expiring_soon ? 'text-red-400' : 'text-slate-400'}`}>
+                      <div className={`flex items-center gap-1 ${a.eid_expiring_soon ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>
                         🪪 {a.emirates_id}
                         {a.eid_expiring_soon && <span className="text-red-400 font-bold">⚠️ EXPIRING</span>}
                       </div>
-                    ) : <span className="text-slate-600">EID not entered</span>}
+                    ) : <span className="text-[var(--text-faint)]">EID not entered</span>}
                     {a.certification_no ? (
-                      <div className={`flex items-center gap-1 ${a.cert_expiring_soon ? 'text-red-400' : 'text-slate-400'}`}>
+                      <div className={`flex items-center gap-1 ${a.cert_expiring_soon ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>
                         📜 {a.certification_no}
                         {a.cert_expiring_soon && <span className="text-red-400 font-bold">⚠️ EXPIRING</span>}
                       </div>
-                    ) : <span className="text-slate-600">Cert not entered</span>}
+                    ) : <span className="text-[var(--text-faint)]">Cert not entered</span>}
                   </td>
-                  <td className="px-4 py-3 text-xs text-slate-400">
+                  <td className="px-4 py-3 text-xs text-[var(--text-muted)]">
                     {a.route_name
-                      ? <p className="text-slate-300">🚌 {a.route_name}</p>
-                      : <span className="text-slate-600">Unassigned</span>
+                      ? <p className="text-[var(--text-muted)]">🚌 {a.route_name}</p>
+                      : <span className="text-[var(--text-faint)]">Unassigned</span>
                     }
                     {a.assigned_vehicle_id && <p className="mt-0.5">🚐 {a.assigned_vehicle_id}</p>}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLOR[a.status] ?? 'bg-slate-700 text-slate-400'}`}>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLOR[a.status] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'}`}>
                       {a.status.replace('_', ' ')}
                     </span>
                   </td>
                   <td className="px-4 py-3">
                     <button onClick={() => setModal(a)}
-                      className="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 text-xs hover:bg-slate-700 transition-all">
+                      className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] text-[var(--text-muted)] text-xs hover:bg-[var(--bg-surface-hover)] transition-all">
                       Edit
                     </button>
                   </td>

@@ -70,7 +70,7 @@ export default function SchoolBusDashboard() {
 
       {loading ? (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[...Array(8)].map((_,i) => <div key={i} className="h-28 bg-slate-800/60 rounded-2xl animate-pulse"/>)}
+          {[...Array(8)].map((_,i) => <div key={i} className="h-28 bg-[var(--bg-surface)]/60 rounded-2xl animate-pulse"/>)}
         </div>
       ) : (
         <>
@@ -113,7 +113,7 @@ export default function SchoolBusDashboard() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-white/10 text-slate-500 text-[11px] uppercase tracking-wider">
+                    <tr className="border-b border-[var(--border-subtle)] text-[var(--text-faint)] text-[11px] uppercase tracking-wider">
                       <th className="text-left py-2 font-medium">Trip</th>
                       <th className="text-left py-2 font-medium">Route</th>
                       <th className="text-left py-2 font-medium">Status</th>
@@ -124,17 +124,17 @@ export default function SchoolBusDashboard() {
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {stats.todayTrips.map(trip => (
-                      <tr key={trip.id} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="py-3 font-mono text-xs text-white">{trip.trip_no ?? trip.id.slice(0,8)}</td>
-                        <td className="py-3 text-slate-300">{trip.route_name ?? '—'}</td>
+                      <tr key={trip.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
+                        <td className="py-3 font-mono text-xs text-[var(--text-main)]">{trip.trip_no ?? trip.id.slice(0,8)}</td>
+                        <td className="py-3 text-[var(--text-muted)]">{trip.route_name ?? '—'}</td>
                         <td className="py-3"><StatusPill status={trip.status} /></td>
-                        <td className="py-3 text-slate-400 text-xs">
+                        <td className="py-3 text-[var(--text-muted)] text-xs">
                           {trip.departure_time ? new Date(trip.departure_time).toLocaleTimeString('en-AE', { hour:'2-digit', minute:'2-digit' }) : '—'}
                         </td>
-                        <td className="py-3 text-slate-400 text-xs">
+                        <td className="py-3 text-[var(--text-muted)] text-xs">
                           {trip.arrival_time ? new Date(trip.arrival_time).toLocaleTimeString('en-AE', { hour:'2-digit', minute:'2-digit' }) : '—'}
                         </td>
-                        <td className="py-3 text-slate-300 text-xs">{trip.vehicle_plate ?? '—'}</td>
+                        <td className="py-3 text-[var(--text-muted)] text-xs">{trip.vehicle_plate ?? '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -142,8 +142,8 @@ export default function SchoolBusDashboard() {
               </div>
             ) : (
               <div className="text-center py-8">
-                <Calendar className="w-10 h-10 text-slate-600 mx-auto mb-2" />
-                <p className="text-slate-400 text-sm">No trips scheduled for today</p>
+                <Calendar className="w-10 h-10 text-[var(--text-faint)] mx-auto mb-2" />
+                <p className="text-[var(--text-muted)] text-sm">No trips scheduled for today</p>
               </div>
             )}
           </Panel>
@@ -157,12 +157,12 @@ export default function SchoolBusDashboard() {
               const Icon = link.icon;
               return (
                 <Link key={link.href} href={link.href}
-                  className="rounded-2xl bg-slate-900/60 border border-white/10 hover:border-amber-500/30 hover:bg-amber-500/5 transition-all p-5 group block">
+                  className="rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] hover:border-amber-500/30 hover:bg-amber-500/5 transition-all p-5 group block">
                   <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center mb-3">
                     <Icon className="w-5 h-5 text-amber-300" />
                   </div>
-                  <h3 className="text-sm font-semibold text-white group-hover:text-amber-300 transition-colors">{link.label}</h3>
-                  <p className="text-xs text-slate-500 mt-1">{link.desc}</p>
+                  <h3 className="text-sm font-semibold text-[var(--text-main)] group-hover:text-amber-300 transition-colors">{link.label}</h3>
+                  <p className="text-xs text-[var(--text-faint)] mt-1">{link.desc}</p>
                 </Link>
               );
             })}

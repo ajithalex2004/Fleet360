@@ -48,8 +48,8 @@ const DUBAI_CENTER = { lat: 25.2048, lng: 55.2708 };
 const STATUS_CONFIG: Record<string, { color: string; bg: string; border: string; label: string; dot: string }> = {
   EN_ROUTE:  { color: 'text-green-400',  bg: 'bg-green-500/15',  border: 'border-green-500/30',  dot: 'bg-green-400',  label: 'En Route'  },
   AT_STOP:   { color: 'text-blue-400',   bg: 'bg-blue-500/15',   border: 'border-blue-500/30',   dot: 'bg-blue-400',   label: 'At Stop'   },
-  IDLE:      { color: 'text-slate-400',  bg: 'bg-slate-500/15',  border: 'border-slate-500/30',  dot: 'bg-slate-400',  label: 'Idle'      },
-  OFFLINE:   { color: 'text-slate-600',  bg: 'bg-slate-800/50',  border: 'border-slate-700',     dot: 'bg-slate-600',  label: 'Offline'   },
+  IDLE:      { color: 'text-[var(--text-muted)]',  bg: 'bg-slate-500/15',  border: 'border-slate-500/30',  dot: 'bg-slate-400',  label: 'Idle'      },
+  OFFLINE:   { color: 'text-[var(--text-faint)]',  bg: 'bg-[var(--bg-surface)]/50',  border: 'border-[var(--border-subtle)]',     dot: 'bg-[var(--bg-surface-hover)]',  label: 'Offline'   },
   BREAKDOWN: { color: 'text-red-400',    bg: 'bg-red-500/15',    border: 'border-red-500/30',    dot: 'bg-red-400',    label: 'Breakdown' },
 };
 
@@ -85,7 +85,7 @@ function MapCanvas({ positions, selected, onSelect }: MapProps) {
   });
 
   return (
-    <div className="relative w-full h-full bg-slate-900 rounded-xl border border-white/10 overflow-hidden">
+    <div className="relative w-full h-full bg-[var(--bg-surface)] rounded-xl border border-[var(--border-subtle)] overflow-hidden">
       {/* Map background grid */}
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full" style={{ minHeight: 400 }}>
         {/* Water background */}
@@ -158,7 +158,7 @@ function MapCanvas({ positions, selected, onSelect }: MapProps) {
       </svg>
 
       {/* Map attribution */}
-      <div className="absolute bottom-2 right-3 text-[10px] text-slate-600">
+      <div className="absolute bottom-2 right-3 text-[10px] text-[var(--text-faint)]">
         Live positions · refreshes every 15s · UAE (Dubai region)
       </div>
 
@@ -167,7 +167,7 @@ function MapCanvas({ positions, selected, onSelect }: MapProps) {
         {Object.entries(STATUS_CONFIG).map(([k, v]) => (
           <div key={k} className="flex items-center gap-1.5">
             <div className={`w-2 h-2 rounded-full ${v.dot}`} />
-            <span className="text-[10px] text-slate-400">{v.label}</span>
+            <span className="text-[10px] text-[var(--text-muted)]">{v.label}</span>
           </div>
         ))}
       </div>
@@ -182,26 +182,26 @@ function VehicleCard({ v, selected, onSelect }: { v: VehiclePosition; selected: 
     <button
       onClick={onSelect}
       className={`w-full text-left px-3 py-3 rounded-lg border transition-all ${
-        selected ? `${cfg.bg} ${cfg.border} border` : 'bg-slate-900 border-white/5 hover:bg-slate-800'
+        selected ? `${cfg.bg} ${cfg.border} border` : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]'
       }`}
     >
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-sm font-semibold text-white">{v.vehicle_plate ?? v.vehicle_id}</span>
+        <span className="text-sm font-semibold text-[var(--text-main)]">{v.vehicle_plate ?? v.vehicle_id}</span>
         <span className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.color} border ${cfg.border}`}>
           <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
           {cfg.label}
         </span>
       </div>
-      {v.route_name && <p className="text-xs text-slate-400 mb-1">🗺️ {v.route_name}</p>}
-      <div className="flex gap-3 text-xs text-slate-500">
+      {v.route_name && <p className="text-xs text-[var(--text-muted)] mb-1">🗺️ {v.route_name}</p>}
+      <div className="flex gap-3 text-xs text-[var(--text-faint)]">
         <span>👨‍✈️ {v.driver_name ?? 'No driver'}</span>
         <span>👧 {v.students_onboard} aboard</span>
         <span>⚡ {Math.round(v.speed_kmh)} km/h</span>
       </div>
       {v.next_stop_name && (
-        <p className="mt-1 text-xs text-slate-500">→ {v.next_stop_name} · ETA {fmtTime(v.next_stop_eta)}</p>
+        <p className="mt-1 text-xs text-[var(--text-faint)]">→ {v.next_stop_name} · ETA {fmtTime(v.next_stop_eta)}</p>
       )}
-      <p className="mt-0.5 text-[10px] text-slate-600">{sinceStr(v.seconds_since_ping)}</p>
+      <p className="mt-0.5 text-[10px] text-[var(--text-faint)]">{sinceStr(v.seconds_since_ping)}</p>
     </button>
   );
 }
@@ -210,67 +210,67 @@ function VehicleCard({ v, selected, onSelect }: { v: VehiclePosition; selected: 
 function DetailPanel({ v, onClose }: { v: VehiclePosition; onClose: () => void }) {
   const cfg = STATUS_CONFIG[v.status] ?? STATUS_CONFIG['IDLE'];
   return (
-    <div className="bg-slate-900 border border-white/10 rounded-xl p-4 space-y-3">
+    <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4 space-y-3">
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="text-base font-bold text-white">{v.vehicle_plate ?? v.vehicle_id}</h3>
+          <h3 className="text-base font-bold text-[var(--text-main)]">{v.vehicle_plate ?? v.vehicle_id}</h3>
           <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.color} border ${cfg.border}`}>
             <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} /> {cfg.label}
           </span>
         </div>
-        <button onClick={onClose} className="text-slate-500 hover:text-white text-xl leading-none">×</button>
+        <button onClick={onClose} className="text-[var(--text-faint)] hover:text-[var(--text-main)] text-xl leading-none">×</button>
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-sm">
-        <div className="bg-slate-800 rounded-lg p-2">
-          <p className="text-slate-500 text-xs mb-0.5">Route</p>
-          <p className="text-white font-medium">{v.route_name ?? '—'}</p>
+        <div className="bg-[var(--bg-surface)] rounded-lg p-2">
+          <p className="text-[var(--text-faint)] text-xs mb-0.5">Route</p>
+          <p className="text-[var(--text-main)] font-medium">{v.route_name ?? '—'}</p>
         </div>
-        <div className="bg-slate-800 rounded-lg p-2">
-          <p className="text-slate-500 text-xs mb-0.5">Speed</p>
-          <p className="text-white font-medium">{Math.round(v.speed_kmh)} km/h</p>
+        <div className="bg-[var(--bg-surface)] rounded-lg p-2">
+          <p className="text-[var(--text-faint)] text-xs mb-0.5">Speed</p>
+          <p className="text-[var(--text-main)] font-medium">{Math.round(v.speed_kmh)} km/h</p>
         </div>
-        <div className="bg-slate-800 rounded-lg p-2">
-          <p className="text-slate-500 text-xs mb-0.5">Students Aboard</p>
-          <p className="text-white font-medium">{v.students_onboard}</p>
+        <div className="bg-[var(--bg-surface)] rounded-lg p-2">
+          <p className="text-[var(--text-faint)] text-xs mb-0.5">Students Aboard</p>
+          <p className="text-[var(--text-main)] font-medium">{v.students_onboard}</p>
         </div>
-        <div className="bg-slate-800 rounded-lg p-2">
-          <p className="text-slate-500 text-xs mb-0.5">Heading</p>
-          <p className="text-white font-medium">{v.heading_deg}°</p>
+        <div className="bg-[var(--bg-surface)] rounded-lg p-2">
+          <p className="text-[var(--text-faint)] text-xs mb-0.5">Heading</p>
+          <p className="text-[var(--text-main)] font-medium">{v.heading_deg}°</p>
         </div>
-        <div className="bg-slate-800 rounded-lg p-2">
-          <p className="text-slate-500 text-xs mb-0.5">GPS</p>
-          <p className="text-white font-mono text-xs">{v.lat.toFixed(5)}, {v.lng.toFixed(5)}</p>
+        <div className="bg-[var(--bg-surface)] rounded-lg p-2">
+          <p className="text-[var(--text-faint)] text-xs mb-0.5">GPS</p>
+          <p className="text-[var(--text-main)] font-mono text-xs">{v.lat.toFixed(5)}, {v.lng.toFixed(5)}</p>
         </div>
-        <div className="bg-slate-800 rounded-lg p-2">
-          <p className="text-slate-500 text-xs mb-0.5">Last Ping</p>
-          <p className="text-white font-medium">{sinceStr(v.seconds_since_ping)}</p>
+        <div className="bg-[var(--bg-surface)] rounded-lg p-2">
+          <p className="text-[var(--text-faint)] text-xs mb-0.5">Last Ping</p>
+          <p className="text-[var(--text-main)] font-medium">{sinceStr(v.seconds_since_ping)}</p>
         </div>
       </div>
 
       {v.next_stop_name && (
         <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-2">
           <p className="text-xs text-blue-400 mb-0.5">Next Stop</p>
-          <p className="text-sm text-white font-medium">{v.next_stop_name}</p>
+          <p className="text-sm text-[var(--text-main)] font-medium">{v.next_stop_name}</p>
           <p className="text-xs text-blue-300">ETA {fmtTime(v.next_stop_eta)}</p>
         </div>
       )}
 
       <div className="space-y-1.5 text-sm">
-        <div className="flex justify-between text-slate-400">
-          <span>👨‍✈️ Driver</span><span className="text-white">{v.driver_name ?? 'Unassigned'}</span>
+        <div className="flex justify-between text-[var(--text-muted)]">
+          <span>👨‍✈️ Driver</span><span className="text-[var(--text-main)]">{v.driver_name ?? 'Unassigned'}</span>
         </div>
-        <div className="flex justify-between text-slate-400">
-          <span>👩 Attendant</span><span className="text-white">{v.attendant_name ?? 'Unassigned'}</span>
+        <div className="flex justify-between text-[var(--text-muted)]">
+          <span>👩 Attendant</span><span className="text-[var(--text-main)]">{v.attendant_name ?? 'Unassigned'}</span>
         </div>
         {v.trip_status && (
           <>
-            <div className="flex justify-between text-slate-400">
-              <span>🛤️ Trip Status</span><span className="text-white">{v.trip_status}</span>
+            <div className="flex justify-between text-[var(--text-muted)]">
+              <span>🛤️ Trip Status</span><span className="text-[var(--text-main)]">{v.trip_status}</span>
             </div>
-            <div className="flex justify-between text-slate-400">
+            <div className="flex justify-between text-[var(--text-muted)]">
               <span>📍 Stops</span>
-              <span className="text-white">{v.stops_completed ?? 0}/{v.stops_total ?? 0}</span>
+              <span className="text-[var(--text-main)]">{v.stops_completed ?? 0}/{v.stops_total ?? 0}</span>
             </div>
           </>
         )}
@@ -364,10 +364,10 @@ export default function LiveMapPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">🛰️ Live Fleet Map</h1>
-          <p className="text-slate-400 text-xs mt-0.5">
+          <h1 className="text-2xl font-bold text-[var(--text-main)] flex items-center gap-2">🛰️ Live Fleet Map</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">
             Real-time GPS positions · UAE School Bus Fleet
-            {lastRefresh && <span className="ml-2 text-slate-600">· updated {lastRefresh.toLocaleTimeString('en-AE')}</span>}
+            {lastRefresh && <span className="ml-2 text-[var(--text-faint)]">· updated {lastRefresh.toLocaleTimeString('en-AE')}</span>}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -375,7 +375,7 @@ export default function LiveMapPage() {
             <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse" />
             LIVE · 15s refresh
           </span>
-          <button onClick={fetchPositions} className="bg-slate-800 hover:bg-slate-700 text-white text-sm px-4 py-2 rounded-lg transition-colors border border-white/10">
+          <button onClick={fetchPositions} className="bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-sm px-4 py-2 rounded-lg transition-colors border border-[var(--border-subtle)]">
             ⟳ Refresh
           </button>
         </div>
@@ -385,17 +385,17 @@ export default function LiveMapPage() {
       {summary && (
         <div className="grid grid-cols-7 gap-2">
           {[
-            { label: 'Total', val: summary.total,    color: 'text-white',         bg: 'bg-slate-800'       },
+            { label: 'Total', val: summary.total,    color: 'text-[var(--text-main)]',         bg: 'bg-[var(--bg-surface)]'       },
             { label: 'Online', val: summary.online,  color: 'text-green-400',     bg: 'bg-green-500/10'    },
             { label: 'En Route', val: summary.enRoute, color: 'text-green-400',   bg: 'bg-green-500/10'    },
             { label: 'At Stop', val: summary.atStop, color: 'text-blue-400',      bg: 'bg-blue-500/10'     },
-            { label: 'Idle',    val: summary.idle,   color: 'text-slate-400',     bg: 'bg-slate-700/50'    },
-            { label: 'Offline', val: summary.offline,color: 'text-slate-500',     bg: 'bg-slate-800/50'    },
+            { label: 'Idle',    val: summary.idle,   color: 'text-[var(--text-muted)]',     bg: 'bg-[var(--bg-surface-hover)]/50'    },
+            { label: 'Offline', val: summary.offline,color: 'text-[var(--text-faint)]',     bg: 'bg-[var(--bg-surface)]/50'    },
             { label: 'Breakdown', val: summary.breakdown, color: 'text-red-400',  bg: 'bg-red-500/10'      },
           ].map(k => (
-            <div key={k.label} className={`${k.bg} border border-white/5 rounded-xl p-3 text-center`}>
+            <div key={k.label} className={`${k.bg} border border-[var(--border-subtle)] rounded-xl p-3 text-center`}>
               <p className={`text-2xl font-bold ${k.color}`}>{k.val}</p>
-              <p className="text-xs text-slate-500 mt-0.5">{k.label}</p>
+              <p className="text-xs text-[var(--text-faint)] mt-0.5">{k.label}</p>
             </div>
           ))}
         </div>
@@ -417,10 +417,10 @@ export default function LiveMapPage() {
         {/* Map */}
         <div className="flex-1 min-h-0">
           {loading ? (
-            <div className="h-full bg-slate-900 rounded-xl border border-white/10 flex items-center justify-center">
+            <div className="h-full bg-[var(--bg-surface)] rounded-xl border border-[var(--border-subtle)] flex items-center justify-center">
               <div className="text-center">
                 <div className="w-8 h-8 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-                <p className="text-slate-400 text-sm">Loading fleet positions…</p>
+                <p className="text-[var(--text-muted)] text-sm">Loading fleet positions…</p>
               </div>
             </div>
           ) : (
@@ -443,7 +443,7 @@ export default function LiveMapPage() {
                 className={`text-xs px-2.5 py-1 rounded-full transition-colors border ${
                   filterStatus === s
                     ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30'
-                    : 'bg-slate-800 text-slate-400 border-white/5 hover:border-white/20'
+                    : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
                 }`}
               >
                 {s === '' ? 'All' : STATUS_CONFIG[s]?.label ?? s}
@@ -460,11 +460,11 @@ export default function LiveMapPage() {
           <div className="space-y-2">
             {loading ? (
               Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="h-20 bg-slate-800 rounded-lg animate-pulse" />
+                <div key={i} className="h-20 bg-[var(--bg-surface)] rounded-lg animate-pulse" />
               ))
             ) : visiblePositions.length === 0 ? (
-              <div className="bg-slate-900 border border-white/5 rounded-xl p-6 text-center">
-                <p className="text-slate-500 text-sm">No vehicles match the current filter</p>
+              <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-6 text-center">
+                <p className="text-[var(--text-faint)] text-sm">No vehicles match the current filter</p>
               </div>
             ) : (
               visiblePositions.map(v => (
@@ -481,8 +481,8 @@ export default function LiveMapPage() {
       </div>
 
       {/* Info banner */}
-      <div className="bg-slate-800/40 border border-white/5 rounded-xl p-3 text-xs text-slate-500">
-        <span className="font-semibold text-slate-400">💡 Integration note:</span> In production, replace the SVG map with Mapbox GL JS or Google Maps API for interactive tiles. Telematics units POST to <code className="bg-slate-700 px-1 rounded">/api/school-bus/fleet-positions</code> every 10–30 seconds. Positions expire from the live view after 5 minutes of no ping.
+      <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-xl p-3 text-xs text-[var(--text-faint)]">
+        <span className="font-semibold text-[var(--text-muted)]">💡 Integration note:</span> In production, replace the SVG map with Mapbox GL JS or Google Maps API for interactive tiles. Telematics units POST to <code className="bg-[var(--bg-surface-hover)] px-1 rounded">/api/school-bus/fleet-positions</code> every 10–30 seconds. Positions expire from the live view after 5 minutes of no ping.
       </div>
     </div>
   );

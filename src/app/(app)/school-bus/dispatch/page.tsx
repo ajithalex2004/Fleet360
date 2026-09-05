@@ -38,12 +38,12 @@ interface SBRoute {
 type Session = 'MORNING' | 'AFTERNOON' | 'ALL';
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; border: string; dot: string; label: string }> = {
-  SCHEDULED:   { color:'text-slate-300',  bg:'bg-slate-800/60',   border:'border-white/10',      dot:'bg-slate-500',   label:'Scheduled' },
+  SCHEDULED:   { color:'text-[var(--text-muted)]',  bg:'bg-[var(--bg-surface)]/60',   border:'border-[var(--border-subtle)]',      dot:'bg-slate-500',   label:'Scheduled' },
   ASSIGNED:    { color:'text-blue-300',   bg:'bg-blue-500/5',     border:'border-blue-500/20',   dot:'bg-blue-500',    label:'Assigned' },
   IN_PROGRESS: { color:'text-cyan-300',   bg:'bg-cyan-500/5',     border:'border-cyan-500/30',   dot:'bg-cyan-400',    label:'On Route' },
   COMPLETED:   { color:'text-emerald-300',bg:'bg-emerald-500/5',  border:'border-emerald-500/20',dot:'bg-emerald-500', label:'Completed' },
   DELAYED:     { color:'text-orange-300', bg:'bg-orange-500/5',   border:'border-orange-500/30', dot:'bg-orange-500 animate-pulse', label:'Delayed' },
-  CANCELLED:   { color:'text-slate-500',  bg:'bg-slate-900/40',   border:'border-white/5',       dot:'bg-slate-700',   label:'Cancelled' },
+  CANCELLED:   { color:'text-[var(--text-faint)]',  bg:'bg-[var(--bg-surface)]/40',   border:'border-[var(--border-subtle)]',       dot:'bg-[var(--bg-surface-hover)]',   label:'Cancelled' },
 };
 
 /* ── Departure countdown ────────────────────────────────────────────────────── */
@@ -60,7 +60,7 @@ function DepartureTimer({ scheduledAt, status }: { scheduledAt?: string; status:
 
   if (status === 'IN_PROGRESS') return <span className="text-cyan-400 text-xs font-bold flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"/>ON ROUTE</span>;
   if (status === 'COMPLETED')   return <span className="text-emerald-400 text-xs font-bold">✅ DONE</span>;
-  if (!scheduledAt)             return <span className="text-slate-500 text-xs">No time set</span>;
+  if (!scheduledAt)             return <span className="text-[var(--text-faint)] text-xs">No time set</span>;
 
   const abs  = Math.abs(diff);
   const hrs  = Math.floor(abs / 3600);
@@ -75,7 +75,7 @@ function DepartureTimer({ scheduledAt, status }: { scheduledAt?: string; status:
     </span>
   );
   return (
-    <span className={`text-xs font-bold font-mono ${soon ? 'text-amber-400' : 'text-slate-400'}`}>
+    <span className={`text-xs font-bold font-mono ${soon ? 'text-amber-400' : 'text-[var(--text-muted)]'}`}>
       {hrs > 0 ? `${String(hrs).padStart(2,'0')}:` : ''}{String(mins).padStart(2,'0')}:{String(secs).padStart(2,'0')}
     </span>
   );
@@ -96,7 +96,7 @@ function ComplianceBar({ route }: { route: SBRoute }) {
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-xs">
-        <span className="text-slate-500">UAE Compliance</span>
+        <span className="text-[var(--text-faint)]">UAE Compliance</span>
         <span className={`font-bold ${allGood ? 'text-emerald-400' : 'text-amber-400'}`}>{passed}/{checks.length}</span>
       </div>
       <div className="flex gap-1">
@@ -138,13 +138,13 @@ function RouteCard({ route, onAction, actionLoading }: {
             <div className={`mt-1 w-3 h-3 rounded-full flex-shrink-0 ${cfg.dot}`}/>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                <h3 className="text-white font-semibold text-sm">{route.name}</h3>
+                <h3 className="text-[var(--text-main)] font-semibold text-sm">{route.name}</h3>
                 <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${cfg.bg} ${cfg.color} border ${cfg.border}`}>
                   {cfg.label}
                 </span>
                 {isActive && <span className="text-[10px] text-cyan-400 flex items-center gap-1"><span className="w-1 h-1 rounded-full bg-cyan-400 animate-pulse"/>LIVE</span>}
               </div>
-              {route.school_name && <p className="text-slate-500 text-xs">🏫 {route.school_name}</p>}
+              {route.school_name && <p className="text-[var(--text-faint)] text-xs">🏫 {route.school_name}</p>}
             </div>
           </div>
           <DepartureTimer scheduledAt={route.scheduled_departure} status={route.status} />
@@ -152,42 +152,42 @@ function RouteCard({ route, onAction, actionLoading }: {
 
         {/* Stats grid */}
         <div className="grid grid-cols-4 gap-2">
-          <div className="bg-slate-800/70 rounded-xl p-2.5 text-center">
-            <p className="text-white font-bold text-base">{route.student_count ?? 0}</p>
-            <p className="text-slate-600 text-[10px]">Students</p>
+          <div className="bg-[var(--bg-surface)]/70 rounded-xl p-2.5 text-center">
+            <p className="text-[var(--text-main)] font-bold text-base">{route.student_count ?? 0}</p>
+            <p className="text-[var(--text-faint)] text-[10px]">Students</p>
           </div>
-          <div className="bg-slate-800/70 rounded-xl p-2.5 text-center">
-            <p className="text-white font-bold text-base">{route.total_stops ?? 0}</p>
-            <p className="text-slate-600 text-[10px]">Stops</p>
+          <div className="bg-[var(--bg-surface)]/70 rounded-xl p-2.5 text-center">
+            <p className="text-[var(--text-main)] font-bold text-base">{route.total_stops ?? 0}</p>
+            <p className="text-[var(--text-faint)] text-[10px]">Stops</p>
           </div>
-          <div className="bg-slate-800/70 rounded-xl p-2.5 text-center">
-            <p className="text-white font-bold text-base">{route.vehicle?.capacity ?? '—'}</p>
-            <p className="text-slate-600 text-[10px]">Capacity</p>
+          <div className="bg-[var(--bg-surface)]/70 rounded-xl p-2.5 text-center">
+            <p className="text-[var(--text-main)] font-bold text-base">{route.vehicle?.capacity ?? '—'}</p>
+            <p className="text-[var(--text-faint)] text-[10px]">Capacity</p>
           </div>
-          <div className="bg-slate-800/70 rounded-xl p-2.5 text-center">
+          <div className="bg-[var(--bg-surface)]/70 rounded-xl p-2.5 text-center">
             <p className={`font-bold text-base ${(route.student_count ?? 0) > (route.vehicle?.capacity ?? 999) ? 'text-red-400' : 'text-emerald-400'}`}>
               {route.vehicle?.capacity ? `${Math.round(((route.student_count ?? 0) / route.vehicle.capacity) * 100)}%` : '—'}
             </p>
-            <p className="text-slate-600 text-[10px]">Load</p>
+            <p className="text-[var(--text-faint)] text-[10px]">Load</p>
           </div>
         </div>
 
         {/* Vehicle & Driver */}
         <div className="space-y-1.5 text-xs">
           <div className="flex items-center gap-2">
-            <span className="text-slate-500 w-12 flex-shrink-0">🚌 Bus</span>
+            <span className="text-[var(--text-faint)] w-12 flex-shrink-0">🚌 Bus</span>
             {route.vehicle ? (
-              <span className="text-slate-300 font-mono">{route.vehicle.plate_number}</span>
+              <span className="text-[var(--text-muted)] font-mono">{route.vehicle.plate_number}</span>
             ) : (
               <span className="text-orange-400">⚠ Not assigned</span>
             )}
-            {route.vehicle && <span className="text-slate-500">{route.vehicle.make} {route.vehicle.model}</span>}
+            {route.vehicle && <span className="text-[var(--text-faint)]">{route.vehicle.make} {route.vehicle.model}</span>}
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-slate-500 w-12 flex-shrink-0">👤 Driver</span>
+            <span className="text-[var(--text-faint)] w-12 flex-shrink-0">👤 Driver</span>
             {route.driver ? (
               <>
-                <span className="text-slate-300">{route.driver.name}</span>
+                <span className="text-[var(--text-muted)]">{route.driver.name}</span>
                 {route.driver.phone && (
                   <a href={`tel:${route.driver.phone}`} className="text-blue-400 hover:text-blue-300 ml-auto">📞</a>
                 )}
@@ -202,23 +202,23 @@ function RouteCard({ route, onAction, actionLoading }: {
         <ComplianceBar route={route} />
 
         {/* Expand toggle */}
-        <button onClick={() => setExpanded(e => !e)} className="text-slate-600 text-[10px] hover:text-slate-400 transition-colors">
+        <button onClick={() => setExpanded(e => !e)} className="text-[var(--text-faint)] text-[10px] hover:text-[var(--text-muted)] transition-colors">
           {expanded ? '▲ Hide timing' : '▼ Timing details'}
         </button>
 
         {expanded && (
-          <div className="grid grid-cols-3 gap-2 text-xs bg-slate-800/40 rounded-xl p-3">
+          <div className="grid grid-cols-3 gap-2 text-xs bg-[var(--bg-surface)]/40 rounded-xl p-3">
             <div>
-              <p className="text-slate-500 mb-0.5">Scheduled</p>
-              <p className="text-slate-300 font-mono">{route.scheduled_departure ? new Date(route.scheduled_departure).toLocaleTimeString('en-AE', {hour:'2-digit',minute:'2-digit'}) : '—'}</p>
+              <p className="text-[var(--text-faint)] mb-0.5">Scheduled</p>
+              <p className="text-[var(--text-muted)] font-mono">{route.scheduled_departure ? new Date(route.scheduled_departure).toLocaleTimeString('en-AE', {hour:'2-digit',minute:'2-digit'}) : '—'}</p>
             </div>
             <div>
-              <p className="text-slate-500 mb-0.5">Departed</p>
-              <p className="text-slate-300 font-mono">{route.actual_departure ? new Date(route.actual_departure).toLocaleTimeString('en-AE', {hour:'2-digit',minute:'2-digit'}) : '—'}</p>
+              <p className="text-[var(--text-faint)] mb-0.5">Departed</p>
+              <p className="text-[var(--text-muted)] font-mono">{route.actual_departure ? new Date(route.actual_departure).toLocaleTimeString('en-AE', {hour:'2-digit',minute:'2-digit'}) : '—'}</p>
             </div>
             <div>
-              <p className="text-slate-500 mb-0.5">Arrived</p>
-              <p className="text-slate-300 font-mono">{route.actual_arrival ? new Date(route.actual_arrival).toLocaleTimeString('en-AE', {hour:'2-digit',minute:'2-digit'}) : '—'}</p>
+              <p className="text-[var(--text-faint)] mb-0.5">Arrived</p>
+              <p className="text-[var(--text-muted)] font-mono">{route.actual_arrival ? new Date(route.actual_arrival).toLocaleTimeString('en-AE', {hour:'2-digit',minute:'2-digit'}) : '—'}</p>
             </div>
           </div>
         )}
@@ -245,12 +245,12 @@ function RouteCard({ route, onAction, actionLoading }: {
           </button>
         )}
         {!canAutoAssign && !canStart && !canComplete && (
-          <div className="flex-1 py-2.5 rounded-xl bg-slate-800/40 border border-white/5 text-slate-600 text-xs font-semibold text-center">
+          <div className="flex-1 py-2.5 rounded-xl bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] text-[var(--text-faint)] text-xs font-semibold text-center">
             {route.status === 'COMPLETED' ? '✅ Trip completed' : route.status === 'CANCELLED' ? 'Cancelled' : 'Awaiting assignment'}
           </div>
         )}
         <Link href={`/school-bus/routes/${route.id}`}
-          className="px-3 py-2.5 rounded-xl bg-slate-800 border border-white/10 text-slate-400 text-xs hover:text-white hover:bg-slate-700 transition-all flex-shrink-0">
+          className="px-3 py-2.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-xs hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] transition-all flex-shrink-0">
           Details →
         </Link>
         {(route.status === 'IN_PROGRESS' || route.status === 'ASSIGNED') && (
@@ -362,14 +362,14 @@ export default function SchoolBusDispatchBoard() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">🚦 School Bus Dispatch Board</h1>
-          <p className="text-slate-400 text-xs mt-0.5">
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">🚦 School Bus Dispatch Board</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">
             Morning / Afternoon coordination · Route assignment · Departure management
           </p>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
           <button onClick={load}
-            className="px-4 py-2 rounded-xl bg-slate-800 border border-white/10 text-slate-300 text-sm hover:bg-slate-700 transition-all">
+            className="px-4 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-sm hover:bg-[var(--bg-surface-hover)] transition-all">
             ↻ Refresh
           </button>
           <Link href="/school-bus/routes/new"
@@ -393,7 +393,7 @@ export default function SchoolBusDispatchBoard() {
               <span className="text-2xl">{k.icon}</span>
               <span className={`text-3xl font-bold ${k.color}`}>{loading ? '…' : k.value}</span>
             </div>
-            <p className="text-slate-400 text-xs font-medium mt-2">{k.label}</p>
+            <p className="text-[var(--text-muted)] text-xs font-medium mt-2">{k.label}</p>
           </div>
         ))}
       </div>
@@ -407,7 +407,7 @@ export default function SchoolBusDispatchBoard() {
               <p className="text-amber-300 font-semibold text-sm">
                 {unassigned} route{unassigned > 1 ? 's' : ''} missing vehicle or driver assignment
               </p>
-              <p className="text-slate-500 text-xs mt-0.5">
+              <p className="text-[var(--text-faint)] text-xs mt-0.5">
                 Use Auto-Assign on each route or manually assign vehicle and driver before departure.
               </p>
             </div>
@@ -426,13 +426,13 @@ export default function SchoolBusDispatchBoard() {
       {/* Session + Status filters */}
       <div className="flex items-center gap-4 flex-wrap">
         {/* Session tabs */}
-        <div className="flex bg-slate-900 border border-white/10 rounded-xl p-1 gap-0.5">
+        <div className="flex bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-1 gap-0.5">
           {(['MORNING', 'AFTERNOON', 'ALL'] as Session[]).map(s => (
             <button key={s} onClick={() => setSession(s)}
               className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 session === s
                   ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                  : 'text-slate-400 hover:text-white'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
               }`}>
               {s === 'MORNING' ? '🌅 Morning' : s === 'AFTERNOON' ? '🌇 Afternoon' : '📋 All Sessions'}
             </button>
@@ -448,7 +448,7 @@ export default function SchoolBusDispatchBoard() {
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
                   filter === s
                     ? 'bg-blue-600/30 text-blue-300 border-blue-500/40'
-                    : 'bg-slate-900 border-white/10 text-slate-400 hover:border-white/20 hover:text-white'
+                    : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text-main)]'
                 }`}>
                 {s === 'IN_PROGRESS' ? 'On Route' : s === 'ALL' ? 'All' : s.charAt(0) + s.slice(1).toLowerCase()}
                 {count > 0 && <span className="ml-1.5 text-[10px] opacity-70">{count}</span>}
@@ -461,13 +461,13 @@ export default function SchoolBusDispatchBoard() {
       {/* Route cards */}
       {loading ? (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[...Array(6)].map((_, i) => <div key={i} className="h-64 bg-slate-900 border border-white/5 rounded-2xl animate-pulse"/>)}
+          {[...Array(6)].map((_, i) => <div key={i} className="h-64 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl animate-pulse"/>)}
         </div>
       ) : displayRoutes.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl bg-slate-900 border border-white/10 h-64 gap-3">
+        <div className="flex flex-col items-center justify-center rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] h-64 gap-3">
           <span className="text-5xl">🚌</span>
-          <p className="text-white font-semibold">No routes for this filter</p>
-          <p className="text-slate-500 text-sm">Try switching session or status filter</p>
+          <p className="text-[var(--text-main)] font-semibold">No routes for this filter</p>
+          <p className="text-[var(--text-faint)] text-sm">Try switching session or status filter</p>
           <Link href="/school-bus/routes/new"
             className="px-4 py-2 rounded-xl bg-amber-500/20 border border-amber-500/30 text-amber-400 text-sm font-semibold hover:bg-amber-500/30 transition-all">
             + Create Route
@@ -482,8 +482,8 @@ export default function SchoolBusDispatchBoard() {
       )}
 
       {/* UAE Compliance reminder */}
-      <div className="rounded-2xl bg-slate-900 border border-white/10 p-5">
-        <p className="text-slate-300 font-semibold text-sm mb-3">🇦🇪 UAE Regulatory Compliance Checklist</p>
+      <div className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-5">
+        <p className="text-[var(--text-muted)] font-semibold text-sm mb-3">🇦🇪 UAE Regulatory Compliance Checklist</p>
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             { icon:'📹', title:'CCTV Operational',    desc:'All cameras functional before departure' },
@@ -491,12 +491,12 @@ export default function SchoolBusDispatchBoard() {
             { icon:'📡', title:'GPS Tracking Active', desc:'Live vehicle location must be transmitting' },
             { icon:'📋', title:'Student Manifest',    desc:'Attendance confirmed against roster' },
           ].map(c => (
-            <div key={c.title} className="bg-slate-800/40 rounded-xl p-3.5">
+            <div key={c.title} className="bg-[var(--bg-surface)]/40 rounded-xl p-3.5">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-lg">{c.icon}</span>
-                <p className="text-slate-300 text-xs font-semibold">{c.title}</p>
+                <p className="text-[var(--text-muted)] text-xs font-semibold">{c.title}</p>
               </div>
-              <p className="text-slate-500 text-[10px] leading-relaxed">{c.desc}</p>
+              <p className="text-[var(--text-faint)] text-[10px] leading-relaxed">{c.desc}</p>
             </div>
           ))}
         </div>
@@ -510,10 +510,10 @@ export default function SchoolBusDispatchBoard() {
           { href:'/school-bus/route-planner',icon:'✨', label:'Route Optimizer',     desc:'AI-powered stop sequencing' },
         ].map(l => (
           <Link key={l.href} href={l.href}
-            className="rounded-2xl bg-slate-900 border border-white/10 p-5 hover:border-amber-500/30 hover:bg-amber-500/5 transition-all group">
+            className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-5 hover:border-amber-500/30 hover:bg-amber-500/5 transition-all group">
             <span className="text-2xl block mb-3">{l.icon}</span>
-            <p className="text-white font-semibold text-sm group-hover:text-amber-300 transition-colors">{l.label}</p>
-            <p className="text-slate-500 text-xs mt-0.5">{l.desc}</p>
+            <p className="text-[var(--text-main)] font-semibold text-sm group-hover:text-amber-300 transition-colors">{l.label}</p>
+            <p className="text-[var(--text-faint)] text-xs mt-0.5">{l.desc}</p>
           </Link>
         ))}
       </div>

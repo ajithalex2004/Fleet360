@@ -21,8 +21,8 @@ function Badge({ label, color }: { label: string; color: string }) {
 function Input({ label, ...p }: React.InputHTMLAttributes<HTMLInputElement> & { label?: string }) {
   return (
     <div className="space-y-1">
-      {label && <label className="text-xs text-slate-400">{label}</label>}
-      <input {...p} className={`w-full bg-slate-800/80 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-yellow-500/50 ${p.className ?? ''}`} />
+      {label && <label className="text-xs text-[var(--text-muted)]">{label}</label>}
+      <input {...p} className={`w-full bg-[var(--bg-surface)]/80 border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50 ${p.className ?? ''}`} />
     </div>
   );
 }
@@ -30,8 +30,8 @@ function Input({ label, ...p }: React.InputHTMLAttributes<HTMLInputElement> & { 
 function Select({ label, children, ...p }: React.SelectHTMLAttributes<HTMLSelectElement> & { label?: string }) {
   return (
     <div className="space-y-1">
-      {label && <label className="text-xs text-slate-400">{label}</label>}
-      <select {...p} className={`w-full bg-slate-800/80 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-yellow-500/50 ${p.className ?? ''}`}>
+      {label && <label className="text-xs text-[var(--text-muted)]">{label}</label>}
+      <select {...p} className={`w-full bg-[var(--bg-surface)]/80 border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-yellow-500/50 ${p.className ?? ''}`}>
         {children}
       </select>
     </div>
@@ -85,11 +85,11 @@ function StudentModal({ student, routes, onClose, onSaved }: ModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}>
-        <div className="sticky top-0 bg-slate-900 border-b border-white/10 px-6 py-4 flex items-center justify-between z-10">
-          <h2 className="text-white font-semibold">{isEdit ? 'Edit Student' : 'Enroll New Student'}</h2>
-          <button onClick={onClose} className="text-slate-500 hover:text-white text-xl">✕</button>
+        <div className="sticky top-0 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] px-6 py-4 flex items-center justify-between z-10">
+          <h2 className="text-[var(--text-main)] font-semibold">{isEdit ? 'Edit Student' : 'Enroll New Student'}</h2>
+          <button onClick={onClose} className="text-[var(--text-faint)] hover:text-[var(--text-main)] text-xl">✕</button>
         </div>
 
         <div className="px-6 py-5 space-y-6">
@@ -148,16 +148,16 @@ function StudentModal({ student, routes, onClose, onSaved }: ModalProps) {
             <p className="text-xs text-yellow-400 font-semibold uppercase tracking-wider mb-3">Medical / Special Notes</p>
             <textarea value={form.medicalNotes} onChange={set('medicalNotes')}
               rows={2} placeholder="Allergies, medical conditions, special requirements…"
-              className="w-full bg-slate-800/80 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-yellow-500/50 resize-none" />
+              className="w-full bg-[var(--bg-surface)]/80 border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50 resize-none" />
           </div>
 
           {error && <p className="text-red-400 text-xs bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{error}</p>}
         </div>
 
-        <div className="sticky bottom-0 bg-slate-900 border-t border-white/10 px-6 py-4 flex justify-end gap-3">
-          <button onClick={onClose} className="text-sm text-slate-400 hover:text-white px-4 py-2 rounded-lg border border-white/10 hover:border-white/20 transition-colors">Cancel</button>
+        <div className="sticky bottom-0 bg-[var(--bg-surface)] border-t border-[var(--border-subtle)] px-6 py-4 flex justify-end gap-3">
+          <button onClick={onClose} className="text-sm text-[var(--text-muted)] hover:text-[var(--text-main)] px-4 py-2 rounded-lg border border-[var(--border-subtle)] hover:border-[var(--border-strong)] transition-colors">Cancel</button>
           <button onClick={save} disabled={saving}
-            className="text-sm font-semibold bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-slate-900 px-5 py-2 rounded-lg transition-colors">
+            className="text-sm font-semibold bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-white px-5 py-2 rounded-lg transition-colors">
             {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Enroll Student'}
           </button>
         </div>
@@ -173,9 +173,9 @@ function StudentDrawer({ student, onClose, onEdit, onArchive }: {
   function Row({ label, value }: { label: string; value?: string | null }) {
     if (!value) return null;
     return (
-      <div className="flex justify-between py-2 border-b border-white/5 text-sm">
-        <span className="text-slate-500">{label}</span>
-        <span className="text-slate-200 text-right max-w-[60%]">{value}</span>
+      <div className="flex justify-between py-2 border-b border-[var(--border-subtle)] text-sm">
+        <span className="text-[var(--text-faint)]">{label}</span>
+        <span className="text-[var(--text-main)] text-right max-w-[60%]">{value}</span>
       </div>
     );
   }
@@ -186,27 +186,27 @@ function StudentDrawer({ student, onClose, onEdit, onArchive }: {
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
-      <div className="w-full max-w-md h-full bg-slate-900 border-l border-white/10 overflow-y-auto shadow-2xl"
+      <div className="w-full max-w-md h-full bg-[var(--bg-surface)] border-l border-[var(--border-subtle)] overflow-y-auto shadow-2xl"
         onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className="px-6 py-5 border-b border-white/10 flex items-start justify-between gap-4">
+        <div className="px-6 py-5 border-b border-[var(--border-subtle)] flex items-start justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-yellow-400 to-amber-500 flex items-center justify-center text-2xl font-bold text-slate-900">
               {student.firstName[0]}{student.lastName[0]}
             </div>
             <div>
-              <h2 className="text-white font-bold text-lg">{student.fullName}</h2>
-              <p className="text-slate-400 text-xs">{student.studentCode}</p>
+              <h2 className="text-[var(--text-main)] font-bold text-lg">{student.fullName}</h2>
+              <p className="text-[var(--text-muted)] text-xs">{student.studentCode}</p>
               <div className="flex gap-2 mt-1">
                 {student.isActive
                   ? <Badge label="Active" color="bg-emerald-500/20 text-emerald-300" />
-                  : <Badge label="Archived" color="bg-slate-700 text-slate-400" />}
+                  : <Badge label="Archived" color="bg-[var(--bg-surface-hover)] text-[var(--text-muted)]" />}
                 {student.grade && <Badge label={`${student.grade}${student.section ? ` ${student.section}` : ''}`} color="bg-yellow-500/20 text-yellow-300" />}
                 {student.rfidCard && <Badge label="RFID" color="bg-purple-500/20 text-purple-300" />}
               </div>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-white text-xl flex-shrink-0">✕</button>
+          <button onClick={onClose} className="text-[var(--text-faint)] hover:text-[var(--text-main)] text-xl flex-shrink-0">✕</button>
         </div>
 
         <div className="px-6 py-4 space-y-5">
@@ -251,7 +251,7 @@ function StudentDrawer({ student, onClose, onEdit, onArchive }: {
           {student.medicalNotes && (
             <div>
               <p className="text-xs text-yellow-400 font-semibold uppercase tracking-wider mb-2">Medical Notes</p>
-              <p className="text-sm text-slate-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{student.medicalNotes}</p>
+              <p className="text-sm text-[var(--text-muted)] bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{student.medicalNotes}</p>
             </div>
           )}
         </div>
@@ -263,7 +263,7 @@ function StudentDrawer({ student, onClose, onEdit, onArchive }: {
           </button>
           {student.isActive && (
             <button onClick={onArchive}
-              className="flex-1 text-sm font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-white/10 px-4 py-2.5 rounded-xl transition-colors">
+              className="flex-1 text-sm font-semibold bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border border-[var(--border-subtle)] px-4 py-2.5 rounded-xl transition-colors">
               📦 Archive
             </button>
           )}
@@ -344,11 +344,11 @@ export default function SchoolBusStudentsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Student Registry</h1>
-          <p className="text-slate-400 text-xs mt-0.5">Enroll students, assign routes, manage guardian contacts</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Student Registry</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Enroll students, assign routes, manage guardian contacts</p>
         </div>
         <button onClick={() => { setEditStudent(null); setShowModal(true); }}
-          className="bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-semibold px-4 py-2 rounded-xl text-sm transition-colors flex items-center gap-2">
+          className="bg-yellow-500 hover:bg-yellow-400 text-white font-semibold px-4 py-2 rounded-xl text-sm transition-colors flex items-center gap-2">
           + Enroll Student
         </button>
       </div>
@@ -357,12 +357,12 @@ export default function SchoolBusStudentsPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { icon: '👧', label: 'Active Students', value: statActive,  color: 'text-yellow-300' },
-          { icon: '🗺️', label: 'No Route Assigned', value: statNoRoute, color: statNoRoute > 0 ? 'text-amber-400' : 'text-slate-400' },
-          { icon: '📡', label: 'No RFID Card',    value: statNoRfid,  color: statNoRfid > 0 ? 'text-amber-400' : 'text-slate-400' },
-          { icon: '🏥', label: 'Medical Notes',   value: statMedical, color: statMedical > 0 ? 'text-red-400' : 'text-slate-400' },
+          { icon: '🗺️', label: 'No Route Assigned', value: statNoRoute, color: statNoRoute > 0 ? 'text-amber-400' : 'text-[var(--text-muted)]' },
+          { icon: '📡', label: 'No RFID Card',    value: statNoRfid,  color: statNoRfid > 0 ? 'text-amber-400' : 'text-[var(--text-muted)]' },
+          { icon: '🏥', label: 'Medical Notes',   value: statMedical, color: statMedical > 0 ? 'text-red-400' : 'text-[var(--text-muted)]' },
         ].map(s => (
-          <div key={s.label} className="bg-slate-900/60 border border-white/10 rounded-2xl p-4">
-            <p className="text-xs text-slate-500">{s.icon} {s.label}</p>
+          <div key={s.label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4">
+            <p className="text-xs text-[var(--text-faint)]">{s.icon} {s.label}</p>
             <p className={`text-2xl font-bold mt-1 ${s.color}`}>{s.value}</p>
           </div>
         ))}
@@ -372,21 +372,21 @@ export default function SchoolBusStudentsPage() {
       <div className="flex flex-wrap gap-3">
         <input type="text" placeholder="Search by name, ID, RFID, phone…"
           value={search} onChange={e => handleSearch(e.target.value)}
-          className="flex-1 min-w-[220px] bg-slate-800/60 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-yellow-500/40" />
+          className="flex-1 min-w-[220px] bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/40" />
         <select value={filterActive} onChange={e => { setFilterActive(e.target.value as typeof filterActive); setPage(1); load(search, filterRoute, filterGrade, e.target.value as typeof filterActive, 1); }}
-          className="bg-slate-800/60 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none">
+          className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] focus:outline-none">
           <option value="true">Active</option>
           <option value="false">Archived</option>
           <option value="all">All</option>
         </select>
         <select value={filterRoute} onChange={e => { setFilterRoute(e.target.value); setPage(1); load(search, e.target.value, filterGrade, filterActive, 1); }}
-          className="bg-slate-800/60 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none">
+          className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] focus:outline-none">
           <option value="">All Routes</option>
           {routes.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>
         {grades.length > 0 && (
           <select value={filterGrade} onChange={e => { setFilterGrade(e.target.value); setPage(1); load(search, filterRoute, e.target.value, filterActive, 1); }}
-            className="bg-slate-800/60 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none">
+            className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-sm text-[var(--text-main)] focus:outline-none">
             <option value="">All Grades</option>
             {grades.map(g => <option key={g} value={g}>{g}</option>)}
           </select>
@@ -394,27 +394,27 @@ export default function SchoolBusStudentsPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden">
-        <div className="px-5 py-3 border-b border-white/10 flex items-center justify-between">
-          <span className="text-sm font-medium text-slate-300">{total} student{total !== 1 ? 's' : ''}</span>
-          <button onClick={() => load()} className="text-xs text-slate-400 hover:text-white border border-white/10 px-3 py-1.5 rounded-lg hover:border-white/20 transition-colors">↺ Refresh</button>
+      <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
+        <div className="px-5 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
+          <span className="text-sm font-medium text-[var(--text-muted)]">{total} student{total !== 1 ? 's' : ''}</span>
+          <button onClick={() => load()} className="text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] border border-[var(--border-subtle)] px-3 py-1.5 rounded-lg hover:border-[var(--border-strong)] transition-colors">↺ Refresh</button>
         </div>
 
         {loading ? (
           <div className="animate-pulse p-4 space-y-3">
-            {[...Array(5)].map((_, i) => <div key={i} className="h-12 bg-slate-800 rounded-xl" />)}
+            {[...Array(5)].map((_, i) => <div key={i} className="h-12 bg-[var(--bg-surface)] rounded-xl" />)}
           </div>
         ) : students.length === 0 ? (
           <div className="py-16 text-center">
             <div className="text-5xl mb-3">👧</div>
-            <p className="text-slate-400 text-sm">No students found</p>
-            <p className="text-slate-600 text-xs mt-1">Try adjusting the filters or enroll a new student</p>
+            <p className="text-[var(--text-muted)] text-sm">No students found</p>
+            <p className="text-[var(--text-faint)] text-xs mt-1">Try adjusting the filters or enroll a new student</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/5 text-xs text-slate-500 uppercase tracking-wider">
+                <tr className="border-b border-[var(--border-subtle)] text-xs text-[var(--text-faint)] uppercase tracking-wider">
                   <th className="text-left px-5 py-3">Student</th>
                   <th className="text-left px-3 py-3">Grade</th>
                   <th className="text-left px-3 py-3">Route</th>
@@ -426,50 +426,50 @@ export default function SchoolBusStudentsPage() {
               </thead>
               <tbody className="divide-y divide-white/5">
                 {students.map(s => (
-                  <tr key={s.id} className="hover:bg-white/5 transition-colors cursor-pointer" onClick={() => setViewStudent(s)}>
+                  <tr key={s.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors cursor-pointer" onClick={() => setViewStudent(s)}>
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-yellow-400 to-amber-500 flex items-center justify-center text-xs font-bold text-slate-900 flex-shrink-0">
                           {s.firstName[0]}{s.lastName[0]}
                         </div>
                         <div>
-                          <p className="text-white font-medium">{s.fullName}</p>
-                          <p className="text-slate-500 text-xs">{s.studentCode}</p>
+                          <p className="text-[var(--text-main)] font-medium">{s.fullName}</p>
+                          <p className="text-[var(--text-faint)] text-xs">{s.studentCode}</p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-3 py-3 text-slate-300">
+                    <td className="px-3 py-3 text-[var(--text-muted)]">
                       {s.grade ?? '—'}{s.section ? ` ${s.section}` : ''}
                     </td>
                     <td className="px-3 py-3">
                       {s.routeName
                         ? <span className="text-yellow-300 text-xs bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded-full">{s.routeName}</span>
-                        : <span className="text-slate-600 text-xs">Unassigned</span>}
+                        : <span className="text-[var(--text-faint)] text-xs">Unassigned</span>}
                     </td>
                     <td className="px-3 py-3">
                       <div className="text-xs">
-                        <p className="text-slate-300">{s.guardian1.name ?? '—'}</p>
-                        {s.guardian1.phone && <p className="text-slate-500">{s.guardian1.phone}</p>}
+                        <p className="text-[var(--text-muted)]">{s.guardian1.name ?? '—'}</p>
+                        {s.guardian1.phone && <p className="text-[var(--text-faint)]">{s.guardian1.phone}</p>}
                       </div>
                     </td>
                     <td className="px-3 py-3 text-xs">
                       {s.rfidCard
                         ? <span className="text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-full font-mono">{s.rfidCard}</span>
-                        : <span className="text-slate-600">—</span>}
+                        : <span className="text-[var(--text-faint)]">—</span>}
                     </td>
                     <td className="px-3 py-3">
                       {s.isActive
                         ? <Badge label="Active"   color="bg-emerald-500/20 text-emerald-300" />
-                        : <Badge label="Archived" color="bg-slate-700 text-slate-400" />}
+                        : <Badge label="Archived" color="bg-[var(--bg-surface-hover)] text-[var(--text-muted)]" />}
                       {s.medicalNotes && <Badge label="⚕" color="bg-red-500/20 text-red-400 ml-1" />}
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex gap-1" onClick={e => e.stopPropagation()}>
                         <button onClick={() => { setEditStudent(s); setShowModal(true); }}
-                          className="text-slate-400 hover:text-yellow-300 text-sm px-2 py-1 rounded hover:bg-yellow-500/10 transition-colors">✏️</button>
+                          className="text-[var(--text-muted)] hover:text-yellow-500 text-sm px-2 py-1 rounded hover:bg-yellow-500/10 transition-colors">✏️</button>
                         {s.isActive && (
                           <button onClick={() => handleArchive(s.id)} disabled={archiving === s.id}
-                            className="text-slate-400 hover:text-red-300 text-sm px-2 py-1 rounded hover:bg-red-500/10 transition-colors">
+                            className="text-[var(--text-muted)] hover:text-red-400 text-sm px-2 py-1 rounded hover:bg-red-500/10 transition-colors">
                             {archiving === s.id ? '…' : '📦'}
                           </button>
                         )}
@@ -484,13 +484,13 @@ export default function SchoolBusStudentsPage() {
 
         {/* Pagination */}
         {total > 50 && (
-          <div className="px-5 py-3 border-t border-white/10 flex items-center justify-between text-xs text-slate-400">
+          <div className="px-5 py-3 border-t border-[var(--border-subtle)] flex items-center justify-between text-xs text-[var(--text-muted)]">
             <span>Page {page} of {Math.ceil(total / 50)}</span>
             <div className="flex gap-2">
               <button disabled={page <= 1} onClick={() => { setPage(p => p - 1); load(search, filterRoute, filterGrade, filterActive, page - 1); }}
-                className="disabled:opacity-30 hover:text-white px-3 py-1.5 border border-white/10 rounded-lg transition-colors">← Prev</button>
+                className="disabled:opacity-30 hover:text-[var(--text-main)] px-3 py-1.5 border border-[var(--border-subtle)] rounded-lg transition-colors">← Prev</button>
               <button disabled={page >= Math.ceil(total / 50)} onClick={() => { setPage(p => p + 1); load(search, filterRoute, filterGrade, filterActive, page + 1); }}
-                className="disabled:opacity-30 hover:text-white px-3 py-1.5 border border-white/10 rounded-lg transition-colors">Next →</button>
+                className="disabled:opacity-30 hover:text-[var(--text-main)] px-3 py-1.5 border border-[var(--border-subtle)] rounded-lg transition-colors">Next →</button>
             </div>
           </div>
         )}

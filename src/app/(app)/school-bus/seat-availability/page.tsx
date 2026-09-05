@@ -65,7 +65,7 @@ function UtilBar({ pct, status }: { pct: number; status: string }) {
   const cfg = CAP_COLOR[status] ?? CAP_COLOR.OK;
   return (
     <div className="flex items-center gap-2 min-w-[140px]">
-      <div className="flex-1 h-2 rounded-full bg-slate-800 overflow-hidden">
+      <div className="flex-1 h-2 rounded-full bg-[var(--bg-surface)] overflow-hidden">
         <div className={`h-2 rounded-full transition-all ${cfg.bar}`} style={{ width: `${Math.min(100, pct)}%` }} />
       </div>
       <span className={`text-xs font-semibold w-10 text-right ${cfg.text}`}>{pct}%</span>
@@ -167,11 +167,11 @@ export default function SeatAvailabilityPage() {
       {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">💺 Seat Availability</h1>
-          <p className="text-slate-400 text-xs mt-0.5">
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">💺 Seat Availability</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">
             Live capacity across all school bus routes
             {lastSync && (
-              <span className="ml-2 text-slate-600">
+              <span className="ml-2 text-[var(--text-faint)]">
                 · Last updated {lastSync.toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit' })}
               </span>
             )}
@@ -179,7 +179,7 @@ export default function SeatAvailabilityPage() {
         </div>
         <div className="flex items-center gap-3">
           <button onClick={load} disabled={loading}
-            className="px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-slate-400 text-xs hover:text-white transition-all disabled:opacity-40">
+            className="px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-xs hover:text-[var(--text-main)] transition-all disabled:opacity-40">
             {loading ? '⟳ Refreshing…' : '⟳ Refresh'}
           </button>
           <Link href="/school-bus/routes"
@@ -194,11 +194,11 @@ export default function SeatAvailabilityPage() {
         {[
           {
             icon: '🗺️', label: 'Total Routes',
-            value: summary.total, sub: 'active routes', color: 'text-white',
+            value: summary.total, sub: 'active routes', color: 'text-[var(--text-main)]',
           },
           {
             icon: '🪑', label: 'Total Seats',
-            value: totalSeats, sub: `${totalEnrolled} enrolled`, color: 'text-white',
+            value: totalSeats, sub: `${totalEnrolled} enrolled`, color: 'text-[var(--text-main)]',
           },
           {
             icon: '✅', label: 'Seats Available',
@@ -210,34 +210,34 @@ export default function SeatAvailabilityPage() {
           },
           {
             icon: '🚨', label: 'Overloaded',
-            value: summary.overload, sub: 'exceed capacity', color: summary.overload > 0 ? 'text-red-400' : 'text-slate-500',
+            value: summary.overload, sub: 'exceed capacity', color: summary.overload > 0 ? 'text-red-400' : 'text-[var(--text-faint)]',
           },
         ].map(k => (
-          <div key={k.label} className="rounded-2xl bg-slate-900 border border-white/10 p-4">
+          <div key={k.label} className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4">
             <div className="flex items-center justify-between">
               <span className="text-xl">{k.icon}</span>
               <span className={`text-2xl font-bold ${k.color}`}>{loading ? '…' : k.value}</span>
             </div>
-            <p className="text-white text-sm font-semibold mt-1">{k.label}</p>
-            <p className="text-slate-500 text-xs">{k.sub}</p>
+            <p className="text-[var(--text-main)] text-sm font-semibold mt-1">{k.label}</p>
+            <p className="text-[var(--text-faint)] text-xs">{k.sub}</p>
           </div>
         ))}
       </div>
 
       {/* ── Fleet utilisation bar ── */}
-      <div className="rounded-2xl bg-slate-900 border border-white/10 p-5">
+      <div className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-5">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-sm font-semibold text-white">Overall Fleet Utilisation</p>
+          <p className="text-sm font-semibold text-[var(--text-main)]">Overall Fleet Utilisation</p>
           <span className={`text-lg font-bold ${
             overallPct >= 100 ? 'text-red-400' : overallPct >= 90 ? 'text-amber-400' : 'text-emerald-400'
           }`}>{overallPct}%</span>
         </div>
-        <div className="h-3 rounded-full bg-slate-800 overflow-hidden">
+        <div className="h-3 rounded-full bg-[var(--bg-surface)] overflow-hidden">
           <div className={`h-3 rounded-full transition-all ${
             overallPct >= 100 ? 'bg-red-500' : overallPct >= 90 ? 'bg-amber-400' : 'bg-emerald-500'
           }`} style={{ width: `${Math.min(100, overallPct)}%` }} />
         </div>
-        <div className="flex justify-between text-xs text-slate-500 mt-2">
+        <div className="flex justify-between text-xs text-[var(--text-faint)] mt-2">
           <span>{totalEnrolled} enrolled</span>
           <span>{totalFree} seats free</span>
           <span>{totalSeats} total capacity</span>
@@ -266,7 +266,7 @@ export default function SeatAvailabilityPage() {
         <input
           value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search route name or code…"
-          className="bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-yellow-500/50 w-56"
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50 w-56"
         />
 
         {/* Session filter */}
@@ -274,7 +274,7 @@ export default function SeatAvailabilityPage() {
           {[['', 'All Sessions'], ['MORNING', '🌅 Morning'], ['AFTERNOON', '🌇 Afternoon'], ['BOTH', '↕ Both']].map(([v, lbl]) => (
             <button key={v} onClick={() => setSession(v)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                session === v ? 'bg-yellow-500 text-slate-900' : 'bg-slate-900 border border-white/10 text-slate-400 hover:text-white'
+                session === v ? 'bg-yellow-500 text-white' : 'bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)]'
               }`}>
               {lbl}
             </button>
@@ -286,7 +286,7 @@ export default function SeatAvailabilityPage() {
           {[['', 'All Directions'], ['PICKUP', '↑ Pickup'], ['DROPOFF', '↓ Drop-off']].map(([v, lbl]) => (
             <button key={v} onClick={() => setDir(v)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                dir === v ? 'bg-yellow-500 text-slate-900' : 'bg-slate-900 border border-white/10 text-slate-400 hover:text-white'
+                dir === v ? 'bg-yellow-500 text-white' : 'bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)]'
               }`}>
               {lbl}
             </button>
@@ -298,7 +298,7 @@ export default function SeatAvailabilityPage() {
           {[['', 'All Status'], ['OK', '🟢 OK'], ['WARNING', '🟡 Near Full'], ['OVERLOAD', '🔴 Overloaded']].map(([v, lbl]) => (
             <button key={v} onClick={() => setCapFil(v)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                capFil === v ? 'bg-yellow-500 text-slate-900' : 'bg-slate-900 border border-white/10 text-slate-400 hover:text-white'
+                capFil === v ? 'bg-yellow-500 text-white' : 'bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)]'
               }`}>
               {lbl}
             </button>
@@ -310,53 +310,53 @@ export default function SeatAvailabilityPage() {
       {loading ? (
         <div className="space-y-2">
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="h-14 bg-slate-800/50 rounded-xl animate-pulse" />
+            <div key={i} className="h-14 bg-[var(--bg-surface)]/50 rounded-xl animate-pulse" />
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-2xl bg-slate-900 border border-white/10 p-14 text-center space-y-3">
+        <div className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-14 text-center space-y-3">
           <span className="text-5xl">💺</span>
-          <p className="text-slate-400 font-medium">No routes match the selected filters</p>
+          <p className="text-[var(--text-muted)] font-medium">No routes match the selected filters</p>
           <button onClick={() => { setSession(''); setDir(''); setCapFil(''); setSearch(''); }}
-            className="text-xs text-slate-500 hover:text-white underline">Clear all filters</button>
+            className="text-xs text-[var(--text-faint)] hover:text-[var(--text-main)] underline">Clear all filters</button>
         </div>
       ) : (
-        <div className="rounded-2xl bg-slate-900 border border-white/10 overflow-hidden">
+        <div className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/10 bg-slate-800/50">
-                <th className="text-left px-5 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/50">
+                <th className="text-left px-5 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">
                   Route
                 </th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">
                   Session
                 </th>
-                <th className="text-left px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">
                   Direction
                 </th>
-                <th className="text-center px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider cursor-pointer hover:text-white select-none"
+                <th className="text-center px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider cursor-pointer hover:text-[var(--text-main)] select-none"
                   onClick={() => toggleSort('seatCapacity' as typeof sortKey)}>
                   Capacity
                 </th>
-                <th className="text-center px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider cursor-pointer hover:text-white select-none"
+                <th className="text-center px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider cursor-pointer hover:text-[var(--text-main)] select-none"
                   onClick={() => toggleSort('enrolledStudents')}>
                   Enrolled <SortIcon k="enrolledStudents" />
                 </th>
-                <th className="text-center px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider cursor-pointer hover:text-white select-none"
+                <th className="text-center px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider cursor-pointer hover:text-[var(--text-main)] select-none"
                   onClick={() => toggleSort('availableSeats')}>
                   Available <SortIcon k="availableSeats" />
                 </th>
-                <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider cursor-pointer hover:text-white select-none"
+                <th className="px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider cursor-pointer hover:text-[var(--text-main)] select-none"
                   onClick={() => toggleSort('utilisationPct')}>
                   Utilisation <SortIcon k="utilisationPct" />
                 </th>
-                <th className="text-center px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <th className="text-center px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">
                   Status
                 </th>
-                <th className="text-center px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <th className="text-center px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">
                   Attendant
                 </th>
-                <th className="px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">
                   Action
                 </th>
               </tr>
@@ -370,7 +370,7 @@ export default function SeatAvailabilityPage() {
                   ? 'bg-red-500/5 hover:bg-red-500/10'
                   : noAtt
                   ? 'bg-amber-500/5 hover:bg-amber-500/8'
-                  : 'hover:bg-slate-800/40';
+                  : 'hover:bg-[var(--bg-surface)]/40';
 
                 return (
                   <tr key={r.routeId} className={`transition-colors ${rowCls}`}>
@@ -379,7 +379,7 @@ export default function SeatAvailabilityPage() {
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-2">
                         <div>
-                          <p className="text-white font-medium leading-tight">{r.routeName}</p>
+                          <p className="text-[var(--text-main)] font-medium leading-tight">{r.routeName}</p>
                           {r.routeCode && (
                             <span className="font-mono text-[10px] text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 px-1.5 py-0.5 rounded mt-0.5 inline-block">
                               {r.routeCode}
@@ -397,19 +397,19 @@ export default function SeatAvailabilityPage() {
                     </td>
 
                     {/* Direction */}
-                    <td className="px-4 py-4 text-xs text-slate-400">
+                    <td className="px-4 py-4 text-xs text-[var(--text-muted)]">
                       {DIR_LABEL[r.direction] ?? r.direction}
                     </td>
 
                     {/* Capacity */}
                     <td className="px-4 py-4 text-center">
-                      <span className="text-white font-semibold">{r.seatCapacity}</span>
-                      <span className="text-slate-500 text-xs ml-1">seats</span>
+                      <span className="text-[var(--text-main)] font-semibold">{r.seatCapacity}</span>
+                      <span className="text-[var(--text-faint)] text-xs ml-1">seats</span>
                     </td>
 
                     {/* Enrolled */}
                     <td className="px-4 py-4 text-center">
-                      <span className={`font-semibold ${isOver ? 'text-red-400' : 'text-white'}`}>
+                      <span className={`font-semibold ${isOver ? 'text-red-400' : 'text-[var(--text-main)]'}`}>
                         {r.enrolledStudents}
                       </span>
                     </td>
@@ -445,7 +445,7 @@ export default function SeatAvailabilityPage() {
                     {/* Action */}
                     <td className="px-4 py-4">
                       <Link href="/school-bus/routes"
-                        className="text-xs text-slate-500 hover:text-yellow-400 transition-colors">
+                        className="text-xs text-[var(--text-faint)] hover:text-yellow-400 transition-colors">
                         Edit →
                       </Link>
                     </td>
@@ -456,24 +456,24 @@ export default function SeatAvailabilityPage() {
 
             {/* Summary footer */}
             <tfoot>
-              <tr className="border-t border-white/10 bg-slate-800/30">
-                <td colSpan={3} className="px-5 py-3 text-xs text-slate-500 font-semibold">
+              <tr className="border-t border-[var(--border-subtle)] bg-[var(--bg-surface)]/30">
+                <td colSpan={3} className="px-5 py-3 text-xs text-[var(--text-faint)] font-semibold">
                   Showing {filtered.length} of {routes.length} routes
                 </td>
-                <td className="px-4 py-3 text-center text-sm font-bold text-white">{totalSeats}</td>
-                <td className="px-4 py-3 text-center text-sm font-bold text-white">{totalEnrolled}</td>
+                <td className="px-4 py-3 text-center text-sm font-bold text-[var(--text-main)]">{totalSeats}</td>
+                <td className="px-4 py-3 text-center text-sm font-bold text-[var(--text-main)]">{totalEnrolled}</td>
                 <td className="px-4 py-3 text-center">
                   <span className="text-sm font-bold text-emerald-400">{totalFree}</span>
-                  <span className="text-xs text-slate-500 ml-1">free</span>
+                  <span className="text-xs text-[var(--text-faint)] ml-1">free</span>
                 </td>
                 <td colSpan={4} className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden max-w-[120px]">
+                    <div className="flex-1 h-1.5 rounded-full bg-[var(--bg-surface)] overflow-hidden max-w-[120px]">
                       <div className={`h-1.5 rounded-full ${
                         overallPct >= 100 ? 'bg-red-500' : overallPct >= 90 ? 'bg-amber-400' : 'bg-emerald-500'
                       }`} style={{ width: `${Math.min(100, overallPct)}%` }} />
                     </div>
-                    <span className="text-xs text-slate-400">{overallPct}% overall</span>
+                    <span className="text-xs text-[var(--text-muted)]">{overallPct}% overall</span>
                   </div>
                 </td>
               </tr>
@@ -483,8 +483,8 @@ export default function SeatAvailabilityPage() {
       )}
 
       {/* ── Legend ── */}
-      <div className="flex flex-wrap items-center gap-6 text-xs text-slate-500 pt-2">
-        <span className="font-semibold text-slate-400">Legend:</span>
+      <div className="flex flex-wrap items-center gap-6 text-xs text-[var(--text-faint)] pt-2">
+        <span className="font-semibold text-[var(--text-muted)]">Legend:</span>
         <div className="flex items-center gap-1.5">
           <div className="w-3 h-3 rounded-full bg-emerald-500" />
           <span>OK — under 90% full</span>
@@ -501,7 +501,7 @@ export default function SeatAvailabilityPage() {
           <span className="text-red-400 font-bold">MISSING</span>
           <span>— No female attendant (UAE violation)</span>
         </div>
-        <span className="ml-auto text-slate-600">Auto-refreshes every 60 seconds</span>
+        <span className="ml-auto text-[var(--text-faint)]">Auto-refreshes every 60 seconds</span>
       </div>
     </div>
   );

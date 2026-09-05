@@ -79,7 +79,7 @@ const CAP_CFG: Record<string, { color: string; bg: string; border: string; label
 
 /* ─────────────────────── sub-components ─────────────────── */
 function CapacityBar({ cap }: { cap?: CapRoute }) {
-  if (!cap) return <p className="text-xs text-slate-600">No data</p>;
+  if (!cap) return <p className="text-xs text-[var(--text-faint)]">No data</p>;
   const cfg = CAP_CFG[cap.capacityStatus];
   return (
     <div className="space-y-1.5">
@@ -89,7 +89,7 @@ function CapacityBar({ cap }: { cap?: CapRoute }) {
           {cfg.label}
         </span>
       </div>
-      <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
+      <div className="h-1.5 rounded-full bg-[var(--bg-surface)] overflow-hidden">
         <div className={`h-1.5 rounded-full transition-all ${
           cap.capacityStatus === 'OVERLOAD' ? 'bg-red-500' :
           cap.capacityStatus === 'WARNING'  ? 'bg-amber-400' : 'bg-emerald-500'
@@ -210,8 +210,8 @@ function RouteModal({ route, options, onClose, onSaved }: {
     finally { setSaving(false); }
   }
 
-  const inp = 'w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-yellow-500/50';
-  const lbl = 'text-xs text-slate-400 mb-1 block';
+  const inp = 'w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50';
+  const lbl = 'text-xs text-[var(--text-muted)] mb-1 block';
 
   /* ── Vehicle / Driver / Attendant dropdown helper ── */
   function VehicleSelect({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
@@ -264,26 +264,26 @@ function RouteModal({ route, options, onClose, onSaved }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 sticky top-0 bg-slate-900 z-10">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)] sticky top-0 bg-[var(--bg-surface)] z-10">
           <div>
-            <h2 className="text-white font-bold">{isEdit ? 'Edit Route' : 'New Route'}</h2>
+            <h2 className="text-[var(--text-main)] font-bold">{isEdit ? 'Edit Route' : 'New Route'}</h2>
             {isEdit && route?.route_code && (
               <p className="text-xs text-yellow-400 mt-0.5 font-mono">{route.route_code}</p>
             )}
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-white text-xl leading-none">×</button>
+          <button onClick={onClose} className="text-[var(--text-faint)] hover:text-[var(--text-main)] text-xl leading-none">×</button>
         </div>
 
         {/* Tabs — only shown in edit mode */}
         {isEdit && (
-          <div className="flex border-b border-white/10 px-6">
+          <div className="flex border-b border-[var(--border-subtle)] px-6">
             {(['details', 'reassign'] as const).map(t => (
               <button key={t} onClick={() => { setTab(t); setError(''); }}
                 className={`py-3 px-4 text-sm font-semibold border-b-2 transition-colors ${
-                  tab === t ? 'border-yellow-500 text-yellow-400' : 'border-transparent text-slate-500 hover:text-white'
+                  tab === t ? 'border-yellow-500 text-yellow-400' : 'border-transparent text-[var(--text-faint)] hover:text-[var(--text-main)]'
                 }`}>
                 {t === 'details' ? '📋 Route Details' : '🔄 Reassign Resources'}
               </button>
@@ -362,8 +362,8 @@ function RouteModal({ route, options, onClose, onSaved }: {
               </div>
 
               {/* Resource Assignment */}
-              <div className="rounded-xl bg-slate-800/50 border border-white/5 p-4 space-y-3">
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Resource Assignment</p>
+              <div className="rounded-xl bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] p-4 space-y-3">
+                <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Resource Assignment</p>
                 <div className="grid grid-cols-3 gap-3">
                   <VehicleSelect
                     label="Vehicle / Bus"
@@ -390,19 +390,19 @@ function RouteModal({ route, options, onClose, onSaved }: {
 
               {/* Stop Sequence Engine */}
               <div className="space-y-3">
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Stop Sequence Engine</p>
+                <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Stop Sequence Engine</p>
                 {stops.map((s, i) => (
-                  <div key={i} className="flex items-center gap-2 bg-slate-800/50 rounded-xl px-3 py-2">
-                    <span className="w-6 h-6 rounded-full bg-slate-700 text-slate-300 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                  <div key={i} className="flex items-center gap-2 bg-[var(--bg-surface)]/50 rounded-xl px-3 py-2">
+                    <span className="w-6 h-6 rounded-full bg-[var(--bg-surface-hover)] text-[var(--text-muted)] flex items-center justify-center text-xs font-bold flex-shrink-0">
                       {s.sequence}
                     </span>
-                    <span className="flex-1 text-sm text-white">{s.stopName}</span>
-                    {s.pickupTime && <span className="text-xs text-slate-500">{s.pickupTime}</span>}
+                    <span className="flex-1 text-sm text-[var(--text-main)]">{s.stopName}</span>
+                    {s.pickupTime && <span className="text-xs text-[var(--text-faint)]">{s.pickupTime}</span>}
                     <div className="flex gap-1">
                       <button onClick={() => moveStop(i, -1)} disabled={i === 0}
-                        className="w-5 h-5 rounded bg-slate-700 text-slate-400 text-xs disabled:opacity-30">↑</button>
+                        className="w-5 h-5 rounded bg-[var(--bg-surface-hover)] text-[var(--text-muted)] text-xs disabled:opacity-30">↑</button>
                       <button onClick={() => moveStop(i, 1)} disabled={i === stops.length - 1}
-                        className="w-5 h-5 rounded bg-slate-700 text-slate-400 text-xs disabled:opacity-30">↓</button>
+                        className="w-5 h-5 rounded bg-[var(--bg-surface-hover)] text-[var(--text-muted)] text-xs disabled:opacity-30">↓</button>
                       <button onClick={() => removeStop(i)}
                         className="w-5 h-5 rounded bg-red-500/20 text-red-400 text-xs">×</button>
                     </div>
@@ -410,10 +410,10 @@ function RouteModal({ route, options, onClose, onSaved }: {
                 ))}
                 <div className="flex gap-2">
                   <input value={newStop.stopName} onChange={e => setNewStop(n => ({ ...n, stopName: e.target.value }))}
-                    placeholder="Stop name…" className="flex-1 bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-yellow-500/50"
+                    placeholder="Stop name…" className="flex-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50"
                     onKeyDown={e => e.key === 'Enter' && addStop()} />
                   <input type="time" value={newStop.pickupTime} onChange={e => setNewStop(n => ({ ...n, pickupTime: e.target.value }))}
-                    className="w-28 bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-yellow-500/50" />
+                    className="w-28 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-yellow-500/50" />
                   <button onClick={addStop}
                     className="px-3 py-2 rounded-lg bg-yellow-500/20 text-yellow-400 text-sm border border-yellow-500/30 hover:bg-yellow-500/30 transition-all">
                     + Add
@@ -427,31 +427,31 @@ function RouteModal({ route, options, onClose, onSaved }: {
           {tab === 'reassign' && isEdit && (
             <>
               {/* Current assignment summary */}
-              <div className="rounded-xl bg-slate-800/50 border border-white/10 p-4 space-y-2">
-                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Current Assignment</p>
+              <div className="rounded-xl bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] p-4 space-y-2">
+                <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Current Assignment</p>
                 {route?.vehicle_reg && (
                   <div className="flex items-center gap-2 text-sm">
-                    <span className="text-slate-400 w-20">Vehicle</span>
-                    <span className="text-white font-mono">{route.vehicle_reg}</span>
-                    {route.vehicle_type && <span className="text-xs text-slate-500">{route.vehicle_type}</span>}
+                    <span className="text-[var(--text-muted)] w-20">Vehicle</span>
+                    <span className="text-[var(--text-main)] font-mono">{route.vehicle_reg}</span>
+                    {route.vehicle_type && <span className="text-xs text-[var(--text-faint)]">{route.vehicle_type}</span>}
                   </div>
                 )}
                 {route?.driver_name && (
                   <div className="flex items-center gap-2 text-sm">
-                    <span className="text-slate-400 w-20">Driver</span>
-                    <span className="text-white">{route.driver_name}</span>
+                    <span className="text-[var(--text-muted)] w-20">Driver</span>
+                    <span className="text-[var(--text-main)]">{route.driver_name}</span>
                   </div>
                 )}
                 {route?.assigned_attendant_id && (
                   <div className="flex items-center gap-2 text-sm">
-                    <span className="text-slate-400 w-20">Attendant</span>
-                    <span className="text-white">
+                    <span className="text-[var(--text-muted)] w-20">Attendant</span>
+                    <span className="text-[var(--text-main)]">
                       {options.attendants.find(a => a.id === route.assigned_attendant_id)?.full_name ?? route.assigned_attendant_id}
                     </span>
                   </div>
                 )}
                 {!route?.vehicle_reg && !route?.driver_name && !route?.assigned_attendant_id && (
-                  <p className="text-xs text-slate-500">No resources currently assigned to this route.</p>
+                  <p className="text-xs text-[var(--text-faint)]">No resources currently assigned to this route.</p>
                 )}
               </div>
 
@@ -495,7 +495,7 @@ function RouteModal({ route, options, onClose, onSaved }: {
                   <label className={lbl}>Notes (optional)</label>
                   <textarea value={reassign.notes} onChange={setR('notes')} rows={2}
                     placeholder="Additional notes about this reassignment…"
-                    className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-yellow-500/50 resize-none" />
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50 resize-none" />
                 </div>
               </div>
 
@@ -515,17 +515,17 @@ function RouteModal({ route, options, onClose, onSaved }: {
           {/* Footer Buttons */}
           <div className="flex gap-3 pt-2">
             <button onClick={onClose}
-              className="flex-1 py-2.5 rounded-xl bg-slate-800 border border-white/10 text-slate-300 text-sm font-semibold hover:bg-slate-700 transition-all">
+              className="flex-1 py-2.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-sm font-semibold hover:bg-[var(--bg-surface-hover)] transition-all">
               Cancel
             </button>
             {tab === 'details' ? (
               <button onClick={save} disabled={saving}
-                className="flex-1 py-2.5 rounded-xl bg-yellow-500 text-slate-900 text-sm font-bold hover:bg-yellow-400 transition-all disabled:opacity-50">
+                className="flex-1 py-2.5 rounded-xl bg-yellow-500 text-white text-sm font-bold hover:bg-yellow-400 transition-all disabled:opacity-50">
                 {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Route'}
               </button>
             ) : (
               <button onClick={saveReassign} disabled={saving}
-                className="flex-1 py-2.5 rounded-xl bg-amber-500 text-slate-900 text-sm font-bold hover:bg-amber-400 transition-all disabled:opacity-50">
+                className="flex-1 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-400 transition-all disabled:opacity-50">
                 {saving ? 'Saving…' : '🔄 Confirm Reassignment'}
               </button>
             )}
@@ -595,11 +595,11 @@ export default function SchoolBusRoutesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">🗺️ Routes Management</h1>
-          <p className="text-slate-400 text-xs mt-0.5">Stop sequences · Capacity guard · Driver & Nanny assignment · UAE compliance</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">🗺️ Routes Management</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Stop sequences · Capacity guard · Driver & Nanny assignment · UAE compliance</p>
         </div>
         <button onClick={() => setModal('new')}
-          className="px-5 py-2.5 rounded-xl bg-yellow-500 text-slate-900 font-bold text-sm hover:bg-yellow-400 transition-all">
+          className="px-5 py-2.5 rounded-xl bg-yellow-500 text-white font-bold text-sm hover:bg-yellow-400 transition-all">
           + New Route
         </button>
       </div>
@@ -625,18 +625,18 @@ export default function SchoolBusRoutesPage() {
       {/* Stats */}
       <div className="grid grid-cols-5 gap-4">
         {[
-          { label: 'Total Routes',  value: routes.length,      color: 'text-white',         icon: '🗺️' },
+          { label: 'Total Routes',  value: routes.length,      color: 'text-[var(--text-main)]',         icon: '🗺️' },
           { label: 'Active',        value: activeCount,         color: 'text-emerald-400',   icon: '🟢' },
-          { label: 'Inactive',      value: routes.length - activeCount, color: 'text-slate-400', icon: '⚪' },
+          { label: 'Inactive',      value: routes.length - activeCount, color: 'text-[var(--text-muted)]', icon: '⚪' },
           { label: 'Near Full',     value: Object.values(capacity).filter(c => c.capacityStatus === 'WARNING').length, color: 'text-amber-400', icon: '⚡' },
-          { label: 'Overloaded',    value: overloadCount,       color: overloadCount > 0 ? 'text-red-400' : 'text-slate-400', icon: '🚨' },
+          { label: 'Overloaded',    value: overloadCount,       color: overloadCount > 0 ? 'text-red-400' : 'text-[var(--text-muted)]', icon: '🚨' },
         ].map(k => (
-          <div key={k.label} className="rounded-2xl bg-slate-900 border border-white/10 p-4">
+          <div key={k.label} className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4">
             <div className="flex items-center justify-between">
               <span className="text-xl">{k.icon}</span>
               <span className={`text-2xl font-bold ${k.color}`}>{loading ? '…' : k.value}</span>
             </div>
-            <p className="text-slate-500 text-xs mt-1">{k.label}</p>
+            <p className="text-[var(--text-faint)] text-xs mt-1">{k.label}</p>
           </div>
         ))}
       </div>
@@ -647,7 +647,7 @@ export default function SchoolBusRoutesPage() {
           {['', 'MORNING', 'AFTERNOON', 'BOTH'].map(s => (
             <button key={s} onClick={() => setSession(s)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                session === s ? 'bg-yellow-500 text-slate-900' : 'bg-slate-900 border border-white/10 text-slate-400 hover:text-white'
+                session === s ? 'bg-yellow-500 text-white' : 'bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)]'
               }`}>
               {s || 'All Sessions'}
             </button>
@@ -657,7 +657,7 @@ export default function SchoolBusRoutesPage() {
           {[['', 'All Status'], ['ACTIVE', '🟢 Active'], ['INACTIVE', '⚪ Inactive']].map(([v, label]) => (
             <button key={v} onClick={() => setStatusFil(v)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                statusFil === v ? 'bg-yellow-500 text-slate-900' : 'bg-slate-900 border border-white/10 text-slate-400 hover:text-white'
+                statusFil === v ? 'bg-yellow-500 text-white' : 'bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)]'
               }`}>
               {label}
             </button>
@@ -669,15 +669,15 @@ export default function SchoolBusRoutesPage() {
       {loading ? (
         <div className="space-y-3">
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-24 bg-slate-800/60 rounded-2xl animate-pulse" />
+            <div key={i} className="h-24 bg-[var(--bg-surface)]/60 rounded-2xl animate-pulse" />
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-2xl bg-slate-900 border border-white/10 p-12 text-center space-y-3">
+        <div className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-12 text-center space-y-3">
           <span className="text-5xl">🗺️</span>
-          <p className="text-slate-400 font-medium">No routes found</p>
+          <p className="text-[var(--text-muted)] font-medium">No routes found</p>
           <button onClick={() => setModal('new')}
-            className="mt-2 px-5 py-2.5 rounded-xl bg-yellow-500 text-slate-900 font-bold text-sm hover:bg-yellow-400 transition-all">
+            className="mt-2 px-5 py-2.5 rounded-xl bg-yellow-500 text-white font-bold text-sm hover:bg-yellow-400 transition-all">
             + Create First Route
           </button>
         </div>
@@ -690,10 +690,10 @@ export default function SchoolBusRoutesPage() {
 
             return (
               <div key={route.id} className={`rounded-2xl border transition-all ${
-                isInactive               ? 'bg-slate-900/40 border-white/5 opacity-70' :
+                isInactive               ? 'bg-[var(--bg-surface)]/40 border-[var(--border-subtle)] opacity-70' :
                 cap?.capacityStatus === 'OVERLOAD'        ? 'bg-red-500/5 border-red-500/30' :
                 cap?.complianceStatus === 'NO_ATTENDANT'  ? 'bg-amber-500/5 border-amber-500/20' :
-                'bg-slate-900 border-white/10 hover:border-white/20'
+                'bg-[var(--bg-surface)] border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
               }`}>
                 <div className="p-5">
                   <div className="flex items-start justify-between gap-4">
@@ -701,7 +701,7 @@ export default function SchoolBusRoutesPage() {
                     {/* Left: Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-white font-semibold">{route.route_name}</span>
+                        <span className="text-[var(--text-main)] font-semibold">{route.route_name}</span>
                         {route.route_code && (
                           <span className="font-mono text-xs text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 px-1.5 py-0.5 rounded">
                             {route.route_code}
@@ -710,20 +710,20 @@ export default function SchoolBusRoutesPage() {
                         <span className={`text-xs px-2 py-0.5 rounded-full font-semibold border ${SESSION_COLOR[route.session] ?? ''}`}>
                           {route.session}
                         </span>
-                        <span className="text-xs text-slate-500">{route.route_type}</span>
-                        <span className="text-xs text-slate-500">{route.direction}</span>
+                        <span className="text-xs text-[var(--text-faint)]">{route.route_type}</span>
+                        <span className="text-xs text-[var(--text-faint)]">{route.direction}</span>
                         {/* Active / Inactive badge */}
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
                           route.is_active
                             ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                            : 'bg-slate-700/40 text-slate-500 border-slate-700/40'
+                            : 'bg-[var(--bg-surface-hover)]/40 text-[var(--text-faint)] border-[var(--border-subtle)]/40'
                         }`}>
                           {route.is_active ? '🟢 ACTIVE' : '⚪ INACTIVE'}
                         </span>
                       </div>
 
                       {/* Times & assignment */}
-                      <div className="flex items-center gap-4 mt-2 text-xs text-slate-400 flex-wrap">
+                      <div className="flex items-center gap-4 mt-2 text-xs text-[var(--text-muted)] flex-wrap">
                         <span>🕐 {route.departure_time}{route.arrival_time ? ` → ${route.arrival_time}` : ''}</span>
                         {route.vehicle_reg
                           ? <span>🚌 {route.vehicle_reg} {route.vehicle_type ? `(${route.vehicle_type})` : ''}</span>
@@ -754,12 +754,12 @@ export default function SchoolBusRoutesPage() {
                     <div className="flex items-center gap-2 flex-shrink-0">
                       {route.stop_sequence?.length > 0 && (
                         <button onClick={() => setExpanded(isEx ? null : route.id)}
-                          className="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 text-xs hover:bg-slate-700 transition-all">
+                          className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] text-[var(--text-muted)] text-xs hover:bg-[var(--bg-surface-hover)] transition-all">
                           {isEx ? '▲ Hide' : `▼ ${route.stop_sequence.length} stops`}
                         </button>
                       )}
                       <button onClick={() => setModal(route)}
-                        className="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 text-xs hover:bg-slate-700 transition-all">
+                        className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface)] text-[var(--text-muted)] text-xs hover:bg-[var(--bg-surface-hover)] transition-all">
                         Edit
                       </button>
                       <button onClick={() => { setModal(route); }}
@@ -772,17 +772,17 @@ export default function SchoolBusRoutesPage() {
 
                   {/* Stop sequence expanded view */}
                   {isEx && (
-                    <div className="mt-4 pt-4 border-t border-white/10">
-                      <p className="text-xs text-slate-500 font-semibold uppercase mb-2">Stop Sequence</p>
+                    <div className="mt-4 pt-4 border-t border-[var(--border-subtle)]">
+                      <p className="text-xs text-[var(--text-faint)] font-semibold uppercase mb-2">Stop Sequence</p>
                       <div className="space-y-1.5">
                         {route.stop_sequence.map((s, i) => (
                           <div key={i} className="flex items-center gap-2 text-xs">
-                            <span className="w-5 h-5 rounded-full bg-slate-700 text-slate-300 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                            <span className="w-5 h-5 rounded-full bg-[var(--bg-surface-hover)] text-[var(--text-muted)] flex items-center justify-center text-[10px] font-bold flex-shrink-0">
                               {s.sequence}
                             </span>
                             {s.stopCode && <span className="font-mono text-yellow-400 text-[10px]">{s.stopCode}</span>}
-                            <span className="flex-1 text-slate-300">{s.stopName}</span>
-                            {s.pickupTime && <span className="text-slate-500">{s.pickupTime}</span>}
+                            <span className="flex-1 text-[var(--text-muted)]">{s.stopName}</span>
+                            {s.pickupTime && <span className="text-[var(--text-faint)]">{s.pickupTime}</span>}
                           </div>
                         ))}
                       </div>

@@ -117,18 +117,18 @@ function ScheduleModal({ initial, onSave, onClose }: ModalProps) {
     setSaving(false);
   };
 
-  const labelClass = 'text-xs text-slate-400 mb-1 block';
-  const inputClass = 'w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-yellow-500/50';
+  const labelClass = 'text-xs text-[var(--text-muted)] mb-1 block';
+  const inputClass = 'w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50';
   const selectClass = `${inputClass} cursor-pointer`;
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
-          <h2 className="text-lg font-bold text-white">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)]">
+          <h2 className="text-lg font-bold text-[var(--text-main)]">
             {initial?.id ? '✏️ Edit Schedule' : '➕ New Schedule'}
           </h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-white text-2xl leading-none">×</button>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-2xl leading-none">×</button>
         </div>
 
         <div className="px-6 py-5 space-y-5">
@@ -174,7 +174,7 @@ function ScheduleModal({ initial, onSave, onClose }: ModalProps) {
 
           {/* Week cycle */}
           <div>
-            <p className="text-xs font-semibold text-slate-300 mb-3 uppercase tracking-wider">UAE Week Cycle</p>
+            <p className="text-xs font-semibold text-[var(--text-muted)] mb-3 uppercase tracking-wider">UAE Week Cycle</p>
             <div className="grid grid-cols-2 gap-4 mb-3">
               <div>
                 <label className={labelClass}>Week Type</label>
@@ -199,7 +199,7 @@ function ScheduleModal({ initial, onSave, onClose }: ModalProps) {
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
                     form.activeDays.includes(day)
                       ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'
-                      : 'bg-slate-800 text-slate-500 border-white/5 hover:border-white/20'
+                      : 'bg-[var(--bg-surface)] text-[var(--text-faint)] border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
                   }`}>
                   {DAY_LABELS[day]}
                 </button>
@@ -209,7 +209,7 @@ function ScheduleModal({ initial, onSave, onClose }: ModalProps) {
 
           {/* Timing */}
           <div>
-            <p className="text-xs font-semibold text-slate-300 mb-3 uppercase tracking-wider">Timing & Direction</p>
+            <p className="text-xs font-semibold text-[var(--text-muted)] mb-3 uppercase tracking-wider">Timing & Direction</p>
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className={labelClass}>Departure Time *</label>
@@ -230,7 +230,7 @@ function ScheduleModal({ initial, onSave, onClose }: ModalProps) {
 
           {/* Validity */}
           <div>
-            <p className="text-xs font-semibold text-slate-300 mb-3 uppercase tracking-wider">Validity Period</p>
+            <p className="text-xs font-semibold text-[var(--text-muted)] mb-3 uppercase tracking-wider">Validity Period</p>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={labelClass}>Effective From *</label>
@@ -245,13 +245,13 @@ function ScheduleModal({ initial, onSave, onClose }: ModalProps) {
 
           {/* Exceptions */}
           <div>
-            <p className="text-xs font-semibold text-slate-300 mb-3 uppercase tracking-wider">Exception Dates</p>
+            <p className="text-xs font-semibold text-[var(--text-muted)] mb-3 uppercase tracking-wider">Exception Dates</p>
             <label className={labelClass}>Dates when schedule does NOT run (comma-separated: YYYY-MM-DD)</label>
             <input value={form.exceptionDatesStr}
               onChange={e => set('exceptionDatesStr', e.target.value)}
               placeholder="e.g. 2025-12-02, 2026-01-01, 2026-04-02"
               className={inputClass} />
-            <p className="text-xs text-slate-600 mt-1">UAE public holidays: National Day (Dec 2–3), Eid Al Fitr, Eid Al Adha, Islamic New Year, Prophet's Birthday</p>
+            <p className="text-xs text-[var(--text-faint)] mt-1">UAE public holidays: National Day (Dec 2–3), Eid Al Fitr, Eid Al Adha, Islamic New Year, Prophet's Birthday</p>
           </div>
 
           {/* Notes */}
@@ -263,12 +263,12 @@ function ScheduleModal({ initial, onSave, onClose }: ModalProps) {
           </div>
         </div>
 
-        <div className="flex gap-3 px-6 py-4 border-t border-white/10">
+        <div className="flex gap-3 px-6 py-4 border-t border-[var(--border-subtle)]">
           <button onClick={handleSubmit} disabled={saving || !form.scheduleName.trim() || !form.departureTime}
-            className="flex-1 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 text-slate-900 font-bold py-2.5 rounded-xl text-sm transition-colors">
+            className="flex-1 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 text-white font-bold py-2.5 rounded-xl text-sm transition-colors">
             {saving ? 'Saving…' : initial?.id ? 'Update Schedule' : 'Create Schedule'}
           </button>
-          <button onClick={onClose} className="px-6 bg-slate-800 hover:bg-slate-700 text-white font-medium py-2.5 rounded-xl text-sm transition-colors">
+          <button onClick={onClose} className="px-6 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] font-medium py-2.5 rounded-xl text-sm transition-colors">
             Cancel
           </button>
         </div>
@@ -279,27 +279,27 @@ function ScheduleModal({ initial, onSave, onClose }: ModalProps) {
 
 /* ──────────────────────── ScheduleCard ─────────────────────── */
 function ScheduleCard({ s, onEdit, onDelete }: { s: Schedule; onEdit: () => void; onDelete: () => void }) {
-  const weekBadge    = WEEK_BADGE[s.week_type]    ?? 'bg-slate-700 text-slate-300 border-slate-600';
-  const sessionBadge = SESSION_BADGE[s.session]   ?? 'bg-slate-700 text-slate-300';
+  const weekBadge    = WEEK_BADGE[s.week_type]    ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border-[var(--border-strong)]';
+  const sessionBadge = SESSION_BADGE[s.session]   ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]';
   const isActive = s.status === 'ACTIVE';
 
   return (
-    <div className={`bg-slate-900 border rounded-xl p-4 transition-all ${
+    <div className={`bg-[var(--bg-surface)] border rounded-xl p-4 transition-all ${
       s.status === 'SUSPENDED' ? 'border-amber-500/20 opacity-75' :
-      s.status === 'DRAFT'     ? 'border-slate-700/50 opacity-60' :
-      'border-white/10 hover:border-white/20'
+      s.status === 'DRAFT'     ? 'border-[var(--border-subtle)]/50 opacity-60' :
+      'border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
     }`}>
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
-          <h3 className="text-sm font-semibold text-white truncate">{s.schedule_name}</h3>
-          {s.route_name && <p className="text-xs text-slate-400 mt-0.5">🗺️ {s.route_name}{s.route_code ? ` · ${s.route_code}` : ''}</p>}
+          <h3 className="text-sm font-semibold text-[var(--text-main)] truncate">{s.schedule_name}</h3>
+          {s.route_name && <p className="text-xs text-[var(--text-muted)] mt-0.5">🗺️ {s.route_name}{s.route_code ? ` · ${s.route_code}` : ''}</p>}
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <span className={`text-xs px-2 py-0.5 rounded-full border ${weekBadge}`}>{s.week_type}</span>
           <span className={`text-xs px-2 py-0.5 rounded-full ${sessionBadge}`}>{s.session}</span>
           {s.status !== 'ACTIVE' && (
             <span className={`text-xs px-2 py-0.5 rounded-full ${
-              s.status === 'SUSPENDED' ? 'bg-amber-500/15 text-amber-300' : 'bg-slate-700 text-slate-400'
+              s.status === 'SUSPENDED' ? 'bg-amber-500/15 text-amber-300' : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'
             }`}>{s.status}</span>
           )}
         </div>
@@ -311,34 +311,34 @@ function ScheduleCard({ s, onEdit, onDelete }: { s: Schedule; onEdit: () => void
           <span key={day} className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
             s.active_days.includes(day)
               ? 'bg-yellow-500/20 text-yellow-300'
-              : 'bg-slate-800 text-slate-600'
+              : 'bg-[var(--bg-surface)] text-[var(--text-faint)]'
           }`}>{DAY_LABELS[day]}</span>
         ))}
       </div>
 
       <div className="flex gap-4 text-sm mb-3">
         <div>
-          <span className="text-slate-500 text-xs">Departure</span>
-          <p className="text-white font-mono font-semibold">{fmtTime(s.departure_time)}</p>
+          <span className="text-[var(--text-faint)] text-xs">Departure</span>
+          <p className="text-[var(--text-main)] font-mono font-semibold">{fmtTime(s.departure_time)}</p>
         </div>
         {s.arrival_time && (
           <div>
-            <span className="text-slate-500 text-xs">Arrival</span>
-            <p className="text-white font-mono font-semibold">{fmtTime(s.arrival_time)}</p>
+            <span className="text-[var(--text-faint)] text-xs">Arrival</span>
+            <p className="text-[var(--text-main)] font-mono font-semibold">{fmtTime(s.arrival_time)}</p>
           </div>
         )}
         <div>
-          <span className="text-slate-500 text-xs">Direction</span>
-          <p className="text-white font-semibold">{s.direction}</p>
+          <span className="text-[var(--text-faint)] text-xs">Direction</span>
+          <p className="text-[var(--text-main)] font-semibold">{s.direction}</p>
         </div>
         <div>
-          <span className="text-slate-500 text-xs">Validity</span>
-          <p className="text-slate-300 text-xs">{fmtDate(s.effective_from)} → {s.effective_to ? fmtDate(s.effective_to) : 'Open-ended'}</p>
+          <span className="text-[var(--text-faint)] text-xs">Validity</span>
+          <p className="text-[var(--text-muted)] text-xs">{fmtDate(s.effective_from)} → {s.effective_to ? fmtDate(s.effective_to) : 'Open-ended'}</p>
         </div>
       </div>
 
       {/* Crew */}
-      <div className="flex gap-3 text-xs text-slate-400 mb-3">
+      <div className="flex gap-3 text-xs text-[var(--text-muted)] mb-3">
         {s.vehicle_plate && <span>🚌 {s.vehicle_plate}</span>}
         {s.driver_name   && <span>👨‍✈️ {s.driver_name}</span>}
         {s.attendant_name && <span>👩 {s.attendant_name}</span>}
@@ -352,10 +352,10 @@ function ScheduleCard({ s, onEdit, onDelete }: { s: Schedule; onEdit: () => void
         </div>
       )}
 
-      {s.notes && <p className="text-xs text-slate-500 italic mb-3">📝 {s.notes}</p>}
+      {s.notes && <p className="text-xs text-[var(--text-faint)] italic mb-3">📝 {s.notes}</p>}
 
-      <div className="flex gap-2 pt-2 border-t border-white/5">
-        <button onClick={onEdit} className="flex-1 text-xs bg-slate-800 hover:bg-slate-700 text-white py-1.5 rounded-lg transition-colors">
+      <div className="flex gap-2 pt-2 border-t border-[var(--border-subtle)]">
+        <button onClick={onEdit} className="flex-1 text-xs bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] py-1.5 rounded-lg transition-colors">
           ✏️ Edit
         </button>
         <button onClick={onDelete} className="px-4 text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 py-1.5 rounded-lg transition-colors">
@@ -424,11 +424,11 @@ export default function SchedulesPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">📅 Master Schedules</h1>
-          <p className="text-slate-400 text-xs mt-0.5">UAE school week cycles · Sun–Thu standard · Friday optional · Ramadan overrides</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] flex items-center gap-2">📅 Master Schedules</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">UAE school week cycles · Sun–Thu standard · Friday optional · Ramadan overrides</p>
         </div>
         <button onClick={() => { setEditing(null); setShowModal(true); }}
-          className="bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold px-4 py-2.5 rounded-xl text-sm transition-colors">
+          className="bg-yellow-500 hover:bg-yellow-400 text-white font-bold px-4 py-2.5 rounded-xl text-sm transition-colors">
           + New Schedule
         </button>
       </div>
@@ -436,7 +436,7 @@ export default function SchedulesPage() {
       {/* UAE Week notice */}
       <div className="bg-indigo-500/5 border border-indigo-500/20 rounded-xl p-3 flex items-start gap-3">
         <span className="text-xl">🇦🇪</span>
-        <div className="text-xs text-slate-400">
+        <div className="text-xs text-[var(--text-muted)]">
           <span className="font-semibold text-indigo-300">UAE school week:</span> Sunday to Thursday (5 days). Friday is a rest day unless special routes are configured. Ramadan schedules typically use a 2-hour delayed start. UAE public holidays are managed via exception dates.
         </div>
       </div>
@@ -444,15 +444,15 @@ export default function SchedulesPage() {
       {/* KPIs */}
       <div className="grid grid-cols-5 gap-3">
         {[
-          { label: 'Total', val: counts.total, color: 'text-white', bg: 'bg-slate-800' },
+          { label: 'Total', val: counts.total, color: 'text-[var(--text-main)]', bg: 'bg-[var(--bg-surface)]' },
           { label: 'Active', val: counts.active, color: 'text-green-400', bg: 'bg-green-500/10' },
           { label: 'Sun–Thu', val: counts.monThu, color: 'text-indigo-400', bg: 'bg-indigo-500/10' },
           { label: 'Friday', val: counts.friday, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
           { label: 'Suspended', val: counts.suspended, color: 'text-amber-400', bg: 'bg-amber-500/10' },
         ].map(k => (
-          <div key={k.label} className={`${k.bg} border border-white/5 rounded-xl p-3 text-center`}>
+          <div key={k.label} className={`${k.bg} border border-[var(--border-subtle)] rounded-xl p-3 text-center`}>
             <p className={`text-2xl font-bold ${k.color}`}>{k.val}</p>
-            <p className="text-xs text-slate-500">{k.label}</p>
+            <p className="text-xs text-[var(--text-faint)]">{k.label}</p>
           </div>
         ))}
       </div>
@@ -461,13 +461,13 @@ export default function SchedulesPage() {
       <div className="flex flex-wrap gap-3">
         <input value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search schedules, routes, drivers…"
-          className="bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-yellow-500/50 w-60" />
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50 w-60" />
         {/* Week filter */}
         <div className="flex gap-1">
           {['', 'MON_THU', 'FRI', 'DAILY'].map(w => (
             <button key={w} onClick={() => setFilterWeek(w)}
               className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-                filterWeek === w ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-slate-900 text-slate-400 border-white/10 hover:border-white/20'
+                filterWeek === w ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
               }`}>{w === '' ? 'All Weeks' : w === 'MON_THU' ? 'Sun–Thu' : w}</button>
           ))}
         </div>
@@ -476,7 +476,7 @@ export default function SchedulesPage() {
           {['', ...SESSIONS].map(s => (
             <button key={s} onClick={() => setFilterSession(s)}
               className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-                filterSession === s ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-slate-900 text-slate-400 border-white/10 hover:border-white/20'
+                filterSession === s ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
               }`}>{s === '' ? 'All Sessions' : s}</button>
           ))}
         </div>
@@ -485,7 +485,7 @@ export default function SchedulesPage() {
           {['', 'ACTIVE', 'SUSPENDED', 'DRAFT'].map(s => (
             <button key={s} onClick={() => setFilterStatus(s)}
               className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-                filterStatus === s ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-slate-900 text-slate-400 border-white/10 hover:border-white/20'
+                filterStatus === s ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
               }`}>{s === '' ? 'All Status' : s}</button>
           ))}
         </div>
@@ -495,16 +495,16 @@ export default function SchedulesPage() {
       {loading ? (
         <div className="grid grid-cols-2 gap-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-48 bg-slate-900 rounded-xl animate-pulse border border-white/5" />
+            <div key={i} className="h-48 bg-[var(--bg-surface)] rounded-xl animate-pulse border border-[var(--border-subtle)]" />
           ))}
         </div>
       ) : schedules.length === 0 ? (
-        <div className="bg-slate-900 border border-white/10 rounded-2xl p-16 text-center">
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-16 text-center">
           <p className="text-4xl mb-4">📅</p>
-          <p className="text-slate-300 font-semibold mb-1">No schedules found</p>
-          <p className="text-slate-500 text-sm mb-4">Create your first master schedule to define when routes operate.</p>
+          <p className="text-[var(--text-muted)] font-semibold mb-1">No schedules found</p>
+          <p className="text-[var(--text-faint)] text-sm mb-4">Create your first master schedule to define when routes operate.</p>
           <button onClick={() => setShowModal(true)}
-            className="bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold px-6 py-2 rounded-xl text-sm transition-colors">
+            className="bg-yellow-500 hover:bg-yellow-400 text-white font-bold px-6 py-2 rounded-xl text-sm transition-colors">
             Create Schedule
           </button>
         </div>

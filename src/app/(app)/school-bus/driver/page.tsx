@@ -71,8 +71,8 @@ export default function SchoolBusDriverTodayPage() {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">Today</h1>
-        <div className="rounded-2xl bg-slate-800/60 border border-white/10 p-5">
-          <p className="text-sm text-slate-300 mb-3">Pin your driver code to see today's trips.</p>
+        <div className="rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] p-5">
+          <p className="text-sm text-[var(--text-muted)] mb-3">Pin your driver code to see today's trips.</p>
           <Link href="/school-bus/driver/profile" className="block w-full text-center py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold">
             Set Driver Code →
           </Link>
@@ -80,20 +80,20 @@ export default function SchoolBusDriverTodayPage() {
       </div>
     );
   }
-  if (loading) return <div className="text-slate-500">Loading…</div>;
+  if (loading) return <div className="text-[var(--text-faint)]">Loading…</div>;
 
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold">Today's Trips</h1>
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-[var(--text-muted)]">
           {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' })}
           {' · '}driver {driverCode}
         </p>
       </div>
 
       {trips.length === 0 ? (
-        <div className="p-8 rounded-xl bg-slate-800/40 border border-slate-700 text-center text-slate-400">
+        <div className="p-8 rounded-xl bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] text-center text-[var(--text-muted)]">
           No school-bus trips assigned to you today.
         </div>
       ) : (
@@ -101,25 +101,25 @@ export default function SchoolBusDriverTodayPage() {
           {trips.map(t => {
             const status = (t.status ?? 'SCHEDULED').toUpperCase();
             return (
-              <div key={t.id} className="rounded-2xl bg-slate-800/60 border border-white/10 p-4 space-y-3">
+              <div key={t.id} className="rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] p-4 space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] border ${STATUS_PILL[status]}`}>{status}</span>
-                      <span className="text-[10px] text-slate-400 uppercase tracking-wide">{t.session_type ?? '—'}</span>
+                      <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">{t.session_type ?? '—'}</span>
                     </div>
                     <div className="text-base font-semibold mt-1 truncate">{t.route_name ?? 'Route'}</div>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className="text-2xl font-bold inline-flex items-center gap-1"><Clock className="w-4 h-4 text-slate-500" /> {fmt(t.scheduled_departure)}</div>
-                    <div className="text-[10px] text-slate-500 uppercase">depart</div>
+                    <div className="text-2xl font-bold inline-flex items-center gap-1"><Clock className="w-4 h-4 text-[var(--text-faint)]" /> {fmt(t.scheduled_departure)}</div>
+                    <div className="text-[10px] text-[var(--text-faint)] uppercase">depart</div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-4 gap-2 text-xs">
-                  <div className="rounded-lg bg-slate-900/40 p-2 text-center">
-                    <div className="text-base font-bold text-white">{t.totalStudents}</div>
-                    <div className="text-[9px] text-slate-500 uppercase">Total</div>
+                  <div className="rounded-lg bg-[var(--bg-surface)]/40 p-2 text-center">
+                    <div className="text-base font-bold text-[var(--text-main)]">{t.totalStudents}</div>
+                    <div className="text-[9px] text-[var(--text-faint)] uppercase">Total</div>
                   </div>
                   <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/30 p-2 text-center">
                     <div className="text-base font-bold text-emerald-300">{t.boardedCount}</div>
@@ -149,7 +149,7 @@ export default function SchoolBusDriverTodayPage() {
 
                 <div className="grid grid-cols-2 gap-2">
                   <Link href={`/school-bus/driver/trip/${t.id}`}
-                    className="text-center py-2.5 rounded-xl bg-slate-900/50 border border-white/10 text-sm hover:bg-slate-900/70 inline-flex items-center justify-center gap-1.5">
+                    className="text-center py-2.5 rounded-xl bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] text-sm hover:bg-[var(--bg-surface)]/70 inline-flex items-center justify-center gap-1.5">
                     <Users className="w-4 h-4" /> Manifest
                   </Link>
                   <Link href={`/school-bus/driver/trip/${t.id}/pretrip`}
@@ -163,7 +163,7 @@ export default function SchoolBusDriverTodayPage() {
                     Board <ArrowRight className="w-4 h-4" />
                   </Link>
                   <a href={`/api/school-bus/trips/${t.id}/manifest/pdf?lang=en&download=1`} target="_blank" rel="noopener noreferrer"
-                    className="text-center py-2.5 rounded-xl border border-white/10 text-slate-200 text-sm inline-flex items-center justify-center gap-1.5">
+                    className="text-center py-2.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-main)] text-sm inline-flex items-center justify-center gap-1.5">
                     <FileText className="w-4 h-4" /> PDF
                   </a>
                 </div>

@@ -87,14 +87,14 @@ export default function ParentAbsencePage() {
       <Link href="/school-bus/parent" className="text-xs text-amber-400 hover:underline">← Today</Link>
       <div>
         <h1 className="text-2xl font-bold">Mark Absence</h1>
-        <p className="text-sm text-slate-400">The bus skips your child's stop for the selected sessions.</p>
+        <p className="text-sm text-[var(--text-muted)]">The bus skips your child's stop for the selected sessions.</p>
       </div>
 
       <form onSubmit={submit} className="space-y-4">
         <div>
-          <label className="block text-xs uppercase tracking-wide text-slate-400 mb-1.5 font-semibold">Child *</label>
+          <label className="block text-xs uppercase tracking-wide text-[var(--text-muted)] mb-1.5 font-semibold">Child *</label>
           <select required value={studentId} onChange={e => setStudentId(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl bg-slate-800/60 border border-white/10 text-white focus:border-amber-500 focus:outline-none">
+            className="w-full px-4 py-3 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-amber-500 focus:outline-none">
             <option value="">Select child</option>
             {students.map(s => (
               <option key={s.studentId} value={s.studentId}>
@@ -105,17 +105,17 @@ export default function ParentAbsencePage() {
         </div>
 
         <div>
-          <label className="block text-xs uppercase tracking-wide text-slate-400 mb-1.5 font-semibold">Date *</label>
+          <label className="block text-xs uppercase tracking-wide text-[var(--text-muted)] mb-1.5 font-semibold">Date *</label>
           <input type="date" required min={todayDate} value={date} onChange={e => setDate(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl bg-slate-800/60 border border-white/10 text-white focus:border-amber-500 focus:outline-none" />
+            className="w-full px-4 py-3 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-amber-500 focus:outline-none" />
         </div>
 
         <div>
-          <label className="block text-xs uppercase tracking-wide text-slate-400 mb-1.5 font-semibold">Session</label>
+          <label className="block text-xs uppercase tracking-wide text-[var(--text-muted)] mb-1.5 font-semibold">Session</label>
           <div className="grid grid-cols-3 gap-2">
             {SESSIONS.map(s => (
               <button key={s.value} type="button" onClick={() => setSessionType(s.value as 'BOTH' | 'MORNING' | 'AFTERNOON')}
-                className={`py-2.5 rounded-lg text-xs font-medium border ${sessionType === s.value ? 'bg-amber-600 border-amber-500 text-white' : 'bg-slate-800/60 border-white/10 text-slate-300'}`}>
+                className={`py-2.5 rounded-lg text-xs font-medium border ${sessionType === s.value ? 'bg-amber-600 border-amber-500 text-white' : 'bg-[var(--bg-surface)]/60 border-[var(--border-subtle)] text-[var(--text-muted)]'}`}>
                 {s.label}
               </button>
             ))}
@@ -123,9 +123,9 @@ export default function ParentAbsencePage() {
         </div>
 
         <div>
-          <label className="block text-xs uppercase tracking-wide text-slate-400 mb-1.5 font-semibold">Reason</label>
+          <label className="block text-xs uppercase tracking-wide text-[var(--text-muted)] mb-1.5 font-semibold">Reason</label>
           <select value={reason} onChange={e => setReason(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl bg-slate-800/60 border border-white/10 text-white focus:border-amber-500 focus:outline-none">
+            className="w-full px-4 py-3 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-amber-500 focus:outline-none">
             <option>Family commitment</option>
             <option>Sick</option>
             <option>Doctor's appointment</option>

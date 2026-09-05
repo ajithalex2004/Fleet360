@@ -52,7 +52,7 @@ const MODE_CFG: Record<string, { label: string; color: string; bg: string; icon:
 const STATUS_CFG: Record<string, { color: string; bg: string; border: string }> = {
   ACTIVE:           { color: 'text-green-400',  bg: 'bg-green-500/10',  border: 'border-green-500/20'  },
   SUSPENDED:        { color: 'text-amber-400',  bg: 'bg-amber-500/10',  border: 'border-amber-500/20'  },
-  WITHDRAWN:        { color: 'text-slate-500',  bg: 'bg-slate-800/50',  border: 'border-slate-700'     },
+  WITHDRAWN:        { color: 'text-[var(--text-faint)]',  bg: 'bg-[var(--bg-surface)]/50',  border: 'border-[var(--border-subtle)]'     },
   PENDING_APPROVAL: { color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20' },
 };
 
@@ -97,8 +97,8 @@ function AllocationModal({ initial, onSave, onClose }: {
   const [error, setError]   = useState('');
 
   const set = (k: string, v: unknown) => setForm(f => ({ ...f, [k]: v }));
-  const labelClass = 'text-xs text-slate-400 mb-1 block';
-  const inputClass = 'w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-yellow-500/50';
+  const labelClass = 'text-xs text-[var(--text-muted)] mb-1 block';
+  const inputClass = 'w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50';
   const selectClass = `${inputClass} cursor-pointer`;
 
   const handleSubmit = async () => {
@@ -122,12 +122,12 @@ function AllocationModal({ initial, onSave, onClose }: {
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
-          <h2 className="text-lg font-bold text-white">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)]">
+          <h2 className="text-lg font-bold text-[var(--text-main)]">
             {initial?.id ? '✏️ Edit Allocation' : '💺 New Seat Allocation'}
           </h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-white text-2xl leading-none">×</button>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-2xl leading-none">×</button>
         </div>
 
         <div className="px-6 py-5 space-y-5">
@@ -139,7 +139,7 @@ function AllocationModal({ initial, onSave, onClose }: {
 
           {/* Student info */}
           <div>
-            <p className="text-xs font-semibold text-slate-300 mb-3 uppercase tracking-wider">Student Information</p>
+            <p className="text-xs font-semibold text-[var(--text-muted)] mb-3 uppercase tracking-wider">Student Information</p>
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-3">
                 <label className={labelClass}>Student Name *</label>
@@ -166,7 +166,7 @@ function AllocationModal({ initial, onSave, onClose }: {
 
           {/* Parent info */}
           <div>
-            <p className="text-xs font-semibold text-slate-300 mb-3 uppercase tracking-wider">Parent / Guardian</p>
+            <p className="text-xs font-semibold text-[var(--text-muted)] mb-3 uppercase tracking-wider">Parent / Guardian</p>
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-3 md:col-span-1">
                 <label className={labelClass}>Parent Name</label>
@@ -188,7 +188,7 @@ function AllocationModal({ initial, onSave, onClose }: {
 
           {/* Route & mode */}
           <div>
-            <p className="text-xs font-semibold text-slate-300 mb-3 uppercase tracking-wider">Route & Bus Mode</p>
+            <p className="text-xs font-semibold text-[var(--text-muted)] mb-3 uppercase tracking-wider">Route & Bus Mode</p>
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label className={labelClass}>Route Name</label>
@@ -206,7 +206,7 @@ function AllocationModal({ initial, onSave, onClose }: {
             </div>
 
             {/* Bus mode explainer */}
-            <div className={`rounded-lg px-3 py-2 text-xs mb-3 ${MODE_CFG[form.busMode]?.bg ?? 'bg-slate-800'}`}>
+            <div className={`rounded-lg px-3 py-2 text-xs mb-3 ${MODE_CFG[form.busMode]?.bg ?? 'bg-[var(--bg-surface)]'}`}>
               {form.busMode === 'TWO_WAY'        && <p className={MODE_CFG.TWO_WAY.color}>↕️ <strong>Two Way:</strong> Student uses bus for both morning pickup to school and afternoon drop back home.</p>}
               {form.busMode === 'ONE_WAY_PICKUP' && <p className={MODE_CFG.ONE_WAY_PICKUP.color}>↑ <strong>Pickup Only:</strong> Student is collected from home in the morning. Parent handles the return journey.</p>}
               {form.busMode === 'ONE_WAY_DROP'   && <p className={MODE_CFG.ONE_WAY_DROP.color}>↓ <strong>Drop Only:</strong> Student is dropped home in the afternoon. Parent handles the morning journey.</p>}
@@ -245,7 +245,7 @@ function AllocationModal({ initial, onSave, onClose }: {
 
           {/* Validity & status */}
           <div>
-            <p className="text-xs font-semibold text-slate-300 mb-3 uppercase tracking-wider">Validity</p>
+            <p className="text-xs font-semibold text-[var(--text-muted)] mb-3 uppercase tracking-wider">Validity</p>
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className={labelClass}>Effective From *</label>
@@ -272,12 +272,12 @@ function AllocationModal({ initial, onSave, onClose }: {
           </div>
         </div>
 
-        <div className="flex gap-3 px-6 py-4 border-t border-white/10">
+        <div className="flex gap-3 px-6 py-4 border-t border-[var(--border-subtle)]">
           <button onClick={handleSubmit} disabled={saving || !form.studentName.trim()}
-            className="flex-1 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 text-slate-900 font-bold py-2.5 rounded-xl text-sm transition-colors">
+            className="flex-1 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 text-white font-bold py-2.5 rounded-xl text-sm transition-colors">
             {saving ? 'Saving…' : initial?.id ? 'Update Allocation' : 'Create Allocation'}
           </button>
-          <button onClick={onClose} className="px-6 bg-slate-800 hover:bg-slate-700 text-white font-medium py-2.5 rounded-xl text-sm transition-colors">
+          <button onClick={onClose} className="px-6 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] font-medium py-2.5 rounded-xl text-sm transition-colors">
             Cancel
           </button>
         </div>
@@ -297,20 +297,20 @@ function AllocRow({ a, onEdit, onWithdraw, onSuspend }: {
   const scfg = STATUS_CFG[a.status] ?? STATUS_CFG.ACTIVE;
 
   return (
-    <tr className="border-t border-white/5 hover:bg-slate-800/30 transition-colors">
+    <tr className="border-t border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]/30 transition-colors">
       <td className="py-3 px-4">
-        <p className="text-sm font-semibold text-white">{a.student_name}</p>
-        <p className="text-xs text-slate-500">{a.student_grade}{a.student_section ? ` · ${a.student_section}` : ''}</p>
+        <p className="text-sm font-semibold text-[var(--text-main)]">{a.student_name}</p>
+        <p className="text-xs text-[var(--text-faint)]">{a.student_grade}{a.student_section ? ` · ${a.student_section}` : ''}</p>
       </td>
       <td className="py-3 px-4">
-        <p className="text-xs text-slate-400">{a.route_name ?? '—'}</p>
+        <p className="text-xs text-[var(--text-muted)]">{a.route_name ?? '—'}</p>
       </td>
       <td className="py-3 px-4">
         <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${mode.bg} ${mode.color}`}>
           {mode.icon} {mode.label}
         </span>
       </td>
-      <td className="py-3 px-4 text-xs text-slate-400">
+      <td className="py-3 px-4 text-xs text-[var(--text-muted)]">
         {a.bus_mode !== 'ONE_WAY_DROP' && a.pickup_stop_name && (
           <div>🟢 {a.pickup_stop_name} {a.pickup_stop_time ? `· ${fmtTime(a.pickup_stop_time)}` : ''}</div>
         )}
@@ -318,21 +318,21 @@ function AllocRow({ a, onEdit, onWithdraw, onSuspend }: {
           <div>🔴 {a.drop_stop_name} {a.drop_stop_time ? `· ${fmtTime(a.drop_stop_time)}` : ''}</div>
         )}
       </td>
-      <td className="py-3 px-4 text-xs text-slate-400">
+      <td className="py-3 px-4 text-xs text-[var(--text-muted)]">
         {a.parent_name && <div>{a.parent_name}</div>}
-        {a.parent_phone && <div className="text-slate-500">{a.parent_phone}</div>}
+        {a.parent_phone && <div className="text-[var(--text-faint)]">{a.parent_phone}</div>}
       </td>
       <td className="py-3 px-4">
         <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${scfg.bg} ${scfg.color} ${scfg.border}`}>
           {a.status.replace('_',' ')}
         </span>
       </td>
-      <td className="py-3 px-4 text-xs text-slate-500">
+      <td className="py-3 px-4 text-xs text-[var(--text-faint)]">
         {fmtDate(a.effective_from)} → {a.effective_to ? fmtDate(a.effective_to) : '∞'}
       </td>
       <td className="py-3 px-4">
         <div className="flex gap-1">
-          <button onClick={onEdit} className="text-xs bg-slate-800 hover:bg-slate-700 text-white px-2 py-1 rounded-lg transition-colors">Edit</button>
+          <button onClick={onEdit} className="text-xs bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] px-2 py-1 rounded-lg transition-colors">Edit</button>
           {a.status === 'ACTIVE' && (
             <button onClick={onSuspend} className="text-xs bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 px-2 py-1 rounded-lg transition-colors">Suspend</button>
           )}
@@ -413,8 +413,8 @@ export default function AllocationsPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">💺 Seat Allocations</h1>
-          <p className="text-slate-400 text-xs mt-0.5">Student enrollment · pickup/drop stops · bus mode · effective dating</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">💺 Seat Allocations</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Student enrollment · pickup/drop stops · bus mode · effective dating</p>
         </div>
         <div className="flex gap-2">
           <Link href="/finance/invoices?module=SCHOOL_BUS"
@@ -422,7 +422,7 @@ export default function AllocationsPage() {
             💰 Fees → Finance ↗
           </Link>
           <button onClick={() => { setEditing(null); setShowModal(true); }}
-            className="bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold px-4 py-2.5 rounded-xl text-sm transition-colors">
+            className="bg-yellow-500 hover:bg-yellow-400 text-white font-bold px-4 py-2.5 rounded-xl text-sm transition-colors">
             + New Allocation
           </button>
         </div>
@@ -434,7 +434,7 @@ export default function AllocationsPage() {
           <span className="text-xl">💰</span>
           <div>
             <p className="text-sm font-semibold text-emerald-300">Transport invoices are managed in Finance</p>
-            <p className="text-xs text-slate-400">Generate invoices, record payments, track AR aging and VAT returns in the Finance module</p>
+            <p className="text-xs text-[var(--text-muted)]">Generate invoices, record payments, track AR aging and VAT returns in the Finance module</p>
           </div>
         </div>
         <Link href="/finance/invoices?module=SCHOOL_BUS"
@@ -446,31 +446,31 @@ export default function AllocationsPage() {
       {/* KPIs */}
       {summary && (
         <div className="grid grid-cols-4 gap-3">
-          <div className="bg-slate-800 border border-white/5 rounded-xl p-3 text-center">
-            <p className="text-2xl font-bold text-white">{summary.total}</p>
-            <p className="text-xs text-slate-500">Total</p>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3 text-center">
+            <p className="text-2xl font-bold text-[var(--text-main)]">{summary.total}</p>
+            <p className="text-xs text-[var(--text-faint)]">Total</p>
           </div>
           <div className="bg-green-500/10 border border-green-500/10 rounded-xl p-3">
-            <div className="flex justify-between text-xs text-slate-400 mb-2">
+            <div className="flex justify-between text-xs text-[var(--text-muted)] mb-2">
               <span>Active</span><span className="text-green-400 font-bold">{summary.active}</span>
             </div>
-            <div className="flex justify-between text-xs text-slate-500">
+            <div className="flex justify-between text-xs text-[var(--text-faint)]">
               <span>↕️ Two Way</span><span>{summary.twoWay}</span>
             </div>
-            <div className="flex justify-between text-xs text-slate-500">
+            <div className="flex justify-between text-xs text-[var(--text-faint)]">
               <span>↑ Pickup Only</span><span>{summary.pickupOnly}</span>
             </div>
-            <div className="flex justify-between text-xs text-slate-500">
+            <div className="flex justify-between text-xs text-[var(--text-faint)]">
               <span>↓ Drop Only</span><span>{summary.dropOnly}</span>
             </div>
           </div>
           <div className="bg-amber-500/10 border border-amber-500/10 rounded-xl p-3 text-center">
             <p className="text-2xl font-bold text-amber-400">{summary.suspended + summary.pending}</p>
-            <p className="text-xs text-slate-500">Suspended / Pending</p>
+            <p className="text-xs text-[var(--text-faint)]">Suspended / Pending</p>
           </div>
-          <div className="bg-slate-800/50 border border-white/5 rounded-xl p-3 text-center">
-            <p className="text-2xl font-bold text-slate-500">{summary.withdrawn}</p>
-            <p className="text-xs text-slate-500">Withdrawn</p>
+          <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-xl p-3 text-center">
+            <p className="text-2xl font-bold text-[var(--text-faint)]">{summary.withdrawn}</p>
+            <p className="text-xs text-[var(--text-faint)]">Withdrawn</p>
           </div>
         </div>
       )}
@@ -479,12 +479,12 @@ export default function AllocationsPage() {
       <div className="flex flex-wrap gap-3">
         <input value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search student, parent, route…"
-          className="bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-yellow-500/50 w-60" />
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50 w-60" />
         <div className="flex gap-1">
           {['', 'ACTIVE', 'SUSPENDED', 'PENDING_APPROVAL', 'WITHDRAWN'].map(s => (
             <button key={s} onClick={() => setFilterStatus(s)}
               className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-                filterStatus === s ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-slate-900 text-slate-400 border-white/10 hover:border-white/20'
+                filterStatus === s ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
               }`}>{s === '' ? 'All Status' : s.replace('_',' ')}</button>
           ))}
         </div>
@@ -492,19 +492,19 @@ export default function AllocationsPage() {
           {['', 'TWO_WAY', 'ONE_WAY_PICKUP', 'ONE_WAY_DROP'].map(m => (
             <button key={m} onClick={() => setFilterMode(m)}
               className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-                filterMode === m ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-slate-900 text-slate-400 border-white/10 hover:border-white/20'
+                filterMode === m ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
               }`}>{m === '' ? 'All Modes' : MODE_CFG[m]?.label ?? m}</button>
           ))}
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-slate-900 border border-white/10 rounded-2xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
         <table className="w-full">
-          <thead className="bg-slate-800/60 border-b border-white/5">
+          <thead className="bg-[var(--bg-surface)]/60 border-b border-[var(--border-subtle)]">
             <tr>
               {['Student', 'Route', 'Bus Mode', 'Stops', 'Parent / Guardian', 'Status', 'Validity', 'Actions'].map(h => (
-                <th key={h} className="text-left py-3 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">{h}</th>
+                <th key={h} className="text-left py-3 px-4 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">{h}</th>
               ))}
             </tr>
           </thead>
@@ -513,14 +513,14 @@ export default function AllocationsPage() {
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i}>
                   <td colSpan={8} className="py-2 px-4">
-                    <div className="h-8 bg-slate-800 rounded animate-pulse" />
+                    <div className="h-8 bg-[var(--bg-surface)] rounded animate-pulse" />
                   </td>
                 </tr>
               ))
             ) : allocations.length === 0 ? (
               <tr>
                 <td colSpan={8} className="py-16 text-center">
-                  <p className="text-slate-500 text-sm mb-2">No allocations found</p>
+                  <p className="text-[var(--text-faint)] text-sm mb-2">No allocations found</p>
                   <button onClick={() => setShowModal(true)}
                     className="text-xs bg-yellow-500/20 text-yellow-300 px-4 py-1.5 rounded-lg">
                     + Create first allocation
@@ -538,7 +538,7 @@ export default function AllocationsPage() {
           </tbody>
         </table>
         {allocations.length > 0 && (
-          <div className="px-4 py-3 border-t border-white/5 text-xs text-slate-500">
+          <div className="px-4 py-3 border-t border-[var(--border-subtle)] text-xs text-[var(--text-faint)]">
             {allocations.length} record{allocations.length !== 1 ? 's' : ''}
           </div>
         )}

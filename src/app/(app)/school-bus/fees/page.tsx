@@ -28,7 +28,7 @@ export default function SchoolBusFeesRedirect() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6 max-w-2xl mx-auto">
       {/* Moved badge */}
-      <div className="flex items-center gap-2 bg-slate-800 border border-white/10 rounded-full px-4 py-1.5 text-xs text-slate-400">
+      <div className="flex items-center gap-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-full px-4 py-1.5 text-xs text-[var(--text-muted)]">
         <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
         Module Relocated
       </div>
@@ -42,8 +42,8 @@ export default function SchoolBusFeesRedirect() {
 
       {/* Title */}
       <div className="text-center">
-        <h1 className="text-2xl font-bold text-white mb-2">School Bus Fees have moved</h1>
-        <p className="text-slate-400 text-xs leading-relaxed">
+        <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">School Bus Fees have moved</h1>
+        <p className="text-[var(--text-muted)] text-xs leading-relaxed">
           Transport invoices are now managed in the <strong className="text-emerald-400">Finance Module</strong> —
           alongside all other receivables. This gives you AR Aging, VAT Returns, Collections,
           Payment Reminders, and P&L reporting automatically.
@@ -51,8 +51,8 @@ export default function SchoolBusFeesRedirect() {
       </div>
 
       {/* Benefits */}
-      <div className="w-full bg-slate-900 border border-white/10 rounded-2xl p-5 space-y-3">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">What you get in Finance</p>
+      <div className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 space-y-3">
+        <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">What you get in Finance</p>
         <div className="grid grid-cols-2 gap-2 text-sm">
           {[
             { icon: '📊', label: 'AR Aging Report', desc: 'See overdue school bus fees by age bucket' },
@@ -62,11 +62,11 @@ export default function SchoolBusFeesRedirect() {
             { icon: '💳', label: 'Payment Recording', desc: 'One unified payment workflow' },
             { icon: '🔁', label: 'Recurring Invoices', desc: 'Auto-generate term/monthly invoices' },
           ].map(b => (
-            <div key={b.label} className="flex items-start gap-2 bg-slate-800 rounded-lg p-2.5">
+            <div key={b.label} className="flex items-start gap-2 bg-[var(--bg-surface)] rounded-lg p-2.5">
               <span className="text-lg flex-shrink-0">{b.icon}</span>
               <div>
-                <p className="text-xs font-semibold text-white">{b.label}</p>
-                <p className="text-xs text-slate-500">{b.desc}</p>
+                <p className="text-xs font-semibold text-[var(--text-main)]">{b.label}</p>
+                <p className="text-xs text-[var(--text-faint)]">{b.desc}</p>
               </div>
             </div>
           ))}
@@ -76,7 +76,7 @@ export default function SchoolBusFeesRedirect() {
       {/* UAE VAT note */}
       <div className="w-full bg-emerald-500/5 border border-emerald-500/20 rounded-xl p-4 flex items-start gap-3">
         <span className="text-xl flex-shrink-0">🇦🇪</span>
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-[var(--text-muted)]">
           <strong className="text-emerald-400">UAE VAT — Educational Transport:</strong> School bus services to students are
           Zero Rated (0%) under Article 45 of the UAE VAT Law. The Finance module applies
           this automatically when you select <em>School Bus</em> as the module.
@@ -90,7 +90,7 @@ export default function SchoolBusFeesRedirect() {
           Go to Finance → School Bus Fees
           <span className="text-emerald-200 font-normal">({countdown}s)</span>
         </Link>
-        <Link href="/school-bus" className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
+        <Link href="/school-bus" className="text-xs text-[var(--text-faint)] hover:text-[var(--text-muted)] transition-colors">
           ← Back to School Bus Dashboard
         </Link>
       </div>

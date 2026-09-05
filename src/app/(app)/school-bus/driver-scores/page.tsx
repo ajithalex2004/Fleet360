@@ -60,7 +60,7 @@ function ScoreMeter({ score, rag }: { score: number; rag: string }) {
       </svg>
       <div className="absolute text-center">
         <p className={`text-xl font-bold leading-none ${cfg.color}`}>{score}</p>
-        <p className="text-[9px] text-slate-500">/100</p>
+        <p className="text-[9px] text-[var(--text-faint)]">/100</p>
       </div>
     </div>
   );
@@ -80,13 +80,13 @@ function DriverCard({ d }: { d: DriverScore }) {
   ].filter(d => d.val > 0);
 
   return (
-    <div className={`bg-slate-900 border rounded-2xl p-5 transition-all hover:border-opacity-60 ${cfg.border}`}>
+    <div className={`bg-[var(--bg-surface)] border rounded-2xl p-5 transition-all hover:border-opacity-60 ${cfg.border}`}>
       {/* Header */}
       <div className="flex items-start gap-4 mb-4">
         <ScoreMeter score={d.raw_score} rag={d.rag_status} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-base font-bold text-white">{d.driver_name}</h3>
+            <h3 className="text-base font-bold text-[var(--text-main)]">{d.driver_name}</h3>
             {d.manual_override && (
               <span className="text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/20 px-1.5 py-0.5 rounded">Manual</span>
             )}
@@ -100,7 +100,7 @@ function DriverCard({ d }: { d: DriverScore }) {
             </p>
           )}
           {/* Trip summary */}
-          <div className="flex gap-3 mt-2 text-xs text-slate-400">
+          <div className="flex gap-3 mt-2 text-xs text-[var(--text-muted)]">
             <span>🛤️ {d.trips_total} trips ({completionRate}% complete)</span>
             <span>📏 {Math.round(d.total_distance_km)} km</span>
             <span>👧 {d.total_students} students</span>
@@ -110,20 +110,20 @@ function DriverCard({ d }: { d: DriverScore }) {
 
       {/* Score breakdown */}
       {deductions.length > 0 ? (
-        <div className="border-t border-white/5 pt-3 mb-3">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Score Deductions</p>
+        <div className="border-t border-[var(--border-subtle)] pt-3 mb-3">
+          <p className="text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wider mb-2">Score Deductions</p>
           <div className="space-y-1">
             {deductions.map(de => (
               <div key={de.label} className="flex items-center gap-2 text-xs">
-                <span className="text-slate-500 flex-1">{de.label}</span>
-                <span className="text-slate-400">{de.val}× events</span>
+                <span className="text-[var(--text-faint)] flex-1">{de.label}</span>
+                <span className="text-[var(--text-muted)]">{de.val}× events</span>
                 <span className={`font-semibold ${de.color} w-12 text-right`}>−{de.penalty} pts</span>
               </div>
             ))}
           </div>
         </div>
       ) : (
-        <div className="border-t border-white/5 pt-3 mb-3">
+        <div className="border-t border-[var(--border-subtle)] pt-3 mb-3">
           <p className="text-xs text-green-400">✅ No safety deductions — perfect record!</p>
         </div>
       )}
@@ -131,16 +131,16 @@ function DriverCard({ d }: { d: DriverScore }) {
       {/* Score bar */}
       <div className="mb-3">
         <div className="flex justify-between text-xs mb-1">
-          <span className="text-slate-500">Safety Score</span>
+          <span className="text-[var(--text-faint)]">Safety Score</span>
           <span className={cfg.color}>{d.raw_score}/100</span>
         </div>
-        <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+        <div className="h-2 bg-[var(--bg-surface)] rounded-full overflow-hidden">
           <div className={`h-full rounded-full transition-all ${
             d.rag_status === 'GREEN' ? 'bg-green-500' : d.rag_status === 'AMBER' ? 'bg-amber-500' : 'bg-red-500'
           }`} style={{ width: `${d.raw_score}%` }} />
         </div>
         {/* Thresholds */}
-        <div className="flex text-[9px] text-slate-600 mt-1">
+        <div className="flex text-[9px] text-[var(--text-faint)] mt-1">
           <span>0</span>
           <span className="ml-[58%]">60 🟡</span>
           <span className="ml-auto">80 🟢</span>
@@ -159,7 +159,7 @@ function DriverCard({ d }: { d: DriverScore }) {
         </div>
       )}
 
-      {d.notes && <p className="text-xs text-slate-500 italic mt-2">📝 {d.notes}</p>}
+      {d.notes && <p className="text-xs text-[var(--text-faint)] italic mt-2">📝 {d.notes}</p>}
       {d.override_reason && <p className="text-xs text-purple-400 mt-1">Override: {d.override_reason}</p>}
     </div>
   );
@@ -192,15 +192,15 @@ function SeedModal({ period, onDone, onClose }: { period: string; onDone: () => 
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-md p-6">
-        <h2 className="text-lg font-bold text-white mb-3">🎯 Seed Demo Driver Scores</h2>
-        <p className="text-slate-400 text-sm mb-5">Seeds 5 sample drivers with varying performance levels (GREEN/AMBER/RED) for period {period}.</p>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-md p-6">
+        <h2 className="text-lg font-bold text-[var(--text-main)] mb-3">🎯 Seed Demo Driver Scores</h2>
+        <p className="text-[var(--text-muted)] text-sm mb-5">Seeds 5 sample drivers with varying performance levels (GREEN/AMBER/RED) for period {period}.</p>
         <div className="flex gap-3">
           <button onClick={seed} disabled={seeding}
-            className="flex-1 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 text-slate-900 font-bold py-2.5 rounded-xl text-sm">
+            className="flex-1 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 text-white font-bold py-2.5 rounded-xl text-sm">
             {seeding ? 'Seeding…' : 'Seed Demo Data'}
           </button>
-          <button onClick={onClose} className="px-5 bg-slate-800 text-white rounded-xl text-sm">Cancel</button>
+          <button onClick={onClose} className="px-5 bg-[var(--bg-surface)] text-[var(--text-main)] rounded-xl text-sm">Cancel</button>
         </div>
       </div>
     </div>
@@ -244,24 +244,24 @@ export default function DriverScoresPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">🎯 Driver Safety Scores</h1>
-          <p className="text-slate-400 text-xs mt-0.5">RAG scoring · speeding · harsh braking · geofence · incident tracking</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">🎯 Driver Safety Scores</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">RAG scoring · speeding · harsh braking · geofence · incident tracking</p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => setShowSeed(true)}
-            className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm px-4 py-2 rounded-lg border border-white/10 transition-colors">
+            className="bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] text-sm px-4 py-2 rounded-lg border border-[var(--border-subtle)] transition-colors">
             + Demo Data
           </button>
-          <button onClick={fetch_} className="bg-slate-800 hover:bg-slate-700 text-white text-sm px-4 py-2 rounded-lg border border-white/10 transition-colors">
+          <button onClick={fetch_} className="bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-sm px-4 py-2 rounded-lg border border-[var(--border-subtle)] transition-colors">
             ⟳ Recalculate
           </button>
         </div>
       </div>
 
       {/* Scoring methodology */}
-      <div className="bg-slate-900 border border-white/5 rounded-xl p-4">
-        <p className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">Scoring Methodology (100 pts base)</p>
-        <div className="grid grid-cols-5 gap-3 text-xs text-slate-400">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4">
+        <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Scoring Methodology (100 pts base)</p>
+        <div className="grid grid-cols-5 gap-3 text-xs text-[var(--text-muted)]">
           {[
             { label: 'Speeding', rule: '−5 pts/event (max −25)', color: 'text-red-400' },
             { label: 'Harsh Braking', rule: '−3 pts/event (max −15)', color: 'text-red-400' },
@@ -269,9 +269,9 @@ export default function DriverScoresPage() {
             { label: 'Incident', rule: '−15 pts/incident (no cap)', color: 'text-red-500' },
             { label: 'Late Departure', rule: '−5 pts/late trip', color: 'text-orange-400' },
           ].map(m => (
-            <div key={m.label} className="bg-slate-800 rounded-lg p-2">
+            <div key={m.label} className="bg-[var(--bg-surface)] rounded-lg p-2">
               <p className={`font-semibold ${m.color} mb-0.5`}>{m.label}</p>
-              <p className="text-slate-500">{m.rule}</p>
+              <p className="text-[var(--text-faint)]">{m.rule}</p>
             </div>
           ))}
         </div>
@@ -285,10 +285,10 @@ export default function DriverScoresPage() {
       {/* Period nav + KPIs */}
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <button onClick={() => changeMonth(-1)} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400 transition-colors">◀</button>
+          <button onClick={() => changeMonth(-1)} className="p-2 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] rounded-lg text-[var(--text-muted)] transition-colors">◀</button>
           <input type="month" value={period} onChange={e => setPeriod(e.target.value)}
-            className="bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-yellow-500/50" />
-          <button onClick={() => changeMonth(1)} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-400 transition-colors">▶</button>
+            className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-yellow-500/50" />
+          <button onClick={() => changeMonth(1)} className="p-2 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] rounded-lg text-[var(--text-muted)] transition-colors">▶</button>
         </div>
 
         {summary && (
@@ -298,11 +298,11 @@ export default function DriverScoresPage() {
               { val: summary.green,  label: '🟢 Green',  color: 'text-green-400'  },
               { val: summary.amber,  label: '🟡 Amber',  color: 'text-amber-400'  },
               { val: summary.red,    label: '🔴 Red',    color: 'text-red-400'    },
-              { val: summary.total,  label: 'Drivers',   color: 'text-white'       },
+              { val: summary.total,  label: 'Drivers',   color: 'text-[var(--text-main)]'       },
             ].map(k => (
-              <div key={k.label} className="bg-slate-900 border border-white/5 rounded-xl p-3 text-center min-w-16">
+              <div key={k.label} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3 text-center min-w-16">
                 <p className={`text-xl font-bold ${k.color}`}>{k.val}</p>
-                <p className="text-xs text-slate-500">{k.label}</p>
+                <p className="text-xs text-[var(--text-faint)]">{k.label}</p>
               </div>
             ))}
           </div>
@@ -325,7 +325,7 @@ export default function DriverScoresPage() {
         {['', 'GREEN', 'AMBER', 'RED'].map(r => (
           <button key={r} onClick={() => setFilterRAG(r)}
             className={`text-xs px-4 py-1.5 rounded-full border transition-colors ${
-              filterRAG === r ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-slate-900 text-slate-400 border-white/10 hover:border-white/20'
+              filterRAG === r ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
             }`}>
             {r === '' ? 'All Drivers' : `${RAG_CFG[r]?.emoji} ${r}`}
           </button>
@@ -336,16 +336,16 @@ export default function DriverScoresPage() {
       {loading ? (
         <div className="grid grid-cols-2 gap-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-48 bg-slate-900 rounded-2xl animate-pulse border border-white/5" />
+            <div key={i} className="h-48 bg-[var(--bg-surface)] rounded-2xl animate-pulse border border-[var(--border-subtle)]" />
           ))}
         </div>
       ) : scores.length === 0 ? (
-        <div className="bg-slate-900 border border-white/10 rounded-2xl p-16 text-center">
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-16 text-center">
           <p className="text-4xl mb-4">🎯</p>
-          <p className="text-slate-300 font-semibold mb-1">No scores for {period}</p>
-          <p className="text-slate-500 text-sm mb-4">Scores auto-compute from trip telemetry. Seed demo data to see the engine in action.</p>
+          <p className="text-[var(--text-muted)] font-semibold mb-1">No scores for {period}</p>
+          <p className="text-[var(--text-faint)] text-sm mb-4">Scores auto-compute from trip telemetry. Seed demo data to see the engine in action.</p>
           <button onClick={() => setShowSeed(true)}
-            className="bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold px-6 py-2 rounded-xl text-sm transition-colors">
+            className="bg-yellow-500 hover:bg-yellow-400 text-white font-bold px-6 py-2 rounded-xl text-sm transition-colors">
             Seed Demo Drivers
           </button>
         </div>

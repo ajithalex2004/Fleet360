@@ -205,11 +205,11 @@ export default function MapView({ waypoints, routeGeometry, mode = 'logistics', 
 
   if (!publicToken) {
     return (
-      <div className={`flex flex-col items-center justify-center bg-slate-900/60 border border-white/10 rounded-2xl ${className ?? 'h-96'}`}>
+      <div className={`flex flex-col items-center justify-center bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl ${className ?? 'h-96'}`}>
         <div className="text-4xl mb-3">🗺️</div>
-        <p className="text-slate-400 text-sm font-medium">Map not configured</p>
-        <p className="text-slate-600 text-xs mt-1 text-center max-w-xs">
-          Add <code className="bg-slate-800 px-1 rounded text-amber-400">NEXT_PUBLIC_MAPBOX_TOKEN=pk.xxx</code> to .env.local
+        <p className="text-[var(--text-muted)] text-sm font-medium">Map not configured</p>
+        <p className="text-[var(--text-faint)] text-xs mt-1 text-center max-w-xs">
+          Add <code className="bg-[var(--bg-surface)] px-1 rounded text-amber-400">NEXT_PUBLIC_MAPBOX_TOKEN=pk.xxx</code> to .env.local
         </p>
       </div>
     );
@@ -218,7 +218,7 @@ export default function MapView({ waypoints, routeGeometry, mode = 'logistics', 
   return (
     <div
       ref={containerRef}
-      className={`rounded-2xl overflow-hidden border border-white/10 ${className ?? 'h-96'}`}
+      className={`rounded-2xl overflow-hidden border border-[var(--border-subtle)] ${className ?? 'h-96'}`}
     />
   );
 }

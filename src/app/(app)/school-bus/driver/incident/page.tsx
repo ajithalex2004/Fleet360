@@ -49,25 +49,25 @@ export default function SchoolBusIncidentPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold">Report Incident</h1>
-        <p className="text-sm text-slate-400">Filing this notifies dispatch AND all parents on the route.</p>
+        <p className="text-sm text-[var(--text-muted)]">Filing this notifies dispatch AND all parents on the route.</p>
       </div>
 
       <form onSubmit={submit} className="space-y-4">
         <div>
-          <label className="block text-xs uppercase tracking-wide text-slate-400 mb-1.5 font-semibold">Trip *</label>
+          <label className="block text-xs uppercase tracking-wide text-[var(--text-muted)] mb-1.5 font-semibold">Trip *</label>
           <select required value={tripId} onChange={e => setTripId(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl bg-slate-800/60 border border-white/10 text-white focus:border-rose-500 focus:outline-none">
+            className="w-full px-4 py-3 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-rose-500 focus:outline-none">
             <option value="">Select today's trip</option>
             {trips.map(t => <option key={t.id} value={t.id}>{t.route_name ?? t.id.slice(0, 8)} · {t.session_type ?? '—'}</option>)}
           </select>
         </div>
 
         <div>
-          <label className="block text-xs uppercase tracking-wide text-slate-400 mb-1.5 font-semibold">Type *</label>
+          <label className="block text-xs uppercase tracking-wide text-[var(--text-muted)] mb-1.5 font-semibold">Type *</label>
           <div className="grid grid-cols-3 gap-2">
             {TYPES.map(t => (
               <button type="button" key={t} onClick={() => setEventType(t)}
-                className={`py-2.5 rounded-lg text-xs font-medium border ${eventType === t ? 'bg-rose-600 border-rose-500 text-white' : 'bg-slate-800/60 border-white/10 text-slate-300'}`}>
+                className={`py-2.5 rounded-lg text-xs font-medium border ${eventType === t ? 'bg-rose-600 border-rose-500 text-white' : 'bg-[var(--bg-surface)]/60 border-[var(--border-subtle)] text-[var(--text-muted)]'}`}>
                 {t.replace('_', ' ')}
               </button>
             ))}
@@ -75,11 +75,11 @@ export default function SchoolBusIncidentPage() {
         </div>
 
         <div>
-          <label className="block text-xs uppercase tracking-wide text-slate-400 mb-1.5 font-semibold">Severity</label>
+          <label className="block text-xs uppercase tracking-wide text-[var(--text-muted)] mb-1.5 font-semibold">Severity</label>
           <div className="grid grid-cols-4 gap-2">
             {SEVERITIES.map(s => (
               <button type="button" key={s} onClick={() => setSeverity(s)}
-                className={`py-2 rounded-lg text-xs font-medium border ${severity === s ? (s === 'CRITICAL' ? 'bg-rose-700' : s === 'HIGH' ? 'bg-rose-600' : s === 'MEDIUM' ? 'bg-amber-600' : 'bg-slate-600') + ' border-white/30 text-white' : 'bg-slate-800/60 border-white/10 text-slate-300'}`}>
+                className={`py-2 rounded-lg text-xs font-medium border ${severity === s ? (s === 'CRITICAL' ? 'bg-rose-700' : s === 'HIGH' ? 'bg-rose-600' : s === 'MEDIUM' ? 'bg-amber-600' : 'bg-[var(--bg-surface-hover)]') + ' border-[var(--border-strong)] text-white' : 'bg-[var(--bg-surface)]/60 border-[var(--border-subtle)] text-[var(--text-muted)]'}`}>
                 {s}
               </button>
             ))}
@@ -87,9 +87,9 @@ export default function SchoolBusIncidentPage() {
         </div>
 
         <div>
-          <label className="block text-xs uppercase tracking-wide text-slate-400 mb-1.5 font-semibold">Description *</label>
+          <label className="block text-xs uppercase tracking-wide text-[var(--text-muted)] mb-1.5 font-semibold">Description *</label>
           <textarea required value={description} onChange={e => setDescription(e.target.value)} rows={3} placeholder="What happened?"
-            className="w-full px-4 py-3 rounded-xl bg-slate-800/60 border border-white/10 text-white" />
+            className="w-full px-4 py-3 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] text-[var(--text-main)]" />
         </div>
 
         {msg && (
