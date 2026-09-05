@@ -117,8 +117,8 @@ export default function RateEventsPage() {
           <Link href="/rental/rates" className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-cyan-400">
             <ChevronLeft className="h-3 w-3" /> Back to rates
           </Link>
-          <h1 className="text-3xl font-bold text-white mt-2">Rate Events</h1>
-          <p className="text-sm text-slate-400 mt-1">
+          <h1 className="text-2xl font-bold text-white mt-2">Rate Events</h1>
+          <p className="text-xs text-slate-400 mt-1">
             Calendar-driven multipliers applied by the yield engine. Set up DSF, Eid,
             F1 etc. once — pricing adjusts automatically for any booking overlap.
           </p>

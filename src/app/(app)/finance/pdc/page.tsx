@@ -236,7 +236,7 @@ export default function PdcPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">PDC Register</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Post-Dated Cheque management — UAE compliance</p>
+          <p className="text-slate-400 text-xs mt-0.5">Post-Dated Cheque management — UAE compliance</p>
         </div>
         <button onClick={() => setShowAdd(true)}
           className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-sm">

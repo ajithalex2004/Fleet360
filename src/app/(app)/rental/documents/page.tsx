@@ -220,7 +220,7 @@ export default function DocumentsPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Compliance Document Vault</h1>
+          <h1 className="text-2xl font-bold text-white mb-2">Compliance Document Vault</h1>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-lg">🇦🇪</span>
             <p className="text-amber-400 text-sm font-medium">

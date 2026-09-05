@@ -102,8 +102,8 @@ export default function DamageClaimsPage() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Damage Claims</h1>
-          <p className="text-slate-400">{openCount} open claims — AED {totalValue.toLocaleString()} estimated</p>
+          <h1 className="text-2xl font-bold text-white mb-2">Damage Claims</h1>
+          <p className="text-xs text-slate-400">{openCount} open claims — AED {totalValue.toLocaleString()} estimated</p>
         </div>
         <button onClick={() => setShowModal(true)} className="rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90">
           + New Claim

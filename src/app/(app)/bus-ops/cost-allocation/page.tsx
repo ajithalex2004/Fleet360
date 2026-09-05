@@ -183,7 +183,7 @@ export default function CostAllocationPage() {
             <span className="text-xs text-[var(--text-muted)]">GL Account: 5145 Debit / 4500 Credit</span>
           </div>
           <h1 className="text-2xl font-bold text-[var(--text-main)] mt-1">Departmental Cost Allocation & Recharge Matrix</h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-xs text-[var(--text-muted)]">
             Pax-Km usage pro-rata splits, cost center chargebacks, and internal General Ledger recharge postings.
           </p>
         </div>

@@ -68,8 +68,8 @@ export default function MaintenanceCostPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-4xl font-bold text-[var(--text-main)] mb-2">Maintenance Cost Report</h1>
-        <p className="text-[var(--text-muted)]">Track service and repair expenses</p>
+        <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Maintenance Cost Report</h1>
+        <p className="text-xs text-[var(--text-muted)]">Track service and repair expenses</p>
       </div>
 
       {/* Date Filter */}

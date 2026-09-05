@@ -158,7 +158,7 @@ export default function PMPlansPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-white">PM Plans</h1>
-                    <p className="mt-1 text-slate-500">Define preventive maintenance rules with odometer, calendar, and hours triggers</p>
+                    <p className="text-xs mt-1 text-slate-500">Define preventive maintenance rules with odometer, calendar, and hours triggers</p>
                 </div>
                 <button
                     onClick={openCreate}

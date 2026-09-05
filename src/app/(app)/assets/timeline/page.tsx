@@ -106,7 +106,7 @@ export default function AssetTimelinePage() {
     <div className="p-8 space-y-5">
       <div>
         <h1 className="text-2xl font-bold text-white">Asset Timeline</h1>
-        <p className="text-slate-400 text-sm">Full movement and event history for any asset</p>
+        <p className="text-slate-400 text-xs">Full movement and event history for any asset</p>
       </div>
 
       {/* Asset Search */}

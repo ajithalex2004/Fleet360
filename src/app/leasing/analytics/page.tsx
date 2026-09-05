@@ -104,8 +104,8 @@ export default function AnalyticsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-[var(--text-main)] mb-2">Analytics & BI</h1>
-          <p className="text-[var(--text-muted)]">
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Analytics & BI</h1>
+          <p className="text-xs text-[var(--text-muted)]">
             Real-time leasing portfolio intelligence
             {lastRefreshed && (
               <span className="ml-3 text-xs text-[var(--text-faint)]">

@@ -245,7 +245,7 @@ export default function DriverScoresPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">🎯 Driver Safety Scores</h1>
-          <p className="text-slate-400 text-sm mt-0.5">RAG scoring · speeding · harsh braking · geofence · incident tracking</p>
+          <p className="text-slate-400 text-xs mt-0.5">RAG scoring · speeding · harsh braking · geofence · incident tracking</p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => setShowSeed(true)}

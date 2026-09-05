@@ -213,7 +213,7 @@ export default function AttendantsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">👩 Attendant Registry</h1>
-          <p className="text-slate-400 text-sm mt-0.5">
+          <p className="text-slate-400 text-xs mt-0.5">
             Bus nannies / female attendants — UAE regulatory requirement
           </p>
         </div>

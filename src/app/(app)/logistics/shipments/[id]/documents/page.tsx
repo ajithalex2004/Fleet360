@@ -124,7 +124,7 @@ export default function ShipmentDocumentsPage() {
             <span className="font-mono text-slate-300">{shipment?.shipment_no ?? id?.slice(0, 8) ?? '—'}</span>
           </div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-white"><FileText className="h-6 w-6 text-sky-300" /> Shipment Documents</h1>
-          <p className="mt-1 text-sm text-slate-400">{shipment?.cargo_owner_name ?? 'Customer'} - {docs.length} document{docs.length === 1 ? '' : 's'}</p>
+          <p className="mt-1 text-xs text-slate-400">{shipment?.cargo_owner_name ?? 'Customer'} - {docs.length} document{docs.length === 1 ? '' : 's'}</p>
         </div>
         <button type="button" onClick={() => setShowUpload(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400"><Plus className="h-4 w-4" /> Attach document</button>
       </div>

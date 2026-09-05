@@ -206,7 +206,7 @@ export default function RentalInvoicesPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white">Rental Invoices</h1>
-            <p className="text-slate-400 text-sm mt-0.5">All customer billing records</p>
+            <p className="text-slate-400 text-xs mt-0.5">All customer billing records</p>
           </div>
         </div>
 

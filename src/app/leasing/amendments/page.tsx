@@ -287,7 +287,7 @@ export default function AmendmentsPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--text-main)]">Contract Amendments</h1>
-          <p className="text-sm text-[var(--text-muted)] mt-0.5">
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">
             Track and manage all contract modifications with full approval audit trail
           </p>
         </div>

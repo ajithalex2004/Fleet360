@@ -110,7 +110,7 @@ export default function RevenueAnalysisPage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-white">Revenue Analysis</h1>
-          <p className="text-slate-400 text-sm mt-1">Vehicle profitability · Customer lifetime value · Branch breakdown</p>
+          <p className="text-slate-400 text-xs mt-1">Vehicle profitability · Customer lifetime value · Branch breakdown</p>
         </div>
         <button onClick={view === 'vehicle' ? exportVehicles : exportCustomers}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-700/40 hover:bg-emerald-700/60 border border-emerald-500/30 text-emerald-300 text-sm font-medium">

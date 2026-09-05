@@ -126,7 +126,7 @@ export default function MfaSecurityPage() {
         </div>
         <div>
           <h1 className="text-2xl font-bold text-white">Multi-factor authentication</h1>
-          <p className="text-slate-400 text-sm mt-1">
+          <p className="text-slate-400 text-xs mt-1">
             {status?.mfaEnabled
               ? 'MFA is active on your account. Disable below if you need to re-enrol.'
               : 'Add a second factor (authenticator app) to your sign-in.'}

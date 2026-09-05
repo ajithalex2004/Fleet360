@@ -265,7 +265,7 @@ export default function LogisticsTrackingPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-white">Live Fleet Tracking</h1>
-          <p className="text-slate-400 text-sm mt-0.5">
+          <p className="text-slate-400 text-xs mt-0.5">
             {trips.length} active shipment{trips.length !== 1 ? 's' : ''} · Auto-refresh every 15s
           </p>
         </div>

@@ -72,7 +72,7 @@ export default function SchoolBusRoutePlannerPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">School Bus Route Planner</h1>
-          <p className="text-slate-400 text-sm mt-0.5">
+          <p className="text-slate-400 text-xs mt-0.5">
             Build optimised student pickup routes with safety-first stop sequencing
           </p>
         </div>

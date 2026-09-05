@@ -241,7 +241,7 @@ export default function LogisticsTripsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-white">Shipment orders</h1>
-          <p className="mt-0.5 text-sm text-slate-400">Canonical freight trips from logistics_shipment_orders.</p>
+          <p className="mt-0.5 text-xs text-slate-400">Canonical freight trips from logistics_shipment_orders.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => void load()} className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-300 hover:bg-white/5"><RefreshCw className="h-4 w-4" /> Refresh</button>

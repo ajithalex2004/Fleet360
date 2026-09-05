@@ -340,7 +340,7 @@ void sendDetection(String tagMac, int rssi, int battery) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">BLE Gateways</h1>
-          <p className="text-slate-400 text-sm">Location gateway network status & hardware integration</p>
+          <p className="text-slate-400 text-xs">Location gateway network status & hardware integration</p>
         </div>
         <button onClick={openAdd} className="bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-semibold px-4 py-2 rounded-lg text-sm">+ Add Gateway</button>
       </div>

@@ -825,7 +825,7 @@ export default function LeaseQuotationsPage() {
       <div className="mx-auto max-w-7xl">
         {/* Header */}
         <div className="mb-8 flex items-end justify-between">
-          <h1 className="text-4xl font-bold text-[var(--text-main)]">Lease Quotations</h1>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Lease Quotations</h1>
           {prefilling && (
             <span className="text-sm text-blue-400 animate-pulse mr-3">
               Loading inquiry data...

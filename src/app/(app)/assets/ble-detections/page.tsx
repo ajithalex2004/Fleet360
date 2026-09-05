@@ -163,7 +163,7 @@ export default function BLEDetectionsPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">📡 BLE Detection Log</h1>
-          <p className="text-slate-400 text-sm mt-1">Real-time signal feed from connected gateways</p>
+          <p className="text-slate-400 text-xs mt-1">Real-time signal feed from connected gateways</p>
         </div>
         <div className="flex items-center gap-3">
           {lastRefresh && (

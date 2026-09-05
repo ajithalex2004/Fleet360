@@ -125,7 +125,7 @@ export default function DriversPage() {
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-2xl font-bold text-white">Driver Management</h1>
-                    <p className="text-slate-500">Manage your fleet drivers.</p>
+                    <p className="text-xs text-slate-500">Manage your fleet drivers.</p>
                 </div>
                 <button
                     onClick={openCreateModal}

@@ -264,7 +264,7 @@ export default function QuotationDetailPage() {
               <ArrowLeft className="h-6 w-6" />
             </button>
             <div>
-              <h1 className="text-3xl font-bold text-[var(--text-main)] print:text-black">
+              <h1 className="text-2xl font-bold text-[var(--text-main)] print:text-black">
                 {quotation.quotationNumber ?? '(unnumbered)'}
               </h1>
               <p className="text-[var(--text-muted)] print:text-[var(--text-faint)] text-sm">

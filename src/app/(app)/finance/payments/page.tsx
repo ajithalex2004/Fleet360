@@ -222,7 +222,7 @@ export default function FinancePaymentsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Payment Reconciliation</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Track all payments and reconcile against invoices</p>
+          <p className="text-slate-400 text-xs mt-0.5">Track all payments and reconcile against invoices</p>
         </div>
         <div className="flex gap-3">
           <button onClick={() => downloadXLSX(`Payments-${new Date().toISOString().split('T')[0]}.xls`, payments.map(p => ({

@@ -114,8 +114,8 @@ export default function RentalExpiryAlertsPage() {
       {/* ── Header ── */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-1">Expiry Alerts & Compliance Monitor</h1>
-          <p className="text-slate-400 text-sm">Documents, licenses, and policies requiring attention within 90 days</p>
+          <h1 className="text-2xl font-bold text-white mb-1">Expiry Alerts & Compliance Monitor</h1>
+          <p className="text-slate-400 text-xs">Documents, licenses, and policies requiring attention within 90 days</p>
           <p className="text-slate-600 text-xs mt-1">
             Last refreshed: {lastRefresh.toLocaleTimeString()} · Auto-refreshes every 5 min
           </p>

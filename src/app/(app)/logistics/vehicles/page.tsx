@@ -117,7 +117,7 @@ export default function LogisticsVehiclesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Logistics Fleet</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Vehicles assigned to logistics operations</p>
+          <p className="text-slate-400 text-xs mt-0.5">Vehicles assigned to logistics operations</p>
         </div>
         <div className="flex items-center gap-3">
           {expiryAlerts > 0 && (

@@ -89,7 +89,7 @@ export default function VATBranchPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-white">VAT Return — Branch Breakdown</h1>
-        <p className="text-slate-400 text-sm mt-1">UAE FTA consolidated VAT return with per-emirate branch contribution · Single TRN filing</p>
+        <p className="text-slate-400 text-xs mt-1">UAE FTA consolidated VAT return with per-emirate branch contribution · Single TRN filing</p>
       </div>
 
       {/* Controls */}

@@ -578,7 +578,7 @@ export default function SpmTicketsPage() {
           <span className="text-slate-300">Tickets</span>
         </nav>
         <h1 className="text-2xl font-bold text-white">🎫 Maintenance Tickets</h1>
-        <p className="text-slate-400 text-sm mt-1">Track and manage all preventive maintenance work orders</p>
+        <p className="text-slate-400 text-xs mt-1">Track and manage all preventive maintenance work orders</p>
       </div>
 
       {/* ── KPI Strip ── */}

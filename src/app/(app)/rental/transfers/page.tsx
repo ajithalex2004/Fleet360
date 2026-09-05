@@ -245,7 +245,7 @@ export default function RentalTransfersPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Inter-Branch Vehicle Transfers</h1>
-          <p className="text-sm text-slate-400 mt-1">Manage vehicle movements between branches and emirates</p>
+          <p className="text-xs text-slate-400 mt-1">Manage vehicle movements between branches and emirates</p>
         </div>
         <button
           onClick={() => { setForm(emptyForm()); setError(''); setShowCreate(true); }}

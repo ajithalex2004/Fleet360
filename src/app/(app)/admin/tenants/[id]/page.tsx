@@ -1064,7 +1064,7 @@ export default function TenantDetailPage() {
       {/* Tenant header */}
       <div>
         <div className="flex items-center gap-3 mb-1">
-          <h1 className="text-4xl font-bold text-white">{tenant.name}</h1>
+          <h1 className="text-2xl font-bold text-white">{tenant.name}</h1>
           {tenant.code && <span className="text-sm font-mono bg-slate-700 text-slate-300 px-2 py-1 rounded">{tenant.code}</span>}
           <span className={`px-2 py-1 rounded text-xs font-medium ${tenant.isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
             {tenant.isActive ? 'ACTIVE' : 'INACTIVE'}

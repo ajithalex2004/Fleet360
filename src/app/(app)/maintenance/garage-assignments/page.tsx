@@ -26,7 +26,7 @@ export default function GarageAssignmentsPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Garage Assignments</h1>
-          <p className="mt-1 text-slate-500">Active work orders and their assigned garages.</p>
+          <p className="text-xs mt-1 text-slate-500">Active work orders and their assigned garages.</p>
         </div>
         <Link
           href="/vendors/garages"

@@ -165,7 +165,7 @@ export default function MileagePage() {
     <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-main)] p-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
-          <h1 className="text-3xl font-bold">Mileage Management</h1>
+          <h1 className="text-2xl font-bold">Mileage Management</h1>
           {activeTab === 'readings' && (
             <button
               onClick={() => setShowNewReadingModal(true)}

@@ -157,7 +157,7 @@ export default function PeriodLocksPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Period Locking</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Financial year & accounting period management</p>
+          <p className="text-slate-400 text-xs mt-0.5">Financial year & accounting period management</p>
         </div>
         <button onClick={() => setShowSetup(true)}
           className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-semibold rounded-xl text-sm">

@@ -664,7 +664,7 @@ export default function TripsPage() {
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
             <h1 className="text-2xl font-bold text-white">🛤️ Trip Telemetry Logs</h1>
-            <p className="text-slate-400 text-sm mt-0.5">Daily trip records · telemetry events · safety incidents · boarding logs</p>
+            <p className="text-slate-400 text-xs mt-0.5">Daily trip records · telemetry events · safety incidents · boarding logs</p>
           </div>
           <div className="flex gap-2 items-center flex-wrap">
             <input type="date" value={date} onChange={e => setDate(e.target.value)}

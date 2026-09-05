@@ -54,7 +54,7 @@ export default function PaperlessPage() {
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold text-white">Paperless Operations</h1>
-        <p className="text-slate-400 text-sm mt-1">Digital transformation impact · Paper waste reduction · Carbon offset from digitisation</p>
+        <p className="text-slate-400 text-xs mt-1">Digital transformation impact · Paper waste reduction · Carbon offset from digitisation</p>
       </div>
 
       {loading ? (

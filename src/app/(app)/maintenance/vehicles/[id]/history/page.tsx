@@ -139,7 +139,7 @@ export default function VehicleHistoryPage() {
                         </Link>
                         <h1 className="text-2xl font-bold text-white">Vehicle History</h1>
                     </div>
-                    <p className="text-slate-500 ml-8">
+                    <p className="text-xs text-slate-500 ml-8">
                         {vehicle.make} {vehicle.model} ({vehicle.licensePlate}) • {vehicle.year}
                     </p>
                 </div>

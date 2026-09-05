@@ -142,7 +142,7 @@ export default function QuotationCopilotPage() {
         >
           <ChevronLeft className="h-3 w-3" /> Back to quotations
         </Link>
-        <h1 className="text-3xl font-bold text-[var(--text-main)] mt-2 flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-[var(--text-main)] mt-2 flex items-center gap-2">
           <Sparkles className="h-6 w-6 text-violet-400" />
           AI Quotation Co-pilot
         </h1>

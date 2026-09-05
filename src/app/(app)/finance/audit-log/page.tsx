@@ -222,7 +222,7 @@ export default function AuditLogPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Finance Audit Log</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Immutable trail of all financial module actions · {total.toLocaleString()} entries</p>
+          <p className="text-slate-400 text-xs mt-0.5">Immutable trail of all financial module actions · {total.toLocaleString()} entries</p>
         </div>
         <button onClick={() => setShowCreate(true)}
           className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl text-sm">

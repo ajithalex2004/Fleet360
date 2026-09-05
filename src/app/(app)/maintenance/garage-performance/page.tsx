@@ -78,7 +78,7 @@ export default function GaragePerformancePage() {
         <div className="space-y-6">
             <div>
                 <h1 className="text-2xl font-bold text-white">Garage Performance Metrics</h1>
-                <p className="mt-1 text-slate-500">Compare and analyze garage performance across key metrics</p>
+                <p className="text-xs mt-1 text-slate-500">Compare and analyze garage performance across key metrics</p>
             </div>
 
             {/* Rankings */}

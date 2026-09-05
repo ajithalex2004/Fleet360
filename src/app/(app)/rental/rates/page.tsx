@@ -187,7 +187,7 @@ export default function RateEnginePage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Rate Engine</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Manage pricing rules for all vehicle categories</p>
+          <p className="text-slate-400 text-xs mt-0.5">Manage pricing rules for all vehicle categories</p>
         </div>
         <div className="flex gap-3">
           <button

@@ -324,7 +324,7 @@ export default function InspectionPage() {
             <span>Inspection</span>
           </div>
           <h1 className="text-2xl font-bold text-white">Vehicle Inspection</h1>
-          <p className="text-slate-400 text-sm mt-0.5">
+          <p className="text-slate-400 text-xs mt-0.5">
             {booking?.customer?.fullName ?? '—'} · {booking?.vehicleCategory ?? 'Vehicle not specified'}
           </p>
         </div>

@@ -138,7 +138,7 @@ export default function TaxPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Tax Engine</h1>
-          <p className="text-slate-400 text-sm mt-0.5">UAE VAT — FTA compliance with Input/Output tracking</p>
+          <p className="text-slate-400 text-xs mt-0.5">UAE VAT — FTA compliance with Input/Output tracking</p>
         </div>
         <div className="flex items-center gap-2">
           <select value={quarter} onChange={e => setQuarter(Number(e.target.value))}

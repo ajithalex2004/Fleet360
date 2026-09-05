@@ -168,7 +168,7 @@ export default function SeatAvailabilityPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">💺 Seat Availability</h1>
-          <p className="text-slate-400 text-sm mt-0.5">
+          <p className="text-slate-400 text-xs mt-0.5">
             Live capacity across all school bus routes
             {lastSync && (
               <span className="ml-2 text-slate-600">

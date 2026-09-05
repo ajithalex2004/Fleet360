@@ -94,8 +94,8 @@ export default function SalikPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Salik Accounts</h1>
-          <p className="text-slate-400">Manage toll tag accounts and balances</p>
+          <h1 className="text-2xl font-bold text-white mb-2">Salik Accounts</h1>
+          <p className="text-xs text-slate-400">Manage toll tag accounts and balances</p>
         </div>
         <button
           onClick={() => setShowModal(true)}

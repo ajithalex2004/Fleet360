@@ -221,7 +221,7 @@ export default function SchoolBusAttendancePage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Student Attendance</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Mark boarding & drop-off, notify parents of absences</p>
+          <p className="text-slate-400 text-xs mt-0.5">Mark boarding & drop-off, notify parents of absences</p>
         </div>
         <div className="flex gap-2">
           {absent.filter(s => !s.notifiedAt).length > 0 && (

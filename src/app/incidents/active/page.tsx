@@ -404,7 +404,7 @@ export default function ActiveIncidentsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Incident Management</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Full workflow: Report → Investigate → Escalate → Resolve → Close</p>
+          <p className="text-slate-400 text-xs mt-0.5">Full workflow: Report → Investigate → Escalate → Resolve → Close</p>
         </div>
         <div className="flex gap-2">
           <button onClick={load} className="text-xs text-slate-400 border border-white/10 px-3 py-2 rounded-xl hover:border-white/20 hover:text-white transition-colors">↺</button>

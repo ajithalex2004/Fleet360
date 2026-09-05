@@ -345,7 +345,7 @@ export default function SchoolBusStudentsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Student Registry</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Enroll students, assign routes, manage guardian contacts</p>
+          <p className="text-slate-400 text-xs mt-0.5">Enroll students, assign routes, manage guardian contacts</p>
         </div>
         <button onClick={() => { setEditStudent(null); setShowModal(true); }}
           className="bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-semibold px-4 py-2 rounded-xl text-sm transition-colors flex items-center gap-2">

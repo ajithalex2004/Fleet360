@@ -251,8 +251,8 @@ export default function BookingsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-[var(--text-main)] mb-1">Rental Bookings</h1>
-          <p className="text-[var(--text-muted)] text-sm">Manage all rental reservations & fleet allocation — {bookings.length} total</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-1">Rental Bookings</h1>
+          <p className="text-[var(--text-muted)] text-xs">Manage all rental reservations & fleet allocation — {bookings.length} total</p>
         </div>
         <div className="flex gap-3">
           <button

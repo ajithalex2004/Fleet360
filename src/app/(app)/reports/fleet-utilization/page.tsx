@@ -71,8 +71,8 @@ export default function FleetUtilizationPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-4xl font-bold text-[var(--text-main)] mb-2">Fleet Utilization Report</h1>
-        <p className="text-[var(--text-muted)]">Analyze vehicle usage and performance metrics</p>
+        <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Fleet Utilization Report</h1>
+        <p className="text-xs text-[var(--text-muted)]">Analyze vehicle usage and performance metrics</p>
       </div>
 
       {/* Date Filter */}

@@ -113,7 +113,7 @@ export default function CRMPage() {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-3xl font-bold text-[var(--text-main)]">CRM & Leads</h1>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">CRM & Leads</h1>
           <Link
             href="/leasing/inquiries"
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-[var(--text-main)] px-4 py-2 rounded-lg transition"

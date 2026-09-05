@@ -252,7 +252,7 @@ export default function MergeOptimizerPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--text-main)]">🔀 Merge Optimizer</h1>
-          <p className="text-[var(--text-muted)] text-sm mt-0.5">
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">
             Three-stage engine: Haversine pre-filter → Routing API road distance → Weighted scoring
           </p>
         </div>

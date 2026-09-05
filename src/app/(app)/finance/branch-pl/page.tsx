@@ -78,7 +78,7 @@ export default function BranchPLPage() {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-white">Branch P&amp;L Report</h1>
-        <p className="text-slate-400 text-sm mt-1">Cost-center segmented income statement · Multi-emirate branch comparison</p>
+        <p className="text-slate-400 text-xs mt-1">Cost-center segmented income statement · Multi-emirate branch comparison</p>
       </div>
 
       {/* Controls */}

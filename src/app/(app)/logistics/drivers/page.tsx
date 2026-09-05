@@ -91,7 +91,7 @@ export default function LogisticsDriversPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Logistics Drivers</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Drivers assigned to logistics fleet</p>
+          <p className="text-slate-400 text-xs mt-0.5">Drivers assigned to logistics fleet</p>
         </div>
         <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-800 border border-white/10 px-3 py-1.5 rounded-lg">
           {drivers.filter(d => d.status === 'ACTIVE').length} active of {drivers.length}

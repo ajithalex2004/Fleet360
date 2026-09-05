@@ -363,7 +363,7 @@ export default function SchoolBusDispatchBoard() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">🚦 School Bus Dispatch Board</h1>
-          <p className="text-slate-400 text-sm mt-0.5">
+          <p className="text-slate-400 text-xs mt-0.5">
             Morning / Afternoon coordination · Route assignment · Departure management
           </p>
         </div>

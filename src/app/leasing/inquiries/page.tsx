@@ -338,8 +338,8 @@ export default function LeaseInquiriesPage() {
         {/* Header */}
         <div className="mb-8 flex items-end justify-between">
           <div>
-            <h1 className="text-4xl font-bold text-[var(--text-main)]">Lease Inquiries</h1>
-            <p className="mt-2 text-[var(--text-muted)]">
+            <h1 className="text-2xl font-bold text-[var(--text-main)]">Lease Inquiries</h1>
+            <p className="text-xs mt-2 text-[var(--text-muted)]">
               Capture and track initial customer interest
             </p>
           </div>

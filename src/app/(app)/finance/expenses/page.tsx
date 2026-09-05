@@ -181,7 +181,7 @@ export default function ExpensesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Expense Management</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Operational expenses with approval workflow</p>
+          <p className="text-slate-400 text-xs mt-0.5">Operational expenses with approval workflow</p>
         </div>
         <div className="flex gap-3">
           <button onClick={() => downloadXLSX(`Expenses-${new Date().toISOString().split('T')[0]}.xls`, expenses.map(e => ({

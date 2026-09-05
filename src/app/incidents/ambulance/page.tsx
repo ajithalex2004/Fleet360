@@ -343,7 +343,7 @@ export default function AmbulancePage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Ambulance Dispatch</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Emergency response tracking · CALL → DISPATCH → SCENE → HOSPITAL → CLEAR</p>
+          <p className="text-slate-400 text-xs mt-0.5">Emergency response tracking · CALL → DISPATCH → SCENE → HOSPITAL → CLEAR</p>
         </div>
         <div className="flex items-center gap-3">
           <div className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border ${

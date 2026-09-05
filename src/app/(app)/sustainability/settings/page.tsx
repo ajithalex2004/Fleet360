@@ -97,7 +97,7 @@ export default function SettingsPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Methodology Settings</h1>
-          <p className="text-slate-400 text-sm mt-1">Configure emission factors, baseline assumptions and reporting parameters</p>
+          <p className="text-slate-400 text-xs mt-1">Configure emission factors, baseline assumptions and reporting parameters</p>
         </div>
         <button
           onClick={handleSave}

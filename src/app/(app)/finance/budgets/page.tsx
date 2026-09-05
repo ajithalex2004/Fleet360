@@ -186,7 +186,7 @@ export default function BudgetsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Budget vs Actual</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Live actuals pulled from all operational modules</p>
+          <p className="text-slate-400 text-xs mt-0.5">Live actuals pulled from all operational modules</p>
         </div>
         <div className="flex items-center gap-2">
           <select value={month} onChange={e => setMonth(Number(e.target.value))}

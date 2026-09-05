@@ -223,7 +223,7 @@ export default function BankReconciliationPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Bank Reconciliation</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Import statements, auto-match, and reconcile</p>
+          <p className="text-slate-400 text-xs mt-0.5">Import statements, auto-match, and reconcile</p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => setShowAddBank(true)}

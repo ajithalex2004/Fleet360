@@ -132,8 +132,8 @@ export default function LeasingExpiryAlertsPage() {
       {/* ── Header ── */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-[var(--text-main)] mb-1">Expiry Alerts & Compliance Monitor</h1>
-          <p className="text-[var(--text-muted)] text-sm">
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-1">Expiry Alerts & Compliance Monitor</h1>
+          <p className="text-[var(--text-muted)] text-xs">
             Leasing documents, licenses, insurance and contract renewals requiring attention within 90 days
           </p>
           <p className="text-[var(--text-faint)] text-xs mt-1">

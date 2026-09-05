@@ -171,7 +171,7 @@ export default function AnalyticsPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">📊 System Analytics & Intelligence</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Route congestion · parent engagement · service area coverage · IQ tracker</p>
+          <p className="text-slate-400 text-xs mt-0.5">Route congestion · parent engagement · service area coverage · IQ tracker</p>
         </div>
       </div>
 

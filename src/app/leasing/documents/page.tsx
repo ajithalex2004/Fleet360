@@ -282,8 +282,8 @@ export default function DocumentsPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-[var(--text-main)] mb-2">Documents</h1>
-          <p className="text-[var(--text-muted)]">Manage contracts, licenses, and related documents</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Documents</h1>
+          <p className="text-xs text-[var(--text-muted)]">Manage contracts, licenses, and related documents</p>
         </div>
         <div className="flex gap-3">
           <button

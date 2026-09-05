@@ -175,8 +175,8 @@ export default function RenewalsPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-[var(--text-main)] mb-2">Renewals</h1>
-          <p className="text-[var(--text-muted)]">Manage contract renewals and extensions</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Renewals</h1>
+          <p className="text-xs text-[var(--text-muted)]">Manage contract renewals and extensions</p>
         </div>
         <button
           onClick={() => setShowModal(true)}

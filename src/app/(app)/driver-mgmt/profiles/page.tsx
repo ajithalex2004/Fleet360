@@ -160,7 +160,7 @@ export default function DriverProfilesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--text-main)]">Driver Profiles</h1>
-          <p className="text-[var(--text-muted)] text-sm mt-0.5">Central driver identity &amp; compliance registry</p>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Central driver identity &amp; compliance registry</p>
         </div>
         <button onClick={openNew}
           className="px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-teal-500 text-white rounded-xl font-semibold text-sm hover:opacity-90 transition-opacity flex items-center gap-2">

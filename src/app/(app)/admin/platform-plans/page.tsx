@@ -190,7 +190,7 @@ export default function PlatformPlansPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white">Platform Plans</h1>
-          <p className="text-slate-400 mt-1 text-sm">
+          <p className="text-slate-400 mt-1 text-xs">
             Plan tiers shown on the onboarding page and used to gate quotas + features.
             Changes are live immediately (no redeploy).
           </p>

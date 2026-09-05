@@ -116,7 +116,7 @@ export default function StockLevelsPage() {
 
       <div>
         <h1 className="text-2xl font-bold text-white">Stock Levels & Valuation</h1>
-        <p className="text-slate-400 text-sm">Live inventory with reorder monitoring</p>
+        <p className="text-slate-400 text-xs">Live inventory with reorder monitoring</p>
       </div>
 
       {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-red-400 text-sm">{error}</div>}

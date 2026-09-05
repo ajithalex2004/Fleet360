@@ -136,7 +136,7 @@ export default function WhatsAppSimulatorPage() {
             <span className="text-xs text-slate-400">Hybrid 2-Tier NLP (Google Gemini 2.0 Flash)</span>
           </div>
           <h1 className="text-2xl font-bold text-white mt-1">WhatsApp & Omnichannel Ticket Simulator</h1>
-          <p className="text-sm text-slate-400">
+          <p className="text-xs text-slate-400">
             Test multilingual driver WhatsApp messages, live UAE license plate extraction, and instant ticket auto-creation.
           </p>
         </div>

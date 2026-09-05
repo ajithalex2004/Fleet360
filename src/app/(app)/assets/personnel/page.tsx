@@ -74,7 +74,7 @@ export default function PersonnelLedgerPage() {
     <div className="p-8 space-y-5">
       <div>
         <h1 className="text-2xl font-bold text-white">Personnel Stock Ledger</h1>
-        <p className="text-slate-400 text-sm">Assets currently held by field technicians</p>
+        <p className="text-slate-400 text-xs">Assets currently held by field technicians</p>
       </div>
 
       {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-red-400 text-sm">{error}</div>}

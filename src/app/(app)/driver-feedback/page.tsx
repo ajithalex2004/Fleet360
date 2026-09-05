@@ -58,7 +58,7 @@ export default function DriverFeedbackPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900">Driver Feedback</h1>
-                    <p className="mt-1 text-slate-500">Report issues and provide feedback on repairs</p>
+                    <p className="text-xs mt-1 text-slate-500">Report issues and provide feedback on repairs</p>
                 </div>
                 <button
                     onClick={() => setShowReportModal(true)}

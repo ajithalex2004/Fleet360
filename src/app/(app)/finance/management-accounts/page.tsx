@@ -486,7 +486,7 @@ export default function ManagementAccountsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Management Accounts</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Income Statement (P&amp;L) · Cash Flow · Business Line Analysis</p>
+          <p className="text-slate-400 text-xs mt-0.5">Income Statement (P&amp;L) · Cash Flow · Business Line Analysis</p>
         </div>
         {data && (
           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium border ${

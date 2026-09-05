@@ -153,7 +153,7 @@ export default function RentalCopilotPage() {
         >
           <ChevronLeft className="h-3 w-3" /> Back to bookings
         </Link>
-        <h1 className="text-3xl font-bold text-white mt-2 flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-white mt-2 flex items-center gap-2">
           <Sparkles className="h-6 w-6 text-teal-400" />
           AI Rental Co-pilot
         </h1>

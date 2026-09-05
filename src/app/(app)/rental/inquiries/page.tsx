@@ -220,8 +220,8 @@ export default function InquiriesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">RAC Inquiries</h1>
-          <p className="text-slate-400 text-sm mt-1">Track and manage rental leads before booking is confirmed</p>
+          <h1 className="text-2xl font-bold text-white tracking-tight">RAC Inquiries</h1>
+          <p className="text-slate-400 text-xs mt-1">Track and manage rental leads before booking is confirmed</p>
         </div>
         <button
           onClick={openNew}

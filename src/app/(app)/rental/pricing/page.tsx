@@ -125,8 +125,8 @@ export default function PricingPage() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Pricing Rules</h1>
-          <p className="text-slate-400">{rules.filter(r => r.isActive).length} active / {rules.length} total rules</p>
+          <h1 className="text-2xl font-bold text-white mb-2">Pricing Rules</h1>
+          <p className="text-xs text-slate-400">{rules.filter(r => r.isActive).length} active / {rules.length} total rules</p>
         </div>
         <button onClick={openNew} className="rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90">
           + New Rule

@@ -204,7 +204,7 @@ export default function CollectionsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Collections & Dunning</h1>
-          <p className="text-slate-400 text-sm mt-0.5">AR aging, collection cases, dunning workflow</p>
+          <p className="text-slate-400 text-xs mt-0.5">AR aging, collection cases, dunning workflow</p>
         </div>
       </div>
 

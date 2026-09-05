@@ -11,7 +11,7 @@ export default function AIPlatformPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-white">AI Platform</h1>
-        <p className="mt-1 text-slate-500">
+        <p className="text-xs mt-1 text-slate-500">
           Machine-learning models and AI engines powering Fleet360 intelligence.
         </p>
       </div>

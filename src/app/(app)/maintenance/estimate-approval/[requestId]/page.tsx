@@ -221,7 +221,7 @@ export default function EstimateApprovalPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-white">Estimate Approval</h1>
-                    <p className="mt-1 text-slate-500">
+                    <p className="text-xs mt-1 text-slate-500">
                         Request #{request.id.toUpperCase()}
                         {isEmailApproval && <span className="ml-2 text-blue-600">• Email Approval</span>}
                     </p>

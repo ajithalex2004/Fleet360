@@ -191,7 +191,7 @@ export default function LogisticsDispatchPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-white">Dispatch Board</h1>
-          <p className="mt-0.5 text-sm text-slate-400">Shipment-order-native execution board for assignment and lifecycle movement.</p>
+          <p className="mt-0.5 text-xs text-slate-400">Shipment-order-native execution board for assignment and lifecycle movement.</p>
         </div>
         <button type="button" onClick={() => void load()} className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-300 hover:bg-white/5">
           <RefreshCw className="h-4 w-4" /> Refresh

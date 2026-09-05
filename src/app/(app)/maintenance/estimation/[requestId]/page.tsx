@@ -262,7 +262,7 @@ export default function EstimationPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-white">Estimation Management</h1>
-                    <p className="mt-1 text-slate-500">Request #{request.id.toUpperCase()} - {request.status}</p>
+                    <p className="text-xs mt-1 text-slate-500">Request #{request.id.toUpperCase()} - {request.status}</p>
                 </div>
                 <div className="flex gap-3">
                     {selectedGarages.size > 0 && canSendRFQ && (

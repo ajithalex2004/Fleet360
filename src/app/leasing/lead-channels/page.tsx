@@ -44,8 +44,8 @@ export default function LeasingLeadChannelsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-4xl font-bold text-[var(--text-main)] mb-2">Lead Channels</h1>
-        <p className="text-[var(--text-muted)]">
+        <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Lead Channels</h1>
+        <p className="text-xs text-[var(--text-muted)]">
           {channels.length} channels · {totalLeads} leads ingested · external sources post into the inbound webhook URLs below.
         </p>
       </div>

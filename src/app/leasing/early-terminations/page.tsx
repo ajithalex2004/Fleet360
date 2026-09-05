@@ -183,8 +183,8 @@ export default function EarlyTerminationsPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-[var(--text-main)] mb-2">Early Terminations</h1>
-          <p className="text-[var(--text-muted)]">Manage contract early termination requests</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Early Terminations</h1>
+          <p className="text-xs text-[var(--text-muted)]">Manage contract early termination requests</p>
         </div>
         <button
           onClick={() => setShowModal(true)}

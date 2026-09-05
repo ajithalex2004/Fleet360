@@ -24,7 +24,7 @@ export default function AIPlatformPredictivePage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-white">Predictive Maintenance</h1>
-        <p className="mt-1 text-slate-500">AI-powered failure prediction and cost forecasting — owned by AI Platform.</p>
+        <p className="text-xs mt-1 text-slate-500">AI-powered failure prediction and cost forecasting — owned by AI Platform.</p>
       </div>
 
       <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 flex items-start justify-between gap-4">

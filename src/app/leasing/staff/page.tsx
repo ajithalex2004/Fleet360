@@ -237,8 +237,8 @@ export default function LeasingStaffPage() {
       {/* ── Header ── */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-[var(--text-main)] mb-1">Branch Staff Management</h1>
-          <p className="text-[var(--text-muted)] text-sm">Manage staff assignments across all leasing branches</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-1">Branch Staff Management</h1>
+          <p className="text-[var(--text-muted)] text-xs">Manage staff assignments across all leasing branches</p>
           <p className="mt-2 text-xs text-amber-300">
             Compatibility page: this feature will move to Admin / Branch Management as Branch Staff Assignments.
           </p>

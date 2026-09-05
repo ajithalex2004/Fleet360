@@ -53,7 +53,7 @@ export default function ServiceTicketsCsatPage() {
             <span className="text-xs text-slate-400">Pillar 5 (P1)</span>
           </div>
           <h1 className="text-2xl font-bold text-white mt-1">CSAT & First-Contact Resolution Analytics</h1>
-          <p className="text-sm text-slate-400">
+          <p className="text-xs text-slate-400">
             Real-time customer satisfaction metrics, 1-click driver feedback ratings, and Net Promoter Score (NPS) breakdown.
           </p>
         </div>

@@ -135,8 +135,8 @@ export default function ShiftManagement() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-[var(--text-main)]">Shift Management</h1>
-          <p className="text-[var(--text-muted)] mt-1">Schedule and manage driver shifts</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Shift Management</h1>
+          <p className="text-xs text-[var(--text-muted)] mt-1">Schedule and manage driver shifts</p>
         </div>
         <button
           onClick={() => setShowModal(true)}

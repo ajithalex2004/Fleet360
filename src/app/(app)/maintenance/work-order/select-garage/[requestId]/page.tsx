@@ -156,7 +156,7 @@ export default function SelectGaragePage() {
             {/* Header */}
             <div>
                 <h1 className="text-2xl font-bold text-white">Select Garage & Send Work Order</h1>
-                <p className="mt-1 text-slate-500">Request #{request.id.toUpperCase()}</p>
+                <p className="text-xs mt-1 text-slate-500">Request #{request.id.toUpperCase()}</p>
             </div>
 
             {/* Request Summary */}

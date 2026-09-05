@@ -31,7 +31,7 @@ export default function DispatchSchoolBusRedirect() {
 
       <div className="text-center space-y-2 max-w-md">
         <h1 className="text-[var(--text-main)] text-2xl font-bold">School Bus has its own Dispatch Board</h1>
-        <p className="text-[var(--text-muted)] text-sm">
+        <p className="text-[var(--text-muted)] text-xs">
           School Bus operations — route assignment, departure management, student attendance,
           and UAE compliance — are handled in the dedicated School Bus module, not the general
           Dispatch Command Centre.

@@ -313,7 +313,7 @@ export default function JournalEntriesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Journal Entries</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Double-entry bookkeeping — every entry must balance</p>
+          <p className="text-slate-400 text-xs mt-0.5">Double-entry bookkeeping — every entry must balance</p>
         </div>
         <button onClick={() => setCreate(true)}
           className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl text-sm">

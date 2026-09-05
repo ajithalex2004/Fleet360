@@ -325,7 +325,7 @@ function RoutePlannerInner() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--text-main)]">Route Optimization</h1>
-          <p className="text-[var(--text-muted)] text-sm mt-0.5">
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">
             {mode === 'fleet'
               ? 'Whole-fleet VRPTW solve — reassign passengers across vehicles to minimise total distance.'
               : editId && editingRouteName

@@ -483,7 +483,7 @@ export default function BranchesPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Branch Management</h1>
-          <p className="text-slate-400 text-sm mt-1">
+          <p className="text-slate-400 text-xs mt-1">
             Multi-emirate branches per tenant · Separate trade licenses · Single TRN per company
           </p>
         </div>

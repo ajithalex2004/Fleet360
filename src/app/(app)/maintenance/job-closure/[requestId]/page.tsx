@@ -98,7 +98,7 @@ export default function JobClosurePage() {
             {/* Header */}
             <div>
                 <h1 className="text-2xl font-bold text-white">Job Closure</h1>
-                <p className="mt-1 text-slate-500">Request #{request.id.toUpperCase()}</p>
+                <p className="text-xs mt-1 text-slate-500">Request #{request.id.toUpperCase()}</p>
             </div>
 
             {/* Completion Summary */}

@@ -510,7 +510,7 @@ export default function LogisticsQuotesPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-white">Freight Quotes</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Calculate, save, and manage logistics freight quotations</p>
+          <p className="text-slate-400 text-xs mt-0.5">Calculate, save, and manage logistics freight quotations</p>
         </div>
         <div className="flex items-center gap-3">
           {quotes.length > 0 && (

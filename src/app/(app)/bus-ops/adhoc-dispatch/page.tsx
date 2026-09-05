@@ -211,7 +211,7 @@ export default function AdhocDispatchPage() {
             <span className="text-xs text-[var(--text-muted)]">Multi-Tier Fulfillment Solver</span>
           </div>
           <h1 className="text-2xl font-bold text-[var(--text-main)] mt-1">Overtime & Ad-Hoc Transport Dispatch</h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-xs text-[var(--text-muted)]">
             Automated capacity matching for unscheduled shifts: Route Fit → Standby Shuttle → Taxi Voucher.
           </p>
         </div>

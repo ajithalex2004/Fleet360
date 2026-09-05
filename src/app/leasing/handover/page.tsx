@@ -500,7 +500,7 @@ export default function HandoverPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--text-main)]">Vehicle Handover & Return</h1>
-          <p className="text-sm text-[var(--text-muted)] mt-0.5">
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">
             Digital handover checklists for vehicle delivery and end-of-lease return
           </p>
         </div>

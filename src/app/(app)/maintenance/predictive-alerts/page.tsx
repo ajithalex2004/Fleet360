@@ -27,7 +27,7 @@ export default function PredictiveAlertsPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Predictive Alerts</h1>
-          <p className="mt-1 text-slate-500">AI-generated failure predictions for your fleet.</p>
+          <p className="text-xs mt-1 text-slate-500">AI-generated failure predictions for your fleet.</p>
         </div>
         <Link
           href="/ai-platform/predictive"

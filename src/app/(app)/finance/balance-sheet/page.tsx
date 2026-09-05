@@ -69,7 +69,7 @@ export default function BalanceSheetPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Balance Sheet</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Statement of Financial Position</p>
+          <p className="text-slate-400 text-xs mt-0.5">Statement of Financial Position</p>
         </div>
         <div className="flex items-center gap-3">
           {data && (

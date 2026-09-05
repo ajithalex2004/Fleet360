@@ -293,7 +293,7 @@ export default function AmbulanceDispatchPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white">🚑 Ambulance Dispatch Board</h1>
-            <p className="text-slate-400 text-sm mt-0.5">
+            <p className="text-slate-400 text-xs mt-0.5">
               Emergency response management · auto-refreshes every 15 seconds
             </p>
           </div>

@@ -154,8 +154,8 @@ export default function LogisticsAnalyticsPage() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-white">Logistics Analytics</h1>
-          <p className="text-slate-400 mt-1">KPI dashboard &amp; fleet performance metrics</p>
+          <h1 className="text-2xl font-bold text-white">Logistics Analytics</h1>
+          <p className="text-xs text-slate-400 mt-1">KPI dashboard &amp; fleet performance metrics</p>
         </div>
         <div className="flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-full">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />

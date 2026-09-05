@@ -95,7 +95,7 @@ export default function EsgCarbonDashboard() {
             <span className="text-xs text-[var(--text-muted)]">DEFRA & GHG Protocol Standards</span>
           </div>
           <h1 className="text-2xl font-bold text-[var(--text-main)] mt-1">Departmental ESG Carbon Attribution</h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-xs text-[var(--text-muted)]">
             Prorated corporate emissions, passenger-km carbon intensity, and avoided commuter footprints.
           </p>
         </div>

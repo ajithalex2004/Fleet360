@@ -196,7 +196,7 @@ export default function VehiclesPage() {
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-2xl font-bold text-white">Vehicle Management</h1>
-                    <p className="text-slate-500">Manage your fleet vehicles.</p>
+                    <p className="text-xs text-slate-500">Manage your fleet vehicles.</p>
                 </div>
                 <button
                     onClick={openCreateModal}

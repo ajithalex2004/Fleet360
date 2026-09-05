@@ -189,7 +189,7 @@ export default function AdminDispatchPage() {
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
             🚦 Dispatch Monitor
             {loading && <span className="w-3 h-3 rounded-full bg-blue-400 animate-pulse" />}
           </h1>

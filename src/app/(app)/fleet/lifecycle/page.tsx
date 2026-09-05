@@ -129,7 +129,7 @@ export default function LifecyclePage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-white">Fleet Lifecycle Events</h1>
-          <p className="text-slate-400 text-sm mt-1">Track vehicle stage transitions and lifecycle history</p>
+          <p className="text-slate-400 text-xs mt-1">Track vehicle stage transitions and lifecycle history</p>
         </div>
         <button
           onClick={openCreate}

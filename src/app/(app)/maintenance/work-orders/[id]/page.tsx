@@ -946,8 +946,8 @@ export default function WorkOrderPage() {
             <div className="hidden print:block mb-8 border-b-2 border-slate-900 pb-4">
                 <div className="flex justify-between items-start">
                     <div>
-                        <h1 className="text-3xl font-bold text-white uppercase tracking-wider">Work Order Details</h1>
-                        <p className="text-sm text-slate-600 mt-1">ID: <span className="font-mono font-bold">{workOrder.id.toUpperCase()}</span></p>
+                        <h1 className="text-2xl font-bold text-white uppercase tracking-wider">Work Order Details</h1>
+                        <p className="text-xs text-slate-600 mt-1">ID: <span className="font-mono font-bold">{workOrder.id.toUpperCase()}</span></p>
                     </div>
                     <div className="text-right">
                         <p className="text-sm font-bold text-white">{garage?.name}</p>

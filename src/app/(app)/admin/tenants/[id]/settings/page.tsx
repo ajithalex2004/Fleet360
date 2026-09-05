@@ -123,8 +123,8 @@ export default function TenantSettingsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-1">Tenant Settings</h1>
-          <p className="text-slate-400 text-sm">Configure operational settings, auto-dispatch rules, and notification preferences</p>
+          <h1 className="text-2xl font-bold text-white mb-1">Tenant Settings</h1>
+          <p className="text-slate-400 text-xs">Configure operational settings, auto-dispatch rules, and notification preferences</p>
         </div>
         <div className="flex items-center gap-3">
           {saveMsg && <span className={`text-sm ${saveMsg.includes('Error') ? 'text-rose-400' : 'text-emerald-400'}`}>{saveMsg}</span>}

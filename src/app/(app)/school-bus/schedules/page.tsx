@@ -425,7 +425,7 @@ export default function SchedulesPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">📅 Master Schedules</h1>
-          <p className="text-slate-400 text-sm mt-0.5">UAE school week cycles · Sun–Thu standard · Friday optional · Ramadan overrides</p>
+          <p className="text-slate-400 text-xs mt-0.5">UAE school week cycles · Sun–Thu standard · Friday optional · Ramadan overrides</p>
         </div>
         <button onClick={() => { setEditing(null); setShowModal(true); }}
           className="bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold px-4 py-2.5 rounded-xl text-sm transition-colors">

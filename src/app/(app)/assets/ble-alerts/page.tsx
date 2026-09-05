@@ -156,7 +156,7 @@ export default function BLEAlertsPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">🚨 BLE Movement Alerts</h1>
-          <p className="text-slate-400 text-sm mt-1">Zone violation alerts from BLE tracking</p>
+          <p className="text-slate-400 text-xs mt-1">Zone violation alerts from BLE tracking</p>
         </div>
         <button onClick={load} className="text-xs bg-slate-800 border border-white/8 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">
           Refresh

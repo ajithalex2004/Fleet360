@@ -422,7 +422,7 @@ export default function DepositsPage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-white">Security Deposit Management</h1>
-          <p className="text-slate-400 text-sm mt-1">Track, deduct & refund security deposits across all contracts</p>
+          <p className="text-slate-400 text-xs mt-1">Track, deduct & refund security deposits across all contracts</p>
         </div>
         <button onClick={() => setShowNew(true)}
           className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-semibold hover:from-emerald-500 hover:to-teal-500 transition-all">

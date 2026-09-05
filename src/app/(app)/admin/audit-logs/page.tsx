@@ -245,7 +245,7 @@ export default function AuditLogsPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">User Audit Log</h1>
-          <p className="text-slate-400 text-sm mt-1">
+          <p className="text-slate-400 text-xs mt-1">
             Complete record of all user actions · {(meta.total ?? 0).toLocaleString()} total entries
           </p>
           {/* Active scope breadcrumb */}

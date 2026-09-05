@@ -374,8 +374,8 @@ export default function WorkflowsPage() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-1">Business Rule & Workflow Management</h1>
-          <p className="text-slate-400 text-sm">Define approval chains, notification rules, and escalation paths for all platform modules</p>
+          <h1 className="text-2xl font-bold text-white mb-1">Business Rule & Workflow Management</h1>
+          <p className="text-slate-400 text-xs">Define approval chains, notification rules, and escalation paths for all platform modules</p>
         </div>
         <button onClick={() => setShowNewWf(true)}
           className="flex-shrink-0 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white font-semibold text-sm hover:opacity-90 transition-opacity shadow-lg">

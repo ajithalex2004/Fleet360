@@ -110,7 +110,7 @@ export default function WorkOrderListPage() {
             <div className="mb-8 flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-white">Work Orders</h1>
-                    <p className="mt-1 text-sm text-slate-500">Manage and track all maintenance work orders</p>
+                    <p className="mt-1 text-xs text-slate-500">Manage and track all maintenance work orders</p>
                 </div>
             </div>
 

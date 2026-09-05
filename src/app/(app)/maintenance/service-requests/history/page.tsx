@@ -160,7 +160,7 @@ export default function ServiceRequestHistoryPage() {
                             </button>
                             <h1 className="text-2xl font-bold text-white tracking-tight">Service Request History</h1>
                         </div>
-                        <p className="mt-1 text-slate-500 ml-7">View resolved service requests.</p>
+                        <p className="text-xs mt-1 text-slate-500 ml-7">View resolved service requests.</p>
                     </div>
                 </div>
 

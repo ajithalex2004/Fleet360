@@ -147,7 +147,7 @@ export default function CertificationsPage() {
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold text-white">Certifications & Readiness</h1>
-        <p className="text-slate-400 text-sm mt-1">ISO 14064 · GHG Protocol · UAE Green Label · Carbon Neutral assessment</p>
+        <p className="text-slate-400 text-xs mt-1">ISO 14064 · GHG Protocol · UAE Green Label · Carbon Neutral assessment</p>
       </div>
 
       {loading ? (

@@ -148,8 +148,8 @@ export default function FuelManagement() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white">Fuel Management</h1>
-          <p className="text-slate-400 mt-1">Track fuel consumption and fuel card usage</p>
+          <h1 className="text-2xl font-bold text-white">Fuel Management</h1>
+          <p className="text-xs text-slate-400 mt-1">Track fuel consumption and fuel card usage</p>
         </div>
       </div>
 

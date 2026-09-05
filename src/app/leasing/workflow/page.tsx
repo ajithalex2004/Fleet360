@@ -145,8 +145,8 @@ export default function WorkflowPage() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-4xl font-bold text-[var(--text-main)] mb-2">Workflow Management</h1>
-        <p className="text-[var(--text-muted)]">Monitor approval cycles and contract lifecycle progression</p>
+        <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Workflow Management</h1>
+        <p className="text-xs text-[var(--text-muted)]">Monitor approval cycles and contract lifecycle progression</p>
       </div>
 
       {/* Workflow Pipeline */}

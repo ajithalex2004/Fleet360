@@ -414,7 +414,7 @@ export default function AllocationsPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">💺 Seat Allocations</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Student enrollment · pickup/drop stops · bus mode · effective dating</p>
+          <p className="text-slate-400 text-xs mt-0.5">Student enrollment · pickup/drop stops · bus mode · effective dating</p>
         </div>
         <div className="flex gap-2">
           <Link href="/finance/invoices?module=SCHOOL_BUS"

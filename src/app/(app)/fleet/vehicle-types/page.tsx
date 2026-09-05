@@ -189,7 +189,7 @@ export default function VehicleTypesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Vehicle Type Master</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Define vehicle categories, specifications, and cost parameters</p>
+          <p className="text-slate-400 text-xs mt-0.5">Define vehicle categories, specifications, and cost parameters</p>
         </div>
         <button onClick={openNew} className="px-5 py-2.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-xl font-semibold text-sm hover:opacity-90 transition-opacity flex items-center gap-2">
           <span>+</span> New Vehicle Type

@@ -167,7 +167,7 @@ export default function DispatchAnalyticsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--text-main)]">📈 Dispatch Analytics</h1>
-          <p className="text-[var(--text-muted)] text-sm mt-0.5">Performance metrics, acceptance rates, fleet utilisation</p>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Performance metrics, acceptance rates, fleet utilisation</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-1">

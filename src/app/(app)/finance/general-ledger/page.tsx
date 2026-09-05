@@ -287,7 +287,7 @@ export default function GeneralLedgerPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">General Ledger</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Trial Balance & Account Statements</p>
+          <p className="text-slate-400 text-xs mt-0.5">Trial Balance & Account Statements</p>
         </div>
         <div className="flex items-center gap-3">
           {tab === 'trial_balance' && (

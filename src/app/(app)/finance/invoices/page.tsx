@@ -588,7 +588,7 @@ function FinanceInvoicesInner() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Invoices</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Create, manage, and track all invoices</p>
+          <p className="text-slate-400 text-xs mt-0.5">Create, manage, and track all invoices</p>
         </div>
         <div className="flex gap-3">
           <button onClick={handleExport}

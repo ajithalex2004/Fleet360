@@ -69,7 +69,7 @@ export default function PlatformAlertsPage() {
             </div>
             <h1 className="text-2xl font-bold text-white">Platform Alert Engine</h1>
           </div>
-          <p className="text-sm text-slate-500 ml-[52px]">
+          <p className="text-xs text-slate-500 ml-[52px]">
             Unified alert configuration and action centre for all Fleet360 modules.
           </p>
         </div>

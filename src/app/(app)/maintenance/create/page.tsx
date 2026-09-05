@@ -310,7 +310,7 @@ export default function CreateRequestPage() {
             {/* Header */}
             <div>
                 <h1 className="text-2xl font-bold text-white">Create Maintenance Request</h1>
-                <p className="mt-1 text-slate-500">Submit a new maintenance request for your vehicle</p>
+                <p className="text-xs mt-1 text-slate-500">Submit a new maintenance request for your vehicle</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-8 rounded-xl border border-white/10 bg-slate-900 p-8 shadow-sm">

@@ -118,7 +118,7 @@ export default function DriverFatigueDashboard() {
             <span className="text-xs text-[var(--text-muted)]">Mandatory 8h Rest & Fatigue Prevention</span>
           </div>
           <h1 className="text-2xl font-bold text-[var(--text-main)] mt-1">Driver Fatigue & Rest Monitor</h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-xs text-[var(--text-muted)]">
             Real-time split-shift rest tracking, 4.5h continuous driving limits, and automated assignment lockout.
           </p>
         </div>

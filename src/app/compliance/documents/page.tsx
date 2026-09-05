@@ -119,8 +119,8 @@ export default function DocumentsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Compliance Documents</h1>
-          <p className="text-slate-400">Manage all regulatory documents and permits</p>
+          <h1 className="text-2xl font-bold text-white mb-2">Compliance Documents</h1>
+          <p className="text-xs text-slate-400">Manage all regulatory documents and permits</p>
         </div>
         <button
           onClick={() => setShowModal(true)}

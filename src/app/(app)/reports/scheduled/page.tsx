@@ -82,8 +82,8 @@ export default function ScheduledReportsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-[var(--text-main)] mb-2">Scheduled Reports</h1>
-          <p className="text-[var(--text-muted)]">Manage automated report generation and delivery</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Scheduled Reports</h1>
+          <p className="text-xs text-[var(--text-muted)]">Manage automated report generation and delivery</p>
         </div>
         <button
           onClick={() => setShowModal(true)}

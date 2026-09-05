@@ -124,7 +124,7 @@ export default function CorporateTaxPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">UAE Corporate Tax</h1>
-          <p className="text-slate-400 text-sm mt-0.5">9% CT on taxable income above AED 375,000 · FTA Compliance</p>
+          <p className="text-slate-400 text-xs mt-0.5">9% CT on taxable income above AED 375,000 · FTA Compliance</p>
         </div>
         <div className="flex items-center gap-3">
           <select value={year} onChange={e => setYear(parseInt(e.target.value))}

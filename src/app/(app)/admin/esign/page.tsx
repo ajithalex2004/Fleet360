@@ -189,7 +189,7 @@ export default function ESignConsolePage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">E-Signing Console</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Manage OTP-based digital signing requests across all contracts</p>
+          <p className="text-slate-400 text-xs mt-0.5">Manage OTP-based digital signing requests across all contracts</p>
         </div>
         <button
           onClick={() => fetchData(pagination.page)}

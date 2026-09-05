@@ -224,8 +224,8 @@ export default function RentalStaffPage() {
       {/* ── Header ── */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-1">Branch Staff Management</h1>
-          <p className="text-slate-400 text-sm">Manage staff assignments across all Rent-A-Car branches</p>
+          <h1 className="text-2xl font-bold text-white mb-1">Branch Staff Management</h1>
+          <p className="text-slate-400 text-xs">Manage staff assignments across all Rent-A-Car branches</p>
         </div>
         <button
           onClick={() => { setEditTarget(null); setForm({ ...EMPTY_FORM }); setShowAssign(true); }}

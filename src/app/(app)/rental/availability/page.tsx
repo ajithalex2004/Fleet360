@@ -60,8 +60,8 @@ export default function AvailabilityPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-4xl font-bold text-white mb-2">Vehicle Availability</h1>
-        <p className="text-slate-400">Check which vehicles are available for a given rental period</p>
+        <h1 className="text-2xl font-bold text-white mb-2">Vehicle Availability</h1>
+        <p className="text-xs text-slate-400">Check which vehicles are available for a given rental period</p>
       </div>
 
       {/* Search Panel */}

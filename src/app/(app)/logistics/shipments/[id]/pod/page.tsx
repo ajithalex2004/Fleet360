@@ -200,7 +200,7 @@ export default function ShipmentPodPage() {
             <span className="font-mono text-slate-300">{shipment?.shipment_no ?? id?.slice(0, 8) ?? '—'}</span>
           </div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-white"><PenLine className="h-6 w-6 text-emerald-300" /> Electronic POD</h1>
-          <p className="mt-1 text-sm text-slate-400">{shipment?.cargo_owner_name ?? 'Customer'} - {shipment?.origin_name ?? shipment?.origin_address ?? '-'} to {shipment?.destination_name ?? shipment?.destination_address ?? '-'}</p>
+          <p className="mt-1 text-xs text-slate-400">{shipment?.cargo_owner_name ?? 'Customer'} - {shipment?.origin_name ?? shipment?.origin_address ?? '-'} to {shipment?.destination_name ?? shipment?.destination_address ?? '-'}</p>
         </div>
         <button type="button" onClick={() => router.push('/logistics/dispatch')} className="rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-300 hover:bg-white/5">Back to dispatch</button>
       </div>

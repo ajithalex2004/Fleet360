@@ -202,7 +202,7 @@ export default function InvoiceEntryPage() {
             {/* Header */}
             <div>
                 <h1 className="text-2xl font-bold text-white">Invoice Entry</h1>
-                <p className="mt-1 text-slate-500">Request #{request.id.toUpperCase()}</p>
+                <p className="text-xs mt-1 text-slate-500">Request #{request.id.toUpperCase()}</p>
             </div>
 
             {/* Invoice Details */}

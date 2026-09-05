@@ -84,7 +84,7 @@ export default function ARAgingPage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-white">AR Aging Report</h1>
-          <p className="text-slate-400 text-sm mt-1">Outstanding receivables by aging bucket · standard 0–30 / 31–60 / 61–90 / 91–120 / 120+ days</p>
+          <p className="text-slate-400 text-xs mt-1">Outstanding receivables by aging bucket · standard 0–30 / 31–60 / 61–90 / 91–120 / 120+ days</p>
         </div>
         <button onClick={exportData}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-700/40 hover:bg-emerald-700/60 border border-emerald-500/30 text-emerald-300 text-sm font-medium transition-all">

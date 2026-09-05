@@ -317,7 +317,7 @@ export default function BudgetApprovalsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Budget Approvals</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Department budget submissions with FM → CFO approval workflow</p>
+          <p className="text-slate-400 text-xs mt-0.5">Department budget submissions with FM → CFO approval workflow</p>
         </div>
         <div className="flex items-center gap-3">
           <select value={selectedYear} onChange={e => setSelectedYear(parseInt(e.target.value))}

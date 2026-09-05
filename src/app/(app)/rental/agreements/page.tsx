@@ -383,7 +383,7 @@ export default function RentalAgreementsPage() {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold text-white">Rental Agreements</h1>
-            <p className="text-slate-400 text-sm mt-0.5">Agreement lifecycle management</p>
+            <p className="text-slate-400 text-xs mt-0.5">Agreement lifecycle management</p>
           </div>
           <Link href="/rental/bookings"
             className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-2 rounded-xl text-sm transition-colors">

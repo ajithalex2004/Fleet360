@@ -409,7 +409,7 @@ export default function PlatformSettingsPage() {
       <div className="sticky top-0 z-10 bg-slate-950/95 backdrop-blur border-b border-white/10 px-8 py-4 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Platform Settings</h1>
-          <p className="text-sm text-slate-400 mt-0.5">Configure system-wide defaults, channels, and feature controls</p>
+          <p className="text-xs text-slate-400 mt-0.5">Configure system-wide defaults, channels, and feature controls</p>
         </div>
         <div className="flex items-center gap-3">
           <button onClick={() => setShowPwModal(true)}

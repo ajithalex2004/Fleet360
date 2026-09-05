@@ -187,7 +187,7 @@ export default function WarrantyPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-white">Warranty Management</h1>
-                    <p className="text-slate-500 text-sm mt-1">Track vehicle warranties and manage repair cost claims</p>
+                    <p className="text-slate-500 text-xs mt-1">Track vehicle warranties and manage repair cost claims</p>
                 </div>
                 <button
                     onClick={() => setModalMode('create-warranty')}

@@ -43,8 +43,8 @@ export default function ChannelsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-4xl font-bold text-white mb-2">Channel Manager</h1>
-        <p className="text-slate-400">
+        <h1 className="text-2xl font-bold text-white mb-2">Channel Manager</h1>
+        <p className="text-xs text-slate-400">
           {channels.length} channels · {totalBookings} bookings ingested · external partners post into the inbound webhook URLs below.
         </p>
       </div>

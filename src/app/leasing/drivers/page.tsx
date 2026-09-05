@@ -69,8 +69,8 @@ export default function LeasingDriversPage() {
     <div className="space-y-8">
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-4xl font-bold text-[var(--text-main)] mb-2">Drivers</h1>
-          <p className="text-[var(--text-muted)]">
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Drivers</h1>
+          <p className="text-xs text-[var(--text-muted)]">
             {scope === 'allocated'
               ? `Drivers currently allocated to leasing contracts`
               : `All drivers in the platform — allocate via a contract page`}

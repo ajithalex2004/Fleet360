@@ -125,7 +125,7 @@ export default function ContractQAPage() {
         >
           <ChevronLeft className="h-3 w-3" /> Back to contracts
         </Link>
-        <h1 className="text-3xl font-bold text-[var(--text-main)] mt-2 flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-[var(--text-main)] mt-2 flex items-center gap-2">
           <Sparkles className="h-6 w-6 text-cyan-400" />
           AI Contract Q&A
         </h1>

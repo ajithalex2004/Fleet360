@@ -198,8 +198,8 @@ export default function InsurancePage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Insurance Documentation</h1>
-          <p className="text-slate-400">Manage RAC vehicle insurance policies</p>
+          <h1 className="text-2xl font-bold text-white mb-2">Insurance Documentation</h1>
+          <p className="text-xs text-slate-400">Manage RAC vehicle insurance policies</p>
         </div>
         <button
           onClick={openNew}

@@ -354,8 +354,8 @@ export default function HandoverPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Handover Checklists</h1>
-          <p className="text-slate-400">Vehicle pickup and return condition records</p>
+          <h1 className="text-2xl font-bold text-white mb-2">Handover Checklists</h1>
+          <p className="text-xs text-slate-400">Vehicle pickup and return condition records</p>
         </div>
         <button
           onClick={() => { resetForm(); setShowModal(true); }}

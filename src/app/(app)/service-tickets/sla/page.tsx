@@ -118,7 +118,7 @@ export default function ServiceTicketsSlaControlTower() {
             <span className="text-xs text-slate-400">Pillar 2 (P0)</span>
           </div>
           <h1 className="text-2xl font-bold text-white mt-1">SLA Control Tower & Escalation Matrix</h1>
-          <p className="text-sm text-slate-400">
+          <p className="text-xs text-slate-400">
             Real-time multi-tier SLA tracking, automated unacknowledged supervisor escalations, and 24/7 vs business hour calendars.
           </p>
         </div>

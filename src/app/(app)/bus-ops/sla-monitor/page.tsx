@@ -155,7 +155,7 @@ export default function ShiftSlaMonitorPage() {
             </span>
           </div>
           <h1 className="text-2xl font-bold text-[var(--text-main)] mt-1">Shift Arrival SLA Monitor</h1>
-          <p className="text-sm text-[var(--text-muted)]">
+          <p className="text-xs text-[var(--text-muted)]">
             Real-time workplace destination ETA tracking and proactive delay warning system for corporate shift shuttles.
           </p>
         </div>

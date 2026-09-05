@@ -11,7 +11,7 @@ export default function VendorGaragePortalPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-white">Garage Portal</h1>
-        <p className="mt-1 text-slate-500">
+        <p className="text-xs mt-1 text-slate-500">
           Vendor-facing portal for submitting and managing quotations against work orders.
         </p>
       </div>

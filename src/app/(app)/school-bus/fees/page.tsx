@@ -43,7 +43,7 @@ export default function SchoolBusFeesRedirect() {
       {/* Title */}
       <div className="text-center">
         <h1 className="text-2xl font-bold text-white mb-2">School Bus Fees have moved</h1>
-        <p className="text-slate-400 text-sm leading-relaxed">
+        <p className="text-slate-400 text-xs leading-relaxed">
           Transport invoices are now managed in the <strong className="text-emerald-400">Finance Module</strong> —
           alongside all other receivables. This gives you AR Aging, VAT Returns, Collections,
           Payment Reminders, and P&L reporting automatically.

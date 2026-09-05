@@ -176,7 +176,7 @@ export default function DriverPerformancePage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-white">{stats.firstName} {stats.lastName}</h1>
-            <p className="text-slate-400 text-sm mt-0.5 space-x-3">
+            <p className="text-slate-400 text-xs mt-0.5 space-x-3">
               {stats.phone && <span>📞 {stats.phone}</span>}
               {stats.licenseNumber && <span>🪪 {stats.licenseNumber}</span>}
             </p>

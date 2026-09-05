@@ -74,8 +74,8 @@ export default function DriverPerformancePage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-4xl font-bold text-[var(--text-main)] mb-2">Driver Performance Report</h1>
-        <p className="text-[var(--text-muted)]">Monitor driver metrics and performance scores</p>
+        <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Driver Performance Report</h1>
+        <p className="text-xs text-[var(--text-muted)]">Monitor driver metrics and performance scores</p>
       </div>
 
       {/* Period Filter */}

@@ -119,7 +119,7 @@ export default function ApprovalRulesPage() {
                         </Link>
                         <h1 className="text-2xl font-bold text-white">Approval Rules</h1>
                     </div>
-                    <p className="text-slate-500 ml-8">Configure approval workflows based on cost thresholds</p>
+                    <p className="text-xs text-slate-500 ml-8">Configure approval workflows based on cost thresholds</p>
                 </div>
                 <button
                     onClick={() => {

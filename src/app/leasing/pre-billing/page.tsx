@@ -192,8 +192,8 @@ export default function PreBillingPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-[var(--text-main)] mb-2">Pre-Billing Statements</h1>
-          <p className="text-[var(--text-muted)]">Generate and manage monthly billing statements</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Pre-Billing Statements</h1>
+          <p className="text-xs text-[var(--text-muted)]">Generate and manage monthly billing statements</p>
         </div>
         <button
           onClick={() => setShowModal(true)}

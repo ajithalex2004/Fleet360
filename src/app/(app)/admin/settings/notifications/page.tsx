@@ -728,8 +728,8 @@ export default function NotificationChannelsPage() {
     <div className="space-y-8 pb-12">
       {/* Page header */}
       <div>
-        <h1 className="text-3xl font-bold text-white">Notification Channels</h1>
-        <p className="text-slate-400 mt-1">Configure Email, SMS, and WhatsApp providers for the platform</p>
+        <h1 className="text-2xl font-bold text-white">Notification Channels</h1>
+        <p className="text-xs text-slate-400 mt-1">Configure Email, SMS, and WhatsApp providers for the platform</p>
       </div>
 
       {error && (

@@ -11,7 +11,7 @@ export default function VendorsPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-white tracking-tight">Vendor &amp; Partner Management</h1>
-        <p className="mt-1 text-slate-400 text-sm">
+        <p className="mt-1 text-slate-400 text-xs">
           Unified procurement and external partner operations across Transport Outsourcing (Passenger, Freight, Recovery, Limo) and Maintenance Garages.
         </p>
       </div>

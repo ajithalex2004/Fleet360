@@ -1154,7 +1154,7 @@ export default function WhatsAppConsolePage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-white">WhatsApp AI Support Console</h1>
-            <p className="text-slate-400 text-sm mt-0.5">Smart Mobility customer support via WhatsApp</p>
+            <p className="text-slate-400 text-xs mt-0.5">Smart Mobility customer support via WhatsApp</p>
           </div>
         </div>
         <div className="flex items-center gap-2">

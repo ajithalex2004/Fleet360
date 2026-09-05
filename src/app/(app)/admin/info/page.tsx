@@ -52,8 +52,8 @@ export default function AdminInfoPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Platform Info</h1>
-          <p className="text-slate-400">{platform.name} v{platform.version} - {platform.stack}</p>
+          <h1 className="text-2xl font-bold text-white mb-2">Platform Info</h1>
+          <p className="text-xs text-slate-400">{platform.name} v{platform.version} - {platform.stack}</p>
         </div>
         <button onClick={load} className="px-4 py-2 rounded-xl bg-slate-700 border border-white/10 text-white text-sm hover:bg-slate-600">
           Refresh

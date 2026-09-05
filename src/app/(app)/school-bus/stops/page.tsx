@@ -233,7 +233,7 @@ export default function StopsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">📍 Stop Management</h1>
-          <p className="text-slate-400 text-sm mt-0.5">
+          <p className="text-slate-400 text-xs mt-0.5">
             Geospatial stop registry · {activeCount} active · {inactiveCount} inactive
           </p>
         </div>

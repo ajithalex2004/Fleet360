@@ -116,7 +116,7 @@ export default function PMSchedulePage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-white">PM Schedule</h1>
-                    <p className="mt-1 text-slate-500">Due items across all active maintenance plans — whichever trigger comes first</p>
+                    <p className="text-xs mt-1 text-slate-500">Due items across all active maintenance plans — whichever trigger comes first</p>
                 </div>
                 <button
                     onClick={handleGenerateRequests}

@@ -506,8 +506,8 @@ export default function TenantsPage() {
       {/* ── Page header ────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Tenants</h1>
-          <p className="text-slate-400">{tenants.filter(t => t.isActive).length} active organisations on the platform</p>
+          <h1 className="text-2xl font-bold text-white mb-2">Tenants</h1>
+          <p className="text-xs text-slate-400">{tenants.filter(t => t.isActive).length} active organisations on the platform</p>
         </div>
         <button onClick={openModal}
           className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90">

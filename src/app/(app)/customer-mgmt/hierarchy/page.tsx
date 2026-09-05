@@ -115,8 +115,8 @@ export default function HierarchyPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-[var(--text-main)]">Hierarchy Setup</h1>
-          <p className="text-[var(--text-muted)] text-sm mt-0.5">3-level customer hierarchy: Region &rarr; Department &rarr; Unit</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Hierarchy Setup</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">3-level customer hierarchy: Region &rarr; Department &rarr; Unit</p>
         </div>
       </div>
 

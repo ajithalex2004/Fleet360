@@ -109,8 +109,8 @@ export default function CustomersPage() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-white mb-2">Customers</h1>
-          <p className="text-slate-400">{customers.length} registered customers</p>
+          <h1 className="text-2xl font-bold text-white mb-2">Customers</h1>
+          <p className="text-xs text-slate-400">{customers.length} registered customers</p>
         </div>
         <button onClick={openNew} className="rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90">
           + New Customer

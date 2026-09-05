@@ -121,7 +121,7 @@ export default function UsersPage() {
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-2xl font-bold text-white">User Management</h1>
-                    <p className="text-slate-500">Manage system users.</p>
+                    <p className="text-xs text-slate-500">Manage system users.</p>
                 </div>
                 <button
                     onClick={openCreateModal}

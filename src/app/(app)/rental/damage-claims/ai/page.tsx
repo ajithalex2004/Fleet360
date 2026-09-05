@@ -115,7 +115,7 @@ export default function DamageAIPage() {
         <Link href="/rental/damage-claims" className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-cyan-400">
           <ChevronLeft className="h-3 w-3" /> Back to damage claims
         </Link>
-        <h1 className="text-3xl font-bold text-white mt-2 flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-white mt-2 flex items-center gap-2">
           <Sparkles className="h-6 w-6 text-rose-400" />
           Damage AI Studio
         </h1>

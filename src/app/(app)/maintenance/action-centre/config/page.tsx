@@ -76,7 +76,7 @@ export default function AlertConfigPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-white">Alert Configuration</h1>
-                    <p className="mt-1 text-slate-500">Configure automated alerts and notifications.</p>
+                    <p className="text-xs mt-1 text-slate-500">Configure automated alerts and notifications.</p>
                 </div>
                 <button
                     onClick={handleAddNew}

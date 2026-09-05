@@ -60,7 +60,7 @@ export default function EmissionReportsPage() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Emission Reports</h1>
-          <p className="text-slate-400 text-sm mt-1">GHG Protocol Project Standard · ISO 14064-1:2018 · Monthly verified snapshots</p>
+          <p className="text-slate-400 text-xs mt-1">GHG Protocol Project Standard · ISO 14064-1:2018 · Monthly verified snapshots</p>
         </div>
         <button className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm px-4 py-2 rounded-xl transition-colors">
           <span>⬇</span> Export CSV

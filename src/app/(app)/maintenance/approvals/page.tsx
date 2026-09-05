@@ -321,7 +321,7 @@ export default function ApprovalsPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-white">Pending Approvals</h1>
-                    <p className="mt-1 text-slate-500">Review and approve maintenance requests.</p>
+                    <p className="text-xs mt-1 text-slate-500">Review and approve maintenance requests.</p>
                 </div>
             </div>
 

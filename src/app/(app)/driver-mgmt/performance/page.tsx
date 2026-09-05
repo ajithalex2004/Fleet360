@@ -92,8 +92,8 @@ export default function PerformanceDashboard() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-[var(--text-main)]">Driver Performance</h1>
-        <p className="text-[var(--text-muted)] mt-1">Monitor driver metrics and KPIs</p>
+        <h1 className="text-2xl font-bold text-[var(--text-main)]">Driver Performance</h1>
+        <p className="text-xs text-[var(--text-muted)] mt-1">Monitor driver metrics and KPIs</p>
       </div>
 
       {/* Filters */}

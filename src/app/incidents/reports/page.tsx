@@ -44,7 +44,7 @@ export default function IncidentReportsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Incident Reports</h1>
-          <p className="text-slate-400 text-sm mt-0.5">Full incident history and analytics</p>
+          <p className="text-slate-400 text-xs mt-0.5">Full incident history and analytics</p>
         </div>
         <div className="text-xs text-slate-400 bg-slate-800 border border-white/10 px-3 py-1.5 rounded-lg">
           {incidents.length} total incidents

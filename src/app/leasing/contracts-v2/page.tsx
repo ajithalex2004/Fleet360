@@ -271,8 +271,8 @@ export default function ContractsV2Page() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold text-[var(--text-main)] mb-1">Lease Agreements</h1>
-          <p className="text-[var(--text-muted)] text-sm">Manage master and individual lease contracts</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-1">Lease Agreements</h1>
+          <p className="text-[var(--text-muted)] text-xs">Manage master and individual lease contracts</p>
         </div>
         <button onClick={() => setShowNewContract(true)}
           className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-sm font-semibold text-white hover:opacity-90 transition-opacity shadow-lg">

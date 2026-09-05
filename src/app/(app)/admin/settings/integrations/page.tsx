@@ -136,8 +136,8 @@ export default function IntegrationsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-4xl font-bold text-white mb-2">Integrations & ERP</h1>
-        <p className="text-slate-400">Configure webhooks, ERP connectors, and GPS/telematics providers</p>
+        <h1 className="text-2xl font-bold text-white mb-2">Integrations & ERP</h1>
+        <p className="text-xs text-slate-400">Configure webhooks, ERP connectors, and GPS/telematics providers</p>
       </div>
 
       {INTEGRATION_META.map(intg => {
