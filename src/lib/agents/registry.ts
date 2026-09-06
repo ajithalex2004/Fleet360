@@ -58,6 +58,11 @@ async function getComplianceAgent(): Promise<AgentDefinition> {
   return complianceAgent as unknown as AgentDefinition;
 }
 
+async function getFleetWorkforcePlannerAgent(): Promise<AgentDefinition> {
+  const { fleetWorkforcePlannerAgent } = await import('./fleet-workforce-planner/agent');
+  return fleetWorkforcePlannerAgent as unknown as AgentDefinition;
+}
+
 // ── Conversational agent wrappers ──────────────────────────────────────────────
 async function getWhatsAppAgent(): Promise<AgentDefinition> {
   const { WHATSAPP_AGENT } = await import('./whatsapp-agent/agent');
@@ -86,6 +91,7 @@ const AGENT_LOADERS: Record<AgentId, () => Promise<AgentDefinition>> = {
   'demand-forecasting':         getDemandForecastingAgent,
   'vehicle-reuse':              getVehicleReuseAgent,
   'compliance':                 getComplianceAgent,
+  'fleet-workforce-planner':    getFleetWorkforcePlannerAgent,
   'document-intelligence':      async () => { throw new Error('Not yet implemented'); },
   // ── Conversational (always-on, stats wrappers) ─────────────────────────────
   'whatsapp-agent':             getWhatsAppAgent,
@@ -271,6 +277,16 @@ export const AGENT_CATALOGUE = [
     status: 'live',
     model: 'Deterministic Regulatory Engine',
     module: 'Compliance & Safety',
+    agentType: 'BATCH',
+  },
+  {
+    id: 'fleet-workforce-planner' as AgentId,
+    name: 'Unified Fleet & Workforce Master Planner Agent',
+    description: 'Master tactical orchestration agent co-optimizing vehicle assets and driver workforce across multi-depots with CP-SAT constraint optimization, 3-scenario comparative planning, and dynamic policy compliance.',
+    version: '1.0.0',
+    status: 'live',
+    model: 'CP-SAT Constraint Optimizer',
+    module: 'Master Planning / Operations',
     agentType: 'BATCH',
   },
   {

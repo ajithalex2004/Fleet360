@@ -316,8 +316,84 @@ export class BenchmarkRunner {
       financialExposureDetectedAed: totalRiskDetectedAed,
     };
   }
+
+  /**
+   * Run Master Fleet & Workforce Planner Ground-Truth Benchmark
+   */
+  async runFleetWorkforcePlannerBenchmark(): Promise<BenchmarkSuiteResult> {
+    const t0 = Date.now();
+    const { masterPlannerSolver } = await import('../fleet-workforce-planner/master-solver');
+    const { FLEET_WORKFORCE_PLANNER_GROUND_TRUTH_DATASETS } = await import('./datasets');
+
+    let tp = 0;
+    let fp = 0;
+    let tn = 0;
+    let fn = 0;
+    let totalSavingsDetectedAed = 0;
+
+    // 1. Standard Multi-Depot Feasible Plan
+    const plan1 = await masterPlannerSolver.solveMasterPlan(
+      FLEET_WORKFORCE_PLANNER_GROUND_TRUTH_DATASETS.standardMultiDepotPlan,
+    );
+
+    if (plan1.feasibilityState === 'FEASIBLE' && plan1.scenarios.length === 3 && plan1.recommendedScenario.isAiRecommended) {
+      tp++;
+      totalSavingsDetectedAed += plan1.totalAvoidedOutsourceSavingsAed || plan1.totalOperatingCostAed;
+    } else {
+      fn++;
+    }
+
+    // Check 2-Way Maintenance Slot
+    if (plan1.recommendedScenario.maintenanceSlots.length > 0) {
+      tp++;
+    } else {
+      fn++;
+    }
+
+    // Check Vehicle Reuse inside master plan
+    if (plan1.tripsCoveredByReuse > 0 || plan1.recommendedScenario.assignments.some((a) => a.isReusedVehicle)) {
+      tp++;
+    } else {
+      fn++;
+    }
+
+    // 2. Capacity Deficit Plan (Expected: Proper Deficit State, NOT 100% FEASIBLE)
+    const plan2 = await masterPlannerSolver.solveMasterPlan(
+      FLEET_WORKFORCE_PLANNER_GROUND_TRUTH_DATASETS.capacityDeficitPlan,
+    );
+
+    if (plan2.feasibilityState !== 'FEASIBLE' || plan2.tripsUnserved > 0) {
+      tn++;
+    } else {
+      fp++;
+    }
+
+    const metrics = calculateClassificationMetrics(tp, fp, tn, fn);
+    const passed = metrics.decisionQualityScore >= 0.95 && metrics.falsePositiveRate === 0;
+
+    await this.recordEvaluationMetric({
+      agentId: 'fleet-workforce-planner',
+      tenantId: 'benchmark',
+      metricCategory: 'ACCURACY',
+      metricName: 'DECISION_QUALITY_SCORE',
+      metricValue: metrics.decisionQualityScore,
+      isPositiveOutcome: passed,
+      notes: `TP: ${tp}, FP: ${fp}, TN: ${tn}, FN: ${fn}, Avoided Cost: ${totalSavingsDetectedAed.toFixed(2)} AED`,
+    });
+
+    return {
+      suiteName: 'Unified Fleet & Workforce Master Planner Ground Truth Benchmark',
+      agentId: 'fleet-workforce-planner',
+      totalScenarios: tp + fp + tn + fn,
+      metrics,
+      passed,
+      benchmarkDurationMs: Date.now() - t0,
+      financialExposureDetectedAed: totalSavingsDetectedAed,
+    };
+  }
 }
 
 /** Global Shared Benchmark Runner Singleton */
 export const benchmarkRunner = new BenchmarkRunner();
+
 

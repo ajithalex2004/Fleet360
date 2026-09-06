@@ -491,3 +491,117 @@ export const COMPLIANCE_GROUND_TRUTH_DATASETS = {
   },
 };
 
+export const FLEET_WORKFORCE_PLANNER_GROUND_TRUTH_DATASETS = {
+  standardMultiDepotPlan: {
+    scheduleDate: '2026-09-07',
+    depots: [
+      { id: 'depot-dip', name: 'Dubai Investment Park (DIP)', lat: 24.9857, lng: 55.1764 },
+      { id: 'depot-jafza', name: 'JAFZA South', lat: 24.995, lng: 55.085 },
+      { id: 'depot-auh', name: 'Abu Dhabi Mussafah', lat: 24.35, lng: 54.5 },
+    ],
+    trips: [
+      {
+        id: 'trip-plan-01',
+        tripNumber: 'TRP-DIP-01',
+        clientName: 'Al Futtaim Staff',
+        plannedPickupTime: '2026-09-07T06:00:00Z',
+        plannedDropoffTime: '2026-09-07T07:15:00Z',
+        passengerCount: 26,
+        vehicleCategoryRequired: 'COASTER_30',
+        depotId: 'depot-dip',
+      },
+      {
+        id: 'trip-plan-02',
+        tripNumber: 'TRP-DIP-02',
+        clientName: 'Al Futtaim Evening',
+        plannedPickupTime: '2026-09-07T16:30:00Z',
+        plannedDropoffTime: '2026-09-07T17:45:00Z',
+        passengerCount: 24,
+        vehicleCategoryRequired: 'COASTER_30',
+        depotId: 'depot-dip',
+      },
+      {
+        id: 'trip-plan-03',
+        tripNumber: 'TRP-JAFZA-01',
+        clientName: 'Emaar Hospitality',
+        plannedPickupTime: '2026-09-07T07:00:00Z',
+        plannedDropoffTime: '2026-09-07T08:30:00Z',
+        passengerCount: 45,
+        vehicleCategoryRequired: 'COACH_50',
+        depotId: 'depot-jafza',
+      },
+      {
+        id: 'trip-plan-04',
+        tripNumber: 'TRP-JAFZA-02',
+        clientName: 'JAFZA Logistics Staff',
+        plannedPickupTime: '2026-09-07T14:00:00Z',
+        plannedDropoffTime: '2026-09-07T15:30:00Z',
+        passengerCount: 22,
+        vehicleCategoryRequired: 'COASTER_30',
+        depotId: 'depot-jafza',
+      },
+    ],
+    vehicles: [
+      {
+        id: 'veh-c30-1',
+        vehicleCode: 'BUS-C30-01',
+        category: 'COASTER_30' as const,
+        capacity: 30,
+        currentDepotId: 'depot-dip',
+        isGrounded: false,
+      },
+      {
+        id: 'veh-c50-1',
+        vehicleCode: 'COACH-50-01',
+        category: 'COACH_50' as const,
+        capacity: 50,
+        currentDepotId: 'depot-jafza',
+        maintenanceRulKm: 350, // Triggers PM slot
+        isGrounded: false,
+      },
+      {
+        id: 'veh-c30-surplus',
+        vehicleCode: 'BUS-C30-02',
+        category: 'COASTER_30' as const,
+        capacity: 30,
+        currentDepotId: 'depot-dip',
+        isGrounded: false,
+      },
+    ],
+    drivers: [
+      {
+        id: 'drv-hbus-1',
+        driverName: 'Ahmed Tariq',
+        currentDepotId: 'depot-dip',
+        licenseClasses: ['HEAVY_BUS'],
+        dutyMinutesUsed: 0,
+        rosterStatus: 'ON_DUTY',
+      },
+      {
+        id: 'drv-hbus-2',
+        driverName: 'Zubair Khan',
+        currentDepotId: 'depot-jafza',
+        licenseClasses: ['HEAVY_BUS'],
+        dutyMinutesUsed: 0,
+        rosterStatus: 'ON_DUTY',
+      },
+    ],
+  },
+  capacityDeficitPlan: {
+    scheduleDate: '2026-09-07',
+    depots: [{ id: 'depot-dip', name: 'DIP', lat: 24.9857, lng: 55.1764 }],
+    trips: [
+      { id: 'trip-def-1', passengerCount: 40, vehicleCategoryRequired: 'COACH_50', depotId: 'depot-dip' },
+      { id: 'trip-def-2', passengerCount: 40, vehicleCategoryRequired: 'COACH_50', depotId: 'depot-dip' },
+      { id: 'trip-def-3', passengerCount: 40, vehicleCategoryRequired: 'COACH_50', depotId: 'depot-dip' },
+    ],
+    vehicles: [
+      { id: 'veh-c50-only', vehicleCode: 'COACH-ONLY', category: 'COACH_50' as const, capacity: 50, currentDepotId: 'depot-dip' },
+    ],
+    drivers: [
+      { id: 'drv-only', driverName: 'Solo Driver', currentDepotId: 'depot-dip', licenseClasses: ['HEAVY_BUS'] },
+    ],
+  },
+};
+
+

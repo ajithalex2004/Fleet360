@@ -234,6 +234,7 @@ export type AgentId =
   | 'document-intelligence'
   | 'vehicle-reuse'
   | 'compliance'
+  | 'fleet-workforce-planner'
   | 'quotation-copilot'
   | 'rental-copilot'
   | 'damage-classifier'
@@ -824,5 +825,211 @@ export interface ComplianceEvaluationResult {
   actionsGenerated: number;
   estimatedFinesAvoidedAed: number;
 }
+
+// ── Master Fleet & Workforce Planner Domain Types ─────────────────────────────
+export type PlanFeasibilityState =
+  | 'FEASIBLE'
+  | 'FEASIBLE_WITH_OUTSOURCING'
+  | 'FEASIBLE_WITH_OVERTIME'
+  | 'PARTIALLY_FEASIBLE'
+  | 'INFEASIBLE';
+
+export type PlanStatus =
+  | 'DRAFT'
+  | 'OPTIMIZED'
+  | 'REVIEWED'
+  | 'LOCKED'
+  | 'ACTIVE'
+  | 'REVISED'
+  | 'COMPLETED';
+
+export type PlanningHorizon =
+  | 'T_PLUS_7_STRATEGIC'
+  | 'T_PLUS_1_OPERATIONAL'
+  | 'T_ZERO_DISRUPTION';
+
+export interface DriverHoursPolicy {
+  policyId: string;
+  jurisdiction: 'UAE_FEDERAL' | 'DUBAI_RTA' | 'ABU_DHABI_ITC' | 'SHARJAH_SRTA' | 'CLIENT_CONTRACT';
+  operatorType: 'STAFF_TRANSPORT' | 'SCHOOL_BUS' | 'CAR_RENTAL' | 'FREIGHT' | 'AMBULANCE';
+  effectiveFrom: string;
+  effectiveTo?: string;
+  normalDailyHours: number;        // Default 8.0
+  normalWeeklyHours: number;       // Default 48.0
+  maxDailyDutyHours: number;       // Default 10.0 (normal + max 2h overtime)
+  maxWeeklyDutyHours: number;      // Default 60.0
+  maxConsecutiveWorkDays: number;  // Default 6 (1 mandatory rest day per 7 days)
+  maxContinuousDrivingMinutes: number; // e.g. 270m (4.5h)
+  mandatoryBreakMinutes: number;   // Default 45m
+  interShiftRestHours: number;     // Default 11h
+  isRamadanSchedule?: boolean;     // Ramadan reduction: 6h/day, 36h/week
+  splitShiftMaxSpreadHours?: number;// Default 14h
+}
+
+export interface ResourceCostProfile {
+  tenantId: string;
+  vehicleCategory: string;
+  fixedDailyCostAed: number;
+  variableCostPerKm: number;
+  fuelCostPerKm: number;
+  tollCostPerGate: number;
+  driverHourlyRateAed: number;
+  driverOvertimeHourlyRateAed: number;
+  depreciationPerKm: number;
+  repositionCostFormula: {
+    fuelRatePerKm: number;
+    driverTimeRatePerHour: number;
+    tollEstimateAed: number;
+    vehicleWearPerKm: number;
+    returnPositioningRiskFactor: number; // e.g. 1.25 multiplier
+  };
+  exchangeStandardCharterRateAed: number;
+  unservedPenaltyAed: number;
+}
+
+export interface RepositionOrder {
+  repositionId: string;
+  repositionType: 'REPO_VEHICLE' | 'REPO_DRIVER' | 'REPO_BOTH';
+  vehicleId?: string;
+  vehicleCode?: string;
+  vehicleCategory?: string;
+  driverId?: string;
+  driverName?: string;
+  sourceDepot: string;
+  targetDepot: string;
+  departureTime: string;
+  arrivalTime: string;
+  deadheadDistanceKm: number;
+  deadheadDurationMin: number;
+  fuelCostAed: number;
+  driverCostAed: number;
+  tollCostAed: number;
+  totalCostAed: number;
+  avoidedOutsourceSavingsAed: number;
+  reason: string;
+}
+
+export interface MasterAssignmentTriplet {
+  assignmentId: string;
+  tripId: string;
+  tripNumber?: string;
+  clientName?: string;
+  originName: string;
+  destinationName: string;
+  pickupTime: string;
+  dropoffTime: string;
+  passengerCount: number;
+  
+  // Assigned Resources
+  vehicleId: string;
+  vehicleCode: string;
+  vehicleCategory: string;
+  driverId: string;
+  driverName: string;
+  depotId: string;
+  
+  // Shift Context
+  shiftType: 'SINGLE_SHIFT' | 'SPLIT_SHIFT_MORNING' | 'SPLIT_SHIFT_EVENING' | 'MIDDAY_TRANSFER';
+  isReusedVehicle: boolean;
+  deadheadFromPreviousKm: number;
+  deadheadDurationMin: number;
+  turnaroundBufferMin: number;
+  
+  // Cost breakdown
+  operatingCostAed: number;
+  overtimeMinutes: number;
+  overtimeCostAed: number;
+  totalCostAed: number;
+}
+
+export interface MaintenanceSlotAssignment {
+  vehicleId: string;
+  vehicleCode: string;
+  serviceType: string;
+  garageDepot: string;
+  startTime: string;
+  endTime: string;
+  peakHourImpact: 'ZERO' | 'LOW' | 'HIGH';
+  proposedBy: 'PLANNER_IDLE_SLOT' | 'PREDICTIVE_MAINTENANCE_RUL';
+}
+
+export interface StandbyAllocation {
+  depotId: string;
+  depotName: string;
+  standbyBusesCount: number;
+  standbyVehicles: Array<{ vehicleId: string; vehicleCode: string; category: string }>;
+  standbyDriversCount: number;
+  standbyDrivers: Array<{ driverId: string; driverName: string; licenseClass: string }>;
+  dutyWindowStart: string;
+  dutyWindowEnd: string;
+  riskJustification: string;
+}
+
+export interface PlanScenario {
+  scenarioId: 'SCENARIO_A_LOWEST_COST' | 'SCENARIO_B_BALANCED' | 'SCENARIO_C_MAX_RESILIENCE';
+  name: string;
+  isAiRecommended: boolean;
+  totalCostAed: number;
+  activeVehiclesCount: number;
+  activeDriversCount: number;
+  repositioningMovesCount: number;
+  repositioningCostAed: number;
+  overtimeMinutesTotal: number;
+  overtimeCostTotalAed: number;
+  standbyVehiclesCount: number;
+  standbyDriversCount: number;
+  outsourcedTripsCount: number;
+  outsourcedCostAed: number;
+  unservedTripsCount: number;
+  disruptionRiskLevel: 'HIGH' | 'LOW' | 'NEAR_ZERO';
+  feasibilityState: PlanFeasibilityState;
+  
+  assignments: MasterAssignmentTriplet[];
+  repositions: RepositionOrder[];
+  maintenanceSlots: MaintenanceSlotAssignment[];
+  standbyAllocations: StandbyAllocation[];
+  explanationNarrative: string;
+}
+
+export interface MasterPlanResult {
+  planId: string;
+  tenantId: string;
+  planHorizon: PlanningHorizon;
+  planStatus: PlanStatus;
+  scheduleDate: string;
+  feasibilityState: PlanFeasibilityState;
+  
+  // Overall Coverage
+  totalTripsRequested: number;
+  tripsCoveredInternally: number;
+  tripsCoveredByReuse: number;
+  tripsCoveredByReposition: number;
+  tripsCoveredByExchange: number;
+  tripsUnserved: number;
+  
+  // Scenarios
+  scenarios: PlanScenario[];
+  recommendedScenario: PlanScenario;
+  
+  // Metrics & Tradeoffs
+  totalOperatingCostAed: number;
+  totalAvoidedOutsourceSavingsAed: number;
+  driverWorkloadVarianceScore: number; // 0–100 (100 = perfectly fair)
+  scheduleStabilityScore: number;     // 0–100
+  evaluatedAt: string;
+}
+
+export interface FleetWorkforcePlanningRequest {
+  scheduleDate: string;
+  horizon?: PlanningHorizon;
+  trips: Array<TripScheduleItem & { depotId?: string; priority?: 'P1' | 'P2' | 'P3' }>;
+  vehicles: Array<VehicleResource & { currentDepotId: string; maintenanceRulKm?: number; isGrounded?: boolean }>;
+  drivers: Array<DriverResource & { currentDepotId: string; licenseClasses?: string[]; historicalWeeklyDutyMin?: number; rosterStatus?: string }>;
+  depots: Array<{ id: string; name: string; lat: number; lng: number }>;
+  policy?: Partial<DriverHoursPolicy>;
+  costProfile?: Partial<ResourceCostProfile>;
+  lockPreviousPlan?: boolean;
+}
+
 
 
