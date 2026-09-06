@@ -233,6 +233,7 @@ export type AgentId =
   | 'demand-forecasting'
   | 'document-intelligence'
   | 'vehicle-reuse'
+  | 'compliance'
   | 'quotation-copilot'
   | 'rental-copilot'
   | 'damage-classifier'
@@ -671,4 +672,157 @@ export interface ReuseEvaluationResult {
   financialSavingsAed: number;
   avoidedCostUsd: number;
 }
+
+// ── Compliance Domain Types ───────────────────────────────────────────────────
+export type ComplianceHorizonCategory = 'CRITICAL' | 'URGENT' | 'UPCOMING' | 'COMPLIANT';
+
+export type ComplianceDocumentType =
+  | 'MULKIYA_REGISTRATION'
+  | 'MOTOR_INSURANCE'
+  | 'TECHNICAL_INSPECTION_FAHAS'
+  | 'RTA_COMMERCIAL_PERMIT'
+  | 'RTA_SCHOOL_BUS_PERMIT'
+  | 'SAFETY_EQUIPMENT_CERT'
+  | 'CIVIL_DEFENCE_HAZMAT_PERMIT'
+  | 'CALIBRATION_CERT_COLD_CHAIN'
+  | 'DRIVER_LICENSE'
+  | 'EMIRATES_ID'
+  | 'RTA_DRIVER_CARD'
+  | 'MEDICAL_FITNESS_CERT'
+  | 'MOHRE_WORK_PERMIT'
+  | 'CONTRACT_AGREEMENT'
+  | 'OTHER';
+
+export interface DocumentRecord {
+  id: string;
+  entityId: string;
+  entityType: 'VEHICLE' | 'DRIVER' | 'VENDOR' | 'CONTRACT' | 'EQUIPMENT';
+  entityCode: string;
+  documentType: ComplianceDocumentType | string;
+  documentNumber?: string;
+  expiryDate: string | Date;
+  issueDate?: string | Date;
+  issuingAuthority?: string; // RTA, Dubai Police, MoHRE, DHA, MoIAT, FTA, etc.
+  status?: 'ACTIVE' | 'EXPIRED' | 'PENDING_RENEWAL' | 'SUSPENDED';
+  metadata?: Record<string, unknown>;
+}
+
+export interface ComplianceCriticalItem {
+  entityId: string;
+  entityType: 'VEHICLE' | 'DRIVER' | 'VENDOR' | 'CONTRACT';
+  code: string;
+  item: string;
+  status: 'EXPIRED' | 'IMMINENT_EXPIRY' | 'SUSPENDED' | 'MISSING';
+  daysOverdue: number;
+  riskDescription: string;
+  potentialFineAed: number;
+}
+
+export interface ComplianceRecommendedAction {
+  id: string;
+  priority: 'P1' | 'P2' | 'P3';
+  actionType: 'GROUND_VEHICLE' | 'SUSPEND_DRIVER' | 'BOOK_INSPECTION' | 'RENEW_INSURANCE' | 'AUDIT_INVOICE' | 'NOTIFY_SAFETY_OFFICER';
+  title: string;
+  description: string;
+  targetEntityId: string;
+  targetEntityCode: string;
+  estimatedFineSavedAed: number;
+  deadline?: string;
+}
+
+export interface FleetComplianceRiskView {
+  fleetComplianceScore: number; // 0–100%
+  overallStatus: 'COMPLIANT' | 'HEALTHY_WITH_WARNINGS' | 'CRITICAL_RISK' | 'NON_COMPLIANT';
+  totalAssetsMonitored: number;
+  totalDocumentsTracked: number;
+  criticalCount: number;
+  urgentCount: number;
+  upcomingCount: number; // Due in 30 days
+  fullyCompliantCount: number;
+  criticalItems: ComplianceCriticalItem[];
+  urgentItems: ComplianceCriticalItem[];
+  dueIn30DaysCount: number;
+  recommendedActions: ComplianceRecommendedAction[];
+  calculatedAt: string;
+}
+
+export interface DriverReadinessRequest {
+  driverId: string;
+  driverName?: string;
+  vehicleCategoryRequired?: string;
+  jobStartTime?: string | Date;
+  jobEndTime?: string | Date;
+  estimatedDurationMin?: number;
+  // Current live state (if available)
+  licenseExpiry?: string | Date;
+  emiratesIdExpiry?: string | Date;
+  rtaCardExpiry?: string | Date;
+  medicalFitnessExpiry?: string | Date;
+  licenseClasses?: string[];
+  authorizedCategories?: string[];
+  dailyDutyMinutesUsed?: number;
+  continuousDrivingMinutesUsed?: number;
+  lastRestBreakAt?: string | Date;
+  blackPoints?: number;
+  rosterStatus?: 'ON_DUTY' | 'OFF_DUTY' | 'ON_LEAVE' | 'SICK_LEAVE';
+  assignedVehicleId?: string;
+}
+
+export interface DriverReadinessResult {
+  isEligible: boolean;
+  status: 'ELIGIBLE' | 'BLOCKED' | 'WARNING';
+  readinessScore: number; // 0–100
+  driverId: string;
+  driverName: string;
+  shiftRemainingMin: number;
+  shiftRemainingFormatted: string; // e.g. "5h 40m"
+  continuousDrivingMin: number;
+  restCompliance: 'PASS' | 'REST_REQUIRED_SOON' | 'VIOLATION';
+  blackPoints: number;
+  blackPointsRisk: 'SAFE' | 'WARNING_THRESHOLD' | 'CRITICAL_SUSPENSION';
+  credentialsValid: boolean;
+  vehicleCategoryAuthorized: boolean;
+  rosterStatusValid: boolean;
+  disqualificationReasons: string[];
+  warnings: string[];
+  summary: string;
+  evaluatedAt: string;
+}
+
+export interface FtaInvoiceValidationRequest {
+  invoiceId: string;
+  invoiceNumber: string;
+  vendorName: string;
+  vendorTrn: string;
+  invoiceDate: string | Date;
+  subtotal: number;
+  vatAmount: number;
+  totalAmount: number;
+  lineItems?: Array<{ description: string; amount: number; vatRate?: number }>;
+  salikTagNumber?: string;
+  vehiclePlateNumber?: string;
+}
+
+export interface FtaInvoiceValidationResult {
+  isValid: boolean;
+  trnValid: boolean;
+  trnFormatted: string;
+  vatMathCorrect: boolean;
+  expectedVatAmount: number;
+  vatDiscrepancyAed: number;
+  salikTagMatched: boolean;
+  complianceFlags: string[];
+  summary: string;
+  financialRiskAed: number;
+}
+
+export interface ComplianceEvaluationResult {
+  scanType: 'FLEET_RISK' | 'DRIVER_READINESS' | 'FTA_TAX_AUDIT' | 'FULL_COMPLIANCE_SWEEP';
+  fleetRisk?: FleetComplianceRiskView;
+  driverReadiness?: DriverReadinessResult;
+  taxValidation?: FtaInvoiceValidationResult;
+  actionsGenerated: number;
+  estimatedFinesAvoidedAed: number;
+}
+
 

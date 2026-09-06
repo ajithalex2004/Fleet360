@@ -377,3 +377,117 @@ export const VEHICLE_REUSE_GROUND_TRUTH_DATASETS = {
     },
   },
 };
+
+export const COMPLIANCE_GROUND_TRUTH_DATASETS = {
+  fleetDocuments: [
+    {
+      id: 'doc-crit-1',
+      entityId: 'veh-101',
+      entityType: 'VEHICLE' as const,
+      entityCode: 'BUS-14',
+      documentType: 'MULKIYA_REGISTRATION',
+      expiryDate: new Date(Date.now() - 2 * 86400000).toISOString(), // Expired 2 days ago
+      issuingAuthority: 'RTA',
+    },
+    {
+      id: 'doc-urg-1',
+      entityId: 'veh-102',
+      entityType: 'VEHICLE' as const,
+      entityCode: 'VAN-22',
+      documentType: 'TECHNICAL_INSPECTION_FAHAS',
+      expiryDate: new Date(Date.now() + 4 * 86400000).toISOString(), // Expires in 4 days
+      issuingAuthority: 'Tasjeel',
+    },
+    {
+      id: 'doc-up-1',
+      entityId: 'veh-103',
+      entityType: 'VEHICLE' as const,
+      entityCode: 'COACH-50',
+      documentType: 'MOTOR_INSURANCE',
+      expiryDate: new Date(Date.now() + 20 * 86400000).toISOString(), // Expires in 20 days
+      issuingAuthority: 'Oman Insurance',
+    },
+    {
+      id: 'doc-comp-1',
+      entityId: 'veh-104',
+      entityType: 'VEHICLE' as const,
+      entityCode: 'BUS-30',
+      documentType: 'MULKIYA_REGISTRATION',
+      expiryDate: new Date(Date.now() + 180 * 86400000).toISOString(),
+      issuingAuthority: 'RTA',
+    },
+    {
+      id: 'doc-comp-2',
+      entityId: 'veh-105',
+      entityType: 'VEHICLE' as const,
+      entityCode: 'BUS-31',
+      documentType: 'SAFETY_EQUIPMENT_CERT',
+      expiryDate: new Date(Date.now() + 200 * 86400000).toISOString(),
+      issuingAuthority: 'Civil Defence',
+    },
+  ],
+  driverReady: {
+    driverId: 'drv-gt-ready',
+    driverName: 'Rashid Al Nuaimi',
+    vehicleCategoryRequired: 'COACH_50',
+    licenseExpiry: new Date(Date.now() + 365 * 86400000).toISOString(),
+    emiratesIdExpiry: new Date(Date.now() + 300 * 86400000).toISOString(),
+    rtaCardExpiry: new Date(Date.now() + 250 * 86400000).toISOString(),
+    medicalFitnessExpiry: new Date(Date.now() + 180 * 86400000).toISOString(),
+    licenseClasses: ['HEAVY_BUS', 'CATEGORY_6'],
+    authorizedCategories: ['COACH_50', 'COASTER_30'],
+    dailyDutyMinutesUsed: 240, // 4 hours used (6h remaining)
+    continuousDrivingMinutesUsed: 90, // 1.5h used
+    blackPoints: 4,
+    rosterStatus: 'ON_DUTY' as const,
+    estimatedDurationMin: 90,
+  },
+  driverFatigued: {
+    driverId: 'drv-gt-fatigued',
+    driverName: 'Zubair Khan',
+    vehicleCategoryRequired: 'MINIVAN_14',
+    licenseExpiry: new Date(Date.now() + 300 * 86400000).toISOString(),
+    emiratesIdExpiry: new Date(Date.now() + 300 * 86400000).toISOString(),
+    dailyDutyMinutesUsed: 540, // 9 hours used
+    continuousDrivingMinutesUsed: 280, // 4.67 hours continuous without break!
+    blackPoints: 2,
+    rosterStatus: 'ON_DUTY' as const,
+    estimatedDurationMin: 60,
+  },
+  driverHighBlackPoints: {
+    driverId: 'drv-gt-points',
+    driverName: 'Tariq Saeed',
+    vehicleCategoryRequired: 'SEDAN',
+    licenseExpiry: new Date(Date.now() + 200 * 86400000).toISOString(),
+    emiratesIdExpiry: new Date(Date.now() + 200 * 86400000).toISOString(),
+    dailyDutyMinutesUsed: 120,
+    continuousDrivingMinutesUsed: 60,
+    blackPoints: 19, // 19 / 24 black points!
+    rosterStatus: 'ON_DUTY' as const,
+    estimatedDurationMin: 45,
+  },
+  ftaInvoiceValid: {
+    invoiceId: 'inv-gt-valid',
+    invoiceNumber: 'INV-2026-881',
+    vendorName: 'Continental Tyres UAE',
+    vendorTrn: '100234567800003',
+    invoiceDate: new Date().toISOString(),
+    subtotal: 2000.0,
+    vatAmount: 100.0, // Exactly 5%
+    totalAmount: 2100.0,
+    salikTagNumber: 'SALIK-9988',
+    vehiclePlateNumber: 'DXB-55441',
+  },
+  ftaInvoiceInvalid: {
+    invoiceId: 'inv-gt-invalid',
+    invoiceNumber: 'INV-2026-882',
+    vendorName: 'Unregistered Vendor LLC',
+    vendorTrn: '999888123', // Invalid TRN format
+    invoiceDate: new Date().toISOString(),
+    subtotal: 2000.0,
+    vatAmount: 300.0, // 15% VAT instead of 5%
+    totalAmount: 2300.0,
+    salikTagNumber: 'SALIK-UNMAPPED-01', // Missing vehicle plate
+  },
+};
+

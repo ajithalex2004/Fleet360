@@ -225,7 +225,99 @@ export class BenchmarkRunner {
       financialExposureDetectedAed: totalSavingsAed,
     };
   }
+
+  /**
+   * Run Compliance & Readiness Ground-Truth Benchmark
+   */
+  async runComplianceBenchmark(): Promise<BenchmarkSuiteResult> {
+    const t0 = Date.now();
+    const { evaluateFleetComplianceRisk } = await import('../compliance/fleet-risk');
+    const { evaluateDriverReadiness } = await import('../compliance/driver-readiness');
+    const { validateFtaInvoice } = await import('../compliance/fta-tax');
+    const { COMPLIANCE_GROUND_TRUTH_DATASETS } = await import('./datasets');
+
+    let tp = 0;
+    let fp = 0;
+    let tn = 0;
+    let fn = 0;
+    let totalRiskDetectedAed = 0;
+
+    // 1. Fleet Risk Assessment (1 critical expired, 1 urgent, 1 upcoming, 2 compliant)
+    const fleetRisk = evaluateFleetComplianceRisk(COMPLIANCE_GROUND_TRUTH_DATASETS.fleetDocuments);
+    if (fleetRisk.criticalCount === 1 && fleetRisk.urgentCount === 1 && fleetRisk.upcomingCount === 1) {
+      tp++;
+      totalRiskDetectedAed += fleetRisk.criticalItems.reduce((s, c) => s + c.potentialFineAed, 0);
+    } else {
+      fn++;
+    }
+
+    // 2. Driver Readiness: Ready Driver (Expected: isEligible = true)
+    const driverReadyRes = evaluateDriverReadiness(COMPLIANCE_GROUND_TRUTH_DATASETS.driverReady);
+    if (driverReadyRes.isEligible) {
+      tp++;
+    } else {
+      fn++;
+    }
+
+    // 3. Driver Readiness: Fatigued Driver (Expected: isEligible = false)
+    const driverFatiguedRes = evaluateDriverReadiness(COMPLIANCE_GROUND_TRUTH_DATASETS.driverFatigued);
+    if (!driverFatiguedRes.isEligible) {
+      tn++;
+      totalRiskDetectedAed += 2000;
+    } else {
+      fp++;
+    }
+
+    // 4. Driver Readiness: High Black Points (Expected: status = WARNING)
+    const driverPointsRes = evaluateDriverReadiness(COMPLIANCE_GROUND_TRUTH_DATASETS.driverHighBlackPoints);
+    if (driverPointsRes.status === 'WARNING') {
+      tp++;
+    } else {
+      fn++;
+    }
+
+    // 5. FTA Tax: Valid Invoice (Expected: isValid = true)
+    const invoiceValidRes = validateFtaInvoice(COMPLIANCE_GROUND_TRUTH_DATASETS.ftaInvoiceValid);
+    if (invoiceValidRes.isValid) {
+      tp++;
+    } else {
+      fn++;
+    }
+
+    // 6. FTA Tax: Invalid Invoice (Expected: isValid = false)
+    const invoiceInvalidRes = validateFtaInvoice(COMPLIANCE_GROUND_TRUTH_DATASETS.ftaInvoiceInvalid);
+    if (!invoiceInvalidRes.isValid) {
+      tn++;
+      totalRiskDetectedAed += invoiceInvalidRes.financialRiskAed;
+    } else {
+      fp++;
+    }
+
+    const metrics = calculateClassificationMetrics(tp, fp, tn, fn);
+    const passed = metrics.decisionQualityScore >= 0.95 && metrics.falsePositiveRate === 0;
+
+    await this.recordEvaluationMetric({
+      agentId: 'compliance',
+      tenantId: 'benchmark',
+      metricCategory: 'ACCURACY',
+      metricName: 'DECISION_QUALITY_SCORE',
+      metricValue: metrics.decisionQualityScore,
+      isPositiveOutcome: passed,
+      notes: `TP: ${tp}, FP: ${fp}, TN: ${tn}, FN: ${fn}, Risk Detected: ${totalRiskDetectedAed.toFixed(2)} AED`,
+    });
+
+    return {
+      suiteName: 'Fleet & Driver Regulatory Compliance Ground Truth Benchmark',
+      agentId: 'compliance',
+      totalScenarios: tp + fp + tn + fn,
+      metrics,
+      passed,
+      benchmarkDurationMs: Date.now() - t0,
+      financialExposureDetectedAed: totalRiskDetectedAed,
+    };
+  }
 }
 
 /** Global Shared Benchmark Runner Singleton */
 export const benchmarkRunner = new BenchmarkRunner();
+

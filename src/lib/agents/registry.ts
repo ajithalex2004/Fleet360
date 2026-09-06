@@ -53,6 +53,11 @@ async function getVehicleReuseAgent(): Promise<AgentDefinition> {
   return vehicleReuseAgent as unknown as AgentDefinition;
 }
 
+async function getComplianceAgent(): Promise<AgentDefinition> {
+  const { complianceAgent } = await import('./compliance/agent');
+  return complianceAgent as unknown as AgentDefinition;
+}
+
 // ── Conversational agent wrappers ──────────────────────────────────────────────
 async function getWhatsAppAgent(): Promise<AgentDefinition> {
   const { WHATSAPP_AGENT } = await import('./whatsapp-agent/agent');
@@ -80,6 +85,7 @@ const AGENT_LOADERS: Record<AgentId, () => Promise<AgentDefinition>> = {
   'driver-coach':               getDriverCoachAgent,
   'demand-forecasting':         getDemandForecastingAgent,
   'vehicle-reuse':              getVehicleReuseAgent,
+  'compliance':                 getComplianceAgent,
   'document-intelligence':      async () => { throw new Error('Not yet implemented'); },
   // ── Conversational (always-on, stats wrappers) ─────────────────────────────
   'whatsapp-agent':             getWhatsAppAgent,
@@ -255,6 +261,16 @@ export const AGENT_CATALOGUE = [
     status: 'live',
     model: 'Spatial Deadhead + Turnaround Matrix',
     module: 'Bus-Ops / Staff Transport',
+    agentType: 'BATCH',
+  },
+  {
+    id: 'compliance' as AgentId,
+    name: 'Fleet & Driver Regulatory Compliance Agent',
+    description: 'Autonomous regulatory sentinel continuously scoring fleet risk, enforcing pre-dispatch driver readiness & fatigue guardrails, and auditing FTA VAT tax compliance.',
+    version: '1.0.0',
+    status: 'live',
+    model: 'Deterministic Regulatory Engine',
+    module: 'Compliance & Safety',
     agentType: 'BATCH',
   },
   {
