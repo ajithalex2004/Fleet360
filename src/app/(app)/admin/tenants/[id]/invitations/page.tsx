@@ -29,7 +29,7 @@ interface Role { id: string; name: string; code: string; }
 const STATUS_BADGE: Record<Invitation['status'], string> = {
   pending:  'bg-blue-500/20 text-blue-300 border-blue-500/40',
   accepted: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
-  revoked:  'bg-slate-600/30 text-slate-400 border-slate-500/40',
+  revoked:  'bg-[var(--bg-surface-hover)]/30 text-[var(--text-muted)] border-slate-500/40',
   expired:  'bg-amber-500/20 text-amber-300 border-amber-500/40',
 };
 
@@ -129,22 +129,22 @@ export default function TenantInvitationsPage() {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading invitations…</div></div>;
+    return <div className="flex items-center justify-center h-full"><div className="text-[var(--text-muted)] animate-pulse">Loading invitations…</div></div>;
   }
 
   return (
     <div className="space-y-8 max-w-5xl">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white inline-flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[var(--text-main)] inline-flex items-center gap-2">
             <Mail className="w-5 h-5 text-blue-400" /> Invitations
           </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            {tenantName ? <>For <strong className="text-white">{tenantName}</strong></> : null}
+          <p className="text-[var(--text-muted)] text-sm mt-1">
+            {tenantName ? <>For <strong className="text-[var(--text-main)]">{tenantName}</strong></> : null}
           </p>
         </div>
         <Link href="/admin/tenants"
-          className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-slate-800 border border-white/10 hover:border-white/20 hover:bg-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:text-white transition-colors">
+          className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] hover:bg-[var(--bg-surface-hover)] px-3 py-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors">
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Tenants
         </Link>
       </div>
@@ -159,7 +159,7 @@ export default function TenantInvitationsPage() {
         <div className="bg-amber-500/10 border border-amber-500/40 rounded-xl px-4 py-3 text-amber-200 text-sm space-y-2">
           <div className="font-semibold">SMTP not configured — share this link manually:</div>
           <div className="flex items-center gap-2">
-            <code className="flex-1 bg-slate-900/60 border border-white/10 rounded px-2 py-1 font-mono text-xs break-all">{devLink}</code>
+            <code className="flex-1 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded px-2 py-1 font-mono text-xs break-all">{devLink}</code>
             <button onClick={() => copy(devLink)}
               className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 rounded text-xs inline-flex items-center gap-1">
               {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
@@ -169,19 +169,19 @@ export default function TenantInvitationsPage() {
         </div>
       )}
 
-      <form onSubmit={send} className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-white">Invite a new member</h2>
+      <form onSubmit={send} className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 space-y-4">
+        <h2 className="text-lg font-semibold text-[var(--text-main)]">Invite a new member</h2>
         <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_auto] gap-3">
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Email</label>
+            <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Email</label>
             <input type="email" value={email} onChange={e => setEmail(e.target.value)}
               placeholder="person@company.com" required
-              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Role</label>
+            <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Role</label>
             <select value={roleId} onChange={e => setRoleId(e.target.value)} required
-              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
               {roles.length === 0 && <option value="">No roles found</option>}
               {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
@@ -191,34 +191,34 @@ export default function TenantInvitationsPage() {
             <Send className="w-4 h-4" /> {sending ? 'Sending…' : 'Send invitation'}
           </button>
         </div>
-        <p className="text-xs text-slate-500">Invitations expire after 7 days. Each invite supersedes any earlier pending invite for the same email.</p>
+        <p className="text-xs text-[var(--text-faint)]">Invitations expire after 7 days. Each invite supersedes any earlier pending invite for the same email.</p>
       </form>
 
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm overflow-x-auto">
         {invitations.length === 0 ? (
-          <div className="text-center text-slate-400 py-8 text-sm">No invitations yet.</div>
+          <div className="text-center text-[var(--text-muted)] py-8 text-sm">No invitations yet.</div>
         ) : (
           <table className="w-full">
             <thead>
-              <tr className="border-b border-white/5">
+              <tr className="border-b border-[var(--border-subtle)]">
                 {['Email', 'Role', 'Status', 'Sent', 'Expires', 'Invited by', ''].map(h => (
-                  <th key={h} className="px-4 py-3 text-xs font-semibold text-slate-400 text-left">{h}</th>
+                  <th key={h} className="px-4 py-3 text-xs font-semibold text-[var(--text-muted)] text-left">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {invitations.map(inv => (
-                <tr key={inv.id} className="border-b border-white/5 hover:bg-white/5">
-                  <td className="px-4 py-3 text-sm text-white">{inv.email}</td>
-                  <td className="px-4 py-3 text-sm text-slate-300">{inv.roleName}</td>
+                <tr key={inv.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]">
+                  <td className="px-4 py-3 text-sm text-[var(--text-main)]">{inv.email}</td>
+                  <td className="px-4 py-3 text-sm text-[var(--text-muted)]">{inv.roleName}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold border ${STATUS_BADGE[inv.status]}`}>
                       {inv.status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-xs text-slate-400">{new Date(inv.createdAt).toLocaleString()}</td>
-                  <td className="px-4 py-3 text-xs text-slate-400">{new Date(inv.expiresAt).toLocaleString()}</td>
-                  <td className="px-4 py-3 text-xs text-slate-400">{inv.invitedBy ?? '—'}</td>
+                  <td className="px-4 py-3 text-xs text-[var(--text-muted)]">{new Date(inv.createdAt).toLocaleString()}</td>
+                  <td className="px-4 py-3 text-xs text-[var(--text-muted)]">{new Date(inv.expiresAt).toLocaleString()}</td>
+                  <td className="px-4 py-3 text-xs text-[var(--text-muted)]">{inv.invitedBy ?? '—'}</td>
                   <td className="px-4 py-3 text-right">
                     {inv.status === 'pending' && (
                       <button onClick={() => revoke(inv)}

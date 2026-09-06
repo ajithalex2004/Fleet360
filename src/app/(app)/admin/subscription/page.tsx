@@ -36,7 +36,7 @@ interface BillingResponse {
 }
 
 const PLAN_BADGE: Record<string, string> = {
-  TRIAL:        'bg-slate-500/20 text-slate-300 border-slate-500/40',
+  TRIAL:        'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/40',
   STANDARD:     'bg-blue-500/20 text-blue-300 border-blue-500/40',
   PROFESSIONAL: 'bg-violet-500/20 text-violet-300 border-violet-500/40',
   ENTERPRISE:   'bg-amber-500/20 text-amber-300 border-amber-500/40',
@@ -70,7 +70,7 @@ export default function SubscriptionPage() {
     })();
   }, []);
 
-  if (loading) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading subscription…</div></div>;
+  if (loading) return <div className="flex items-center justify-center h-full"><div className="text-[var(--text-muted)] animate-pulse">Loading subscription…</div></div>;
   if (error || !data) return (
     <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-300 text-sm flex items-center gap-2">
       <AlertCircle className="w-4 h-4" /> {error ?? 'Failed to load'}
@@ -84,16 +84,16 @@ export default function SubscriptionPage() {
   return (
     <div className="space-y-8 max-w-5xl">
       <div>
-        <h1 className="text-2xl font-bold text-white inline-flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-[var(--text-main)] inline-flex items-center gap-2">
           <CreditCard className="w-5 h-5 text-emerald-400" /> Subscription
         </h1>
-        <p className="text-slate-400 text-sm mt-1">
-          Plan, usage, and Stripe subscription for <strong className="text-white">{billing.tenantName}</strong>.
+        <p className="text-[var(--text-muted)] text-sm mt-1">
+          Plan, usage, and Stripe subscription for <strong className="text-[var(--text-main)]">{billing.tenantName}</strong>.
         </p>
       </div>
 
       {/* Plan card */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 space-y-4">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 space-y-4">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
@@ -101,13 +101,13 @@ export default function SubscriptionPage() {
                 {billing.plan}
               </span>
               {billing.subscriptionStatus && (
-                <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold border ${STATUS_BADGE[billing.subscriptionStatus] ?? 'bg-slate-700/40 text-slate-300 border-slate-500/40'}`}>
+                <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold border ${STATUS_BADGE[billing.subscriptionStatus] ?? 'bg-[var(--bg-surface-hover)]/40 text-[var(--text-muted)] border-slate-500/40'}`}>
                   {billing.subscriptionStatus}
                 </span>
               )}
             </div>
-            <h2 className="text-xl font-bold text-white">{planTitle(billing.plan)}</h2>
-            <p className="text-sm text-slate-400 max-w-xl">{planDesc(billing.plan)}</p>
+            <h2 className="text-xl font-bold text-[var(--text-main)]">{planTitle(billing.plan)}</h2>
+            <p className="text-sm text-[var(--text-muted)] max-w-xl">{planDesc(billing.plan)}</p>
           </div>
           <a href="/admin/subscription/upgrade"
             className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-white font-semibold text-sm inline-flex items-center gap-2 whitespace-nowrap">
@@ -139,8 +139,8 @@ export default function SubscriptionPage() {
       </div>
 
       {/* Feature matrix */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6">
-        <h2 className="text-lg font-semibold text-white mb-4">Plan features</h2>
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6">
+        <h2 className="text-lg font-semibold text-[var(--text-main)] mb-4">Plan features</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
           <FeatureLine on={limits.sso}      label="Single sign-on (SSO)" />
           <FeatureLine on={limits.apiKeys}  label="Tenant API keys" />
@@ -153,9 +153,9 @@ export default function SubscriptionPage() {
 
 function Row({ label, value, highlight }: { label: string; value: React.ReactNode; highlight?: 'amber' | null }) {
   return (
-    <div className={`flex items-center justify-between rounded-lg px-3 py-2 ${highlight === 'amber' ? 'bg-amber-500/10 border border-amber-500/30' : 'bg-slate-900/40 border border-white/5'}`}>
-      <span className="text-slate-400">{label}</span>
-      <span className={highlight === 'amber' ? 'text-amber-200 font-semibold' : 'text-white'}>{value}</span>
+    <div className={`flex items-center justify-between rounded-lg px-3 py-2 ${highlight === 'amber' ? 'bg-amber-500/10 border border-amber-500/30' : 'bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)]'}`}>
+      <span className="text-[var(--text-muted)]">{label}</span>
+      <span className={highlight === 'amber' ? 'text-amber-200 font-semibold' : 'text-[var(--text-main)]'}>{value}</span>
     </div>
   );
 }
@@ -173,17 +173,17 @@ function UsageCard({ icon: Icon, label, current, limit }: { icon: React.Componen
     rose:    { bar: 'bg-rose-500',    text: 'text-rose-300'    },
   }[tone];
   return (
-    <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-5 space-y-3">
-      <div className="flex items-center gap-2 text-slate-400">
+    <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-5 space-y-3">
+      <div className="flex items-center gap-2 text-[var(--text-muted)]">
         <Icon className="w-4 h-4" />
         <span className="text-xs uppercase tracking-wide">{label}</span>
       </div>
       <div className="flex items-baseline gap-2">
-        <span className="text-3xl font-bold text-white">{current.toLocaleString()}</span>
-        <span className="text-sm text-slate-400">/ {limit ? limit.toLocaleString() : '∞'}</span>
+        <span className="text-3xl font-bold text-[var(--text-main)]">{current.toLocaleString()}</span>
+        <span className="text-sm text-[var(--text-muted)]">/ {limit ? limit.toLocaleString() : '∞'}</span>
       </div>
       {limit && (
-        <div className="h-1.5 bg-slate-900/60 rounded-full overflow-hidden">
+        <div className="h-1.5 bg-[var(--bg-surface)]/60 rounded-full overflow-hidden">
           <div className={`h-full ${colors.bar} transition-all`} style={{ width: `${pct}%` }} />
         </div>
       )}
@@ -199,8 +199,8 @@ function FeatureLine({ on, label }: { on: boolean; label: string }) {
     <div className="flex items-center gap-2 text-sm">
       {on
         ? <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-        : <AlertCircle  className="w-4 h-4 text-slate-500" />}
-      <span className={on ? 'text-white' : 'text-slate-500'}>{label}</span>
+        : <AlertCircle  className="w-4 h-4 text-[var(--text-faint)]" />}
+      <span className={on ? 'text-[var(--text-main)]' : 'text-[var(--text-faint)]'}>{label}</span>
     </div>
   );
 }

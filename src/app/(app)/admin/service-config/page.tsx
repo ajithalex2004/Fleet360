@@ -47,7 +47,7 @@ const TONE_BG: Record<ServiceTone, string> = {
 };
 const TONE_FG: Record<ServiceTone, string> = {
   gold: 'text-amber-300', blue: 'text-blue-300', emerald: 'text-emerald-300',
-  amber: 'text-amber-300', rose: 'text-rose-300', slate: 'text-slate-300',
+  amber: 'text-amber-300', rose: 'text-rose-300', slate: 'text-[var(--text-muted)]',
   violet: 'text-violet-300', cyan: 'text-cyan-300',
 };
 
@@ -184,12 +184,12 @@ export default function ServiceConfigPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-4">
         {/* ───────── Left panel — categories + types ───────── */}
-        <aside className="bg-slate-900 border border-white/10 rounded-2xl p-3 space-y-2">
+        <aside className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-3 space-y-2">
           <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search services…"
-              className="w-full bg-slate-800 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500" />
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg pl-9 pr-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-violet-500" />
           </div>
           <button onClick={() => setShowNewCat(true)}
             className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/40 text-violet-200 text-xs font-semibold">
@@ -203,7 +203,7 @@ export default function ServiceConfigPage() {
           {loading ? (
             <div className="space-y-2 pt-2">
               {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-9 rounded-lg bg-slate-800/40 animate-pulse" />
+                <div key={i} className="h-9 rounded-lg bg-[var(--bg-surface)]/40 animate-pulse" />
               ))}
             </div>
           ) : (
@@ -211,28 +211,28 @@ export default function ServiceConfigPage() {
               {filteredCategories.map(cat => (
                 <div key={cat.id} className="space-y-0.5">
                   <button onClick={() => toggle(cat.id)}
-                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-sm font-semibold ${TONE_FG[cat.tone]} hover:bg-white/5`}>
+                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-sm font-semibold ${TONE_FG[cat.tone]} hover:bg-[var(--bg-surface-hover)]`}>
                     {expanded.has(cat.id) ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                     <Folder className="w-3.5 h-3.5 shrink-0" />
                     <span className="flex-1 truncate">{cat.name}</span>
-                    <span className="text-[10px] tabular-nums text-slate-500">{cat.types.length}</span>
+                    <span className="text-[10px] tabular-nums text-[var(--text-faint)]">{cat.types.length}</span>
                   </button>
                   {expanded.has(cat.id) && (
-                    <div className="ml-5 space-y-0.5 border-l border-white/5 pl-2">
+                    <div className="ml-5 space-y-0.5 border-l border-[var(--border-subtle)] pl-2">
                       {cat.types.map(t => (
                         <button key={t.id} onClick={() => setSelectedTypeId(t.id)}
                           className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-xs ${
                             selectedTypeId === t.id
                               ? `${TONE_BG[t.tone]} ${TONE_FG[t.tone]} ring-1 ring-current/30`
-                              : 'text-slate-300 hover:bg-white/5'
+                              : 'text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]'
                           }`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${TONE_BG[t.tone]} ring-1 ring-current/40`} />
                           <span className="flex-1 truncate">{t.name}</span>
-                          {t.isSystem && <span className="text-[9px] uppercase text-slate-500 tracking-wider">sys</span>}
+                          {t.isSystem && <span className="text-[9px] uppercase text-[var(--text-faint)] tracking-wider">sys</span>}
                         </button>
                       ))}
                       <button onClick={() => setShowNewType(cat.id)}
-                        className="w-full inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-slate-400 hover:text-violet-300 hover:bg-white/5">
+                        className="w-full inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-[var(--text-muted)] hover:text-violet-300 hover:bg-[var(--bg-surface-hover)]">
                         <Plus className="w-3 h-3" /> Add service type
                       </button>
                       {showNewType === cat.id && (
@@ -249,22 +249,22 @@ export default function ServiceConfigPage() {
         </aside>
 
         {/* ───────── Right panel — tabs ───────── */}
-        <section className="bg-slate-900 border border-white/10 rounded-2xl">
+        <section className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl">
           {!selectedType ? (
-            <div className="py-20 text-center text-slate-500 text-sm">
-              <Layers className="w-8 h-8 mx-auto mb-3 text-slate-600" />
+            <div className="py-20 text-center text-[var(--text-faint)] text-sm">
+              <Layers className="w-8 h-8 mx-auto mb-3 text-[var(--text-faint)]" />
               Select a service type from the left panel to view its configuration.
             </div>
           ) : (
             <>
               {/* Header */}
-              <div className="flex items-center gap-3 p-5 border-b border-white/5">
+              <div className="flex items-center gap-3 p-5 border-b border-[var(--border-subtle)]">
                 <div className={`w-10 h-10 rounded-xl ${TONE_BG[selectedType.type.tone]} ${TONE_FG[selectedType.type.tone]} flex items-center justify-center text-base font-bold`}>
                   {selectedType.type.name.slice(0, 1)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-lg font-bold text-white truncate">{selectedType.type.name}</h2>
-                  <p className="text-xs text-slate-500 truncate">
+                  <h2 className="text-lg font-bold text-[var(--text-main)] truncate">{selectedType.type.name}</h2>
+                  <p className="text-xs text-[var(--text-faint)] truncate">
                     {selectedType.category.name} · <span className="font-mono">{selectedType.type.key}</span>
                   </p>
                 </div>
@@ -281,7 +281,7 @@ export default function ServiceConfigPage() {
                 onScopeCreated={() => { setShowNewScope(false); void loadScopes(); }} />
 
               {/* Tab strip */}
-              <div className="flex flex-wrap gap-1 p-2 border-b border-white/5">
+              <div className="flex flex-wrap gap-1 p-2 border-b border-[var(--border-subtle)]">
                 {TABS.map(t => {
                   const Icon = t.icon;
                   const active = activeTab === t.key;
@@ -290,7 +290,7 @@ export default function ServiceConfigPage() {
                       className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                         active
                           ? 'bg-violet-500/20 text-violet-200 ring-1 ring-violet-500/40'
-                          : 'text-slate-300 hover:bg-white/5'
+                          : 'text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]'
                       }`}>
                       <Icon className="w-3.5 h-3.5" /> {t.label}
                     </button>
@@ -374,17 +374,17 @@ function NewCategoryRow({ onCancel, onCreated }: { onCancel: () => void; onCreat
   };
 
   return (
-    <div className="bg-slate-800/60 border border-violet-500/30 rounded-lg p-2 space-y-2">
+    <div className="bg-[var(--bg-surface)]/60 border border-violet-500/30 rounded-lg p-2 space-y-2">
       <input value={name} onChange={e => setName(e.target.value)} placeholder="Category name"
-        className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1.5 text-xs text-white" />
+        className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded px-2 py-1.5 text-xs text-[var(--text-main)]" />
       <input value={key} onChange={e => setKey(e.target.value)} placeholder="KEY (auto if blank)"
-        className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1.5 text-xs text-white font-mono uppercase" />
+        className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded px-2 py-1.5 text-xs text-[var(--text-main)] font-mono uppercase" />
       {err && <div className="text-[10px] text-rose-300">{err}</div>}
       <div className="flex gap-1">
         <button onClick={submit} disabled={busy} className="flex-1 px-2 py-1 rounded bg-violet-600 hover:bg-violet-500 text-white text-xs disabled:opacity-50">
           {busy ? 'Adding…' : 'Add'}
         </button>
-        <button onClick={onCancel} className="px-2 py-1 rounded text-slate-400 hover:text-white text-xs">Cancel</button>
+        <button onClick={onCancel} className="px-2 py-1 rounded text-[var(--text-muted)] hover:text-[var(--text-main)] text-xs">Cancel</button>
       </div>
     </div>
   );
@@ -411,17 +411,17 @@ function NewTypeRow({ categoryId, onCancel, onCreated }: { categoryId: string; o
   };
 
   return (
-    <div className="bg-slate-800/60 border border-violet-500/30 rounded p-1.5 space-y-1.5 ml-2">
+    <div className="bg-[var(--bg-surface)]/60 border border-violet-500/30 rounded p-1.5 space-y-1.5 ml-2">
       <input value={name} onChange={e => setName(e.target.value)} placeholder="Service type name"
-        className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-[11px] text-white" />
+        className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded px-2 py-1 text-[11px] text-[var(--text-main)]" />
       <input value={key} onChange={e => setKey(e.target.value)} placeholder="KEY (auto if blank)"
-        className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-[11px] text-white font-mono uppercase" />
+        className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded px-2 py-1 text-[11px] text-[var(--text-main)] font-mono uppercase" />
       {err && <div className="text-[10px] text-rose-300">{err}</div>}
       <div className="flex gap-1">
         <button onClick={submit} disabled={busy} className="flex-1 px-2 py-1 rounded bg-violet-600 hover:bg-violet-500 text-white text-[11px] disabled:opacity-50">
           {busy ? 'Adding…' : 'Add'}
         </button>
-        <button onClick={onCancel} className="px-2 py-1 rounded text-slate-400 hover:text-white text-[11px]">Cancel</button>
+        <button onClick={onCancel} className="px-2 py-1 rounded text-[var(--text-muted)] hover:text-[var(--text-main)] text-[11px]">Cancel</button>
       </div>
     </div>
   );
@@ -481,21 +481,21 @@ function BasicInfoTab({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <Field label="Name" required>
           <input value={name} onChange={e => setName(e.target.value)}
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+            className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
         </Field>
         <Field label="Key" hint="Stable code lookup — read-only">
           <input value={type.key} readOnly
-            className="w-full bg-slate-950 border border-white/5 rounded-lg px-3 py-2 text-slate-400 text-sm font-mono" />
+            className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-muted)] text-sm font-mono" />
         </Field>
         <Field label="Category">
           <select value={categoryId} onChange={e => setCategoryId(e.target.value)}
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm">
+            className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm">
             {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </Field>
         <Field label="Default priority">
           <select value={defaultPriority} onChange={e => setPriority(e.target.value as DefaultPriority)}
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm">
+            className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm">
             <option>Low</option><option>Medium</option><option>High</option>
           </select>
         </Field>
@@ -504,7 +504,7 @@ function BasicInfoTab({
             {SERVICE_TONES.map(t => (
               <button key={t} type="button" onClick={() => setTone(t)}
                 className={`px-2.5 py-1 rounded-md text-[11px] font-medium border ${TONE_BG[t]} ${TONE_FG[t]} ${
-                  tone === t ? 'ring-2 ring-current/50' : 'border-white/10'
+                  tone === t ? 'ring-2 ring-current/50' : 'border-[var(--border-subtle)]'
                 }`}>
                 {t}
               </button>
@@ -514,17 +514,17 @@ function BasicInfoTab({
         <Field label="Sort order">
           <input type="number" value={sortOrder}
             onChange={e => setSortOrder(parseInt(e.target.value || '0', 10))}
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm" />
+            className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm" />
         </Field>
         <Field label="Icon (Lucide name)" hint="e.g. Wrench, Calendar — optional">
           <input value={icon} onChange={e => setIcon(e.target.value)}
             placeholder="Wrench"
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm font-mono" />
+            className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm font-mono" />
         </Field>
       </div>
       <Field label="Description">
         <textarea value={description} onChange={e => setDescription(e.target.value)} rows={3}
-          className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+          className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
       </Field>
 
       <div className="flex items-center gap-2 pt-2">
@@ -539,7 +539,7 @@ function BasicInfoTab({
           </button>
         )}
         {type.isSystem && (
-          <span className="text-[11px] text-slate-500 inline-flex items-center gap-1 ml-auto">
+          <span className="text-[11px] text-[var(--text-faint)] inline-flex items-center gap-1 ml-auto">
             <Lock className="w-3 h-3" /> System service type — cannot be deleted
           </span>
         )}
@@ -589,7 +589,7 @@ function ModuleMappingTab({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <Field label="Linked module" required hint="Which module owns this service's lifecycle">
           <select value={linkedModule} onChange={e => setLinkedModule(e.target.value as LinkedModule)}
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm">
+            className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm">
             {LINKED_MODULES.map(m => (
               <option key={m} value={m}>{LINKED_MODULE_LABEL[m]}</option>
             ))}
@@ -598,13 +598,13 @@ function ModuleMappingTab({
         <Field label="Sub-module" hint="Optional free text — e.g. 'Maintenance Tickets'">
           <input value={subModule} onChange={e => setSubModule(e.target.value)}
             placeholder="Optional"
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm" />
+            className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm" />
         </Field>
       </div>
 
       <div className="space-y-2">
-        <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Sub-engines</h4>
-        <p className="text-[11px] text-slate-500">Toggle the sub-engines this service depends on. Engines stay configurable inside their own admin sections — these flags decide which apply.</p>
+        <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Sub-engines</h4>
+        <p className="text-[11px] text-[var(--text-faint)]">Toggle the sub-engines this service depends on. Engines stay configurable inside their own admin sections — these flags decide which apply.</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-2">
           <Toggle label="Workflow engine"     icon={Workflow}    checked={workflow}     onChange={setWorkflow} />
           <Toggle label="Notification engine" icon={Bell}        checked={notification} onChange={setNotification} />
@@ -632,11 +632,11 @@ function Field({ label, children, hint, required }: {
 }) {
   return (
     <div className="space-y-1">
-      <label className="text-xs font-medium text-slate-400 uppercase tracking-wide flex items-center gap-1">
+      <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide flex items-center gap-1">
         {label} {required && <span className="text-rose-400">*</span>}
       </label>
       {children}
-      {hint && <p className="text-[10px] text-slate-500">{hint}</p>}
+      {hint && <p className="text-[10px] text-[var(--text-faint)]">{hint}</p>}
     </div>
   );
 }
@@ -650,11 +650,11 @@ function Toggle({ label, icon: Icon, checked, onChange }: {
       className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all text-left ${
         checked
           ? 'bg-violet-500/15 border-violet-500/40 text-violet-100'
-          : 'bg-slate-800/60 border-white/10 text-slate-400 hover:border-white/20'
+          : 'bg-[var(--bg-surface)]/60 border-[var(--border-subtle)] text-[var(--text-muted)] hover:border-[var(--border-strong)]'
       }`}>
-      <Icon className={`w-4 h-4 ${checked ? 'text-violet-300' : 'text-slate-500'}`} />
+      <Icon className={`w-4 h-4 ${checked ? 'text-violet-300' : 'text-[var(--text-faint)]'}`} />
       <span className="flex-1">{label}</span>
-      <span className={`w-8 h-4 rounded-full relative ${checked ? 'bg-violet-500' : 'bg-slate-700'}`}>
+      <span className={`w-8 h-4 rounded-full relative ${checked ? 'bg-violet-500' : 'bg-[var(--bg-surface-hover)]'}`}>
         <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${checked ? 'left-4' : 'left-0.5'}`} />
       </span>
     </button>
@@ -676,12 +676,12 @@ function ScopePicker({
   const active = scopes.find(s => s.id === activeScopeId);
 
   return (
-    <div className="px-5 py-3 border-b border-white/5 bg-slate-950/40">
+    <div className="px-5 py-3 border-b border-[var(--border-subtle)] bg-[var(--bg-canvas)]/40">
       <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Scope</span>
+        <span className="text-[10px] uppercase tracking-wider text-[var(--text-faint)] font-semibold">Scope</span>
         <select value={activeScopeId ?? ''}
           onChange={e => onChange(e.target.value)}
-          className="bg-slate-800 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-violet-500">
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-1.5 text-sm text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-violet-500">
           {scopes.map(s => (
             <option key={s.id} value={s.id}>
               {s.isRoot ? '🏢 ' : '↳ '}
@@ -748,31 +748,31 @@ function NewScopeForm({
   };
 
   return (
-    <div className="bg-slate-800/60 border border-violet-500/30 rounded-lg p-3 space-y-2">
+    <div className="bg-[var(--bg-surface)]/60 border border-violet-500/30 rounded-lg p-3 space-y-2">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
         <div className="space-y-1">
-          <label className="text-[10px] text-slate-400 uppercase tracking-wide">Name</label>
+          <label className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">Name</label>
           <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Dubai Branch"
-            className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1.5 text-xs text-white" />
+            className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded px-2 py-1.5 text-xs text-[var(--text-main)]" />
         </div>
         <div className="space-y-1">
-          <label className="text-[10px] text-slate-400 uppercase tracking-wide">Key</label>
+          <label className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">Key</label>
           <input value={key} onChange={e => setKey(e.target.value)} placeholder="auto"
-            className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1.5 text-xs text-white font-mono uppercase" />
+            className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded px-2 py-1.5 text-xs text-[var(--text-main)] font-mono uppercase" />
         </div>
         <div className="space-y-1">
-          <label className="text-[10px] text-slate-400 uppercase tracking-wide">Level</label>
+          <label className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">Level</label>
           <select value={level} onChange={e => setLevel(e.target.value as ScopeLevel)}
-            className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1.5 text-xs text-white">
+            className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded px-2 py-1.5 text-xs text-[var(--text-main)]">
             {SCOPE_LEVELS.filter(l => l !== 'COMPANY').map(l => (
               <option key={l} value={l}>{SCOPE_LEVEL_LABEL[l]}</option>
             ))}
           </select>
         </div>
         <div className="space-y-1">
-          <label className="text-[10px] text-slate-400 uppercase tracking-wide">Parent</label>
+          <label className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">Parent</label>
           <select value={parentScopeId} onChange={e => setParentScopeId(e.target.value)}
-            className="w-full bg-slate-900 border border-white/10 rounded px-2 py-1.5 text-xs text-white">
+            className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded px-2 py-1.5 text-xs text-[var(--text-main)]">
             {scopes.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
@@ -782,7 +782,7 @@ function NewScopeForm({
         <button onClick={submit} disabled={busy} className="px-3 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-white text-xs disabled:opacity-50">
           {busy ? 'Adding…' : 'Add scope'}
         </button>
-        <button onClick={onCancel} className="px-2 py-1.5 rounded text-slate-400 hover:text-white text-xs">Cancel</button>
+        <button onClick={onCancel} className="px-2 py-1.5 rounded text-[var(--text-muted)] hover:text-[var(--text-main)] text-xs">Cancel</button>
       </div>
     </div>
   );

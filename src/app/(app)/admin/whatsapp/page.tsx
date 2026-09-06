@@ -70,13 +70,13 @@ const INTENT_COLORS: Record<string, string> = {
   BOOKING_CONFIRMATION: 'bg-green-500/20 text-green-300 border-green-500/30',
   PAYMENT_REMINDER: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
   RENEWAL_NUDGE: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
-  GENERAL: 'bg-slate-500/20 text-slate-300 border-slate-500/30',
+  GENERAL: 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30',
 };
 
 const MODULE_COLORS: Record<string, string> = {
   RENTAL: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
   LEASING: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
-  GENERAL: 'bg-slate-500/20 text-slate-300 border-slate-500/30',
+  GENERAL: 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30',
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -84,7 +84,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   PAYMENT_REMINDER: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
   RENEWAL_NUDGE: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
   INQUIRY_RESPONSE: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
-  GENERAL: 'bg-slate-500/20 text-slate-300 border-slate-500/30',
+  GENERAL: 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30',
 };
 
 function Badge({ label, colorClass }: { label: string; colorClass: string }) {
@@ -214,7 +214,7 @@ function InboxTab() {
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               filter === f
                 ? 'bg-green-500 text-white'
-                : 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
+                : 'bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]'
             }`}
           >
             {f === 'ALL' ? `All (${threads.length})` :
@@ -222,7 +222,7 @@ function InboxTab() {
              f}
           </button>
         ))}
-        <div className="ml-auto flex items-center gap-2 text-slate-400 text-xs">
+        <div className="ml-auto flex items-center gap-2 text-[var(--text-muted)] text-xs">
           <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
           Auto-refreshes every 30s
         </div>
@@ -235,7 +235,7 @@ function InboxTab() {
       )}
 
       {!loading && filtered.length === 0 && (
-        <div className="flex flex-col items-center justify-center h-48 text-slate-500">
+        <div className="flex flex-col items-center justify-center h-48 text-[var(--text-faint)]">
           <span className="text-4xl mb-3">💬</span>
           <p className="text-sm">No conversations yet</p>
           <p className="text-xs mt-1">Messages will appear here when customers contact you via WhatsApp</p>
@@ -251,12 +251,12 @@ function InboxTab() {
               className={`rounded-xl border transition-all ${
                 thread.unresolvedCount > 0
                   ? 'border-green-500/30 bg-green-500/5'
-                  : 'border-white/10 bg-slate-900/50'
+                  : 'border-[var(--border-subtle)] bg-[var(--bg-surface)]/50'
               }`}
             >
               {/* Thread Header */}
               <div
-                className="flex items-center gap-3 p-4 cursor-pointer hover:bg-white/5 rounded-t-xl transition-colors"
+                className="flex items-center gap-3 p-4 cursor-pointer hover:bg-[var(--bg-surface-hover)] rounded-t-xl transition-colors"
                 onClick={() => setExpandedThread(isExpanded ? null : thread.from_number)}
               >
                 {/* Avatar */}
@@ -266,11 +266,11 @@ function InboxTab() {
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-white font-semibold text-sm truncate">
+                    <span className="text-[var(--text-main)] font-semibold text-sm truncate">
                       {thread.customer_name ?? thread.from_number}
                     </span>
                     {thread.customer_name && (
-                      <span className="text-slate-500 text-xs">{thread.from_number}</span>
+                      <span className="text-[var(--text-faint)] text-xs">{thread.from_number}</span>
                     )}
                     {thread.unresolvedCount > 0 && (
                       <span className="w-5 h-5 bg-green-500 rounded-full text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
@@ -278,11 +278,11 @@ function InboxTab() {
                       </span>
                     )}
                   </div>
-                  <p className="text-slate-400 text-xs truncate">{thread.lastMessage.message_body}</p>
+                  <p className="text-[var(--text-muted)] text-xs truncate">{thread.lastMessage.message_body}</p>
                 </div>
 
                 <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                  <span className="text-slate-500 text-xs">{timeAgo(thread.lastMessage.created_at)}</span>
+                  <span className="text-[var(--text-faint)] text-xs">{timeAgo(thread.lastMessage.created_at)}</span>
                   <div className="flex items-center gap-1.5">
                     {thread.intent && thread.intent !== 'GENERAL' && (
                       <Badge label={thread.intent} colorClass={INTENT_COLORS[thread.intent] ?? INTENT_COLORS.GENERAL} />
@@ -296,12 +296,12 @@ function InboxTab() {
                   </div>
                 </div>
 
-                <span className="text-slate-600 ml-2">{isExpanded ? '▲' : '▼'}</span>
+                <span className="text-[var(--text-faint)] ml-2">{isExpanded ? '▲' : '▼'}</span>
               </div>
 
               {/* Expanded Conversation */}
               {isExpanded && (
-                <div className="border-t border-white/10">
+                <div className="border-t border-[var(--border-subtle)]">
                   {/* Chat messages */}
                   <div className="p-4 space-y-3 max-h-80 overflow-y-auto">
                     {thread.messages.map(msg => (
@@ -312,7 +312,7 @@ function InboxTab() {
                         <div
                           className={`max-w-xs lg:max-w-md rounded-2xl px-4 py-2.5 ${
                             msg.direction === 'INBOUND'
-                              ? 'bg-slate-800 text-slate-100 rounded-tl-sm'
+                              ? 'bg-[var(--bg-surface)] text-[var(--text-main)] rounded-tl-sm'
                               : 'bg-blue-600 text-white rounded-tr-sm'
                           }`}
                         >
@@ -321,7 +321,7 @@ function InboxTab() {
                           )}
                           <p className="text-sm whitespace-pre-wrap">{msg.message_body}</p>
                           {msg.direction === 'INBOUND' && msg.auto_replied && msg.auto_reply_text && (
-                            <div className="mt-2 pt-2 border-t border-white/10 text-xs text-green-300 opacity-70">
+                            <div className="mt-2 pt-2 border-t border-[var(--border-subtle)] text-xs text-green-300 opacity-70">
                               🤖 Auto-replied
                             </div>
                           )}
@@ -337,14 +337,14 @@ function InboxTab() {
                   </div>
 
                   {/* Reply box + actions */}
-                  <div className="p-4 border-t border-white/10 space-y-3">
+                  <div className="p-4 border-t border-[var(--border-subtle)] space-y-3">
                     <div className="flex gap-2">
                       <textarea
                         value={replyText[thread.from_number] ?? ''}
                         onChange={e => setReplyText(r => ({ ...r, [thread.from_number]: e.target.value }))}
                         placeholder="Type a reply..."
                         rows={2}
-                        className="flex-1 bg-slate-800 border border-white/10 text-white rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-green-500/50 placeholder-slate-500"
+                        className="flex-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-green-500/50 placeholder-[var(--text-faint)]"
                         onKeyDown={e => {
                           if (e.key === 'Enter' && e.ctrlKey) handleReply(thread.from_number);
                         }}
@@ -358,18 +358,18 @@ function InboxTab() {
                       </button>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-500 text-xs">Ctrl+Enter to send</span>
+                      <span className="text-[var(--text-faint)] text-xs">Ctrl+Enter to send</span>
                       {thread.unresolvedCount > 0 ? (
                         <button
                           onClick={() => handleResolve(thread.from_number, true)}
-                          className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white rounded-lg text-xs font-semibold transition-colors"
+                          className="px-3 py-1.5 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] rounded-lg text-xs font-semibold transition-colors"
                         >
                           ✓ Mark Resolved
                         </button>
                       ) : (
                         <button
                           onClick={() => handleResolve(thread.from_number, false)}
-                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-500 hover:text-slate-300 rounded-lg text-xs transition-colors"
+                          className="px-3 py-1.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-faint)] hover:text-[var(--text-muted)] rounded-lg text-xs transition-colors"
                         >
                           Reopen
                         </button>
@@ -478,29 +478,29 @@ function SendTab() {
 
         {/* Phone input */}
         <div>
-          <label className="block text-slate-300 text-sm font-medium mb-2">Recipient Phone Number</label>
+          <label className="block text-[var(--text-muted)] text-sm font-medium mb-2">Recipient Phone Number</label>
           <div className="flex">
-            <span className="flex items-center px-3 bg-slate-800 border border-r-0 border-white/10 rounded-l-lg text-slate-400 text-sm">🇦🇪 +971</span>
+            <span className="flex items-center px-3 bg-[var(--bg-surface)] border border-r-0 border-[var(--border-subtle)] rounded-l-lg text-[var(--text-muted)] text-sm">🇦🇪 +971</span>
             <input
               type="tel"
               value={to}
               onChange={e => setTo(e.target.value.startsWith('+') ? e.target.value : e.target.value)}
               placeholder="501234567 or +971501234567"
-              className="flex-1 bg-slate-900 border border-white/10 text-white rounded-r-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500/50 placeholder-slate-600"
+              className="flex-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] rounded-r-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500/50 placeholder-[var(--text-faint)]"
             />
           </div>
         </div>
 
         {/* Mode toggle */}
         <div>
-          <label className="block text-slate-300 text-sm font-medium mb-2">Message Type</label>
-          <div className="flex rounded-lg overflow-hidden border border-white/10">
+          <label className="block text-[var(--text-muted)] text-sm font-medium mb-2">Message Type</label>
+          <div className="flex rounded-lg overflow-hidden border border-[var(--border-subtle)]">
             {(['text', 'template'] as const).map(m => (
               <button
                 key={m}
                 onClick={() => setMode(m)}
                 className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                  mode === m ? 'bg-green-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+                  mode === m ? 'bg-green-600 text-white' : 'bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--text-main)]'
                 }`}
               >
                 {m === 'text' ? '✏️ Free Text' : '📋 Template'}
@@ -512,13 +512,13 @@ function SendTab() {
         {/* Free text */}
         {mode === 'text' && (
           <div>
-            <label className="block text-slate-300 text-sm font-medium mb-2">Message</label>
+            <label className="block text-[var(--text-muted)] text-sm font-medium mb-2">Message</label>
             <textarea
               value={freeText}
               onChange={e => setFreeText(e.target.value)}
               rows={5}
               placeholder="Type your message..."
-              className="w-full bg-slate-900 border border-white/10 text-white rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-green-500/50 placeholder-slate-600"
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-green-500/50 placeholder-[var(--text-faint)]"
             />
           </div>
         )}
@@ -527,11 +527,11 @@ function SendTab() {
         {mode === 'template' && (
           <div className="space-y-4">
             <div>
-              <label className="block text-slate-300 text-sm font-medium mb-2">Template</label>
+              <label className="block text-[var(--text-muted)] text-sm font-medium mb-2">Template</label>
               <select
                 value={selectedTemplate}
                 onChange={e => { setSelectedTemplate(e.target.value); setTemplateVars({}); }}
-                className="w-full bg-slate-900 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500/50"
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500/50"
               >
                 <option value="">— Select template —</option>
                 {templates.map(t => (
@@ -545,20 +545,20 @@ function SendTab() {
             {/* Variable fill-in */}
             {templateVarNames.length > 0 && (
               <div>
-                <label className="block text-slate-300 text-sm font-medium mb-2">
+                <label className="block text-[var(--text-muted)] text-sm font-medium mb-2">
                   Template Variables
-                  <span className="ml-2 text-slate-500 text-xs font-normal">Use {'{{variable_name}}'} syntax</span>
+                  <span className="ml-2 text-[var(--text-faint)] text-xs font-normal">Use {'{{variable_name}}'} syntax</span>
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   {templateVarNames.map(varName => (
                     <div key={varName}>
-                      <label className="block text-slate-500 text-xs mb-1">{varName}</label>
+                      <label className="block text-[var(--text-faint)] text-xs mb-1">{varName}</label>
                       <input
                         type="text"
                         value={templateVars[varName] ?? ''}
                         onChange={e => setTemplateVars(v => ({ ...v, [varName]: e.target.value }))}
                         placeholder={`{{${varName}}}`}
-                        className="w-full bg-slate-800 border border-white/10 text-white rounded px-2 py-1.5 text-xs focus:outline-none focus:border-green-500/50 placeholder-slate-600"
+                        className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] rounded px-2 py-1.5 text-xs focus:outline-none focus:border-green-500/50 placeholder-[var(--text-faint)]"
                       />
                     </div>
                   ))}
@@ -570,14 +570,14 @@ function SendTab() {
 
         {/* Language toggle */}
         <div>
-          <label className="block text-slate-300 text-sm font-medium mb-2">Language</label>
-          <div className="flex rounded-lg overflow-hidden border border-white/10">
+          <label className="block text-[var(--text-muted)] text-sm font-medium mb-2">Language</label>
+          <div className="flex rounded-lg overflow-hidden border border-[var(--border-subtle)]">
             {(['en', 'ar', 'both'] as const).map(l => (
               <button
                 key={l}
                 onClick={() => setLanguage(l)}
                 className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                  language === l ? 'bg-green-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+                  language === l ? 'bg-green-600 text-white' : 'bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--text-main)]'
                 }`}
               >
                 {l === 'en' ? '🇬🇧 English' : l === 'ar' ? '🇦🇪 Arabic' : '🌐 Both'}
@@ -601,7 +601,7 @@ function SendTab() {
         >
           {sending ? (
             <>
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <div className="w-4 h-4 border-2 border-[var(--border-strong)] border-t-white rounded-full animate-spin" />
               Sending...
             </>
           ) : (
@@ -616,40 +616,40 @@ function SendTab() {
       <div className="space-y-5">
         {/* Preview */}
         <div>
-          <label className="block text-slate-300 text-sm font-medium mb-2">Message Preview</label>
-          <div className="bg-slate-800 rounded-xl p-4 min-h-32 border border-white/10">
+          <label className="block text-[var(--text-muted)] text-sm font-medium mb-2">Message Preview</label>
+          <div className="bg-[var(--bg-surface)] rounded-xl p-4 min-h-32 border border-[var(--border-subtle)]">
             <div className="flex justify-end">
               <div className="max-w-xs bg-green-600 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm whitespace-pre-wrap">
                 {previewBody() || <span className="opacity-40 italic">Preview will appear here...</span>}
               </div>
             </div>
             <div className="flex justify-end mt-1">
-              <span className="text-slate-500 text-xs">Sent · just now · ✓</span>
+              <span className="text-[var(--text-faint)] text-xs">Sent · just now · ✓</span>
             </div>
           </div>
-          <p className="text-slate-500 text-xs mt-1">This is how the message will appear in WhatsApp</p>
+          <p className="text-[var(--text-faint)] text-xs mt-1">This is how the message will appear in WhatsApp</p>
         </div>
 
         {/* Recent sends */}
         <div>
-          <h4 className="text-slate-300 text-sm font-medium mb-3">Recent Sends</h4>
+          <h4 className="text-[var(--text-muted)] text-sm font-medium mb-3">Recent Sends</h4>
           {recentSends.length === 0 ? (
-            <p className="text-slate-500 text-xs text-center py-4">No outbound messages yet</p>
+            <p className="text-[var(--text-faint)] text-xs text-center py-4">No outbound messages yet</p>
           ) : (
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {recentSends.map(msg => (
-                <div key={msg.id} className="flex items-start gap-3 p-3 bg-slate-800/50 rounded-lg border border-white/5">
+                <div key={msg.id} className="flex items-start gap-3 p-3 bg-[var(--bg-surface)]/50 rounded-lg border border-[var(--border-subtle)]">
                   <div className="w-8 h-8 rounded-full bg-blue-600/30 flex items-center justify-center text-blue-300 text-xs flex-shrink-0">
                     📤
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-slate-300 text-xs font-medium truncate">{msg.to_number}</span>
-                      <span className="text-slate-500 text-xs flex-shrink-0">{timeAgo(msg.created_at)}</span>
+                      <span className="text-[var(--text-muted)] text-xs font-medium truncate">{msg.to_number}</span>
+                      <span className="text-[var(--text-faint)] text-xs flex-shrink-0">{timeAgo(msg.created_at)}</span>
                     </div>
-                    <p className="text-slate-400 text-xs truncate mt-0.5">{msg.message_body}</p>
+                    <p className="text-[var(--text-muted)] text-xs truncate mt-0.5">{msg.message_body}</p>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className={`text-xs ${msg.status === 'SENT' ? 'text-green-400' : msg.status === 'FAILED' ? 'text-red-400' : 'text-slate-500'}`}>
+                      <span className={`text-xs ${msg.status === 'SENT' ? 'text-green-400' : msg.status === 'FAILED' ? 'text-red-400' : 'text-[var(--text-faint)]'}`}>
                         {msg.status}
                       </span>
                       {msg.template_name && (
@@ -755,7 +755,7 @@ function TemplatesTab() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <p className="text-slate-400 text-sm">{templates.length} templates · {templates.filter(t => t.is_active).length} active</p>
+        <p className="text-[var(--text-muted)] text-sm">{templates.length} templates · {templates.filter(t => t.is_active).length} active</p>
         <button
           onClick={openNewModal}
           className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 text-white font-semibold rounded-xl text-sm transition-colors"
@@ -772,7 +772,7 @@ function TemplatesTab() {
 
       {categories.map(category => (
         <div key={category}>
-          <h4 className="text-slate-300 text-sm font-semibold mb-3 flex items-center gap-2">
+          <h4 className="text-[var(--text-muted)] text-sm font-semibold mb-3 flex items-center gap-2">
             <Badge label={category} colorClass={CATEGORY_COLORS[category] ?? CATEGORY_COLORS.GENERAL} />
           </h4>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -780,34 +780,34 @@ function TemplatesTab() {
               <div
                 key={t.id}
                 className={`rounded-xl border p-4 space-y-3 transition-all ${
-                  t.is_active ? 'border-white/10 bg-slate-900/50' : 'border-white/5 bg-slate-900/20 opacity-60'
+                  t.is_active ? 'border-[var(--border-subtle)] bg-[var(--bg-surface)]/50' : 'border-[var(--border-subtle)] bg-[var(--bg-surface)]/20 opacity-60'
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="text-white text-sm font-semibold">{t.display_name}</p>
-                    <p className="text-slate-500 text-xs">{t.template_name}</p>
+                    <p className="text-[var(--text-main)] text-sm font-semibold">{t.display_name}</p>
+                    <p className="text-[var(--text-faint)] text-xs">{t.template_name}</p>
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     <span title="Language">{t.language === 'ar' ? '🇦🇪' : t.language === 'both' ? '🌐' : '🇬🇧'}</span>
                   </div>
                 </div>
 
-                <p className="text-slate-400 text-xs line-clamp-3 whitespace-pre-wrap">
+                <p className="text-[var(--text-muted)] text-xs line-clamp-3 whitespace-pre-wrap">
                   {t.body_en}
                 </p>
 
-                <div className="flex items-center gap-2 text-xs text-slate-500">
+                <div className="flex items-center gap-2 text-xs text-[var(--text-faint)]">
                   <span>Used {t.usage_count}×</span>
                   {Array.isArray(t.variables) && t.variables.length > 0 && (
                     <span>{t.variables.length} vars</span>
                   )}
                 </div>
 
-                <div className="flex items-center gap-2 pt-1 border-t border-white/5">
+                <div className="flex items-center gap-2 pt-1 border-t border-[var(--border-subtle)]">
                   <button
                     onClick={() => openEditModal(t)}
-                    className="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-medium transition-colors"
+                    className="flex-1 py-1.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] rounded-lg text-xs font-medium transition-colors"
                   >
                     ✏️ Edit
                   </button>
@@ -831,29 +831,29 @@ function TemplatesTab() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-screen overflow-y-auto shadow-2xl">
-            <div className="flex items-center justify-between p-6 border-b border-white/10">
-              <h3 className="text-white font-semibold text-lg">{editTemplate ? 'Edit Template' : 'New Template'}</h3>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white text-xl transition-colors">×</button>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-screen overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between p-6 border-b border-[var(--border-subtle)]">
+              <h3 className="text-[var(--text-main)] font-semibold text-lg">{editTemplate ? 'Edit Template' : 'New Template'}</h3>
+              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl transition-colors">×</button>
             </div>
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-slate-300 text-xs font-medium mb-1">Template Name <span className="text-slate-500">(unique slug)</span></label>
+                  <label className="block text-[var(--text-muted)] text-xs font-medium mb-1">Template Name <span className="text-[var(--text-faint)]">(unique slug)</span></label>
                   <input
                     value={form.template_name}
                     onChange={e => setForm(f => ({ ...f, template_name: e.target.value }))}
                     disabled={!!editTemplate}
-                    className="w-full bg-slate-800 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500/50 disabled:opacity-50"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500/50 disabled:opacity-50"
                     placeholder="booking_confirmation_en"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-300 text-xs font-medium mb-1">Display Name</label>
+                  <label className="block text-[var(--text-muted)] text-xs font-medium mb-1">Display Name</label>
                   <input
                     value={form.display_name}
                     onChange={e => setForm(f => ({ ...f, display_name: e.target.value }))}
-                    className="w-full bg-slate-800 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500/50"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500/50"
                     placeholder="Booking Confirmation (English)"
                   />
                 </div>
@@ -861,11 +861,11 @@ function TemplatesTab() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-slate-300 text-xs font-medium mb-1">Category</label>
+                  <label className="block text-[var(--text-muted)] text-xs font-medium mb-1">Category</label>
                   <select
                     value={form.category}
                     onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                    className="w-full bg-slate-800 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500/50"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500/50"
                   >
                     {['BOOKING_CONFIRMATION', 'PAYMENT_REMINDER', 'RENEWAL_NUDGE', 'INQUIRY_RESPONSE', 'GENERAL'].map(c => (
                       <option key={c} value={c}>{c}</option>
@@ -873,11 +873,11 @@ function TemplatesTab() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-300 text-xs font-medium mb-1">Language</label>
+                  <label className="block text-[var(--text-muted)] text-xs font-medium mb-1">Language</label>
                   <select
                     value={form.language}
                     onChange={e => setForm(f => ({ ...f, language: e.target.value }))}
-                    className="w-full bg-slate-800 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500/50"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500/50"
                   >
                     <option value="en">🇬🇧 English</option>
                     <option value="ar">🇦🇪 Arabic</option>
@@ -887,48 +887,48 @@ function TemplatesTab() {
               </div>
 
               <div>
-                <label className="block text-slate-300 text-xs font-medium mb-1">
+                <label className="block text-[var(--text-muted)] text-xs font-medium mb-1">
                   English Body
-                  <span className="ml-2 text-slate-500 font-normal">Use {'{{variable_name}}'} for placeholders</span>
+                  <span className="ml-2 text-[var(--text-faint)] font-normal">Use {'{{variable_name}}'} for placeholders</span>
                 </label>
                 <textarea
                   value={form.body_en}
                   onChange={e => setForm(f => ({ ...f, body_en: e.target.value }))}
                   rows={5}
-                  className="w-full bg-slate-800 border border-white/10 text-white rounded-lg px-3 py-2 text-sm font-mono resize-none focus:outline-none focus:border-green-500/50"
+                  className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] rounded-lg px-3 py-2 text-sm font-mono resize-none focus:outline-none focus:border-green-500/50"
                   placeholder="Hello {{customer_name}}! ✅ Your booking {{booking_ref}} is confirmed..."
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 text-xs font-medium mb-1">Arabic Body <span className="text-slate-500 font-normal">(optional)</span></label>
+                <label className="block text-[var(--text-muted)] text-xs font-medium mb-1">Arabic Body <span className="text-[var(--text-faint)] font-normal">(optional)</span></label>
                 <textarea
                   value={form.body_ar}
                   onChange={e => setForm(f => ({ ...f, body_ar: e.target.value }))}
                   rows={4}
                   dir="rtl"
-                  className="w-full bg-slate-800 border border-white/10 text-white rounded-lg px-3 py-2 text-sm font-mono resize-none focus:outline-none focus:border-green-500/50"
+                  className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] rounded-lg px-3 py-2 text-sm font-mono resize-none focus:outline-none focus:border-green-500/50"
                   placeholder="مرحباً {{customer_name}}! ✅ تم تأكيد حجزك..."
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 text-xs font-medium mb-1">
-                  Variables <span className="text-slate-500 font-normal">(comma-separated names)</span>
+                <label className="block text-[var(--text-muted)] text-xs font-medium mb-1">
+                  Variables <span className="text-[var(--text-faint)] font-normal">(comma-separated names)</span>
                 </label>
                 <input
                   value={form.variables}
                   onChange={e => setForm(f => ({ ...f, variables: e.target.value }))}
-                  className="w-full bg-slate-800 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500/50"
+                  className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-green-500/50"
                   placeholder="customer_name, booking_ref, vehicle_name, pickup_date"
                 />
               </div>
             </div>
 
-            <div className="flex items-center gap-3 p-6 border-t border-white/10">
+            <div className="flex items-center gap-3 p-6 border-t border-[var(--border-subtle)]">
               <button
                 onClick={() => setShowModal(false)}
-                className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-sm font-medium transition-colors"
+                className="flex-1 py-2.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] rounded-xl text-sm font-medium transition-colors"
               >
                 Cancel
               </button>
@@ -970,7 +970,7 @@ function AnalyticsTab() {
   }
 
   if (!data) {
-    return <p className="text-slate-500 text-sm text-center py-12">Failed to load analytics</p>;
+    return <p className="text-[var(--text-faint)] text-sm text-center py-12">Failed to load analytics</p>;
   }
 
   const { kpis, intentBreakdown, moduleBreakdown, topNumbers, hourlyActivity } = data;
@@ -999,22 +999,22 @@ function AnalyticsTab() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {kpiItems.map(item => (
-          <div key={item.label} className="bg-slate-900/70 border border-white/10 rounded-xl p-5">
+          <div key={item.label} className="bg-[var(--bg-surface)]/70 border border-[var(--border-subtle)] rounded-xl p-5">
             <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${item.color} flex items-center justify-center text-xl mb-3`}>
               {item.icon}
             </div>
-            <p className="text-2xl font-bold text-white">{item.value}</p>
-            <p className="text-slate-400 text-xs mt-1">{item.label}</p>
+            <p className="text-2xl font-bold text-[var(--text-main)]">{item.value}</p>
+            <p className="text-[var(--text-muted)] text-xs mt-1">{item.label}</p>
           </div>
         ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Intent Breakdown */}
-        <div className="bg-slate-900/50 border border-white/10 rounded-xl p-5">
-          <h3 className="text-white font-semibold mb-4">Intent Breakdown</h3>
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-xl p-5">
+          <h3 className="text-[var(--text-main)] font-semibold mb-4">Intent Breakdown</h3>
           {intentBreakdown.length === 0 ? (
-            <p className="text-slate-500 text-sm text-center py-6">No data yet</p>
+            <p className="text-[var(--text-faint)] text-sm text-center py-6">No data yet</p>
           ) : (
             <div className="space-y-3">
               {intentBreakdown.map((row, i) => {
@@ -1023,10 +1023,10 @@ function AnalyticsTab() {
                 return (
                   <div key={row.intent}>
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-slate-300 text-sm">{row.intent || 'Unknown'}</span>
-                      <span className="text-slate-400 text-xs">{count} ({pct}%)</span>
+                      <span className="text-[var(--text-muted)] text-sm">{row.intent || 'Unknown'}</span>
+                      <span className="text-[var(--text-muted)] text-xs">{count} ({pct}%)</span>
                     </div>
-                    <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-2 bg-[var(--bg-surface)] rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all ${intentColorList[i % intentColorList.length]}`}
                         style={{ width: `${pct}%` }}
@@ -1040,10 +1040,10 @@ function AnalyticsTab() {
         </div>
 
         {/* Module Breakdown */}
-        <div className="bg-slate-900/50 border border-white/10 rounded-xl p-5">
-          <h3 className="text-white font-semibold mb-4">Module Breakdown</h3>
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-xl p-5">
+          <h3 className="text-[var(--text-main)] font-semibold mb-4">Module Breakdown</h3>
           {moduleBreakdown.length === 0 ? (
-            <p className="text-slate-500 text-sm text-center py-6">No data yet</p>
+            <p className="text-[var(--text-faint)] text-sm text-center py-6">No data yet</p>
           ) : (
             <div className="space-y-3">
               {moduleBreakdown.map((row, i) => {
@@ -1053,10 +1053,10 @@ function AnalyticsTab() {
                 return (
                   <div key={row.module}>
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-slate-300 text-sm">{row.module || 'Unknown'}</span>
-                      <span className="text-slate-400 text-xs">{count} ({pct}%)</span>
+                      <span className="text-[var(--text-muted)] text-sm">{row.module || 'Unknown'}</span>
+                      <span className="text-[var(--text-muted)] text-xs">{count} ({pct}%)</span>
                     </div>
-                    <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                    <div className="h-2 bg-[var(--bg-surface)] rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all ${moduleColorList[i % moduleColorList.length]}`}
                         style={{ width: `${pct}%` }}
@@ -1072,24 +1072,24 @@ function AnalyticsTab() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top 5 Phone Numbers */}
-        <div className="bg-slate-900/50 border border-white/10 rounded-xl p-5">
-          <h3 className="text-white font-semibold mb-4">Top Customers by Messages</h3>
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-xl p-5">
+          <h3 className="text-[var(--text-main)] font-semibold mb-4">Top Customers by Messages</h3>
           {topNumbers.length === 0 ? (
-            <p className="text-slate-500 text-sm text-center py-6">No data yet</p>
+            <p className="text-[var(--text-faint)] text-sm text-center py-6">No data yet</p>
           ) : (
             <div className="space-y-3">
               {topNumbers.map((row, i) => (
-                <div key={row.from_number} className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg">
-                  <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                <div key={row.from_number} className="flex items-center gap-3 p-3 bg-[var(--bg-surface)]/50 rounded-lg">
+                  <div className="w-7 h-7 rounded-full bg-[var(--bg-surface-hover)] flex items-center justify-center text-[var(--text-main)] text-xs font-bold flex-shrink-0">
                     {i + 1}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm font-medium truncate">{row.customer_name || row.from_number}</p>
-                    {row.customer_name && <p className="text-slate-500 text-xs">{row.from_number}</p>}
+                    <p className="text-[var(--text-main)] text-sm font-medium truncate">{row.customer_name || row.from_number}</p>
+                    {row.customer_name && <p className="text-[var(--text-faint)] text-xs">{row.from_number}</p>}
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     <span className="text-green-400 font-semibold text-sm">{row.count}</span>
-                    <span className="text-slate-500 text-xs">msgs</span>
+                    <span className="text-[var(--text-faint)] text-xs">msgs</span>
                   </div>
                 </div>
               ))}
@@ -1098,9 +1098,9 @@ function AnalyticsTab() {
         </div>
 
         {/* Messages by Hour */}
-        <div className="bg-slate-900/50 border border-white/10 rounded-xl p-5">
-          <h3 className="text-white font-semibold mb-1">Messages by Hour (Last 7 days)</h3>
-          <p className="text-slate-500 text-xs mb-4">Peak activity hours</p>
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-xl p-5">
+          <h3 className="text-[var(--text-main)] font-semibold mb-1">Messages by Hour (Last 7 days)</h3>
+          <p className="text-[var(--text-faint)] text-xs mb-4">Peak activity hours</p>
           <div className="flex items-end gap-0.5 h-28">
             {hourlyGrid.map(({ hour, count }) => {
               const heightPct = maxHourly > 0 ? (count / maxHourly) * 100 : 0;
@@ -1115,7 +1115,7 @@ function AnalyticsTab() {
               );
             })}
           </div>
-          <div className="flex justify-between text-slate-600 text-xs mt-1">
+          <div className="flex justify-between text-[var(--text-faint)] text-xs mt-1">
             <span>12am</span>
             <span>6am</span>
             <span>12pm</span>
@@ -1148,17 +1148,17 @@ export default function WhatsAppConsolePage() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-green-500/20">
-            <svg viewBox="0 0 24 24" fill="currentColor" className="w-7 h-7 text-white">
+            <svg viewBox="0 0 24 24" fill="currentColor" className="w-7 h-7 text-[var(--text-main)]">
               <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
             </svg>
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-white">WhatsApp AI Support Console</h1>
-            <p className="text-slate-400 text-xs mt-0.5">Smart Mobility customer support via WhatsApp</p>
+            <h1 className="text-2xl font-bold text-[var(--text-main)]">WhatsApp AI Support Console</h1>
+            <p className="text-[var(--text-muted)] text-xs mt-0.5">Smart Mobility customer support via WhatsApp</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800 border border-white/10 text-slate-300 text-xs font-medium">
+          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-xs font-medium">
             <span className="w-2 h-2 bg-red-400 rounded-full" />
             Powered by Twilio
           </span>
@@ -1170,7 +1170,7 @@ export default function WhatsAppConsolePage() {
       </div>
 
       {/* Tab bar */}
-      <div className="flex items-center gap-1 p-1 bg-slate-900/50 rounded-xl border border-white/10 w-fit">
+      <div className="flex items-center gap-1 p-1 bg-[var(--bg-surface)]/50 rounded-xl border border-[var(--border-subtle)] w-fit">
         {TABS.map(tab => (
           <button
             key={tab.id}
@@ -1178,7 +1178,7 @@ export default function WhatsAppConsolePage() {
             className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
               activeTab === tab.id
                 ? 'bg-green-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-white hover:bg-white/5'
+                : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]'
             }`}
           >
             <span>{tab.icon}</span>

@@ -99,23 +99,23 @@ export default function TicketTypesAccessPage() {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading access matrix…</div></div>;
+    return <div className="flex items-center justify-center h-full"><div className="text-[var(--text-muted)] animate-pulse">Loading access matrix…</div></div>;
   }
 
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white inline-flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[var(--text-main)] inline-flex items-center gap-2">
             <Headphones className="w-5 h-5 text-violet-400" /> Service-Ticket types
           </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            {tenantName ? <>For <strong className="text-white">{tenantName}</strong></> : null}
-            <span className="ml-2 text-slate-500">· toggle which ticket types this tenant can use, and override the default SLA</span>
+          <p className="text-[var(--text-muted)] text-sm mt-1">
+            {tenantName ? <>For <strong className="text-[var(--text-main)]">{tenantName}</strong></> : null}
+            <span className="ml-2 text-[var(--text-faint)]">· toggle which ticket types this tenant can use, and override the default SLA</span>
           </p>
         </div>
         <Link href="/admin/tenants"
-          className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-slate-800 border border-white/10 hover:border-white/20 hover:bg-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:text-white transition-colors">
+          className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] hover:bg-[var(--bg-surface-hover)] px-3 py-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors">
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Tenants
         </Link>
       </div>
@@ -129,10 +129,10 @@ export default function TicketTypesAccessPage() {
         <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3 text-emerald-300 text-sm">Saved.</div>
       )}
 
-      <div className="rounded-2xl bg-slate-900/60 border border-white/10 overflow-hidden">
+      <div className="rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-white/10 text-slate-500 text-[11px] uppercase tracking-wider bg-slate-900/40">
+            <tr className="border-b border-[var(--border-subtle)] text-[var(--text-faint)] text-[11px] uppercase tracking-wider bg-[var(--bg-surface)]/40">
               <th className="text-left px-5 py-3 font-medium">Type</th>
               <th className="text-left px-3 py-3 font-medium">Prefix</th>
               <th className="text-left px-3 py-3 font-medium">Default SLA</th>
@@ -150,22 +150,22 @@ export default function TicketTypesAccessPage() {
               const prefix = meta?.prefix ?? '';
               const defaultSla = meta?.defaultSlaHours ?? 24;
               return (
-                <tr key={row.ticketType} className="hover:bg-white/[0.02]">
+                <tr key={row.ticketType} className="hover:bg-[var(--bg-surface-hover)]">
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-3">
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${TONE_BG[tone]}`}>
                         <Icon className={`w-4 h-4 ${TONE_FG[tone]}`} strokeWidth={2} />
                       </div>
                       <div>
-                        <div className="text-white font-medium">{label}</div>
-                        <div className="text-[11px] text-slate-500 max-w-md leading-tight">{description}</div>
+                        <div className="text-[var(--text-main)] font-medium">{label}</div>
+                        <div className="text-[11px] text-[var(--text-faint)] max-w-md leading-tight">{description}</div>
                       </div>
                     </div>
                   </td>
                   <td className="px-3 py-3">
-                    <code className="text-[11px] font-mono text-slate-300 bg-slate-700/40 px-2 py-0.5 rounded">{prefix}</code>
+                    <code className="text-[11px] font-mono text-[var(--text-muted)] bg-[var(--bg-surface-hover)]/40 px-2 py-0.5 rounded">{prefix}</code>
                   </td>
-                  <td className="px-3 py-3 text-slate-400 text-xs whitespace-nowrap">
+                  <td className="px-3 py-3 text-[var(--text-muted)] text-xs whitespace-nowrap">
                     {fmtHours(defaultSla)}
                   </td>
                   <td className="px-3 py-3">
@@ -176,14 +176,14 @@ export default function TicketTypesAccessPage() {
                         slaOverrideHours: e.target.value === '' ? null : Number(e.target.value),
                       })}
                       disabled={!row.enabled}
-                      className="w-24 bg-slate-800 border border-white/10 rounded-lg px-2 py-1 text-white text-sm disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                      className="w-24 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2 py-1 text-[var(--text-main)] text-sm disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-violet-500" />
                   </td>
                   <td className="px-5 py-3 text-center">
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input type="checkbox" className="sr-only peer"
                         checked={row.enabled}
                         onChange={e => updateRow(row.ticketType, { enabled: e.target.checked })} />
-                      <div className="w-11 h-6 bg-slate-700 peer-focus:ring-2 peer-focus:ring-violet-500 rounded-full peer-checked:bg-emerald-600 transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-transform peer-checked:after:translate-x-5" />
+                      <div className="w-11 h-6 bg-[var(--bg-surface-hover)] peer-focus:ring-2 peer-focus:ring-violet-500 rounded-full peer-checked:bg-emerald-600 transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-transform peer-checked:after:translate-x-5" />
                     </label>
                   </td>
                 </tr>
@@ -194,7 +194,7 @@ export default function TicketTypesAccessPage() {
       </div>
 
       <div className="flex items-center justify-between">
-        <p className="text-xs text-slate-500">
+        <p className="text-xs text-[var(--text-faint)]">
           Defaults: every ticket type is <strong className="text-emerald-400">enabled</strong> for any tenant without explicit configuration.
           Disabling a type here hides it from the tenant&rsquo;s Service &amp; Support module.
         </p>
@@ -219,6 +219,6 @@ const TONE_BG: Record<string, string> = {
 };
 const TONE_FG: Record<string, string> = {
   gold: 'text-amber-300', blue: 'text-blue-300', emerald: 'text-emerald-300',
-  amber: 'text-amber-300', rose: 'text-rose-300', slate: 'text-slate-300',
+  amber: 'text-amber-300', rose: 'text-rose-300', slate: 'text-[var(--text-muted)]',
   violet: 'text-violet-300',
 };

@@ -132,7 +132,7 @@ function StepIcon({ type, order }: { type: string; order: number }) {
   if (type === 'APPROVAL')     return <span className="text-violet-300 text-xs font-bold">{order}</span>;
   if (type === 'NOTIFICATION') return <span className="text-blue-300 text-xs font-bold">N</span>;
   if (type === 'AUTO_APPROVE') return <span className="text-emerald-300 text-xs font-bold">A</span>;
-  return <span className="text-slate-300 text-xs font-bold">{order}</span>;
+  return <span className="text-[var(--text-muted)] text-xs font-bold">{order}</span>;
 }
 
 //  Main Component 
@@ -360,7 +360,7 @@ export default function WorkflowsPage() {
   };
 
   const getStepTypeStyle = (type: string) =>
-    STEP_TYPES.find(t => t.value === type)?.color ?? 'bg-slate-500/20 text-slate-300 border-slate-500/30';
+    STEP_TYPES.find(t => t.value === type)?.color ?? 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30';
 
   const getModuleMeta = (key: string) => MODULES.find(m => m.key === key);
   const getProcedures = (mod: string) => PROCEDURES[mod] ?? [];
@@ -374,8 +374,8 @@ export default function WorkflowsPage() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-1">Business Rule & Workflow Management</h1>
-          <p className="text-slate-400 text-xs">Define approval chains, notification rules, and escalation paths for all platform modules</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-1">Business Rule & Workflow Management</h1>
+          <p className="text-[var(--text-muted)] text-xs">Define approval chains, notification rules, and escalation paths for all platform modules</p>
         </div>
         <button onClick={() => setShowNewWf(true)}
           className="flex-shrink-0 px-5 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white font-semibold text-sm hover:opacity-90 transition-opacity shadow-lg">
@@ -386,14 +386,14 @@ export default function WorkflowsPage() {
       {/* Stats Bar */}
       <div className="grid grid-cols-4 gap-4">
         {[
-          { label: 'Total Workflows', value: stats.total, color: 'text-white', bg: 'bg-slate-800/60 border-white/10' },
+          { label: 'Total Workflows', value: stats.total, color: 'text-[var(--text-main)]', bg: 'bg-[var(--bg-surface)]/60 border-[var(--border-subtle)]' },
           { label: 'Active Workflows', value: stats.active, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' },
           { label: 'Live Instances', value: stats.activeInstances, color: 'text-violet-400', bg: 'bg-violet-500/10 border-violet-500/20' },
           { label: 'Pending Approvals', value: stats.pendingApprovals, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
         ].map(s => (
           <div key={s.label} className={`rounded-xl border p-4 ${s.bg}`}>
             <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
-            <p className="text-slate-400 text-xs mt-0.5">{s.label}</p>
+            <p className="text-[var(--text-muted)] text-xs mt-0.5">{s.label}</p>
           </div>
         ))}
       </div>
@@ -409,8 +409,8 @@ export default function WorkflowsPage() {
       <div className="flex gap-2 flex-wrap">
         {MODULES.map(m => (
           <button key={m.key} onClick={() => { setActiveModule(m.key); setSelectedWf(null); setWfSteps([]); }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${activeModule === m.key ? `bg-gradient-to-r ${m.color} text-white shadow-lg` : 'bg-slate-800/60 text-slate-400 hover:text-white hover:bg-slate-700/60 border border-white/5'}`}>
-            <span className={`w-5 h-5 rounded flex items-center justify-center text-xs font-bold ${activeModule === m.key ? 'bg-white/20' : 'bg-slate-700'}`}>{m.icon}</span>
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${activeModule === m.key ? `bg-gradient-to-r ${m.color} text-white shadow-lg` : 'bg-[var(--bg-surface)]/60 text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]/60 border border-[var(--border-subtle)]'}`}>
+            <span className={`w-5 h-5 rounded flex items-center justify-center text-xs font-bold ${activeModule === m.key ? 'bg-[var(--bg-surface-hover)]' : 'bg-[var(--bg-surface-hover)]'}`}>{m.icon}</span>
             {m.label}
           </button>
         ))}
@@ -422,21 +422,21 @@ export default function WorkflowsPage() {
         {/* Left: Procedures + Workflows */}
         <div className="lg:col-span-2 space-y-4">
           {/* Procedure Reference */}
-          <div className="bg-slate-800/40 border border-white/10 rounded-2xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-white/10 flex items-center gap-2">
+          <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-[var(--border-subtle)] flex items-center gap-2">
               <span className={`w-6 h-6 rounded bg-gradient-to-br ${getModuleMeta(activeModule)?.color ?? 'from-slate-500 to-slate-600'} flex items-center justify-center text-white text-xs font-bold`}>
                 {getModuleMeta(activeModule)?.icon}
               </span>
-              <p className="text-white font-semibold text-sm">{getModuleMeta(activeModule)?.label} Procedures</p>
+              <p className="text-[var(--text-main)] font-semibold text-sm">{getModuleMeta(activeModule)?.label} Procedures</p>
             </div>
             <div className="p-2 space-y-1">
               {getProcedures(activeModule).map(proc => {
                 const hasWf = workflows.some(w => w.procedure === proc.key);
                 return (
-                  <div key={proc.key} className="px-3 py-2 rounded-xl flex items-center justify-between gap-2 hover:bg-white/5 transition-all">
+                  <div key={proc.key} className="px-3 py-2 rounded-xl flex items-center justify-between gap-2 hover:bg-[var(--bg-surface-hover)] transition-all">
                     <div className="flex-1 min-w-0">
-                      <p className="text-slate-300 text-xs font-semibold">{proc.label}</p>
-                      <p className="text-slate-600 text-xs truncate">{proc.description}</p>
+                      <p className="text-[var(--text-muted)] text-xs font-semibold">{proc.label}</p>
+                      <p className="text-[var(--text-faint)] text-xs truncate">{proc.description}</p>
                     </div>
                     {hasWf
                       ? <span className="flex-shrink-0 px-2 py-0.5 rounded-full text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/20">Defined</span>
@@ -451,28 +451,28 @@ export default function WorkflowsPage() {
 
           {/* Workflow Cards */}
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-1">
+            <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2 px-1">
               Defined Workflows ({workflows.length})
             </p>
             {loading ? (
-              <div className="text-slate-500 text-sm py-8 text-center animate-pulse">Loading...</div>
+              <div className="text-[var(--text-faint)] text-sm py-8 text-center animate-pulse">Loading...</div>
             ) : workflows.length === 0 ? (
-              <div className="bg-slate-800/40 border border-dashed border-white/10 rounded-2xl p-8 text-center">
-                <p className="text-slate-500 text-sm mb-2">No workflows defined for this module</p>
+              <div className="bg-[var(--bg-surface)]/40 border border-dashed border-[var(--border-subtle)] rounded-2xl p-8 text-center">
+                <p className="text-[var(--text-faint)] text-sm mb-2">No workflows defined for this module</p>
                 <button onClick={() => setShowNewWf(true)} className="text-violet-400 text-sm hover:underline">Create one now</button>
               </div>
             ) : (
               <div className="space-y-2.5">
                 {workflows.map(wf => (
                   <div key={wf.id} onClick={() => handleSelectWf(wf)}
-                    className={`bg-slate-800/50 border rounded-2xl p-4 cursor-pointer transition-all hover:border-violet-500/30 ${selectedWf?.id === wf.id ? 'border-violet-500/50 bg-violet-500/10' : 'border-white/10'}`}>
+                    className={`bg-[var(--bg-surface)]/50 border rounded-2xl p-4 cursor-pointer transition-all hover:border-violet-500/30 ${selectedWf?.id === wf.id ? 'border-violet-500/50 bg-violet-500/10' : 'border-[var(--border-subtle)]'}`}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
-                        <p className="text-white font-semibold text-sm truncate">{wf.name}</p>
-                        <p className="text-slate-500 text-xs mt-0.5">{getProcLabel(wf.module, wf.procedure)}</p>
-                        {wf.description && <p className="text-slate-600 text-xs mt-1 line-clamp-1">{wf.description}</p>}
+                        <p className="text-[var(--text-main)] font-semibold text-sm truncate">{wf.name}</p>
+                        <p className="text-[var(--text-faint)] text-xs mt-0.5">{getProcLabel(wf.module, wf.procedure)}</p>
+                        {wf.description && <p className="text-[var(--text-faint)] text-xs mt-1 line-clamp-1">{wf.description}</p>}
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
-                          <span className="text-xs text-slate-400">{wf.stepCount} step{wf.stepCount !== 1 ? 's' : ''}</span>
+                          <span className="text-xs text-[var(--text-muted)]">{wf.stepCount} step{wf.stepCount !== 1 ? 's' : ''}</span>
                           {wf.activeInstances > 0 && (
                             <span className="px-1.5 py-0.5 rounded-full text-xs bg-amber-500/20 text-amber-400 border border-amber-500/20">
                               {wf.activeInstances} live
@@ -488,19 +488,19 @@ export default function WorkflowsPage() {
                             </span>
                           ) : (
                             <span title="Legacy global workflow — not yet linked to a service type. Resolves via (module, procedure)."
-                              className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-700/40 text-slate-400 border border-white/10">
+                              className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-[var(--bg-surface-hover)]/40 text-[var(--text-muted)] border border-[var(--border-subtle)]">
                               Legacy
                             </span>
                           )}
                         </div>
                       </div>
                       <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${wf.isActive ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/20' : 'bg-slate-700/40 text-slate-500 border-white/10'}`}>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${wf.isActive ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/20' : 'bg-[var(--bg-surface-hover)]/40 text-[var(--text-faint)] border-[var(--border-subtle)]'}`}>
                           {wf.isActive ? 'Active' : 'Inactive'}
                         </span>
                         <div className="flex gap-1">
                           <button onClick={e => { e.stopPropagation(); handleToggleActive(wf); }}
-                            className="px-2 py-0.5 text-xs rounded border border-white/10 text-slate-400 hover:bg-white/5 transition-all">
+                            className="px-2 py-0.5 text-xs rounded border border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] transition-all">
                             {wf.isActive ? 'Deactivate' : 'Activate'}
                           </button>
                           <button onClick={e => { e.stopPropagation(); handleOpenEditWf(wf); }}
@@ -522,29 +522,29 @@ export default function WorkflowsPage() {
         {/* Right: Step Flow Designer */}
         <div className="lg:col-span-3">
           {!selectedWf ? (
-            <div className="bg-slate-800/40 border border-dashed border-white/10 rounded-2xl p-12 text-center h-full flex flex-col items-center justify-center min-h-96">
+            <div className="bg-[var(--bg-surface)]/40 border border-dashed border-[var(--border-subtle)] rounded-2xl p-12 text-center h-full flex flex-col items-center justify-center min-h-96">
               <div className="w-16 h-16 rounded-2xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center mb-4 text-3xl">W</div>
-              <p className="text-white font-semibold mb-2">Select a Workflow to Design</p>
-              <p className="text-slate-500 text-sm max-w-xs">Click any workflow on the left to configure its approval steps, assignees, SLA timers, and escalation rules</p>
+              <p className="text-[var(--text-main)] font-semibold mb-2">Select a Workflow to Design</p>
+              <p className="text-[var(--text-faint)] text-sm max-w-xs">Click any workflow on the left to configure its approval steps, assignees, SLA timers, and escalation rules</p>
             </div>
           ) : (
-            <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-hidden">
+            <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
               {/* Designer Header */}
-              <div className="p-5 border-b border-white/10">
+              <div className="p-5 border-b border-[var(--border-subtle)]">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-bold bg-gradient-to-r ${getModuleMeta(selectedWf.module)?.color ?? 'from-slate-500 to-slate-600'} text-white`}>
                         {selectedWf.module}
                       </span>
-                      <span className="text-slate-500 text-xs">{getProcLabel(selectedWf.module, selectedWf.procedure)}</span>
+                      <span className="text-[var(--text-faint)] text-xs">{getProcLabel(selectedWf.module, selectedWf.procedure)}</span>
                       {selectedWf.isActive
                         ? <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/20">Active</span>
-                        : <span className="px-2 py-0.5 rounded-full text-xs bg-slate-700 text-slate-400">Inactive</span>
+                        : <span className="px-2 py-0.5 rounded-full text-xs bg-[var(--bg-surface-hover)] text-[var(--text-muted)]">Inactive</span>
                       }
                     </div>
-                    <h2 className="text-white font-bold text-lg">{selectedWf.name}</h2>
-                    {selectedWf.description && <p className="text-slate-500 text-xs mt-0.5">{selectedWf.description}</p>}
+                    <h2 className="text-[var(--text-main)] font-bold text-lg">{selectedWf.name}</h2>
+                    {selectedWf.description && <p className="text-[var(--text-faint)] text-xs mt-0.5">{selectedWf.description}</p>}
                   </div>
                   <button onClick={() => openStepEditor()}
                     className="flex-shrink-0 px-4 py-2 rounded-xl bg-violet-600 text-white font-semibold text-sm hover:bg-violet-500 transition-all">
@@ -553,7 +553,7 @@ export default function WorkflowsPage() {
                 </div>
 
                 {/* Mini legend */}
-                <div className="flex items-center gap-4 mt-3 pt-3 border-t border-white/5">
+                <div className="flex items-center gap-4 mt-3 pt-3 border-t border-[var(--border-subtle)]">
                   {STEP_TYPES.map(t => (
                     <span key={t.value} className={`flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full border ${t.color}`}>
                       {t.icon === 'CHECK' && <span>&#10003;</span>}
@@ -562,17 +562,17 @@ export default function WorkflowsPage() {
                       {t.label}
                     </span>
                   ))}
-                  <span className="text-slate-600 text-xs ml-auto">{wfSteps.length} step{wfSteps.length !== 1 ? 's' : ''} configured</span>
+                  <span className="text-[var(--text-faint)] text-xs ml-auto">{wfSteps.length} step{wfSteps.length !== 1 ? 's' : ''} configured</span>
                 </div>
               </div>
 
               {/* Step Flow */}
               <div className="p-5 max-h-[60vh] overflow-y-auto">
                 {stepsLoading ? (
-                  <div className="text-slate-500 text-sm animate-pulse py-10 text-center">Loading steps...</div>
+                  <div className="text-[var(--text-faint)] text-sm animate-pulse py-10 text-center">Loading steps...</div>
                 ) : wfSteps.length === 0 ? (
                   <div className="text-center py-12">
-                    <p className="text-slate-500 text-sm mb-4">No steps configured yet.</p>
+                    <p className="text-[var(--text-faint)] text-sm mb-4">No steps configured yet.</p>
                     <button onClick={() => openStepEditor()}
                       className="px-5 py-2.5 rounded-xl border border-dashed border-violet-500/40 text-violet-400 text-sm hover:bg-violet-500/10 transition-all">
                       + Add First Step
@@ -587,7 +587,7 @@ export default function WorkflowsPage() {
                       </div>
                       <div>
                         <span className="text-emerald-400 text-xs font-bold">TRIGGER / SUBMIT</span>
-                        <p className="text-slate-600 text-xs">Workflow initiated by system or user action</p>
+                        <p className="text-[var(--text-faint)] text-xs">Workflow initiated by system or user action</p>
                       </div>
                     </div>
 
@@ -598,43 +598,43 @@ export default function WorkflowsPage() {
                         <React.Fragment key={step.id}>
                           {/* Connector line */}
                           <div className="flex items-stretch gap-3 py-0.5 ml-3.5">
-                            <div className="w-0.5 bg-slate-700 self-stretch mx-[3px]" style={{ minHeight: 20 }} />
+                            <div className="w-0.5 bg-[var(--bg-surface-hover)] self-stretch mx-[3px]" style={{ minHeight: 20 }} />
                           </div>
                           {/* Step card */}
                           <div className="flex items-start gap-3">
-                            <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${sfx?.color ?? 'bg-slate-700 border-slate-600'}`}>
+                            <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${sfx?.color ?? 'bg-[var(--bg-surface-hover)] border-[var(--border-strong)]'}`}>
                               <StepIcon type={step.stepType} order={step.stepOrder} />
                             </div>
-                            <div className="flex-1 bg-slate-900/60 border border-white/10 rounded-xl p-3.5 hover:border-white/20 transition-all group">
+                            <div className="flex-1 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-3.5 hover:border-[var(--border-strong)] transition-all group">
                               <div className="flex items-start justify-between gap-2">
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 flex-wrap mb-1">
                                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getStepTypeStyle(step.stepType)}`}>
                                       {STEP_TYPES.find(t => t.value === step.stepType)?.label ?? step.stepType}
                                     </span>
-                                    {step.isOptional && <span className="text-xs text-slate-500 italic">optional</span>}
+                                    {step.isOptional && <span className="text-xs text-[var(--text-faint)] italic">optional</span>}
                                     {cond && (
                                       <span className="px-2 py-0.5 rounded-full text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20">
                                         IF {cond.field} {cond.operator} {cond.value}
                                       </span>
                                     )}
                                   </div>
-                                  <p className="text-white font-semibold text-sm">{step.stepName}</p>
+                                  <p className="text-[var(--text-main)] font-semibold text-sm">{step.stepName}</p>
                                   <div className="mt-1.5 space-y-0.5">
                                     {step.assigneeType === 'SPECIFIC_USER' && step.assigneeEmail && (
-                                      <p className="text-xs text-slate-400"><span className="text-slate-600">Assignee:</span> {step.assigneeEmail}</p>
+                                      <p className="text-xs text-[var(--text-muted)]"><span className="text-[var(--text-faint)]">Assignee:</span> {step.assigneeEmail}</p>
                                     )}
                                     {step.assigneeType === 'MULTI_USER' && step.multiApproverEmails && (
-                                      <p className="text-xs text-slate-400"><span className="text-slate-600">Multiple:</span> {step.multiApproverEmails.split(',').length} approvers {step.requireAllApprovers ? '(all required)' : '(any one)'}</p>
+                                      <p className="text-xs text-[var(--text-muted)]"><span className="text-[var(--text-faint)]">Multiple:</span> {step.multiApproverEmails.split(',').length} approvers {step.requireAllApprovers ? '(all required)' : '(any one)'}</p>
                                     )}
                                     {!['SPECIFIC_USER','MULTI_USER'].includes(step.assigneeType) && (
-                                      <p className="text-xs text-slate-400">
-                                        <span className="text-slate-600">Route to:</span>{' '}
+                                      <p className="text-xs text-[var(--text-muted)]">
+                                        <span className="text-[var(--text-faint)]">Route to:</span>{' '}
                                         {ASSIGNEE_TYPES.find(a => a.value === step.assigneeType)?.label}
                                         {step.assigneeRoleCode ? `  ${step.assigneeRoleCode}` : ''}
                                       </p>
                                     )}
-                                    <div className="flex items-center gap-3 text-xs text-slate-500">
+                                    <div className="flex items-center gap-3 text-xs text-[var(--text-faint)]">
                                       {step.slaHours > 0 && <span>SLA: {step.slaHours}h</span>}
                                       {step.escalationEmail && <span>Escalate to: {step.escalationEmail} (+{step.escalationHours}h)</span>}
                                     </div>
@@ -642,9 +642,9 @@ export default function WorkflowsPage() {
                                 </div>
                                 <div className="flex gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                                   <button onClick={() => moveStep(step, -1)} disabled={idx === 0}
-                                    className="w-6 h-6 rounded bg-slate-700/60 text-slate-300 hover:bg-slate-600 disabled:opacity-30 text-xs flex items-center justify-center transition-all">^</button>
+                                    className="w-6 h-6 rounded bg-[var(--bg-surface-hover)]/60 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] disabled:opacity-30 text-xs flex items-center justify-center transition-all">^</button>
                                   <button onClick={() => moveStep(step, 1)} disabled={idx === wfSteps.length - 1}
-                                    className="w-6 h-6 rounded bg-slate-700/60 text-slate-300 hover:bg-slate-600 disabled:opacity-30 text-xs flex items-center justify-center transition-all">v</button>
+                                    className="w-6 h-6 rounded bg-[var(--bg-surface-hover)]/60 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] disabled:opacity-30 text-xs flex items-center justify-center transition-all">v</button>
                                   <button onClick={() => openStepEditor(step)}
                                     className="px-2 py-1 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs hover:bg-blue-500/30 transition-all">Edit</button>
                                   <button onClick={() => handleDeleteStep(step)}
@@ -659,7 +659,7 @@ export default function WorkflowsPage() {
 
                     {/* Connector + End */}
                     <div className="flex items-stretch gap-3 py-0.5 ml-3.5">
-                      <div className="w-0.5 bg-slate-700 self-stretch mx-[3px]" style={{ minHeight: 20 }} />
+                      <div className="w-0.5 bg-[var(--bg-surface-hover)] self-stretch mx-[3px]" style={{ minHeight: 20 }} />
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-blue-500/20 border-2 border-blue-500 flex items-center justify-center flex-shrink-0">
@@ -667,7 +667,7 @@ export default function WorkflowsPage() {
                       </div>
                       <div>
                         <span className="text-blue-400 text-xs font-bold">WORKFLOW COMPLETE</span>
-                        <p className="text-slate-600 text-xs">All steps approved  status updated, notifications sent</p>
+                        <p className="text-[var(--text-faint)] text-xs">All steps approved  status updated, notifications sent</p>
                       </div>
                     </div>
                   </div>
@@ -681,34 +681,34 @@ export default function WorkflowsPage() {
       {/*  New Workflow Modal  */}
       {showNewWf && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-xl shadow-2xl">
-            <div className="flex items-center justify-between p-6 border-b border-white/10">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-xl shadow-2xl">
+            <div className="flex items-center justify-between p-6 border-b border-[var(--border-subtle)]">
               <div>
-                <h2 className="text-xl font-bold text-white">New Workflow Definition</h2>
-                <p className="text-slate-400 text-xs mt-0.5">Define a reusable approval process for a procedure</p>
+                <h2 className="text-xl font-bold text-[var(--text-main)]">New Workflow Definition</h2>
+                <p className="text-[var(--text-muted)] text-xs mt-0.5">Define a reusable approval process for a procedure</p>
               </div>
-              <button onClick={() => setShowNewWf(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all">x</button>
+              <button onClick={() => setShowNewWf(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-all">x</button>
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1.5">Workflow Name *</label>
+                <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Workflow Name *</label>
                 <input value={newWf.name} onChange={e => setNewWf(p => ({ ...p, name: e.target.value }))}
                   placeholder="e.g. Lease Quotation Internal Approval"
-                  className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500/50" />
+                  className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-violet-500/50" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">Module *</label>
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Module *</label>
                   <select value={newWf.module}
                     onChange={e => setNewWf(p => ({ ...p, module: e.target.value, procedure: PROCEDURES[e.target.value]?.[0]?.key ?? '' }))}
-                    className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-violet-500/50">
+                    className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-violet-500/50">
                     {MODULES.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">Procedure *</label>
+                  <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Procedure *</label>
                   <select value={newWf.procedure} onChange={e => setNewWf(p => ({ ...p, procedure: e.target.value }))}
-                    className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-violet-500/50">
+                    className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-violet-500/50">
                     {getProcedures(newWf.module).map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
                   </select>
                 </div>
@@ -719,14 +719,14 @@ export default function WorkflowsPage() {
                 </div>
               )}
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1.5">Description (optional)</label>
+                <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Description (optional)</label>
                 <textarea value={newWf.description} onChange={e => setNewWf(p => ({ ...p, description: e.target.value }))}
                   placeholder="Internal notes about when and how this workflow is used..."
-                  rows={2} className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500/50 resize-none" />
+                  rows={2} className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-violet-500/50 resize-none" />
               </div>
             </div>
-            <div className="p-6 border-t border-white/10 flex gap-3 justify-end">
-              <button onClick={() => setShowNewWf(false)} className="px-5 py-2.5 rounded-xl border border-white/10 text-slate-300 hover:bg-white/5 font-medium transition-all text-sm">Cancel</button>
+            <div className="p-6 border-t border-[var(--border-subtle)] flex gap-3 justify-end">
+              <button onClick={() => setShowNewWf(false)} className="px-5 py-2.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] font-medium transition-all text-sm">Cancel</button>
               <button onClick={handleCreateWf} disabled={saving || !newWf.name || !newWf.module || !newWf.procedure}
                 className="px-6 py-2.5 rounded-xl bg-violet-600 text-white font-bold hover:bg-violet-500 transition-all disabled:opacity-50 text-sm">
                 {saving ? 'Creating...' : 'Create Workflow'}
@@ -739,21 +739,21 @@ export default function WorkflowsPage() {
       {/*  Step Editor Modal  */}
       {showStepEditor && editingStep && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl">
-            <div className="flex items-center justify-between p-5 border-b border-white/10 sticky top-0 bg-slate-900 z-10">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)] sticky top-0 bg-[var(--bg-surface)] z-10">
               <div>
-                <h2 className="text-xl font-bold text-white">{editingStep.id ? 'Edit Step' : 'New Step'}</h2>
-                <p className="text-slate-500 text-xs">Step {editingStep.stepOrder} of {selectedWf?.name}</p>
+                <h2 className="text-xl font-bold text-[var(--text-main)]">{editingStep.id ? 'Edit Step' : 'New Step'}</h2>
+                <p className="text-[var(--text-faint)] text-xs">Step {editingStep.stepOrder} of {selectedWf?.name}</p>
               </div>
               <button onClick={() => { setShowStepEditor(false); setEditingStep(null); }}
-                className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all">x</button>
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-all">x</button>
             </div>
 
             {/* Step Editor Tabs */}
-            <div className="flex gap-1 px-5 pt-4 border-b border-white/10">
+            <div className="flex gap-1 px-5 pt-4 border-b border-[var(--border-subtle)]">
               {([['basic','Basic Info'],['assignee','Assignee'],['email','Email Template'],['advanced','Conditions & SLA']] as const).map(([key, label]) => (
                 <button key={key} onClick={() => setStepTab(key)}
-                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all -mb-px ${stepTab === key ? 'bg-slate-800 text-white border border-white/10 border-b-slate-800' : 'text-slate-500 hover:text-slate-300'}`}>
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all -mb-px ${stepTab === key ? 'bg-[var(--bg-surface)] text-[var(--text-main)] border border-[var(--border-subtle)] border-b-slate-800' : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'}`}>
                   {label}
                 </button>
               ))}
@@ -765,30 +765,30 @@ export default function WorkflowsPage() {
                 <div className="space-y-5">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-400 mb-1.5">Step Name *</label>
+                      <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Step Name *</label>
                       <input value={editingStep.stepName ?? ''}
                         onChange={e => setEditingStep(p => ({ ...p!, stepName: e.target.value }))}
                         placeholder="e.g. Operations Manager Approval"
-                        className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500/50" />
+                        className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-violet-500/50" />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-400 mb-1.5">Step Order</label>
+                      <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Step Order</label>
                       <input type="number" min="1" value={editingStep.stepOrder ?? 1}
                         onChange={e => setEditingStep(p => ({ ...p!, stepOrder: parseInt(e.target.value) || 1 }))}
-                        className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-violet-500/50" />
+                        className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-violet-500/50" />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-2">Step Type *</label>
+                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Step Type *</label>
                     <div className="grid grid-cols-3 gap-3">
                       {STEP_TYPES.map(t => (
-                        <label key={t.value} className={`flex flex-col gap-1 p-3 rounded-xl border cursor-pointer transition-all ${editingStep.stepType === t.value ? `${t.color}` : 'border-white/10 hover:border-white/20'}`}>
+                        <label key={t.value} className={`flex flex-col gap-1 p-3 rounded-xl border cursor-pointer transition-all ${editingStep.stepType === t.value ? `${t.color}` : 'border-[var(--border-subtle)] hover:border-[var(--border-strong)]'}`}>
                           <div className="flex items-center gap-2">
                             <input type="radio" name="stepType" value={t.value} checked={editingStep.stepType === t.value}
                               onChange={e => setEditingStep(p => ({ ...p!, stepType: e.target.value }))} className="accent-violet-500" />
-                            <span className="text-sm font-semibold text-white">{t.label}</span>
+                            <span className="text-sm font-semibold text-[var(--text-main)]">{t.label}</span>
                           </div>
-                          <p className="text-xs text-slate-500 pl-5">{t.desc}</p>
+                          <p className="text-xs text-[var(--text-faint)] pl-5">{t.desc}</p>
                         </label>
                       ))}
                     </div>
@@ -797,8 +797,8 @@ export default function WorkflowsPage() {
                     <input type="checkbox" checked={editingStep.isOptional ?? false}
                       onChange={e => setEditingStep(p => ({ ...p!, isOptional: e.target.checked }))} className="w-4 h-4 accent-violet-500" />
                     <div>
-                      <span className="text-slate-300 text-sm">Optional step</span>
-                      <p className="text-slate-500 text-xs">Workflow continues even if this step is rejected or skipped</p>
+                      <span className="text-[var(--text-muted)] text-sm">Optional step</span>
+                      <p className="text-[var(--text-faint)] text-xs">Workflow continues even if this step is rejected or skipped</p>
                     </div>
                   </label>
                 </div>
@@ -808,15 +808,15 @@ export default function WorkflowsPage() {
               {stepTab === 'assignee' && (
                 <div className="space-y-5">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-2">Assignee Type *</label>
+                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Assignee Type *</label>
                     <div className="space-y-2">
                       {ASSIGNEE_TYPES.map(t => (
-                        <label key={t.value} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${editingStep.assigneeType === t.value ? 'bg-violet-500/15 border-violet-500/40' : 'border-white/10 hover:border-white/20'}`}>
+                        <label key={t.value} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${editingStep.assigneeType === t.value ? 'bg-violet-500/15 border-violet-500/40' : 'border-[var(--border-subtle)] hover:border-[var(--border-strong)]'}`}>
                           <input type="radio" name="assigneeType" value={t.value} checked={editingStep.assigneeType === t.value}
                             onChange={e => setEditingStep(p => ({ ...p!, assigneeType: e.target.value }))} className="accent-violet-500" />
                           <div>
-                            <p className="text-white text-sm font-semibold">{t.label}</p>
-                            <p className="text-slate-500 text-xs">{t.desc}</p>
+                            <p className="text-[var(--text-main)] text-sm font-semibold">{t.label}</p>
+                            <p className="text-[var(--text-faint)] text-xs">{t.desc}</p>
                           </div>
                         </label>
                       ))}
@@ -824,37 +824,37 @@ export default function WorkflowsPage() {
                   </div>
                   {editingStep.assigneeType === 'SPECIFIC_USER' && (
                     <div>
-                      <label className="block text-xs font-semibold text-slate-400 mb-1.5">Assignee Email *</label>
+                      <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Assignee Email *</label>
                       <input type="email" value={editingStep.assigneeEmail ?? ''}
                         onChange={e => setEditingStep(p => ({ ...p!, assigneeEmail: e.target.value }))}
                         placeholder="manager@company.com"
-                        className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500/50" />
+                        className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-violet-500/50" />
                     </div>
                   )}
                   {editingStep.assigneeType === 'ROLE' && (
                     <div>
-                      <label className="block text-xs font-semibold text-slate-400 mb-1.5">Role Code *</label>
+                      <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Role Code *</label>
                       <input value={editingStep.assigneeRoleCode ?? ''}
                         onChange={e => setEditingStep(p => ({ ...p!, assigneeRoleCode: e.target.value }))}
                         placeholder="e.g. LEASE_MANAGER, CREDIT_OFFICER, FINANCE_HEAD"
-                        className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500/50" />
+                        className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-violet-500/50" />
                     </div>
                   )}
                   {editingStep.assigneeType === 'MULTI_USER' && (
                     <div className="space-y-3">
                       <div>
-                        <label className="block text-xs font-semibold text-slate-400 mb-1.5">Approver Emails (comma-separated)</label>
+                        <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Approver Emails (comma-separated)</label>
                         <textarea value={editingStep.multiApproverEmails ?? ''} rows={3}
                           onChange={e => setEditingStep(p => ({ ...p!, multiApproverEmails: e.target.value }))}
                           placeholder="manager1@co.com, manager2@co.com, cfo@co.com"
-                          className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500/50 resize-none" />
+                          className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-violet-500/50 resize-none" />
                       </div>
                       <label className="flex items-center gap-3 cursor-pointer">
                         <input type="checkbox" checked={editingStep.requireAllApprovers ?? false}
                           onChange={e => setEditingStep(p => ({ ...p!, requireAllApprovers: e.target.checked }))} className="w-4 h-4 accent-violet-500" />
                         <div>
-                          <span className="text-slate-300 text-sm">Require ALL approvers</span>
-                          <p className="text-slate-500 text-xs">If unchecked, any one of the listed approvers can approve</p>
+                          <span className="text-[var(--text-muted)] text-sm">Require ALL approvers</span>
+                          <p className="text-[var(--text-faint)] text-xs">If unchecked, any one of the listed approvers can approve</p>
                         </div>
                       </label>
                     </div>
@@ -869,18 +869,18 @@ export default function WorkflowsPage() {
                     Available template variables: <code className="bg-blue-500/20 px-1 rounded">{'{referenceNumber}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{submittedBy}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{stepName}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{moduleLabel}'}</code>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">Email Subject</label>
+                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Email Subject</label>
                     <input value={editingStep.emailSubject ?? ''}
                       onChange={e => setEditingStep(p => ({ ...p!, emailSubject: e.target.value }))}
                       placeholder="Leave blank to use default: Action Required: {referenceNumber} awaiting approval"
-                      className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500/50" />
+                      className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-violet-500/50" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">Email Body</label>
+                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Email Body</label>
                     <textarea value={editingStep.emailBody ?? ''} rows={6}
                       onChange={e => setEditingStep(p => ({ ...p!, emailBody: e.target.value }))}
                       placeholder={'Leave blank to use the default message.\n\nExample:\nDear {approverName},\n\nPlease review {referenceNumber} and take action.\n\nSubmitted by: {submittedBy}'}
-                      className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500/50 resize-none font-mono" />
+                      className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-violet-500/50 resize-none font-mono" />
                   </div>
                 </div>
               )}
@@ -891,39 +891,39 @@ export default function WorkflowsPage() {
                   {/* SLA */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-400 mb-1.5">SLA (hours to respond)</label>
+                      <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">SLA (hours to respond)</label>
                       <input type="number" min="1" value={editingStep.slaHours ?? 24}
                         onChange={e => setEditingStep(p => ({ ...p!, slaHours: parseInt(e.target.value) || 24 }))}
-                        className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-violet-500/50" />
-                      <p className="text-slate-600 text-xs mt-1">Step becomes overdue after this many hours</p>
+                        className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-violet-500/50" />
+                      <p className="text-[var(--text-faint)] text-xs mt-1">Step becomes overdue after this many hours</p>
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-400 mb-1.5">Escalation after (hours)</label>
+                      <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Escalation after (hours)</label>
                       <input type="number" min="1" value={editingStep.escalationHours ?? 48}
                         onChange={e => setEditingStep(p => ({ ...p!, escalationHours: parseInt(e.target.value) || 48 }))}
-                        className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-violet-500/50" />
-                      <p className="text-slate-600 text-xs mt-1">Hours before escalating to backup approver</p>
+                        className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-violet-500/50" />
+                      <p className="text-[var(--text-faint)] text-xs mt-1">Hours before escalating to backup approver</p>
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">Escalation Email</label>
+                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Escalation Email</label>
                     <input type="email" value={editingStep.escalationEmail ?? ''}
                       onChange={e => setEditingStep(p => ({ ...p!, escalationEmail: e.target.value }))}
                       placeholder="escalation@company.com (leave blank to skip escalation)"
-                      className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500/50" />
+                      className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-violet-500/50" />
                   </div>
 
                   {/* Condition */}
-                  <div className="border-t border-white/10 pt-5">
+                  <div className="border-t border-[var(--border-subtle)] pt-5">
                     <div className="flex items-center justify-between mb-3">
                       <div>
-                        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Conditional Step</p>
-                        <p className="text-slate-600 text-xs">Only activate this step if a condition is met</p>
+                        <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Conditional Step</p>
+                        <p className="text-[var(--text-faint)] text-xs">Only activate this step if a condition is met</p>
                       </div>
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input type="checkbox" checked={showCondition}
                           onChange={e => setShowCondition(e.target.checked)} className="w-4 h-4 accent-amber-500" />
-                        <span className="text-slate-300 text-sm">Enable condition</span>
+                        <span className="text-[var(--text-muted)] text-sm">Enable condition</span>
                       </label>
                     </div>
                     {showCondition && (
@@ -931,24 +931,24 @@ export default function WorkflowsPage() {
                         <p className="text-amber-400 text-xs font-semibold">ACTIVATE STEP ONLY IF...</p>
                         <div className="grid grid-cols-3 gap-3">
                           <div>
-                            <label className="block text-xs text-slate-500 mb-1">Field</label>
+                            <label className="block text-xs text-[var(--text-faint)] mb-1">Field</label>
                             <select value={condField} onChange={e => setCondField(e.target.value)}
-                              className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-amber-500/50">
+                              className="w-full px-3 py-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-amber-500/50">
                               <option value="">Select field...</option>
                               {CONDITION_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                             </select>
                           </div>
                           <div>
-                            <label className="block text-xs text-slate-500 mb-1">Operator</label>
+                            <label className="block text-xs text-[var(--text-faint)] mb-1">Operator</label>
                             <select value={condOp} onChange={e => setCondOp(e.target.value)}
-                              className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-amber-500/50">
+                              className="w-full px-3 py-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-amber-500/50">
                               {CONDITION_OPERATORS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                             </select>
                           </div>
                           <div>
-                            <label className="block text-xs text-slate-500 mb-1">Value</label>
+                            <label className="block text-xs text-[var(--text-faint)] mb-1">Value</label>
                             <input value={condVal} onChange={e => setCondVal(e.target.value)} placeholder="e.g. 100000"
-                              className="w-full px-3 py-2 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-amber-500/50" />
+                              className="w-full px-3 py-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-amber-500/50" />
                           </div>
                         </div>
                         {condField && condVal && (
@@ -964,16 +964,16 @@ export default function WorkflowsPage() {
               )}
             </div>
 
-            <div className="p-5 border-t border-white/10 flex gap-3 justify-between sticky bottom-0 bg-slate-900">
+            <div className="p-5 border-t border-[var(--border-subtle)] flex gap-3 justify-between sticky bottom-0 bg-[var(--bg-surface)]">
               <div className="flex gap-2">
                 {(['basic','assignee','email','advanced'] as const).map((tab) => (
                   <button key={tab} onClick={() => setStepTab(tab)}
-                    className={`w-2 h-2 rounded-full transition-all ${stepTab === tab ? 'bg-violet-500' : 'bg-slate-600 hover:bg-slate-500'}`} />
+                    className={`w-2 h-2 rounded-full transition-all ${stepTab === tab ? 'bg-violet-500' : 'bg-[var(--bg-surface-hover)] hover:bg-slate-500'}`} />
                 ))}
               </div>
               <div className="flex gap-3">
                 <button onClick={() => { setShowStepEditor(false); setEditingStep(null); }}
-                  className="px-5 py-2.5 rounded-xl border border-white/10 text-slate-300 hover:bg-white/5 font-medium transition-all text-sm">Cancel</button>
+                  className="px-5 py-2.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] font-medium transition-all text-sm">Cancel</button>
                 <button onClick={handleSaveStep} disabled={saving || !editingStep.stepName}
                   className="px-6 py-2.5 rounded-xl bg-violet-600 text-white font-bold hover:bg-violet-500 transition-all disabled:opacity-50 text-sm">
                   {saving ? 'Saving...' : editingStep.id ? 'Update Step' : 'Add Step'}
@@ -987,20 +987,20 @@ export default function WorkflowsPage() {
       {/*  Edit Workflow Modal  */}
       {showEditWf && editingWf && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl">
 
             {/* Header */}
-            <div className="flex items-center justify-between p-5 border-b border-white/10 sticky top-0 bg-slate-900 z-10">
+            <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)] sticky top-0 bg-[var(--bg-surface)] z-10">
               <div>
-                <h2 className="text-xl font-bold text-white">Edit Workflow</h2>
-                <p className="text-slate-400 text-xs mt-0.5">{editingWf.name}</p>
+                <h2 className="text-xl font-bold text-[var(--text-main)]">Edit Workflow</h2>
+                <p className="text-[var(--text-muted)] text-xs mt-0.5">{editingWf.name}</p>
               </div>
               <button onClick={() => { setShowEditWf(false); setEditingWf(null); }}
-                className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all">x</button>
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-all">x</button>
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-1 px-5 pt-4 border-b border-white/10">
+            <div className="flex gap-1 px-5 pt-4 border-b border-[var(--border-subtle)]">
               {([
                 ['basic',      'Basic Info'],
                 ['assignee',   'Assignee'],
@@ -1008,7 +1008,7 @@ export default function WorkflowsPage() {
                 ['conditions', 'Conditions & SLA'],
               ] as const).map(([key, label]) => (
                 <button key={key} onClick={() => setEditWfTab(key)}
-                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all -mb-px ${editWfTab === key ? 'bg-slate-800 text-white border border-white/10 border-b-slate-900' : 'text-slate-500 hover:text-slate-300'}`}>
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all -mb-px ${editWfTab === key ? 'bg-[var(--bg-surface)] text-[var(--text-main)] border border-[var(--border-subtle)] border-b-slate-900' : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'}`}>
                   {label}
                 </button>
               ))}
@@ -1020,25 +1020,25 @@ export default function WorkflowsPage() {
               {editWfTab === 'basic' && (
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">Workflow Name *</label>
+                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Workflow Name *</label>
                     <input value={editWfForm.name}
                       onChange={e => setEditWfForm(p => ({ ...p, name: e.target.value }))}
-                      className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-violet-500/50" />
+                      className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-violet-500/50" />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-400 mb-1.5">Module</label>
+                      <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Module</label>
                       <select value={editWfForm.module}
                         onChange={e => setEditWfForm(p => ({ ...p, module: e.target.value, procedure: PROCEDURES[e.target.value]?.[0]?.key ?? p.procedure }))}
-                        className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-violet-500/50">
+                        className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-violet-500/50">
                         {MODULES.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-400 mb-1.5">Procedure</label>
+                      <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Procedure</label>
                       <select value={editWfForm.procedure}
                         onChange={e => setEditWfForm(p => ({ ...p, procedure: e.target.value }))}
-                        className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-violet-500/50">
+                        className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-violet-500/50">
                         {(PROCEDURES[editWfForm.module] ?? []).map(proc => <option key={proc.key} value={proc.key}>{proc.label}</option>)}
                       </select>
                     </div>
@@ -1049,19 +1049,19 @@ export default function WorkflowsPage() {
                     </div>
                   )}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">Description</label>
+                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Description</label>
                     <textarea value={editWfForm.description}
                       onChange={e => setEditWfForm(p => ({ ...p, description: e.target.value }))}
                       rows={3} placeholder="Internal notes about when and how this workflow is used..."
-                      className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500/50 resize-none" />
+                      className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-violet-500/50 resize-none" />
                   </div>
-                  <div className="flex items-center justify-between p-4 rounded-xl bg-slate-800/60 border border-white/10">
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]">
                     <div>
-                      <p className="text-white text-sm font-semibold">Active Status</p>
-                      <p className="text-slate-500 text-xs">Only active workflows are triggered by the system</p>
+                      <p className="text-[var(--text-main)] text-sm font-semibold">Active Status</p>
+                      <p className="text-[var(--text-faint)] text-xs">Only active workflows are triggered by the system</p>
                     </div>
                     <button onClick={() => setEditWfForm(p => ({ ...p, isActive: !p.isActive }))}
-                      className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${editWfForm.isActive ? 'bg-emerald-500' : 'bg-slate-600'}`}>
+                      className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${editWfForm.isActive ? 'bg-emerald-500' : 'bg-[var(--bg-surface-hover)]'}`}>
                       <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${editWfForm.isActive ? 'translate-x-6' : 'translate-x-0.5'}`} />
                     </button>
                   </div>
@@ -1075,17 +1075,17 @@ export default function WorkflowsPage() {
                     Set the <strong>default assignee</strong> for all new steps in this workflow. Individual steps can override this. Existing steps are not affected.
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-2">Default Assignee Type</label>
+                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Default Assignee Type</label>
                     <div className="space-y-2">
                       {ASSIGNEE_TYPES.map(t => (
-                        <label key={t.value} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${editWfForm.defaultAssigneeType === t.value ? 'bg-violet-500/15 border-violet-500/40' : 'border-white/10 hover:border-white/20'}`}>
+                        <label key={t.value} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${editWfForm.defaultAssigneeType === t.value ? 'bg-violet-500/15 border-violet-500/40' : 'border-[var(--border-subtle)] hover:border-[var(--border-strong)]'}`}>
                           <input type="radio" name="editWfAssignee" value={t.value}
                             checked={editWfForm.defaultAssigneeType === t.value}
                             onChange={e => setEditWfForm(p => ({ ...p, defaultAssigneeType: e.target.value }))}
                             className="accent-violet-500" />
                           <div>
-                            <p className="text-white text-sm font-semibold">{t.label}</p>
-                            <p className="text-slate-500 text-xs">{t.desc}</p>
+                            <p className="text-[var(--text-main)] text-sm font-semibold">{t.label}</p>
+                            <p className="text-[var(--text-faint)] text-xs">{t.desc}</p>
                           </div>
                         </label>
                       ))}
@@ -1093,20 +1093,20 @@ export default function WorkflowsPage() {
                   </div>
                   {editWfForm.defaultAssigneeType === 'SPECIFIC_USER' && (
                     <div>
-                      <label className="block text-xs font-semibold text-slate-400 mb-1.5">Default Assignee Email</label>
+                      <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Default Assignee Email</label>
                       <input type="email" value={editWfForm.defaultAssigneeEmail}
                         onChange={e => setEditWfForm(p => ({ ...p, defaultAssigneeEmail: e.target.value }))}
                         placeholder="approver@company.com"
-                        className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500/50" />
+                        className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-violet-500/50" />
                     </div>
                   )}
                   {editWfForm.defaultAssigneeType === 'ROLE' && (
                     <div>
-                      <label className="block text-xs font-semibold text-slate-400 mb-1.5">Default Role Code</label>
+                      <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Default Role Code</label>
                       <input value={editWfForm.defaultAssigneeRoleCode}
                         onChange={e => setEditWfForm(p => ({ ...p, defaultAssigneeRoleCode: e.target.value }))}
                         placeholder="e.g. LEASE_MANAGER, CREDIT_OFFICER, FINANCE_HEAD"
-                        className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500/50" />
+                        className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-violet-500/50" />
                     </div>
                   )}
                 </div>
@@ -1121,27 +1121,27 @@ export default function WorkflowsPage() {
                     Available variables: <code className="bg-blue-500/20 px-1 rounded">{'{referenceNumber}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{submittedBy}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{stepName}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{moduleLabel}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{approvalUrl}'}</code>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">Default Email Subject</label>
+                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Default Email Subject</label>
                     <input value={editWfForm.defaultEmailSubject}
                       onChange={e => setEditWfForm(p => ({ ...p, defaultEmailSubject: e.target.value }))}
                       placeholder="Action Required: {referenceNumber} is awaiting your approval"
-                      className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500/50" />
+                      className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-blue-500/50" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">Default Email Body</label>
+                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Default Email Body</label>
                     <textarea value={editWfForm.defaultEmailBody}
                       onChange={e => setEditWfForm(p => ({ ...p, defaultEmailBody: e.target.value }))}
                       rows={8}
                       placeholder={'Dear Approver,\n\nA new request {referenceNumber} has been submitted and requires your approval.\n\nStep: {stepName}\nSubmitted by: {submittedBy}\n\nPlease click the link below to review and take action.\n\n{approvalUrl}\n\nRegards,\nFleet360'}
-                      className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-blue-500/50 resize-none font-mono leading-relaxed" />
+                      className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-blue-500/50 resize-none font-mono leading-relaxed" />
                   </div>
                   {editWfForm.defaultEmailSubject || editWfForm.defaultEmailBody ? (
-                    <div className="p-4 rounded-xl bg-slate-800/60 border border-white/10">
-                      <p className="text-xs font-semibold text-slate-400 mb-2">Preview</p>
-                      <p className="text-white text-sm font-semibold mb-2">
+                    <div className="p-4 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]">
+                      <p className="text-xs font-semibold text-[var(--text-muted)] mb-2">Preview</p>
+                      <p className="text-[var(--text-main)] text-sm font-semibold mb-2">
                         {editWfForm.defaultEmailSubject || 'Action Required: QT-001 is awaiting your approval'}
                       </p>
-                      <p className="text-slate-400 text-xs whitespace-pre-wrap leading-relaxed">
+                      <p className="text-[var(--text-muted)] text-xs whitespace-pre-wrap leading-relaxed">
                         {(editWfForm.defaultEmailBody || '').replace('{referenceNumber}','QT-001').replace('{submittedBy}','admin@company.com').replace('{stepName}','Manager Approval').replace('{moduleLabel}','Leasing').replace('{approvalUrl}','http://localhost:3000/approvals')}
                       </p>
                     </div>
@@ -1157,29 +1157,29 @@ export default function WorkflowsPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-400 mb-1.5">Default SLA (hours)</label>
+                      <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Default SLA (hours)</label>
                       <input type="number" min="1" value={editWfForm.defaultSlaHours}
                         onChange={e => setEditWfForm(p => ({ ...p, defaultSlaHours: parseInt(e.target.value) || 24 }))}
-                        className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-amber-500/50" />
-                      <p className="text-slate-600 text-xs mt-1">Steps become overdue after this many hours</p>
+                        className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-amber-500/50" />
+                      <p className="text-[var(--text-faint)] text-xs mt-1">Steps become overdue after this many hours</p>
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-400 mb-1.5">Default Escalation (hours after SLA)</label>
+                      <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Default Escalation (hours after SLA)</label>
                       <input type="number" min="1" value={editWfForm.defaultEscalationHours}
                         onChange={e => setEditWfForm(p => ({ ...p, defaultEscalationHours: parseInt(e.target.value) || 48 }))}
-                        className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-amber-500/50" />
-                      <p className="text-slate-600 text-xs mt-1">Hours before escalating to the backup approver</p>
+                        className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-amber-500/50" />
+                      <p className="text-[var(--text-faint)] text-xs mt-1">Hours before escalating to the backup approver</p>
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1.5">Default Escalation Email</label>
+                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Default Escalation Email</label>
                     <input type="email" value={editWfForm.defaultEscalationEmail}
                       onChange={e => setEditWfForm(p => ({ ...p, defaultEscalationEmail: e.target.value }))}
                       placeholder="manager@company.com  leave blank to skip escalation"
-                      className="w-full px-3 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-amber-500/50" />
+                      className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-amber-500/50" />
                   </div>
-                  <div className="border-t border-white/10 pt-5">
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">SLA Summary</p>
+                  <div className="border-t border-[var(--border-subtle)] pt-5">
+                    <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1">SLA Summary</p>
                     <div className="grid grid-cols-3 gap-3 mt-3">
                       {[
                         { label: 'Pending', hours: editWfForm.defaultSlaHours, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
@@ -1188,7 +1188,7 @@ export default function WorkflowsPage() {
                       ].map(s => (
                         <div key={s.label} className={`rounded-xl p-3 border ${s.bg}`}>
                           <p className={`text-lg font-bold ${s.color}`}>{s.hours}h</p>
-                          <p className="text-slate-500 text-xs">{s.label}</p>
+                          <p className="text-[var(--text-faint)] text-xs">{s.label}</p>
                         </div>
                       ))}
                     </div>
@@ -1199,16 +1199,16 @@ export default function WorkflowsPage() {
             </div>
 
             {/* Footer */}
-            <div className="p-5 border-t border-white/10 flex items-center justify-between sticky bottom-0 bg-slate-900">
+            <div className="p-5 border-t border-[var(--border-subtle)] flex items-center justify-between sticky bottom-0 bg-[var(--bg-surface)]">
               <div className="flex gap-1.5">
                 {(['basic','assignee','email','conditions'] as const).map(tab => (
                   <button key={tab} onClick={() => setEditWfTab(tab)}
-                    className={`w-2 h-2 rounded-full transition-all ${editWfTab === tab ? 'bg-amber-400' : 'bg-slate-600 hover:bg-slate-500'}`} />
+                    className={`w-2 h-2 rounded-full transition-all ${editWfTab === tab ? 'bg-amber-400' : 'bg-[var(--bg-surface-hover)] hover:bg-slate-500'}`} />
                 ))}
               </div>
               <div className="flex gap-3">
                 <button onClick={() => { setShowEditWf(false); setEditingWf(null); }}
-                  className="px-5 py-2.5 rounded-xl border border-white/10 text-slate-300 hover:bg-white/5 font-medium transition-all text-sm">Cancel</button>
+                  className="px-5 py-2.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] font-medium transition-all text-sm">Cancel</button>
                 <button onClick={handleSaveEditWf} disabled={saving || !editWfForm.name}
                   className="px-6 py-2.5 rounded-xl bg-amber-500 text-white font-bold hover:bg-amber-400 transition-all disabled:opacity-50 text-sm">
                   {saving ? 'Saving...' : 'Save Changes'}

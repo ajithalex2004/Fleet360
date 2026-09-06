@@ -109,22 +109,22 @@ export default function BrandingPage() {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading branding…</div></div>;
+    return <div className="flex items-center justify-center h-full"><div className="text-[var(--text-muted)] animate-pulse">Loading branding…</div></div>;
   }
 
   return (
     <div className="space-y-8 max-w-5xl">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white inline-flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[var(--text-main)] inline-flex items-center gap-2">
             <Palette className="w-5 h-5 text-pink-400" /> White-label branding
           </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            {tenantName ? <>For <strong className="text-white">{tenantName}</strong></> : null}
+          <p className="text-[var(--text-muted)] text-sm mt-1">
+            {tenantName ? <>For <strong className="text-[var(--text-main)]">{tenantName}</strong></> : null}
           </p>
         </div>
         <Link href="/admin/tenants"
-          className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-slate-800 border border-white/10 hover:border-white/20 hover:bg-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:text-white transition-colors">
+          className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] hover:bg-[var(--bg-surface-hover)] px-3 py-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors">
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Tenants
         </Link>
       </div>
@@ -142,31 +142,31 @@ export default function BrandingPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-6">
         {/* ─── form ─── */}
-        <form onSubmit={save} className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 space-y-5">
+        <form onSubmit={save} className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Product name</label>
+              <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Product name</label>
               <input value={productName} onChange={e => setProductName(e.target.value)}
                 placeholder="e.g. Acme Mobility"
                 maxLength={80}
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-pink-500" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:ring-2 focus:ring-pink-500" />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Tagline</label>
+              <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Tagline</label>
               <input value={tagline} onChange={e => setTagline(e.target.value)}
                 placeholder="Smart fleet for your team"
                 maxLength={120}
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-pink-500" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:ring-2 focus:ring-pink-500" />
             </div>
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Logo</label>
+            <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Logo</label>
             <div className="flex items-center gap-2">
               <input value={logoUrl} onChange={e => setLogoUrl(e.target.value)}
                 placeholder="https://cdn.example.com/logo.svg or upload below"
-                className="flex-1 bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-pink-500" />
-              <label className={`shrink-0 px-3 py-2.5 rounded-lg text-sm inline-flex items-center gap-2 cursor-pointer ${uploading ? 'bg-slate-700/50 text-slate-500' : 'bg-pink-500/20 hover:bg-pink-500/30 border border-pink-500/40 text-pink-200'}`}>
+                className="flex-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-pink-500" />
+              <label className={`shrink-0 px-3 py-2.5 rounded-lg text-sm inline-flex items-center gap-2 cursor-pointer ${uploading ? 'bg-[var(--bg-surface-hover)]/50 text-[var(--text-faint)]' : 'bg-pink-500/20 hover:bg-pink-500/30 border border-pink-500/40 text-pink-200'}`}>
                 <Upload className="w-4 h-4" />
                 {uploading ? 'Uploading…' : 'Upload'}
                 <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" className="hidden"
@@ -174,14 +174,14 @@ export default function BrandingPage() {
                   onChange={e => { const f = e.target.files?.[0]; if (f) void uploadLogo(f); e.target.value = ''; }} />
               </label>
             </div>
-            <p className="text-xs text-slate-500">PNG / JPEG / SVG / WebP, up to 1 MB. Around 200×40 px works best in the chrome.</p>
+            <p className="text-xs text-[var(--text-faint)]">PNG / JPEG / SVG / WebP, up to 1 MB. Around 200×40 px works best in the chrome.</p>
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Favicon URL (https)</label>
+            <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Favicon URL (https)</label>
             <input value={faviconUrl} onChange={e => setFaviconUrl(e.target.value)}
               placeholder="https://cdn.example.com/favicon.png"
-              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-pink-500" />
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-pink-500" />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -190,7 +190,7 @@ export default function BrandingPage() {
           </div>
 
           <button type="submit" disabled={saving}
-            className="px-5 py-2.5 rounded-lg text-white font-semibold text-sm inline-flex items-center gap-2 disabled:opacity-50"
+            className="px-5 py-2.5 rounded-lg text-[var(--text-main)] font-semibold text-sm inline-flex items-center gap-2 disabled:opacity-50"
             style={{ background: primaryColor }}>
             <Save className="w-4 h-4" /> {saving ? 'Saving…' : 'Save branding'}
           </button>
@@ -198,32 +198,32 @@ export default function BrandingPage() {
 
         {/* ─── live preview ─── */}
         <div className="space-y-4">
-          <div className="text-xs uppercase tracking-wide text-slate-400">Live preview</div>
+          <div className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Live preview</div>
 
-          <div className="bg-slate-950 border border-white/10 rounded-2xl p-6 space-y-4">
+          <div className="bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-2xl p-6 space-y-4">
             <div className="flex items-center gap-3">
               {logoUrl ? (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img src={logoUrl} alt="" className="h-8 max-w-[160px] object-contain" />
               ) : (
-                <div className="text-2xl font-black text-white tracking-tight">
+                <div className="text-2xl font-black text-[var(--text-main)] tracking-tight">
                   {productName || 'Your brand'}
                 </div>
               )}
             </div>
-            {tagline && <p className="text-slate-400 text-sm">{tagline}</p>}
+            {tagline && <p className="text-[var(--text-muted)] text-sm">{tagline}</p>}
             <div className="flex gap-2 pt-2">
-              <button type="button" className="px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ background: primaryColor }}>
+              <button type="button" className="px-4 py-2 rounded-lg text-[var(--text-main)] text-sm font-semibold" style={{ background: primaryColor }}>
                 Primary action
               </button>
-              <button type="button" className="px-4 py-2 rounded-lg text-white text-sm font-semibold" style={{ background: accentColor }}>
+              <button type="button" className="px-4 py-2 rounded-lg text-[var(--text-main)] text-sm font-semibold" style={{ background: accentColor }}>
                 Accent action
               </button>
             </div>
           </div>
 
-          <div className="bg-slate-800/30 border border-white/5 rounded-xl p-4 text-xs text-slate-400 space-y-2">
-            <p className="text-white font-semibold">Where this shows</p>
+          <div className="bg-[var(--bg-surface)]/30 border border-[var(--border-subtle)] rounded-xl p-4 text-xs text-[var(--text-muted)] space-y-2">
+            <p className="text-[var(--text-main)] font-semibold">Where this shows</p>
             <ul className="list-disc pl-5 space-y-1">
               <li>Document title + favicon (browser tab)</li>
               <li>CSS variables <code>--brand-primary</code> and <code>--brand-accent</code> available everywhere</li>
@@ -239,13 +239,13 @@ export default function BrandingPage() {
 function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
     <div className="space-y-1">
-      <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">{label}</label>
+      <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">{label}</label>
       <div className="flex items-center gap-2">
         <input type="color" value={value} onChange={e => onChange(e.target.value)}
-          className="h-10 w-14 rounded border border-white/10 bg-slate-800 cursor-pointer" />
+          className="h-10 w-14 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] cursor-pointer" />
         <input type="text" value={value} onChange={e => onChange(e.target.value)}
           placeholder="#2563eb" maxLength={7}
-          className="flex-1 bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-pink-500" />
+          className="flex-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-pink-500" />
       </div>
     </div>
   );

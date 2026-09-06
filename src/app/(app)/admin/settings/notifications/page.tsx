@@ -99,7 +99,7 @@ function Toggle({ checked, onChange, onColor = 'bg-blue-500' }: {
 }) {
   return (
     <button onClick={() => onChange(!checked)}
-      className={`relative w-12 h-6 rounded-full transition-all duration-200 ${checked ? onColor : 'bg-slate-600'}`}>
+      className={`relative w-12 h-6 rounded-full transition-all duration-200 ${checked ? onColor : 'bg-[var(--bg-surface-hover)]'}`}>
       <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${checked ? 'translate-x-6' : ''}`} />
     </button>
   );
@@ -115,7 +115,7 @@ function PasswordInput({ value, onChange, placeholder, className }: {
         onChange={e => onChange(e.target.value)}
         className={`${className ?? ''} pr-9`} />
       <button type="button" onClick={() => setShow(s => !s)}
-        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-sm">
+        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--text-faint)] hover:text-[var(--text-muted)] text-sm">
         {show ? '🙈' : '👁'}
       </button>
     </div>
@@ -162,8 +162,8 @@ function TestBtn({ channelKey, settings, onColor }: {
         className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold border transition-all disabled:opacity-60 ${
           state === 'ok'      ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300' :
           state === 'fail'    ? 'bg-red-500/20 border-red-500/30 text-red-300' :
-          state === 'running' ? 'bg-slate-700 border-white/10 text-slate-400' :
-                                `${onColor} border-transparent text-white hover:opacity-90`
+          state === 'running' ? 'bg-[var(--bg-surface-hover)] border-[var(--border-subtle)] text-[var(--text-muted)]' :
+                                `${onColor} border-transparent text-[var(--text-main)] hover:opacity-90`
         }`}>
         {state === 'running' ? <><span className="animate-spin inline-block">⟳</span> Sending…</> :
          state === 'ok'      ? <>✓ Email Delivered!</> :
@@ -187,14 +187,14 @@ function TestBtn({ channelKey, settings, onColor }: {
 function FieldRow({ field, value, onChange }: {
   field: ChannelField; value: string; onChange: (k: string, v: string) => void;
 }) {
-  const base = 'bg-slate-800 border border-white/10 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/50 placeholder-slate-600 w-full';
+  const base = 'bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500/50 placeholder-[var(--text-faint)] w-full';
 
   return (
-    <div className="flex items-center justify-between py-3.5 border-b border-white/5 last:border-0 gap-6">
+    <div className="flex items-center justify-between py-3.5 border-b border-[var(--border-subtle)] last:border-0 gap-6">
       <div className="min-w-0">
-        <p className="text-sm font-medium text-white">{field.label}</p>
-        <p className="text-xs text-slate-400 mt-0.5">{field.description}</p>
-        <p className="text-[10px] text-slate-600 font-mono mt-0.5">{field.key}</p>
+        <p className="text-sm font-medium text-[var(--text-main)]">{field.label}</p>
+        <p className="text-xs text-[var(--text-muted)] mt-0.5">{field.description}</p>
+        <p className="text-[10px] text-[var(--text-faint)] font-mono mt-0.5">{field.key}</p>
       </div>
       <div className="flex-shrink-0 w-72">
         {field.type === 'select' && (
@@ -205,7 +205,7 @@ function FieldRow({ field, value, onChange }: {
         {field.type === 'toggle' && (
           <div className="flex items-center gap-2">
             <Toggle checked={value === 'true'} onChange={v => onChange(field.key, v ? 'true' : 'false')} />
-            <span className={`text-xs font-medium ${value === 'true' ? 'text-blue-400' : 'text-slate-500'}`}>
+            <span className={`text-xs font-medium ${value === 'true' ? 'text-blue-400' : 'text-[var(--text-faint)]'}`}>
               {value === 'true' ? 'Enabled' : 'Disabled'}
             </span>
           </div>
@@ -215,7 +215,7 @@ function FieldRow({ field, value, onChange }: {
             <input type="number" value={value} min={field.min} max={field.max}
               onChange={e => onChange(field.key, e.target.value)}
               className={`${base} w-32 text-center`} />
-            {field.unit && <span className="text-slate-500 text-xs whitespace-nowrap">{field.unit}</span>}
+            {field.unit && <span className="text-[var(--text-faint)] text-xs whitespace-nowrap">{field.unit}</span>}
           </div>
         )}
         {(field.type === 'text' || field.type === 'email' || field.type === 'url') && (
@@ -260,14 +260,14 @@ function ChannelCard({ channelKey, label, icon, gradient, borderColor, fields, s
   }
 
   return (
-    <div className={`bg-slate-900/70 border rounded-2xl overflow-hidden ${borderColor}`}>
+    <div className={`bg-[var(--bg-surface)]/70 border rounded-2xl overflow-hidden ${borderColor}`}>
       {/* Card header */}
       <div className={`bg-gradient-to-r ${gradient} p-5 flex items-center justify-between`}>
         <div className="flex items-center gap-3">
           <span className="text-2xl">{icon}</span>
           <div>
-            <h2 className="text-lg font-bold text-white">{label}</h2>
-            <p className="text-white/70 text-xs mt-0.5">
+            <h2 className="text-lg font-bold text-[var(--text-main)]">{label}</h2>
+            <p className="text-[var(--text-main)]/70 text-xs mt-0.5">
               {enabled ? `Provider: ${provider}` : 'No provider configured'}
             </p>
           </div>
@@ -280,8 +280,8 @@ function ChannelCard({ channelKey, label, icon, gradient, borderColor, fields, s
           )}
           <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${
             enabled
-              ? 'bg-white/20 text-white border-white/30'
-              : 'bg-black/30 text-white/60 border-white/10'
+              ? 'bg-[var(--bg-surface-hover)] text-[var(--text-main)] border-[var(--border-strong)]'
+              : 'bg-black/30 text-[var(--text-main)]/60 border-[var(--border-subtle)]'
           }`}>
             {enabled ? '● Active' : '○ Disabled'}
           </span>
@@ -292,7 +292,7 @@ function ChannelCard({ channelKey, label, icon, gradient, borderColor, fields, s
       <div className="divide-y divide-white/5">
         {groups.map(grp => (
           <div key={grp.name} className="px-6 py-1">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pt-4 pb-1">{grp.name}</p>
+            <p className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-widest pt-4 pb-1">{grp.name}</p>
             {grp.fields.map(f => (
               <FieldRow key={f.key} field={f} value={settings[f.key] ?? ''} onChange={onChange} />
             ))}
@@ -301,10 +301,10 @@ function ChannelCard({ channelKey, label, icon, gradient, borderColor, fields, s
       </div>
 
       {/* Footer actions */}
-      <div className="px-6 py-4 border-t border-white/10 flex items-center justify-between bg-slate-900/40">
+      <div className="px-6 py-4 border-t border-[var(--border-subtle)] flex items-center justify-between bg-[var(--bg-surface)]/40">
         <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${enabled ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
-          <span className="text-xs text-slate-400">
+          <span className={`w-2 h-2 rounded-full ${enabled ? 'bg-emerald-400 animate-pulse' : 'bg-[var(--bg-surface-hover)]'}`} />
+          <span className="text-xs text-[var(--text-muted)]">
             {enabled ? `Delivery via ${provider}` : 'Enable a provider to start sending'}
           </span>
         </div>
@@ -474,28 +474,28 @@ function NotificationPrefsMatrix({ settings, onSave }: {
   };
 
   return (
-    <div className="bg-slate-900/70 border border-rose-500/25 rounded-2xl overflow-hidden">
+    <div className="bg-[var(--bg-surface)]/70 border border-rose-500/25 rounded-2xl overflow-hidden">
       {/* Header */}
       <div className="bg-gradient-to-r from-rose-600 to-pink-600 p-5 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl">🔔</span>
           <div>
-            <h2 className="text-lg font-bold text-white">Notification Preferences</h2>
-            <p className="text-white/70 text-xs mt-0.5">Configure Email, SMS, Push & WhatsApp delivery per event across all modules</p>
+            <h2 className="text-lg font-bold text-[var(--text-main)]">Notification Preferences</h2>
+            <p className="text-[var(--text-main)]/70 text-xs mt-0.5">Configure Email, SMS, Push & WhatsApp delivery per event across all modules</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
           {saved && <span className="text-emerald-300 text-xs font-medium">✓ Saved!</span>}
           <button onClick={handleSave} disabled={saving}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-white/20 hover:bg-white/30 text-white transition-all disabled:opacity-50">
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] transition-all disabled:opacity-50">
             {saving ? <><span className="animate-spin inline-block">⟳</span> Saving…</> : <>💾 Save Preferences</>}
           </button>
         </div>
       </div>
 
       {/* Channel legend */}
-      <div className="px-6 py-3 border-b border-white/10 flex items-center gap-6">
-        <span className="text-xs text-slate-500 uppercase tracking-widest font-bold">Channels:</span>
+      <div className="px-6 py-3 border-b border-[var(--border-subtle)] flex items-center gap-6">
+        <span className="text-xs text-[var(--text-faint)] uppercase tracking-widest font-bold">Channels:</span>
         {CHANNELS.map(c => (
           <div key={c.key} className={`flex items-center gap-1.5 text-xs font-medium ${c.color}`}>
             <span className="w-2 h-2 rounded-full bg-current" />{c.label}
@@ -512,19 +512,19 @@ function NotificationPrefsMatrix({ settings, onSave }: {
               {/* Group header — click to collapse */}
               <button
                 onClick={() => setOpenGroups(prev => ({ ...prev, [group.label]: !isOpen }))}
-                className="w-full flex items-center justify-between px-6 py-3.5 text-left hover:bg-white/5 transition-colors">
+                className="w-full flex items-center justify-between px-6 py-3.5 text-left hover:bg-[var(--bg-surface-hover)] transition-colors">
                 <div className="flex items-center gap-2.5">
                   <span className="text-base">{group.icon}</span>
-                  <span className="text-sm font-semibold text-white">{group.label}</span>
-                  <span className="text-[10px] text-slate-600">{group.events.length} events</span>
+                  <span className="text-sm font-semibold text-[var(--text-main)]">{group.label}</span>
+                  <span className="text-[10px] text-[var(--text-faint)]">{group.events.length} events</span>
                 </div>
-                <span className={`text-slate-500 text-xs transition-transform ${isOpen ? 'rotate-180' : ''}`}>▼</span>
+                <span className={`text-[var(--text-faint)] text-xs transition-transform ${isOpen ? 'rotate-180' : ''}`}>▼</span>
               </button>
 
               {isOpen && (
                 <div className="px-6 pb-2">
                   {/* Column headers */}
-                  <div className="grid text-[10px] font-bold uppercase tracking-widest text-slate-600 pb-1.5 border-b border-white/5"
+                  <div className="grid text-[10px] font-bold uppercase tracking-widest text-[var(--text-faint)] pb-1.5 border-b border-[var(--border-subtle)]"
                     style={{ gridTemplateColumns: '1fr repeat(4, 80px)' }}>
                     <span>Event</span>
                     {CHANNELS.map(c => <span key={c.key} className={`text-center ${c.color}`}>{c.label}</span>)}
@@ -533,9 +533,9 @@ function NotificationPrefsMatrix({ settings, onSave }: {
                     const pref = prefs[evt.key] ?? evt.default;
                     return (
                       <div key={evt.key}
-                        className="grid items-center border-b border-white/5 last:border-0 py-2.5"
+                        className="grid items-center border-b border-[var(--border-subtle)] last:border-0 py-2.5"
                         style={{ gridTemplateColumns: '1fr repeat(4, 80px)' }}>
-                        <span className="text-sm text-slate-300">{evt.label}</span>
+                        <span className="text-sm text-[var(--text-muted)]">{evt.label}</span>
                         {CHANNELS.map(ch => (
                           <div key={ch.key} className="flex justify-center">
                             <button
@@ -543,9 +543,9 @@ function NotificationPrefsMatrix({ settings, onSave }: {
                               className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
                                 pref[ch.key]
                                   ? 'border-current bg-current'
-                                  : 'border-slate-600 bg-transparent'
+                                  : 'border-[var(--border-strong)] bg-transparent'
                               } ${ch.color}`}>
-                              {pref[ch.key] && <span className="text-slate-900 text-[10px] font-bold leading-none">✓</span>}
+                              {pref[ch.key] && <span className="text-[var(--text-main)] text-[10px] font-bold leading-none">✓</span>}
                             </button>
                           </div>
                         ))}
@@ -559,8 +559,8 @@ function NotificationPrefsMatrix({ settings, onSave }: {
         })}
       </div>
 
-      <div className="px-6 py-4 border-t border-white/10 bg-slate-900/40 flex items-center justify-between">
-        <p className="text-xs text-slate-500">Preferences stored in <code className="text-slate-600 font-mono">platform_settings</code> as JSON</p>
+      <div className="px-6 py-4 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 flex items-center justify-between">
+        <p className="text-xs text-[var(--text-faint)]">Preferences stored in <code className="text-[var(--text-faint)] font-mono">platform_settings</code> as JSON</p>
         <button onClick={handleSave} disabled={saving}
           className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-rose-600 to-pink-600 text-white hover:opacity-90 disabled:opacity-50 transition-all">
           {saving ? <><span className="animate-spin inline-block">⟳</span> Saving…</> : saved ? <>✓ Saved!</> : <>💾 Save Preferences</>}
@@ -613,44 +613,44 @@ function WhatsAppCard() {
   };
 
   return (
-    <div className="bg-slate-900/70 border border-green-500/25 rounded-2xl overflow-hidden">
+    <div className="bg-[var(--bg-surface)]/70 border border-green-500/25 rounded-2xl overflow-hidden">
       <div className="bg-gradient-to-r from-green-600 to-emerald-600 p-5 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-2xl">💬</span>
           <div>
-            <h2 className="text-lg font-bold text-white">WhatsApp Business</h2>
-            <p className="text-white/70 text-xs mt-0.5">
+            <h2 className="text-lg font-bold text-[var(--text-main)]">WhatsApp Business</h2>
+            <p className="text-[var(--text-main)]/70 text-xs mt-0.5">
               {cfg.provider ? `Provider: ${cfg.provider}` : 'No provider configured'}
             </p>
           </div>
         </div>
         <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${
-          cfg.isEnabled ? 'bg-white/20 text-white border-white/30' : 'bg-black/30 text-white/60 border-white/10'
+          cfg.isEnabled ? 'bg-[var(--bg-surface-hover)] text-[var(--text-main)] border-[var(--border-strong)]' : 'bg-black/30 text-[var(--text-main)]/60 border-[var(--border-subtle)]'
         }`}>
           {cfg.isEnabled ? '● Active' : '○ Disabled'}
         </span>
       </div>
       <div className="px-6 py-2">
-        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pt-4 pb-1">Credentials</p>
+        <p className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-widest pt-4 pb-1">Credentials</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
           {WA_FIELDS.map(f => (
-            <div key={f.key} className="py-3 border-b border-white/5 last:border-0">
-              <label className="block text-sm font-medium text-white mb-1.5">{f.label}</label>
+            <div key={f.key} className="py-3 border-b border-[var(--border-subtle)] last:border-0">
+              <label className="block text-sm font-medium text-[var(--text-main)] mb-1.5">{f.label}</label>
               {(f as any).secret ? (
                 <PasswordInput value={(cfg as any)[f.key] ?? ''} onChange={v => setField(f.key, v)}
                   placeholder={f.ph}
-                  className="bg-slate-800 border border-white/10 text-white text-sm rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-green-500/50 placeholder-slate-600" />
+                  className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-green-500/50 placeholder-[var(--text-faint)]" />
               ) : (
                 <input type="text" value={(cfg as any)[f.key] ?? ''} placeholder={f.ph}
                   onChange={e => setField(f.key, e.target.value)}
-                  className="bg-slate-800 border border-white/10 text-white text-sm rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-green-500/50 placeholder-slate-600" />
+                  className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-green-500/50 placeholder-[var(--text-faint)]" />
               )}
             </div>
           ))}
         </div>
       </div>
-      <div className="px-6 py-4 border-t border-white/10 bg-slate-900/40 flex items-center justify-between">
-        <p className="text-xs text-slate-500">Supported: Twilio · 360dialog · MessageBird</p>
+      <div className="px-6 py-4 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 flex items-center justify-between">
+        <p className="text-xs text-[var(--text-faint)]">Supported: Twilio · 360dialog · MessageBird</p>
         <div className="flex items-center gap-3">
           {msg && <span className={`text-xs ${msg === 'Saved!' ? 'text-emerald-400' : 'text-red-400'}`}>{msg}</span>}
           <button onClick={save} disabled={saving}
@@ -719,7 +719,7 @@ export default function NotificationChannelsPage() {
     <div className="flex items-center justify-center h-64">
       <div className="text-center">
         <div className="text-4xl animate-spin mb-3">⟳</div>
-        <p className="text-slate-400 text-sm">Loading channel settings…</p>
+        <p className="text-[var(--text-muted)] text-sm">Loading channel settings…</p>
       </div>
     </div>
   );
@@ -728,14 +728,14 @@ export default function NotificationChannelsPage() {
     <div className="space-y-8 pb-12">
       {/* Page header */}
       <div>
-        <h1 className="text-2xl font-bold text-white">Notification Channels</h1>
-        <p className="text-xs text-slate-400 mt-1">Configure Email, SMS, and WhatsApp providers for the platform</p>
+        <h1 className="text-2xl font-bold text-[var(--text-main)]">Notification Channels</h1>
+        <p className="text-xs text-[var(--text-muted)] mt-1">Configure Email, SMS, and WhatsApp providers for the platform</p>
       </div>
 
       {error && (
         <div className="bg-red-500/20 border border-red-500/30 rounded-xl p-4 text-red-300 text-sm flex items-center gap-2">
           ⚠️ {error}
-          <button onClick={() => setError('')} className="ml-auto text-red-400 hover:text-white">✕</button>
+          <button onClick={() => setError('')} className="ml-auto text-red-400 hover:text-[var(--text-main)]">✕</button>
         </div>
       )}
 
@@ -788,8 +788,8 @@ export default function NotificationChannelsPage() {
         }}
       />
 
-      <p className="text-xs text-slate-600 text-center pt-2">
-        Email & SMS settings stored in <code className="text-slate-500 font-mono">platform_settings</code> · WhatsApp stored in <code className="text-slate-500 font-mono">integration_configs</code>
+      <p className="text-xs text-[var(--text-faint)] text-center pt-2">
+        Email & SMS settings stored in <code className="text-[var(--text-faint)] font-mono">platform_settings</code> · WhatsApp stored in <code className="text-[var(--text-faint)] font-mono">integration_configs</code>
       </p>
     </div>
   );

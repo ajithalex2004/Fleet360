@@ -61,9 +61,9 @@ export default function AdminOverview() {
           { title: 'User Management', desc: 'Assign users to tenants with specific roles', href: '/admin/users', color: 'border-violet-500/30 hover:border-violet-500/50' },
         ].map(item => (
           <Link key={item.href} href={item.href}
-            className={`block p-6 rounded-2xl bg-slate-800/50 border ${item.color} transition-all`}>
-            <h3 className="text-white font-semibold mb-2">{item.title}</h3>
-            <p className="text-slate-400 text-sm">{item.desc}</p>
+            className={`block p-6 rounded-2xl bg-[var(--bg-surface)]/50 border ${item.color} transition-all`}>
+            <h3 className="text-[var(--text-main)] font-semibold mb-2">{item.title}</h3>
+            <p className="text-[var(--text-muted)] text-sm">{item.desc}</p>
           </Link>
         ))}
       </div>

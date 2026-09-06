@@ -125,8 +125,8 @@ export default function MfaSecurityPage() {
           <ShieldCheck className="w-6 h-6" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-white">Multi-factor authentication</h1>
-          <p className="text-slate-400 text-xs mt-1">
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Multi-factor authentication</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-1">
             {status?.mfaEnabled
               ? 'MFA is active on your account. Disable below if you need to re-enrol.'
               : 'Add a second factor (authenticator app) to your sign-in.'}
@@ -145,11 +145,11 @@ export default function MfaSecurityPage() {
           <div className="flex items-center gap-2 text-amber-300 font-semibold">
             <KeyRound className="w-5 h-5" /> Save these recovery codes
           </div>
-          <p className="text-sm text-slate-300">
+          <p className="text-sm text-[var(--text-muted)]">
             Each code works once and replaces your authenticator if you lose it.
             You will <strong>not</strong> see them again.
           </p>
-          <div className="grid grid-cols-2 gap-2 font-mono text-sm bg-slate-900/60 border border-white/10 rounded-lg p-4">
+          <div className="grid grid-cols-2 gap-2 font-mono text-sm bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg p-4">
             {recoveryCodes.map(c => <div key={c} className="text-amber-200">{c}</div>)}
           </div>
           <button onClick={() => copy(recoveryCodes.join('\n'), 'recovery')}
@@ -162,9 +162,9 @@ export default function MfaSecurityPage() {
 
       {/* Status: not yet enrolled and no enrolment in flight */}
       {!status?.mfaEnabled && !enrol && !recoveryCodes && (
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-white">Set up MFA</h2>
-          <ol className="list-decimal list-inside text-sm text-slate-300 space-y-1">
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 space-y-4">
+          <h2 className="text-lg font-semibold text-[var(--text-main)]">Set up MFA</h2>
+          <ol className="list-decimal list-inside text-sm text-[var(--text-muted)] space-y-1">
             <li>Install an authenticator app (Google Authenticator, 1Password, Authy, Microsoft Authenticator).</li>
             <li>Tap the button below to generate your setup key.</li>
             <li>Add the key to your authenticator and enter the 6-digit code it shows.</li>
@@ -179,8 +179,8 @@ export default function MfaSecurityPage() {
 
       {/* Enrolment step 2: secret displayed, awaiting verification code */}
       {enrol && (
-        <form onSubmit={completeEnrol} className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 space-y-5">
-          <h2 className="text-lg font-semibold text-white">Scan with your authenticator</h2>
+        <form onSubmit={completeEnrol} className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 space-y-5">
+          <h2 className="text-lg font-semibold text-[var(--text-main)]">Scan with your authenticator</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-[240px_1fr] gap-5 items-start">
             {enrol.qrDataUrl ? (
@@ -189,46 +189,46 @@ export default function MfaSecurityPage() {
                 <img src={enrol.qrDataUrl} alt="MFA QR code" width={216} height={216} />
               </div>
             ) : (
-              <div className="bg-slate-900/60 border border-white/10 rounded-xl p-6 text-xs text-slate-400">
+              <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-6 text-xs text-[var(--text-muted)]">
                 QR code unavailable — use the setup key on the right.
               </div>
             )}
 
             <div className="space-y-3">
               <div>
-                <div className="text-xs uppercase tracking-wide text-slate-400">Account</div>
-                <div className="text-sm text-white">{enrol.issuer} &mdash; {enrol.account}</div>
+                <div className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Account</div>
+                <div className="text-sm text-[var(--text-main)]">{enrol.issuer} &mdash; {enrol.account}</div>
               </div>
 
               <div className="space-y-2">
-                <div className="text-xs uppercase tracking-wide text-slate-400">Or enter setup key manually</div>
+                <div className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Or enter setup key manually</div>
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 bg-slate-900/60 border border-white/10 rounded-lg px-3 py-2.5 font-mono text-xs text-emerald-300 break-all">
+                  <code className="flex-1 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 font-mono text-xs text-emerald-300 break-all">
                     {enrol.secret}
                   </code>
                   <button type="button" onClick={() => copy(enrol.secret, 'secret')}
-                    className="px-3 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-200 text-sm inline-flex items-center gap-2">
+                    className="px-3 py-2.5 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] rounded-lg text-[var(--text-main)] text-sm inline-flex items-center gap-2">
                     {copied === 'secret' ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                     {copied === 'secret' ? 'Copied' : 'Copy'}
                   </button>
                 </div>
               </div>
 
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-[var(--text-faint)]">
                 Open Google Authenticator / 1Password / Authy → scan the QR or paste the key. Account name: {enrol.account}.
               </p>
             </div>
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">6-digit code</label>
+            <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">6-digit code</label>
             <input
               value={code}
               onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
               inputMode="numeric"
               autoComplete="one-time-code"
               placeholder="000000"
-              className="w-40 bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-lg font-mono text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-40 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-lg font-mono text-center tracking-widest focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
@@ -238,16 +238,16 @@ export default function MfaSecurityPage() {
               {loading ? 'Verifying…' : 'Verify and enable MFA'}
             </button>
             <button type="button" onClick={() => { setEnrol(null); setCode(''); setError(null); }}
-              className="px-4 py-2.5 text-slate-400 hover:text-white text-sm">Cancel</button>
+              className="px-4 py-2.5 text-[var(--text-muted)] hover:text-[var(--text-main)] text-sm">Cancel</button>
           </div>
         </form>
       )}
 
       {/* MFA already on: show disable form */}
       {status?.mfaEnabled && !recoveryCodes && (
-        <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-white">Disable MFA</h2>
-          <p className="text-sm text-slate-300">
+        <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 space-y-4">
+          <h2 className="text-lg font-semibold text-[var(--text-main)]">Disable MFA</h2>
+          <p className="text-sm text-[var(--text-muted)]">
             Disabling MFA removes the second-factor requirement on your account. We&rsquo;ll
             require your password and a current authenticator (or recovery) code to confirm.
           </p>
@@ -260,16 +260,16 @@ export default function MfaSecurityPage() {
           ) : (
             <form onSubmit={disable} className="space-y-3 max-w-md">
               <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Your password</label>
+                <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Your password</label>
                 <input type="password" value={disablePw} onChange={e => setDisablePw(e.target.value)}
                   autoComplete="current-password"
-                  className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
+                  className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Authenticator OR recovery code</label>
+                <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Authenticator OR recovery code</label>
                 <input value={disableCode} onChange={e => setDisableCode(e.target.value)}
                   placeholder="000000  or  a3f9c-7e1b8"
-                  className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-rose-500" />
+                  className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-rose-500" />
               </div>
               <div className="flex gap-2">
                 <button type="submit" disabled={loading}
@@ -277,7 +277,7 @@ export default function MfaSecurityPage() {
                   {loading ? 'Disabling…' : 'Confirm disable'}
                 </button>
                 <button type="button" onClick={() => { setShowDisable(false); setDisablePw(''); setDisableCode(''); setError(null); }}
-                  className="px-4 py-2 text-slate-400 hover:text-white text-sm">Cancel</button>
+                  className="px-4 py-2 text-[var(--text-muted)] hover:text-[var(--text-main)] text-sm">Cancel</button>
               </div>
             </form>
           )}

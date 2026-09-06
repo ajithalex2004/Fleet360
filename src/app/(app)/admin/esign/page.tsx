@@ -53,7 +53,7 @@ function StatusBadge({ status }: { status: string }) {
     PENDING:   'bg-amber-500/15  text-amber-400  border border-amber-500/30',
     SIGNED:    'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30',
     EXPIRED:   'bg-red-500/15    text-red-400    border border-red-500/30',
-    CANCELLED: 'bg-slate-500/15  text-slate-400  border border-slate-500/30',
+    CANCELLED: 'bg-slate-500/15  text-[var(--text-muted)]  border border-slate-500/30',
   };
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${map[status] ?? map.CANCELLED}`}>
@@ -84,7 +84,7 @@ function SentViaBadge({ via }: { via: string }) {
   };
   const icon: Record<string, string> = { SMS: '💬', EMAIL: '📧', WHATSAPP: '📱' };
   return (
-    <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${map[via] ?? 'text-slate-400'}`}>
+    <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${map[via] ?? 'text-[var(--text-muted)]'}`}>
       {icon[via] ?? '📤'} {via}
     </span>
   );
@@ -99,12 +99,12 @@ function KpiCard({
   icon: string;
 }) {
   return (
-    <div className={`bg-slate-800/60 border ${color} rounded-xl p-4`}>
+    <div className={`bg-[var(--bg-surface)]/60 border ${color} rounded-xl p-4`}>
       <div className="flex items-center justify-between mb-3">
         <span className="text-2xl">{icon}</span>
-        <span className="text-2xl font-bold text-white">{value.toLocaleString()}</span>
+        <span className="text-2xl font-bold text-[var(--text-main)]">{value.toLocaleString()}</span>
       </div>
-      <p className="text-slate-400 text-sm font-medium">{label}</p>
+      <p className="text-[var(--text-muted)] text-sm font-medium">{label}</p>
     </div>
   );
 }
@@ -188,12 +188,12 @@ export default function ESignConsolePage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">E-Signing Console</h1>
-          <p className="text-slate-400 text-xs mt-0.5">Manage OTP-based digital signing requests across all contracts</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">E-Signing Console</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Manage OTP-based digital signing requests across all contracts</p>
         </div>
         <button
           onClick={() => fetchData(pagination.page)}
-          className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm rounded-lg transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-sm rounded-lg transition-colors"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -204,20 +204,20 @@ export default function ESignConsolePage() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <KpiCard label="Total Sent"  value={summary.total}     color="border-slate-700"        icon="✍️" />
+        <KpiCard label="Total Sent"  value={summary.total}     color="border-[var(--border-subtle)]"        icon="✍️" />
         <KpiCard label="Signed"      value={summary.SIGNED}    color="border-emerald-500/30"   icon="✅" />
         <KpiCard label="Pending"     value={summary.PENDING}   color="border-amber-500/30"     icon="⏳" />
         <KpiCard label="Expired"     value={summary.EXPIRED}   color="border-red-500/30"       icon="⌛" />
-        <KpiCard label="Cancelled"   value={summary.CANCELLED} color="border-slate-600/50"     icon="🚫" />
+        <KpiCard label="Cancelled"   value={summary.CANCELLED} color="border-[var(--border-strong)]/50"     icon="🚫" />
       </div>
 
       {/* Filters */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-xl p-4">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-xl p-4">
         <div className="flex flex-wrap gap-3">
           {/* Search */}
           <div className="flex-1 min-w-48">
             <div className="relative">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
               <input
@@ -226,7 +226,7 @@ export default function ESignConsolePage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && fetchData(1)}
-                className="w-full pl-9 pr-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white text-sm placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                className="w-full pl-9 pr-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm placeholder-slate-400 focus:outline-none focus:border-blue-500"
               />
             </div>
           </div>
@@ -235,7 +235,7 @@ export default function ESignConsolePage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatus(e.target.value)}
-            className="px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+            className="px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-blue-500"
           >
             <option value="">All Statuses</option>
             <option value="PENDING">Pending</option>
@@ -248,7 +248,7 @@ export default function ESignConsolePage() {
           <select
             value={typeFilter}
             onChange={(e) => setType(e.target.value)}
-            className="px-3 py-2 bg-slate-700 border border-white/10 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
+            className="px-3 py-2 bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-blue-500"
           >
             <option value="">All Types</option>
             <option value="LEASE_AGREEMENT">Lease Agreement</option>
@@ -265,7 +265,7 @@ export default function ESignConsolePage() {
           </button>
           <button
             onClick={() => { setSearch(''); setStatus(''); setType(''); }}
-            className="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-slate-200 text-sm rounded-lg transition-colors"
+            className="px-4 py-2 bg-[var(--bg-surface-hover)] hover:bg-slate-500 text-[var(--text-main)] text-sm rounded-lg transition-colors"
           >
             Clear
           </button>
@@ -280,22 +280,22 @@ export default function ESignConsolePage() {
       )}
 
       {/* Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/10 bg-slate-900/50">
-                <th className="text-left px-4 py-3 text-slate-400 font-medium whitespace-nowrap">Token</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium whitespace-nowrap">Type</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium whitespace-nowrap">Ref</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium whitespace-nowrap">Document</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium whitespace-nowrap">Signer</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium whitespace-nowrap">Phone</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium whitespace-nowrap">Via</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium whitespace-nowrap">Status</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium whitespace-nowrap">Created</th>
-                <th className="text-left px-4 py-3 text-slate-400 font-medium whitespace-nowrap">Signed At</th>
-                <th className="text-right px-4 py-3 text-slate-400 font-medium whitespace-nowrap">Actions</th>
+              <tr className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/50">
+                <th className="text-left px-4 py-3 text-[var(--text-muted)] font-medium whitespace-nowrap">Token</th>
+                <th className="text-left px-4 py-3 text-[var(--text-muted)] font-medium whitespace-nowrap">Type</th>
+                <th className="text-left px-4 py-3 text-[var(--text-muted)] font-medium whitespace-nowrap">Ref</th>
+                <th className="text-left px-4 py-3 text-[var(--text-muted)] font-medium whitespace-nowrap">Document</th>
+                <th className="text-left px-4 py-3 text-[var(--text-muted)] font-medium whitespace-nowrap">Signer</th>
+                <th className="text-left px-4 py-3 text-[var(--text-muted)] font-medium whitespace-nowrap">Phone</th>
+                <th className="text-left px-4 py-3 text-[var(--text-muted)] font-medium whitespace-nowrap">Via</th>
+                <th className="text-left px-4 py-3 text-[var(--text-muted)] font-medium whitespace-nowrap">Status</th>
+                <th className="text-left px-4 py-3 text-[var(--text-muted)] font-medium whitespace-nowrap">Created</th>
+                <th className="text-left px-4 py-3 text-[var(--text-muted)] font-medium whitespace-nowrap">Signed At</th>
+                <th className="text-right px-4 py-3 text-[var(--text-muted)] font-medium whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -303,8 +303,8 @@ export default function ESignConsolePage() {
                 <tr>
                   <td colSpan={11} className="text-center py-16">
                     <div className="flex flex-col items-center gap-3">
-                      <div className="w-8 h-8 border-2 border-slate-600 border-t-blue-400 rounded-full animate-spin" />
-                      <p className="text-slate-400 text-sm">Loading signing requests...</p>
+                      <div className="w-8 h-8 border-2 border-[var(--border-strong)] border-t-blue-400 rounded-full animate-spin" />
+                      <p className="text-[var(--text-muted)] text-sm">Loading signing requests...</p>
                     </div>
                   </td>
                 </tr>
@@ -313,8 +313,8 @@ export default function ESignConsolePage() {
                   <td colSpan={11} className="text-center py-16">
                     <div className="flex flex-col items-center gap-3">
                       <span className="text-4xl">✍️</span>
-                      <p className="text-slate-400 text-sm">No signing requests found</p>
-                      <p className="text-slate-500 text-xs">Signing requests created from Leasing or RAC contracts will appear here.</p>
+                      <p className="text-[var(--text-muted)] text-sm">No signing requests found</p>
+                      <p className="text-[var(--text-faint)] text-xs">Signing requests created from Leasing or RAC contracts will appear here.</p>
                     </div>
                   </td>
                 </tr>
@@ -322,11 +322,11 @@ export default function ESignConsolePage() {
                 data.map((row) => (
                   <tr
                     key={row.id}
-                    className="border-b border-white/5 hover:bg-white/3 transition-colors"
+                    className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors"
                   >
                     {/* Token (first 8 chars) */}
                     <td className="px-4 py-3">
-                      <code className="text-xs text-slate-300 bg-slate-700/60 px-2 py-0.5 rounded font-mono">
+                      <code className="text-xs text-[var(--text-muted)] bg-[var(--bg-surface-hover)]/60 px-2 py-0.5 rounded font-mono">
                         {row.signing_token.slice(0, 8)}…
                       </code>
                     </td>
@@ -338,22 +338,22 @@ export default function ESignConsolePage() {
 
                     {/* Contract ref */}
                     <td className="px-4 py-3">
-                      <span className="text-white font-medium text-xs">{row.contract_ref}</span>
+                      <span className="text-[var(--text-main)] font-medium text-xs">{row.contract_ref}</span>
                     </td>
 
                     {/* Document title */}
                     <td className="px-4 py-3 max-w-[180px]">
-                      <span className="text-slate-300 text-xs line-clamp-2">{row.document_title}</span>
+                      <span className="text-[var(--text-muted)] text-xs line-clamp-2">{row.document_title}</span>
                     </td>
 
                     {/* Signer name */}
                     <td className="px-4 py-3">
-                      <span className="text-white text-xs font-medium">{row.signer_name}</span>
+                      <span className="text-[var(--text-main)] text-xs font-medium">{row.signer_name}</span>
                     </td>
 
                     {/* Phone */}
                     <td className="px-4 py-3">
-                      <span className="text-slate-300 text-xs">{row.signer_phone}</span>
+                      <span className="text-[var(--text-muted)] text-xs">{row.signer_phone}</span>
                     </td>
 
                     {/* Sent via */}
@@ -368,12 +368,12 @@ export default function ESignConsolePage() {
 
                     {/* Created */}
                     <td className="px-4 py-3">
-                      <span className="text-slate-400 text-xs whitespace-nowrap">{fmtDate(row.created_at)}</span>
+                      <span className="text-[var(--text-muted)] text-xs whitespace-nowrap">{fmtDate(row.created_at)}</span>
                     </td>
 
                     {/* Signed at */}
                     <td className="px-4 py-3">
-                      <span className={`text-xs whitespace-nowrap ${row.signed_at ? 'text-emerald-400' : 'text-slate-600'}`}>
+                      <span className={`text-xs whitespace-nowrap ${row.signed_at ? 'text-emerald-400' : 'text-[var(--text-faint)]'}`}>
                         {fmtDate(row.signed_at)}
                       </span>
                     </td>
@@ -385,7 +385,7 @@ export default function ESignConsolePage() {
                         <button
                           onClick={() => copySigningUrl(row.signing_token)}
                           title="Copy signing URL"
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white text-xs rounded-lg transition-colors"
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] text-xs rounded-lg transition-colors"
                         >
                           {copiedToken === row.signing_token ? (
                             <>
@@ -418,7 +418,7 @@ export default function ESignConsolePage() {
                                 </button>
                                 <button
                                   onClick={() => setCancelConfirm(null)}
-                                  className="px-2 py-1.5 bg-slate-600 hover:bg-slate-500 text-slate-300 text-xs rounded-lg transition-colors"
+                                  className="px-2 py-1.5 bg-[var(--bg-surface-hover)] hover:bg-slate-500 text-[var(--text-muted)] text-xs rounded-lg transition-colors"
                                 >
                                   No
                                 </button>
@@ -444,25 +444,25 @@ export default function ESignConsolePage() {
 
         {/* Pagination footer */}
         {!loading && pagination.total > 0 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-white/10">
-            <p className="text-slate-400 text-xs">
+          <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--border-subtle)]">
+            <p className="text-[var(--text-muted)] text-xs">
               Showing {data.length} of {pagination.total.toLocaleString()} requests
             </p>
             <div className="flex items-center gap-2">
               <button
                 disabled={pagination.page <= 1}
                 onClick={() => fetchData(pagination.page - 1)}
-                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] text-xs rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 ← Prev
               </button>
-              <span className="text-slate-400 text-xs">
+              <span className="text-[var(--text-muted)] text-xs">
                 Page {pagination.page} / {pagination.pages}
               </span>
               <button
                 disabled={pagination.page >= pagination.pages}
                 onClick={() => fetchData(pagination.page + 1)}
-                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-3 py-1.5 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] text-xs rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Next →
               </button>

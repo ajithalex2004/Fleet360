@@ -84,19 +84,19 @@ export function EditTenantModal({ tenant, onDone, onCancel }: Props) {
     }
   };
 
-  const inputCls = 'w-full px-3 py-2 rounded border border-white/10 bg-slate-900 text-white text-sm focus:outline-none focus:border-blue-500';
-  const labelCls = 'block text-xs font-medium text-slate-300 mb-1';
+  const inputCls = 'w-full px-3 py-2 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-main)] text-sm focus:outline-none focus:border-blue-500';
+  const labelCls = 'block text-xs font-medium text-[var(--text-muted)] mb-1';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="w-full max-w-2xl max-h-[90vh] bg-slate-900 border border-white/10 rounded-2xl flex flex-col shadow-2xl overflow-hidden">
+      <div className="w-full max-w-2xl max-h-[90vh] bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl flex flex-col shadow-2xl overflow-hidden">
 
-        <div className="px-6 py-4 border-b border-white/10 flex items-start justify-between flex-shrink-0">
+        <div className="px-6 py-4 border-b border-[var(--border-subtle)] flex items-start justify-between flex-shrink-0">
           <div>
-            <h2 className="text-lg font-bold text-white">Edit Tenant</h2>
-            <p className="text-slate-400 text-xs mt-0.5 font-mono">{tenant.id}</p>
+            <h2 className="text-lg font-bold text-[var(--text-main)]">Edit Tenant</h2>
+            <p className="text-[var(--text-muted)] text-xs mt-0.5 font-mono">{tenant.id}</p>
           </div>
-          <button onClick={onCancel} className="text-slate-400 hover:text-white text-xl leading-none">✕</button>
+          <button onClick={onCancel} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl leading-none">✕</button>
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-5">
@@ -166,17 +166,17 @@ export function EditTenantModal({ tenant, onDone, onCancel }: Props) {
             </label>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-slate-300">
+          <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
             <input type="checkbox" checked={form.isActive}
               onChange={e => set('isActive', e.target.checked)} />
             Active
-            <span className="text-xs text-slate-500 ml-2">(uncheck to soft-delete; can be hard-deleted later)</span>
+            <span className="text-xs text-[var(--text-faint)] ml-2">(uncheck to soft-delete; can be hard-deleted later)</span>
           </label>
         </div>
 
-        <div className="px-6 py-4 border-t border-white/10 flex justify-end gap-2 flex-shrink-0">
+        <div className="px-6 py-4 border-t border-[var(--border-subtle)] flex justify-end gap-2 flex-shrink-0">
           <button onClick={onCancel}
-            className="px-4 py-2 text-sm rounded border border-white/10 text-slate-300 hover:bg-white/5">
+            className="px-4 py-2 text-sm rounded border border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]">
             Cancel
           </button>
           <button onClick={save} disabled={saving}

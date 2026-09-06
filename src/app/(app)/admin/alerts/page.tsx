@@ -67,9 +67,9 @@ export default function PlatformAlertsPage() {
             <div className="rounded-xl bg-amber-500/15 p-2.5">
               <Bell className="h-5 w-5 text-amber-400" />
             </div>
-            <h1 className="text-2xl font-bold text-white">Platform Alert Engine</h1>
+            <h1 className="text-2xl font-bold text-[var(--text-main)]">Platform Alert Engine</h1>
           </div>
-          <p className="text-xs text-slate-500 ml-[52px]">
+          <p className="text-xs text-[var(--text-faint)] ml-[52px]">
             Unified alert configuration and action centre for all Fleet360 modules.
           </p>
         </div>
@@ -102,11 +102,11 @@ export default function PlatformAlertsPage() {
             >
               <div className="flex items-center justify-between">
                 <Icon className={`h-6 w-6 ${s.iconColor}`} />
-                <ArrowRight className="h-4 w-4 text-slate-600 transition-transform group-hover:translate-x-1" />
+                <ArrowRight className="h-4 w-4 text-[var(--text-faint)] transition-transform group-hover:translate-x-1" />
               </div>
               <div>
-                <p className="font-semibold text-white">{s.label}</p>
-                <p className="mt-1 text-xs text-slate-400">{s.description}</p>
+                <p className="font-semibold text-[var(--text-main)]">{s.label}</p>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">{s.description}</p>
               </div>
             </Link>
           );
@@ -115,20 +115,20 @@ export default function PlatformAlertsPage() {
 
       {/* Module sources */}
       <div>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-[var(--text-faint)]">
           Alert sources
         </h2>
-        <div className="rounded-xl border border-white/10 bg-slate-900 divide-y divide-white/5">
+        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] divide-y divide-white/5">
           {MODULE_SOURCES.map(src => {
             const Icon = src.icon;
             return (
               <div key={src.label} className="flex items-center gap-4 px-5 py-3.5">
-                <div className="rounded-lg bg-slate-800 p-2">
-                  <Icon className="h-4 w-4 text-slate-400" />
+                <div className="rounded-lg bg-[var(--bg-surface)] p-2">
+                  <Icon className="h-4 w-4 text-[var(--text-muted)]" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white">{src.label}</p>
-                  <p className="text-xs text-slate-500">{src.description}</p>
+                  <p className="text-sm font-medium text-[var(--text-main)]">{src.label}</p>
+                  <p className="text-xs text-[var(--text-faint)]">{src.description}</p>
                 </div>
                 <span className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-medium text-emerald-400">
                   Active

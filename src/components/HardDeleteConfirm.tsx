@@ -122,7 +122,7 @@ export function HardDeleteConfirm({ title, target, description, onDone, onCancel
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="w-full max-w-2xl max-h-[90vh] bg-slate-900 border border-rose-500/30 rounded-2xl flex flex-col shadow-2xl overflow-hidden">
+      <div className="w-full max-w-2xl max-h-[90vh] bg-[var(--bg-surface)] border border-rose-500/30 rounded-2xl flex flex-col shadow-2xl overflow-hidden">
 
         {/* Header */}
         <div className="px-6 py-4 border-b border-rose-500/20 bg-rose-950/30 flex items-start justify-between flex-shrink-0">
@@ -132,7 +132,7 @@ export function HardDeleteConfirm({ title, target, description, onDone, onCancel
             </h2>
             <p className="text-rose-200/80 text-xs mt-1">{description}</p>
           </div>
-          <button onClick={onCancel} className="text-slate-400 hover:text-white text-xl leading-none">✕</button>
+          <button onClick={onCancel} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl leading-none">✕</button>
         </div>
 
         {/* Body */}
@@ -144,36 +144,36 @@ export function HardDeleteConfirm({ title, target, description, onDone, onCancel
           )}
 
           {loading && (
-            <div className="text-slate-400 text-sm">Loading preview…</div>
+            <div className="text-[var(--text-muted)] text-sm">Loading preview…</div>
           )}
 
           {/* ── Preview step ── */}
           {step === 'preview' && preview && (
             <>
               <div>
-                <div className="text-xs uppercase tracking-wider text-slate-400 mb-1">Target</div>
-                <div className="text-white font-mono text-sm">
+                <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-1">Target</div>
+                <div className="text-[var(--text-main)] font-mono text-sm">
                   {target.kind === 'tenant' ? preview.tenant?.name : preview.user?.email}
                 </div>
               </div>
 
               {target.kind === 'tenant' && preview.tables && (
                 <div>
-                  <div className="text-xs uppercase tracking-wider text-slate-400 mb-2">
+                  <div className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-2">
                     Would delete from {preview.tables.length} table(s) — total {preview.totalRows ?? 0} row(s)
                   </div>
-                  <div className="max-h-64 overflow-y-auto rounded-lg border border-white/10 bg-slate-950/50">
+                  <div className="max-h-64 overflow-y-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)]/50">
                     <table className="w-full text-xs">
-                      <thead className="bg-slate-800 sticky top-0">
+                      <thead className="bg-[var(--bg-surface)] sticky top-0">
                         <tr>
-                          <th className="text-left px-3 py-2 text-slate-300 font-medium">Table</th>
-                          <th className="text-right px-3 py-2 text-slate-300 font-medium">Rows</th>
+                          <th className="text-left px-3 py-2 text-[var(--text-muted)] font-medium">Table</th>
+                          <th className="text-right px-3 py-2 text-[var(--text-muted)] font-medium">Rows</th>
                         </tr>
                       </thead>
                       <tbody>
                         {preview.tables.map(t => (
-                          <tr key={t.name} className="border-t border-white/5">
-                            <td className="px-3 py-1.5 text-slate-300 font-mono">{t.name}</td>
+                          <tr key={t.name} className="border-t border-[var(--border-subtle)]">
+                            <td className="px-3 py-1.5 text-[var(--text-muted)] font-mono">{t.name}</td>
                             <td className="px-3 py-1.5 text-right text-rose-300 font-medium">{t.rowCount}</td>
                           </tr>
                         ))}
@@ -184,9 +184,9 @@ export function HardDeleteConfirm({ title, target, description, onDone, onCancel
               )}
 
               {target.kind === 'user' && preview.counts && (
-                <div className="p-3 rounded-lg bg-slate-800/50 border border-white/10 text-sm">
+                <div className="p-3 rounded-lg bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] text-sm">
                   Would delete:
-                  <ul className="mt-2 space-y-1 ml-4 list-disc text-slate-300">
+                  <ul className="mt-2 space-y-1 ml-4 list-disc text-[var(--text-muted)]">
                     <li><span className="font-mono">{preview.user?.email}</span> (the User row)</li>
                     {preview.counts.memberships > 0 && (
                       <li><span className="text-rose-300 font-medium">{preview.counts.memberships}</span> UserTenant membership(s) across all tenants</li>
@@ -200,11 +200,11 @@ export function HardDeleteConfirm({ title, target, description, onDone, onCancel
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
-                  Type <code className="px-1 py-0.5 rounded bg-slate-800 text-rose-300">{target.confirmText}</code> to confirm
+                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">
+                  Type <code className="px-1 py-0.5 rounded bg-[var(--bg-surface)] text-rose-300">{target.confirmText}</code> to confirm
                 </label>
                 <input
-                  className="w-full px-3 py-2 rounded border border-white/10 bg-slate-900 text-white text-sm focus:outline-none focus:border-rose-500"
+                  className="w-full px-3 py-2 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-main)] text-sm focus:outline-none focus:border-rose-500"
                   value={typed}
                   onChange={e => setTyped(e.target.value)}
                   placeholder={target.confirmText}
@@ -237,18 +237,18 @@ export function HardDeleteConfirm({ title, target, description, onDone, onCancel
                   .
                 </div>
               )}
-              <div className="text-slate-500 text-xs mt-2">Audit log entry recorded.</div>
+              <div className="text-[var(--text-faint)] text-xs mt-2">Audit log entry recorded.</div>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-white/10 flex justify-end gap-2 flex-shrink-0">
+        <div className="px-6 py-4 border-t border-[var(--border-subtle)] flex justify-end gap-2 flex-shrink-0">
           {step === 'preview' && (
             <>
               <button
                 onClick={onCancel}
-                className="px-4 py-2 text-sm rounded border border-white/10 text-slate-300 hover:bg-white/5"
+                className="px-4 py-2 text-sm rounded border border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
               >
                 Cancel
               </button>

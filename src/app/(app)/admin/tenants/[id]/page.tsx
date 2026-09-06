@@ -190,7 +190,7 @@ const SERVICE_ICONS: Record<string, string> = {
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <button type="button" onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${checked ? 'bg-blue-600' : 'bg-slate-600'}`}>
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${checked ? 'bg-blue-600' : 'bg-[var(--bg-surface-hover)]'}`}>
       <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
     </button>
   );
@@ -200,14 +200,14 @@ function NumInput({ value, onChange, placeholder, min = 0 }: { value: number; on
   return (
     <input type="number" value={value} min={min} placeholder={placeholder}
       onChange={e => onChange(parseFloat(e.target.value) || 0)}
-      className="w-full px-3 py-2 rounded-lg bg-slate-700/60 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none text-sm" />
+      className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none text-sm" />
   );
 }
 
 function SelectInput({ value, onChange, options }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
   return (
     <select value={value} onChange={e => onChange(e.target.value)}
-      className="w-full px-3 py-2 rounded-lg bg-slate-700/60 border border-white/10 text-white focus:border-blue-500 focus:outline-none text-sm">
+      className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none text-sm">
       {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
   );
@@ -216,8 +216,8 @@ function SelectInput({ value, onChange, options }: { value: string; onChange: (v
 function ConfigField({ label, help, children }: { label: string; help?: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-xs font-medium text-slate-300 mb-1">{label}</div>
-      {help && <div className="text-[10px] text-slate-500 mt-0.5 leading-tight mb-1">{help}</div>}
+      <div className="text-xs font-medium text-[var(--text-muted)] mb-1">{label}</div>
+      {help && <div className="text-[10px] text-[var(--text-faint)] mt-0.5 leading-tight mb-1">{help}</div>}
       {children}
     </div>
   );
@@ -226,7 +226,7 @@ function ConfigField({ label, help, children }: { label: string; help?: string; 
 function SectionBlock({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="mt-5">
-      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">{title}</h4>
+      <h4 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-widest mb-3">{title}</h4>
       {children}
     </div>
   );
@@ -239,30 +239,30 @@ function FeatureCard({ icon, gradient, title, desc, enabled, onToggle, children,
 }) {
   if (locked) {
     return (
-      <div className="rounded-2xl border border-white/10 overflow-hidden opacity-60">
+      <div className="rounded-2xl border border-[var(--border-subtle)] overflow-hidden opacity-60">
         {/* Header — greyed, toggle replaced with lock */}
-        <div className="flex items-center gap-4 p-5 bg-slate-800/30">
+        <div className="flex items-center gap-4 p-5 bg-[var(--bg-surface)]/30">
           <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center text-xl flex-shrink-0 grayscale`}>{icon}</div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-slate-400">{title}</p>
-            <p className="text-xs text-slate-500 mt-0.5">{desc}</p>
+            <p className="text-sm font-semibold text-[var(--text-muted)]">{title}</p>
+            <p className="text-xs text-[var(--text-faint)] mt-0.5">{desc}</p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-slate-700/60 text-slate-500 border-slate-600">
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-[var(--bg-surface-hover)]/60 text-[var(--text-faint)] border-[var(--border-strong)]">
               LOCKED
             </span>
-            <div className="w-10 h-6 rounded-full bg-slate-700 flex items-center justify-center" title="Enable the required module to unlock">
-              <span className="text-slate-400 text-sm">🔒</span>
+            <div className="w-10 h-6 rounded-full bg-[var(--bg-surface-hover)] flex items-center justify-center" title="Enable the required module to unlock">
+              <span className="text-[var(--text-muted)] text-sm">🔒</span>
             </div>
           </div>
         </div>
 
         {/* Unlock banner */}
-        <div className="px-5 py-4 bg-slate-900/60 border-t border-white/5 flex items-start gap-3">
+        <div className="px-5 py-4 bg-[var(--bg-surface)]/60 border-t border-[var(--border-subtle)] flex items-start gap-3">
           <span className="text-amber-400 mt-0.5 flex-shrink-0">⚠</span>
           <div>
-            <p className="text-xs font-semibold text-slate-300">Module not assigned to this tenant</p>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs font-semibold text-[var(--text-muted)]">Module not assigned to this tenant</p>
+            <p className="text-xs text-[var(--text-faint)] mt-0.5">
               Enable one of the following modules in the{' '}
               <button
                 onClick={() => onUnlock?.()}
@@ -286,22 +286,22 @@ function FeatureCard({ icon, gradient, title, desc, enabled, onToggle, children,
   }
 
   return (
-    <div className={`rounded-2xl border overflow-hidden transition-all ${enabled ? 'border-blue-500/30' : 'border-white/10'}`}>
-      <div className={`flex items-center gap-4 p-5 ${enabled ? 'bg-slate-800/70' : 'bg-slate-800/40'}`}>
+    <div className={`rounded-2xl border overflow-hidden transition-all ${enabled ? 'border-blue-500/30' : 'border-[var(--border-subtle)]'}`}>
+      <div className={`flex items-center gap-4 p-5 ${enabled ? 'bg-[var(--bg-surface)]/70' : 'bg-[var(--bg-surface)]/40'}`}>
         <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center text-xl flex-shrink-0`}>{icon}</div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-white">{title}</p>
-          <p className="text-xs text-slate-400 mt-0.5">{desc}</p>
+          <p className="text-sm font-semibold text-[var(--text-main)]">{title}</p>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">{desc}</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${enabled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-slate-700 text-slate-500 border-transparent'}`}>
+          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${enabled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-[var(--bg-surface-hover)] text-[var(--text-faint)] border-transparent'}`}>
             {enabled ? 'ENABLED' : 'DISABLED'}
           </span>
           <Toggle checked={enabled} onChange={onToggle} />
         </div>
       </div>
       {enabled && children && (
-        <div className="px-5 pb-5 pt-1 bg-slate-900/40 border-t border-white/5">
+        <div className="px-5 pb-5 pt-1 bg-[var(--bg-surface)]/40 border-t border-[var(--border-subtle)]">
           {children}
         </div>
       )}
@@ -320,14 +320,14 @@ function WeightSlider({
   onChange: (v: number) => void;
 }) {
   const pct   = Math.round(value * 100);
-  const color = pct >= 50 ? 'text-red-400' : pct >= 30 ? 'text-amber-400' : pct >= 10 ? 'text-blue-400' : 'text-slate-400';
+  const color = pct >= 50 ? 'text-red-400' : pct >= 30 ? 'text-amber-400' : pct >= 10 ? 'text-blue-400' : 'text-[var(--text-muted)]';
 
   return (
     <div className="flex items-center gap-3 group">
       {/* Factor label */}
       <div className="w-32 flex-shrink-0">
-        <p className="text-xs font-medium text-slate-300 leading-tight">{FACTOR_LABELS[factor]}</p>
-        <p className="text-[10px] text-slate-600 leading-tight mt-0.5 hidden group-hover:block">{FACTOR_HELP[factor]}</p>
+        <p className="text-xs font-medium text-[var(--text-muted)] leading-tight">{FACTOR_LABELS[factor]}</p>
+        <p className="text-[10px] text-[var(--text-faint)] leading-tight mt-0.5 hidden group-hover:block">{FACTOR_HELP[factor]}</p>
       </div>
 
       {/* Slider */}
@@ -337,7 +337,7 @@ function WeightSlider({
           min={0} max={1} step={0.05}
           value={value}
           onChange={e => onChange(parseFloat(e.target.value))}
-          className="w-full h-2 rounded-full appearance-none cursor-pointer bg-slate-700 accent-blue-500"
+          className="w-full h-2 rounded-full appearance-none cursor-pointer bg-[var(--bg-surface-hover)] accent-blue-500"
           style={{
             background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${pct}%, #334155 ${pct}%, #334155 100%)`,
           }}
@@ -358,7 +358,7 @@ function WeightSlider({
           const v = Math.min(1, Math.max(0, parseFloat(e.target.value) || 0));
           onChange(parseFloat(v.toFixed(2)));
         }}
-        className="w-16 px-2 py-1 rounded-lg bg-slate-700/60 border border-white/10 text-white text-xs focus:border-blue-500 focus:outline-none font-mono"
+        className="w-16 px-2 py-1 rounded-lg bg-[var(--bg-surface-hover)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] text-xs focus:border-blue-500 focus:outline-none font-mono"
       />
     </div>
   );
@@ -569,18 +569,18 @@ function DispatchWeightPanel({
 
   return (
     <SectionBlock title="Scoring Weight Configuration">
-      <div className="rounded-2xl border border-white/10 bg-slate-900/60 overflow-hidden">
+      <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 overflow-hidden">
         {/* Info bar */}
-        <div className="px-4 py-3 bg-slate-800/60 border-b border-white/5 flex items-center gap-2">
+        <div className="px-4 py-3 bg-[var(--bg-surface)]/60 border-b border-[var(--border-subtle)] flex items-center gap-2">
           <span className="text-blue-400 text-sm">ℹ</span>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-[var(--text-muted)]">
             Weights control how the dispatch engine ranks candidate drivers. Higher weight = stronger influence on score.
-            All weights for a priority profile <strong className="text-slate-300">must sum to 1.00</strong>.
+            All weights for a priority profile <strong className="text-[var(--text-muted)]">must sum to 1.00</strong>.
           </p>
         </div>
 
         {/* Service type tabs */}
-        <div className="flex border-b border-white/10 overflow-x-auto">
+        <div className="flex border-b border-[var(--border-subtle)] overflow-x-auto">
           {services.map(svc => (
             <button
               key={svc}
@@ -588,7 +588,7 @@ function DispatchWeightPanel({
               className={`flex items-center gap-2 px-5 py-3 text-sm font-medium whitespace-nowrap border-b-2 -mb-px transition-all ${
                 activeSvc === svc
                   ? 'text-white border-blue-500 bg-blue-500/5'
-                  : 'text-slate-400 border-transparent hover:text-slate-300 hover:bg-white/[0.02]'
+                  : 'text-[var(--text-muted)] border-transparent hover:text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]'
               }`}
             >
               <span>{SERVICE_ICONS[svc]}</span>
@@ -606,7 +606,7 @@ function DispatchWeightPanel({
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                 activePri === pri
                   ? `bg-gradient-to-r ${PRIORITY_COLORS[pri] ?? 'from-slate-600 to-slate-500'} text-white shadow`
-                  : 'bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-white'
+                  : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]'
               }`}
             >
               {pri === 'P1' && '🚨'} {pri === 'P2' && '⚡'} {pri}
@@ -618,14 +618,14 @@ function DispatchWeightPanel({
           {/* Quick action buttons */}
           <button
             onClick={normaliseWeights}
-            className="px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-700 hover:bg-slate-600 text-slate-300 transition-all"
+            className="px-3 py-1.5 rounded-xl text-xs font-medium bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] transition-all"
             title="Scale all weights so they sum to exactly 1.00"
           >
             ⟳ Normalise
           </button>
           <button
             onClick={resetToDefault}
-            className="px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-700 hover:bg-slate-600 text-slate-300 transition-all"
+            className="px-3 py-1.5 rounded-xl text-xs font-medium bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] transition-all"
             title="Reset to platform default weights for this service × priority"
           >
             ↩ Reset Default
@@ -662,17 +662,17 @@ function DispatchWeightPanel({
           </div>
 
           {/* Comparison with platform default */}
-          <div className="rounded-xl bg-slate-800/60 border border-white/5 px-3 py-2">
-            <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mb-2">Platform Defaults — {activeSvc} / {activePri}</p>
+          <div className="rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] px-3 py-2">
+            <p className="text-[10px] text-[var(--text-faint)] font-semibold uppercase tracking-wider mb-2">Platform Defaults — {activeSvc} / {activePri}</p>
             <div className="flex flex-wrap gap-2">
               {factors.map(f => {
                 const def = DEFAULT_DISPATCH_WEIGHTS[activeSvc]?.[activePri]?.[f] ?? 0;
                 const cur = profile[f] ?? 0;
                 const delta = parseFloat((cur - def).toFixed(2));
                 return (
-                  <span key={f} className="text-[10px] font-mono bg-slate-700 px-2 py-0.5 rounded">
-                    <span className="text-slate-400">{FACTOR_LABELS[f]}: </span>
-                    <span className="text-slate-200">{def.toFixed(2)}</span>
+                  <span key={f} className="text-[10px] font-mono bg-[var(--bg-surface-hover)] px-2 py-0.5 rounded">
+                    <span className="text-[var(--text-muted)]">{FACTOR_LABELS[f]}: </span>
+                    <span className="text-[var(--text-main)]">{def.toFixed(2)}</span>
                     {delta !== 0 && (
                       <span className={delta > 0 ? 'text-blue-400' : 'text-orange-400'}>
                         {' '}({delta > 0 ? '+' : ''}{delta.toFixed(2)})
@@ -685,20 +685,20 @@ function DispatchWeightPanel({
           </div>
 
           {/* ── Dispatch Behaviour Controls ── */}
-          <div className="rounded-xl border border-white/10 bg-slate-800/50 overflow-hidden">
-            <div className="px-3 py-2 bg-slate-800/80 border-b border-white/5 flex items-center gap-2">
+          <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 overflow-hidden">
+            <div className="px-3 py-2 bg-[var(--bg-surface)]/80 border-b border-[var(--border-subtle)] flex items-center gap-2">
               <span className="text-amber-400 text-xs">⚙</span>
-              <p className="text-xs font-semibold text-slate-300">Dispatch Behaviour — {activeSvc} / {activePri}</p>
-              <span className="ml-auto text-[10px] text-slate-500">Saved independently per service × priority</span>
+              <p className="text-xs font-semibold text-[var(--text-muted)]">Dispatch Behaviour — {activeSvc} / {activePri}</p>
+              <span className="ml-auto text-[10px] text-[var(--text-faint)]">Saved independently per service × priority</span>
             </div>
 
             <div className="px-3 py-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
 
               {/* Driver Response Timeout */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide flex items-center gap-1">
+                <label className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wide flex items-center gap-1">
                   ⏱ Response Timeout
-                  <span className="font-normal normal-case text-slate-500">(minutes)</span>
+                  <span className="font-normal normal-case text-[var(--text-faint)]">(minutes)</span>
                 </label>
                 <div className="flex items-center gap-2">
                   <input
@@ -713,10 +713,10 @@ function DispatchWeightPanel({
                     min={1} max={30} step={1}
                     value={currentOp.driverResponseTimeoutMin}
                     onChange={e => updateOp('driverResponseTimeoutMin', Math.min(30, Math.max(1, parseInt(e.target.value) || 1)))}
-                    className="w-14 px-2 py-1 rounded-lg bg-slate-700/60 border border-white/10 text-white text-xs text-center font-mono focus:border-amber-500 focus:outline-none"
+                    className="w-14 px-2 py-1 rounded-lg bg-[var(--bg-surface-hover)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] text-xs text-center font-mono focus:border-amber-500 focus:outline-none"
                   />
                 </div>
-                <p className="text-[10px] text-slate-500">
+                <p className="text-[10px] text-[var(--text-faint)]">
                   {activeSvc === 'AMBULANCE' && activePri === 'P1' && '🚨 P1: recommend 1–2 min'}
                   {activeSvc === 'AMBULANCE' && activePri === 'P2' && '⚡ P2: recommend 2–3 min'}
                   {activeSvc === 'AMBULANCE' && activePri === 'P3' && '🟡 P3: recommend 5 min'}
@@ -726,9 +726,9 @@ function DispatchWeightPanel({
 
               {/* Max Attempts */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide flex items-center gap-1">
+                <label className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wide flex items-center gap-1">
                   🔄 Max Attempts
-                  <span className="font-normal normal-case text-slate-500">(drivers tried)</span>
+                  <span className="font-normal normal-case text-[var(--text-faint)]">(drivers tried)</span>
                 </label>
                 <div className="flex items-center gap-2">
                   <input
@@ -743,17 +743,17 @@ function DispatchWeightPanel({
                     min={1} max={10} step={1}
                     value={currentOp.maxAttempts}
                     onChange={e => updateOp('maxAttempts', Math.min(10, Math.max(1, parseInt(e.target.value) || 1)))}
-                    className="w-14 px-2 py-1 rounded-lg bg-slate-700/60 border border-white/10 text-white text-xs text-center font-mono focus:border-blue-500 focus:outline-none"
+                    className="w-14 px-2 py-1 rounded-lg bg-[var(--bg-surface-hover)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] text-xs text-center font-mono focus:border-blue-500 focus:outline-none"
                   />
                 </div>
-                <p className="text-[10px] text-slate-500">After this many rejections → job escalated</p>
+                <p className="text-[10px] text-[var(--text-faint)]">After this many rejections → job escalated</p>
               </div>
 
               {/* Dispatch Radius */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide flex items-center gap-1">
+                <label className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wide flex items-center gap-1">
                   📍 Dispatch Radius
-                  <span className="font-normal normal-case text-slate-500">(km)</span>
+                  <span className="font-normal normal-case text-[var(--text-faint)]">(km)</span>
                 </label>
                 <div className="flex items-center gap-2">
                   <input
@@ -768,10 +768,10 @@ function DispatchWeightPanel({
                     min={1} max={100} step={1}
                     value={currentOp.dispatchRadiusKm}
                     onChange={e => updateOp('dispatchRadiusKm', Math.min(100, Math.max(1, parseInt(e.target.value) || 1)))}
-                    className="w-14 px-2 py-1 rounded-lg bg-slate-700/60 border border-white/10 text-white text-xs text-center font-mono focus:border-emerald-500 focus:outline-none"
+                    className="w-14 px-2 py-1 rounded-lg bg-[var(--bg-surface-hover)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] text-xs text-center font-mono focus:border-emerald-500 focus:outline-none"
                   />
                 </div>
-                <p className="text-[10px] text-slate-500">Drivers beyond this radius are excluded</p>
+                <p className="text-[10px] text-[var(--text-faint)]">Drivers beyond this radius are excluded</p>
               </div>
             </div>
 
@@ -789,13 +789,13 @@ function DispatchWeightPanel({
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
                     currentOp[field as keyof OpConfig]
                       ? 'bg-blue-500/15 border-blue-500/40 text-blue-300'
-                      : 'bg-slate-700/40 border-white/5 text-slate-500 hover:text-slate-400'
+                      : 'bg-[var(--bg-surface-hover)]/40 border-[var(--border-subtle)] text-[var(--text-faint)] hover:text-[var(--text-muted)]'
                   }`}
                 >
                   <span className={`w-3 h-3 rounded-full border flex-shrink-0 ${
                     currentOp[field as keyof OpConfig]
                       ? 'bg-blue-500 border-blue-400'
-                      : 'bg-slate-600 border-slate-500'
+                      : 'bg-[var(--bg-surface-hover)] border-slate-500'
                   }`} />
                   {label}
                 </button>
@@ -807,7 +807,7 @@ function DispatchWeightPanel({
           <div className="flex items-center gap-3 pt-1">
             {error  && <span className="text-rose-400 text-xs flex-1">{error}</span>}
             {saved  && <span className="text-emerald-400 text-xs flex-1">✓ Weights saved for {activeSvc} / {activePri}</span>}
-            {!error && !saved && <span className="text-slate-600 text-xs flex-1">Save applies to {activeSvc} {activePri} for this tenant only.</span>}
+            {!error && !saved && <span className="text-[var(--text-faint)] text-xs flex-1">Save applies to {activeSvc} {activePri} for this tenant only.</span>}
 
             <button
               onClick={saveWeights}
@@ -822,8 +822,8 @@ function DispatchWeightPanel({
         </div>
 
         {/* Batch save tip */}
-        <div className="px-4 py-3 bg-slate-800/40 border-t border-white/5">
-          <p className="text-[10px] text-slate-500">
+        <div className="px-4 py-3 bg-[var(--bg-surface)]/40 border-t border-[var(--border-subtle)]">
+          <p className="text-[10px] text-[var(--text-faint)]">
             💡 Each service × priority profile is saved independently. Switch tabs to configure other profiles. Unsaved profiles use platform defaults automatically.
           </p>
         </div>
@@ -1056,7 +1056,7 @@ export default function TenantDetailPage() {
     }
   };
 
-  if (loading) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading...</div></div>;
+  if (loading) return <div className="flex items-center justify-center h-full"><div className="text-[var(--text-muted)] animate-pulse">Loading...</div></div>;
   if (!tenant) return <div className="text-rose-400 p-8">Tenant not found</div>;
 
   return (
@@ -1064,17 +1064,17 @@ export default function TenantDetailPage() {
       {/* Tenant header */}
       <div>
         <div className="flex items-center gap-3 mb-1">
-          <h1 className="text-2xl font-bold text-white">{tenant.name}</h1>
-          {tenant.code && <span className="text-sm font-mono bg-slate-700 text-slate-300 px-2 py-1 rounded">{tenant.code}</span>}
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">{tenant.name}</h1>
+          {tenant.code && <span className="text-sm font-mono bg-[var(--bg-surface-hover)] text-[var(--text-muted)] px-2 py-1 rounded">{tenant.code}</span>}
           <span className={`px-2 py-1 rounded text-xs font-medium ${tenant.isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'}`}>
             {tenant.isActive ? 'ACTIVE' : 'INACTIVE'}
           </span>
         </div>
-        <p className="text-slate-400">{tenant.plan} plan {tenant.industry ? ` - ${tenant.industry}` : ''}</p>
+        <p className="text-[var(--text-muted)]">{tenant.plan} plan {tenant.industry ? ` - ${tenant.industry}` : ''}</p>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-white/10 overflow-x-auto">
+      <div className="flex gap-2 border-b border-[var(--border-subtle)] overflow-x-auto">
         {([
           ['modules',      'Module Access'],
           ['features',     '⚡ Feature Flags'],
@@ -1084,7 +1084,7 @@ export default function TenantDetailPage() {
           ['branches',     `Branches (${branches.length})`],
         ] as [typeof tab, string][]).map(([t, l]) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-5 py-2.5 text-sm font-medium transition-all border-b-2 -mb-px whitespace-nowrap ${tab === t ? 'text-white border-blue-500' : 'text-slate-400 border-transparent hover:text-slate-300'}`}>
+            className={`px-5 py-2.5 text-sm font-medium transition-all border-b-2 -mb-px whitespace-nowrap ${tab === t ? 'text-[var(--text-main)] border-blue-500' : 'text-[var(--text-muted)] border-transparent hover:text-[var(--text-muted)]'}`}>
             {l}
           </button>
         ))}
@@ -1093,16 +1093,16 @@ export default function TenantDetailPage() {
       {/* ── MODULE ACCESS ── */}
       {tab === 'modules' && (
         <div className="space-y-6">
-          <p className="text-slate-400 text-sm">Control which modules this tenant can access. Disabled modules will be hidden from their navigation.</p>
+          <p className="text-[var(--text-muted)] text-sm">Control which modules this tenant can access. Disabled modules will be hidden from their navigation.</p>
           <div className="grid grid-cols-3 gap-3">
             {ALL_MODULES.map(m => (
-              <label key={m} className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${enabledModules.includes(m) ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-white/10 bg-slate-800/50 hover:border-white/20'}`}>
+              <label key={m} className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${enabledModules.includes(m) ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 hover:border-[var(--border-strong)]'}`}>
                 <input type="checkbox" checked={enabledModules.includes(m)}
                   onChange={() => setEnabledModules(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m])}
                   className="w-4 h-4 accent-emerald-500"/>
                 <div>
-                  <div className="text-sm font-medium text-white">{MODULE_LABELS[m]}</div>
-                  <div className={`text-xs mt-0.5 ${enabledModules.includes(m) ? 'text-emerald-400' : 'text-slate-500'}`}>{enabledModules.includes(m) ? 'Enabled' : 'Disabled'}</div>
+                  <div className="text-sm font-medium text-[var(--text-main)]">{MODULE_LABELS[m]}</div>
+                  <div className={`text-xs mt-0.5 ${enabledModules.includes(m) ? 'text-emerald-400' : 'text-[var(--text-faint)]'}`}>{enabledModules.includes(m) ? 'Enabled' : 'Disabled'}</div>
                 </div>
               </label>
             ))}
@@ -1120,9 +1120,9 @@ export default function TenantDetailPage() {
           {/* Header row */}
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-xl font-bold text-white">Feature Flags</h2>
-              <p className="text-slate-400 text-sm mt-1">
-                Enable advanced operational features and configure their parameters for <strong className="text-white">{tenant.name}</strong>.
+              <h2 className="text-xl font-bold text-[var(--text-main)]">Feature Flags</h2>
+              <p className="text-[var(--text-muted)] text-sm mt-1">
+                Enable advanced operational features and configure their parameters for <strong className="text-[var(--text-main)]">{tenant.name}</strong>.
                 All changes are tenant-specific and do not affect other clients.
               </p>
             </div>
@@ -1163,11 +1163,11 @@ export default function TenantDetailPage() {
             </SectionBlock>
 
             <SectionBlock title="Dropoff Matching">
-              <div className="flex items-center gap-3 mb-4 p-3 rounded-xl bg-slate-800/60 border border-white/5">
+              <div className="flex items-center gap-3 mb-4 p-3 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]">
                 <Toggle checked={ts.requireDropoffMatch} onChange={v => set('requireDropoffMatch', v)} />
                 <div>
-                  <p className="text-sm font-medium text-white">Require Dropoff Match</p>
-                  <p className="text-xs text-slate-500">If enabled, trips must have matching dropoffs to merge</p>
+                  <p className="text-sm font-medium text-[var(--text-main)]">Require Dropoff Match</p>
+                  <p className="text-xs text-[var(--text-faint)]">If enabled, trips must have matching dropoffs to merge</p>
                 </div>
               </div>
               {ts.requireDropoffMatch && (
@@ -1251,11 +1251,11 @@ export default function TenantDetailPage() {
                   <NumInput value={ts.dispatchRadius} onChange={v => set('dispatchRadius', v)} placeholder="10" min={1} />
                 </ConfigField>
               </div>
-              <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-800/60 border border-white/5">
+              <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]">
                 <Toggle checked={ts.preferNearestDriver} onChange={v => set('preferNearestDriver', v)} />
                 <div>
-                  <p className="text-sm font-medium text-white">Prefer Nearest Driver</p>
-                  <p className="text-xs text-slate-500">Boost the distance weight for same-zone drivers automatically</p>
+                  <p className="text-sm font-medium text-[var(--text-main)]">Prefer Nearest Driver</p>
+                  <p className="text-xs text-[var(--text-faint)]">Boost the distance weight for same-zone drivers automatically</p>
                 </div>
               </div>
             </SectionBlock>
@@ -1298,7 +1298,7 @@ export default function TenantDetailPage() {
                 <ConfigField label="Google Maps API Key" help="Your Google Maps Platform key with Routes & Distance Matrix enabled">
                   <PasswordInput value={ts.googleMapsApiKey ?? ''} onChange={e => set('googleMapsApiKey', e.target.value)}
                     placeholder="AIza..."
-                    className="w-full px-3 py-2 rounded-lg bg-slate-700/60 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none text-sm font-mono" />
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)]/60 border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none text-sm font-mono" />
                 </ConfigField>
               </SectionBlock>
             )}
@@ -1322,8 +1322,8 @@ export default function TenantDetailPage() {
                 <div className="flex items-start gap-3 pt-5">
                   <Toggle checked={ts.fallbackToStraightLine} onChange={v => set('fallbackToStraightLine', v)} />
                   <div>
-                    <p className="text-sm font-medium text-white">Fallback to Straight Line</p>
-                    <p className="text-xs text-slate-500">Use straight-line distance calculation if routing engine fails or API limit is reached</p>
+                    <p className="text-sm font-medium text-[var(--text-main)]">Fallback to Straight Line</p>
+                    <p className="text-xs text-[var(--text-faint)]">Use straight-line distance calculation if routing engine fails or API limit is reached</p>
                   </div>
                 </div>
               </div>
@@ -1331,8 +1331,8 @@ export default function TenantDetailPage() {
           </FeatureCard>
 
           {/* Footer save */}
-          <div className="flex items-center justify-between pt-2 border-t border-white/10">
-            <p className="text-xs text-slate-600">
+          <div className="flex items-center justify-between pt-2 border-t border-[var(--border-subtle)]">
+            <p className="text-xs text-[var(--text-faint)]">
               Dispatch weight profiles are saved per service × priority and apply immediately to new dispatch jobs.
             </p>
             <div className="flex items-center gap-3">
@@ -1351,46 +1351,46 @@ export default function TenantDetailPage() {
       {tab === 'admin-access' && (
         <div className="space-y-6 max-w-2xl">
           <div>
-            <h3 className="text-white font-semibold text-lg">Tenant Admin — Admin Panel Access</h3>
-            <p className="text-slate-400 text-sm mt-1">
+            <h3 className="text-[var(--text-main)] font-semibold text-lg">Tenant Admin — Admin Panel Access</h3>
+            <p className="text-[var(--text-muted)] text-sm mt-1">
               Control which Admin Panel sections the Tenant Admin of this organisation can see.
               <br/>
-              <span className="text-slate-500">Overview, Users, and Roles are always visible. Toggle optional sections below.</span>
+              <span className="text-[var(--text-faint)]">Overview, Users, and Roles are always visible. Toggle optional sections below.</span>
             </p>
           </div>
 
           {/* Always-on items (read-only display) */}
-          <div className="bg-slate-800/40 border border-white/10 rounded-xl p-4 space-y-3">
-            <p className="text-xs text-slate-500 font-semibold uppercase tracking-wide">Always Enabled</p>
+          <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-xl p-4 space-y-3">
+            <p className="text-xs text-[var(--text-faint)] font-semibold uppercase tracking-wide">Always Enabled</p>
             {['Overview', 'Users', 'Roles & Permissions'].map(label => (
               <div key={label} className="flex items-center gap-3">
                 <div className="w-4 h-4 rounded bg-emerald-500/30 border border-emerald-500/50 flex items-center justify-center">
                   <svg className="w-2.5 h-2.5 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 00-1.414 0L8 12.586 4.707 9.293a1 1 0 00-1.414 1.414l4 4a1 1 0 001.414 0l8-8a1 1 0 000-1.414z" clipRule="evenodd"/></svg>
                 </div>
-                <span className="text-slate-300 text-sm">{label}</span>
+                <span className="text-[var(--text-muted)] text-sm">{label}</span>
                 <span className="ml-auto text-xs text-emerald-500 font-medium">Always On</span>
               </div>
             ))}
           </div>
 
           {/* Toggleable items */}
-          <div className="bg-slate-900 border border-white/10 rounded-xl divide-y divide-white/5">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl divide-y divide-white/5">
             <div className="px-5 py-3">
-              <p className="text-xs text-slate-500 font-semibold uppercase tracking-wide">Optional — Enable for this tenant</p>
+              <p className="text-xs text-[var(--text-faint)] font-semibold uppercase tracking-wide">Optional — Enable for this tenant</p>
             </div>
             {TOGGLEABLE_NAV.map(item => (
               <div key={item.key} className="flex items-center gap-4 px-5 py-4">
                 <button
                   onClick={() => setNavPerms(p => ({ ...p, [item.key]: !p[item.key] }))}
-                  className={`relative inline-flex w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 focus:outline-none ${navPerms[item.key] ? 'bg-blue-600' : 'bg-slate-700'}`}
+                  className={`relative inline-flex w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 focus:outline-none ${navPerms[item.key] ? 'bg-blue-600' : 'bg-[var(--bg-surface-hover)]'}`}
                 >
                   <span className={`absolute left-0.5 top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${navPerms[item.key] ? 'translate-x-5' : 'translate-x-0'}`}/>
                 </button>
                 <div className="flex-1 min-w-0">
-                  <p className="text-white text-sm font-medium">{item.label}</p>
-                  <p className="text-slate-500 text-xs">{item.desc}</p>
+                  <p className="text-[var(--text-main)] text-sm font-medium">{item.label}</p>
+                  <p className="text-[var(--text-faint)] text-xs">{item.desc}</p>
                 </div>
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${navPerms[item.key] ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-500'}`}>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${navPerms[item.key] ? 'bg-blue-500/20 text-blue-400' : 'bg-[var(--bg-surface)] text-[var(--text-faint)]'}`}>
                   {navPerms[item.key] ? 'Enabled' : 'Hidden'}
                 </span>
               </div>
@@ -1398,14 +1398,14 @@ export default function TenantDetailPage() {
           </div>
 
           {/* Super Admin only — informational */}
-          <div className="bg-slate-800/40 border border-white/10 rounded-xl p-4 space-y-3">
-            <p className="text-xs text-slate-500 font-semibold uppercase tracking-wide">Super Admin Only — Never Visible to Tenant Admin</p>
+          <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-xl p-4 space-y-3">
+            <p className="text-xs text-[var(--text-faint)] font-semibold uppercase tracking-wide">Super Admin Only — Never Visible to Tenant Admin</p>
             {['Tenants', 'Platform Info', 'Notifications', 'Integrations & ERP', 'Platform Settings'].map(label => (
               <div key={label} className="flex items-center gap-3">
                 <div className="w-4 h-4 rounded bg-red-500/20 border border-red-500/30 flex items-center justify-center">
                   <svg className="w-2.5 h-2.5 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/></svg>
                 </div>
-                <span className="text-slate-400 text-sm">{label}</span>
+                <span className="text-[var(--text-muted)] text-sm">{label}</span>
                 <span className="ml-auto text-xs text-red-500 font-medium">Platform Only</span>
               </div>
             ))}
@@ -1439,30 +1439,30 @@ export default function TenantDetailPage() {
       {tab === 'users' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <p className="text-slate-400 text-sm">Users assigned to this tenant with their roles</p>
+            <p className="text-[var(--text-muted)] text-sm">Users assigned to this tenant with their roles</p>
             <button onClick={openAddUser} className="px-4 py-2 rounded-lg bg-violet-500/20 text-violet-400 border border-violet-500/30 text-sm hover:bg-violet-500/30">+ Add User</button>
           </div>
           {users.length === 0 ? (
-            <div className="text-center text-slate-400 py-12 bg-slate-800/30 border border-white/5 rounded-xl">No users assigned. Add users above.</div>
+            <div className="text-center text-[var(--text-muted)] py-12 bg-[var(--bg-surface)]/30 border border-[var(--border-subtle)] rounded-xl">No users assigned. Add users above.</div>
           ) : (
-            <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-hidden">
+            <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
               <table className="w-full">
-                <thead><tr className="border-b border-white/5">
+                <thead><tr className="border-b border-[var(--border-subtle)]">
                   {['Name','Username','Email','Role','Status','Actions'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-400">{h}</th>
+                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">{h}</th>
                   ))}
                 </tr></thead>
                 <tbody>
                   {users.map(u => (
-                    <tr key={u.id ?? u.userId} className="border-b border-white/5 hover:bg-white/5">
-                      <td className="px-4 py-3 text-sm font-medium text-white">{u.firstName ?? ''} {u.lastName ?? ''}</td>
-                      <td className="px-4 py-3 text-sm text-white font-mono">{u.username}</td>
-                      <td className="px-4 py-3 text-sm text-white">{u.email}</td>
+                    <tr key={u.id ?? u.userId} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]">
+                      <td className="px-4 py-3 text-sm font-medium text-[var(--text-main)]">{u.firstName ?? ''} {u.lastName ?? ''}</td>
+                      <td className="px-4 py-3 text-sm text-[var(--text-main)] font-mono">{u.username}</td>
+                      <td className="px-4 py-3 text-sm text-[var(--text-main)]">{u.email}</td>
                       <td className="px-4 py-3">
                         <span className="px-2 py-0.5 rounded text-xs font-medium bg-violet-500/20 text-violet-400 border border-violet-500/30">{u.roleCode ?? u.roleName}</span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`text-xs ${u.isActive !== false ? 'text-emerald-400' : 'text-slate-300'}`}>{u.isActive !== false ? 'Active' : 'Inactive'}</span>
+                        <span className={`text-xs ${u.isActive !== false ? 'text-emerald-400' : 'text-[var(--text-muted)]'}`}>{u.isActive !== false ? 'Active' : 'Inactive'}</span>
                       </td>
                       <td className="px-4 py-3">
                         <button onClick={() => removeUser(u.id ?? u.userId)} className="text-xs px-2 py-1 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30 hover:bg-rose-500/30">Remove</button>
@@ -1475,31 +1475,31 @@ export default function TenantDetailPage() {
           )}
           {showAddUser && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-              <div className="w-full max-w-md bg-slate-800/95 border border-white/10 rounded-2xl p-8">
+              <div className="w-full max-w-md bg-[var(--bg-surface)]/95 border border-[var(--border-subtle)] rounded-2xl p-8">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-xl font-bold text-white">Add User to Tenant</h3>
-                  <button onClick={() => setShowAddUser(false)} className="text-slate-400 hover:text-white">✕</button>
+                  <h3 className="text-xl font-bold text-[var(--text-main)]">Add User to Tenant</h3>
+                  <button onClick={() => setShowAddUser(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">✕</button>
                 </div>
                 <form onSubmit={addUser} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">User *</label>
+                    <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">User *</label>
                     <select value={newUser.userId} onChange={e => setNewUser(p => ({ ...p, userId: e.target.value }))} required
                       disabled={allUsersLoading}
-                      className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:outline-none disabled:opacity-50">
+                      className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none disabled:opacity-50">
                       <option value="">{allUsersLoading ? 'Loading users…' : 'Select user'}</option>
                       {allUsers.map(u => <option key={u.id} value={u.id}>{u.firstName ?? ''} {u.lastName ?? ''} ({u.username})</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Role *</label>
+                    <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Role *</label>
                     <select value={newUser.roleId} onChange={e => setNewUser(p => ({ ...p, roleId: e.target.value }))} required
-                      className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:outline-none">
+                      className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none">
                       <option value="">Select role</option>
                       {allRoles.map(r => <option key={r.id} value={r.id}>{r.name} {r.isSystem ? '(System)' : ''}</option>)}
                     </select>
                   </div>
                   <div className="flex gap-3 justify-end pt-2">
-                    <button type="button" onClick={() => setShowAddUser(false)} className="px-5 py-2 rounded-lg border border-white/10 text-white hover:bg-white/5">Cancel</button>
+                    <button type="button" onClick={() => setShowAddUser(false)} className="px-5 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]">Cancel</button>
                     <button type="submit" disabled={saving} className="px-5 py-2 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 disabled:opacity-50">{saving ? 'Adding...' : 'Add User'}</button>
                   </div>
                 </form>
@@ -1513,16 +1513,16 @@ export default function TenantDetailPage() {
       {tab === 'branches' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <p className="text-slate-400 text-sm">Multi-emirate branches for this tenant — each with its own Trade License, separate from the shared TRN.</p>
+            <p className="text-[var(--text-muted)] text-sm">Multi-emirate branches for this tenant — each with its own Trade License, separate from the shared TRN.</p>
             <Link href="/admin/branches" className="text-sm text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 px-4 py-2 rounded-xl transition-colors">
               Manage All Branches →
             </Link>
           </div>
           {branches.length === 0 ? (
-            <div className="bg-slate-800/40 border border-white/10 rounded-2xl p-10 text-center">
+            <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-2xl p-10 text-center">
               <p className="text-3xl mb-3">🏢</p>
-              <p className="text-white font-medium">No branches configured</p>
-              <p className="text-slate-500 text-sm mt-1">Add branches for each emirate this tenant operates in</p>
+              <p className="text-[var(--text-main)] font-medium">No branches configured</p>
+              <p className="text-[var(--text-faint)] text-sm mt-1">Add branches for each emirate this tenant operates in</p>
               <Link href="/admin/branches" className="mt-4 inline-block text-emerald-400 text-sm hover:text-emerald-300">+ Add Branch →</Link>
             </div>
           ) : (
@@ -1532,47 +1532,47 @@ export default function TenantDetailPage() {
                 const LABELS: Record<string,string> = { ABU_DHABI:'Abu Dhabi', DUBAI:'Dubai', SHARJAH:'Sharjah', AJMAN:'Ajman', UMM_AL_QUWAIN:'Umm Al Quwain', RAS_AL_KHAIMAH:'Ras Al Khaimah', FUJAIRAH:'Fujairah' };
                 const days = b.trade_license_expiry ? Math.floor((new Date(b.trade_license_expiry).getTime() - Date.now()) / 86400000) : null;
                 return (
-                  <div key={b.id} className={`bg-slate-800/50 border rounded-2xl p-5 ${b.is_default ? 'border-blue-500/30' : 'border-white/10'}`}>
+                  <div key={b.id} className={`bg-[var(--bg-surface)]/50 border rounded-2xl p-5 ${b.is_default ? 'border-blue-500/30' : 'border-[var(--border-subtle)]'}`}>
                     <div className="flex items-start gap-3">
                       <span className="text-2xl">{FLAGS[b.emirate] ?? '🏢'}</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-white font-semibold">{b.branch_name}</p>
+                          <p className="text-[var(--text-main)] font-semibold">{b.branch_name}</p>
                           {b.is_default && <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded-full">HQ</span>}
-                          {!b.is_active && <span className="text-[10px] bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded-full">Inactive</span>}
+                          {!b.is_active && <span className="text-[10px] bg-[var(--bg-surface-hover)] text-[var(--text-muted)] px-1.5 py-0.5 rounded-full">Inactive</span>}
                         </div>
-                        <p className="text-slate-400 text-xs mt-0.5">{LABELS[b.emirate] ?? b.emirate}</p>
+                        <p className="text-[var(--text-muted)] text-xs mt-0.5">{LABELS[b.emirate] ?? b.emirate}</p>
                         <div className="mt-3 space-y-1.5 text-xs">
                           {b.trade_license_no && (
                             <div className="flex items-center gap-2">
-                              <span className="text-slate-500 w-28">Trade License:</span>
-                              <span className="text-slate-300 font-mono">{b.trade_license_no}</span>
-                              {b.trade_license_authority && <span className="text-slate-600">({b.trade_license_authority})</span>}
+                              <span className="text-[var(--text-faint)] w-28">Trade License:</span>
+                              <span className="text-[var(--text-muted)] font-mono">{b.trade_license_no}</span>
+                              {b.trade_license_authority && <span className="text-[var(--text-faint)]">({b.trade_license_authority})</span>}
                             </div>
                           )}
                           {days !== null && (
                             <div className="flex items-center gap-2">
-                              <span className="text-slate-500 w-28">License Expiry:</span>
-                              <span className={`font-medium ${days < 0 ? 'text-red-400' : days < 60 ? 'text-amber-400' : 'text-slate-300'}`}>
+                              <span className="text-[var(--text-faint)] w-28">License Expiry:</span>
+                              <span className={`font-medium ${days < 0 ? 'text-red-400' : days < 60 ? 'text-amber-400' : 'text-[var(--text-muted)]'}`}>
                                 {b.trade_license_expiry} {days < 0 ? `(Expired ${Math.abs(days)}d ago)` : days < 60 ? `(Expires in ${days}d)` : ''}
                               </span>
                             </div>
                           )}
                           {b.cost_center_code && (
                             <div className="flex items-center gap-2">
-                              <span className="text-slate-500 w-28">Cost Center:</span>
-                              <span className="font-mono bg-slate-900 text-slate-300 px-2 py-0.5 rounded">{b.cost_center_code}</span>
+                              <span className="text-[var(--text-faint)] w-28">Cost Center:</span>
+                              <span className="font-mono bg-[var(--bg-surface)] text-[var(--text-muted)] px-2 py-0.5 rounded">{b.cost_center_code}</span>
                             </div>
                           )}
                           {b.billing_city && (
                             <div className="flex items-center gap-2">
-                              <span className="text-slate-500 w-28">Address:</span>
-                              <span className="text-slate-400">{b.billing_city}{b.billing_po_box ? `, P.O. Box ${b.billing_po_box}` : ''}</span>
+                              <span className="text-[var(--text-faint)] w-28">Address:</span>
+                              <span className="text-[var(--text-muted)]">{b.billing_city}{b.billing_po_box ? `, P.O. Box ${b.billing_po_box}` : ''}</span>
                             </div>
                           )}
-                          <div className="flex items-center gap-4 mt-2 pt-2 border-t border-white/5">
-                            <span className="text-slate-600">{b.invoice_count ?? 0} invoices</span>
-                            <span className="text-slate-600">{b.vehicle_count ?? 0} vehicles</span>
+                          <div className="flex items-center gap-4 mt-2 pt-2 border-t border-[var(--border-subtle)]">
+                            <span className="text-[var(--text-faint)]">{b.invoice_count ?? 0} invoices</span>
+                            <span className="text-[var(--text-faint)]">{b.vehicle_count ?? 0} vehicles</span>
                           </div>
                         </div>
                       </div>
@@ -1585,7 +1585,7 @@ export default function TenantDetailPage() {
           {tenant?.trn && (
             <div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
               <span>🇦🇪</span>
-              <p className="text-slate-400 text-xs">
+              <p className="text-[var(--text-muted)] text-xs">
                 TRN <strong className="text-emerald-400 font-mono">{tenant.trn}</strong> is shared across all {branches.length} branch{branches.length !== 1 ? 'es' : ''} above.
                 Each branch has its own trade license for emirate-level regulatory compliance.
               </p>
@@ -1597,16 +1597,16 @@ export default function TenantDetailPage() {
       {/* ── ROLES ── */}
       {tab === 'roles' && (
         <div className="space-y-4">
-          <p className="text-slate-400 text-sm">Roles available for this tenant (includes system roles). Go to <a href="/admin/roles" className="text-blue-400 hover:underline">Roles page</a> to configure permission matrices.</p>
+          <p className="text-[var(--text-muted)] text-sm">Roles available for this tenant (includes system roles). Go to <a href="/admin/roles" className="text-blue-400 hover:underline">Roles page</a> to configure permission matrices.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {roles.map(r => (
-              <div key={r.id} className="bg-slate-800/50 border border-white/10 rounded-xl p-4">
+              <div key={r.id} className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-xl p-4">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="font-medium text-white text-sm">{r.name}</span>
+                  <span className="font-medium text-[var(--text-main)] text-sm">{r.name}</span>
                   {r.isSystem && <span className="text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded">SYSTEM</span>}
                 </div>
-                <div className="text-xs text-slate-400 font-mono mb-2">{r.code}</div>
-                <div className="text-xs text-slate-500">{r._count?.permissions ?? 0} permissions · {r._count?.userTenants ?? 0} users</div>
+                <div className="text-xs text-[var(--text-muted)] font-mono mb-2">{r.code}</div>
+                <div className="text-xs text-[var(--text-faint)]">{r._count?.permissions ?? 0} permissions · {r._count?.userTenants ?? 0} users</div>
               </div>
             ))}
           </div>

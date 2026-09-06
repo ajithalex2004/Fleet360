@@ -41,30 +41,30 @@ const DEFAULT_PREFS: Record<string, { email: boolean; sms: boolean; push: boolea
 
 const ToggleSwitch = ({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) => (
   <button type="button" onClick={() => onChange(!checked)}
-    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${checked ? 'bg-blue-600' : 'bg-slate-600'}`}>
+    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${checked ? 'bg-blue-600' : 'bg-[var(--bg-surface-hover)]'}`}>
     <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
   </button>
 );
 
 const Field = ({ label, help, children }: { label: string; help?: string; children: React.ReactNode }) => (
   <div>
-    <label className="block text-sm font-medium text-slate-300 mb-1">{label}</label>
+    <label className="block text-sm font-medium text-[var(--text-muted)] mb-1">{label}</label>
     {children}
-    {help && <p className="text-xs text-slate-500 mt-1">{help}</p>}
+    {help && <p className="text-xs text-[var(--text-faint)] mt-1">{help}</p>}
   </div>
 );
 
 const NumInput = ({ value, onChange, placeholder, min }: { value: number; onChange: (v: number) => void; placeholder?: string; min?: number }) => (
   <input type="number" value={value} min={min ?? 0} placeholder={placeholder}
     onChange={e => onChange(parseFloat(e.target.value) || 0)}
-    className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none text-sm" />
+    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none text-sm" />
 );
 
 const Section = ({ title, desc, icon, children }: { title: string; desc: string; icon: string; children: React.ReactNode }) => (
-  <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-hidden mb-6">
-    <div className="p-5 border-b border-white/10 flex items-start gap-3">
-      <div className="w-9 h-9 rounded-xl bg-slate-700 flex items-center justify-center text-lg flex-shrink-0">{icon}</div>
-      <div><div className="font-semibold text-white">{title}</div><div className="text-sm text-slate-400">{desc}</div></div>
+  <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl overflow-hidden mb-6">
+    <div className="p-5 border-b border-[var(--border-subtle)] flex items-start gap-3">
+      <div className="w-9 h-9 rounded-xl bg-[var(--bg-surface-hover)] flex items-center justify-center text-lg flex-shrink-0">{icon}</div>
+      <div><div className="font-semibold text-[var(--text-main)]">{title}</div><div className="text-sm text-[var(--text-muted)]">{desc}</div></div>
     </div>
     <div className="p-5">{children}</div>
   </div>
@@ -114,7 +114,7 @@ export default function TenantSettingsPage() {
     } finally { setSaving(false); }
   };
 
-  if (loading) return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading settings...</div></div>;
+  if (loading) return <div className="flex items-center justify-center h-full"><div className="text-[var(--text-muted)] animate-pulse">Loading settings...</div></div>;
   if (!settings) return <div className="text-rose-400 p-8">Failed to load settings</div>;
 
   const s = settings;
@@ -123,8 +123,8 @@ export default function TenantSettingsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-1">Tenant Settings</h1>
-          <p className="text-slate-400 text-xs">Configure operational settings, auto-dispatch rules, and notification preferences</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-1">Tenant Settings</h1>
+          <p className="text-[var(--text-muted)] text-xs">Configure operational settings, auto-dispatch rules, and notification preferences</p>
         </div>
         <div className="flex items-center gap-3">
           {saveMsg && <span className={`text-sm ${saveMsg.includes('Error') ? 'text-rose-400' : 'text-emerald-400'}`}>{saveMsg}</span>}
@@ -136,10 +136,10 @@ export default function TenantSettingsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-white/10">
+      <div className="flex gap-1 border-b border-[var(--border-subtle)]">
         {([['operations','Operations'],['route','Route Optimization'],['notifications','Notifications']] as [Tab,string][]).map(([t,l]) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-all ${tab===t ? 'text-white border-blue-500' : 'text-slate-400 border-transparent hover:text-slate-300'}`}>
+            className={`px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-all ${tab===t ? 'text-[var(--text-main)] border-blue-500' : 'text-[var(--text-muted)] border-transparent hover:text-[var(--text-muted)]'}`}>
             {l}
           </button>
         ))}
@@ -152,19 +152,19 @@ export default function TenantSettingsPage() {
           <Section title="Trip Merging" desc="Configure how trips are merged together" icon="M">
             <div className="flex items-center justify-between mb-5">
               <div>
-                <div className="text-sm font-medium text-white">Enable Trip Merging</div>
-                <div className="text-xs text-slate-400">Merge compatible trips to optimize fleet utilisation</div>
+                <div className="text-sm font-medium text-[var(--text-main)]">Enable Trip Merging</div>
+                <div className="text-xs text-[var(--text-muted)]">Merge compatible trips to optimize fleet utilisation</div>
               </div>
               <ToggleSwitch checked={s.tripMergingEnabled} onChange={v => set('tripMergingEnabled', v)} />
             </div>
             {s.tripMergingEnabled && (
               <div className="space-y-5">
                 <div>
-                  <h4 className="text-sm font-semibold text-slate-300 mb-3">Pickup Matching</h4>
+                  <h4 className="text-sm font-semibold text-[var(--text-muted)] mb-3">Pickup Matching</h4>
                   <div className="grid grid-cols-3 gap-4">
                     <Field label="Pickup Match Type">
                       <select value={s.pickupMatchType} onChange={e => set('pickupMatchType', e.target.value)}
-                        className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none text-sm">
+                        className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none text-sm">
                         <option value="DISTANCE">Distance-based</option>
                         <option value="TIME">Time-based</option>
                         <option value="HYBRID">Hybrid</option>
@@ -180,9 +180,9 @@ export default function TenantSettingsPage() {
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-semibold text-slate-300">Dropoff Matching</h4>
+                    <h4 className="text-sm font-semibold text-[var(--text-muted)]">Dropoff Matching</h4>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-slate-400">Require Dropoff Match</span>
+                      <span className="text-xs text-[var(--text-muted)]">Require Dropoff Match</span>
                       <ToggleSwitch checked={s.requireDropoffMatch} onChange={v => set('requireDropoffMatch', v)} />
                     </div>
                   </div>
@@ -190,7 +190,7 @@ export default function TenantSettingsPage() {
                     <div className="grid grid-cols-3 gap-4">
                       <Field label="Dropoff Match Type">
                         <select value={s.dropoffMatchType} onChange={e => set('dropoffMatchType', e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none text-sm">
+                          className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none text-sm">
                           <option value="DISTANCE">Distance-based</option>
                           <option value="TIME">Time-based</option>
                           <option value="HYBRID">Hybrid</option>
@@ -206,7 +206,7 @@ export default function TenantSettingsPage() {
                   )}
                 </div>
                 <div>
-                  <h4 className="text-sm font-semibold text-slate-300 mb-3">Capacity & Routing</h4>
+                  <h4 className="text-sm font-semibold text-[var(--text-muted)] mb-3">Capacity & Routing</h4>
                   <div className="grid grid-cols-4 gap-4">
                     <Field label="Max Passengers" help="Maximum number of passengers in a merged trip">
                       <NumInput value={s.maxPassengers} onChange={v => set('maxPassengers', v)} placeholder="5" min={1} />
@@ -230,8 +230,8 @@ export default function TenantSettingsPage() {
           <Section title="Auto-Merge" desc="Automatically merge eligible trips before departure" icon="A">
             <div className="flex items-center justify-between mb-5">
               <div>
-                <div className="text-sm font-medium text-white">Enable Auto-Merge</div>
-                <div className="text-xs text-slate-400">System automatically merges trips without manual intervention</div>
+                <div className="text-sm font-medium text-[var(--text-main)]">Enable Auto-Merge</div>
+                <div className="text-xs text-[var(--text-muted)]">System automatically merges trips without manual intervention</div>
               </div>
               <ToggleSwitch checked={s.autoMergeEnabled} onChange={v => set('autoMergeEnabled', v)} />
             </div>
@@ -251,8 +251,8 @@ export default function TenantSettingsPage() {
           <Section title="Auto Dispatch" desc="Automatically assign drivers to trips" icon="D">
             <div className="flex items-center justify-between mb-5">
               <div>
-                <div className="text-sm font-medium text-white">Enable Auto Dispatch</div>
-                <div className="text-xs text-slate-400">Automatically assign the nearest available driver to confirmed trips</div>
+                <div className="text-sm font-medium text-[var(--text-main)]">Enable Auto Dispatch</div>
+                <div className="text-xs text-[var(--text-muted)]">Automatically assign the nearest available driver to confirmed trips</div>
               </div>
               <ToggleSwitch checked={s.autoDispatchEnabled} onChange={v => set('autoDispatchEnabled', v)} />
             </div>
@@ -272,8 +272,8 @@ export default function TenantSettingsPage() {
                 <div className="flex items-center gap-3">
                   <ToggleSwitch checked={s.preferNearestDriver} onChange={v => set('preferNearestDriver', v)} />
                   <div>
-                    <div className="text-sm font-medium text-white">Prefer Nearest Driver</div>
-                    <div className="text-xs text-slate-400">Always dispatch to the closest available driver first</div>
+                    <div className="text-sm font-medium text-[var(--text-main)]">Prefer Nearest Driver</div>
+                    <div className="text-xs text-[var(--text-muted)]">Always dispatch to the closest available driver first</div>
                   </div>
                 </div>
               </div>
@@ -288,17 +288,17 @@ export default function TenantSettingsPage() {
           <Section title="Route Optimization" desc="Configure routing engine settings for accurate distance calculations" icon="R">
             <div className="flex items-center justify-between mb-5">
               <div>
-                <div className="text-sm font-medium text-white">Enable Route Optimization</div>
-                <div className="text-xs text-slate-400">Use routing engine for real road distances and ETAs</div>
+                <div className="text-sm font-medium text-[var(--text-main)]">Enable Route Optimization</div>
+                <div className="text-xs text-[var(--text-muted)]">Use routing engine for real road distances and ETAs</div>
               </div>
               <ToggleSwitch checked={s.routeOptimizationEnabled} onChange={v => set('routeOptimizationEnabled', v)} />
             </div>
             <div className="space-y-5">
               <div>
-                <h4 className="text-sm font-semibold text-slate-300 mb-3">Routing Engine</h4>
+                <h4 className="text-sm font-semibold text-[var(--text-muted)] mb-3">Routing Engine</h4>
                 <Field label="Routing Engine">
                   <select value={s.routingEngine} onChange={e => set('routingEngine', e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white focus:border-blue-500 focus:outline-none text-sm">
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-blue-500 focus:outline-none text-sm">
                     <option value="GOOGLE_MAPS">Google Maps</option>
                     <option value="OSRM">OSRM (Open Source)</option>
                     <option value="HERE">HERE Maps</option>
@@ -308,16 +308,16 @@ export default function TenantSettingsPage() {
               </div>
               {s.routingEngine === 'GOOGLE_MAPS' && (
                 <div>
-                  <h4 className="text-sm font-semibold text-slate-300 mb-3">Google Maps Configuration</h4>
+                  <h4 className="text-sm font-semibold text-[var(--text-muted)] mb-3">Google Maps Configuration</h4>
                   <Field label="Google Maps API Key" help="Your Google Maps API key for routing services">
                     <PasswordInput value={s.googleMapsApiKey ?? ''} onChange={e => set('googleMapsApiKey', e.target.value)}
                       placeholder="AIza..."
-                      className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none text-sm font-mono" />
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none text-sm font-mono" />
                   </Field>
                 </div>
               )}
               <div>
-                <h4 className="text-sm font-semibold text-slate-300 mb-3">Rate Limiting</h4>
+                <h4 className="text-sm font-semibold text-[var(--text-muted)] mb-3">Rate Limiting</h4>
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Max API Calls Per Hour" help="Maximum number of API calls allowed per hour">
                     <NumInput value={s.maxApiCallsPerHour} onChange={v => set('maxApiCallsPerHour', v)} placeholder="500" min={1} />
@@ -328,7 +328,7 @@ export default function TenantSettingsPage() {
                 </div>
               </div>
               <div>
-                <h4 className="text-sm font-semibold text-slate-300 mb-3">Distance & Fallback Settings</h4>
+                <h4 className="text-sm font-semibold text-[var(--text-muted)] mb-3">Distance & Fallback Settings</h4>
                 <div className="grid grid-cols-2 gap-4">
                   <Field label="Road Distance Multiplier" help="Scaling factor for road vs straight-line distance">
                     <NumInput value={s.roadDistanceMultiplier} onChange={v => set('roadDistanceMultiplier', v)} placeholder="1.5" min={1} />
@@ -336,8 +336,8 @@ export default function TenantSettingsPage() {
                   <div className="flex items-start gap-3 pt-6">
                     <ToggleSwitch checked={s.fallbackToStraightLine} onChange={v => set('fallbackToStraightLine', v)} />
                     <div>
-                      <div className="text-sm font-medium text-white">Fallback to Straight Line</div>
-                      <div className="text-xs text-slate-400">Use straight-line calculation if routing engine fails</div>
+                      <div className="text-sm font-medium text-[var(--text-main)]">Fallback to Straight Line</div>
+                      <div className="text-xs text-[var(--text-muted)]">Use straight-line calculation if routing engine fails</div>
                     </div>
                   </div>
                 </div>
@@ -353,7 +353,7 @@ export default function TenantSettingsPage() {
           {/* Email */}
           <Section title="Email" desc="Configure SMTP settings for email notifications" icon="E">
             <div className="flex items-center justify-between mb-4">
-              <div className="text-sm text-slate-400">{s.emailNotificationsEnabled ? 'Email notifications are enabled' : 'Email notifications are disabled. Enable to configure SMTP settings.'}</div>
+              <div className="text-sm text-[var(--text-muted)]">{s.emailNotificationsEnabled ? 'Email notifications are enabled' : 'Email notifications are disabled. Enable to configure SMTP settings.'}</div>
               <ToggleSwitch checked={s.emailNotificationsEnabled} onChange={v => set('emailNotificationsEnabled', v)} />
             </div>
             {s.emailNotificationsEnabled && (
@@ -361,7 +361,7 @@ export default function TenantSettingsPage() {
                 {[{l:'SMTP Host',k:'smtpHost',ph:'smtp.gmail.com'},{l:'SMTP Port',k:'smtpPort',ph:'587'},{l:'Username',k:'smtpUser',ph:'user@domain.com'},{l:'Password',k:'smtpPass',ph:'**hidden**',pwd:true},{l:'From Email',k:'smtpFromEmail',ph:'noreply@company.com'},{l:'From Name',k:'smtpFromName',ph:'Fleet360'}].map(({l,k,ph,pwd})=>(
                   <Field key={k} label={l}>
                     <input type={pwd ? 'password' : 'text'} value={(s as any)[k] ?? ''} onChange={e => set(k as keyof Settings, e.target.value)} placeholder={ph}
-                      className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none text-sm" />
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none text-sm" />
                   </Field>
                 ))}
               </div>
@@ -371,7 +371,7 @@ export default function TenantSettingsPage() {
           {/* SMS */}
           <Section title="SMS" desc="Configure SMS provider for text notifications" icon="S">
             <div className="flex items-center justify-between mb-4">
-              <div className="text-sm text-slate-400">{s.smsNotificationsEnabled ? 'SMS notifications are enabled' : 'SMS notifications are disabled. Enable to configure provider settings.'}</div>
+              <div className="text-sm text-[var(--text-muted)]">{s.smsNotificationsEnabled ? 'SMS notifications are enabled' : 'SMS notifications are disabled. Enable to configure provider settings.'}</div>
               <ToggleSwitch checked={s.smsNotificationsEnabled} onChange={v => set('smsNotificationsEnabled', v)} />
             </div>
             {s.smsNotificationsEnabled && (
@@ -379,7 +379,7 @@ export default function TenantSettingsPage() {
                 {[{l:'SMS Provider',k:'smsProvider',ph:'Twilio, AWS SNS'},{l:'API Key',k:'smsApiKey',ph:'**hidden**',pwd:true},{l:'From Number',k:'smsFromNumber',ph:'+971XXXXXXXXX'}].map(({l,k,ph,pwd})=>(
                   <Field key={k} label={l}>
                     <input type={pwd ? 'password' : 'text'} value={(s as any)[k] ?? ''} onChange={e => set(k as keyof Settings, e.target.value)} placeholder={ph}
-                      className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none text-sm" />
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-blue-500 focus:outline-none text-sm" />
                   </Field>
                 ))}
               </div>
@@ -391,8 +391,8 @@ export default function TenantSettingsPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-white/10">
-                    <th className="text-left py-3 pr-6 text-slate-400 font-medium">Event</th>
+                  <tr className="border-b border-[var(--border-subtle)]">
+                    <th className="text-left py-3 pr-6 text-[var(--text-muted)] font-medium">Event</th>
                     <th className="text-center py-3 px-6 text-blue-400 font-medium">Email</th>
                     <th className="text-center py-3 px-6 text-emerald-400 font-medium">SMS</th>
                     <th className="text-center py-3 px-6 text-violet-400 font-medium">Push</th>
@@ -404,8 +404,8 @@ export default function TenantSettingsPage() {
                     const toggle = (ch: 'email'|'sms'|'push') =>
                       setNotifPrefs(p => ({ ...p, [event]: { ...pref, [ch]: !pref[ch] } }));
                     return (
-                      <tr key={event} className="border-b border-white/5">
-                        <td className="py-3 pr-6 text-white">{event}</td>
+                      <tr key={event} className="border-b border-[var(--border-subtle)]">
+                        <td className="py-3 pr-6 text-[var(--text-main)]">{event}</td>
                         {(['email','sms','push'] as const).map(ch => (
                           <td key={ch} className="text-center py-3 px-6">
                             <input type="checkbox" checked={pref[ch]}

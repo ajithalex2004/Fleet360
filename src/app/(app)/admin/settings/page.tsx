@@ -122,12 +122,12 @@ function PasswordField({ value, onChange, placeholder, ring }: {
         value={value}
         placeholder={placeholder}
         onChange={e => onChange(e.target.value)}
-        className={`bg-slate-800 border border-white/10 text-white text-sm rounded-lg px-3 py-2 w-64 pr-10 focus:outline-none focus:ring-2 ${ring} placeholder-slate-600`}
+        className={`bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm rounded-lg px-3 py-2 w-64 pr-10 focus:outline-none focus:ring-2 ${ring} placeholder-[var(--text-faint)]`}
       />
       <button
         type="button"
         onClick={() => setShow(s => !s)}
-        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors text-base"
+        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--text-faint)] hover:text-[var(--text-muted)] transition-colors text-base"
         title={show ? 'Hide' : 'Show'}
       >
         {show ? '🙈' : '👁'}
@@ -141,7 +141,7 @@ function Toggle({ checked, onChange, color }: { checked: boolean; onChange: (v: 
   return (
     <button
       onClick={() => onChange(!checked)}
-      className={`relative w-12 h-6 rounded-full transition-all duration-200 ${checked ? COLORS[color].toggle : 'bg-slate-600'}`}
+      className={`relative w-12 h-6 rounded-full transition-all duration-200 ${checked ? COLORS[color].toggle : 'bg-[var(--bg-surface-hover)]'}`}
     >
       <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${checked ? 'translate-x-6' : ''}`} />
     </button>
@@ -153,14 +153,14 @@ function SettingRow({ field, value, onChange, color }: {
   field: SettingField; value: string; onChange: (key: string, v: string) => void; color: string;
 }) {
   const c = COLORS[color];
-  const inputBase = `bg-slate-800 border border-white/10 text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 ${c.ring} placeholder-slate-600`;
+  const inputBase = `bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 ${c.ring} placeholder-[var(--text-faint)]`;
 
   return (
-    <div className="flex items-center justify-between py-4 border-b border-white/5 last:border-0 gap-8">
+    <div className="flex items-center justify-between py-4 border-b border-[var(--border-subtle)] last:border-0 gap-8">
       <div className="min-w-0">
-        <p className="text-sm font-medium text-white">{field.label}</p>
-        <p className="text-xs text-slate-400 mt-0.5">{field.description}</p>
-        <p className="text-[10px] text-slate-600 font-mono mt-0.5">{field.key}</p>
+        <p className="text-sm font-medium text-[var(--text-main)]">{field.label}</p>
+        <p className="text-xs text-[var(--text-muted)] mt-0.5">{field.description}</p>
+        <p className="text-[10px] text-[var(--text-faint)] font-mono mt-0.5">{field.key}</p>
       </div>
       <div className="flex-shrink-0">
         {field.type === 'select' && (
@@ -171,7 +171,7 @@ function SettingRow({ field, value, onChange, color }: {
         )}
         {field.type === 'toggle' && (
           <div className="flex items-center gap-2">
-            <span className={`text-xs font-medium ${value === 'true' ? c.icon : 'text-slate-500'}`}>
+            <span className={`text-xs font-medium ${value === 'true' ? c.icon : 'text-[var(--text-faint)]'}`}>
               {value === 'true' ? 'Enabled' : 'Disabled'}
             </span>
             <Toggle checked={value === 'true'} onChange={v => onChange(field.key, v ? 'true' : 'false')} color={color} />
@@ -182,7 +182,7 @@ function SettingRow({ field, value, onChange, color }: {
             <input type="number" value={value} min={field.min} max={field.max}
               onChange={e => onChange(field.key, e.target.value)}
               className={`${inputBase} w-28 text-center`} />
-            {field.unit && <span className="text-slate-500 text-xs whitespace-nowrap">{field.unit}</span>}
+            {field.unit && <span className="text-[var(--text-faint)] text-xs whitespace-nowrap">{field.unit}</span>}
           </div>
         )}
         {(field.type === 'text' || field.type === 'email' || field.type === 'url') && (
@@ -245,31 +245,31 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-md p-6 shadow-2xl">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-lg font-bold text-white">Change Password</h2>
-            <p className="text-xs text-slate-400 mt-0.5">Update your admin account password</p>
+            <h2 className="text-lg font-bold text-[var(--text-main)]">Change Password</h2>
+            <p className="text-xs text-[var(--text-muted)] mt-0.5">Update your admin account password</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white text-xl leading-none">✕</button>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl leading-none">✕</button>
         </div>
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">Current Password</label>
+            <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Current Password</label>
             <PasswordInput placeholder="Enter current password" value={form.current}
               onChange={e => handleChange('current', e.target.value)}
-              className="w-full bg-slate-800 border border-white/10 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-violet-500/50 placeholder-slate-600" />
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-violet-500/50 placeholder-[var(--text-faint)]" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">New Password</label>
+            <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">New Password</label>
             <PasswordInput placeholder="Enter new password" value={form.next}
               onChange={e => handleChange('next', e.target.value)}
-              className="w-full bg-slate-800 border border-white/10 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-violet-500/50 placeholder-slate-600" />
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-violet-500/50 placeholder-[var(--text-faint)]" />
             {form.next && (
               <div className="mt-2">
                 <div className="flex gap-1">
                   {[1,2,3,4].map(i => (
-                    <div key={i} className={`h-1 flex-1 rounded-full ${i <= strength ? strengthColor[strength] : 'bg-slate-700'}`} />
+                    <div key={i} className={`h-1 flex-1 rounded-full ${i <= strength ? strengthColor[strength] : 'bg-[var(--bg-surface-hover)]'}`} />
                   ))}
                 </div>
                 <p className={`text-xs mt-1 ${strengthColor[strength].replace('bg-','text-')}`}>{strengthLabel[strength]}</p>
@@ -277,17 +277,17 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
             )}
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-400 mb-1.5">Confirm New Password</label>
+            <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Confirm New Password</label>
             <PasswordInput placeholder="Confirm new password" value={form.confirm}
               onChange={e => handleChange('confirm', e.target.value)}
-              className={`w-full bg-slate-800 border text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-2 placeholder-slate-600 ${
+              className={`w-full bg-[var(--bg-surface)] border text-[var(--text-main)] text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-2 placeholder-[var(--text-faint)] ${
                 form.confirm && form.confirm !== form.next ? 'border-red-500/50 focus:ring-red-500/50' :
                 form.confirm && form.confirm === form.next ? 'border-emerald-500/50 focus:ring-emerald-500/50' :
-                'border-white/10 focus:ring-violet-500/50'}`} />
+                'border-[var(--border-subtle)] focus:ring-violet-500/50'}`} />
             {form.confirm && form.confirm === form.next && <p className="text-xs text-emerald-400 mt-1">✓ Passwords match</p>}
           </div>
-          <div className="bg-slate-800/50 rounded-xl p-3">
-            <p className="text-xs font-medium text-slate-400 mb-2">Password requirements:</p>
+          <div className="bg-[var(--bg-surface)]/50 rounded-xl p-3">
+            <p className="text-xs font-medium text-[var(--text-muted)] mb-2">Password requirements:</p>
             {[
               ['At least 8 characters', form.next.length >= 8],
               ['One uppercase letter',  /[A-Z]/.test(form.next)],
@@ -295,8 +295,8 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
               ['One special character', /[^A-Za-z0-9]/.test(form.next)],
             ].map(([rule, met]) => (
               <div key={String(rule)} className="flex items-center gap-2 mb-1">
-                <span className={`text-xs ${met ? 'text-emerald-400' : 'text-slate-600'}`}>{met ? '✓' : '○'}</span>
-                <span className={`text-xs ${met ? 'text-slate-300' : 'text-slate-500'}`}>{String(rule)}</span>
+                <span className={`text-xs ${met ? 'text-emerald-400' : 'text-[var(--text-faint)]'}`}>{met ? '✓' : '○'}</span>
+                <span className={`text-xs ${met ? 'text-[var(--text-muted)]' : 'text-[var(--text-faint)]'}`}>{String(rule)}</span>
               </div>
             ))}
           </div>
@@ -307,7 +307,7 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
           </div>
         )}
         <div className="flex gap-3 mt-6">
-          <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-sm hover:bg-slate-700 transition-colors">Cancel</button>
+          <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl bg-[var(--bg-surface)] text-[var(--text-muted)] text-sm hover:bg-[var(--bg-surface-hover)] transition-colors">Cancel</button>
           <button onClick={handleSubmit} disabled={saving}
             className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
             {saving ? 'Saving…' : 'Change Password'}
@@ -326,25 +326,25 @@ function SettingSection({ section, settings, onChange }: {
   const c = COLORS[section.color];
 
   return (
-    <div className={`bg-slate-900/60 border rounded-2xl overflow-hidden ${c.border}`}>
+    <div className={`bg-[var(--bg-surface)]/60 border rounded-2xl overflow-hidden ${c.border}`}>
       {/* Section header */}
       <button onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between p-5 hover:bg-white/[0.02] transition-colors">
+        className="w-full flex items-center justify-between p-5 hover:bg-[var(--bg-surface-hover)] transition-colors">
         <div className="flex items-center gap-3">
           <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg ${c.badge}`}>{section.icon}</span>
           <div className="text-left">
-            <p className="text-base font-semibold text-white">{section.label}</p>
+            <p className="text-base font-semibold text-[var(--text-main)]">{section.label}</p>
           </div>
           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${c.badge}`}>
             {section.fields.length} settings
           </span>
         </div>
-        <span className={`text-slate-400 text-lg transition-transform duration-200 ${open ? 'rotate-90' : ''}`}>›</span>
+        <span className={`text-[var(--text-muted)] text-lg transition-transform duration-200 ${open ? 'rotate-90' : ''}`}>›</span>
       </button>
 
       {/* Fields */}
       {open && (
-        <div className="px-5 pb-2 border-t border-white/5">
+        <div className="px-5 pb-2 border-t border-[var(--border-subtle)]">
           {section.fields.map(field => (
             <SettingRow key={field.key} field={field} value={settings[field.key] ?? ''}
               onChange={onChange} color={section.color} />
@@ -406,19 +406,19 @@ export default function PlatformSettingsPage() {
   return (
     <div>
       {/* Sticky header */}
-      <div className="sticky top-0 z-10 bg-slate-950/95 backdrop-blur border-b border-white/10 px-8 py-4 flex items-center justify-between">
+      <div className="sticky top-0 z-10 bg-[var(--bg-canvas)]/95 backdrop-blur border-b border-[var(--border-subtle)] px-8 py-4 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Platform Settings</h1>
-          <p className="text-xs text-slate-400 mt-0.5">Configure system-wide defaults, channels, and feature controls</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Platform Settings</h1>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">Configure system-wide defaults, channels, and feature controls</p>
         </div>
         <div className="flex items-center gap-3">
           <button onClick={() => setShowPwModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 border border-white/10 text-slate-300 text-sm hover:bg-slate-700 hover:text-white transition-all">
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-sm hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)] transition-all">
             🔑 Change Password
           </button>
           {hasDirty && (
             <button onClick={handleDiscard}
-              className="px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 text-sm hover:bg-slate-700 transition-colors">
+              className="px-4 py-2.5 rounded-xl bg-[var(--bg-surface)] text-[var(--text-muted)] text-sm hover:bg-[var(--bg-surface-hover)] transition-colors">
               Discard
             </button>
           )}
@@ -426,11 +426,11 @@ export default function PlatformSettingsPage() {
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${
               hasDirty
                 ? 'bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 shadow-lg shadow-violet-900/30'
-                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                : 'bg-[var(--bg-surface)] text-[var(--text-faint)] cursor-not-allowed'
             }`}>
             {saving   ? <><span className="animate-spin">⟳</span> Saving…</> :
              saved    ? <><span className="text-emerald-400">✓</span> Saved!</> :
-             hasDirty ? <><span>💾</span> Save Changes <span className="ml-1 bg-white/20 text-white text-xs px-1.5 py-0.5 rounded-full">{Object.keys(dirty).length}</span></> :
+             hasDirty ? <><span>💾</span> Save Changes <span className="ml-1 bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-xs px-1.5 py-0.5 rounded-full">{Object.keys(dirty).length}</span></> :
                         <><span>💾</span> Save Changes</>}
           </button>
         </div>
@@ -441,7 +441,7 @@ export default function PlatformSettingsPage() {
         {error && (
           <div className="bg-red-500/20 border border-red-500/30 rounded-xl p-4 text-red-300 text-sm flex items-center gap-2">
             <span>⚠️</span> {error}
-            <button onClick={() => setError('')} className="ml-auto text-red-400 hover:text-white">✕</button>
+            <button onClick={() => setError('')} className="ml-auto text-red-400 hover:text-[var(--text-main)]">✕</button>
           </div>
         )}
 
@@ -456,7 +456,7 @@ export default function PlatformSettingsPage() {
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
               <div className="text-4xl mb-3 animate-spin">⟳</div>
-              <p className="text-slate-400 text-sm">Loading settings…</p>
+              <p className="text-[var(--text-muted)] text-sm">Loading settings…</p>
             </div>
           </div>
         ) : (
@@ -471,13 +471,13 @@ export default function PlatformSettingsPage() {
             <div className="bg-red-950/30 border border-red-500/20 rounded-2xl overflow-hidden">
               <div className="px-5 py-4 border-b border-red-500/10 flex items-center gap-3">
                 <span className="w-9 h-9 rounded-xl bg-red-500/20 text-red-400 flex items-center justify-center text-lg">⚠️</span>
-                <span className="text-base font-semibold text-white">Danger Zone</span>
+                <span className="text-base font-semibold text-[var(--text-main)]">Danger Zone</span>
               </div>
               <div className="p-5 space-y-4">
                 <div className="flex items-center justify-between py-2">
                   <div>
-                    <p className="text-sm font-medium text-white">Change Admin Password</p>
-                    <p className="text-xs text-slate-400 mt-0.5">Update your admin account credentials</p>
+                    <p className="text-sm font-medium text-[var(--text-main)]">Change Admin Password</p>
+                    <p className="text-xs text-[var(--text-muted)] mt-0.5">Update your admin account credentials</p>
                   </div>
                   <button onClick={() => setShowPwModal(true)}
                     className="px-4 py-2 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 text-sm hover:bg-red-500/30 transition-colors">
@@ -486,8 +486,8 @@ export default function PlatformSettingsPage() {
                 </div>
                 <div className="flex items-center justify-between py-2 border-t border-red-500/10">
                   <div>
-                    <p className="text-sm font-medium text-white">Reset All Settings</p>
-                    <p className="text-xs text-slate-400 mt-0.5">Restore all platform settings to defaults</p>
+                    <p className="text-sm font-medium text-[var(--text-main)]">Reset All Settings</p>
+                    <p className="text-xs text-[var(--text-muted)] mt-0.5">Restore all platform settings to defaults</p>
                   </div>
                   <button onClick={() => { if (confirm('Reset all settings to defaults? This cannot be undone.')) load(); }}
                     className="px-4 py-2 rounded-xl bg-red-500/20 border border-red-500/30 text-red-400 text-sm hover:bg-red-500/30 transition-colors">
@@ -498,8 +498,8 @@ export default function PlatformSettingsPage() {
             </div>
 
             <div className="text-center py-4">
-              <p className="text-xs text-slate-600">
-                Settings stored in <code className="text-slate-500 font-mono">platform_settings</code> · Changes take effect immediately
+              <p className="text-xs text-[var(--text-faint)]">
+                Settings stored in <code className="text-[var(--text-faint)] font-mono">platform_settings</code> · Changes take effect immediately
               </p>
             </div>
           </>

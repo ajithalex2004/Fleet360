@@ -136,7 +136,7 @@ export default function SsoConfigPage() {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading SSO config…</div></div>;
+    return <div className="flex items-center justify-center h-full"><div className="text-[var(--text-muted)] animate-pulse">Loading SSO config…</div></div>;
   }
 
   const baseUrl = (typeof window !== 'undefined' ? window.location.origin : '');
@@ -146,15 +146,15 @@ export default function SsoConfigPage() {
     <div className="space-y-8 max-w-4xl">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white inline-flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[var(--text-main)] inline-flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-violet-400" /> Single Sign-On (OIDC)
           </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            {tenantName ? <>For <strong className="text-white">{tenantName}</strong></> : null}
+          <p className="text-[var(--text-muted)] text-sm mt-1">
+            {tenantName ? <>For <strong className="text-[var(--text-main)]">{tenantName}</strong></> : null}
           </p>
         </div>
         <Link href="/admin/tenants"
-          className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-slate-800 border border-white/10 hover:border-white/20 hover:bg-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:text-white transition-colors">
+          className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] hover:bg-[var(--bg-surface-hover)] px-3 py-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors">
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Tenants
         </Link>
       </div>
@@ -168,40 +168,40 @@ export default function SsoConfigPage() {
         <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3 text-emerald-300 text-sm">Saved.</div>
       )}
 
-      <div className="bg-violet-500/10 border border-violet-500/30 rounded-2xl p-5 text-sm text-slate-300 space-y-2">
-        <p className="text-white font-semibold">Configure your IdP to use this redirect URI:</p>
-        <code className="block bg-slate-900/60 border border-white/10 rounded-lg px-3 py-2 font-mono text-xs text-emerald-300 break-all">
+      <div className="bg-violet-500/10 border border-violet-500/30 rounded-2xl p-5 text-sm text-[var(--text-muted)] space-y-2">
+        <p className="text-[var(--text-main)] font-semibold">Configure your IdP to use this redirect URI:</p>
+        <code className="block bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg px-3 py-2 font-mono text-xs text-emerald-300 break-all">
           {callbackUrl}
         </code>
-        <p className="text-xs text-slate-500">Required scopes: <code>openid email profile</code>. PKCE (S256) is enforced.</p>
+        <p className="text-xs text-[var(--text-faint)]">Required scopes: <code>openid email profile</code>. PKCE (S256) is enforced.</p>
       </div>
 
-      <form onSubmit={save} className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 space-y-5">
+      <form onSubmit={save} className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 space-y-5">
         <div className="space-y-1">
-          <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Issuer URL</label>
+          <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Issuer URL</label>
           <input value={issuer} onChange={e => setIssuer(e.target.value)} required
             placeholder="https://login.microsoftonline.com/<tenant-id>/v2.0"
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
-          <p className="text-xs text-slate-500">For Entra ID / Azure AD, Google Workspace, Okta, Auth0, etc — the well-known endpoint root.</p>
+            className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
+          <p className="text-xs text-[var(--text-faint)]">For Entra ID / Azure AD, Google Workspace, Okta, Auth0, etc — the well-known endpoint root.</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Client ID</label>
+            <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Client ID</label>
             <input value={clientId} onChange={e => setClientId(e.target.value)} required
-              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">
+            <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
               Client Secret {config?.clientSecretSet ? <span className="text-emerald-400 normal-case">· stored</span> : null}
             </label>
             <div className="relative">
               <input type={showSecret ? 'text' : 'password'}
                 value={clientSecret} onChange={e => setClientSecret(e.target.value)}
                 placeholder={config?.clientSecretSet ? '•••••••• (leave blank to keep existing)' : ''}
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 pr-12 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 pr-12 text-[var(--text-main)] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
               <button type="button" onClick={() => setShowSecret(v => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white">
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-main)]">
                 {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
@@ -209,14 +209,14 @@ export default function SsoConfigPage() {
         </div>
 
         <div className="space-y-2">
-          <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">
+          <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
             Allowed email domains ({domains.length}) — only emails from these domains can sign in via SSO
           </label>
           <div className="flex gap-2">
             <input value={domainInput} onChange={e => setDomainInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addDomain(); }}}
               placeholder="acme.com"
-              className="flex-1 bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+              className="flex-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
             <button type="button" onClick={addDomain}
               className="px-3 py-2 bg-violet-500/20 hover:bg-violet-500/30 border border-violet-500/40 rounded-lg text-violet-200 text-sm inline-flex items-center gap-1">
               <Plus className="w-4 h-4" /> Add
@@ -226,7 +226,7 @@ export default function SsoConfigPage() {
             {domains.map(d => (
               <span key={d} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-500/20 text-violet-200 border border-violet-500/40 text-xs">
                 {d}
-                <button type="button" onClick={() => removeDomain(d)} className="hover:text-white">
+                <button type="button" onClick={() => removeDomain(d)} className="hover:text-[var(--text-main)]">
                   <X className="w-3 h-3" />
                 </button>
               </span>
@@ -236,20 +236,20 @@ export default function SsoConfigPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1">
-            <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Default role for new users</label>
+            <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Default role for new users</label>
             <select value={defaultRoleId} onChange={e => setDefaultRoleId(e.target.value)}
-              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
               <option value="">Auto (TENANT_ADMIN)</option>
               {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
           </div>
           <div className="space-y-3 pt-5">
-            <label className="inline-flex items-center gap-2 text-sm text-slate-300">
+            <label className="inline-flex items-center gap-2 text-sm text-[var(--text-muted)]">
               <input type="checkbox" checked={jitEnabled} onChange={e => setJitEnabled(e.target.checked)}
                 className="accent-violet-500" />
               <span>JIT provisioning — auto-create users on first SSO login</span>
             </label>
-            <label className="inline-flex items-center gap-2 text-sm text-slate-300">
+            <label className="inline-flex items-center gap-2 text-sm text-[var(--text-muted)]">
               <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)}
                 className="accent-violet-500" />
               <span>SSO is active</span>

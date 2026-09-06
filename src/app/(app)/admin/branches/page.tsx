@@ -61,13 +61,13 @@ function daysUntilExpiry(dateStr?: string): number | null {
 }
 
 function ExpiryBadge({ dateStr }: { dateStr?: string }) {
-  if (!dateStr) return <span className="text-slate-600 text-xs">—</span>;
+  if (!dateStr) return <span className="text-[var(--text-faint)] text-xs">—</span>;
   const days = daysUntilExpiry(dateStr);
-  if (days === null) return <span className="text-slate-600 text-xs">—</span>;
+  if (days === null) return <span className="text-[var(--text-faint)] text-xs">—</span>;
   if (days < 0) return <span className="text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-full">Expired {Math.abs(days)}d ago</span>;
   if (days < 30) return <span className="text-xs bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-full">Expires in {days}d</span>;
   if (days < 90) return <span className="text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full">Expires in {days}d</span>;
-  return <span className="text-xs text-slate-400">{new Date(dateStr).toLocaleDateString('en-AE')}</span>;
+  return <span className="text-xs text-[var(--text-muted)]">{new Date(dateStr).toLocaleDateString('en-AE')}</span>;
 }
 
 // ── Reusable field — defined OUTSIDE modal so it never gets recreated on render
@@ -83,14 +83,14 @@ function Field({ label, name, type = 'text', placeholder = '', required = false,
 }) {
   return (
     <div>
-      <label className="block text-slate-300 text-xs font-medium mb-1.5">{label}{required && ' *'}</label>
+      <label className="block text-[var(--text-muted)] text-xs font-medium mb-1.5">{label}{required && ' *'}</label>
       {children ?? (
         <input
           type={type}
           value={value ?? ''}
           placeholder={placeholder}
           onChange={e => onChange?.(name, e.target.value)}
-          className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500/50 transition-colors"
+          className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-emerald-500/50 transition-colors"
         />
       )}
     </div>
@@ -160,14 +160,14 @@ function BranchModal({
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)]">
           <div>
-            <h2 className="text-white font-bold text-lg">{isEdit ? 'Edit Branch' : 'Add New Branch'}</h2>
-            <p className="text-slate-400 text-xs mt-0.5">Multi-emirate branch under a single TRN</p>
+            <h2 className="text-[var(--text-main)] font-bold text-lg">{isEdit ? 'Edit Branch' : 'Add New Branch'}</h2>
+            <p className="text-[var(--text-muted)] text-xs mt-0.5">Multi-emirate branch under a single TRN</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white text-xl transition-colors">✕</button>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl transition-colors">✕</button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
@@ -177,12 +177,12 @@ function BranchModal({
 
           {/* Tenant */}
           <div>
-            <label className="block text-slate-300 text-xs font-medium mb-1.5">Tenant *</label>
+            <label className="block text-[var(--text-muted)] text-xs font-medium mb-1.5">Tenant *</label>
             <select
               value={form.tenantId}
               onChange={e => setForm(f => ({ ...f, tenantId: e.target.value }))}
               disabled={isEdit}
-              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500/50 disabled:opacity-60"
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-emerald-500/50 disabled:opacity-60"
             >
               <option value="">Select a tenant…</option>
               {tenants.map(t => (
@@ -190,7 +190,7 @@ function BranchModal({
               ))}
             </select>
             {form.tenantId && (
-              <p className="text-slate-600 text-xs mt-1">
+              <p className="text-[var(--text-faint)] text-xs mt-1">
                 TRN: {tenants.find(t => t.id === form.tenantId)?.trn ?? '—'} · Shared across all branches
               </p>
             )}
@@ -200,11 +200,11 @@ function BranchModal({
           <div className="grid grid-cols-2 gap-4">
             <Field label="Branch Name" name="branchName" placeholder="Abu Dhabi Branch" required value={form.branchName} onChange={handleField} />
             <div>
-              <label className="block text-slate-300 text-xs font-medium mb-1.5">Emirate *</label>
+              <label className="block text-[var(--text-muted)] text-xs font-medium mb-1.5">Emirate *</label>
               <select
                 value={form.emirate}
                 onChange={e => setForm(f => ({ ...f, emirate: e.target.value, tradeLicenseAuthority: EMIRATE_MAP[e.target.value]?.authorities[0] ?? '' }))}
-                className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500/50"
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-emerald-500/50"
               >
                 {EMIRATES.map(em => (
                   <option key={em.value} value={em.value}>{em.flag} {em.label}</option>
@@ -214,18 +214,18 @@ function BranchModal({
           </div>
 
           {/* Trade License section */}
-          <div className="bg-slate-800/40 border border-amber-500/10 rounded-xl p-4 space-y-4">
+          <div className="bg-[var(--bg-surface)]/40 border border-amber-500/10 rounded-xl p-4 space-y-4">
             <p className="text-amber-400 text-xs font-semibold uppercase tracking-wide flex items-center gap-1.5">
               📜 Trade License (Emirate-specific)
             </p>
             <div className="grid grid-cols-2 gap-4">
               <Field label="Trade License Number" name="tradeLicenseNo" placeholder="CN-1234567" value={form.tradeLicenseNo} onChange={handleField} />
               <div>
-                <label className="block text-slate-300 text-xs font-medium mb-1.5">Issuing Authority</label>
+                <label className="block text-[var(--text-muted)] text-xs font-medium mb-1.5">Issuing Authority</label>
                 <select
                   value={form.tradeLicenseAuthority}
                   onChange={e => setForm(f => ({ ...f, tradeLicenseAuthority: e.target.value }))}
-                  className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500/50"
+                  className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-emerald-500/50"
                 >
                   {emirateAuthorities.map(a => <option key={a} value={a}>{a}</option>)}
                 </select>
@@ -237,7 +237,7 @@ function BranchModal({
 
           {/* Billing address */}
           <div className="space-y-3">
-            <p className="text-slate-400 text-xs font-semibold uppercase tracking-wide">Billing Address (appears on invoices)</p>
+            <p className="text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wide">Billing Address (appears on invoices)</p>
             <Field label="Street Address" name="billingAddress" placeholder="Al Khalidiyah Street" value={form.billingAddress} onChange={handleField} />
             <div className="grid grid-cols-2 gap-4">
               <Field label="City" name="billingCity" placeholder="Abu Dhabi" value={form.billingCity} onChange={handleField} />
@@ -247,7 +247,7 @@ function BranchModal({
 
           {/* Contact */}
           <div className="space-y-3">
-            <p className="text-slate-400 text-xs font-semibold uppercase tracking-wide">Branch Contact</p>
+            <p className="text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wide">Branch Contact</p>
             <div className="grid grid-cols-3 gap-4">
               <Field label="Contact Name" name="contactName" placeholder="Branch Manager" value={form.contactName} onChange={handleField} />
               <Field label="Email" name="contactEmail" type="email" placeholder="ops@branch.ae" value={form.contactEmail} onChange={handleField} />
@@ -264,25 +264,25 @@ function BranchModal({
                 onChange={e => setForm(f => ({ ...f, isDefault: e.target.checked }))}
                 className="w-4 h-4 rounded accent-emerald-500"
               />
-              <span className="text-slate-300 text-sm">Set as head-office / default branch</span>
+              <span className="text-[var(--text-muted)] text-sm">Set as head-office / default branch</span>
             </label>
           </div>
 
           {/* Notes */}
           <div>
-            <label className="block text-slate-300 text-xs font-medium mb-1.5">Notes</label>
+            <label className="block text-[var(--text-muted)] text-xs font-medium mb-1.5">Notes</label>
             <textarea
               value={form.notes}
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
               rows={2}
               placeholder="Any internal notes about this branch…"
-              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500/50 resize-none"
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-emerald-500/50 resize-none"
             />
           </div>
 
           {/* Actions */}
-          <div className="flex items-center justify-end gap-3 pt-2 border-t border-white/10">
-            <button type="button" onClick={onClose} className="px-5 py-2.5 rounded-xl bg-slate-800 border border-white/10 text-slate-300 text-sm hover:text-white transition-colors">
+          <div className="flex items-center justify-end gap-3 pt-2 border-t border-[var(--border-subtle)]">
+            <button type="button" onClick={onClose} className="px-5 py-2.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-sm hover:text-[var(--text-main)] transition-colors">
               Cancel
             </button>
             <button type="submit" disabled={saving} className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition-colors disabled:opacity-60">
@@ -310,27 +310,27 @@ function DeleteConfirmModal({
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-900 border border-red-500/30 rounded-2xl w-full max-w-md shadow-2xl">
+      <div className="bg-[var(--bg-surface)] border border-red-500/30 rounded-2xl w-full max-w-md shadow-2xl">
         {/* Header */}
-        <div className="flex items-center gap-3 px-6 py-5 border-b border-white/10">
+        <div className="flex items-center gap-3 px-6 py-5 border-b border-[var(--border-subtle)]">
           <div className="w-10 h-10 rounded-full bg-red-500/15 border border-red-500/30 flex items-center justify-center flex-shrink-0">
             <span className="text-lg">⚠️</span>
           </div>
           <div>
-            <h2 className="text-white font-bold text-base">Delete Branch</h2>
-            <p className="text-slate-400 text-xs mt-0.5">This action cannot be undone</p>
+            <h2 className="text-[var(--text-main)] font-bold text-base">Delete Branch</h2>
+            <p className="text-[var(--text-muted)] text-xs mt-0.5">This action cannot be undone</p>
           </div>
         </div>
 
         {/* Branch summary */}
         <div className="px-6 py-5 space-y-4">
-          <div className="bg-slate-800/60 border border-white/10 rounded-xl px-4 py-3 flex items-center gap-3">
+          <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl px-4 py-3 flex items-center gap-3">
             <span className="text-2xl">{em?.flag ?? '🏢'}</span>
             <div>
-              <p className="text-white font-semibold text-sm">{branch.branch_name}</p>
-              <p className="text-slate-400 text-xs">{branch.tenant_name} · {em?.label ?? branch.emirate}</p>
+              <p className="text-[var(--text-main)] font-semibold text-sm">{branch.branch_name}</p>
+              <p className="text-[var(--text-muted)] text-xs">{branch.tenant_name} · {em?.label ?? branch.emirate}</p>
               {branch.trade_license_no && (
-                <p className="text-slate-500 text-xs font-mono mt-0.5">TL: {branch.trade_license_no}</p>
+                <p className="text-[var(--text-faint)] text-xs font-mono mt-0.5">TL: {branch.trade_license_no}</p>
               )}
             </div>
           </div>
@@ -341,25 +341,25 @@ function DeleteConfirmModal({
               <p className="text-amber-300 text-xs font-semibold flex items-center gap-1.5">
                 🔗 Linked records will be affected
               </p>
-              <ul className="text-slate-400 text-xs space-y-1 ml-1">
+              <ul className="text-[var(--text-muted)] text-xs space-y-1 ml-1">
                 {(branch.invoice_count ?? 0) > 0 && (
                   <li>• {branch.invoice_count} invoice{branch.invoice_count !== 1 ? 's' : ''} linked to this branch</li>
                 )}
                 {(branch.vehicle_count ?? 0) > 0 && (
                   <li>• {branch.vehicle_count} vehicle{branch.vehicle_count !== 1 ? 's' : ''} assigned to this branch</li>
                 )}
-                <li className="text-slate-500 pt-0.5">These records will remain but lose their branch association.</li>
+                <li className="text-[var(--text-faint)] pt-0.5">These records will remain but lose their branch association.</li>
               </ul>
             </div>
           ) : (
-            <div className="bg-slate-800/40 border border-white/8 rounded-xl px-4 py-3">
-              <p className="text-slate-400 text-xs">No invoices or vehicles are linked to this branch.</p>
+            <div className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-xl px-4 py-3">
+              <p className="text-[var(--text-muted)] text-xs">No invoices or vehicles are linked to this branch.</p>
             </div>
           )}
 
-          <p className="text-slate-400 text-sm">
+          <p className="text-[var(--text-muted)] text-sm">
             Are you sure you want to permanently delete{' '}
-            <span className="text-white font-medium">{branch.branch_name}</span>?
+            <span className="text-[var(--text-main)] font-medium">{branch.branch_name}</span>?
           </p>
 
           {error && (
@@ -370,11 +370,11 @@ function DeleteConfirmModal({
         </div>
 
         {/* Actions */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-white/10">
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[var(--border-subtle)]">
           <button
             onClick={onCancel}
             disabled={deleting}
-            className="px-5 py-2.5 rounded-xl bg-slate-800 border border-white/10 text-slate-300 text-sm hover:text-white transition-colors disabled:opacity-50"
+            className="px-5 py-2.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-sm hover:text-[var(--text-main)] transition-colors disabled:opacity-50"
           >
             Cancel
           </button>
@@ -384,7 +384,7 @@ function DeleteConfirmModal({
             className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-sm font-medium transition-colors disabled:opacity-60 flex items-center gap-2"
           >
             {deleting ? (
-              <><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block" /> Deleting…</>
+              <><span className="w-3.5 h-3.5 border-2 border-[var(--border-strong)] border-t-white rounded-full animate-spin inline-block" /> Deleting…</>
             ) : (
               '🗑️ Delete Branch'
             )}
@@ -482,8 +482,8 @@ export default function BranchesPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Branch Management</h1>
-          <p className="text-slate-400 text-xs mt-1">
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Branch Management</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-1">
             Multi-emirate branches per tenant · Separate trade licenses · Single TRN per company
           </p>
         </div>
@@ -500,9 +500,9 @@ export default function BranchesPage() {
         <span className="text-xl flex-shrink-0">🇦🇪</span>
         <div>
           <p className="text-amber-300 font-medium text-sm">UAE Multi-Branch Architecture</p>
-          <p className="text-slate-400 text-xs mt-1 leading-relaxed">
-            The <strong className="text-white">TRN</strong> (Tax Registration Number) is a single federal number issued by FTA — shared across all emirates.
-            Each emirate has its own <strong className="text-white">Trade License</strong> (DED Dubai, ADDED Abu Dhabi, etc.).
+          <p className="text-[var(--text-muted)] text-xs mt-1 leading-relaxed">
+            The <strong className="text-[var(--text-main)]">TRN</strong> (Tax Registration Number) is a single federal number issued by FTA — shared across all emirates.
+            Each emirate has its own <strong className="text-[var(--text-main)]">Trade License</strong> (DED Dubai, ADDED Abu Dhabi, etc.).
             Invoices display the branch trade license and address, while VAT is consolidated under the single TRN for FTA filing.
           </p>
         </div>
@@ -516,10 +516,10 @@ export default function BranchesPage() {
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {expiringSoon.map(b => (
-              <div key={b.id} className="flex items-center justify-between bg-slate-900/60 border border-red-500/10 rounded-xl px-4 py-2">
+              <div key={b.id} className="flex items-center justify-between bg-[var(--bg-surface)]/60 border border-red-500/10 rounded-xl px-4 py-2">
                 <div>
-                  <p className="text-white text-sm font-medium">{b.branch_name}</p>
-                  <p className="text-slate-500 text-xs">{b.tenant_name} · {b.trade_license_authority}</p>
+                  <p className="text-[var(--text-main)] text-sm font-medium">{b.branch_name}</p>
+                  <p className="text-[var(--text-faint)] text-xs">{b.tenant_name} · {b.trade_license_authority}</p>
                 </div>
                 <ExpiryBadge dateStr={b.trade_license_expiry} />
               </div>
@@ -532,11 +532,11 @@ export default function BranchesPage() {
       {statsByEmirate.length > 0 && (
         <div className="flex gap-3 flex-wrap">
           {statsByEmirate.map(em => (
-            <div key={em.value} className="flex items-center gap-2 bg-slate-900 border border-white/10 rounded-xl px-4 py-2.5">
+            <div key={em.value} className="flex items-center gap-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5">
               <span className="text-lg">{em.flag}</span>
               <div>
-                <p className="text-white text-sm font-semibold">{em.label}</p>
-                <p className="text-slate-500 text-xs">{em.count} branch{em.count !== 1 ? 'es' : ''}</p>
+                <p className="text-[var(--text-main)] text-sm font-semibold">{em.label}</p>
+                <p className="text-[var(--text-faint)] text-xs">{em.count} branch{em.count !== 1 ? 'es' : ''}</p>
               </div>
             </div>
           ))}
@@ -550,12 +550,12 @@ export default function BranchesPage() {
           placeholder="Search branches, tenants, license…"
           value={filter.search}
           onChange={e => setFilter(f => ({ ...f, search: e.target.value }))}
-          className="flex-1 min-w-48 bg-slate-800 border border-white/10 rounded-xl px-4 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-emerald-500/40"
+          className="flex-1 min-w-48 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] text-sm placeholder-[var(--text-faint)] focus:outline-none focus:border-emerald-500/40"
         />
         <select
           value={filter.tenantId}
           onChange={e => setFilter(f => ({ ...f, tenantId: e.target.value }))}
-          className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2 text-white text-sm focus:outline-none"
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] text-sm focus:outline-none"
         >
           <option value="">All Tenants</option>
           {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -563,7 +563,7 @@ export default function BranchesPage() {
         <select
           value={filter.emirate}
           onChange={e => setFilter(f => ({ ...f, emirate: e.target.value }))}
-          className="bg-slate-800 border border-white/10 rounded-xl px-4 py-2 text-white text-sm focus:outline-none"
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] text-sm focus:outline-none"
         >
           <option value="">All Emirates</option>
           {EMIRATES.map(em => <option key={em.value} value={em.value}>{em.flag} {em.label}</option>)}
@@ -571,7 +571,7 @@ export default function BranchesPage() {
         {(filter.tenantId || filter.emirate || filter.search) && (
           <button
             onClick={() => setFilter({ tenantId: '', emirate: '', search: '' })}
-            className="text-slate-400 hover:text-white text-sm px-3 py-2 rounded-xl bg-slate-800 border border-white/10 transition-colors whitespace-nowrap"
+            className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-sm px-3 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] transition-colors whitespace-nowrap"
           >
             ✕ Clear filters
           </button>
@@ -579,28 +579,28 @@ export default function BranchesPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-slate-900 border border-white/10 rounded-2xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
-          <h2 className="text-white font-semibold">
-            All Branches <span className="text-slate-500 font-normal ml-2 text-sm">({filtered.length})</span>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
+          <h2 className="text-[var(--text-main)] font-semibold">
+            All Branches <span className="text-[var(--text-faint)] font-normal ml-2 text-sm">({filtered.length})</span>
           </h2>
         </div>
 
         {loading ? (
-          <div className="p-12 text-center text-slate-500 text-sm">Loading branches…</div>
+          <div className="p-12 text-center text-[var(--text-faint)] text-sm">Loading branches…</div>
         ) : filtered.length === 0 ? (
           <div className="p-16 text-center">
             <p className="text-4xl mb-3">🏢</p>
             {(filter.tenantId || filter.emirate || filter.search) ? (
               <>
-                <p className="text-white font-medium">No branches match your filters</p>
-                <p className="text-slate-500 text-sm mt-1">Try changing the emirate or tenant filter, or clear all filters</p>
+                <p className="text-[var(--text-main)] font-medium">No branches match your filters</p>
+                <p className="text-[var(--text-faint)] text-sm mt-1">Try changing the emirate or tenant filter, or clear all filters</p>
                 <button onClick={() => setFilter({ tenantId: '', emirate: '', search: '' })} className="mt-4 text-emerald-400 text-sm hover:text-emerald-300 transition-colors">✕ Clear filters →</button>
               </>
             ) : (
               <>
-                <p className="text-white font-medium">No branches yet</p>
-                <p className="text-slate-500 text-sm mt-1">Add your first branch to get started</p>
+                <p className="text-[var(--text-main)] font-medium">No branches yet</p>
+                <p className="text-[var(--text-faint)] text-sm mt-1">Add your first branch to get started</p>
                 <button onClick={() => setModal({ open: true, branch: null })} className="mt-4 text-emerald-400 text-sm hover:text-emerald-300 transition-colors">+ Add Branch →</button>
               </>
             )}
@@ -609,7 +609,7 @@ export default function BranchesPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-slate-800/50 text-xs text-slate-400">
+                <tr className="bg-[var(--bg-surface)]/50 text-xs text-[var(--text-muted)]">
                   <th className="text-left px-6 py-3">Branch</th>
                   <th className="text-left px-4 py-3">Tenant / TRN</th>
                   <th className="text-left px-4 py-3">Emirate</th>
@@ -626,54 +626,54 @@ export default function BranchesPage() {
                 {filtered.map(b => {
                   const em = EMIRATE_MAP[b.emirate];
                   return (
-                    <tr key={b.id} className="hover:bg-white/5 transition-colors">
+                    <tr key={b.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2.5">
                           <span className="text-lg">{em?.flag ?? '🏢'}</span>
                           <div>
                             <div className="flex items-center gap-1.5">
-                              <p className="text-white font-medium">{b.branch_name}</p>
+                              <p className="text-[var(--text-main)] font-medium">{b.branch_name}</p>
                               {b.is_default && (
                                 <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded-full">HQ</span>
                               )}
                             </div>
-                            {b.contact_email && <p className="text-slate-500 text-xs">{b.contact_email}</p>}
+                            {b.contact_email && <p className="text-[var(--text-faint)] text-xs">{b.contact_email}</p>}
                           </div>
                         </div>
                       </td>
                       <td className="px-4 py-4">
-                        <p className="text-slate-300 text-sm">{b.tenant_name ?? '—'}</p>
-                        {b.tenant_trn && <p className="text-slate-600 text-xs font-mono">TRN: {b.tenant_trn}</p>}
+                        <p className="text-[var(--text-muted)] text-sm">{b.tenant_name ?? '—'}</p>
+                        {b.tenant_trn && <p className="text-[var(--text-faint)] text-xs font-mono">TRN: {b.tenant_trn}</p>}
                       </td>
                       <td className="px-4 py-4">
-                        <span className="text-slate-300 text-sm">{em?.label ?? b.emirate}</span>
-                        {b.trade_license_authority && <p className="text-slate-600 text-xs">{b.trade_license_authority}</p>}
+                        <span className="text-[var(--text-muted)] text-sm">{em?.label ?? b.emirate}</span>
+                        {b.trade_license_authority && <p className="text-[var(--text-faint)] text-xs">{b.trade_license_authority}</p>}
                       </td>
                       <td className="px-4 py-4">
                         {b.trade_license_no
-                          ? <span className="font-mono text-sm text-slate-300">{b.trade_license_no}</span>
-                          : <span className="text-slate-600">—</span>}
+                          ? <span className="font-mono text-sm text-[var(--text-muted)]">{b.trade_license_no}</span>
+                          : <span className="text-[var(--text-faint)]">—</span>}
                       </td>
                       <td className="px-4 py-4">
                         <ExpiryBadge dateStr={b.trade_license_expiry} />
                       </td>
                       <td className="px-4 py-4">
                         {b.cost_center_code
-                          ? <span className="font-mono text-xs bg-slate-800 border border-white/10 text-slate-300 px-2 py-1 rounded">{b.cost_center_code}</span>
-                          : <span className="text-slate-600">—</span>}
+                          ? <span className="font-mono text-xs bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] px-2 py-1 rounded">{b.cost_center_code}</span>
+                          : <span className="text-[var(--text-faint)]">—</span>}
                       </td>
-                      <td className="px-4 py-4 text-right text-slate-300">{b.invoice_count}</td>
-                      <td className="px-4 py-4 text-right text-slate-300">{b.vehicle_count}</td>
+                      <td className="px-4 py-4 text-right text-[var(--text-muted)]">{b.invoice_count}</td>
+                      <td className="px-4 py-4 text-right text-[var(--text-muted)]">{b.vehicle_count}</td>
                       <td className="px-4 py-4 text-center">
                         {b.is_active
                           ? <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full">Active</span>
-                          : <span className="text-xs bg-slate-700/60 text-slate-500 border border-white/10 px-2 py-0.5 rounded-full">Inactive</span>}
+                          : <span className="text-xs bg-[var(--bg-surface-hover)]/60 text-[var(--text-faint)] border border-[var(--border-subtle)] px-2 py-0.5 rounded-full">Inactive</span>}
                       </td>
                       <td className="px-4 py-4">
                         <div className="flex items-center gap-2 justify-end">
                           <button
                             onClick={() => setModal({ open: true, branch: b })}
-                            className="text-xs text-slate-400 hover:text-white bg-slate-800 border border-white/10 px-3 py-1.5 rounded-lg transition-colors"
+                            className="text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-3 py-1.5 rounded-lg transition-colors"
                           >Edit</button>
                           <button
                             onClick={() => setDeleteTarget(b)}

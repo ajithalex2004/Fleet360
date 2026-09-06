@@ -120,14 +120,14 @@ export default function UpgradePage() {
   return (
     <div className="space-y-8 max-w-6xl">
       <div>
-        <Link href="/admin/subscription" className="text-xs text-slate-400 hover:text-white inline-flex items-center gap-1 mb-2">
+        <Link href="/admin/subscription" className="text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] inline-flex items-center gap-1 mb-2">
           <ArrowLeft className="w-3 h-3" /> Back to subscription
         </Link>
-        <h1 className="text-2xl font-bold text-white inline-flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-[var(--text-main)] inline-flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-emerald-400" /> Upgrade your plan
         </h1>
-        <p className="text-slate-400 text-sm mt-1">
-          Currently on <strong className="text-white">{currentPlan}</strong>. Pick a plan to continue.
+        <p className="text-[var(--text-muted)] text-sm mt-1">
+          Currently on <strong className="text-[var(--text-main)]">{currentPlan}</strong>. Pick a plan to continue.
         </p>
       </div>
 
@@ -142,15 +142,15 @@ export default function UpgradePage() {
         </div>
       )}
 
-      <div className="flex items-center justify-between bg-slate-800/30 border border-white/5 rounded-xl px-4 py-2">
-        <div className="text-sm text-slate-400">Currency</div>
+      <div className="flex items-center justify-between bg-[var(--bg-surface)]/30 border border-[var(--border-subtle)] rounded-xl px-4 py-2">
+        <div className="text-sm text-[var(--text-muted)]">Currency</div>
         <div className="flex gap-1">
           {(['usd', 'aed'] as const).map(c => (
             <button key={c} onClick={() => setCurrency(c)}
               className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${
                 currency === c
                   ? 'bg-emerald-500/30 text-emerald-200 border-emerald-500/60'
-                  : 'bg-slate-800/50 text-slate-400 border-white/10 hover:border-white/30'
+                  : 'bg-[var(--bg-surface)]/50 text-[var(--text-muted)] border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
               }`}>
               {c.toUpperCase()}
             </button>
@@ -165,23 +165,23 @@ export default function UpgradePage() {
           const symbol = currency === 'usd' ? '$' : 'AED ';
           return (
             <div key={p.code}
-              className={`bg-slate-800/50 border rounded-2xl p-6 space-y-4 ${
-                p.featured ? 'border-emerald-500/40 shadow-lg shadow-emerald-500/10' : 'border-white/10'
+              className={`bg-[var(--bg-surface)]/50 border rounded-2xl p-6 space-y-4 ${
+                p.featured ? 'border-emerald-500/40 shadow-lg shadow-emerald-500/10' : 'border-[var(--border-subtle)]'
               }`}>
               {p.featured && (
                 <div className="text-[10px] uppercase tracking-wider text-emerald-300 font-bold">Most popular</div>
               )}
               <div>
-                <h2 className="text-xl font-bold text-white">{p.title}</h2>
-                <p className="text-sm text-slate-400 mt-1">{p.blurb}</p>
+                <h2 className="text-xl font-bold text-[var(--text-main)]">{p.title}</h2>
+                <p className="text-sm text-[var(--text-muted)] mt-1">{p.blurb}</p>
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-3xl font-bold text-white">{symbol}{price.toLocaleString()}</span>
-                <span className="text-sm text-slate-400">/ month</span>
+                <span className="text-3xl font-bold text-[var(--text-main)]">{symbol}{price.toLocaleString()}</span>
+                <span className="text-sm text-[var(--text-muted)]">/ month</span>
               </div>
               <ul className="space-y-2 text-sm">
                 {p.bullets.map(b => (
-                  <li key={b} className="flex items-start gap-2 text-slate-300">
+                  <li key={b} className="flex items-start gap-2 text-[var(--text-muted)]">
                     <Check className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" /> <span>{b}</span>
                   </li>
                 ))}
@@ -191,10 +191,10 @@ export default function UpgradePage() {
                 onClick={() => checkout(p.code)}
                 className={`w-full py-2.5 rounded-lg font-semibold text-sm transition-all ${
                   isCurrent
-                    ? 'bg-slate-700/50 text-slate-400 cursor-default'
+                    ? 'bg-[var(--bg-surface-hover)]/50 text-[var(--text-muted)] cursor-default'
                     : p.featured
                       ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                      : 'bg-slate-700 hover:bg-slate-600 text-white'
+                      : 'bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)]'
                 } disabled:opacity-50`}>
                 {isCurrent ? 'Current plan' : loadingPlan === p.code ? 'Redirecting…' : `Choose ${p.title}`}
               </button>
@@ -204,19 +204,19 @@ export default function UpgradePage() {
       </div>
 
       {hasCustomer && (
-        <div className="bg-slate-800/30 border border-white/5 rounded-2xl p-5 space-y-3">
-          <h3 className="text-sm font-semibold text-white">Need to update payment method or view invoices?</h3>
+        <div className="bg-[var(--bg-surface)]/30 border border-[var(--border-subtle)] rounded-2xl p-5 space-y-3">
+          <h3 className="text-sm font-semibold text-[var(--text-main)]">Need to update payment method or view invoices?</h3>
           <button onClick={portal} disabled={loadingPlan === 'portal'}
-            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 rounded-lg text-white text-sm inline-flex items-center gap-2">
+            className="px-4 py-2 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] disabled:opacity-50 rounded-lg text-[var(--text-main)] text-sm inline-flex items-center gap-2">
             <ExternalLink className="w-4 h-4" /> {loadingPlan === 'portal' ? 'Opening…' : 'Manage in Stripe'}
           </button>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-[var(--text-faint)]">
             Stripe&rsquo;s hosted Customer Portal — update card, download VAT invoices, change plan, or cancel.
           </p>
         </div>
       )}
 
-      <p className="text-xs text-slate-500 text-center">
+      <p className="text-xs text-[var(--text-faint)] text-center">
         VAT (5% UAE) is calculated automatically at checkout. Cancel anytime; you keep access through the period you&rsquo;ve paid for.
       </p>
     </div>

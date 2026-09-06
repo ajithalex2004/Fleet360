@@ -65,17 +65,17 @@ export default function BrandPreviewPage() {
 
           <div className="flex-1 max-w-md mx-auto">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-faint)]" />
               <input
                 placeholder="Search anything…"
-                className="w-full rounded-xl pl-10 pr-12 py-2 text-sm placeholder-slate-500 focus:outline-none transition-all"
+                className="w-full rounded-xl pl-10 pr-12 py-2 text-sm placeholder-[var(--text-faint)] focus:outline-none transition-all"
                 style={{
                   background: C.surface,
                   border: `1px solid ${C.border}`,
                   boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
                 }}
               />
-              <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-500 border rounded px-1.5 py-0.5"
+              <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-[var(--text-faint)] border rounded px-1.5 py-0.5"
                 style={{ borderColor: C.border, background: 'rgba(255,255,255,0.03)' }}>⌘K</kbd>
             </div>
           </div>
@@ -98,7 +98,7 @@ export default function BrandPreviewPage() {
             </span>
             <span className="text-[11px] font-medium text-emerald-300">All systems operational</span>
           </div>
-          <button className="inline-flex items-center gap-1.5 text-[11px] hover:text-white transition-colors px-2.5 py-1 rounded-md"
+          <button className="inline-flex items-center gap-1.5 text-[11px] hover:text-[var(--text-main)] transition-colors px-2.5 py-1 rounded-md"
             style={{ color: 'rgba(255,255,255,0.5)' }}>
             <RefreshCw className="w-3 h-3" /> 14:32
           </button>
@@ -133,10 +133,10 @@ export default function BrandPreviewPage() {
                       <a.Icon className="w-4 h-4" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-white">{a.label}</div>
+                      <div className="text-sm font-medium text-[var(--text-main)]">{a.label}</div>
                       <div className="text-[11px]" style={{ color: 'rgba(255,255,255,0.4)' }}>{a.sub}</div>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-white transition-colors" />
+                    <ChevronRight className="w-4 h-4 text-[var(--text-faint)] group-hover:text-[var(--text-main)] transition-colors" />
                   </a>
                 </li>
               ))}
@@ -160,7 +160,7 @@ export default function BrandPreviewPage() {
                     <p.Icon className="w-3.5 h-3.5" style={{ color: p.tone === 'gold' ? C.gold : C.blueBright }} />
                     <span className="text-[10px] uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.4)' }}>{p.label}</span>
                   </div>
-                  <div className="text-2xl font-bold text-white tabular-nums">{p.value}</div>
+                  <div className="text-2xl font-bold text-[var(--text-main)] tabular-nums">{p.value}</div>
                   <div className="text-[11px] truncate" style={{ color: 'rgba(255,255,255,0.4)' }}>{p.sub}</div>
                 </a>
               ))}
@@ -187,8 +187,8 @@ export default function BrandPreviewPage() {
                     }}>
                     <q.Icon className="w-4 h-4" style={{ color: C.gold }} />
                   </div>
-                  <span className="flex-1 text-sm font-medium text-white">{q.label}</span>
-                  <ArrowUpRight className="w-4 h-4 text-slate-600 group-hover:text-white transition-colors" />
+                  <span className="flex-1 text-sm font-medium text-[var(--text-main)]">{q.label}</span>
+                  <ArrowUpRight className="w-4 h-4 text-[var(--text-faint)] group-hover:text-[var(--text-main)] transition-colors" />
                 </a>
               ))}
             </div>
@@ -235,7 +235,7 @@ export default function BrandPreviewPage() {
             <div className="mt-4 flex items-center gap-2">
               <input
                 placeholder="Sample input…"
-                className="flex-1 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none transition-all"
+                className="flex-1 rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none transition-all"
                 style={{
                   background: C.surface, border: `1px solid ${C.border}`,
                   boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.05)',
@@ -280,9 +280,9 @@ export default function BrandPreviewPage() {
 
         <footer className="text-center text-[11px] pt-4" style={{ color: 'rgba(255,255,255,0.3)' }}>
           Brand preview — compare against{' '}
-          <a href="/platform" className="hover:text-white" style={{ color: C.gold }}>/platform</a>
+          <a href="/platform" className="hover:text-[var(--text-main)]" style={{ color: C.gold }}>/platform</a>
           {' · '}
-          <a href="/platform" className="hover:text-white" style={{ color: C.blueBright }}>/platform</a>
+          <a href="/platform" className="hover:text-[var(--text-main)]" style={{ color: C.blueBright }}>/platform</a>
           {' · then decide whether to roll out via tailwind.config + page-theme.tsx.'}
         </footer>
       </main>
@@ -326,7 +326,7 @@ function PulseCard({ tone, label, value, sub, Icon }: { tone: 'gold' | 'blue'; l
           style={{ background: tint, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)' }}>
           <Icon className="w-5 h-5" />
         </div>
-        <ArrowUpRight className="w-4 h-4 text-slate-600 group-hover:text-white transition-colors" />
+        <ArrowUpRight className="w-4 h-4 text-[var(--text-faint)] group-hover:text-[var(--text-main)] transition-colors" />
       </div>
       <div className="text-[11px] uppercase tracking-wider font-medium mb-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>{label}</div>
       <div className="text-4xl font-black tabular-nums tracking-tight mb-1.5"
@@ -350,7 +350,7 @@ function GlassPanel({ title, Icon, accent, count, children }: { title: string; I
       }}>
       <div className="flex items-center gap-2 mb-4">
         <Icon className="w-4 h-4" style={{ color: c }} />
-        <h3 className="text-sm font-semibold text-white">{title}</h3>
+        <h3 className="text-sm font-semibold text-[var(--text-main)]">{title}</h3>
         {count !== undefined && count > 0 && (
           <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full"
             style={{ background: tint, color: c }}>
@@ -376,7 +376,7 @@ function ModuleTile({ Icon, label, tone }: { Icon: React.ComponentType<{ classNa
         style={{ background: tint, color, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08)' }}>
         <Icon className="w-5 h-5" />
       </div>
-      <span className="text-[10px] text-center leading-tight font-medium group-hover:text-white" style={{ color: 'rgba(255,255,255,0.5)' }}>{label}</span>
+      <span className="text-[10px] text-center leading-tight font-medium group-hover:text-[var(--text-main)]" style={{ color: 'rgba(255,255,255,0.5)' }}>{label}</span>
     </a>
   );
 }
@@ -403,7 +403,7 @@ function ButtonPrimary({ icon: Icon, children, onClick }: BtnProps) {
 function ButtonSecondary({ icon: Icon, children, onClick }: BtnProps) {
   return (
     <button onClick={onClick}
-      className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold text-white transition-all"
+      className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold text-[var(--text-main)] transition-all"
       style={{
         background: `linear-gradient(135deg, ${C.blue} 0%, #1e40af 100%)`,
         boxShadow: `inset 0 1px 0 rgba(255,255,255,0.20), 0 8px 24px -4px ${C.blueGlow}`,
@@ -430,7 +430,7 @@ function ButtonGhost({ icon: Icon, children, onClick }: BtnProps) {
 function ButtonDanger({ icon: Icon, children, onClick }: BtnProps) {
   return (
     <button onClick={onClick}
-      className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold text-white transition-all"
+      className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-semibold text-[var(--text-main)] transition-all"
       style={{
         background: 'linear-gradient(135deg, #f43f5e 0%, #be123c 100%)',
         boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.20), 0 8px 24px -4px rgba(244,63,94,0.30)',
@@ -467,7 +467,7 @@ function Swatch({ label, color }: { label: string; color: string }) {
       style={{ border: `1px solid ${C.border}` }}>
       <div className="h-16 w-full" style={{ background: color }} />
       <div className="px-3 py-2" style={{ background: 'rgba(0,0,0,0.4)' }}>
-        <div className="text-xs font-semibold text-white">{label}</div>
+        <div className="text-xs font-semibold text-[var(--text-main)]">{label}</div>
         <code className="text-[10px] font-mono" style={{ color: 'rgba(255,255,255,0.5)' }}>{color}</code>
       </div>
     </div>

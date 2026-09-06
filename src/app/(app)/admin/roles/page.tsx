@@ -273,7 +273,7 @@ export default function RolesPage() {
 
   if (loading) return (
     <div className="flex items-center justify-center h-full">
-      <div className="text-slate-400 animate-pulse">Loading roles...</div>
+      <div className="text-[var(--text-muted)] animate-pulse">Loading roles...</div>
     </div>
   );
 
@@ -288,20 +288,20 @@ export default function RolesPage() {
   //                `relative` parent.
   return (
     <div className={fullscreen
-      ? 'fixed inset-0 z-40 bg-slate-950 p-6 flex flex-col gap-6 overflow-hidden'
-      : 'absolute inset-0 bg-slate-950 p-6 flex flex-col gap-6 overflow-hidden'
+      ? 'fixed inset-0 z-40 bg-[var(--bg-canvas)] p-6 flex flex-col gap-6 overflow-hidden'
+      : 'absolute inset-0 bg-[var(--bg-canvas)] p-6 flex flex-col gap-6 overflow-hidden'
     }>
       {!fullscreen && (
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white mb-2">Roles & Permissions</h1>
-            <p className="text-xs text-slate-400">Configure granular access control per module, action, and resource</p>
+            <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Roles & Permissions</h1>
+            <p className="text-xs text-[var(--text-muted)]">Configure granular access control per module, action, and resource</p>
           </div>
           <div className="flex items-center gap-3">
             <button
               onClick={() => setFullscreen(true)}
               title="Expand the permission matrix to fill the whole screen"
-              className="rounded-xl border border-white/15 bg-slate-800/60 hover:bg-slate-700 px-4 py-3 text-sm font-medium text-slate-200 hover:text-white"
+              className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 hover:bg-[var(--bg-surface-hover)] px-4 py-3 text-sm font-medium text-[var(--text-main)] hover:text-[var(--text-main)]"
             >
               ⛶ Fullscreen
             </button>
@@ -323,9 +323,9 @@ export default function RolesPage() {
         {/* -- Role List (hidden in fullscreen) ------------- */}
         {!fullscreen && (
           <div className="col-span-3 flex flex-col min-h-0">
-          <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-hidden flex-1 flex flex-col min-h-0">
-            <div className="p-4 border-b border-white/10">
-              <h2 className="text-sm font-semibold text-slate-300">ROLES ({roles.length})</h2>
+          <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl overflow-hidden flex-1 flex flex-col min-h-0">
+            <div className="p-4 border-b border-[var(--border-subtle)]">
+              <h2 className="text-sm font-semibold text-[var(--text-muted)]">ROLES ({roles.length})</h2>
             </div>
             <div className="divide-y divide-white/5 flex-1 overflow-y-auto">
               {roles.map(role => {
@@ -333,10 +333,10 @@ export default function RolesPage() {
                 const isMyOverride = role.tenantId === myTenantId;
                 return (
                   <div key={role.id}
-                    className={`w-full text-left p-4 hover:bg-white/5 transition-all cursor-pointer ${selectedRole?.id === role.id ? 'bg-blue-500/10 border-r-2 border-blue-500' : ''}`}
+                    className={`w-full text-left p-4 hover:bg-[var(--bg-surface-hover)] transition-all cursor-pointer ${selectedRole?.id === role.id ? 'bg-blue-500/10 border-r-2 border-blue-500' : ''}`}
                     onClick={() => selectRole(role)}>
                     <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm font-medium text-white truncate">{role.name}</span>
+                      <span className="text-sm font-medium text-[var(--text-main)] truncate">{role.name}</span>
                       {isPlatform && role.isSystem && (
                         <span className="text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded flex-shrink-0">
                           SYS
@@ -351,8 +351,8 @@ export default function RolesPage() {
                         </span>
                       )}
                     </div>
-                    <div className="text-xs font-mono text-slate-400 mb-1">{role.code}</div>
-                    <div className="text-xs text-slate-400">{role._count?.permissions ?? 0} perms</div>
+                    <div className="text-xs font-mono text-[var(--text-muted)] mb-1">{role.code}</div>
+                    <div className="text-xs text-[var(--text-muted)]">{role._count?.permissions ?? 0} perms</div>
                     {isPlatform && !isSuperAdmin && myTenantId && (
                       <button
                         onClick={e => { e.stopPropagation(); selectRole(role); }}
@@ -384,10 +384,10 @@ export default function RolesPage() {
           {fullscreen && (
             <div className="flex items-center justify-between mb-4 gap-3">
               <div className="flex items-center gap-3 min-w-0">
-                <h1 className="text-2xl font-bold text-white">Roles & Permissions</h1>
-                <span className="text-slate-400 text-sm">·</span>
+                <h1 className="text-2xl font-bold text-[var(--text-main)]">Roles & Permissions</h1>
+                <span className="text-[var(--text-muted)] text-sm">·</span>
                 {selectedRole && (
-                  <span className="text-base font-bold text-white truncate">
+                  <span className="text-base font-bold text-[var(--text-main)] truncate">
                     {selectedRole.name}
                     {selectedRole.isSystem && selectedRole.tenantId == null && (
                       <span className="ml-2 text-xs bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded">SYSTEM</span>
@@ -404,7 +404,7 @@ export default function RolesPage() {
                     const r = roles.find(x => x.id === e.target.value);
                     if (r) selectRole(r);
                   }}
-                  className="bg-slate-800 border border-white/15 text-white text-sm rounded-lg px-3 py-1.5 ml-2"
+                  className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm rounded-lg px-3 py-1.5 ml-2"
                 >
                   <option value="">— select role —</option>
                   {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
@@ -412,7 +412,7 @@ export default function RolesPage() {
               </div>
               <button
                 onClick={() => setFullscreen(false)}
-                className="rounded-xl border border-white/15 bg-slate-800/60 hover:bg-slate-700 px-4 py-2 text-sm font-medium text-slate-200 hover:text-white flex items-center gap-2"
+                className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/60 hover:bg-[var(--bg-surface-hover)] px-4 py-2 text-sm font-medium text-[var(--text-main)] hover:text-[var(--text-main)] flex items-center gap-2"
               >
                 <span>✕</span> Exit fullscreen
               </button>
@@ -420,7 +420,7 @@ export default function RolesPage() {
           )}
 
           {!selectedRole ? (
-            <div className="h-64 flex items-center justify-center bg-slate-800/30 border border-white/5 rounded-2xl text-slate-500">
+            <div className="h-64 flex items-center justify-center bg-[var(--bg-surface)]/30 border border-[var(--border-subtle)] rounded-2xl text-[var(--text-faint)]">
               Select a role from the left to configure its permissions
             </div>
           ) : (
@@ -436,7 +436,7 @@ export default function RolesPage() {
               {/* Header */}
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <h2 className="text-xl font-bold text-white flex items-center gap-3 flex-wrap">
+                  <h2 className="text-xl font-bold text-[var(--text-main)] flex items-center gap-3 flex-wrap">
                     {selectedRole.name}
                     {selectedRole.isSystem && selectedRole.tenantId == null && (
                       <span className="text-sm bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded">
@@ -459,7 +459,7 @@ export default function RolesPage() {
                       </span>
                     )}
                   </h2>
-                  <p className="text-slate-400 text-sm mt-0.5">
+                  <p className="text-[var(--text-muted)] text-sm mt-0.5">
                     {selectedRole.description ?? selectedRole.code} &mdash; {rolePermIds.size} permissions granted
                     {readOnly && (
                       <span className="ml-2 text-amber-400">
@@ -506,12 +506,12 @@ export default function RolesPage() {
               {/* Module filter chips */}
               <div className="flex gap-2 flex-wrap">
                 <button onClick={() => setFilterModule('all')}
-                  className={`px-3 py-1 rounded text-xs border transition-all ${filterModule === 'all' ? 'border-blue-500 bg-blue-500/10 text-white' : 'border-white/10 text-slate-400 hover:border-white/20'}`}>
+                  className={`px-3 py-1 rounded text-xs border transition-all ${filterModule === 'all' ? 'border-blue-500 bg-blue-500/10 text-white' : 'border-[var(--border-subtle)] text-[var(--text-muted)] hover:border-[var(--border-strong)]'}`}>
                   All Modules
                 </button>
                 {MODULES.map(m => (
                   <button key={m} onClick={() => setFilterModule(m)}
-                    className={`px-3 py-1 rounded text-xs border transition-all ${filterModule === m ? 'border-blue-500 bg-blue-500/10 text-white' : 'border-white/10 text-slate-400 hover:border-white/20'}`}>
+                    className={`px-3 py-1 rounded text-xs border transition-all ${filterModule === m ? 'border-blue-500 bg-blue-500/10 text-white' : 'border-[var(--border-subtle)] text-[var(--text-muted)] hover:border-[var(--border-strong)]'}`}>
                     {MODULE_LABELS[m]}
                   </button>
                 ))}
@@ -521,7 +521,7 @@ export default function RolesPage() {
                   sticky module headers, compact permission chips. flex-1 makes it fill
                   the remaining column height; min-h-0 is the flexbox hack that lets a
                   child with overflow-y-auto actually scroll. */}
-              <div className="bg-slate-800/50 border border-white/10 rounded-2xl flex-1 flex flex-col min-h-0">
+              <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl flex-1 flex flex-col min-h-0">
                 <div
                   className="flex-1 overflow-y-auto overflow-x-auto p-2"
                   style={{ minHeight: '320px' }}
@@ -531,13 +531,13 @@ export default function RolesPage() {
                     const grantedInMod = modPerms.filter(p => rolePermIds.has(p.id)).length;
                     const allGranted   = grantedInMod === modPerms.length && modPerms.length > 0;
                     return (
-                      <div key={mod} className="mb-3 last:mb-0 bg-slate-900/70 rounded-xl border border-white/10">
+                      <div key={mod} className="mb-3 last:mb-0 bg-[var(--bg-surface)]/70 rounded-xl border border-[var(--border-subtle)]">
                         {/* Sticky module header — high contrast so the label reads
                             clearly even on dim screens / over busy content. */}
-                        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 py-2.5 bg-slate-900 border-b border-white/15 rounded-t-xl shadow-md">
+                        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 py-2.5 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] rounded-t-xl shadow-md">
                           <div className="flex items-center gap-2.5 min-w-0">
-                            <span className="text-base font-bold text-white tracking-tight">{MODULE_LABELS[mod]}</span>
-                            <span className="text-xs text-slate-300 font-mono font-semibold">
+                            <span className="text-base font-bold text-[var(--text-main)] tracking-tight">{MODULE_LABELS[mod]}</span>
+                            <span className="text-xs text-[var(--text-muted)] font-mono font-semibold">
                               {grantedInMod}/{modPerms.length} granted
                             </span>
                           </div>
@@ -565,7 +565,7 @@ export default function RolesPage() {
                                   <div className={`text-[12px] font-bold tracking-wider ${ACTION_COLORS[action]}`}>
                                     {action.toUpperCase()}
                                   </div>
-                                  <div className="text-[11px] text-slate-300 font-mono font-semibold">
+                                  <div className="text-[11px] text-[var(--text-muted)] font-mono font-semibold">
                                     {grantedInAction}/{actionPerms.length}
                                   </div>
                                 </div>
@@ -580,12 +580,12 @@ export default function RolesPage() {
                                         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium transition-all cursor-pointer ${
                                           granted
                                             ? 'bg-emerald-500/25 border-emerald-400/70 hover:bg-emerald-500/40 text-emerald-100'
-                                            : 'bg-slate-800/70 border-slate-500/60 hover:bg-slate-700 hover:border-slate-400 text-slate-200'
+                                            : 'bg-[var(--bg-surface)]/70 border-slate-500/60 hover:bg-[var(--bg-surface-hover)] hover:border-slate-400 text-[var(--text-main)]'
                                         }`}
                                         title={`${mod} · ${action} · ${label}`}
                                       >
                                         <span className={`flex-shrink-0 w-4 h-4 rounded text-[10px] font-bold flex items-center justify-center ${
-                                          granted ? 'bg-emerald-500 text-white' : 'bg-slate-500 text-slate-200'
+                                          granted ? 'bg-emerald-500 text-white' : 'bg-slate-500 text-white'
                                         }`}>
                                           {granted ? 'Y' : ''}
                                         </span>
@@ -604,7 +604,7 @@ export default function RolesPage() {
                 </div>
 
                 {/* Legend (always visible below the scroll area) */}
-                <div className="flex items-center gap-5 text-sm text-slate-200 flex-wrap px-4 py-3 border-t border-white/15 bg-slate-900/40">
+                <div className="flex items-center gap-5 text-sm text-[var(--text-main)] flex-wrap px-4 py-3 border-t border-[var(--border-subtle)] bg-[var(--bg-surface)]/40">
                   <div className="flex items-center gap-2">
                     <span className="w-4 h-4 rounded bg-emerald-500 text-white flex items-center justify-center text-[10px] font-bold">Y</span>
                     <span className="font-medium">= Granted</span>
@@ -613,7 +613,7 @@ export default function RolesPage() {
                     <span className="w-4 h-4 rounded bg-slate-500 flex items-center justify-center text-[10px]"></span>
                     <span className="font-medium">= Not granted</span>
                   </div>
-                  <div className="ml-auto text-slate-300 italic">Click any chip to toggle · scroll within the matrix for more</div>
+                  <div className="ml-auto text-[var(--text-muted)] italic">Click any chip to toggle · scroll within the matrix for more</div>
                 </div>
               </div>
             </div>
@@ -624,13 +624,13 @@ export default function RolesPage() {
       {/* Create Role Modal */}
       {showCreateRole && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-slate-800 border-2 border-white/20 rounded-2xl p-8 shadow-2xl">
+          <div className="w-full max-w-md bg-[var(--bg-surface)] border-2 border-[var(--border-strong)] rounded-2xl p-8 shadow-2xl">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-white">New Role</h3>
+              <h3 className="text-xl font-bold text-[var(--text-main)]">New Role</h3>
               <button
                 onClick={() => setShowCreateRole(false)}
                 aria-label="Close"
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-white/10 text-2xl leading-none"
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-2xl leading-none"
               >
                 ✕
               </button>
@@ -638,15 +638,15 @@ export default function RolesPage() {
             <form onSubmit={createRole} className="space-y-4">
               {NEW_ROLE_FIELDS.map(({ l, k, ph, req }) => (
                 <div key={k}>
-                  <label className="block text-sm font-semibold text-white mb-2">{l}</label>
+                  <label className="block text-sm font-semibold text-[var(--text-main)] mb-2">{l}</label>
                   <input type="text" value={newRole[k]} onChange={e => setNewRole(p => ({ ...p, [k]: e.target.value }))}
                     required={req} placeholder={ph}
-                    className="w-full px-4 py-2 rounded-lg bg-slate-700 border border-white/20 text-white placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:bg-slate-600"/>
+                    className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-strong)] text-[var(--text-main)] placeholder-slate-400 focus:border-emerald-500 focus:outline-none focus:bg-[var(--bg-surface-hover)]"/>
                 </div>
               ))}
               <div className="flex gap-3 justify-end pt-2">
                 <button type="button" onClick={() => setShowCreateRole(false)}
-                  className="px-5 py-2 rounded-lg border border-white/30 text-white font-medium hover:bg-white/10">
+                  className="px-5 py-2 rounded-lg border border-[var(--border-strong)] text-[var(--text-main)] font-medium hover:bg-[var(--bg-surface-hover)]">
                   Cancel
                 </button>
                 <button type="submit" disabled={saving}
@@ -665,31 +665,31 @@ export default function RolesPage() {
           edits only affect that tenant. */}
       {overridePrompt && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-lg bg-slate-800 border-2 border-violet-500/40 rounded-2xl p-8 shadow-2xl">
+          <div className="w-full max-w-lg bg-[var(--bg-surface)] border-2 border-violet-500/40 rounded-2xl p-8 shadow-2xl">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-white">Customize for {myTenantName || 'your tenant'}?</h3>
+              <h3 className="text-xl font-bold text-[var(--text-main)]">Customize for {myTenantName || 'your tenant'}?</h3>
               <button
                 onClick={() => setOverridePrompt(null)}
                 aria-label="Close"
-                className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-white/10 text-2xl leading-none">
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-2xl leading-none">
                 ✕
               </button>
             </div>
 
-            <div className="space-y-3 text-slate-200 text-sm leading-relaxed">
+            <div className="space-y-3 text-[var(--text-main)] text-sm leading-relaxed">
               <p>
-                <span className="font-semibold text-white">{overridePrompt.role.name}</span> is a
+                <span className="font-semibold text-[var(--text-main)]">{overridePrompt.role.name}</span> is a
                 platform-wide role. Editing it would change it for every tenant.
               </p>
               <p>
                 We'll create a <span className="font-semibold text-violet-300">custom version</span> just
-                for <span className="font-semibold text-white">{myTenantName || 'your tenant'}</span> with
+                for <span className="font-semibold text-[var(--text-main)]">{myTenantName || 'your tenant'}</span> with
                 the same {overridePrompt.permCount} permission{overridePrompt.permCount === 1 ? '' : 's'}.
                 The platform role stays untouched.
               </p>
-              <div className="rounded-lg border border-white/10 bg-slate-900/50 p-3 text-xs font-mono">
-                <div className="text-slate-400">Code: <span className="text-white">{overridePrompt.role.code}</span></div>
-                <div className="text-slate-400">Description: <span className="text-white">{overridePrompt.role.description ?? '—'}</span></div>
+              <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 p-3 text-xs font-mono">
+                <div className="text-[var(--text-muted)]">Code: <span className="text-[var(--text-main)]">{overridePrompt.role.code}</span></div>
+                <div className="text-[var(--text-muted)]">Description: <span className="text-[var(--text-main)]">{overridePrompt.role.description ?? '—'}</span></div>
               </div>
               <p className="text-amber-300/90 text-xs">
                 Tip: you can also delete the custom version later to revert this tenant to the
@@ -700,7 +700,7 @@ export default function RolesPage() {
             <div className="flex gap-3 justify-end pt-5">
               <button
                 onClick={() => setOverridePrompt(null)}
-                className="px-5 py-2 rounded-lg border border-white/30 text-white font-medium hover:bg-white/10">
+                className="px-5 py-2 rounded-lg border border-[var(--border-strong)] text-[var(--text-main)] font-medium hover:bg-[var(--bg-surface-hover)]">
                 Cancel
               </button>
               <button

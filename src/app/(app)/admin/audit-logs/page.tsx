@@ -46,7 +46,7 @@ const ACTION_META: Record<string, { color: string; bg: string; icon: string }> =
   CREATE:  { color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20', icon: '✚' },
   UPDATE:  { color: 'text-blue-400',    bg: 'bg-blue-500/10 border-blue-500/20',       icon: '✎' },
   DELETE:  { color: 'text-red-400',     bg: 'bg-red-500/10 border-red-500/20',         icon: '✕' },
-  VIEW:    { color: 'text-slate-400',   bg: 'bg-slate-700/40 border-white/10',         icon: '👁' },
+  VIEW:    { color: 'text-[var(--text-muted)]',   bg: 'bg-[var(--bg-surface-hover)]/40 border-[var(--border-subtle)]',         icon: '👁' },
   EXPORT:  { color: 'text-violet-400',  bg: 'bg-violet-500/10 border-violet-500/20',   icon: '↓' },
   LOGIN:   { color: 'text-cyan-400',    bg: 'bg-cyan-500/10 border-cyan-500/20',        icon: '→' },
   LOGOUT:  { color: 'text-amber-400',   bg: 'bg-amber-500/10 border-amber-500/20',     icon: '←' },
@@ -83,7 +83,7 @@ function sessionDuration(login?: string, logout?: string) {
 }
 
 function ActionBadge({ action }: { action: string }) {
-  const m = ACTION_META[action] ?? { color:'text-slate-400', bg:'bg-slate-700/40 border-white/10', icon:'·' };
+  const m = ACTION_META[action] ?? { color:'text-[var(--text-muted)]', bg:'bg-[var(--bg-surface-hover)]/40 border-[var(--border-subtle)]', icon:'·' };
   return (
     <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border ${m.bg} ${m.color}`}>
       <span className="text-[10px]">{m.icon}</span>{action}
@@ -117,24 +117,24 @@ function DetailDrawer({ log, onClose }: { log: AuditLog; onClose: () => void }) 
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-end z-50">
-      <div className="w-full max-w-lg h-full bg-slate-900 border-l border-white/10 flex flex-col shadow-2xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 flex-shrink-0">
+      <div className="w-full max-w-lg h-full bg-[var(--bg-surface)] border-l border-[var(--border-subtle)] flex flex-col shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)] flex-shrink-0">
           <div>
-            <h2 className="text-white font-bold text-base">Audit Log Detail</h2>
-            <p className="text-slate-400 text-xs mt-0.5">{fmtDate(log.created_at)}</p>
+            <h2 className="text-[var(--text-main)] font-bold text-base">Audit Log Detail</h2>
+            <p className="text-[var(--text-muted)] text-xs mt-0.5">{fmtDate(log.created_at)}</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white text-xl">✕</button>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">✕</button>
         </div>
         <div className="flex-1 overflow-y-auto p-6 space-y-1">
           {rows.map(([label, value]) => (
-            <div key={label} className="flex items-start gap-3 py-2.5 border-b border-white/5">
-              <span className="text-slate-500 text-xs w-36 flex-shrink-0 pt-0.5">{label}</span>
-              <span className="text-slate-200 text-sm flex-1">{value}</span>
+            <div key={label} className="flex items-start gap-3 py-2.5 border-b border-[var(--border-subtle)]">
+              <span className="text-[var(--text-faint)] text-xs w-36 flex-shrink-0 pt-0.5">{label}</span>
+              <span className="text-[var(--text-main)] text-sm flex-1">{value}</span>
             </div>
           ))}
         </div>
-        <div className="px-6 py-4 border-t border-white/10 flex-shrink-0">
-          <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-slate-800 border border-white/10 text-slate-300 text-sm hover:text-white transition-colors">
+        <div className="px-6 py-4 border-t border-[var(--border-subtle)] flex-shrink-0">
+          <button onClick={onClose} className="w-full py-2.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-sm hover:text-[var(--text-main)] transition-colors">
             Close
           </button>
         </div>
@@ -244,20 +244,20 @@ export default function AuditLogsPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">User Audit Log</h1>
-          <p className="text-slate-400 text-xs mt-1">
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">User Audit Log</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-1">
             Complete record of all user actions · {(meta.total ?? 0).toLocaleString()} total entries
           </p>
           {/* Active scope breadcrumb */}
           {(selectedTenant || selectedBranch) && (
             <div className="flex items-center gap-1.5 mt-2 text-xs">
-              <span className="text-slate-500">Showing:</span>
+              <span className="text-[var(--text-faint)]">Showing:</span>
               {selectedTenant && (
                 <span className="bg-red-500/10 text-red-300 border border-red-500/20 px-2 py-0.5 rounded-full">
                   🏢 {selectedTenant.name}
                 </span>
               )}
-              {selectedTenant && selectedBranch && <span className="text-slate-600">›</span>}
+              {selectedTenant && selectedBranch && <span className="text-[var(--text-faint)]">›</span>}
               {selectedBranch && (
                 <span className="bg-blue-500/10 text-blue-300 border border-blue-500/20 px-2 py-0.5 rounded-full">
                   {EMIRATE_FLAGS[selectedBranch.emirate] ?? '🏛️'} {selectedBranch.branch_name}
@@ -269,7 +269,7 @@ export default function AuditLogsPage() {
         <button
           onClick={exportCSV}
           disabled={logs.length === 0}
-          className="flex items-center gap-2 bg-slate-800 border border-white/10 hover:border-white/20 text-slate-300 hover:text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40"
+          className="flex items-center gap-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] text-[var(--text-muted)] hover:text-[var(--text-main)] px-4 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-40"
         >
           ↓ Export CSV
         </button>
@@ -283,7 +283,7 @@ export default function AuditLogsPage() {
             return (
               <button key={act}
                 onClick={() => setFilter(f => ({ ...f, action: f.action === act ? '' : act }))}
-                className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition-colors ${filter.action === act ? (m?.bg ?? 'bg-slate-700/40 border-white/20') + ' ' + (m?.color ?? 'text-white') : 'bg-slate-800/60 border-white/10 text-slate-400 hover:text-white'}`}
+                className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition-colors ${filter.action === act ? (m?.bg ?? 'bg-[var(--bg-surface-hover)]/40 border-[var(--border-strong)]') + ' ' + (m?.color ?? 'text-[var(--text-main)]') : 'bg-[var(--bg-surface)]/60 border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
               >
                 <span>{m?.icon ?? '·'}</span>{act} <span className="opacity-60">({cnt})</span>
               </button>
@@ -293,27 +293,27 @@ export default function AuditLogsPage() {
       )}
 
       {/* ── Filters ────────────────────────────────────────────────────────── */}
-      <div className="bg-slate-900 border border-white/10 rounded-2xl p-5 space-y-4">
-        <p className="text-slate-400 text-xs font-semibold uppercase tracking-wide">Filter Audit Logs</p>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 space-y-4">
+        <p className="text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wide">Filter Audit Logs</p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
 
           {/* Keyword search */}
           <div className="lg:col-span-1">
-            <label className="block text-slate-500 text-xs mb-1">Keyword Search</label>
+            <label className="block text-[var(--text-faint)] text-xs mb-1">Keyword Search</label>
             <input type="text" placeholder="User name, email, entity, details…"
               value={filter.search}
               onChange={e => setFilter(f => ({ ...f, search: e.target.value }))}
-              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-red-500/40"
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] text-sm placeholder-[var(--text-faint)] focus:outline-none focus:border-red-500/40"
             />
           </div>
 
           {/* Tenant */}
           <div>
-            <label className="block text-slate-500 text-xs mb-1">Tenant</label>
+            <label className="block text-[var(--text-faint)] text-xs mb-1">Tenant</label>
             <select value={filter.tenantId}
               onChange={e => setFilter(f => ({ ...f, tenantId: e.target.value, branchId: '' }))}
-              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500/40"
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-red-500/40"
             >
               <option value="">All Tenants</option>
               {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -323,14 +323,14 @@ export default function AuditLogsPage() {
           {/* Branch — only enabled when a tenant is selected */}
           <div>
             <label className="block text-xs mb-1 flex items-center gap-1.5">
-              <span className={filter.tenantId ? 'text-slate-400' : 'text-slate-600'}>Branch</span>
-              {!filter.tenantId && <span className="text-slate-600 text-[10px]">(select a tenant first)</span>}
-              {filter.tenantId && branches.length === 0 && <span className="text-slate-600 text-[10px]">(no branches found)</span>}
+              <span className={filter.tenantId ? 'text-[var(--text-muted)]' : 'text-[var(--text-faint)]'}>Branch</span>
+              {!filter.tenantId && <span className="text-[var(--text-faint)] text-[10px]">(select a tenant first)</span>}
+              {filter.tenantId && branches.length === 0 && <span className="text-[var(--text-faint)] text-[10px]">(no branches found)</span>}
             </label>
             <select value={filter.branchId}
               onChange={e => setFilter(f => ({ ...f, branchId: e.target.value }))}
               disabled={!filter.tenantId || branches.length === 0}
-              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500/40 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-red-500/40 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <option value="">All Branches</option>
               {branches.map(b => (
@@ -343,10 +343,10 @@ export default function AuditLogsPage() {
 
           {/* Entity Type */}
           <div>
-            <label className="block text-slate-500 text-xs mb-1">Entity Type</label>
+            <label className="block text-[var(--text-faint)] text-xs mb-1">Entity Type</label>
             <select value={filter.entityType}
               onChange={e => setFilter(f => ({ ...f, entityType: e.target.value }))}
-              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500/40"
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-red-500/40"
             >
               <option value="">All Entity Types</option>
               {ENTITY_TYPES.map(e => <option key={e} value={e}>{e}</option>)}
@@ -355,10 +355,10 @@ export default function AuditLogsPage() {
 
           {/* Action */}
           <div>
-            <label className="block text-slate-500 text-xs mb-1">Action</label>
+            <label className="block text-[var(--text-faint)] text-xs mb-1">Action</label>
             <select value={filter.action}
               onChange={e => setFilter(f => ({ ...f, action: e.target.value }))}
-              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500/40"
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-red-500/40"
             >
               <option value="">All Actions</option>
               {ACTIONS.map(a => <option key={a} value={a}>{a}</option>)}
@@ -367,28 +367,28 @@ export default function AuditLogsPage() {
 
           {/* User ID */}
           <div>
-            <label className="block text-slate-500 text-xs mb-1">User ID</label>
+            <label className="block text-[var(--text-faint)] text-xs mb-1">User ID</label>
             <input type="text" value={filter.userId} placeholder="Paste user UUID…"
               onChange={e => setFilter(f => ({ ...f, userId: e.target.value }))}
-              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-white text-sm font-mono placeholder-slate-600 focus:outline-none focus:border-red-500/40"
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] text-sm font-mono placeholder-[var(--text-faint)] focus:outline-none focus:border-red-500/40"
             />
           </div>
 
           {/* Date From */}
           <div>
-            <label className="block text-slate-500 text-xs mb-1">Date From</label>
+            <label className="block text-[var(--text-faint)] text-xs mb-1">Date From</label>
             <input type="date" value={filter.dateFrom}
               onChange={e => setFilter(f => ({ ...f, dateFrom: e.target.value }))}
-              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500/40"
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-red-500/40"
             />
           </div>
 
           {/* Date To */}
           <div>
-            <label className="block text-slate-500 text-xs mb-1">Date To</label>
+            <label className="block text-[var(--text-faint)] text-xs mb-1">Date To</label>
             <input type="date" value={filter.dateTo}
               onChange={e => setFilter(f => ({ ...f, dateTo: e.target.value }))}
-              className="w-full bg-slate-800 border border-white/10 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500/40"
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-red-500/40"
             />
           </div>
 
@@ -397,7 +397,7 @@ export default function AuditLogsPage() {
             <div className="flex items-end">
               <button
                 onClick={() => setFilter({ tenantId:'', branchId:'', entityType:'', userId:'', action:'', search:'', dateFrom:'', dateTo:'' })}
-                className="w-full py-2 rounded-xl bg-slate-800 border border-white/10 text-slate-400 hover:text-white text-sm transition-colors"
+                className="w-full py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] text-sm transition-colors"
               >
                 ✕ Clear all filters
               </button>
@@ -407,12 +407,12 @@ export default function AuditLogsPage() {
       </div>
 
       {/* ── Table ──────────────────────────────────────────────────────────── */}
-      <div className="bg-slate-900 border border-white/10 rounded-2xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
         {/* Table header bar */}
-        <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
-          <h2 className="text-white font-semibold text-sm">
+        <div className="px-6 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
+          <h2 className="text-[var(--text-main)] font-semibold text-sm">
             Audit Entries
-            <span className="text-slate-500 font-normal ml-2">
+            <span className="text-[var(--text-faint)] font-normal ml-2">
               {(meta.total ?? 0) > 0
                 ? `${(((meta.page??1)-1)*(meta.limit??50))+1}–${Math.min((meta.page??1)*(meta.limit??50), meta.total??0)} of ${(meta.total??0).toLocaleString()}`
                 : '0 results'}
@@ -421,12 +421,12 @@ export default function AuditLogsPage() {
           {(meta.pages ?? 1) > 1 && (
             <div className="flex items-center gap-2">
               <button disabled={page <= 1} onClick={() => setPage(p => p-1)}
-                className="text-xs text-slate-400 hover:text-white disabled:opacity-30 px-3 py-1.5 rounded-lg bg-slate-800 border border-white/10 transition-colors">
+                className="text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] disabled:opacity-30 px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] transition-colors">
                 ← Prev
               </button>
-              <span className="text-slate-400 text-xs">Page {meta.page ?? 1} / {meta.pages ?? 1}</span>
+              <span className="text-[var(--text-muted)] text-xs">Page {meta.page ?? 1} / {meta.pages ?? 1}</span>
               <button disabled={page >= (meta.pages ?? 1)} onClick={() => setPage(p => p+1)}
-                className="text-xs text-slate-400 hover:text-white disabled:opacity-30 px-3 py-1.5 rounded-lg bg-slate-800 border border-white/10 transition-colors">
+                className="text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] disabled:opacity-30 px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] transition-colors">
                 Next →
               </button>
             </div>
@@ -434,12 +434,12 @@ export default function AuditLogsPage() {
         </div>
 
         {loading ? (
-          <div className="p-16 text-center text-slate-500 text-sm">Loading audit logs…</div>
+          <div className="p-16 text-center text-[var(--text-faint)] text-sm">Loading audit logs…</div>
         ) : logs.length === 0 ? (
           <div className="p-16 text-center">
             <p className="text-4xl mb-3">📋</p>
-            <p className="text-white font-medium">No audit logs found</p>
-            <p className="text-slate-500 text-sm mt-1">
+            <p className="text-[var(--text-main)] font-medium">No audit logs found</p>
+            <p className="text-[var(--text-faint)] text-sm mt-1">
               {hasFilter
                 ? 'No entries match the current filters — try adjusting or clearing them.'
                 : 'User actions will appear here as they interact with the platform.'}
@@ -456,7 +456,7 @@ export default function AuditLogsPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-slate-800/50 text-[10px] text-slate-400 uppercase tracking-wide">
+                <tr className="bg-[var(--bg-surface)]/50 text-[10px] text-[var(--text-muted)] uppercase tracking-wide">
                   <th className="text-left px-4 py-3 whitespace-nowrap">Timestamp</th>
                   <th className="text-left px-4 py-3">Tenant</th>
                   <th className="text-left px-4 py3">Branch</th>
@@ -477,19 +477,19 @@ export default function AuditLogsPage() {
                   const dur = sessionDuration(log.login_time, log.logout_time);
                   return (
                     <tr key={log.id} onClick={() => setSelected(log)}
-                      className="hover:bg-white/5 transition-colors cursor-pointer">
+                      className="hover:bg-[var(--bg-surface-hover)] transition-colors cursor-pointer">
 
                       {/* Timestamp */}
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <p className="text-white text-xs font-medium">
+                        <p className="text-[var(--text-main)] text-xs font-medium">
                           {new Date(log.created_at).toLocaleDateString('en-AE', { day:'2-digit', month:'short', year:'numeric' })}
                         </p>
-                        <p className="text-slate-500 text-xs">{fmtTime(log.created_at)}</p>
+                        <p className="text-[var(--text-faint)] text-xs">{fmtTime(log.created_at)}</p>
                       </td>
 
                       {/* Tenant */}
                       <td className="px-4 py-3">
-                        <p className="text-slate-300 text-xs">{log.tenant_name ?? '—'}</p>
+                        <p className="text-[var(--text-muted)] text-xs">{log.tenant_name ?? '—'}</p>
                       </td>
 
                       {/* Branch */}
@@ -498,70 +498,70 @@ export default function AuditLogsPage() {
                           <span className="inline-flex items-center gap-1 text-xs bg-blue-500/10 text-blue-300 border border-blue-500/20 px-2 py-0.5 rounded-full whitespace-nowrap">
                             🏛️ {log.branch_name}
                           </span>
-                        ) : <span className="text-slate-600 text-xs">—</span>}
+                        ) : <span className="text-[var(--text-faint)] text-xs">—</span>}
                       </td>
 
                       {/* Entity Type */}
                       <td className="px-4 py-3">
-                        <span className="text-xs bg-slate-800 border border-white/10 text-slate-300 px-2 py-0.5 rounded-md">{log.entity_type}</span>
+                        <span className="text-xs bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] px-2 py-0.5 rounded-md">{log.entity_type}</span>
                       </td>
 
                       {/* Entity */}
                       <td className="px-4 py-3">
-                        <p className="text-slate-300 text-xs max-w-[110px] truncate">{log.entity_name ?? '—'}</p>
-                        {log.entity_id && <p className="text-slate-600 text-[10px] font-mono">{log.entity_id.slice(0,8)}…</p>}
+                        <p className="text-[var(--text-muted)] text-xs max-w-[110px] truncate">{log.entity_name ?? '—'}</p>
+                        {log.entity_id && <p className="text-[var(--text-faint)] text-[10px] font-mono">{log.entity_id.slice(0,8)}…</p>}
                       </td>
 
                       {/* User */}
                       <td className="px-4 py-3">
-                        <p className="text-slate-200 text-xs font-medium">{log.user_name ?? log.user_id ?? '—'}</p>
-                        {log.user_email && <p className="text-slate-500 text-[10px]">{log.user_email}</p>}
+                        <p className="text-[var(--text-main)] text-xs font-medium">{log.user_name ?? log.user_id ?? '—'}</p>
+                        {log.user_email && <p className="text-[var(--text-faint)] text-[10px]">{log.user_email}</p>}
                       </td>
 
                       {/* Role */}
                       <td className="px-4 py-3">
                         {log.user_role
                           ? <span className="text-xs bg-violet-500/10 text-violet-300 border border-violet-500/20 px-2 py-0.5 rounded-full">{log.user_role}</span>
-                          : <span className="text-slate-600">—</span>}
+                          : <span className="text-[var(--text-faint)]">—</span>}
                       </td>
 
                       {/* Action */}
                       <td className="px-4 py-3">
                         <ActionBadge action={log.action} />
-                        {log.details && <p className="text-slate-500 text-[10px] mt-0.5 max-w-[130px] truncate">{log.details}</p>}
+                        {log.details && <p className="text-[var(--text-faint)] text-[10px] mt-0.5 max-w-[130px] truncate">{log.details}</p>}
                       </td>
 
                       {/* Login Time */}
                       <td className="px-4 py-3 whitespace-nowrap">
                         {log.login_time
                           ? <><p className="text-cyan-400 text-xs">{fmtTime(log.login_time)}</p>
-                              <p className="text-slate-600 text-[10px]">{new Date(log.login_time).toLocaleDateString('en-AE',{day:'2-digit',month:'short'})}</p></>
-                          : <span className="text-slate-600 text-xs">—</span>}
+                              <p className="text-[var(--text-faint)] text-[10px]">{new Date(log.login_time).toLocaleDateString('en-AE',{day:'2-digit',month:'short'})}</p></>
+                          : <span className="text-[var(--text-faint)] text-xs">—</span>}
                       </td>
 
                       {/* Logout Time */}
                       <td className="px-4 py-3 whitespace-nowrap">
                         {log.logout_time
                           ? <><p className="text-amber-400 text-xs">{fmtTime(log.logout_time)}</p>
-                              <p className="text-slate-600 text-[10px]">{new Date(log.logout_time).toLocaleDateString('en-AE',{day:'2-digit',month:'short'})}</p></>
-                          : <span className="text-slate-600 text-xs">—</span>}
+                              <p className="text-[var(--text-faint)] text-[10px]">{new Date(log.logout_time).toLocaleDateString('en-AE',{day:'2-digit',month:'short'})}</p></>
+                          : <span className="text-[var(--text-faint)] text-xs">—</span>}
                       </td>
 
                       {/* Session Duration */}
                       <td className="px-4 py-3">
                         {dur ? <span className="text-xs text-emerald-400 font-medium">{dur}</span>
-                             : <span className="text-slate-600 text-xs">—</span>}
+                             : <span className="text-[var(--text-faint)] text-xs">—</span>}
                       </td>
 
                       {/* IP */}
                       <td className="px-4 py-3">
-                        <span className="text-slate-500 text-xs font-mono">{log.ip_address ?? '—'}</span>
+                        <span className="text-[var(--text-faint)] text-xs font-mono">{log.ip_address ?? '—'}</span>
                       </td>
 
                       {/* View button */}
                       <td className="px-4 py-3">
                         <button onClick={e => { e.stopPropagation(); setSelected(log); }}
-                          className="text-[10px] text-slate-500 hover:text-white px-2 py-1 rounded-lg bg-slate-800 border border-white/10 transition-colors whitespace-nowrap">
+                          className="text-[10px] text-[var(--text-faint)] hover:text-[var(--text-main)] px-2 py-1 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] transition-colors whitespace-nowrap">
                           View →
                         </button>
                       </td>
@@ -575,23 +575,23 @@ export default function AuditLogsPage() {
 
         {/* Bottom pagination */}
         {(meta.pages ?? 1) > 1 && !loading && (
-          <div className="px-6 py-4 border-t border-white/10 flex items-center justify-between">
-            <p className="text-slate-500 text-xs">{(meta.total ?? 0).toLocaleString()} total entries</p>
+          <div className="px-6 py-4 border-t border-[var(--border-subtle)] flex items-center justify-between">
+            <p className="text-[var(--text-faint)] text-xs">{(meta.total ?? 0).toLocaleString()} total entries</p>
             <div className="flex items-center gap-2">
               <button disabled={page <= 1} onClick={() => setPage(p => p-1)}
-                className="text-xs text-slate-400 hover:text-white disabled:opacity-30 px-3 py-1.5 rounded-lg bg-slate-800 border border-white/10 transition-colors">← Previous</button>
+                className="text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] disabled:opacity-30 px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] transition-colors">← Previous</button>
               {Array.from({ length: Math.min(5, meta.pages ?? 1) }, (_, i) => {
                 const totalPages = meta.pages ?? 1;
                 const pg = Math.max(1, Math.min(totalPages - 4, page - 2)) + i;
                 return (
                   <button key={pg} onClick={() => setPage(pg)}
-                    className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${pg === page ? 'bg-red-600 border-red-500 text-white' : 'bg-slate-800 border-white/10 text-slate-400 hover:text-white'}`}>
+                    className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${pg === page ? 'bg-red-600 border-red-500 text-white' : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
                     {pg}
                   </button>
                 );
               })}
               <button disabled={page >= (meta.pages ?? 1)} onClick={() => setPage(p => p+1)}
-                className="text-xs text-slate-400 hover:text-white disabled:opacity-30 px-3 py-1.5 rounded-lg bg-slate-800 border border-white/10 transition-colors">Next →</button>
+                className="text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] disabled:opacity-30 px-3 py-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] transition-colors">Next →</button>
             </div>
           </div>
         )}

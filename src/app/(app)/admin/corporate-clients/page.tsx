@@ -196,41 +196,41 @@ export default function CorporateClientsPage() {
 
       {/* KPI Overview Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 space-y-2">
-          <div className="flex items-center justify-between text-xs text-slate-400">
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5 space-y-2">
+          <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
             <span>Corporate Clients</span>
             <Building2 className="w-4 h-4 text-orange-400" />
           </div>
-          <p className="text-3xl font-mono font-bold text-white">{clients.length}</p>
+          <p className="text-3xl font-mono font-bold text-[var(--text-main)]">{clients.length}</p>
           <span className="text-[11px] text-emerald-400">Active B2B Contracts</span>
         </div>
 
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 space-y-2">
-          <div className="flex items-center justify-between text-xs text-slate-400">
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5 space-y-2">
+          <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
             <span>Authorized Coordinators</span>
             <Users className="w-4 h-4 text-cyan-400" />
           </div>
-          <p className="text-3xl font-mono font-bold text-white">{totalRosterUsers}</p>
-          <span className="text-[11px] text-slate-400">Across all client rosters</span>
+          <p className="text-3xl font-mono font-bold text-[var(--text-main)]">{totalRosterUsers}</p>
+          <span className="text-[11px] text-[var(--text-muted)]">Across all client rosters</span>
         </div>
 
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 space-y-2">
-          <div className="flex items-center justify-between text-xs text-slate-400">
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5 space-y-2">
+          <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
             <span>Total Credit Line</span>
             <CreditCard className="w-4 h-4 text-emerald-400" />
           </div>
           <p className="text-3xl font-mono font-bold text-emerald-400">
             AED {(totalCreditLimit / 1000).toFixed(0)}k
           </p>
-          <span className="text-[11px] text-slate-400">Monthly 30-day terms</span>
+          <span className="text-[11px] text-[var(--text-muted)]">Monthly 30-day terms</span>
         </div>
 
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5 space-y-2">
-          <div className="flex items-center justify-between text-xs text-slate-400">
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5 space-y-2">
+          <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
             <span>Domain Auto-Discovery</span>
             <ShieldCheck className="w-4 h-4 text-violet-400" />
           </div>
-          <p className="text-3xl font-mono font-bold text-white">100%</p>
+          <p className="text-3xl font-mono font-bold text-[var(--text-main)]">100%</p>
           <span className="text-[11px] text-violet-300">Enabled for Mobile App</span>
         </div>
       </div>
@@ -246,20 +246,20 @@ export default function CorporateClientsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Corporate Accounts List (5 cols) */}
         <div className="lg:col-span-5 space-y-4">
-          <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-4 space-y-3">
+          <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-white">Corporate Accounts</h3>
-              <span className="text-xs text-slate-400">{filteredClients.length} accounts</span>
+              <h3 className="text-sm font-bold text-[var(--text-main)]">Corporate Accounts</h3>
+              <span className="text-xs text-[var(--text-muted)]">{filteredClients.length} accounts</span>
             </div>
 
             <div className="relative">
-              <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+              <Search className="w-4 h-4 text-[var(--text-faint)] absolute left-3 top-2.5" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search clients, domains, cost centers…"
-                className="w-full bg-slate-950 border border-white/10 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+                className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-xl pl-9 pr-3 py-2 text-xs text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:ring-1 focus:ring-orange-500"
               />
             </div>
 
@@ -273,7 +273,7 @@ export default function CorporateClientsPage() {
                     className={`p-4 rounded-xl border transition-all cursor-pointer ${
                       isSelected
                         ? 'bg-orange-500/10 border-orange-500 shadow-md shadow-orange-500/10'
-                        : 'bg-slate-950/40 border-white/5 hover:border-white/20'
+                        : 'bg-[var(--bg-canvas)]/40 border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
                     }`}
                   >
                     <div className="flex items-start justify-between">
@@ -282,7 +282,7 @@ export default function CorporateClientsPage() {
                           🏢
                         </div>
                         <div>
-                          <h4 className="text-xs font-bold text-white">{client.clientName}</h4>
+                          <h4 className="text-xs font-bold text-[var(--text-main)]">{client.clientName}</h4>
                           <span className="text-[11px] text-orange-300 font-mono">@{client.emailDomain}</span>
                         </div>
                       </div>
@@ -291,9 +291,9 @@ export default function CorporateClientsPage() {
                       </span>
                     </div>
 
-                    <div className="mt-3 pt-2.5 border-t border-white/5 flex items-center justify-between text-[11px] text-slate-400">
-                      <span>Cost Center: <strong className="text-slate-200">{client.costCenterCode}</strong></span>
-                      <span>Roster: <strong className="text-white">{client.userRoster?.length || 0} users</strong></span>
+                    <div className="mt-3 pt-2.5 border-t border-[var(--border-subtle)] flex items-center justify-between text-[11px] text-[var(--text-muted)]">
+                      <span>Cost Center: <strong className="text-[var(--text-main)]">{client.costCenterCode}</strong></span>
+                      <span>Roster: <strong className="text-[var(--text-main)]">{client.userRoster?.length || 0} users</strong></span>
                     </div>
                   </div>
                 );
@@ -305,19 +305,19 @@ export default function CorporateClientsPage() {
         {/* Right Column: Client Detail & User Roster Panel (7 cols) */}
         <div className="lg:col-span-7 space-y-4">
           {selectedClient ? (
-            <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-6 space-y-6">
+            <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-6 space-y-6">
               {/* Selected Client Header Banner */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--border-subtle)] pb-5">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-orange-600 to-amber-500 flex items-center justify-center text-2xl shadow-lg shadow-orange-500/20">
                     🏢
                   </div>
                   <div>
-                    <h2 className="text-lg font-bold text-white">{selectedClient.clientName}</h2>
-                    <div className="flex items-center gap-2 text-xs text-slate-400">
+                    <h2 className="text-lg font-bold text-[var(--text-main)]">{selectedClient.clientName}</h2>
+                    <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
                       <span className="font-mono text-orange-300">@{selectedClient.emailDomain}</span>
                       <span>•</span>
-                      <span>Tenant: <strong className="text-slate-200">{selectedClient.tenantName}</strong></span>
+                      <span>Tenant: <strong className="text-[var(--text-main)]">{selectedClient.tenantName}</strong></span>
                     </div>
                   </div>
                 </div>
@@ -334,28 +334,28 @@ export default function CorporateClientsPage() {
 
               {/* Contract & Account Overview Grid */}
               <div className="grid grid-cols-3 gap-3">
-                <div className="bg-slate-950/60 border border-white/5 rounded-xl p-3">
-                  <span className="text-[10px] text-slate-500 uppercase block mb-1">Cost Center Code</span>
+                <div className="bg-[var(--bg-canvas)]/60 border border-[var(--border-subtle)] rounded-xl p-3">
+                  <span className="text-[10px] text-[var(--text-faint)] uppercase block mb-1">Cost Center Code</span>
                   <span className="text-xs font-mono font-bold text-orange-400">{selectedClient.costCenterCode}</span>
                 </div>
-                <div className="bg-slate-950/60 border border-white/5 rounded-xl p-3">
-                  <span className="text-[10px] text-slate-500 uppercase block mb-1">Contract Tariff Discount</span>
+                <div className="bg-[var(--bg-canvas)]/60 border border-[var(--border-subtle)] rounded-xl p-3">
+                  <span className="text-[10px] text-[var(--text-faint)] uppercase block mb-1">Contract Tariff Discount</span>
                   <span className="text-xs font-mono font-bold text-emerald-400">{selectedClient.discountPercent}% Discount</span>
                 </div>
-                <div className="bg-slate-950/60 border border-white/5 rounded-xl p-3">
-                  <span className="text-[10px] text-slate-500 uppercase block mb-1">Monthly Credit Line</span>
-                  <span className="text-xs font-mono font-bold text-white">AED {selectedClient.creditLimitAed.toLocaleString()}</span>
+                <div className="bg-[var(--bg-canvas)]/60 border border-[var(--border-subtle)] rounded-xl p-3">
+                  <span className="text-[10px] text-[var(--text-faint)] uppercase block mb-1">Monthly Credit Line</span>
+                  <span className="text-xs font-mono font-bold text-[var(--text-main)]">AED {selectedClient.creditLimitAed.toLocaleString()}</span>
                 </div>
               </div>
 
               {/* Authorized User Roster Section */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  <h3 className="text-xs font-bold text-[var(--text-main)] uppercase tracking-wider flex items-center gap-2">
                     <Users className="w-4 h-4 text-orange-400" />
                     Authorized Client User Roster ({selectedClient.userRoster?.length || 0})
                   </h3>
-                  <span className="text-[10px] text-slate-400">Authorized to book on corporate account</span>
+                  <span className="text-[10px] text-[var(--text-muted)]">Authorized to book on corporate account</span>
                 </div>
 
                 {selectedClient.userRoster && selectedClient.userRoster.length > 0 ? (
@@ -363,12 +363,12 @@ export default function CorporateClientsPage() {
                     {selectedClient.userRoster.map((user) => (
                       <div
                         key={user.id}
-                        className="bg-slate-950/40 border border-white/5 hover:border-white/15 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors"
+                        className="bg-[var(--bg-canvas)]/40 border border-[var(--border-subtle)] hover:border-[var(--border-subtle)] rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors"
                       >
                         <div className="space-y-1">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-white">{user.name}</span>
-                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">
+                            <span className="text-xs font-bold text-[var(--text-main)]">{user.name}</span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--bg-surface)] text-[var(--text-muted)] font-mono">
                               {user.role}
                             </span>
                             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -376,14 +376,14 @@ export default function CorporateClientsPage() {
                             </span>
                           </div>
 
-                          <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400">
+                          <div className="flex flex-wrap items-center gap-3 text-[11px] text-[var(--text-muted)]">
                             <span className="flex items-center gap-1 font-mono text-cyan-300">
                               <Phone className="w-3 h-3 text-cyan-400" /> {user.mobileNumber}
                             </span>
                             <span className="flex items-center gap-1">
-                              <Mail className="w-3 h-3 text-slate-500" /> {user.email}
+                              <Mail className="w-3 h-3 text-[var(--text-faint)]" /> {user.email}
                             </span>
-                            <span>Limit: <strong className="text-white">AED {user.maxSpendingLimitAed || 10000}</strong></span>
+                            <span>Limit: <strong className="text-[var(--text-main)]">AED {user.maxSpendingLimitAed || 10000}</strong></span>
                           </div>
                         </div>
 
@@ -397,7 +397,7 @@ export default function CorporateClientsPage() {
                           </button>
                           <button
                             onClick={() => handleDeleteUser(user.id)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                            className="p-1.5 rounded-lg text-[var(--text-faint)] hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
                             title="Remove from roster"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -407,8 +407,8 @@ export default function CorporateClientsPage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="border border-dashed border-white/10 rounded-2xl p-8 text-center space-y-2">
-                    <p className="text-xs text-slate-400">No coordinators added to this roster yet.</p>
+                  <div className="border border-dashed border-[var(--border-subtle)] rounded-2xl p-8 text-center space-y-2">
+                    <p className="text-xs text-[var(--text-muted)]">No coordinators added to this roster yet.</p>
                     <button
                       onClick={() => setShowAddUserModal(true)}
                       className="text-xs text-orange-400 hover:text-orange-300 underline"
@@ -420,7 +420,7 @@ export default function CorporateClientsPage() {
               </div>
             </div>
           ) : (
-            <div className="border border-white/10 rounded-2xl p-12 text-center text-slate-400">
+            <div className="border border-[var(--border-subtle)] rounded-2xl p-12 text-center text-[var(--text-muted)]">
               Select a corporate client to view details and manage user roster.
             </div>
           )}
@@ -432,70 +432,70 @@ export default function CorporateClientsPage() {
       ══════════════════════════════════════════════════════════════ */}
       {showAddClientModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-white/15 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+              <h3 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
                 <Building2 className="w-4 h-4 text-orange-400" /> Add Corporate Client
               </h3>
-              <button onClick={() => setShowAddClientModal(false)} className="text-slate-400 hover:text-white">
+              <button onClick={() => setShowAddClientModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleCreateClient} className="space-y-3 text-xs">
               <div>
-                <label className="text-slate-300 block mb-1 font-semibold">Client Company Name *</label>
+                <label className="text-[var(--text-muted)] block mb-1 font-semibold">Client Company Name *</label>
                 <input
                   type="text"
                   required
                   value={newClientName}
                   onChange={(e) => setNewClientName(e.target.value)}
                   placeholder="e.g. EIN360 or Dubai Logistics Hub"
-                  className="w-full bg-slate-950 border border-white/15 rounded-xl px-3 py-2 text-white"
+                  className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)]"
                 />
               </div>
 
               <div>
-                <label className="text-slate-300 block mb-1 font-semibold">Authorized Email Domain *</label>
+                <label className="text-[var(--text-muted)] block mb-1 font-semibold">Authorized Email Domain *</label>
                 <input
                   type="text"
                   required
                   value={newClientDomain}
                   onChange={(e) => setNewClientDomain(e.target.value)}
                   placeholder="e.g. ein360.ae or emaar.ae"
-                  className="w-full bg-slate-950 border border-white/15 rounded-xl px-3 py-2 text-white"
+                  className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)]"
                 />
               </div>
 
               <div>
-                <label className="text-slate-300 block mb-1 font-semibold">Corporate Cost Center Code *</label>
+                <label className="text-[var(--text-muted)] block mb-1 font-semibold">Corporate Cost Center Code *</label>
                 <input
                   type="text"
                   required
                   value={newCostCenter}
                   onChange={(e) => setNewCostCenter(e.target.value)}
                   placeholder="e.g. CC-EIN360-LOGISTICS"
-                  className="w-full bg-slate-950 border border-white/15 rounded-xl px-3 py-2 text-white"
+                  className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)]"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-300 block mb-1 font-semibold">Contract Discount (%)</label>
+                  <label className="text-[var(--text-muted)] block mb-1 font-semibold">Contract Discount (%)</label>
                   <input
                     type="number"
                     value={newDiscount}
                     onChange={(e) => setNewDiscount(e.target.value)}
-                    className="w-full bg-slate-950 border border-white/15 rounded-xl px-3 py-2 text-white"
+                    className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)]"
                   />
                 </div>
                 <div>
-                  <label className="text-slate-300 block mb-1 font-semibold">Credit Limit (AED)</label>
+                  <label className="text-[var(--text-muted)] block mb-1 font-semibold">Credit Limit (AED)</label>
                   <input
                     type="number"
                     value={newCreditLimit}
                     onChange={(e) => setNewCreditLimit(e.target.value)}
-                    className="w-full bg-slate-950 border border-white/15 rounded-xl px-3 py-2 text-white"
+                    className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)]"
                   />
                 </div>
               </div>
@@ -504,7 +504,7 @@ export default function CorporateClientsPage() {
                 <button
                   type="button"
                   onClick={() => setShowAddClientModal(false)}
-                  className="flex-1 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-semibold"
+                  className="flex-1 py-2.5 rounded-xl bg-[var(--bg-surface)] text-[var(--text-muted)] font-semibold"
                 >
                   Cancel
                 </button>
@@ -525,60 +525,60 @@ export default function CorporateClientsPage() {
       ══════════════════════════════════════════════════════════════ */}
       {showAddUserModal && selectedClient && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-white/15 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+              <h3 className="text-sm font-bold text-[var(--text-main)] flex items-center gap-2">
                 <Users className="w-4 h-4 text-orange-400" /> Add Coordinator to {selectedClient.clientName}
               </h3>
-              <button onClick={() => setShowAddUserModal(false)} className="text-slate-400 hover:text-white">
+              <button onClick={() => setShowAddUserModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleAddUserToRoster} className="space-y-3 text-xs">
               <div>
-                <label className="text-slate-300 block mb-1 font-semibold">Full Name *</label>
+                <label className="text-[var(--text-muted)] block mb-1 font-semibold">Full Name *</label>
                 <input
                   type="text"
                   required
                   value={newUserName}
                   onChange={(e) => setNewUserName(e.target.value)}
                   placeholder="e.g. Fatima Al-Nuaimi"
-                  className="w-full bg-slate-950 border border-white/15 rounded-xl px-3 py-2 text-white"
+                  className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)]"
                 />
               </div>
 
               <div>
-                <label className="text-slate-300 block mb-1 font-semibold">Mobile Number (WhatsApp OTP) *</label>
+                <label className="text-[var(--text-muted)] block mb-1 font-semibold">Mobile Number (WhatsApp OTP) *</label>
                 <input
                   type="text"
                   required
                   value={newUserMobile}
                   onChange={(e) => setNewUserMobile(e.target.value)}
                   placeholder="e.g. +971 50 887 6543"
-                  className="w-full bg-slate-950 border border-white/15 rounded-xl px-3 py-2 text-white font-mono"
+                  className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)] font-mono"
                 />
               </div>
 
               <div>
-                <label className="text-slate-300 block mb-1 font-semibold">Work Email *</label>
+                <label className="text-[var(--text-muted)] block mb-1 font-semibold">Work Email *</label>
                 <input
                   type="email"
                   required
                   value={newUserEmail}
                   onChange={(e) => setNewUserEmail(e.target.value)}
                   placeholder={`e.g. fatima@${selectedClient.emailDomain}`}
-                  className="w-full bg-slate-950 border border-white/15 rounded-xl px-3 py-2 text-white"
+                  className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)]"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-slate-300 block mb-1 font-semibold">Role</label>
+                  <label className="text-[var(--text-muted)] block mb-1 font-semibold">Role</label>
                   <select
                     value={newUserRole}
                     onChange={(e: any) => setNewUserRole(e.target.value)}
-                    className="w-full bg-slate-950 border border-white/15 rounded-xl px-3 py-2 text-white"
+                    className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)]"
                   >
                     <option value="LOGISTICS_LEAD">Logistics Lead</option>
                     <option value="DISPATCHER">Dispatcher</option>
@@ -587,12 +587,12 @@ export default function CorporateClientsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-slate-300 block mb-1 font-semibold">Max Spending Limit (AED)</label>
+                  <label className="text-[var(--text-muted)] block mb-1 font-semibold">Max Spending Limit (AED)</label>
                   <input
                     type="number"
                     value={newUserSpendingLimit}
                     onChange={(e) => setNewUserSpendingLimit(e.target.value)}
-                    className="w-full bg-slate-950 border border-white/15 rounded-xl px-3 py-2 text-white"
+                    className="w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-[var(--text-main)]"
                   />
                 </div>
               </div>
@@ -601,7 +601,7 @@ export default function CorporateClientsPage() {
                 <button
                   type="button"
                   onClick={() => setShowAddUserModal(false)}
-                  className="flex-1 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-semibold"
+                  className="flex-1 py-2.5 rounded-xl bg-[var(--bg-surface)] text-[var(--text-muted)] font-semibold"
                 >
                   Cancel
                 </button>

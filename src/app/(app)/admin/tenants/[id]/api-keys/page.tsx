@@ -122,23 +122,23 @@ export default function TenantApiKeysPage() {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-full"><div className="text-slate-400 animate-pulse">Loading API keys…</div></div>;
+    return <div className="flex items-center justify-center h-full"><div className="text-[var(--text-muted)] animate-pulse">Loading API keys…</div></div>;
   }
 
   return (
     <div className="space-y-8 max-w-5xl">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white inline-flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-[var(--text-main)] inline-flex items-center gap-2">
             <KeyRound className="w-5 h-5 text-amber-400" /> API Keys
           </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            {tenantName ? <>For <strong className="text-white">{tenantName}</strong></> : null}
-            <span className="ml-2 text-slate-500">· server-to-server integrations and ERP connectors</span>
+          <p className="text-[var(--text-muted)] text-sm mt-1">
+            {tenantName ? <>For <strong className="text-[var(--text-main)]">{tenantName}</strong></> : null}
+            <span className="ml-2 text-[var(--text-faint)]">· server-to-server integrations and ERP connectors</span>
           </p>
         </div>
         <Link href="/admin/tenants"
-          className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-slate-800 border border-white/10 hover:border-white/20 hover:bg-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:text-white transition-colors">
+          className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] hover:bg-[var(--bg-surface-hover)] px-3 py-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors">
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Tenants
         </Link>
       </div>
@@ -154,16 +154,16 @@ export default function TenantApiKeysPage() {
           <div className="flex items-center gap-2 text-amber-300 font-semibold">
             <KeyRound className="w-5 h-5" /> Save this API key
           </div>
-          <p className="text-sm text-slate-300">
+          <p className="text-sm text-[var(--text-muted)]">
             <strong>{newKey.name}</strong> — copy this key now. We don&rsquo;t store the
             plaintext, so you won&rsquo;t see it again.
           </p>
           <div className="flex items-center gap-2">
-            <code className="flex-1 bg-slate-900/60 border border-white/10 rounded-lg px-3 py-2.5 font-mono text-sm text-emerald-300 break-all">
+            <code className="flex-1 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 font-mono text-sm text-emerald-300 break-all">
               {showPlain ? newKey.plaintext : newKey.plaintext.replace(/^(xlk_.{8}).*/, '$1' + '•'.repeat(40))}
             </code>
             <button onClick={() => setShowPlain(v => !v)}
-              className="px-3 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-200 text-sm inline-flex items-center gap-2">
+              className="px-3 py-2.5 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] rounded-lg text-[var(--text-main)] text-sm inline-flex items-center gap-2">
               {showPlain ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               {showPlain ? 'Hide' : 'Show'}
             </button>
@@ -173,30 +173,30 @@ export default function TenantApiKeysPage() {
               {copied ? 'Copied' : 'Copy'}
             </button>
           </div>
-          <pre className="bg-slate-900/40 border border-white/5 rounded-lg p-3 text-xs text-slate-400 font-mono overflow-x-auto">
+          <pre className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-lg p-3 text-xs text-[var(--text-muted)] font-mono overflow-x-auto">
 {`curl -H "Authorization: Bearer ${showPlain ? newKey.plaintext : 'xlk_…'}" \\
   https://api.your-domain.com/v1/...`}
           </pre>
           <button onClick={() => setNewKey(null)}
-            className="px-3 py-1.5 text-xs text-slate-400 hover:text-white">Dismiss</button>
+            className="px-3 py-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)]">Dismiss</button>
         </div>
       )}
 
-      <form onSubmit={create} className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-white inline-flex items-center gap-2">
+      <form onSubmit={create} className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 space-y-4">
+        <h2 className="text-lg font-semibold text-[var(--text-main)] inline-flex items-center gap-2">
           <Plus className="w-4 h-4" /> Create new key
         </h2>
 
         <div className="space-y-1">
-          <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Name</label>
+          <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">Name</label>
           <input type="text" value={name} onChange={e => setName(e.target.value)}
             placeholder="e.g. Acme ERP integration"
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+            className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
             maxLength={80} required />
         </div>
 
         <div className="space-y-2">
-          <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">
+          <label className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
             Scopes ({scopes.length}) — leave empty to grant tenant-wide access
           </label>
           <div className="flex flex-wrap gap-2">
@@ -205,7 +205,7 @@ export default function TenantApiKeysPage() {
                 className={`text-xs px-3 py-1.5 rounded-full border transition-all ${
                   scopes.includes(s)
                     ? 'bg-amber-500/30 text-amber-200 border-amber-500/60'
-                    : 'bg-slate-800/50 text-slate-400 border-white/10 hover:border-white/30'
+                    : 'bg-[var(--bg-surface)]/50 text-[var(--text-muted)] border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
                 }`}>
                 {s}
               </button>
@@ -219,42 +219,42 @@ export default function TenantApiKeysPage() {
         </button>
       </form>
 
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-6 overflow-x-auto">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 overflow-x-auto">
         {keys.length === 0 ? (
-          <div className="text-center text-slate-400 py-8 text-sm">No API keys yet.</div>
+          <div className="text-center text-[var(--text-muted)] py-8 text-sm">No API keys yet.</div>
         ) : (
           <table className="w-full">
             <thead>
-              <tr className="border-b border-white/5">
+              <tr className="border-b border-[var(--border-subtle)]">
                 {['Name', 'Prefix', 'Scopes', 'Last used', 'Created', 'Status', ''].map(h => (
-                  <th key={h} className="px-4 py-3 text-xs font-semibold text-slate-400 text-left">{h}</th>
+                  <th key={h} className="px-4 py-3 text-xs font-semibold text-[var(--text-muted)] text-left">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {keys.map(k => (
-                <tr key={k.id} className={`border-b border-white/5 hover:bg-white/5 ${k.revoked ? 'opacity-50' : ''}`}>
-                  <td className="px-4 py-3 text-sm text-white">{k.name}</td>
-                  <td className="px-4 py-3 text-xs font-mono text-slate-400">xlk_{k.prefix}…</td>
+                <tr key={k.id} className={`border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] ${k.revoked ? 'opacity-50' : ''}`}>
+                  <td className="px-4 py-3 text-sm text-[var(--text-main)]">{k.name}</td>
+                  <td className="px-4 py-3 text-xs font-mono text-[var(--text-muted)]">xlk_{k.prefix}…</td>
                   <td className="px-4 py-3">
                     {k.scopes.length === 0 ? (
-                      <span className="text-xs text-slate-500 italic">tenant-wide</span>
+                      <span className="text-xs text-[var(--text-faint)] italic">tenant-wide</span>
                     ) : (
                       <div className="flex flex-wrap gap-1">
                         {k.scopes.map(s => (
-                          <span key={s} className="text-[10px] px-2 py-0.5 rounded-full bg-slate-700/60 text-slate-300">{s}</span>
+                          <span key={s} className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--bg-surface-hover)]/60 text-[var(--text-muted)]">{s}</span>
                         ))}
                       </div>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-xs text-slate-400">
+                  <td className="px-4 py-3 text-xs text-[var(--text-muted)]">
                     {k.lastUsedAt
-                      ? <>{new Date(k.lastUsedAt).toLocaleString()}{k.lastUsedIp ? <span className="text-slate-500"> ({k.lastUsedIp})</span> : null}</>
+                      ? <>{new Date(k.lastUsedAt).toLocaleString()}{k.lastUsedIp ? <span className="text-[var(--text-faint)]"> ({k.lastUsedIp})</span> : null}</>
                       : '—'}
                   </td>
-                  <td className="px-4 py-3 text-xs text-slate-400">
+                  <td className="px-4 py-3 text-xs text-[var(--text-muted)]">
                     {new Date(k.createdAt).toLocaleString()}
-                    {k.createdBy ? <div className="text-slate-500">by {k.createdBy}</div> : null}
+                    {k.createdBy ? <div className="text-[var(--text-faint)]">by {k.createdBy}</div> : null}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold border ${
@@ -280,9 +280,9 @@ export default function TenantApiKeysPage() {
         )}
       </div>
 
-      <div className="bg-slate-800/30 border border-white/5 rounded-2xl p-5 text-xs text-slate-400 space-y-2">
-        <p className="text-white font-semibold mb-1">How to use</p>
-        <pre className="bg-slate-900/60 border border-white/5 rounded-lg p-3 font-mono overflow-x-auto">
+      <div className="bg-[var(--bg-surface)]/30 border border-[var(--border-subtle)] rounded-2xl p-5 text-xs text-[var(--text-muted)] space-y-2">
+        <p className="text-[var(--text-main)] font-semibold mb-1">How to use</p>
+        <pre className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg p-3 font-mono overflow-x-auto">
 {`curl -H "Authorization: Bearer xlk_..." \\
   https://api.your-domain.com/v1/...`}
         </pre>

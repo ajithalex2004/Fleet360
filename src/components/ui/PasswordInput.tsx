@@ -34,7 +34,7 @@ const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
           onClick={() => setShow(v => !v)}
           tabIndex={-1}
           aria-label={show ? 'Hide password' : 'Show password'}
-          className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-white transition-colors"
+          className="absolute inset-y-0 right-0 flex items-center px-3 text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
         >
           {show ? (
             /* Eye-off icon */

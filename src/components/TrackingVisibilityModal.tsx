@@ -116,24 +116,24 @@ export function TrackingVisibilityModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
       onClick={onClose}>
-      <div className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col"
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col"
         onClick={e => e.stopPropagation()}>
 
         {/* Header */}
-        <div className="flex items-start gap-3 px-5 py-4 border-b border-white/10">
+        <div className="flex items-start gap-3 px-5 py-4 border-b border-[var(--border-subtle)]">
           <div className="flex-1">
-            <h2 className="text-base font-bold text-white">{title}</h2>
-            {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
+            <h2 className="text-base font-bold text-[var(--text-main)]">{title}</h2>
+            {subtitle && <p className="text-xs text-[var(--text-muted)] mt-0.5">{subtitle}</p>}
           </div>
           <button onClick={onClose}
-            className="p-1 text-slate-400 hover:text-white">
+            className="p-1 text-[var(--text-muted)] hover:text-[var(--text-main)]">
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Body — 4 radio cards */}
         <div className="flex-1 overflow-y-auto p-5 space-y-2">
-          <p className="text-[11px] uppercase tracking-wider text-slate-500 mb-1">
+          <p className="text-[11px] uppercase tracking-wider text-[var(--text-faint)] mb-1">
             Choose what the shipper sees
           </p>
           {OPTIONS.map(opt => {
@@ -144,24 +144,24 @@ export function TrackingVisibilityModal({
               <button key={opt.value} type="button"
                 onClick={() => setSelected(opt.value)}
                 className={`w-full text-left rounded-xl border p-3 transition-colors ${
-                  checked ? 'ring-2 ring-emerald-500/50 ' + opt.tone : opt.tone + ' border-white/10'
+                  checked ? 'ring-2 ring-emerald-500/50 ' + opt.tone : opt.tone + ' border-[var(--border-subtle)]'
                 }`}>
                 <div className="flex items-start gap-3">
                   <div className={`mt-0.5 w-9 h-9 rounded-lg flex items-center justify-center ${
-                    checked ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-slate-400'
+                    checked ? 'bg-emerald-500/20 text-emerald-300' : 'bg-[var(--bg-surface)] text-[var(--text-muted)]'
                   }`}>
                     <Icon className="w-4 h-4" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-bold text-white">{opt.label}</p>
+                      <p className="text-sm font-bold text-[var(--text-main)]">{opt.label}</p>
                       {isCurrent && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
                           Current
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                    <p className="text-xs text-[var(--text-muted)] mt-1 leading-relaxed">
                       {opt.description}
                     </p>
                   </div>
@@ -179,11 +179,11 @@ export function TrackingVisibilityModal({
             <div className={`mt-4 p-3 rounded-xl border ${
               isDowngrade
                 ? 'bg-amber-500/5 border-amber-500/30'
-                : 'bg-slate-800/30 border-white/5'
+                : 'bg-[var(--bg-surface)]/30 border-[var(--border-subtle)]'
             }`}>
               <label className="text-[11px] font-semibold uppercase tracking-wider flex items-center gap-1.5 mb-1">
                 {isDowngrade && <Lock className="w-3.5 h-3.5 text-amber-300" />}
-                <span className={isDowngrade ? 'text-amber-200' : 'text-slate-400'}>
+                <span className={isDowngrade ? 'text-amber-200' : 'text-[var(--text-muted)]'}>
                   {isDowngrade ? 'Reason for reducing visibility' : 'Reason (optional)'}
                 </span>
               </label>
@@ -193,7 +193,7 @@ export function TrackingVisibilityModal({
                 placeholder={isDowngrade
                   ? 'Why is this shipper getting less information? (audit trail)'
                   : 'Add a note for the audit log (optional)'}
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
             </div>
           )}
 
@@ -205,16 +205,16 @@ export function TrackingVisibilityModal({
         </div>
 
         {/* Footer actions */}
-        <div className="flex items-center gap-2 px-5 py-3 border-t border-white/10">
+        <div className="flex items-center gap-2 px-5 py-3 border-t border-[var(--border-subtle)]">
           {allowClear && (
             <button onClick={() => void submit(true)} disabled={busy}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-slate-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-md disabled:opacity-50">
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs text-[var(--text-muted)] hover:text-rose-300 hover:bg-rose-500/10 rounded-md disabled:opacity-50">
               <Trash2 className="w-3.5 h-3.5" /> Clear override
             </button>
           )}
           <div className="ml-auto flex items-center gap-2">
             <button onClick={onClose} disabled={busy}
-              className="px-3 py-2 text-sm text-slate-400 hover:text-white">
+              className="px-3 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-main)]">
               Cancel
             </button>
             <button onClick={() => void submit(false)} disabled={busy || isNoChange}

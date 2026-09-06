@@ -129,15 +129,15 @@ export default function IntegrationsPage() {
 
   if (loading) return (
     <div className="flex items-center justify-center h-full">
-      <div className="text-slate-400 animate-pulse">Loading integrations...</div>
+      <div className="text-[var(--text-muted)] animate-pulse">Loading integrations...</div>
     </div>
   );
 
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-white mb-2">Integrations & ERP</h1>
-        <p className="text-xs text-slate-400">Configure webhooks, ERP connectors, and GPS/telematics providers</p>
+        <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Integrations & ERP</h1>
+        <p className="text-xs text-[var(--text-muted)]">Configure webhooks, ERP connectors, and GPS/telematics providers</p>
       </div>
 
       {INTEGRATION_META.map(intg => {
@@ -148,26 +148,26 @@ export default function IntegrationsPage() {
         const message  = msg[intg.type];
 
         return (
-          <div key={intg.type} className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-hidden">
+          <div key={intg.type} className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-white/10">
+            <div className="flex items-center justify-between p-6 border-b border-[var(--border-subtle)]">
               <div className="flex items-center gap-4">
                 <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${intg.color} flex items-center justify-center text-white font-bold text-lg`}>
                   {intg.icon}
                 </div>
                 <div>
                   <div className="flex items-center gap-3">
-                    <h2 className="text-lg font-semibold text-white">{intg.label}</h2>
-                    <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${isActive ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-slate-700 text-slate-400 border-white/10'}`}>
+                    <h2 className="text-lg font-semibold text-[var(--text-main)]">{intg.label}</h2>
+                    <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${isActive ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border-[var(--border-subtle)]'}`}>
                       {isActive ? 'Connected' : 'Not Connected'}
                     </span>
                     {existing?.updatedAt && (
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs text-[var(--text-faint)]">
                         Last saved: {new Date(existing.updatedAt).toLocaleDateString()}
                       </span>
                     )}
                   </div>
-                  <p className="text-slate-400 text-sm">{intg.description}</p>
+                  <p className="text-[var(--text-muted)] text-sm">{intg.description}</p>
                 </div>
               </div>
               <button
@@ -182,13 +182,13 @@ export default function IntegrationsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {intg.fields.map(f => (
                   <div key={f.key}>
-                    <label className="block text-sm font-medium text-slate-300 mb-1.5">{f.label}</label>
+                    <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">{f.label}</label>
                     <input
                       type={(f as any).secret ? 'password' : 'text'}
                       value={(form as any)[f.key] ?? ''}
                       onChange={e => setField(intg.type, f.key, e.target.value)}
                       placeholder={f.ph}
-                      className="w-full px-3 py-2 rounded-lg bg-slate-700 border border-white/10 text-white placeholder-slate-500 text-sm focus:border-blue-500 focus:outline-none"
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:border-blue-500 focus:outline-none"
                     />
                   </div>
                 ))}
@@ -197,10 +197,10 @@ export default function IntegrationsPage() {
               {/* Webhook events */}
               {(intg as any).events && (
                 <div className="mt-4">
-                  <p className="text-xs text-slate-500 font-medium uppercase tracking-wider mb-2">Trigger Events</p>
+                  <p className="text-xs text-[var(--text-faint)] font-medium uppercase tracking-wider mb-2">Trigger Events</p>
                   <div className="flex flex-wrap gap-2">
                     {((intg as any).events as string[]).map((ev: string) => (
-                      <span key={ev} className="text-xs font-mono px-2 py-1 rounded bg-slate-700 text-slate-300 border border-white/10">{ev}</span>
+                      <span key={ev} className="text-xs font-mono px-2 py-1 rounded bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border border-[var(--border-subtle)]">{ev}</span>
                     ))}
                   </div>
                 </div>

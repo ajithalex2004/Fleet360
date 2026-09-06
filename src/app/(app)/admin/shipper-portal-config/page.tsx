@@ -32,7 +32,7 @@ interface CustomerRow {
 }
 
 const LEVEL_META: Record<TrackingLevel, { label: string; icon: React.ComponentType<{ className?: string }>; tone: string }> = {
-  NONE:           { label: 'Notifications only', icon: ShieldOff,  tone: 'bg-slate-500/15 text-slate-300 border-slate-500/30' },
+  NONE:           { label: 'Notifications only', icon: ShieldOff,  tone: 'bg-slate-500/15 text-[var(--text-muted)] border-slate-500/30' },
   STATUS_ONLY:    { label: 'Status updates',     icon: Eye,        tone: 'bg-blue-500/15 text-blue-300 border-blue-500/30' },
   STATUS_AND_ETA: { label: 'Status + ETA',       icon: Navigation, tone: 'bg-violet-500/15 text-violet-300 border-violet-500/30' },
   FULL_TRACKING:  { label: 'Live tracking',      icon: Activity,   tone: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
@@ -136,14 +136,14 @@ export default function ShipperPortalConfigPage() {
           <Ship className="w-5 h-5" />
         </div>
         <div className="flex-1">
-          <h1 className="text-xl font-bold text-white">Shipper Portal Configuration</h1>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <h1 className="text-xl font-bold text-[var(--text-main)]">Shipper Portal Configuration</h1>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">
             Manage portal access and tracking visibility per customer. Per-shipment overrides live on each shipment&apos;s detail page.
           </p>
         </div>
         <SeedDemoButton onSeeded={() => void load()} />
         <button onClick={() => void load()}
-          className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5">
+          className="p-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]">
           <RefreshCw className="w-4 h-4" />
         </button>
       </div>
@@ -154,7 +154,7 @@ export default function ShipperPortalConfigPage() {
           <Settings className="w-5 h-5 text-emerald-300 mt-1" />
           <div className="flex-1">
             <p className="text-[10px] uppercase tracking-wider text-emerald-300/80">Tenant default</p>
-            <p className="text-sm text-white mt-1">
+            <p className="text-sm text-[var(--text-main)] mt-1">
               When a customer hasn&apos;t been given a specific level, shipments default to:
             </p>
             {tenantDefault && (
@@ -186,16 +186,16 @@ export default function ShipperPortalConfigPage() {
 
       {/* Search */}
       <div className="relative max-w-md">
-        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]" />
         <input value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search customers by name or email…"
-          className="w-full bg-slate-900 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+          className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg pl-9 pr-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-emerald-500" />
       </div>
 
       {/* Customers table */}
-      <div className="bg-slate-900 border border-white/10 rounded-2xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-slate-800/40 text-slate-400 text-[11px] uppercase tracking-wider">
+          <thead className="bg-[var(--bg-surface)]/40 text-[var(--text-muted)] text-[11px] uppercase tracking-wider">
             <tr>
               <th className="px-4 py-2.5 text-left">Customer</th>
               <th className="px-4 py-2.5 text-left">Portal access</th>
@@ -207,20 +207,20 @@ export default function ShipperPortalConfigPage() {
           <tbody>
             {loading ? (
               [...Array(5)].map((_, i) => (
-                <tr key={i} className="border-t border-white/5">
-                  <td colSpan={5} className="px-4 py-3"><div className="h-5 rounded bg-slate-800/60 animate-pulse" /></td>
+                <tr key={i} className="border-t border-[var(--border-subtle)]">
+                  <td colSpan={5} className="px-4 py-3"><div className="h-5 rounded bg-[var(--bg-surface)]/60 animate-pulse" /></td>
                 </tr>
               ))
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-500 text-sm">
+              <tr><td colSpan={5} className="px-4 py-10 text-center text-[var(--text-faint)] text-sm">
                 {customers.length === 0 ? 'No customers yet.' : 'No customers match your search.'}
               </td></tr>
             ) : (
               filtered.map(c => (
-                <tr key={c.id} className="border-t border-white/5 hover:bg-white/5">
+                <tr key={c.id} className="border-t border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]">
                   <td className="px-4 py-3">
-                    <p className="text-white font-medium">{c.name}</p>
-                    {c.email && <p className="text-[11px] text-slate-500">{c.email}</p>}
+                    <p className="text-[var(--text-main)] font-medium">{c.name}</p>
+                    {c.email && <p className="text-[11px] text-[var(--text-faint)]">{c.email}</p>}
                   </td>
                   <td className="px-4 py-3">
                     {c.activeUserCount > 0 ? (
@@ -232,19 +232,19 @@ export default function ShipperPortalConfigPage() {
                         <Clock className="w-3 h-3" /> Pending
                       </span>
                     ) : (
-                      <span className="text-[11px] text-slate-500">Not invited</span>
+                      <span className="text-[11px] text-[var(--text-faint)]">Not invited</span>
                     )}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5">
                       <LevelPill level={c.trackingLevel} />
                       {c.usingDefault && (
-                        <span className="text-[10px] text-slate-500 italic">(inherited)</span>
+                        <span className="text-[10px] text-[var(--text-faint)] italic">(inherited)</span>
                       )}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-xs text-slate-400">
-                    {c.lastLoginAt ? formatRelative(c.lastLoginAt) : <span className="text-slate-600">—</span>}
+                  <td className="px-4 py-3 text-xs text-[var(--text-muted)]">
+                    {c.lastLoginAt ? formatRelative(c.lastLoginAt) : <span className="text-[var(--text-faint)]">—</span>}
                   </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     <button onClick={() => setEditing({
@@ -322,41 +322,41 @@ function SeedDemoButton({ onSeeded }: { onSeeded: () => void }) {
     <>
       <button onClick={seed} disabled={busy}
         title="Create a demo customer + portal user + sample shipments"
-        className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-white/5 disabled:opacity-50">
+        className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] disabled:opacity-50">
         <Settings className="w-3.5 h-3.5" /> {busy ? 'Seeding…' : 'Seed demo'}
       </button>
       {(result || err) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
           onClick={() => { setResult(null); setErr(null); }}>
-          <div className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-3"
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-3"
             onClick={e => e.stopPropagation()}>
             {err ? (
               <>
                 <p className="text-sm font-bold text-rose-300 inline-flex items-center gap-2">
                   <AlertCircle className="w-4 h-4" /> Seed failed
                 </p>
-                <p className="text-xs text-slate-400">{err}</p>
+                <p className="text-xs text-[var(--text-muted)]">{err}</p>
               </>
             ) : result && (
               <>
-                <p className="text-sm font-bold text-white inline-flex items-center gap-2">
+                <p className="text-sm font-bold text-[var(--text-main)] inline-flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-300" /> Demo data created
                 </p>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-[var(--text-muted)]">
                   Created a demo customer, a portal user, and {result.shipments} sample shipments.
                   Open the setup link in an incognito window to log in as the shipper.
                 </p>
                 <div>
-                  <p className="text-[11px] uppercase tracking-wider text-slate-500 mb-1">Setup link</p>
+                  <p className="text-[11px] uppercase tracking-wider text-[var(--text-faint)] mb-1">Setup link</p>
                   <input readOnly value={result.setupUrl}
                     onClick={e => (e.target as HTMLInputElement).select()}
-                    className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                 </div>
               </>
             )}
             <div className="flex justify-end">
               <button onClick={() => { setResult(null); setErr(null); }}
-                className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-sm">
+                className="px-4 py-2 rounded-lg bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-sm">
                 Close
               </button>
             </div>
@@ -399,10 +399,10 @@ function InvitePortalUserModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-white/10 flex items-center gap-2">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center gap-2">
           <UserPlus className="w-4 h-4 text-emerald-300" />
-          <h2 className="text-base font-bold text-white">Invite portal user — {customerName}</h2>
+          <h2 className="text-base font-bold text-[var(--text-main)]">Invite portal user — {customerName}</h2>
         </div>
 
         {result ? (
@@ -412,23 +412,23 @@ function InvitePortalUserModal({
                 ? 'bg-emerald-500/10 border-emerald-500/30'
                 : 'bg-amber-500/10 border-amber-500/30'
             }`}>
-              <p className="text-sm font-bold text-white inline-flex items-center gap-2">
+              <p className="text-sm font-bold text-[var(--text-main)] inline-flex items-center gap-2">
                 {result.emailSent
                   ? <><CheckCircle2 className="w-4 h-4 text-emerald-300" /> Invitation sent</>
                   : <><AlertCircle className="w-4 h-4 text-amber-300" /> Invitation created — email not sent</>}
               </p>
-              <p className="text-xs text-slate-400 mt-1">
+              <p className="text-xs text-[var(--text-muted)] mt-1">
                 {result.emailSent
                   ? 'The invitee will receive a setup link by email.'
                   : 'SMTP is not configured. Copy the link below and share it manually.'}
               </p>
             </div>
             <div>
-              <p className="text-[11px] uppercase tracking-wider text-slate-500 mb-1">Setup link</p>
+              <p className="text-[11px] uppercase tracking-wider text-[var(--text-faint)] mb-1">Setup link</p>
               <input readOnly value={result.setupUrl}
                 onClick={e => (e.target as HTMLInputElement).select()}
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-              <p className="text-[10px] text-slate-500 mt-1">Single-use, expires in 7 days.</p>
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+              <p className="text-[10px] text-[var(--text-faint)] mt-1">Single-use, expires in 7 days.</p>
             </div>
             <div className="flex justify-end">
               <button onClick={onInvited}
@@ -442,12 +442,12 @@ function InvitePortalUserModal({
             <Field label="Email" required>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)}
                 placeholder="ahmed@acme.com"
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
             </Field>
             <Field label="Full name (optional)">
               <input value={fullName} onChange={e => setFullName(e.target.value)}
                 placeholder="Ahmed Khan"
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
             </Field>
             {err && (
               <div className="bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2 text-rose-300 text-xs flex items-center gap-2">
@@ -456,7 +456,7 @@ function InvitePortalUserModal({
             )}
             <div className="flex justify-end gap-2 pt-1">
               <button onClick={onClose}
-                className="px-3 py-2 text-slate-400 hover:text-white text-sm">Cancel</button>
+                className="px-3 py-2 text-[var(--text-muted)] hover:text-[var(--text-main)] text-sm">Cancel</button>
               <button onClick={submit} disabled={busy || !email.trim()}
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold disabled:opacity-50">
                 <Mail className="w-4 h-4" /> {busy ? 'Sending…' : 'Send invitation'}
@@ -489,7 +489,7 @@ function StatCard({
   icon?: React.ComponentType<{ className?: string }>;
 }) {
   const cls = {
-    slate:   'bg-slate-700/30   border-white/10       text-slate-300',
+    slate:   'bg-[var(--bg-surface-hover)]/30   border-[var(--border-subtle)]       text-[var(--text-muted)]',
     emerald: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300',
     amber:   'bg-amber-500/10   border-amber-500/30   text-amber-300',
     rose:    'bg-rose-500/10    border-rose-500/30    text-rose-300',
@@ -508,7 +508,7 @@ function StatCard({
 function Field({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
-      <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide flex items-center gap-1">
+      <label className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wide flex items-center gap-1">
         {label}{required && <span className="text-rose-400">*</span>}
       </label>
       {children}

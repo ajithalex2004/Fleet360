@@ -189,8 +189,8 @@ export default function PlatformPlansPage() {
     <div className="p-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-white">Platform Plans</h1>
-          <p className="text-slate-400 mt-1 text-xs">
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Platform Plans</h1>
+          <p className="text-[var(--text-muted)] mt-1 text-xs">
             Plan tiers shown on the onboarding page and used to gate quotas + features.
             Changes are live immediately (no redeploy).
           </p>
@@ -222,11 +222,11 @@ export default function PlatformPlansPage() {
       )}
 
       {loading ? (
-        <div className="text-slate-400 text-sm">Loading…</div>
+        <div className="text-[var(--text-muted)] text-sm">Loading…</div>
       ) : (
         <div className="space-y-2">
           {plans.length === 0 && (
-            <div className="text-slate-400 text-sm">No plans yet. Click "+ New Plan" to create one.</div>
+            <div className="text-[var(--text-muted)] text-sm">No plans yet. Click "+ New Plan" to create one.</div>
           )}
           {plans.map(p => (
             <div key={p.code}>
@@ -262,22 +262,22 @@ function PlanRow({
 }) {
   const limits = p.limits;
   return (
-    <div className={`p-4 rounded-lg border ${p.isActive ? 'border-white/10 bg-slate-800' : 'border-white/5 bg-slate-900/50 opacity-60'}`}>
+    <div className={`p-4 rounded-lg border ${p.isActive ? 'border-[var(--border-subtle)] bg-[var(--bg-surface)]' : 'border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 opacity-60'}`}>
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-slate-700 text-slate-200">{p.code}</span>
-            <span className="font-semibold text-white">{p.name}</span>
+            <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-[var(--bg-surface-hover)] text-[var(--text-main)]">{p.code}</span>
+            <span className="font-semibold text-[var(--text-main)]">{p.name}</span>
             <span className="text-blue-400 text-sm">{p.priceLabel}</span>
             {p.highlight && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-blue-600 text-white">Popular</span>
             )}
             {!p.isActive && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-slate-600 text-slate-300">Retired</span>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--bg-surface-hover)] text-[var(--text-muted)]">Retired</span>
             )}
-            <span className="text-xs text-slate-500">sort: {p.sortOrder}</span>
+            <span className="text-xs text-[var(--text-faint)]">sort: {p.sortOrder}</span>
           </div>
-          <div className="text-slate-400 text-sm mt-1">{p.description}</div>
+          <div className="text-[var(--text-muted)] text-sm mt-1">{p.description}</div>
           <div className="flex flex-wrap gap-2 mt-2 text-xs">
             <Tag>users ≤ {fmtN(limits.maxUsers)}</Tag>
             <Tag>vehicles ≤ {fmtN(limits.maxVehicles)}</Tag>
@@ -290,7 +290,7 @@ function PlanRow({
         <div className="flex gap-2 shrink-0">
           <button
             onClick={() => onEdit(p)}
-            className="px-3 py-1.5 text-sm rounded border border-white/10 hover:bg-white/5 text-slate-200"
+            className="px-3 py-1.5 text-sm rounded border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)]"
           >
             Edit
           </button>
@@ -313,7 +313,7 @@ function PlanRow({
 function Tag({ children, accent }: { children: React.ReactNode; accent?: boolean }) {
   return (
     <span className={`px-2 py-0.5 rounded border ${
-      accent ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-white/10 bg-slate-700/40 text-slate-300'
+      accent ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]/40 text-[var(--text-muted)]'
     }`}>
       {children}
     </span>
@@ -332,14 +332,14 @@ function Field({
 }: { label: string; children: React.ReactNode; hint?: string }) {
   return (
     <label className="block">
-      <span className="block text-xs font-medium text-slate-400 mb-1">{label}</span>
+      <span className="block text-xs font-medium text-[var(--text-muted)] mb-1">{label}</span>
       {children}
-      {hint && <span className="block text-xs text-slate-500 mt-1">{hint}</span>}
+      {hint && <span className="block text-xs text-[var(--text-faint)] mt-1">{hint}</span>}
     </label>
   );
 }
 
-const inputCls = 'w-full px-3 py-2 rounded border border-white/10 bg-slate-900 text-white text-sm focus:outline-none focus:border-blue-500';
+const inputCls = 'w-full px-3 py-2 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-main)] text-sm focus:outline-none focus:border-blue-500';
 
 function PlanForm({
   title, form, isNew, saving, onChange, onCancel, onSubmit,
@@ -358,7 +358,7 @@ function PlanForm({
 
   return (
     <div className="p-4 rounded-lg border border-blue-500/30 bg-blue-950/20 mb-3">
-      <h3 className="text-white font-semibold mb-4">{title}</h3>
+      <h3 className="text-[var(--text-main)] font-semibold mb-4">{title}</h3>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Field label="Code" hint="UPPERCASE_WITH_UNDERSCORES. Permanent — never change after launch.">
@@ -388,12 +388,12 @@ function PlanForm({
           />
         </Field>
         <div className="flex items-end gap-4">
-          <label className="flex items-center gap-2 text-sm text-slate-300">
+          <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
             <input type="checkbox" checked={form.highlight} onChange={e => set('highlight', e.target.checked)} />
             Show "Popular" badge
           </label>
           {!isNew && (
-            <label className="flex items-center gap-2 text-sm text-slate-300">
+            <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
               <input type="checkbox" checked={form.isActive} onChange={e => set('isActive', e.target.checked)} />
               Active
             </label>
@@ -401,8 +401,8 @@ function PlanForm({
         </div>
       </div>
 
-      <div className="mt-4 pt-4 border-t border-white/5">
-        <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-3">Quotas</div>
+      <div className="mt-4 pt-4 border-t border-[var(--border-subtle)]">
+        <div className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Quotas</div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Field label="Max users">
             <input className={inputCls} type="number" min={1} value={form.limits.maxUsers}
@@ -419,9 +419,9 @@ function PlanForm({
         </div>
       </div>
 
-      <div className="mt-4 pt-4 border-t border-white/5">
-        <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-3">Feature gates</div>
-        <div className="flex flex-wrap gap-4 text-sm text-slate-300">
+      <div className="mt-4 pt-4 border-t border-[var(--border-subtle)]">
+        <div className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Feature gates</div>
+        <div className="flex flex-wrap gap-4 text-sm text-[var(--text-muted)]">
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={form.limits.sso}      onChange={e => setL('sso',      e.target.checked)} /> SSO
           </label>
@@ -437,7 +437,7 @@ function PlanForm({
       <div className="mt-6 flex justify-end gap-2">
         <button
           onClick={onCancel}
-          className="px-3 py-1.5 text-sm rounded border border-white/10 text-slate-300 hover:bg-white/5"
+          className="px-3 py-1.5 text-sm rounded border border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
         >
           Cancel
         </button>

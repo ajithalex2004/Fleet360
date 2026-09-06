@@ -17,7 +17,7 @@ import { useFetchedData, invalidate, invalidatePrefix } from '@/hooks/useFetched
 
 const PLANS = ['TRIAL', 'STANDARD', 'PROFESSIONAL', 'ENTERPRISE'];
 const PLAN_COLORS: Record<string, string> = {
-  TRIAL:        'bg-slate-500/20 text-slate-400 border-slate-500/30',
+  TRIAL:        'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30',
   STANDARD:     'bg-blue-500/20 text-blue-400 border-blue-500/30',
   PROFESSIONAL: 'bg-violet-500/20 text-violet-400 border-violet-500/30',
   ENTERPRISE:   'bg-amber-500/20 text-amber-400 border-amber-500/30',
@@ -496,7 +496,7 @@ export default function TenantsPage() {
   // ── render ────────────────────────────────────────────────────────────────
   if (loading) return (
     <div className="flex items-center justify-center h-full">
-      <div className="text-slate-400 animate-pulse">Loading tenants…</div>
+      <div className="text-[var(--text-muted)] animate-pulse">Loading tenants…</div>
     </div>
   );
 
@@ -506,8 +506,8 @@ export default function TenantsPage() {
       {/* ── Page header ────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-2">Tenants</h1>
-          <p className="text-xs text-slate-400">{tenants.filter(t => t.isActive).length} active organisations on the platform</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Tenants</h1>
+          <p className="text-xs text-[var(--text-muted)]">{tenants.filter(t => t.isActive).length} active organisations on the platform</p>
         </div>
         <button onClick={openModal}
           className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-sm font-medium text-white hover:opacity-90">
@@ -522,27 +522,27 @@ export default function TenantsPage() {
       {/* ── Tenant list ─────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-4">
         {tenants.length === 0 ? (
-          <div className="text-center text-slate-400 py-16 bg-slate-800/30 border border-white/5 rounded-2xl">
+          <div className="text-center text-[var(--text-muted)] py-16 bg-[var(--bg-surface)]/30 border border-[var(--border-subtle)] rounded-2xl">
             No tenants yet. Create your first tenant to get started.
           </div>
         ) : tenants.map(t => (
           <div key={t.id}
-            className={`bg-slate-800/50 border rounded-2xl p-6 transition-all ${t.isActive ? 'border-white/10' : 'border-white/5 opacity-60'}`}>
+            className={`bg-[var(--bg-surface)]/50 border rounded-2xl p-6 transition-all ${t.isActive ? 'border-[var(--border-subtle)]' : 'border-[var(--border-subtle)] opacity-60'}`}>
             <div className="flex items-start justify-between mb-4">
               <div>
                 <div className="flex items-center gap-3 mb-1">
-                  <h3 className="text-xl font-bold text-white">{t.name}</h3>
-                  {t.code && <span className="text-xs font-mono bg-slate-700 text-slate-300 px-2 py-0.5 rounded">{t.code}</span>}
+                  <h3 className="text-xl font-bold text-[var(--text-main)]">{t.name}</h3>
+                  {t.code && <span className="text-xs font-mono bg-[var(--bg-surface-hover)] text-[var(--text-muted)] px-2 py-0.5 rounded">{t.code}</span>}
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${PLAN_COLORS[t.plan ?? 'STANDARD']}`}>{t.plan}</span>
                   {!t.isActive && <span className="px-2 py-0.5 rounded-full text-xs bg-rose-500/20 text-rose-400 border border-rose-500/30">INACTIVE</span>}
                 </div>
-                <p className="text-slate-400 text-sm">
+                <p className="text-[var(--text-muted)] text-sm">
                   {[t.domain, t.contactEmail].filter(Boolean).join('  ·  ') || t.industry || 'No contact details'}
                 </p>
               </div>
               <div className="text-right text-sm">
-                <div className="text-white font-medium">{t._count?.userTenants ?? 0} users</div>
-                <div className="text-slate-400">{t._count?.roles ?? 0} roles</div>
+                <div className="text-[var(--text-main)] font-medium">{t._count?.userTenants ?? 0} users</div>
+                <div className="text-[var(--text-muted)]">{t._count?.roles ?? 0} roles</div>
               </div>
             </div>
             <div className="flex flex-wrap gap-2 mb-4">
@@ -553,7 +553,7 @@ export default function TenantsPage() {
                   return (
                     <span key={m} className={`px-2 py-1 rounded text-xs font-medium
                       ${enabled ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                : 'bg-slate-700 text-slate-500 border border-white/5'}`}>
+                                : 'bg-[var(--bg-surface-hover)] text-[var(--text-faint)] border border-[var(--border-subtle)]'}`}>
                       {MODULE_LABELS[m]}
                     </span>
                   );
@@ -602,7 +602,7 @@ export default function TenantsPage() {
                   const r = await fetch(`/api/admin/tenants/${t.id}`);
                   if (r.ok) setEditingTenant(await r.json() as TenantForEdit);
                 }}
-                className="text-xs px-3 py-1.5 rounded-lg border border-white/10 text-slate-200 hover:bg-white/5">
+                className="text-xs px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]">
                 Edit
               </button>
               {/* Hard delete — only for inactive tenants (server enforces this too) */}
@@ -654,28 +654,28 @@ export default function TenantsPage() {
             Key fix: use h-[90vh] (not max-h) so flex children get a defined
             height, enabling flex-1 + overflow-y-auto to scroll properly.
           */}
-          <div className="w-full max-w-2xl h-[90vh] bg-slate-900 border border-white/10 rounded-2xl
+          <div className="w-full max-w-2xl h-[90vh] bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl
                           flex flex-col shadow-2xl overflow-hidden">
 
             {/* ── Modal header (never scrolls) ─────────────────────────────── */}
-            <div className="flex items-start justify-between px-7 pt-5 pb-4 border-b border-white/10 flex-shrink-0">
+            <div className="flex items-start justify-between px-7 pt-5 pb-4 border-b border-[var(--border-subtle)] flex-shrink-0">
               <div>
-                <h2 className="text-xl font-bold text-white">Create New Tenant</h2>
-                <p className="text-slate-400 text-xs mt-0.5">Configure a new tenant with modules and settings</p>
+                <h2 className="text-xl font-bold text-[var(--text-main)]">Create New Tenant</h2>
+                <p className="text-[var(--text-muted)] text-xs mt-0.5">Configure a new tenant with modules and settings</p>
               </div>
-              <button onClick={closeModal} className="text-slate-400 hover:text-white text-lg leading-none mt-0.5">✕</button>
+              <button onClick={closeModal} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-lg leading-none mt-0.5">✕</button>
             </div>
 
             {/* ── Tab bar (never scrolls) ───────────────────────────────────── */}
-            <div className="flex border-b border-white/10 flex-shrink-0 bg-slate-900 overflow-x-auto">
+            <div className="flex border-b border-[var(--border-subtle)] flex-shrink-0 bg-[var(--bg-surface)] overflow-x-auto">
               {TABS.map((t, i) => (
                 <button key={t.key} onClick={() => setActiveTab(t.key)}
                   className={`flex items-center gap-1.5 px-4 py-3 text-xs font-medium border-b-2 -mb-px transition-all whitespace-nowrap flex-shrink-0
                     ${activeTab === t.key
-                      ? 'text-white border-blue-500'
+                      ? 'text-[var(--text-main)] border-blue-500'
                       : i < tabIndex
                         ? 'text-emerald-400 border-transparent hover:text-emerald-300'
-                        : 'text-slate-500 border-transparent hover:text-slate-300'}`}>
+                        : 'text-[var(--text-faint)] border-transparent hover:text-[var(--text-muted)]'}`}>
                   <span>{t.icon}</span>
                   <span>{t.label}</span>
                   {i < tabIndex && <span className="text-emerald-400 text-[10px]">✓</span>}
@@ -710,32 +710,32 @@ export default function TenantsPage() {
                     desc="Supported languages and localisation settings">
                     <div className="space-y-3">
                       <div>
-                        <label className="block text-xs font-medium text-slate-400 mb-2">Supported Languages</label>
+                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-2">Supported Languages</label>
                         <div className="flex gap-5">
                           {[{ key: 'en', label: 'English' }, { key: 'ar', label: 'Arabic' }].map(lang => (
                             <label key={lang.key} className="flex items-center gap-2 cursor-pointer">
                               <input type="checkbox" checked={form.supportedLanguages.includes(lang.key)}
                                 onChange={() => toggleLanguage(lang.key)}
-                                className="accent-blue-500 w-4 h-4 text-white" />
-                              <span className="text-sm text-slate-300">{lang.label}</span>
+                                className="accent-blue-500 w-4 h-4 text-[var(--text-main)]" />
+                              <span className="text-sm text-[var(--text-muted)]">{lang.label}</span>
                             </label>
                           ))}
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Default Language</label>
+                          <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Default Language</label>
                           <select value={form.defaultLanguage} onChange={e => set('defaultLanguage', e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-blue-500 focus:outline-none">
+                            className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-blue-500 focus:outline-none">
                             {form.supportedLanguages.map(l => (
                               <option key={l} value={l}>{l === 'en' ? 'English' : 'Arabic'}</option>
                             ))}
                           </select>
                         </div>
                         <div>
-                          <label className="block text-xs font-medium text-slate-400 mb-1.5">Plan</label>
+                          <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Plan</label>
                           <select value={form.plan} onChange={e => set('plan', e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white text-sm focus:border-blue-500 focus:outline-none">
+                            className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-blue-500 focus:outline-none">
                             {PLANS.map(p => <option key={p} value={p}>{p}</option>)}
                           </select>
                         </div>
@@ -743,7 +743,7 @@ export default function TenantsPage() {
                     </div>
                   </Section>
 
-                  <Section icon="✏️" iconBg="bg-slate-600/30"
+                  <Section icon="✏️" iconBg="bg-[var(--bg-surface-hover)]/30"
                     title={<>Localised Tenant Information <span className="text-rose-400">*</span></>}
                     desc="Enter the tenant information in all supported languages">
                     <div className="grid grid-cols-2 gap-3">
@@ -782,8 +782,8 @@ export default function TenantsPage() {
                                   {group.spec.icon}
                                 </span>
                                 <div>
-                                  <div className="text-sm font-semibold text-white">{group.spec.label}</div>
-                                  <div className="text-[10px] text-slate-500 leading-tight">{group.spec.description}</div>
+                                  <div className="text-sm font-semibold text-[var(--text-main)]">{group.spec.label}</div>
+                                  <div className="text-[10px] text-[var(--text-faint)] leading-tight">{group.spec.description}</div>
                                 </div>
                               </div>
                               <button onClick={() => {
@@ -802,14 +802,14 @@ export default function TenantsPage() {
                               {group.modules.map(m => (
                                 <label key={m.key}
                                   className={`flex items-start gap-3 p-2.5 rounded-lg cursor-pointer transition-all
-                                    ${form.enabledModules.includes(m.key) ? 'bg-white/10' : 'hover:bg-white/5'}`}>
+                                    ${form.enabledModules.includes(m.key) ? 'bg-[var(--bg-surface-hover)]' : 'hover:bg-[var(--bg-surface-hover)]'}`}>
                                   <input type="checkbox"
                                     checked={form.enabledModules.includes(m.key)}
                                     onChange={() => toggleModule(m.key)}
                                     className={`mt-0.5 w-4 h-4 flex-shrink-0 ${ACCENT[group.spec.color]}`} />
                                   <div>
-                                    <div className="text-sm font-medium text-white">{m.shortName ?? m.name}</div>
-                                    <div className="text-xs text-slate-400 mt-0.5">{m.description}</div>
+                                    <div className="text-sm font-medium text-[var(--text-main)]">{m.shortName ?? m.name}</div>
+                                    <div className="text-xs text-[var(--text-muted)] mt-0.5">{m.description}</div>
                                   </div>
                                 </label>
                               ))}
@@ -818,7 +818,7 @@ export default function TenantsPage() {
                         );
                       })}
                     </div>
-                    <p className="text-xs text-slate-500 mt-1">
+                    <p className="text-xs text-[var(--text-faint)] mt-1">
                       {form.enabledModules.length} of {ALL_MODULE_KEYS.length} modules selected
                     </p>
                   </Section>
@@ -830,8 +830,8 @@ export default function TenantsPage() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between mb-1">
                     <div>
-                      <p className="text-sm font-semibold text-white">Booking Type Configuration</p>
-                      <p className="text-xs text-slate-400 mt-0.5">
+                      <p className="text-sm font-semibold text-[var(--text-main)]">Booking Type Configuration</p>
+                      <p className="text-xs text-[var(--text-muted)] mt-0.5">
                         Define available request types for each service. Selected types will appear in the Booking page.
                       </p>
                     </div>
@@ -860,8 +860,8 @@ export default function TenantsPage() {
                               {svc.icon}
                             </span>
                             <div className="min-w-0">
-                              <div className="text-sm font-semibold text-white">{svc.label}</div>
-                              <div className="text-xs text-slate-400 truncate">{svc.desc}</div>
+                              <div className="text-sm font-semibold text-[var(--text-main)]">{svc.label}</div>
+                              <div className="text-xs text-[var(--text-muted)] truncate">{svc.desc}</div>
                             </div>
                           </button>
 
@@ -872,11 +872,11 @@ export default function TenantsPage() {
                               </span>
                             )}
                             <button onClick={() => selectAllRequestTypes(svc.key, allKeys)}
-                              className="text-xs text-slate-400 hover:text-white px-2 py-1 rounded hover:bg-white/5">
+                              className="text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] px-2 py-1 rounded hover:bg-[var(--bg-surface-hover)]">
                               {allSel ? 'None' : 'All'}
                             </button>
                             <button onClick={() => toggleExpanded(svc.key)}
-                              className="text-slate-400 hover:text-white w-6 h-6 flex items-center justify-center">
+                              className="text-[var(--text-muted)] hover:text-[var(--text-main)] w-6 h-6 flex items-center justify-center">
                               {isOpen ? '▲' : '▼'}
                             </button>
                           </div>
@@ -884,8 +884,8 @@ export default function TenantsPage() {
 
                         {/* Request types grid — shown when expanded */}
                         {isOpen && (
-                          <div className="px-4 pb-4 border-t border-white/5 pt-3">
-                            <p className="text-xs text-slate-500 mb-3">
+                          <div className="px-4 pb-4 border-t border-[var(--border-subtle)] pt-3">
+                            <p className="text-xs text-[var(--text-faint)] mb-3">
                               {allKeys.length} request types available — select which should be enabled for this tenant
                             </p>
                             <div className="grid grid-cols-3 gap-1.5">
@@ -895,8 +895,8 @@ export default function TenantsPage() {
                                   <label key={rt.key}
                                     className={`flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer transition-all border text-xs
                                       ${checked
-                                        ? `${BORDER_BG[svc.color]} text-white border-opacity-70`
-                                        : 'border-white/8 bg-slate-800/40 text-slate-400 hover:border-white/20'}`}>
+                                        ? `${BORDER_BG[svc.color]} text-[var(--text-main)] border-opacity-70`
+                                        : 'border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 text-[var(--text-muted)] hover:border-[var(--border-strong)]'}`}>
                                     <input type="checkbox" checked={checked}
                                       onChange={() => toggleRequestType(svc.key, rt.key)}
                                       className={`w-3.5 h-3.5 flex-shrink-0 ${ACCENT[svc.color]}`} />
@@ -916,15 +916,15 @@ export default function TenantsPage() {
               {/* ── TAB 4: Attachments ───────────────────────────────────── */}
               {activeTab === 'attachments' && (
                 <div className="h-full flex flex-col gap-4">
-                  <Section icon="📎" iconBg="bg-slate-600/30" title="Branding & Attachments"
+                  <Section icon="📎" iconBg="bg-[var(--bg-surface-hover)]/30" title="Branding & Attachments"
                     desc="Upload logo, documents, and other files">
                     {/* Empty state — intentionally compact, no py-16 */}
-                    <div className="rounded-xl border border-white/10 bg-slate-800/40
+                    <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40
                                     flex flex-col items-center justify-center gap-3
                                     py-10 px-6 text-center">
                       <span className="text-5xl opacity-20">📎</span>
-                      <p className="text-slate-300 text-sm font-medium">No attachments yet</p>
-                      <p className="text-slate-500 text-xs max-w-xs">
+                      <p className="text-[var(--text-muted)] text-sm font-medium">No attachments yet</p>
+                      <p className="text-[var(--text-faint)] text-xs max-w-xs">
                         Attachments can be added after saving. Once the tenant is created,
                         open the tenant detail page to upload logos and documents.
                       </p>
@@ -933,19 +933,19 @@ export default function TenantsPage() {
 
                   <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
                     <p className="text-xs font-semibold text-blue-300 mb-1">📋 Summary</p>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-slate-400 mt-2">
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-[var(--text-muted)] mt-2">
                       <span>Name</span>
-                      <span className="text-white truncate">{form.localizedName_en || form.name || '—'}</span>
+                      <span className="text-[var(--text-main)] truncate">{form.localizedName_en || form.name || '—'}</span>
                       <span>Code</span>
-                      <span className="text-white font-mono">{form.code || '—'}</span>
+                      <span className="text-[var(--text-main)] font-mono">{form.code || '—'}</span>
                       <span>Plan</span>
-                      <span className="text-white">{form.plan}</span>
+                      <span className="text-[var(--text-main)]">{form.plan}</span>
                       <span>Languages</span>
-                      <span className="text-white">{form.supportedLanguages.map(l => l === 'en' ? 'English' : 'Arabic').join(', ')}</span>
+                      <span className="text-[var(--text-main)]">{form.supportedLanguages.map(l => l === 'en' ? 'English' : 'Arabic').join(', ')}</span>
                       <span>Modules</span>
-                      <span className="text-white">{form.enabledModules.length} selected</span>
+                      <span className="text-[var(--text-main)]">{form.enabledModules.length} selected</span>
                       <span>Booking Types</span>
-                      <span className="text-white">{totalBookingSelected} request types across {Object.keys(form.bookingTypes).filter(k => (form.bookingTypes[k]?.length ?? 0) > 0).length} services</span>
+                      <span className="text-[var(--text-main)]">{totalBookingSelected} request types across {Object.keys(form.bookingTypes).filter(k => (form.bookingTypes[k]?.length ?? 0) > 0).length} services</span>
                     </div>
                   </div>
                 </div>
@@ -953,24 +953,24 @@ export default function TenantsPage() {
             </div>
 
             {/* ── Footer — never scrolls ───────────────────────────────────── */}
-            <div className="flex items-center justify-between px-7 py-3.5 border-t border-white/10
-                            bg-slate-900 flex-shrink-0 rounded-b-2xl">
+            <div className="flex items-center justify-between px-7 py-3.5 border-t border-[var(--border-subtle)]
+                            bg-[var(--bg-surface)] flex-shrink-0 rounded-b-2xl">
               <div className="min-w-0 mr-4">
                 {error
                   ? <p className="text-rose-400 text-xs truncate">{error}</p>
-                  : <p className="text-slate-500 text-xs">
+                  : <p className="text-[var(--text-faint)] text-xs">
                       Step {tabIndex + 1} of {TABS.length} — {TABS[tabIndex].label}
                     </p>
                 }
               </div>
               <div className="flex gap-2 flex-shrink-0">
                 <button onClick={closeModal}
-                  className="px-4 py-2 rounded-lg border border-white/10 text-white text-xs hover:bg-white/5 transition-all">
+                  className="px-4 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] text-xs hover:bg-[var(--bg-surface-hover)] transition-all">
                   Cancel
                 </button>
                 {tabIndex > 0 && (
                   <button onClick={() => setActiveTab(TABS[tabIndex - 1].key)}
-                    className="px-4 py-2 rounded-lg border border-white/10 text-white text-xs hover:bg-white/5 transition-all">
+                    className="px-4 py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-main)] text-xs hover:bg-[var(--bg-surface-hover)] transition-all">
                     ← Back
                   </button>
                 )}
@@ -1010,8 +1010,8 @@ function Section({
       <div className="flex items-center gap-2">
         <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-sm flex-shrink-0 ${iconBg}`}>{icon}</span>
         <div>
-          <div className="text-sm font-semibold text-white">{title}</div>
-          {desc && <div className="text-xs text-slate-400">{desc}</div>}
+          <div className="text-sm font-semibold text-[var(--text-main)]">{title}</div>
+          {desc && <div className="text-xs text-[var(--text-muted)]">{desc}</div>}
         </div>
       </div>
       {children}
@@ -1027,12 +1027,12 @@ function Field({
 }) {
   return (
     <div className={className}>
-      <label className="block text-xs font-medium text-slate-400 mb-1.5">{label}</label>
+      <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">{label}</label>
       <input type="text" value={value} onChange={e => onChange(e.target.value)}
         placeholder={placeholder} required={required}
-        className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-white/10 text-white
-                   placeholder-slate-600 text-sm focus:border-blue-500 focus:outline-none transition-colors" />
-      {hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
+        className="w-full px-3 py-2 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)]
+                   placeholder-[var(--text-faint)] text-sm focus:border-blue-500 focus:outline-none transition-colors" />
+      {hint && <p className="mt-1 text-xs text-[var(--text-faint)]">{hint}</p>}
     </div>
   );
 }
