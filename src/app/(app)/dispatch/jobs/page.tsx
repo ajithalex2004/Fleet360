@@ -481,7 +481,7 @@ export default function DispatchJobsPage() {
               <h3 className="text-lg font-bold text-[var(--text-main)] flex items-center gap-2">
                 🤖 AI Dispatch Breakdown
               </h3>
-              <button onClick={() => setSelectedJobRec(null)} className="text-[var(--text-muted)] hover:text-white text-xl">✕</button>
+              <button onClick={() => setSelectedJobRec(null)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">✕</button>
             </div>
 
             <div className="p-3 bg-[var(--bg-surface-hover)] rounded-xl border border-[var(--border-subtle)] space-y-2">
@@ -501,7 +501,7 @@ export default function DispatchJobsPage() {
 
             <div className="space-y-2">
               <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">Operational Rationale</h4>
-              <p className="text-sm text-[var(--text-main)] bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-xl leading-relaxed">
+              <p className="text-sm text-white bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-xl leading-relaxed">
                 {selectedJobRec.reason}
               </p>
             </div>

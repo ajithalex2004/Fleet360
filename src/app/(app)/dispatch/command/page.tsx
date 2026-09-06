@@ -64,14 +64,14 @@ const SVC_ICON: Record<string,string> = {
 const PRI_BG: Record<string,string> = {
   P1:'bg-red-600 text-white', P2:'bg-orange-500 text-white', P3:'bg-yellow-500 text-black',
   EMERGENCY:'bg-red-600 text-white', URGENT:'bg-orange-500 text-white',
-  NORMAL:'bg-slate-600 text-white', SCHEDULED:'bg-slate-700 text-slate-300',
+  NORMAL:'bg-[var(--bg-surface-hover)] text-[var(--text-main)]', SCHEDULED:'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]',
 };
 const STATUS_DOT: Record<string,string> = {
   PENDING:'bg-slate-400', SEARCHING:'bg-blue-400 animate-pulse',
   OFFERED:'bg-yellow-400 animate-pulse', ACCEPTED:'bg-green-400',
   IN_PROGRESS:'bg-cyan-400 animate-pulse', COMPLETED:'bg-emerald-400',
   RETRYING:'bg-orange-400 animate-pulse', ESCALATED:'bg-red-500 animate-pulse',
-  FAILED:'bg-red-800', CANCELLED:'bg-slate-600',
+  FAILED:'bg-red-800', CANCELLED:'bg-[var(--bg-surface-hover)]',
 };
 const STATUS_LBL: Record<string,string> = {
   PENDING:'Pending', SEARCHING:'Searching…', OFFERED:'Offered', ACCEPTED:'Accepted',
@@ -79,7 +79,7 @@ const STATUS_LBL: Record<string,string> = {
   ESCALATED:'ESCALATED', FAILED:'Failed', CANCELLED:'Cancelled',
 };
 const DRVR_DOT: Record<DrvStatus,string> = {
-  AVAILABLE:'bg-green-500', BUSY:'bg-yellow-500', BREAK:'bg-blue-500', OFF_DUTY:'bg-slate-600',
+  AVAILABLE:'bg-green-500', BUSY:'bg-yellow-500', BREAK:'bg-blue-500', OFF_DUTY:'bg-[var(--bg-surface-hover)]',
 };
 const JOB_CTX    = ['Assign Vehicle','Auto-Dispatch Now','Re-Dispatch','Change Priority','Merge with Another Job','Cancel Job','View Details'];
 const VEH_CTX    = ['Assign to Job','View Route','Send to Location','Mark Maintenance','Change Status','View History'];
@@ -287,7 +287,7 @@ function MapPanel({ jobs, drivers, selectedJob, onJobClick, onMapCtx }:{
   onJobClick:(j:Job)=>void; onMapCtx:(e:React.MouseEvent)=>void;
 }) {
   return (
-    <div className="relative w-full h-full overflow-hidden bg-slate-950" onContextMenu={e=>{e.preventDefault();onMapCtx(e);}}>
+    <div className="relative w-full h-full overflow-hidden bg-[var(--bg-canvas)]" onContextMenu={e=>{e.preventDefault();onMapCtx(e);}}>
       {/* Background grid */}
       <div className="absolute inset-0" style={{
         backgroundImage:`
@@ -323,11 +323,11 @@ function MapPanel({ jobs, drivers, selectedJob, onJobClick, onMapCtx }:{
           <div key={d.driver_id} className="absolute -translate-x-1/2 -translate-y-1/2 group cursor-pointer z-10"
             style={{left:`${p.x}%`,top:`${p.y}%`}}>
             {d.status==='BUSY'&&<div className="absolute inset-0 rounded-full bg-yellow-400 opacity-25 animate-ping scale-150"/>}
-            <div className="relative w-9 h-9 rounded-full border-2 border-slate-900 flex items-center justify-center text-sm shadow-lg transition-transform group-hover:scale-125"
+            <div className="relative w-9 h-9 rounded-full border-2 border-[var(--border-subtle)] flex items-center justify-center text-sm shadow-lg transition-transform group-hover:scale-125"
               style={{backgroundColor:col}}>
               {SVC_ICON[d.vehicle_type as SvcType]??'🚗'}
             </div>
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 w-40 bg-slate-800 border border-white/15 rounded-xl px-3 py-2 text-sm shadow-2xl">
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50 w-40 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm shadow-2xl">
               <p className="text-[var(--text-main)] font-semibold truncate">{d.driver_name}</p>
               <p className="text-[var(--text-muted)] text-xs">{d.vehicle_reg??'—'} · {d.status}</p>
               <p className="text-[var(--text-faint)] text-xs">{ago(d.last_ping)}</p>
@@ -346,13 +346,13 @@ function MapPanel({ jobs, drivers, selectedJob, onJobClick, onMapCtx }:{
             className="absolute -translate-x-1/2 -translate-y-full cursor-pointer group z-20"
             style={{left:`${p.x}%`,top:`${p.y}%`}}>
             <div className={`flex flex-col items-center transition-transform ${sel?'scale-125':'group-hover:scale-110'}`}>
-              <div className={`px-2 py-0.5 rounded text-xs font-bold bg-slate-900 border mb-0.5 ${sel?'border-blue-400 text-blue-300':'border-white/20 text-[var(--text-muted)]'}`}>
+              <div className={`px-2 py-0.5 rounded text-xs font-bold bg-[var(--bg-surface)] border mb-0.5 ${sel?'border-blue-400 text-blue-300':'border-[var(--border-strong)] text-[var(--text-muted)]'}`}>
                 {SVC_ICON[job.service_type]}
               </div>
               <div className="w-px h-4 bg-slate-500"/>
-              <div className="w-2.5 h-2.5 rounded-full border border-slate-600" style={{backgroundColor:col}}/>
+              <div className="w-2.5 h-2.5 rounded-full border border-[var(--border-strong)]" style={{backgroundColor:col}}/>
             </div>
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-50 w-44 bg-slate-800 border border-white/15 rounded-xl px-3 py-2 text-sm shadow-2xl">
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-50 w-44 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm shadow-2xl">
               <p className="text-[var(--text-main)] font-semibold">{job.service_type} · {job.priority}</p>
               <p className="text-[var(--text-muted)] text-xs truncate">{job.origin_address??'Origin'}</p>
               <p className="text-xs font-semibold text-[var(--text-muted)] mt-0.5">{STATUS_LBL[job.status]}</p>
@@ -361,7 +361,7 @@ function MapPanel({ jobs, drivers, selectedJob, onJobClick, onMapCtx }:{
         );
       })}
       {/* Legend */}
-      <div className="absolute bottom-4 left-4 bg-slate-900/85 backdrop-blur-sm border border-[var(--border-subtle)] rounded-2xl px-4 py-3 text-sm space-y-1.5">
+      <div className="absolute bottom-4 left-4 bg-[var(--bg-surface)]/85 backdrop-blur-sm border border-[var(--border-subtle)] rounded-2xl px-4 py-3 text-sm space-y-1.5">
         <p className="text-[var(--text-muted)] font-semibold text-xs mb-2 uppercase tracking-wider">Legend</p>
         {[['bg-green-400','On track'],['bg-amber-400','Delay risk'],['bg-red-500','SLA breach'],['bg-green-500','Available driver'],['bg-yellow-500','Busy driver']].map(([dot,lbl])=>(
           <div key={lbl} className="flex items-center gap-2">
@@ -373,12 +373,12 @@ function MapPanel({ jobs, drivers, selectedJob, onJobClick, onMapCtx }:{
       {/* Controls */}
       <div className="absolute top-4 right-4 flex flex-col gap-1.5">
         {['+','−','⌂'].map(c=>(
-          <button key={c} className="w-9 h-9 bg-slate-800/90 border border-[var(--border-subtle)] rounded-xl text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-slate-700 text-sm font-bold transition-all">
+          <button key={c} className="w-9 h-9 bg-[var(--bg-surface)]/90 border border-[var(--border-subtle)] rounded-xl text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm font-bold transition-all">
             {c}
           </button>
         ))}
       </div>
-      <div className="absolute top-4 left-4 bg-slate-900/70 border border-[var(--border-subtle)] rounded-xl px-3 py-1.5 text-xs text-[var(--text-faint)]">
+      <div className="absolute top-4 left-4 bg-[var(--bg-surface)]/70 border border-[var(--border-subtle)] rounded-xl px-3 py-1.5 text-xs text-[var(--text-faint)]">
         Right-click map for actions
       </div>
     </div>

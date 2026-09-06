@@ -210,7 +210,7 @@ export default function DispatchAnalyticsPage() {
               <DonutSegment value={jobStats.pending}    total={jobStats.total} color="bg-slate-500"   label="Pending" />
               <DonutSegment value={jobStats.failed}     total={jobStats.total} color="bg-red-600"     label="Failed" />
               <DonutSegment value={jobStats.escalated}  total={jobStats.total} color="bg-red-400"     label="Escalated" />
-              <DonutSegment value={jobStats.cancelled}  total={jobStats.total} color="bg-slate-700"   label="Cancelled" />
+              <DonutSegment value={jobStats.cancelled}  total={jobStats.total} color="bg-[var(--bg-surface-hover)]"   label="Cancelled" />
             </div>
 
             {/* Driver Pool */}
@@ -219,7 +219,7 @@ export default function DispatchAnalyticsPage() {
               <DonutSegment value={driverStats.available} total={driverStats.total} color="bg-green-500"  label="Available" />
               <DonutSegment value={driverStats.busy}      total={driverStats.total} color="bg-yellow-500" label="Busy" />
               <DonutSegment value={driverStats.break}     total={driverStats.total} color="bg-blue-500"   label="On Break" />
-              <DonutSegment value={driverStats.offDuty}   total={driverStats.total} color="bg-slate-600"  label="Off Duty" />
+              <DonutSegment value={driverStats.offDuty}   total={driverStats.total} color="bg-[var(--bg-surface-hover)]"  label="Off Duty" />
               <div className="pt-3 border-t border-[var(--border-subtle)]">
                 <p className="text-[var(--text-faint)] text-xs">{driverStats.total} total drivers tracked</p>
               </div>
@@ -272,7 +272,7 @@ export default function DispatchAnalyticsPage() {
                   {serviceBreakdown.map(s => {
                     const successRate = s.count > 0 ? Math.round((s.completed / s.count) * 100) : 0;
                     return (
-                      <tr key={s.service_type} className="hover:bg-white/[0.02] transition-colors">
+                      <tr key={s.service_type} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                         <td className="px-5 py-3">
                           <span className={`font-medium text-sm ${SVC_COLOR[s.service_type] ?? 'text-[var(--text-muted)]'}`}>
                             {SVC_ICON[s.service_type] ?? '🚗'} {s.service_type}
