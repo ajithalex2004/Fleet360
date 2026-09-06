@@ -30,7 +30,7 @@ const SEVERITY_BADGE: Record<string, string> = {
   CRITICAL: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
   HIGH:     'bg-orange-500/20 text-orange-300 border-orange-500/40',
   MEDIUM:   'bg-amber-500/20 text-amber-300 border-amber-500/40',
-  LOW:      'bg-slate-500/20 text-slate-300 border-slate-500/40',
+  LOW:      'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/40',
 };
 
 export default function IncidentsDashboard() {
@@ -82,7 +82,7 @@ export default function IncidentsDashboard() {
 
       {loading ? (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          {[...Array(6)].map((_, i) => <div key={i} className="h-28 bg-slate-800/60 rounded-2xl animate-pulse" />)}
+          {[...Array(6)].map((_, i) => <div key={i} className="h-28 bg-[var(--bg-surface)]/60 rounded-2xl animate-pulse" />)}
         </div>
       ) : (
         <>
@@ -110,7 +110,7 @@ export default function IncidentsDashboard() {
                   {ambulancePct}% Available
                 </span>
               }>
-              <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden">
+              <div className="h-2.5 bg-[var(--bg-surface)] rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all ${
                     ambulancePct >= 60 ? 'bg-gradient-to-r from-emerald-500 to-teal-500'
@@ -120,7 +120,7 @@ export default function IncidentsDashboard() {
                   style={{ width: `${ambulancePct}%` }}
                 />
               </div>
-              <p className="text-xs text-slate-500 mt-2">
+              <p className="text-xs text-[var(--text-faint)] mt-2">
                 {data?.ambulanceAvailable} of {data?.ambulanceVehicles} ambulance vehicles ready
               </p>
             </Panel>
@@ -132,7 +132,7 @@ export default function IncidentsDashboard() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-white/10 text-slate-500 text-[11px] uppercase tracking-wider">
+                    <tr className="border-b border-[var(--border-subtle)] text-[var(--text-faint)] text-[11px] uppercase tracking-wider">
                       <th className="text-left py-2 font-medium">Incident</th>
                       <th className="text-left py-2 font-medium">Type</th>
                       <th className="text-left py-2 font-medium">Severity</th>
@@ -143,9 +143,9 @@ export default function IncidentsDashboard() {
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {data.incidents.map(inc => (
-                      <tr key={inc.id} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="py-3 font-mono text-xs text-white">{inc.incident_no ?? inc.id.slice(0, 8)}</td>
-                        <td className="py-3 text-slate-300 text-xs">{inc.incident_type.replace(/_/g, ' ')}</td>
+                      <tr key={inc.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
+                        <td className="py-3 font-mono text-xs text-[var(--text-main)]">{inc.incident_no ?? inc.id.slice(0, 8)}</td>
+                        <td className="py-3 text-[var(--text-muted)] text-xs">{inc.incident_type.replace(/_/g, ' ')}</td>
                         <td className="py-3">
                           {inc.severity && (
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${SEVERITY_BADGE[inc.severity] ?? SEVERITY_BADGE.LOW}`}>
@@ -154,8 +154,8 @@ export default function IncidentsDashboard() {
                           )}
                         </td>
                         <td className="py-3">{inc.status && <StatusPill status={inc.status} />}</td>
-                        <td className="py-3 text-slate-300 text-xs max-w-xs truncate">{inc.location ?? '—'}</td>
-                        <td className="py-3 text-slate-400 text-xs">
+                        <td className="py-3 text-[var(--text-muted)] text-xs max-w-xs truncate">{inc.location ?? '—'}</td>
+                        <td className="py-3 text-[var(--text-muted)] text-xs">
                           {inc.incident_date ? new Date(inc.incident_date).toLocaleDateString('en-AE') : '—'}
                         </td>
                       </tr>
@@ -166,8 +166,8 @@ export default function IncidentsDashboard() {
             ) : (
               <div className="text-center py-8">
                 <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2" />
-                <p className="text-slate-400 text-sm">No incidents recorded</p>
-                <p className="text-slate-600 text-xs mt-1">Incidents from trip_incidents table will appear here</p>
+                <p className="text-[var(--text-muted)] text-sm">No incidents recorded</p>
+                <p className="text-[var(--text-faint)] text-xs mt-1">Incidents from trip_incidents table will appear here</p>
               </div>
             )}
           </Panel>
@@ -181,12 +181,12 @@ export default function IncidentsDashboard() {
               const Icon = link.icon;
               return (
                 <Link key={link.href} href={link.href}
-                  className="rounded-2xl bg-slate-900/60 border border-white/10 hover:border-rose-500/30 hover:bg-rose-500/5 transition-all p-5 group block">
+                  className="rounded-2xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] hover:border-rose-500/30 hover:bg-rose-500/5 transition-all p-5 group block">
                   <div className="w-10 h-10 rounded-xl bg-rose-500/10 flex items-center justify-center mb-3">
                     <Icon className="w-5 h-5 text-rose-300" />
                   </div>
-                  <h3 className="text-sm font-semibold text-white group-hover:text-rose-300 transition-colors">{link.label}</h3>
-                  <p className="text-xs text-slate-500 mt-1">{link.desc}</p>
+                  <h3 className="text-sm font-semibold text-[var(--text-main)] group-hover:text-rose-300 transition-colors">{link.label}</h3>
+                  <p className="text-xs text-[var(--text-faint)] mt-1">{link.desc}</p>
                 </Link>
               );
             })}

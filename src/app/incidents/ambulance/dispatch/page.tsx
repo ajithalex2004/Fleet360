@@ -79,11 +79,11 @@ function SlaTimer({ createdAt, priority }: { createdAt: string; priority: string
 
   return (
     <div className="flex flex-col items-end gap-0.5">
-      <p className="text-[10px] text-slate-500">Response time · SLA {slaMin}m</p>
-      <span className={`font-mono text-sm font-bold ${isCritical ? 'text-red-400 animate-pulse' : isWarn ? 'text-orange-400' : 'text-slate-300'}`}>
+      <p className="text-[10px] text-[var(--text-faint)]">Response time · SLA {slaMin}m</p>
+      <span className={`font-mono text-sm font-bold ${isCritical ? 'text-red-400 animate-pulse' : isWarn ? 'text-orange-400' : 'text-[var(--text-muted)]'}`}>
         {String(mins).padStart(2,'0')}:{String(secs).padStart(2,'0')}
       </span>
-      <div className="w-20 h-1 rounded-full bg-slate-800 overflow-hidden">
+      <div className="w-20 h-1 rounded-full bg-[var(--bg-surface)] overflow-hidden">
         <div className={`h-1 rounded-full transition-all ${isCritical ? 'bg-red-500' : isWarn ? 'bg-orange-400' : 'bg-green-500'}`}
           style={{ width: `${pct}%` }} />
       </div>
@@ -106,7 +106,7 @@ function CallCard({ call, onDispatch }: { call: AmbCall; onDispatch: (id: string
           <span className="text-2xl">{cfg.icon}</span>
           <div>
             <p className={`text-xs font-bold ${cfg.color}`}>{cfg.label}</p>
-            <p className="text-slate-500 text-[10px]">{cfg.desc}</p>
+            <p className="text-[var(--text-faint)] text-[10px]">{cfg.desc}</p>
           </div>
         </div>
         {isActive && <SlaTimer createdAt={call.created_at} priority={call.priority} />}
@@ -119,9 +119,9 @@ function CallCard({ call, onDispatch }: { call: AmbCall; onDispatch: (id: string
           call.status === 'COMPLETED'   ? 'bg-emerald-500/20 text-emerald-300' :
           call.status === 'FAILED'      ? 'bg-red-700/20 text-red-400' :
           isActive                      ? 'bg-blue-500/20 text-blue-300 animate-pulse' :
-          'bg-slate-700 text-slate-400'
+          'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'
         }`}>{call.status}</span>
-        <span className="text-slate-600 text-xs font-mono">{call.id.slice(0,10)}…</span>
+        <span className="text-[var(--text-faint)] text-xs font-mono">{call.id.slice(0,10)}…</span>
         {call.attempt_count > 0 && (
           <span className="text-orange-400 text-xs">
             ↩ {call.attempt_count} attempt{call.attempt_count > 1 ? 's' : ''}
@@ -133,12 +133,12 @@ function CallCard({ call, onDispatch }: { call: AmbCall; onDispatch: (id: string
       <div className="space-y-1">
         <div className="flex items-start gap-2 text-xs">
           <span className="text-red-400 mt-0.5 flex-shrink-0">📍</span>
-          <span className="text-slate-300">{call.origin_address ?? 'Location not specified'}</span>
+          <span className="text-[var(--text-muted)]">{call.origin_address ?? 'Location not specified'}</span>
         </div>
         {call.destination_address && (
           <div className="flex items-start gap-2 text-xs">
             <span className="text-emerald-400 mt-0.5 flex-shrink-0">🏥</span>
-            <span className="text-slate-400">{call.destination_address}</span>
+            <span className="text-[var(--text-muted)]">{call.destination_address}</span>
           </div>
         )}
       </div>
@@ -165,16 +165,16 @@ function UnitCard({ unit }: { unit: AmbUnit }) {
     <div className={`rounded-2xl border p-5 space-y-3 ${
       isAvailable ? 'bg-green-500/5 border-green-500/20' :
       isBusy      ? 'bg-cyan-500/5  border-cyan-500/20' :
-      'bg-slate-900 border-white/10'
+      'bg-[var(--bg-surface)] border-[var(--border-subtle)]'
     }`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <span className="text-2xl">🚑</span>
           <div>
-            <p className="text-white font-semibold text-sm">
+            <p className="text-[var(--text-main)] font-semibold text-sm">
               {unit.vehicle?.plate_number ?? 'Unassigned'}
             </p>
-            <p className="text-slate-500 text-xs">
+            <p className="text-[var(--text-faint)] text-xs">
               {[unit.vehicle?.make, unit.vehicle?.model].filter(Boolean).join(' ') || 'Unknown vehicle'}
             </p>
           </div>
@@ -182,18 +182,18 @@ function UnitCard({ unit }: { unit: AmbUnit }) {
         <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
           isAvailable ? 'bg-green-500/20 text-green-400' :
           isBusy      ? 'bg-cyan-500/20 text-cyan-400' :
-          'bg-slate-700 text-slate-400'
+          'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'
         }`}>{unit.status.replace('_',' ')}</span>
       </div>
       <div className="space-y-1 text-xs">
         <div className="flex items-center gap-2">
-          <span className="text-slate-500 w-16 flex-shrink-0">Paramedic</span>
-          <span className="text-slate-300">{unit.driver?.name ?? '—'}</span>
+          <span className="text-[var(--text-faint)] w-16 flex-shrink-0">Paramedic</span>
+          <span className="text-[var(--text-muted)]">{unit.driver?.name ?? '—'}</span>
         </div>
         {unit.zone_id && (
           <div className="flex items-center gap-2">
-            <span className="text-slate-500 w-16 flex-shrink-0">Zone</span>
-            <span className="text-slate-300 font-mono">{unit.zone_id}</span>
+            <span className="text-[var(--text-faint)] w-16 flex-shrink-0">Zone</span>
+            <span className="text-[var(--text-muted)] font-mono">{unit.zone_id}</span>
           </div>
         )}
       </div>
@@ -256,7 +256,7 @@ export default function AmbulanceDispatchPage() {
   });
 
   return (
-    <div className="flex flex-col h-screen w-full overflow-hidden bg-slate-950">
+    <div className="flex flex-col h-screen w-full overflow-hidden bg-[var(--bg-canvas)]">
       <PlatformHomeBar
         moduleName="Ambulance Dispatch"
         moduleIcon="🚑"
@@ -292,18 +292,18 @@ export default function AmbulanceDispatchPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">🚑 Ambulance Dispatch Board</h1>
-            <p className="text-slate-400 text-xs mt-0.5">
+            <h1 className="text-2xl font-bold text-[var(--text-main)]">🚑 Ambulance Dispatch Board</h1>
+            <p className="text-[var(--text-muted)] text-xs mt-0.5">
               Emergency response management · auto-refreshes every 15 seconds
             </p>
           </div>
           <div className="flex items-center gap-3">
             <Link href="/incidents/ambulance"
-              className="px-4 py-2 rounded-xl bg-slate-800 border border-white/10 text-slate-300 text-sm hover:bg-slate-700 transition-all">
+              className="px-4 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-sm hover:bg-[var(--bg-surface-hover)] transition-all">
               📋 Clinical Call Log
             </Link>
             <button onClick={load}
-              className="px-4 py-2 rounded-xl bg-slate-800 border border-white/10 text-slate-300 text-sm hover:bg-slate-700 transition-all">
+              className="px-4 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-sm hover:bg-[var(--bg-surface-hover)] transition-all">
               ↻ Refresh
             </button>
           </div>
@@ -317,18 +317,18 @@ export default function AmbulanceDispatchPage() {
             { label:'Units Available', value: availableUnits.length, color:'text-green-400',  bg:'from-green-600/15 to-green-600/5', icon:'✅' },
             { label:'On Active Calls', value: busyUnits.length,      color:'text-cyan-400',   bg:'from-cyan-600/15 to-cyan-600/5',   icon:'🚑' },
           ].map(k => (
-            <div key={k.label} className={`rounded-2xl bg-gradient-to-br ${k.bg} border border-white/10 p-5`}>
+            <div key={k.label} className={`rounded-2xl bg-gradient-to-br ${k.bg} border border-[var(--border-subtle)] p-5`}>
               <div className="flex items-center justify-between mb-2">
                 <span className="text-2xl">{k.icon}</span>
                 <span className={`text-3xl font-bold ${k.color}`}>{loading ? '…' : k.value}</span>
               </div>
-              <p className="text-slate-400 text-xs font-medium">{k.label}</p>
+              <p className="text-[var(--text-muted)] text-xs font-medium">{k.label}</p>
             </div>
           ))}
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-slate-900 border border-white/10 rounded-2xl p-1 w-fit">
+        <div className="flex gap-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-1 w-fit">
           {([
             { id:'active', label: `Active Calls (${activeCalls.length})` },
             { id:'all',    label: 'All Calls' },
@@ -338,20 +338,20 @@ export default function AmbulanceDispatchPage() {
               className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
                 tab === t.id
                   ? 'bg-red-600/30 text-red-300 border border-red-500/30'
-                  : 'text-slate-400 hover:text-white'
+                  : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
               }`}>{t.label}</button>
           ))}
         </div>
 
         {/* Content */}
         {loading ? (
-          <div className="flex items-center justify-center h-48 text-slate-500 text-sm">Loading…</div>
+          <div className="flex items-center justify-center h-48 text-[var(--text-faint)] text-sm">Loading…</div>
         ) : tab === 'active' ? (
           sortedActive.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 gap-3">
               <span className="text-5xl">✅</span>
-              <p className="text-slate-400 font-medium">No active calls — all clear</p>
-              <p className="text-slate-600 text-xs">New calls will appear here automatically</p>
+              <p className="text-[var(--text-muted)] font-medium">No active calls — all clear</p>
+              <p className="text-[var(--text-faint)] text-xs">New calls will appear here automatically</p>
             </div>
           ) : (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -361,10 +361,10 @@ export default function AmbulanceDispatchPage() {
             </div>
           )
         ) : tab === 'all' ? (
-          <div className="rounded-2xl bg-slate-900 border border-white/10 overflow-hidden">
+          <div className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/10 text-slate-500 text-xs">
+                <tr className="border-b border-[var(--border-subtle)] text-[var(--text-faint)] text-xs">
                   <th className="px-5 py-3 text-left">Priority</th>
                   <th className="px-4 py-3 text-left">Status</th>
                   <th className="px-4 py-3 text-left">Origin</th>
@@ -376,27 +376,27 @@ export default function AmbulanceDispatchPage() {
               <tbody className="divide-y divide-white/5">
                 {calls.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-5 py-8 text-center text-slate-500 text-sm">No calls found</td>
+                    <td colSpan={6} className="px-5 py-8 text-center text-[var(--text-faint)] text-sm">No calls found</td>
                   </tr>
                 ) : calls.map(c => {
                   const cfg = PRIORITY_CONFIG[c.priority];
                   return (
-                    <tr key={c.id} className="hover:bg-white/[0.02] transition-colors">
+                    <tr key={c.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                       <td className="px-5 py-3">
                         <span className={`px-2 py-0.5 rounded text-xs font-bold border
-                          ${cfg?.bgColor ?? 'bg-slate-700'} ${cfg?.border ?? ''} ${cfg?.color ?? 'text-slate-400'}`}>
+                          ${cfg?.bgColor ?? 'bg-[var(--bg-surface-hover)]'} ${cfg?.border ?? ''} ${cfg?.color ?? 'text-[var(--text-muted)]'}`}>
                           {cfg?.icon} {c.priority}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-slate-400 text-xs">{c.status}</td>
-                      <td className="px-4 py-3 text-slate-300 text-xs max-w-xs truncate">
+                      <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{c.status}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)] text-xs max-w-xs truncate">
                         {c.origin_address ?? '—'}
                       </td>
-                      <td className="px-4 py-3 text-slate-400 text-xs max-w-xs truncate">
+                      <td className="px-4 py-3 text-[var(--text-muted)] text-xs max-w-xs truncate">
                         {c.destination_address ?? '—'}
                       </td>
-                      <td className="px-4 py-3 text-slate-400 text-xs">{c.attempt_count}</td>
-                      <td className="px-4 py-3 text-slate-500 text-xs whitespace-nowrap">
+                      <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{c.attempt_count}</td>
+                      <td className="px-4 py-3 text-[var(--text-faint)] text-xs whitespace-nowrap">
                         {new Date(c.created_at).toLocaleString('en-AE', {
                           month:'short', day:'numeric', hour:'2-digit', minute:'2-digit',
                         })}
@@ -412,7 +412,7 @@ export default function AmbulanceDispatchPage() {
           units.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 gap-3">
               <span className="text-4xl">🚑</span>
-              <p className="text-slate-500 text-sm">No ambulance units tracked</p>
+              <p className="text-[var(--text-faint)] text-sm">No ambulance units tracked</p>
             </div>
           ) : (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -425,7 +425,7 @@ export default function AmbulanceDispatchPage() {
         <div className="rounded-2xl bg-rose-500/5 border border-rose-500/20 p-5 flex items-center justify-between">
           <div>
             <p className="text-rose-300 font-semibold text-sm">Clinical Call Log & Patient Records</p>
-            <p className="text-slate-500 text-xs mt-0.5">
+            <p className="text-[var(--text-faint)] text-xs mt-0.5">
               Full CALL_RECEIVED → DISPATCHED → ON_SCENE → AT_HOSPITAL lifecycle,
               patient details, MOHAP/DHA compliance records
             </p>

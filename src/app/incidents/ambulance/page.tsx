@@ -35,7 +35,7 @@ const PRIORITY_CFG: Record<Priority, { label: string; color: string; bg: string;
   CRITICAL: { label: 'CRITICAL', color: 'text-red-300',    bg: 'bg-red-500/20',    border: 'border-red-500/40'    },
   HIGH:     { label: 'HIGH',     color: 'text-orange-300', bg: 'bg-orange-500/20', border: 'border-orange-500/40' },
   MEDIUM:   { label: 'MEDIUM',   color: 'text-amber-300',  bg: 'bg-amber-500/20',  border: 'border-amber-500/40'  },
-  LOW:      { label: 'LOW',      color: 'text-slate-300',  bg: 'bg-slate-500/20',  border: 'border-slate-500/30'  },
+  LOW:      { label: 'LOW',      color: 'text-[var(--text-muted)]',  bg: 'bg-slate-500/20',  border: 'border-slate-500/30'  },
 };
 
 // ── Timer ─────────────────────────────────────────────────────────────────────
@@ -92,27 +92,27 @@ function NewCallModal({ vehicles, drivers, onClose, onCreated }: {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto"
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-xl max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-            <h2 className="text-white font-semibold">New Emergency Call</h2>
+            <h2 className="text-[var(--text-main)] font-semibold">New Emergency Call</h2>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-white text-xl">✕</button>
+          <button onClick={onClose} className="text-[var(--text-faint)] hover:text-[var(--text-main)] text-xl">✕</button>
         </div>
 
         <div className="px-6 py-5 space-y-5">
           {/* Priority */}
           <div>
-            <label className="text-xs text-slate-400 mb-2 block">Priority</label>
+            <label className="text-xs text-[var(--text-muted)] mb-2 block">Priority</label>
             <div className="flex gap-2">
               {(['CRITICAL','HIGH','MEDIUM','LOW'] as Priority[]).map(p => {
                 const c = PRIORITY_CFG[p];
                 return (
                   <button key={p} onClick={() => setForm(f => ({ ...f, priority: p }))}
                     className={`flex-1 text-xs font-bold py-2 rounded-lg border transition-all ${
-                      form.priority === p ? `${c.bg} ${c.color} ${c.border}` : 'bg-slate-800 text-slate-500 border-white/10'
+                      form.priority === p ? `${c.bg} ${c.color} ${c.border}` : 'bg-[var(--bg-surface)] text-[var(--text-faint)] border-[var(--border-subtle)]'
                     }`}>
                     {p}
                   </button>
@@ -126,14 +126,14 @@ function NewCallModal({ vehicles, drivers, onClose, onCreated }: {
             <p className="text-xs text-red-400 font-semibold uppercase tracking-wider mb-2">Caller Details</p>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-xs text-slate-400">Caller Name</label>
+                <label className="text-xs text-[var(--text-muted)]">Caller Name</label>
                 <input value={form.callerName} onChange={set('callerName')} placeholder="Name"
-                  className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-red-500/40" />
+                  className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-red-500/40" />
               </div>
               <div className="space-y-1">
-                <label className="text-xs text-slate-400">Caller Phone</label>
+                <label className="text-xs text-[var(--text-muted)]">Caller Phone</label>
                 <input value={form.callerPhone} onChange={set('callerPhone')} placeholder="+971 50 000 0000"
-                  className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-red-500/40" />
+                  className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-red-500/40" />
               </div>
             </div>
           </div>
@@ -143,14 +143,14 @@ function NewCallModal({ vehicles, drivers, onClose, onCreated }: {
             <p className="text-xs text-red-400 font-semibold uppercase tracking-wider mb-2">Incident Details</p>
             <div className="space-y-3">
               <div className="space-y-1">
-                <label className="text-xs text-slate-400">Pickup Location *</label>
+                <label className="text-xs text-[var(--text-muted)]">Pickup Location *</label>
                 <input value={form.pickupLocation} onChange={set('pickupLocation')} placeholder="Street / building / landmark"
-                  className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-red-500/40" />
+                  className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-red-500/40" />
               </div>
               <div className="space-y-1">
-                <label className="text-xs text-slate-400">Chief Complaint / Incident</label>
+                <label className="text-xs text-[var(--text-muted)]">Chief Complaint / Incident</label>
                 <input value={form.chiefComplaint} onChange={set('chiefComplaint')} placeholder="e.g. Chest pain, RTA, fall…"
-                  className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-red-500/40" />
+                  className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-red-500/40" />
               </div>
             </div>
           </div>
@@ -160,14 +160,14 @@ function NewCallModal({ vehicles, drivers, onClose, onCreated }: {
             <p className="text-xs text-red-400 font-semibold uppercase tracking-wider mb-2">Patient</p>
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2 space-y-1">
-                <label className="text-xs text-slate-400">Name</label>
+                <label className="text-xs text-[var(--text-muted)]">Name</label>
                 <input value={form.patientName} onChange={set('patientName')} placeholder="Patient name"
-                  className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none" />
+                  className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none" />
               </div>
               <div className="space-y-1">
-                <label className="text-xs text-slate-400">Age</label>
+                <label className="text-xs text-[var(--text-muted)]">Age</label>
                 <input type="number" value={form.patientAge} onChange={set('patientAge')} placeholder="—" min="0" max="120"
-                  className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none" />
+                  className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none" />
               </div>
             </div>
           </div>
@@ -177,25 +177,25 @@ function NewCallModal({ vehicles, drivers, onClose, onCreated }: {
             <p className="text-xs text-red-400 font-semibold uppercase tracking-wider mb-2">Assign Ambulance</p>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-xs text-slate-400">Ambulance ({avail.length} available)</label>
+                <label className="text-xs text-[var(--text-muted)]">Ambulance ({avail.length} available)</label>
                 <select value={form.vehicleId} onChange={set('vehicleId')}
-                  className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none">
+                  className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none">
                   <option value="">— Assign later —</option>
                   {avail.map(v => <option key={v.id} value={v.id}>{v.plate_number} · {v.model}</option>)}
                 </select>
               </div>
               <div className="space-y-1">
-                <label className="text-xs text-slate-400">Driver</label>
+                <label className="text-xs text-[var(--text-muted)]">Driver</label>
                 <select value={form.driverId} onChange={set('driverId')}
-                  className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none">
+                  className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none">
                   <option value="">— Assign later —</option>
                   {drivers.map(d => <option key={d.id} value={d.id}>{d.first_name} {d.last_name}</option>)}
                 </select>
               </div>
               <div className="col-span-2 space-y-1">
-                <label className="text-xs text-slate-400">Paramedic / Crew</label>
+                <label className="text-xs text-[var(--text-muted)]">Paramedic / Crew</label>
                 <input value={form.paramedicName} onChange={set('paramedicName')} placeholder="Paramedic name"
-                  className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none" />
+                  className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none" />
               </div>
             </div>
           </div>
@@ -204,7 +204,7 @@ function NewCallModal({ vehicles, drivers, onClose, onCreated }: {
         </div>
 
         <div className="px-6 pb-5 flex justify-end gap-3">
-          <button onClick={onClose} className="text-sm text-slate-400 hover:text-white px-4 py-2 rounded-lg border border-white/10 transition-colors">Cancel</button>
+          <button onClick={onClose} className="text-sm text-[var(--text-muted)] hover:text-[var(--text-main)] px-4 py-2 rounded-lg border border-[var(--border-subtle)] transition-colors">Cancel</button>
           <button onClick={save} disabled={saving}
             className="text-sm font-bold bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white px-5 py-2 rounded-lg transition-colors">
             {saving ? 'Logging…' : '🚑 Log Call'}
@@ -228,8 +228,8 @@ function CallCard({ call, onAdvance, onSelect }: { call: AmbCall; onAdvance: (id
       }`}>
       <div className="flex items-start justify-between gap-2 mb-3">
         <div>
-          <p className="text-white font-bold text-sm">{call.callNo}</p>
-          <p className="text-slate-400 text-xs mt-0.5">{stage.icon} {stage.label}</p>
+          <p className="text-[var(--text-main)] font-bold text-sm">{call.callNo}</p>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">{stage.icon} {stage.label}</p>
         </div>
         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 ${prio.bg} ${prio.color} ${prio.border}`}>
           {prio.label}
@@ -238,36 +238,36 @@ function CallCard({ call, onAdvance, onSelect }: { call: AmbCall; onAdvance: (id
 
       <div className="space-y-1.5 text-xs mb-3">
         <div className="flex items-start gap-2">
-          <span className="text-slate-500 flex-shrink-0">📍</span>
-          <span className="text-slate-200 line-clamp-2">{call.pickupLocation}</span>
+          <span className="text-[var(--text-faint)] flex-shrink-0">📍</span>
+          <span className="text-[var(--text-main)] line-clamp-2">{call.pickupLocation}</span>
         </div>
         {call.chiefComplaint && (
           <div className="flex items-start gap-2">
-            <span className="text-slate-500 flex-shrink-0">🩺</span>
-            <span className="text-slate-300 line-clamp-1">{call.chiefComplaint}</span>
+            <span className="text-[var(--text-faint)] flex-shrink-0">🩺</span>
+            <span className="text-[var(--text-muted)] line-clamp-1">{call.chiefComplaint}</span>
           </div>
         )}
         {(call.patientName || call.patientAge) && (
           <div className="flex items-center gap-2">
-            <span className="text-slate-500">👤</span>
-            <span className="text-slate-300">{call.patientName ?? 'Unknown'}{call.patientAge ? `, ${call.patientAge}y` : ''}</span>
+            <span className="text-[var(--text-faint)]">👤</span>
+            <span className="text-[var(--text-muted)]">{call.patientName ?? 'Unknown'}{call.patientAge ? `, ${call.patientAge}y` : ''}</span>
           </div>
         )}
         {call.vehiclePlate && (
           <div className="flex items-center gap-2">
-            <span className="text-slate-500">🚑</span>
-            <span className="text-slate-300">{call.vehiclePlate} {call.driverName ? `· ${call.driverName}` : ''}</span>
+            <span className="text-[var(--text-faint)]">🚑</span>
+            <span className="text-[var(--text-muted)]">{call.vehiclePlate} {call.driverName ? `· ${call.driverName}` : ''}</span>
           </div>
         )}
       </div>
 
       <div className="flex items-center justify-between">
-        <span className={`text-xs font-mono ${isCritical && call.status !== 'CLEARED' ? 'text-red-400' : 'text-slate-500'}`}>
+        <span className={`text-xs font-mono ${isCritical && call.status !== 'CLEARED' ? 'text-red-400' : 'text-[var(--text-faint)]'}`}>
           ⏱ <ElapsedTimer from={call.callReceivedAt} />
         </span>
         {call.status !== 'CLEARED' && (
           <button onClick={e => { e.stopPropagation(); onAdvance(call.id); }}
-            className="text-xs font-semibold bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg transition-colors border border-white/10">
+            className="text-xs font-semibold bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] px-3 py-1.5 rounded-lg transition-colors border border-[var(--border-subtle)]">
             → {stage.next}
           </button>
         )}
@@ -342,8 +342,8 @@ export default function AmbulancePage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Ambulance Dispatch</h1>
-          <p className="text-slate-400 text-xs mt-0.5">Emergency response tracking · CALL → DISPATCH → SCENE → HOSPITAL → CLEAR</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Ambulance Dispatch</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-0.5">Emergency response tracking · CALL → DISPATCH → SCENE → HOSPITAL → CLEAR</p>
         </div>
         <div className="flex items-center gap-3">
           <div className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border ${
@@ -370,10 +370,10 @@ export default function AmbulancePage() {
           { label: 'Cleared',    value: stats.cleared,       color: 'text-emerald-300', icon: '✅' },
           { label: 'Avg Resp',   value: `${stats.avgResponseMin}m`, color: stats.avgResponseMin <= 8 ? 'text-emerald-300' : stats.avgResponseMin <= 15 ? 'text-amber-300' : 'text-red-400', icon: '⏱' },
         ].map(s => (
-          <div key={s.label} className="bg-slate-900/60 border border-white/10 rounded-xl p-3 text-center">
-            <p className="text-xs text-slate-500">{s.icon}</p>
+          <div key={s.label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-3 text-center">
+            <p className="text-xs text-[var(--text-faint)]">{s.icon}</p>
             <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
-            <p className="text-xs text-slate-500 mt-0.5">{s.label}</p>
+            <p className="text-xs text-[var(--text-faint)] mt-0.5">{s.label}</p>
           </div>
         ))}
       </div>
@@ -381,7 +381,7 @@ export default function AmbulancePage() {
       {/* Kanban board — active calls */}
       {active.length > 0 && (
         <div>
-          <p className="text-xs text-slate-500 uppercase tracking-wider font-medium mb-3">Active Calls ({active.length})</p>
+          <p className="text-xs text-[var(--text-faint)] uppercase tracking-wider font-medium mb-3">Active Calls ({active.length})</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             {kanbanStages.map(stage => {
               const stageCalls = calls.filter(c => c.status === stage);
@@ -394,7 +394,7 @@ export default function AmbulancePage() {
                     <span className="ml-auto opacity-60">{stageCalls.length}</span>
                   </div>
                   {stageCalls.length === 0
-                    ? <div className="border border-dashed border-white/10 rounded-xl p-4 text-center text-xs text-slate-600">No calls</div>
+                    ? <div className="border border-dashed border-[var(--border-subtle)] rounded-xl p-4 text-center text-xs text-[var(--text-faint)]">No calls</div>
                     : stageCalls.map(c => (
                         <CallCard key={c.id} call={c} onAdvance={id => { setAdvancing(id); advance(id); }} onSelect={setSelected} />
                       ))
@@ -409,14 +409,14 @@ export default function AmbulancePage() {
       {/* All calls table */}
       <div>
         <div className="flex items-center gap-3 mb-3">
-          <p className="text-xs text-slate-500 uppercase tracking-wider font-medium">Call Log</p>
+          <p className="text-xs text-[var(--text-faint)] uppercase tracking-wider font-medium">Call Log</p>
           <div className="flex gap-1">
             {(['ALL', ...byStage] as const).map(s => (
               <button key={s} onClick={() => setFilter(s)}
                 className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${
                   filter === s
-                    ? s === 'ALL' ? 'bg-slate-700 text-white border-white/20' : `${STAGE_CFG[s as CallStatus].bg} ${STAGE_CFG[s as CallStatus].color} ${STAGE_CFG[s as CallStatus].border}`
-                    : 'bg-slate-800/60 text-slate-500 border-white/10 hover:text-slate-300'
+                    ? s === 'ALL' ? 'bg-[var(--bg-surface-hover)] text-[var(--text-main)] border-[var(--border-strong)]' : `${STAGE_CFG[s as CallStatus].bg} ${STAGE_CFG[s as CallStatus].color} ${STAGE_CFG[s as CallStatus].border}`
+                    : 'bg-[var(--bg-surface)]/60 text-[var(--text-faint)] border-[var(--border-subtle)] hover:text-[var(--text-muted)]'
                 }`}>
                 {s === 'ALL' ? 'All' : STAGE_CFG[s as CallStatus].icon}
               </button>
@@ -424,15 +424,15 @@ export default function AmbulancePage() {
           </div>
         </div>
 
-        <div className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden">
+        <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
           {loading ? (
             <div className="animate-pulse p-4 space-y-3">
-              {[...Array(5)].map((_, i) => <div key={i} className="h-12 bg-slate-800 rounded-xl" />)}
+              {[...Array(5)].map((_, i) => <div key={i} className="h-12 bg-[var(--bg-surface)] rounded-xl" />)}
             </div>
           ) : filtered.length === 0 ? (
             <div className="py-16 text-center">
               <div className="text-5xl mb-3">🚑</div>
-              <p className="text-slate-400 text-sm">No calls logged yet</p>
+              <p className="text-[var(--text-muted)] text-sm">No calls logged yet</p>
               <button onClick={() => setShowNew(true)}
                 className="mt-4 text-sm font-bold bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-xl transition-colors">
                 🚨 Log First Call
@@ -442,7 +442,7 @@ export default function AmbulancePage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-white/5 text-xs text-slate-500 uppercase tracking-wider">
+                  <tr className="border-b border-[var(--border-subtle)] text-xs text-[var(--text-faint)] uppercase tracking-wider">
                     <th className="text-left px-5 py-3">Call No.</th>
                     <th className="text-left px-3 py-3">Priority</th>
                     <th className="text-left px-3 py-3">Location</th>
@@ -459,33 +459,33 @@ export default function AmbulancePage() {
                     const stg = STAGE_CFG[c.status];
                     const pri = PRIORITY_CFG[c.priority];
                     return (
-                      <tr key={c.id} className="hover:bg-white/5 transition-colors cursor-pointer" onClick={() => setSelected(c)}>
-                        <td className="px-5 py-3 font-mono text-xs text-white">{c.callNo}</td>
+                      <tr key={c.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors cursor-pointer" onClick={() => setSelected(c)}>
+                        <td className="px-5 py-3 font-mono text-xs text-[var(--text-main)]">{c.callNo}</td>
                         <td className="px-3 py-3">
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${pri.bg} ${pri.color} ${pri.border}`}>{pri.label}</span>
                         </td>
-                        <td className="px-3 py-3 text-slate-300 max-w-[180px] truncate">{c.pickupLocation}</td>
-                        <td className="px-3 py-3 text-slate-400 max-w-[160px] truncate">{c.chiefComplaint ?? '—'}</td>
+                        <td className="px-3 py-3 text-[var(--text-muted)] max-w-[180px] truncate">{c.pickupLocation}</td>
+                        <td className="px-3 py-3 text-[var(--text-muted)] max-w-[160px] truncate">{c.chiefComplaint ?? '—'}</td>
                         <td className="px-3 py-3 text-xs">
                           {c.vehiclePlate
                             ? <span className="text-amber-300">{c.vehiclePlate}</span>
-                            : <span className="text-slate-600">Unassigned</span>}
+                            : <span className="text-[var(--text-faint)]">Unassigned</span>}
                         </td>
                         <td className="px-3 py-3">
                           <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${stg.bg} ${stg.color} ${stg.border}`}>
                             {stg.icon} {stg.label}
                           </span>
                         </td>
-                        <td className="px-3 py-3 text-xs text-slate-400">
+                        <td className="px-3 py-3 text-xs text-[var(--text-muted)]">
                           {c.responseTimeMin != null ? `${c.responseTimeMin}m` : '—'}
                         </td>
-                        <td className="px-3 py-3 text-xs font-mono text-slate-400">
+                        <td className="px-3 py-3 text-xs font-mono text-[var(--text-muted)]">
                           {c.status !== 'CLEARED' ? <ElapsedTimer from={c.callReceivedAt} /> : '—'}
                         </td>
                         <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
                           {c.status !== 'CLEARED' && (
                             <button disabled={advancing === c.id} onClick={() => advance(c.id)}
-                              className="text-xs font-semibold bg-white/10 hover:bg-white/20 text-white px-2.5 py-1 rounded-lg transition-colors border border-white/10 disabled:opacity-40">
+                              className="text-xs font-semibold bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] px-2.5 py-1 rounded-lg transition-colors border border-[var(--border-subtle)] disabled:opacity-40">
                               {advancing === c.id ? '…' : `→ ${stg.next}`}
                             </button>
                           )}
@@ -503,16 +503,16 @@ export default function AmbulancePage() {
       {/* Detail drawer */}
       {selected && (
         <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setSelected(null)}>
-          <div className="w-full max-w-sm h-full bg-slate-900 border-l border-white/10 overflow-y-auto shadow-2xl"
+          <div className="w-full max-w-sm h-full bg-[var(--bg-surface)] border-l border-[var(--border-subtle)] overflow-y-auto shadow-2xl"
             onClick={e => e.stopPropagation()}>
-            <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
+            <div className="px-5 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
               <div>
-                <p className="text-white font-bold">{selected.callNo}</p>
+                <p className="text-[var(--text-main)] font-bold">{selected.callNo}</p>
                 <span className={`text-xs px-2 py-0.5 rounded-full border ${STAGE_CFG[selected.status].bg} ${STAGE_CFG[selected.status].color} ${STAGE_CFG[selected.status].border}`}>
                   {STAGE_CFG[selected.status].icon} {STAGE_CFG[selected.status].label}
                 </span>
               </div>
-              <button onClick={() => setSelected(null)} className="text-slate-500 hover:text-white text-xl">✕</button>
+              <button onClick={() => setSelected(null)} className="text-[var(--text-faint)] hover:text-[var(--text-main)] text-xl">✕</button>
             </div>
             <div className="px-5 py-4 space-y-4 text-sm">
               {/* Timeline */}
@@ -527,9 +527,9 @@ export default function AmbulancePage() {
                   { label: 'Cleared',      ts: selected.clearedAt },
                 ].map(t => (
                   <div key={t.label} className={`flex items-center gap-3 py-1.5 ${!t.ts ? 'opacity-30' : ''}`}>
-                    <span className={`w-2 h-2 rounded-full ${t.ts ? 'bg-red-400' : 'bg-slate-700'}`} />
-                    <span className="text-slate-300 text-xs flex-1">{t.label}</span>
-                    <span className="text-slate-500 text-xs font-mono">
+                    <span className={`w-2 h-2 rounded-full ${t.ts ? 'bg-red-400' : 'bg-[var(--bg-surface-hover)]'}`} />
+                    <span className="text-[var(--text-muted)] text-xs flex-1">{t.label}</span>
+                    <span className="text-[var(--text-faint)] text-xs font-mono">
                       {t.ts ? new Date(t.ts).toLocaleTimeString('en-AE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}
                     </span>
                   </div>
@@ -549,9 +549,9 @@ export default function AmbulancePage() {
                 ['Response Time', selected.responseTimeMin != null ? `${selected.responseTimeMin} min` : null],
                 ['Notes',         selected.notes],
               ].map(([label, val]) => val ? (
-                <div key={label as string} className="flex justify-between py-1 border-b border-white/5">
-                  <span className="text-slate-500 text-xs">{label}</span>
-                  <span className="text-slate-200 text-xs text-right max-w-[60%]">{val}</span>
+                <div key={label as string} className="flex justify-between py-1 border-b border-[var(--border-subtle)]">
+                  <span className="text-[var(--text-faint)] text-xs">{label}</span>
+                  <span className="text-[var(--text-main)] text-xs text-right max-w-[60%]">{val}</span>
                 </div>
               ) : null)}
             </div>
