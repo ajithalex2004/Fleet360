@@ -162,6 +162,69 @@ export class BenchmarkRunner {
       financialExposureDetectedAed: totalExposure,
     };
   }
+
+  /**
+   * Run Vehicle Reuse Ground-Truth Benchmark
+   */
+  async runVehicleReuseBenchmark(): Promise<BenchmarkSuiteResult> {
+    const t0 = Date.now();
+    const { evaluateVehicleReuse } = await import('../vehicle-reuse/evaluator');
+    const { VEHICLE_REUSE_GROUND_TRUTH_DATASETS } = await import('./datasets');
+
+    let tp = 0;
+    let fp = 0;
+    let tn = 0;
+    let fn = 0;
+    let totalSavingsAed = 0;
+
+    // 1. Feasible Case (Expected: isFeasible = true)
+    const res1 = await evaluateVehicleReuse(VEHICLE_REUSE_GROUND_TRUTH_DATASETS.feasibleStandard);
+    if (res1.isFeasible) {
+      tp++;
+      totalSavingsAed += res1.financialSavingsAed;
+    } else {
+      fn++;
+    }
+
+    // 2. Deadhead Deficit Infeasible Case (Expected: isFeasible = false)
+    const res2 = await evaluateVehicleReuse(VEHICLE_REUSE_GROUND_TRUTH_DATASETS.infeasibleDeadheadDeficit);
+    if (!res2.isFeasible) {
+      tn++;
+    } else {
+      fp++;
+    }
+
+    // 3. Capacity Deficit Infeasible Case (Expected: isFeasible = false)
+    const res3 = await evaluateVehicleReuse(VEHICLE_REUSE_GROUND_TRUTH_DATASETS.infeasibleCapacityDeficit);
+    if (!res3.isFeasible) {
+      tn++;
+    } else {
+      fp++;
+    }
+
+    const metrics = calculateClassificationMetrics(tp, fp, tn, fn);
+    const passed = metrics.decisionQualityScore >= 0.95 && metrics.falsePositiveRate === 0;
+
+    await this.recordEvaluationMetric({
+      agentId: 'vehicle-reuse',
+      tenantId: 'benchmark',
+      metricCategory: 'ACCURACY',
+      metricName: 'DECISION_QUALITY_SCORE',
+      metricValue: metrics.decisionQualityScore,
+      isPositiveOutcome: passed,
+      notes: `TP: ${tp}, FP: ${fp}, TN: ${tn}, FN: ${fn}, Savings: ${totalSavingsAed.toFixed(2)} AED`,
+    });
+
+    return {
+      suiteName: 'Vehicle Reuse Inter-Trip Chaining Ground Truth Benchmark',
+      agentId: 'vehicle-reuse',
+      totalScenarios: tp + fp + tn + fn,
+      metrics,
+      passed,
+      benchmarkDurationMs: Date.now() - t0,
+      financialExposureDetectedAed: totalSavingsAed,
+    };
+  }
 }
 
 /** Global Shared Benchmark Runner Singleton */

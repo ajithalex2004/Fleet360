@@ -232,6 +232,7 @@ export type AgentId =
   | 'driver-coach'
   | 'demand-forecasting'
   | 'document-intelligence'
+  | 'vehicle-reuse'
   | 'quotation-copilot'
   | 'rental-copilot'
   | 'damage-classifier'
@@ -556,3 +557,118 @@ export interface AgentDefinition {
   supportsEntityScan: boolean;
   run: (event: AgentEvent) => Promise<AgentRunResult>;
 }
+
+// ── Vehicle Reuse Domain Types ────────────────────────────────────────────────
+export type VehicleCategoryTier =
+  | 'SEDAN'
+  | 'MINIVAN'
+  | 'COASTER_30'
+  | 'COACH_50'
+  | 'CARGO_VAN'
+  | 'LUXURY_VIP';
+
+export interface TripScheduleItem {
+  id: string;
+  tripNumber?: string;
+  routeId?: string;
+  clientName?: string;
+  origin?: CanonicalLocation | LatLng | { latitude?: number; longitude?: number; lat?: number; lng?: number; name?: string; address?: string; addressName?: string };
+  destination?: CanonicalLocation | LatLng | { latitude?: number; longitude?: number; lat?: number; lng?: number; name?: string; address?: string; addressName?: string };
+  startLocation?: CanonicalLocation | LatLng | { latitude?: number; longitude?: number; lat?: number; lng?: number; name?: string; address?: string; addressName?: string };
+  endLocation?: CanonicalLocation | LatLng | { latitude?: number; longitude?: number; lat?: number; lng?: number; name?: string; address?: string; addressName?: string };
+  plannedPickupTime?: string | Date;
+  plannedDropoffTime?: string | Date;
+  startTime?: string | Date;
+  endTime?: string | Date;
+  passengerCount: number;
+  requiredVehicleType?: VehicleCategoryTier | string;
+  vehicleCategoryRequired?: VehicleCategoryTier | string;
+  requiredFeatures?: string[];
+  operationalZone?: string;
+  zoneId?: string;
+  assignedVehicleId?: string;
+  assignedDriverId?: string;
+}
+
+export interface VehicleResource {
+  id?: string;
+  vehicleId?: string;
+  vehicleCode: string;
+  seatingCapacity?: number;
+  capacity?: number;
+  vehicleType?: VehicleCategoryTier | string;
+  category?: VehicleCategoryTier | string;
+  features?: string[];
+  wheelchairAccessible?: boolean;
+  fuelType?: 'DIESEL' | 'PETROL' | 'ELECTRIC' | 'HYBRID' | string;
+  operationalZone?: string;
+  currentZoneId?: string;
+  lastDropoffTime?: string | Date;
+  lastDropoffLocation?: CanonicalLocation | LatLng | { latitude?: number; longitude?: number; lat?: number; lng?: number };
+}
+
+export interface DriverResource {
+  id?: string;
+  driverId?: string;
+  name?: string;
+  driverName?: string;
+  shiftStartTime?: string | Date;
+  dailyHoursRemaining?: number;
+  continuousHoursRemaining?: number;
+  licenseCategory?: string;
+  drivingMinutesUsed?: number;
+  dutyMinutesUsed?: number;
+  maxDailyDutyMinutes?: number; // Default 600 min (10h)
+  maxContinuousMinutes?: number; // Default 270 min (4.5h)
+  lastRestBreakAt?: string | Date;
+}
+
+export interface ReuseEvaluationRequest {
+  tripA: TripScheduleItem;
+  tripB: TripScheduleItem;
+  vehicle: VehicleResource;
+  driver?: DriverResource;
+  minimumSafeBufferMin?: number;
+}
+
+export interface ReuseEvaluationBreakdown {
+  totalWindowMin: number;
+  deadheadMin: number;
+  turnaroundMin: number;
+  bufferMin: number;
+  temporalFeasible: boolean;
+  capacityFeasible: boolean;
+  driverFeasible: boolean;
+  zoneFeasible: boolean;
+}
+
+export interface ReuseEvaluationResult {
+  isFeasible: boolean;
+  recommendation: 'FEASIBLE' | 'TIGHT_BUFFER' | 'INFEASIBLE';
+  feasibilityStatus: 'FEASIBLE' | 'TIGHT_BUFFER' | 'INFEASIBLE';
+  feasibilityScore: number;
+  tripAId: string;
+  tripBId: string;
+  vehicleId: string;
+  vehicleCode: string;
+  driverId?: string;
+  tripAEndTime: string;
+  tripBStartTime: string;
+  availableGapMin: number;
+  deadheadKm: number;
+  deadheadMin: number;
+  turnaroundMin: number;
+  bufferMin: number;
+  vehicleCapacitySufficient: boolean;
+  vehicleFeaturesMatched: boolean;
+  driverDutyPermitted: boolean;
+  driverRemainingDutyMin?: number;
+  operationalZoneCompatible: boolean;
+  reasons: string[];
+  infeasibilityReasons: string[];
+  breakdown: ReuseEvaluationBreakdown;
+  summary: string;
+  financialSavingsAed: number;
+  avoidedCostUsd: number;
+}
+

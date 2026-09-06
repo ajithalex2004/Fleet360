@@ -48,6 +48,11 @@ async function getDemandForecastingAgent(): Promise<AgentDefinition> {
   return DEMAND_FORECASTING_AGENT;
 }
 
+async function getVehicleReuseAgent(): Promise<AgentDefinition> {
+  const { vehicleReuseAgent } = await import('./vehicle-reuse/agent');
+  return vehicleReuseAgent as unknown as AgentDefinition;
+}
+
 // ── Conversational agent wrappers ──────────────────────────────────────────────
 async function getWhatsAppAgent(): Promise<AgentDefinition> {
   const { WHATSAPP_AGENT } = await import('./whatsapp-agent/agent');
@@ -74,6 +79,7 @@ const AGENT_LOADERS: Record<AgentId, () => Promise<AgentDefinition>> = {
   'dispatch-optimiser':         getDispatchOptimiserAgent,
   'driver-coach':               getDriverCoachAgent,
   'demand-forecasting':         getDemandForecastingAgent,
+  'vehicle-reuse':              getVehicleReuseAgent,
   'document-intelligence':      async () => { throw new Error('Not yet implemented'); },
   // ── Conversational (always-on, stats wrappers) ─────────────────────────────
   'whatsapp-agent':             getWhatsAppAgent,
@@ -240,6 +246,16 @@ export const AGENT_CATALOGUE = [
     status: 'live',
     model: 'Moving Avg + GPT-4o',
     module: 'Fleet / RAC / Leasing',
+  },
+  {
+    id: 'vehicle-reuse' as AgentId,
+    name: 'Vehicle Reuse & Shift Chaining Agent',
+    description: 'Evaluates inter-trip feasibility (dropoff-to-pickup, deadhead routing, turnaround, driver HOS, vehicle restrictions) to safely chain trips and eliminate redundant vehicle chartering.',
+    version: '1.0.0',
+    status: 'live',
+    model: 'Spatial Deadhead + Turnaround Matrix',
+    module: 'Bus-Ops / Staff Transport',
+    agentType: 'BATCH',
   },
   {
     id: 'document-intelligence' as AgentId,
