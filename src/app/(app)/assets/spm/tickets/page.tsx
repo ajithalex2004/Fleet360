@@ -58,15 +58,15 @@ function UserPicker({ value, onChange }: {
   return (
     <div ref={ref} className="relative">
       {value ? (
-        <div className="flex items-center gap-3 bg-slate-800 border border-yellow-500/30 rounded-lg px-3 py-2.5">
+        <div className="flex items-center gap-3 bg-[var(--bg-surface)] border border-yellow-500/30 rounded-lg px-3 py-2.5">
           <div className="w-8 h-8 rounded-full bg-yellow-500/20 border border-yellow-500/40 flex items-center justify-center text-yellow-300 text-xs font-bold shrink-0">
             {value.initials}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-white text-sm font-medium truncate">{value.display_name}</div>
-            <div className="text-slate-400 text-xs truncate">{value.department || value.email}</div>
+            <div className="text-[var(--text-main)] text-sm font-medium truncate">{value.display_name}</div>
+            <div className="text-[var(--text-muted)] text-xs truncate">{value.department || value.email}</div>
           </div>
-          <button type="button" onClick={clear} className="text-slate-500 hover:text-white transition-colors text-sm">✕</button>
+          <button type="button" onClick={clear} className="text-[var(--text-faint)] hover:text-[var(--text-main)] transition-colors text-sm">✕</button>
         </div>
       ) : (
         <div>
@@ -75,22 +75,22 @@ function UserPicker({ value, onChange }: {
             onChange={e => handleInput(e.target.value)}
             onFocus={() => { if (results.length > 0) setOpen(true); else fetchUsers(''); }}
             placeholder="Search team members…"
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-yellow-500/50 focus:ring-1 focus:ring-yellow-500/20 transition-colors"
+            className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50 focus:ring-1 focus:ring-yellow-500/20 transition-colors"
           />
-          {loading && <div className="absolute right-3 top-3 text-slate-500 text-xs">Searching…</div>}
+          {loading && <div className="absolute right-3 top-3 text-[var(--text-faint)] text-xs">Searching…</div>}
         </div>
       )}
       {open && results.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full bg-slate-800 border border-white/10 rounded-xl overflow-hidden shadow-2xl">
+        <div className="absolute z-50 mt-1 w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl overflow-hidden shadow-2xl">
           {results.map(u => (
             <button key={u.id} type="button" onClick={() => select(u)}
-              className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-white/5 transition-colors text-left">
-              <div className="w-8 h-8 rounded-full bg-slate-700 border border-white/10 flex items-center justify-center text-slate-300 text-xs font-bold shrink-0">
+              className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[var(--bg-surface-hover)] transition-colors text-left">
+              <div className="w-8 h-8 rounded-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--text-muted)] text-xs font-bold shrink-0">
                 {u.initials}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-white text-sm font-medium truncate">{u.display_name}</div>
-                <div className="text-slate-500 text-xs truncate">{u.department}{u.department && u.email ? ' · ' : ''}{u.email}</div>
+                <div className="text-[var(--text-main)] text-sm font-medium truncate">{u.display_name}</div>
+                <div className="text-[var(--text-faint)] text-xs truncate">{u.department}{u.department && u.email ? ' · ' : ''}{u.email}</div>
               </div>
             </button>
           ))}
@@ -152,9 +152,9 @@ function statusBadge(status: string) {
     OPEN: 'bg-blue-500/20 text-blue-400 border border-blue-500/30',
     IN_PROGRESS: 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
     COMPLETED: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
-    CANCELLED: 'bg-slate-700/60 text-slate-500 border border-slate-600/30',
+    CANCELLED: 'bg-[var(--bg-surface-hover)]/60 text-[var(--text-faint)] border border-[var(--border-strong)]/30',
   };
-  return map[status] ?? 'bg-slate-700 text-slate-400';
+  return map[status] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]';
 }
 
 function priorityBadge(priority: string) {
@@ -164,7 +164,7 @@ function priorityBadge(priority: string) {
     MEDIUM: 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30',
     LOW: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
   };
-  return map[priority] ?? 'bg-slate-700 text-slate-400';
+  return map[priority] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]';
 }
 
 function formatDate(d?: string | null) {
@@ -183,12 +183,12 @@ function ToastStack({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: st
           className={`pointer-events-auto flex items-start gap-3 rounded-xl px-4 py-3 shadow-xl border text-sm font-medium ${
             t.type === 'success' ? 'bg-emerald-900/90 border-emerald-500/40 text-emerald-200' :
             t.type === 'error'   ? 'bg-red-900/90 border-red-500/40 text-red-200' :
-                                   'bg-slate-800 border-white/10 text-slate-200'
+                                   'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-main)]'
           }`}
         >
           <span className="mt-0.5 shrink-0">{t.type === 'success' ? '✅' : t.type === 'error' ? '❌' : 'ℹ️'}</span>
           <span className="flex-1">{t.message}</span>
-          <button onClick={() => onDismiss(t.id)} className="text-slate-400 hover:text-white ml-1 shrink-0">✕</button>
+          <button onClick={() => onDismiss(t.id)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] ml-1 shrink-0">✕</button>
         </div>
       ))}
     </div>
@@ -200,12 +200,12 @@ function ToastStack({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: st
 function Skeleton() {
   return (
     <div className="p-8 space-y-6 animate-pulse">
-      <div className="h-6 bg-slate-800 rounded w-56" />
+      <div className="h-6 bg-[var(--bg-surface)] rounded w-56" />
       <div className="grid grid-cols-3 gap-4">
-        {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-24 bg-slate-800 rounded-xl" />)}
+        {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-24 bg-[var(--bg-surface)] rounded-xl" />)}
       </div>
-      <div className="h-10 bg-slate-800 rounded-xl" />
-      <div className="h-72 bg-slate-800 rounded-xl" />
+      <div className="h-10 bg-[var(--bg-surface)] rounded-xl" />
+      <div className="h-72 bg-[var(--bg-surface)] rounded-xl" />
     </div>
   );
 }
@@ -324,24 +324,24 @@ function TicketDetailModal({ ticket, onClose, onUpdated, pushToast }: {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
         {/* Header */}
-        <div className="flex items-start justify-between p-6 border-b border-white/8 sticky top-0 bg-slate-900 z-10">
+        <div className="flex items-start justify-between p-6 border-b border-[var(--border-subtle)] sticky top-0 bg-[var(--bg-surface)] z-10">
           <div className="flex-1">
             <div className="flex items-center gap-2 flex-wrap mb-1">
-              <span className="text-xs font-mono text-slate-500">{d.ticket_code}</span>
+              <span className="text-xs font-mono text-[var(--text-faint)]">{d.ticket_code}</span>
               <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${statusBadge(currentStatus)}`}>{currentStatus.replace('_', ' ')}</span>
               <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${priorityBadge(d.priority)}`}>{d.priority}</span>
             </div>
-            <h2 className="text-white font-bold text-base">{d.cycle_name ?? 'Maintenance Ticket'}</h2>
-            <p className="text-slate-400 text-sm">{d.asset_name ?? '—'} {d.asset_no ? `· ${d.asset_no}` : ''}</p>
+            <h2 className="text-[var(--text-main)] font-bold text-base">{d.cycle_name ?? 'Maintenance Ticket'}</h2>
+            <p className="text-[var(--text-muted)] text-sm">{d.asset_name ?? '—'} {d.asset_no ? `· ${d.asset_no}` : ''}</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 ml-4 shrink-0">✕</button>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--bg-surface-hover)] ml-4 shrink-0">✕</button>
         </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <div className="w-6 h-6 border-2 border-slate-700 border-t-yellow-500 rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-[var(--border-subtle)] border-t-yellow-500 rounded-full animate-spin" />
           </div>
         ) : (
           <div className="p-6 space-y-5">
@@ -352,16 +352,16 @@ function TicketDetailModal({ ticket, onClose, onUpdated, pushToast }: {
                 ['Scheduled', formatDate(d.scheduled_date)],
                 ['Triggered By', d.triggered_by === 'SCHEDULER' ? '🤖 Scheduler' : '👤 Manual'],
               ].map(([k, v]) => (
-                <div key={k} className="bg-slate-800/60 rounded-lg p-3">
-                  <div className="text-slate-500 uppercase tracking-wide text-[10px] mb-1">{k}</div>
-                  <div className="text-slate-200 font-medium">{v}</div>
+                <div key={k} className="bg-[var(--bg-surface)]/60 rounded-lg p-3">
+                  <div className="text-[var(--text-faint)] uppercase tracking-wide text-[10px] mb-1">{k}</div>
+                  <div className="text-[var(--text-main)] font-medium">{v}</div>
                 </div>
               ))}
             </div>
 
             {/* Status Workflow */}
             <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2.5">Status Actions</p>
+              <p className="text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wide mb-2.5">Status Actions</p>
               <div className="flex flex-wrap gap-2">
                 {currentStatus === 'OPEN' && (
                   <button
@@ -394,7 +394,7 @@ function TicketDetailModal({ ticket, onClose, onUpdated, pushToast }: {
                   </>
                 )}
                 {(currentStatus === 'COMPLETED' || currentStatus === 'CANCELLED') && (
-                  <div className="px-4 py-2 bg-slate-800/60 text-slate-500 rounded-lg text-sm italic">
+                  <div className="px-4 py-2 bg-[var(--bg-surface)]/60 text-[var(--text-faint)] rounded-lg text-sm italic">
                     Ticket is {currentStatus.toLowerCase()} — no further actions available
                   </div>
                 )}
@@ -404,12 +404,12 @@ function TicketDetailModal({ ticket, onClose, onUpdated, pushToast }: {
             {/* Checklist */}
             {checks.length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2.5">
+                <p className="text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wide mb-2.5">
                   Checklist ({checks.filter(c => c.is_completed).length}/{checks.length} done)
                 </p>
                 <div className="space-y-2">
                   {checks.map((check, i) => (
-                    <label key={check.id} className="flex items-start gap-3 bg-slate-800/40 rounded-lg px-3 py-2.5 cursor-pointer hover:bg-slate-800/60 transition-colors">
+                    <label key={check.id} className="flex items-start gap-3 bg-[var(--bg-surface)]/40 rounded-lg px-3 py-2.5 cursor-pointer hover:bg-[var(--bg-surface)]/60 transition-colors">
                       <input
                         type="checkbox"
                         checked={check.is_completed}
@@ -417,7 +417,7 @@ function TicketDetailModal({ ticket, onClose, onUpdated, pushToast }: {
                         className="mt-0.5 accent-emerald-400"
                       />
                       <div className="flex-1">
-                        <span className={`text-sm ${check.is_completed ? 'line-through text-slate-500' : 'text-slate-200'}`}>
+                        <span className={`text-sm ${check.is_completed ? 'line-through text-[var(--text-faint)]' : 'text-[var(--text-main)]'}`}>
                           {check.description}
                         </span>
                         {check.is_mandatory && (
@@ -432,53 +432,53 @@ function TicketDetailModal({ ticket, onClose, onUpdated, pushToast }: {
 
             {/* Assigned To — User Picker */}
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Assigned To</label>
+              <label className="block text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wide mb-1.5">Assigned To</label>
               <UserPicker value={assignee} onChange={setAssignee} />
               {assignee && (
-                <p className="text-slate-600 text-xs mt-1.5">{assignee.email}</p>
+                <p className="text-[var(--text-faint)] text-xs mt-1.5">{assignee.email}</p>
               )}
             </div>
 
             {/* Findings */}
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Findings</label>
+              <label className="block text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wide mb-1.5">Findings</label>
               <textarea
                 value={findings}
                 onChange={e => setFindings(e.target.value)}
                 rows={3}
                 placeholder="Document any findings observed during this maintenance…"
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-yellow-500/50 transition-colors resize-none"
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50 transition-colors resize-none"
               />
             </div>
 
             {/* Resolution Notes */}
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Resolution Notes</label>
+              <label className="block text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wide mb-1.5">Resolution Notes</label>
               <textarea
                 value={resolutionNotes}
                 onChange={e => setResolutionNotes(e.target.value)}
                 rows={3}
                 placeholder="How was this resolved? What actions were taken?…"
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-yellow-500/50 transition-colors resize-none"
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50 transition-colors resize-none"
               />
             </div>
 
             {/* Technician Notes */}
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Technician Notes</label>
+              <label className="block text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wide mb-1.5">Technician Notes</label>
               <textarea
                 value={techNotes}
                 onChange={e => setTechNotes(e.target.value)}
                 rows={2}
                 placeholder="Internal notes for the technician…"
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-yellow-500/50 transition-colors resize-none"
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50 transition-colors resize-none"
               />
             </div>
 
             {/* Save */}
-            <div className="flex justify-end gap-3 pt-2 border-t border-white/8">
+            <div className="flex justify-end gap-3 pt-2 border-t border-[var(--border-subtle)]">
               <button onClick={onClose}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors">
+                className="px-4 py-2 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] rounded-lg text-sm font-medium transition-colors">
                 Close
               </button>
               <button onClick={saveChanges} disabled={saving}
@@ -570,79 +570,79 @@ export default function SpmTicketsPage() {
       {/* ── Header ── */}
       <div>
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-1.5 text-xs text-slate-500 mb-3">
-          <Link href="/assets" className="hover:text-slate-300 transition-colors">Assets</Link>
+        <nav className="flex items-center gap-1.5 text-xs text-[var(--text-faint)] mb-3">
+          <Link href="/assets" className="hover:text-[var(--text-muted)] transition-colors">Assets</Link>
           <span>›</span>
-          <Link href="/assets/spm" className="hover:text-slate-300 transition-colors">SPM</Link>
+          <Link href="/assets/spm" className="hover:text-[var(--text-muted)] transition-colors">SPM</Link>
           <span>›</span>
-          <span className="text-slate-300">Tickets</span>
+          <span className="text-[var(--text-muted)]">Tickets</span>
         </nav>
-        <h1 className="text-2xl font-bold text-white">🎫 Maintenance Tickets</h1>
-        <p className="text-slate-400 text-xs mt-1">Track and manage all preventive maintenance work orders</p>
+        <h1 className="text-2xl font-bold text-[var(--text-main)]">🎫 Maintenance Tickets</h1>
+        <p className="text-[var(--text-muted)] text-xs mt-1">Track and manage all preventive maintenance work orders</p>
       </div>
 
       {/* ── KPI Strip ── */}
       <div className="grid grid-cols-3 gap-4">
-        <div className="bg-slate-900 border border-white/8 rounded-xl p-5">
-          <p className="text-slate-500 text-xs font-semibold uppercase tracking-wide mb-3">Open Tickets</p>
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5">
+          <p className="text-[var(--text-faint)] text-xs font-semibold uppercase tracking-wide mb-3">Open Tickets</p>
           <p className="text-3xl font-bold text-blue-400">{openCount}</p>
-          <p className="text-slate-600 text-xs mt-1">Awaiting action</p>
+          <p className="text-[var(--text-faint)] text-xs mt-1">Awaiting action</p>
         </div>
-        <div className="bg-slate-900 border border-white/8 rounded-xl p-5">
-          <p className="text-slate-500 text-xs font-semibold uppercase tracking-wide mb-3">In Progress</p>
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5">
+          <p className="text-[var(--text-faint)] text-xs font-semibold uppercase tracking-wide mb-3">In Progress</p>
           <p className="text-3xl font-bold text-amber-400">{inProgressCount}</p>
-          <p className="text-slate-600 text-xs mt-1">Currently being worked</p>
+          <p className="text-[var(--text-faint)] text-xs mt-1">Currently being worked</p>
         </div>
-        <div className="bg-slate-900 border border-white/8 rounded-xl p-5">
-          <p className="text-slate-500 text-xs font-semibold uppercase tracking-wide mb-3">Completed This Month</p>
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5">
+          <p className="text-[var(--text-faint)] text-xs font-semibold uppercase tracking-wide mb-3">Completed This Month</p>
           <p className="text-3xl font-bold text-emerald-400">{completedCount}</p>
-          <p className="text-slate-600 text-xs mt-1">Successfully closed</p>
+          <p className="text-[var(--text-faint)] text-xs mt-1">Successfully closed</p>
         </div>
       </div>
 
       {/* ── Filters ── */}
       <div className="flex flex-wrap gap-3 items-center">
         <div className="relative flex-1 min-w-[200px]">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">🔍</span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)] text-sm">🔍</span>
           <input
             value={search}
             onChange={e => handleSearch(e.target.value)}
             placeholder="Search ticket code or asset name…"
-            className="w-full pl-9 pr-4 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white text-sm placeholder-slate-600 focus:outline-none focus:border-yellow-500/50 transition-colors"
+            className="w-full pl-9 pr-4 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50 transition-colors"
           />
         </div>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-          className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-yellow-500/50 transition-colors">
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-yellow-500/50 transition-colors">
           {STATUS_FILTERS.map(s => <option key={s} value={s}>{s === 'ALL' ? 'All Statuses' : s.replace('_', ' ')}</option>)}
         </select>
         <select value={priorityFilter} onChange={e => setPriorityFilter(e.target.value)}
-          className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-yellow-500/50 transition-colors">
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-yellow-500/50 transition-colors">
           {PRIORITY_FILTERS.map(p => <option key={p} value={p}>{p === 'ALL' ? 'All Priorities' : p}</option>)}
         </select>
         <div className="flex items-center gap-2">
-          <span className="text-slate-500 text-xs">From</span>
+          <span className="text-[var(--text-faint)] text-xs">From</span>
           <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-            className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-yellow-500/50 transition-colors" />
+            className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-yellow-500/50 transition-colors" />
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-slate-500 text-xs">To</span>
+          <span className="text-[var(--text-faint)] text-xs">To</span>
           <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-            className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-yellow-500/50 transition-colors" />
+            className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-yellow-500/50 transition-colors" />
         </div>
       </div>
 
       {/* ── Tickets Table ── */}
-      <div className="bg-slate-900 border border-white/8 rounded-xl overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/8">
-          <h2 className="text-white font-semibold text-sm">Tickets</h2>
-          <span className="text-slate-500 text-xs">{tickets.length} ticket{tickets.length !== 1 ? 's' : ''}</span>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border-subtle)]">
+          <h2 className="text-[var(--text-main)] font-semibold text-sm">Tickets</h2>
+          <span className="text-[var(--text-faint)] text-xs">{tickets.length} ticket{tickets.length !== 1 ? 's' : ''}</span>
         </div>
 
         {tickets.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
             <span className="text-4xl">🎫</span>
-            <p className="text-slate-400 font-medium">No tickets found</p>
-            <p className="text-slate-600 text-sm">Run the SPM scheduler to generate maintenance tickets</p>
+            <p className="text-[var(--text-muted)] font-medium">No tickets found</p>
+            <p className="text-[var(--text-faint)] text-sm">Run the SPM scheduler to generate maintenance tickets</p>
             <Link href="/assets/spm"
               className="mt-2 px-4 py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-semibold rounded-lg text-sm transition-colors">
               Go to SPM Dashboard
@@ -652,7 +652,7 @@ export default function SpmTicketsPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-slate-500 text-xs uppercase tracking-wide border-b border-white/8">
+                <tr className="text-[var(--text-faint)] text-xs uppercase tracking-wide border-b border-[var(--border-subtle)]">
                   <th className="text-left px-4 py-3 font-semibold">Ticket Code</th>
                   <th className="text-left px-4 py-3 font-semibold">Cycle</th>
                   <th className="text-left px-4 py-3 font-semibold">Asset</th>
@@ -670,24 +670,24 @@ export default function SpmTicketsPage() {
                 {tickets.map((ticket, idx) => (
                   <tr
                     key={ticket.id}
-                    className={`transition-colors hover:bg-white/5 ${idx % 2 === 0 ? 'bg-slate-800/40' : 'bg-slate-900'}`}
+                    className={`transition-colors hover:bg-[var(--bg-surface-hover)] ${idx % 2 === 0 ? 'bg-[var(--bg-surface)]/40' : 'bg-[var(--bg-surface)]'}`}
                   >
-                    <td className="px-4 py-3 font-mono text-xs text-slate-400 whitespace-nowrap">{ticket.ticket_code}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-[var(--text-muted)] whitespace-nowrap">{ticket.ticket_code}</td>
                     <td className="px-4 py-3">
-                      <div className="text-white text-sm font-medium">{ticket.cycle_name ?? '—'}</div>
-                      {ticket.cycle_code && <div className="text-slate-500 text-xs font-mono">{ticket.cycle_code}</div>}
+                      <div className="text-[var(--text-main)] text-sm font-medium">{ticket.cycle_name ?? '—'}</div>
+                      {ticket.cycle_code && <div className="text-[var(--text-faint)] text-xs font-mono">{ticket.cycle_code}</div>}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="text-slate-200 text-sm">{ticket.asset_name ?? '—'}</div>
-                      {ticket.asset_no && <div className="text-slate-500 text-xs">{ticket.asset_no}</div>}
+                      <div className="text-[var(--text-main)] text-sm">{ticket.asset_name ?? '—'}</div>
+                      {ticket.asset_no && <div className="text-[var(--text-faint)] text-xs">{ticket.asset_no}</div>}
                     </td>
-                    <td className="px-4 py-3 text-slate-400 text-xs">{ticket.category ?? '—'}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{ticket.category ?? '—'}</td>
                     <td className="px-4 py-3">
                       {ticket.maintenance_type ? (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-700/60 text-slate-400 uppercase tracking-wide">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[var(--bg-surface-hover)]/60 text-[var(--text-muted)] uppercase tracking-wide">
                           {ticket.maintenance_type}
                         </span>
-                      ) : <span className="text-slate-600">—</span>}
+                      ) : <span className="text-[var(--text-faint)]">—</span>}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span title={ticket.triggered_by} className="text-base">
@@ -699,7 +699,7 @@ export default function SpmTicketsPage() {
                         {ticket.priority}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">{formatDate(ticket.scheduled_date)}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)] text-xs whitespace-nowrap">{formatDate(ticket.scheduled_date)}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${statusBadge(ticket.status)}`}>
                         {ticket.status.replace('_', ' ')}
@@ -711,16 +711,16 @@ export default function SpmTicketsPage() {
                           <div className="w-6 h-6 rounded-full bg-yellow-500/20 border border-yellow-500/30 flex items-center justify-center text-yellow-300 text-[9px] font-bold shrink-0">
                             {(ticket.assigned_to ?? '').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '?'}
                           </div>
-                          <span className="text-slate-300 text-xs truncate max-w-[80px]">{ticket.assigned_to}</span>
+                          <span className="text-[var(--text-muted)] text-xs truncate max-w-[80px]">{ticket.assigned_to}</span>
                         </div>
                       ) : (
-                        <span className="text-slate-500 text-xs">{ticket.assigned_to ?? '—'}</span>
+                        <span className="text-[var(--text-faint)] text-xs">{ticket.assigned_to ?? '—'}</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <button
                         onClick={() => setSelectedTicket(ticket)}
-                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium rounded-lg border border-white/8 transition-colors"
+                        className="px-3 py-1.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] text-xs font-medium rounded-lg border border-[var(--border-subtle)] transition-colors"
                       >
                         View / Update
                       </button>

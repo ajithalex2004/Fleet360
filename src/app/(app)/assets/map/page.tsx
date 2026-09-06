@@ -119,9 +119,9 @@ export default function AssetMapPage() {
 
   if (loading) return (
     <div className="p-8 space-y-4">
-      <div className="h-8 bg-slate-800 rounded w-48 animate-pulse" />
+      <div className="h-8 bg-[var(--bg-surface)] rounded w-48 animate-pulse" />
       <div className="grid grid-cols-3 gap-4">
-        {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-40 bg-slate-800 rounded-xl animate-pulse" />)}
+        {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-40 bg-[var(--bg-surface)] rounded-xl animate-pulse" />)}
       </div>
     </div>
   );
@@ -129,14 +129,14 @@ export default function AssetMapPage() {
   return (
     <div className="p-8 space-y-5">
       <div className="flex items-center justify-between">
-        <div><h1 className="text-2xl font-bold text-white">Asset Map</h1><p className="text-slate-400 text-sm">Zone-based asset location view</p></div>
+        <div><h1 className="text-2xl font-bold text-[var(--text-main)]">Asset Map</h1><p className="text-[var(--text-muted)] text-sm">Zone-based asset location view</p></div>
         <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${autoRefresh ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
-          <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
+          <span className={`w-2 h-2 rounded-full ${autoRefresh ? 'bg-emerald-400 animate-pulse' : 'bg-[var(--bg-surface-hover)]'}`} />
+          <label className="flex items-center gap-2 text-sm text-[var(--text-muted)] cursor-pointer">
             <input type="checkbox" checked={autoRefresh} onChange={e => setAutoRefresh(e.target.checked)} className="w-4 h-4 rounded" />
             Auto-refresh (30s)
           </label>
-          <button onClick={load} className="ml-2 bg-slate-800 border border-white/10 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg text-xs">↻ Refresh</button>
+          <button onClick={load} className="ml-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] px-3 py-1.5 rounded-lg text-xs">↻ Refresh</button>
         </div>
       </div>
 
@@ -144,13 +144,13 @@ export default function AssetMapPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
-        <select value={domainFilter} onChange={e => setDomainFilter(e.target.value)} className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+        <select value={domainFilter} onChange={e => setDomainFilter(e.target.value)} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]">
           {DOMAINS.map(d => <option key={d}>{d}</option>)}
         </select>
-        <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+        <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]">
           {ASSET_TYPES.map(t => <option key={t}>{t}</option>)}
         </select>
-        <select value={zoneFilter} onChange={e => setZoneFilter(e.target.value)} className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+        <select value={zoneFilter} onChange={e => setZoneFilter(e.target.value)} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]">
           <option value="ALL">All Zones</option>
           {Array.from(allZones).map(z => <option key={z}>{z}</option>)}
         </select>
@@ -160,7 +160,7 @@ export default function AssetMapPage() {
         {/* Zone Grid */}
         <div className="flex-1">
           {filteredZones.length === 0 ? (
-            <div className="bg-slate-900 border border-white/8 rounded-xl p-12 text-center text-slate-500">
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-12 text-center text-[var(--text-faint)]">
               <div className="text-5xl mb-3">🗺️</div>
               <p className="font-medium">No zone data available</p>
               <p className="text-sm mt-1">BLE tags and gateways will appear here once they report location zones.</p>
@@ -171,8 +171,8 @@ export default function AssetMapPage() {
                 <div key={zone.name} className={`border rounded-xl p-4 ${zoneColor(zone)}`}>
                   <div className="flex items-center justify-between mb-3">
                     <div>
-                      <h3 className="text-white font-semibold text-sm">{zone.name}</h3>
-                      <p className="text-slate-400 text-xs">{zone.tags.length} asset(s)</p>
+                      <h3 className="text-[var(--text-main)] font-semibold text-sm">{zone.name}</h3>
+                      <p className="text-[var(--text-muted)] text-xs">{zone.tags.length} asset(s)</p>
                     </div>
                     <div className="flex gap-1">
                       {zone.gateways.map(g => (
@@ -184,17 +184,17 @@ export default function AssetMapPage() {
                   {/* Asset list */}
                   <div className="space-y-1.5 max-h-40 overflow-y-auto">
                     {zone.tags.length === 0
-                      ? <p className="text-slate-600 text-xs italic">No assets in this zone</p>
+                      ? <p className="text-[var(--text-faint)] text-xs italic">No assets in this zone</p>
                       : zone.tags.map(t => {
                         const ago = minutesAgo(t.last_seen);
-                        const batColor = !t.battery_pct ? 'text-slate-500' : t.battery_pct < 20 ? 'text-red-400' : t.battery_pct < 50 ? 'text-amber-400' : 'text-emerald-400';
+                        const batColor = !t.battery_pct ? 'text-[var(--text-faint)]' : t.battery_pct < 20 ? 'text-red-400' : t.battery_pct < 50 ? 'text-amber-400' : 'text-emerald-400';
                         return (
                           <div key={t.id} className="flex items-center justify-between bg-black/20 rounded-lg px-2.5 py-1.5 text-xs">
                             <div className="flex items-center gap-1.5">
                               <span className={`w-1.5 h-1.5 rounded-full ${t.status === 'ACTIVE' ? 'bg-emerald-400' : 'bg-red-400'}`} />
-                              <span className="text-slate-300 truncate max-w-[120px]">{t.assigned_asset_name ?? t.tag_name ?? t.tag_mac}</span>
+                              <span className="text-[var(--text-muted)] truncate max-w-[120px]">{t.assigned_asset_name ?? t.tag_name ?? t.tag_mac}</span>
                             </div>
-                            <div className="flex items-center gap-2 text-slate-500">
+                            <div className="flex items-center gap-2 text-[var(--text-faint)]">
                               {t.battery_pct !== undefined && <span className={batColor}>{t.battery_pct}%</span>}
                               {ago !== null && <span>{ago}m</span>}
                             </div>
@@ -205,7 +205,7 @@ export default function AssetMapPage() {
 
                   {/* Gateway indicators */}
                   {zone.gateways.length > 0 && (
-                    <div className="mt-3 pt-2 border-t border-white/8 flex flex-wrap gap-1.5">
+                    <div className="mt-3 pt-2 border-t border-[var(--border-subtle)] flex flex-wrap gap-1.5">
                       {zone.gateways.map(g => (
                         <span key={g.id} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs border ${g.status === 'ONLINE' ? 'border-emerald-500/30 text-emerald-400' : 'border-red-500/30 text-red-400'}`}>
                           📶 {g.name} {g.tags_visible !== undefined && `(${g.tags_visible})`}
@@ -221,24 +221,24 @@ export default function AssetMapPage() {
 
         {/* Movement Alerts Panel */}
         <div className="w-72 flex-shrink-0">
-          <div className="bg-slate-900 border border-white/8 rounded-xl p-4">
-            <h2 className="text-white font-semibold mb-3 text-sm">Recent Movements (2h)</h2>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4">
+            <h2 className="text-[var(--text-main)] font-semibold mb-3 text-sm">Recent Movements (2h)</h2>
             {recentMovements.length === 0 ? (
-              <p className="text-slate-500 text-sm text-center py-6">No recent movements</p>
+              <p className="text-[var(--text-faint)] text-sm text-center py-6">No recent movements</p>
             ) : (
               <div className="space-y-2 max-h-[60vh] overflow-y-auto">
                 {recentMovements.map((m, i) => (
-                  <div key={m.id ?? i} className="bg-slate-800/50 rounded-lg p-2.5 text-xs">
+                  <div key={m.id ?? i} className="bg-[var(--bg-surface)]/50 rounded-lg p-2.5 text-xs">
                     <div className="flex items-start justify-between gap-2 mb-1">
-                      <span className="text-white font-medium truncate">{m.asset_name ?? '—'}</span>
-                      <span className="text-slate-500 flex-shrink-0">{m.performed_at ? minutesAgo(m.performed_at) + 'm' : '—'}</span>
+                      <span className="text-[var(--text-main)] font-medium truncate">{m.asset_name ?? '—'}</span>
+                      <span className="text-[var(--text-faint)] flex-shrink-0">{m.performed_at ? minutesAgo(m.performed_at) + 'm' : '—'}</span>
                     </div>
-                    <div className="text-slate-400">{m.movement_type}</div>
+                    <div className="text-[var(--text-muted)]">{m.movement_type}</div>
                     {(m.from_location || m.to_location) && (
-                      <div className="text-slate-500 mt-1">
+                      <div className="text-[var(--text-faint)] mt-1">
                         {m.from_location && <span>{m.from_location}</span>}
                         {m.from_location && m.to_location && <span className="mx-1">→</span>}
-                        {m.to_location && <span className="text-slate-300">{m.to_location}</span>}
+                        {m.to_location && <span className="text-[var(--text-muted)]">{m.to_location}</span>}
                       </div>
                     )}
                   </div>
@@ -248,13 +248,13 @@ export default function AssetMapPage() {
           </div>
 
           {/* Stats */}
-          <div className="mt-4 bg-slate-900 border border-white/8 rounded-xl p-4 space-y-2 text-sm">
-            <h3 className="text-white font-semibold text-sm mb-2">Network Status</h3>
-            <div className="flex justify-between"><span className="text-slate-400">Total Tags</span><span className="text-white">{tags.length}</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">Active Tags</span><span className="text-emerald-400">{tags.filter(t => t.status === 'ACTIVE').length}</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">Offline Tags</span><span className="text-red-400">{tags.filter(t => t.status === 'OFFLINE').length}</span></div>
-            <div className="flex justify-between mt-2 pt-2 border-t border-white/8"><span className="text-slate-400">Gateways Online</span><span className="text-emerald-400">{gateways.filter(g => g.status === 'ONLINE').length}</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">Gateways Offline</span><span className="text-red-400">{gateways.filter(g => g.status === 'OFFLINE').length}</span></div>
+          <div className="mt-4 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4 space-y-2 text-sm">
+            <h3 className="text-[var(--text-main)] font-semibold text-sm mb-2">Network Status</h3>
+            <div className="flex justify-between"><span className="text-[var(--text-muted)]">Total Tags</span><span className="text-[var(--text-main)]">{tags.length}</span></div>
+            <div className="flex justify-between"><span className="text-[var(--text-muted)]">Active Tags</span><span className="text-emerald-400">{tags.filter(t => t.status === 'ACTIVE').length}</span></div>
+            <div className="flex justify-between"><span className="text-[var(--text-muted)]">Offline Tags</span><span className="text-red-400">{tags.filter(t => t.status === 'OFFLINE').length}</span></div>
+            <div className="flex justify-between mt-2 pt-2 border-t border-[var(--border-subtle)]"><span className="text-[var(--text-muted)]">Gateways Online</span><span className="text-emerald-400">{gateways.filter(g => g.status === 'ONLINE').length}</span></div>
+            <div className="flex justify-between"><span className="text-[var(--text-muted)]">Gateways Offline</span><span className="text-red-400">{gateways.filter(g => g.status === 'OFFLINE').length}</span></div>
           </div>
         </div>
       </div>

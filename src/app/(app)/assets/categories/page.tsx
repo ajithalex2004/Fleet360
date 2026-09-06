@@ -82,8 +82,8 @@ export default function CategoriesPage() {
 
   if (loading) return (
     <div className="p-8 space-y-4">
-      <div className="h-8 bg-slate-800 rounded w-48 animate-pulse" />
-      {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-12 bg-slate-800 rounded animate-pulse" />)}
+      <div className="h-8 bg-[var(--bg-surface)] rounded w-48 animate-pulse" />
+      {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-12 bg-[var(--bg-surface)] rounded animate-pulse" />)}
     </div>
   );
 
@@ -92,16 +92,16 @@ export default function CategoriesPage() {
       {toast && <div className="fixed top-4 right-4 z-50 bg-emerald-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm">{toast}</div>}
 
       <div className="flex items-center justify-between">
-        <div><h1 className="text-2xl font-bold text-white">Categories</h1><p className="text-slate-400 text-sm">Asset category hierarchy</p></div>
-        <button onClick={openAdd} className="bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-semibold px-4 py-2 rounded-lg text-sm">+ Add Category</button>
+        <div><h1 className="text-2xl font-bold text-[var(--text-main)]">Categories</h1><p className="text-[var(--text-muted)] text-sm">Asset category hierarchy</p></div>
+        <button onClick={openAdd} className="bg-yellow-400 hover:bg-yellow-300 text-white font-semibold px-4 py-2 rounded-lg text-sm">+ Add Category</button>
       </div>
 
       {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-red-400 text-sm">{error}</div>}
 
-      <div className="bg-slate-900 border border-white/8 rounded-xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-slate-800/50 border-b border-white/8">
-            <tr className="text-slate-400 text-xs uppercase">
+          <thead className="bg-[var(--bg-surface)]/50 border-b border-[var(--border-subtle)]">
+            <tr className="text-[var(--text-muted)] text-xs uppercase">
               {['Name', 'Domain', 'Icon', 'Description', 'Active', 'Actions'].map(h => (
                 <th key={h} className="text-left px-4 py-3 font-medium">{h}</th>
               ))}
@@ -109,26 +109,26 @@ export default function CategoriesPage() {
           </thead>
           <tbody className="divide-y divide-white/5">
             {sorted.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-500">
+              <tr><td colSpan={6} className="px-4 py-12 text-center text-[var(--text-faint)]">
                 <div className="text-4xl mb-2">🏷️</div><p>No categories yet. Add one to get started.</p>
               </td></tr>
             ) : sorted.map(c => (
-              <tr key={c.id} className="hover:bg-white/3 transition-colors">
+              <tr key={c.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                 <td className="px-4 py-3">
-                  <span className={c.parent_id ? 'pl-6 text-slate-300' : 'text-white font-medium'}>
-                    {c.parent_id && <span className="text-slate-600 mr-2">└</span>}
+                  <span className={c.parent_id ? 'pl-6 text-[var(--text-muted)]' : 'text-[var(--text-main)] font-medium'}>
+                    {c.parent_id && <span className="text-[var(--text-faint)] mr-2">└</span>}
                     {c.name}
                   </span>
-                  {c.parent_name && <span className="ml-2 text-xs text-slate-500">({c.parent_name})</span>}
+                  {c.parent_name && <span className="ml-2 text-xs text-[var(--text-faint)]">({c.parent_name})</span>}
                 </td>
-                <td className="px-4 py-3 text-slate-400">{c.domain ?? '—'}</td>
+                <td className="px-4 py-3 text-[var(--text-muted)]">{c.domain ?? '—'}</td>
                 <td className="px-4 py-3 text-xl">{c.icon ?? '📦'}</td>
-                <td className="px-4 py-3 text-slate-400 max-w-xs truncate">{c.description ?? '—'}</td>
+                <td className="px-4 py-3 text-[var(--text-muted)] max-w-xs truncate">{c.description ?? '—'}</td>
                 <td className="px-4 py-3">
-                  <span className={`inline-block w-2 h-2 rounded-full ${c.is_active !== false ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+                  <span className={`inline-block w-2 h-2 rounded-full ${c.is_active !== false ? 'bg-emerald-400' : 'bg-[var(--bg-surface-hover)]'}`} />
                 </td>
                 <td className="px-4 py-3">
-                  <button onClick={() => openEdit(c)} className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-1 rounded">Edit</button>
+                  <button onClick={() => openEdit(c)} className="text-xs bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] px-2 py-1 rounded">Edit</button>
                 </td>
               </tr>
             ))}
@@ -138,25 +138,25 @@ export default function CategoriesPage() {
 
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-md">
-            <div className="flex items-center justify-between p-5 border-b border-white/8">
-              <h2 className="text-white font-semibold">{editCat ? 'Edit Category' : 'New Category'}</h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white text-xl">✕</button>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-md">
+            <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)]">
+              <h2 className="text-[var(--text-main)] font-semibold">{editCat ? 'Edit Category' : 'New Category'}</h2>
+              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">✕</button>
             </div>
             <div className="p-5 space-y-4">
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Name*</label>
-                <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+                <label className="block text-xs text-[var(--text-muted)] mb-1">Name*</label>
+                <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Domain</label>
-                <select value={form.domain} onChange={e => setForm(p => ({ ...p, domain: e.target.value }))} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+                <label className="block text-xs text-[var(--text-muted)] mb-1">Domain</label>
+                <select value={form.domain} onChange={e => setForm(p => ({ ...p, domain: e.target.value }))} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]">
                   {DOMAINS.map(d => <option key={d}>{d}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Parent Category</label>
-                <select value={form.parent_id} onChange={e => setForm(p => ({ ...p, parent_id: e.target.value }))} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+                <label className="block text-xs text-[var(--text-muted)] mb-1">Parent Category</label>
+                <select value={form.parent_id} onChange={e => setForm(p => ({ ...p, parent_id: e.target.value }))} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]">
                   <option value="">— None (top level) —</option>
                   {categories.filter(c => !c.parent_id && c.id !== editCat?.id).map(c => (
                     <option key={c.id} value={c.id}>{c.name}</option>
@@ -165,22 +165,22 @@ export default function CategoriesPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Icon (emoji)</label>
-                  <input value={form.icon} onChange={e => setForm(p => ({ ...p, icon: e.target.value }))} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+                  <label className="block text-xs text-[var(--text-muted)] mb-1">Icon (emoji)</label>
+                  <input value={form.icon} onChange={e => setForm(p => ({ ...p, icon: e.target.value }))} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Color</label>
-                  <input type="color" value={form.color} onChange={e => setForm(p => ({ ...p, color: e.target.value }))} className="w-full h-10 bg-slate-800 border border-white/10 rounded-lg px-2" />
+                  <label className="block text-xs text-[var(--text-muted)] mb-1">Color</label>
+                  <input type="color" value={form.color} onChange={e => setForm(p => ({ ...p, color: e.target.value }))} className="w-full h-10 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2" />
                 </div>
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Description</label>
-                <textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={2} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+                <label className="block text-xs text-[var(--text-muted)] mb-1">Description</label>
+                <textarea value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} rows={2} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
               </div>
             </div>
-            <div className="flex gap-3 justify-end p-5 border-t border-white/8">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
-              <button onClick={submit} disabled={submitting || !form.name} className="bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-semibold px-5 py-2 rounded-lg text-sm disabled:opacity-50">
+            <div className="flex gap-3 justify-end p-5 border-t border-[var(--border-subtle)]">
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-main)]">Cancel</button>
+              <button onClick={submit} disabled={submitting || !form.name} className="bg-yellow-400 hover:bg-yellow-300 text-white font-semibold px-5 py-2 rounded-lg text-sm disabled:opacity-50">
                 {submitting ? 'Saving...' : editCat ? 'Update' : 'Create'}
               </button>
             </div>

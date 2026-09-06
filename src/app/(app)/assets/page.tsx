@@ -28,15 +28,15 @@ interface AssetStats {
 function Skeleton() {
   return (
     <div className="p-8 space-y-6">
-      <div className="h-8 bg-slate-800 rounded w-64 animate-pulse" />
+      <div className="h-8 bg-[var(--bg-surface)] rounded w-64 animate-pulse" />
       <div className="grid grid-cols-6 gap-4">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="h-24 bg-slate-800 rounded-xl animate-pulse" />
+          <div key={i} className="h-24 bg-[var(--bg-surface)] rounded-xl animate-pulse" />
         ))}
       </div>
       <div className="grid grid-cols-2 gap-6">
-        <div className="h-64 bg-slate-800 rounded-xl animate-pulse" />
-        <div className="h-64 bg-slate-800 rounded-xl animate-pulse" />
+        <div className="h-64 bg-[var(--bg-surface)] rounded-xl animate-pulse" />
+        <div className="h-64 bg-[var(--bg-surface)] rounded-xl animate-pulse" />
       </div>
     </div>
   );
@@ -74,7 +74,7 @@ export default function AssetsDashboard() {
         icon={Package}
         accent="cyan"
         actions={
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-[var(--text-faint)]">
             {new Date().toLocaleDateString('en-AE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </span>
         }
@@ -140,14 +140,14 @@ export default function AssetsDashboard() {
       {/* Row 3: Domain Breakdown + Operations Summary */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Domain Breakdown */}
-        <div className="bg-slate-900 border border-white/8 rounded-xl p-5">
-          <h2 className="text-white font-semibold mb-4">Domain Breakdown</h2>
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5">
+          <h2 className="text-[var(--text-main)] font-semibold mb-4">Domain Breakdown</h2>
           {!s.domainBreakdown || s.domainBreakdown.length === 0 ? (
-            <p className="text-slate-500 text-sm">No domain data available</p>
+            <p className="text-[var(--text-faint)] text-sm">No domain data available</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-slate-500 text-xs uppercase border-b border-white/8">
+                <tr className="text-[var(--text-faint)] text-xs uppercase border-b border-[var(--border-subtle)]">
                   <th className="text-left pb-2">Domain</th>
                   <th className="text-right pb-2">Count</th>
                   <th className="text-right pb-2">Value AED</th>
@@ -155,8 +155,8 @@ export default function AssetsDashboard() {
               </thead>
               <tbody className="divide-y divide-white/5">
                 {s.domainBreakdown.map(d => (
-                  <tr key={d.domain} className="text-slate-300">
-                    <td className="py-2 text-slate-200 font-medium">{d.domain}</td>
+                  <tr key={d.domain} className="text-[var(--text-muted)]">
+                    <td className="py-2 text-[var(--text-main)] font-medium">{d.domain}</td>
                     <td className="py-2 text-right">{d.count}</td>
                     <td className="py-2 text-right text-yellow-300">{(d.totalValue ?? 0).toLocaleString()}</td>
                   </tr>
@@ -167,8 +167,8 @@ export default function AssetsDashboard() {
         </div>
 
         {/* Operations Summary */}
-        <div className="bg-slate-900 border border-white/8 rounded-xl p-5">
-          <h2 className="text-white font-semibold mb-4">Operations Summary</h2>
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5">
+          <h2 className="text-[var(--text-main)] font-semibold mb-4">Operations Summary</h2>
           <div className="space-y-3">
             {[
               { label: 'Pending Dispatches', value: s.pendingDispatches ?? 0, icon: '🚚', color: 'text-blue-400' },
@@ -177,8 +177,8 @@ export default function AssetsDashboard() {
               { label: 'BLE Tags Offline', value: s.bleTagsOffline ?? 0, icon: '📡', color: 'text-red-400' },
               { label: 'Gateways Offline', value: s.gatewaysOffline ?? 0, icon: '📶', color: 'text-red-400' },
             ].map(item => (
-              <div key={item.label} className="flex items-center justify-between py-2 border-b border-white/5 last:border-0">
-                <div className="flex items-center gap-2 text-slate-400 text-sm">
+              <div key={item.label} className="flex items-center justify-between py-2 border-b border-[var(--border-subtle)] last:border-0">
+                <div className="flex items-center gap-2 text-[var(--text-muted)] text-sm">
                   <span>{item.icon}</span>
                   <span>{item.label}</span>
                 </div>
@@ -191,16 +191,16 @@ export default function AssetsDashboard() {
 
       {/* Quick Actions */}
       <div className="flex flex-wrap gap-3">
-        <Link href="/assets/registry" className="flex items-center gap-2 bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-semibold px-4 py-2 rounded-lg text-sm transition-colors">
+        <Link href="/assets/registry" className="flex items-center gap-2 bg-yellow-400 hover:bg-yellow-300 text-white font-semibold px-4 py-2 rounded-lg text-sm transition-colors">
           <span>+</span> Add Asset
         </Link>
         <Link href="/assets/dispatch" className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold px-4 py-2 rounded-lg text-sm transition-colors">
           <span>+</span> New Dispatch
         </Link>
-        <Link href="/assets/returns" className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white font-semibold px-4 py-2 rounded-lg text-sm transition-colors">
+        <Link href="/assets/returns" className="flex items-center gap-2 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] font-semibold px-4 py-2 rounded-lg text-sm transition-colors">
           <span>+</span> Return Request
         </Link>
-        <Link href="/assets/transactions" className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 border border-white/10 text-slate-300 font-semibold px-4 py-2 rounded-lg text-sm transition-colors">
+        <Link href="/assets/transactions" className="flex items-center gap-2 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] font-semibold px-4 py-2 rounded-lg text-sm transition-colors">
           View Ledger
         </Link>
       </div>

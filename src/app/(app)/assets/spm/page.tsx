@@ -95,21 +95,21 @@ function priorityBadge(priority: string) {
     MEDIUM: 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30',
     LOW: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
   };
-  return map[priority] ?? 'bg-slate-700 text-slate-400';
+  return map[priority] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]';
 }
 
 function statusBadge(status: string) {
   const map: Record<string, string> = {
     ACTIVE: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30',
-    PAUSED: 'bg-slate-600/40 text-slate-400 border border-slate-600/40',
-    ARCHIVED: 'bg-slate-700/40 text-slate-500 border border-slate-700/40',
+    PAUSED: 'bg-[var(--bg-surface-hover)]/40 text-[var(--text-muted)] border border-[var(--border-strong)]/40',
+    ARCHIVED: 'bg-[var(--bg-surface-hover)]/40 text-[var(--text-faint)] border border-[var(--border-subtle)]/40',
   };
-  return map[status] ?? 'bg-slate-700 text-slate-400';
+  return map[status] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]';
 }
 
 function daysRemainingPill(days: number | null | undefined) {
   if (days === null || days === undefined) {
-    return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-700/60 text-slate-500">Not scheduled</span>;
+    return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-[var(--bg-surface-hover)]/60 text-[var(--text-faint)]">Not scheduled</span>;
   }
   if (days < 0) {
     return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/20 text-red-400 border border-red-500/30">{Math.abs(days)}d overdue</span>;
@@ -141,14 +141,14 @@ function ToastStack({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: st
           className={`flex items-start gap-3 rounded-xl px-4 py-3 shadow-xl border text-sm font-medium transition-all ${
             t.type === 'success' ? 'bg-emerald-900/90 border-emerald-500/40 text-emerald-200' :
             t.type === 'error'   ? 'bg-red-900/90 border-red-500/40 text-red-200' :
-                                   'bg-slate-800 border-white/10 text-slate-200'
+                                   'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-main)]'
           }`}
         >
           <span className="mt-0.5 shrink-0">
             {t.type === 'success' ? '✅' : t.type === 'error' ? '❌' : 'ℹ️'}
           </span>
           <span className="flex-1">{t.message}</span>
-          <button onClick={() => onDismiss(t.id)} className="text-slate-400 hover:text-white ml-1 shrink-0">✕</button>
+          <button onClick={() => onDismiss(t.id)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] ml-1 shrink-0">✕</button>
         </div>
       ))}
     </div>
@@ -160,12 +160,12 @@ function ToastStack({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: st
 function Skeleton() {
   return (
     <div className="p-8 space-y-6 animate-pulse">
-      <div className="h-8 bg-slate-800 rounded w-80" />
+      <div className="h-8 bg-[var(--bg-surface)] rounded w-80" />
       <div className="grid grid-cols-4 gap-4">
-        {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-24 bg-slate-800 rounded-xl" />)}
+        {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-24 bg-[var(--bg-surface)] rounded-xl" />)}
       </div>
-      <div className="h-12 bg-slate-800 rounded-xl" />
-      <div className="h-64 bg-slate-800 rounded-xl" />
+      <div className="h-12 bg-[var(--bg-surface)] rounded-xl" />
+      <div className="h-64 bg-[var(--bg-surface)] rounded-xl" />
     </div>
   );
 }
@@ -220,15 +220,15 @@ function UserPicker({ value, onChange }: {
   return (
     <div ref={ref} className="relative">
       {value ? (
-        <div className="flex items-center gap-3 bg-slate-800 border border-yellow-500/30 rounded-lg px-3 py-2.5">
+        <div className="flex items-center gap-3 bg-[var(--bg-surface)] border border-yellow-500/30 rounded-lg px-3 py-2.5">
           <div className="w-8 h-8 rounded-full bg-yellow-500/20 border border-yellow-500/40 flex items-center justify-center text-yellow-300 text-xs font-bold shrink-0">
             {value.initials}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-white text-sm font-medium truncate">{value.display_name}</div>
-            <div className="text-slate-400 text-xs truncate">{value.department || value.email}</div>
+            <div className="text-[var(--text-main)] text-sm font-medium truncate">{value.display_name}</div>
+            <div className="text-[var(--text-muted)] text-xs truncate">{value.department || value.email}</div>
           </div>
-          <button type="button" onClick={clear} className="text-slate-500 hover:text-white transition-colors text-sm">✕</button>
+          <button type="button" onClick={clear} className="text-[var(--text-faint)] hover:text-[var(--text-main)] transition-colors text-sm">✕</button>
         </div>
       ) : (
         <div>
@@ -237,22 +237,22 @@ function UserPicker({ value, onChange }: {
             onChange={e => handleInput(e.target.value)}
             onFocus={() => { if (results.length > 0) setOpen(true); else fetchUsers(''); }}
             placeholder="Search team members…"
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-yellow-500/50 focus:ring-1 focus:ring-yellow-500/20 transition-colors"
+            className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50 focus:ring-1 focus:ring-yellow-500/20 transition-colors"
           />
-          {loading && <div className="absolute right-3 top-3 text-slate-500 text-xs">Searching…</div>}
+          {loading && <div className="absolute right-3 top-3 text-[var(--text-faint)] text-xs">Searching…</div>}
         </div>
       )}
       {open && results.length > 0 && (
-        <div className="absolute z-50 mt-1 w-full bg-slate-800 border border-white/10 rounded-xl overflow-hidden shadow-2xl">
+        <div className="absolute z-50 mt-1 w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl overflow-hidden shadow-2xl">
           {results.map(u => (
             <button key={u.id} type="button" onClick={() => select(u)}
-              className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-white/5 transition-colors text-left">
-              <div className="w-8 h-8 rounded-full bg-slate-700 border border-white/10 flex items-center justify-center text-slate-300 text-xs font-bold shrink-0">
+              className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-[var(--bg-surface-hover)] transition-colors text-left">
+              <div className="w-8 h-8 rounded-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] flex items-center justify-center text-[var(--text-muted)] text-xs font-bold shrink-0">
                 {u.initials}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-white text-sm font-medium truncate">{u.display_name}</div>
-                <div className="text-slate-500 text-xs truncate">{u.department}{u.department && u.email ? ' · ' : ''}{u.email}</div>
+                <div className="text-[var(--text-main)] text-sm font-medium truncate">{u.display_name}</div>
+                <div className="text-[var(--text-faint)] text-xs truncate">{u.department}{u.department && u.email ? ' · ' : ''}{u.email}</div>
               </div>
             </button>
           ))}
@@ -322,21 +322,21 @@ function NotificationBell({ userId }: { userId?: string }) {
     <div ref={ref} className="relative">
       <button
         onClick={() => { setOpen(o => !o); if (!open) fetchNotifications(); }}
-        className="relative w-9 h-9 flex items-center justify-center rounded-lg bg-slate-800 border border-white/10 hover:bg-slate-700 hover:border-white/20 transition-colors"
+        className="relative w-9 h-9 flex items-center justify-center rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] hover:border-[var(--border-strong)] transition-colors"
         title="Notifications"
       >
         <span className="text-base">🔔</span>
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center border border-slate-900">
+          <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center border border-[var(--border-subtle)]">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 top-11 w-80 bg-slate-900 border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-white/8">
-            <span className="text-white text-sm font-semibold">SPM Notifications</span>
+        <div className="absolute right-0 top-11 w-80 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl shadow-2xl z-50 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-subtle)]">
+            <span className="text-[var(--text-main)] text-sm font-semibold">SPM Notifications</span>
             {unreadCount > 0 && (
               <button onClick={markAllRead} className="text-xs text-yellow-400 hover:text-yellow-300 transition-colors">
                 Mark all read
@@ -345,17 +345,17 @@ function NotificationBell({ userId }: { userId?: string }) {
           </div>
           <div className="max-h-72 overflow-y-auto">
             {notifications.length === 0 ? (
-              <div className="px-4 py-8 text-center text-slate-500 text-sm">No notifications</div>
+              <div className="px-4 py-8 text-center text-[var(--text-faint)] text-sm">No notifications</div>
             ) : notifications.map(n => (
-              <div key={n.id} className={`px-4 py-3 border-b border-white/5 hover:bg-white/3 transition-colors ${!n.is_read ? 'bg-yellow-500/5' : ''}`}>
+              <div key={n.id} className={`px-4 py-3 border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors ${!n.is_read ? 'bg-yellow-500/5' : ''}`}>
                 <div className="flex items-start gap-2.5">
                   <span className="text-base shrink-0 mt-0.5">{typeIcon[n.type] ?? '📌'}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-slate-200 text-xs leading-snug">{n.message}</p>
+                    <p className="text-[var(--text-main)] text-xs leading-snug">{n.message}</p>
                     {n.ticket_code && (
-                      <p className="text-slate-500 text-[10px] mt-0.5">Ticket: {n.ticket_code}</p>
+                      <p className="text-[var(--text-faint)] text-[10px] mt-0.5">Ticket: {n.ticket_code}</p>
                     )}
-                    <p className="text-slate-600 text-[10px] mt-1">{timeAgo(n.created_at)}</p>
+                    <p className="text-[var(--text-faint)] text-[10px] mt-1">{timeAgo(n.created_at)}</p>
                   </div>
                   {!n.is_read && <span className="w-2 h-2 rounded-full bg-yellow-400 shrink-0 mt-1" />}
                 </div>
@@ -498,48 +498,48 @@ function AddCycleModal({ onClose, onCreated, pushToast }: {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-white/8 sticky top-0 bg-slate-900 z-10">
+        <div className="flex items-center justify-between p-6 border-b border-[var(--border-subtle)] sticky top-0 bg-[var(--bg-surface)] z-10">
           <div>
-            <h2 className="text-white font-bold text-lg">New Maintenance Cycle</h2>
-            <p className="text-slate-400 text-xs mt-0.5">Set up a recurring preventive maintenance schedule</p>
+            <h2 className="text-[var(--text-main)] font-bold text-lg">New Maintenance Cycle</h2>
+            <p className="text-[var(--text-muted)] text-xs mt-0.5">Set up a recurring preventive maintenance schedule</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 transition-colors">✕</button>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--bg-surface-hover)] transition-colors">✕</button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           {/* Name */}
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Cycle Name <span className="text-red-400">*</span></label>
+            <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Cycle Name <span className="text-red-400">*</span></label>
             <input value={form.name} onChange={f('name')} required placeholder="e.g. Monthly Generator Inspection"
-              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-yellow-500/50 focus:ring-1 focus:ring-yellow-500/20 transition-colors" />
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50 focus:ring-1 focus:ring-yellow-500/20 transition-colors" />
           </div>
 
           {/* Description */}
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Description</label>
+            <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Description</label>
             <textarea value={form.description} onChange={f('description')} rows={2} placeholder="Brief description of this maintenance cycle..."
-              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-yellow-500/50 focus:ring-1 focus:ring-yellow-500/20 transition-colors resize-none" />
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50 focus:ring-1 focus:ring-yellow-500/20 transition-colors resize-none" />
           </div>
 
           {/* Asset Search */}
           <div className="relative">
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Asset <span className="text-red-400">*</span></label>
+            <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Asset <span className="text-red-400">*</span></label>
             <input
               value={assetSearch}
               onChange={e => handleAssetInput(e.target.value)}
               placeholder="Type to search assets..."
-              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-yellow-500/50 focus:ring-1 focus:ring-yellow-500/20 transition-colors"
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50 focus:ring-1 focus:ring-yellow-500/20 transition-colors"
             />
-            {assetSearching && <div className="absolute right-3 top-9 text-slate-500 text-xs">Searching…</div>}
+            {assetSearching && <div className="absolute right-3 top-9 text-[var(--text-faint)] text-xs">Searching…</div>}
             {assetResults.length > 0 && (
-              <div className="absolute z-10 mt-1 w-full bg-slate-800 border border-white/10 rounded-lg overflow-hidden shadow-xl">
+              <div className="absolute z-10 mt-1 w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg overflow-hidden shadow-xl">
                 {assetResults.map(a => (
                   <button key={a.id} type="button" onClick={() => selectAsset(a)}
-                    className="w-full text-left px-4 py-2.5 hover:bg-white/5 transition-colors">
-                    <div className="text-white text-sm font-medium">{a.name}</div>
-                    <div className="text-slate-500 text-xs">{a.asset_no} · {a.category_name} · {a.warehouse_location}</div>
+                    className="w-full text-left px-4 py-2.5 hover:bg-[var(--bg-surface-hover)] transition-colors">
+                    <div className="text-[var(--text-main)] text-sm font-medium">{a.name}</div>
+                    <div className="text-[var(--text-faint)] text-xs">{a.asset_no} · {a.category_name} · {a.warehouse_location}</div>
                   </button>
                 ))}
               </div>
@@ -548,9 +548,9 @@ function AddCycleModal({ onClose, onCreated, pushToast }: {
             {form.asset_id && (
               <div className="mt-2 grid grid-cols-3 gap-2">
                 {[['Category', form.asset_category], ['Location', form.asset_location], ['Domain', form.asset_domain]].map(([label, val]) => (
-                  <div key={label} className="bg-slate-800/60 border border-white/5 rounded-lg px-3 py-1.5">
-                    <div className="text-[10px] text-slate-500 uppercase tracking-wide">{label}</div>
-                    <div className="text-slate-300 text-xs font-medium truncate">{val || '—'}</div>
+                  <div key={label} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg px-3 py-1.5">
+                    <div className="text-[10px] text-[var(--text-faint)] uppercase tracking-wide">{label}</div>
+                    <div className="text-[var(--text-muted)] text-xs font-medium truncate">{val || '—'}</div>
                   </div>
                 ))}
               </div>
@@ -560,18 +560,18 @@ function AddCycleModal({ onClose, onCreated, pushToast }: {
           {/* Type + Priority */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Maintenance Type</label>
+              <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Maintenance Type</label>
               <select value={form.maintenance_type} onChange={f('maintenance_type')}
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-yellow-500/50 transition-colors">
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-yellow-500/50 transition-colors">
                 {['PREVENTIVE', 'INSPECTION', 'CALIBRATION', 'CLEANING', 'LUBRICATION', 'REPLACEMENT', 'TESTING'].map(t => (
                   <option key={t} value={t}>{t}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Priority</label>
+              <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Priority</label>
               <select value={form.priority} onChange={f('priority')}
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-yellow-500/50 transition-colors">
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-yellow-500/50 transition-colors">
                 {['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
@@ -580,78 +580,78 @@ function AddCycleModal({ onClose, onCreated, pushToast }: {
           {/* Interval + Duration */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Interval (Days)</label>
+              <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Interval (Days)</label>
               <input type="number" min={1} value={form.interval_days} onChange={f('interval_days')}
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-yellow-500/50 transition-colors" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-yellow-500/50 transition-colors" />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Est. Duration (min)</label>
+              <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Est. Duration (min)</label>
               <input type="number" min={0} value={form.estimated_duration_min} onChange={f('estimated_duration_min')}
-                className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-yellow-500/50 transition-colors" />
+                className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-yellow-500/50 transition-colors" />
             </div>
           </div>
 
           {/* First Run Date */}
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">First Run Date</label>
+            <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">First Run Date</label>
             <input type="date" value={form.first_run_date} onChange={f('first_run_date')}
-              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-yellow-500/50 transition-colors" />
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-yellow-500/50 transition-colors" />
           </div>
 
           {/* Assigned To — User Picker */}
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Assigned To</label>
+            <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Assigned To</label>
             <UserPicker value={assignee} onChange={setAssignee} />
             {assignee && (
-              <p className="text-slate-500 text-xs mt-1.5">
+              <p className="text-[var(--text-faint)] text-xs mt-1.5">
                 {assignee.position && <span className="mr-2">{assignee.position}</span>}
-                <span className="text-slate-600">{assignee.email}</span>
+                <span className="text-[var(--text-faint)]">{assignee.email}</span>
               </p>
             )}
           </div>
 
           {/* Notes */}
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">Notes</label>
+            <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">Notes</label>
             <textarea value={form.notes} onChange={f('notes')} rows={2} placeholder="Additional notes..."
-              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-yellow-500/50 transition-colors resize-none" />
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50 transition-colors resize-none" />
           </div>
 
           {/* Checklist Items */}
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Checklist Items</label>
+            <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-2">Checklist Items</label>
             <div className="space-y-2 mb-3">
               {checklistItems.length === 0 && (
-                <p className="text-slate-600 text-xs italic">No checklist items yet. Add items below.</p>
+                <p className="text-[var(--text-faint)] text-xs italic">No checklist items yet. Add items below.</p>
               )}
               {checklistItems.map((item, i) => (
-                <div key={i} className="flex items-center gap-2 bg-slate-800/60 border border-white/5 rounded-lg px-3 py-2">
+                <div key={i} className="flex items-center gap-2 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg px-3 py-2">
                   <span className={`w-2 h-2 rounded-full shrink-0 ${item.is_mandatory ? 'bg-red-400' : 'bg-slate-500'}`} />
-                  <span className="text-slate-300 text-sm flex-1">{item.description}</span>
-                  <span className="text-[10px] text-slate-500">{item.is_mandatory ? 'Required' : 'Optional'}</span>
-                  <button type="button" onClick={() => removeChecklistItem(i)} className="text-slate-600 hover:text-red-400 text-xs ml-1 transition-colors">✕</button>
+                  <span className="text-[var(--text-muted)] text-sm flex-1">{item.description}</span>
+                  <span className="text-[10px] text-[var(--text-faint)]">{item.is_mandatory ? 'Required' : 'Optional'}</span>
+                  <button type="button" onClick={() => removeChecklistItem(i)} className="text-[var(--text-faint)] hover:text-red-400 text-xs ml-1 transition-colors">✕</button>
                 </div>
               ))}
             </div>
             <div className="flex gap-2">
               <input value={newItemDesc} onChange={e => setNewItemDesc(e.target.value)} placeholder="Add checklist item description..."
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addChecklistItem(); }}}
-                className="flex-1 bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm placeholder-slate-600 focus:outline-none focus:border-yellow-500/50 transition-colors" />
-              <label className="flex items-center gap-1.5 text-slate-400 text-xs cursor-pointer select-none">
+                className="flex-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50 transition-colors" />
+              <label className="flex items-center gap-1.5 text-[var(--text-muted)] text-xs cursor-pointer select-none">
                 <input type="checkbox" checked={newItemMandatory} onChange={e => setNewItemMandatory(e.target.checked)} className="accent-red-400" />
                 Mandatory
               </label>
               <button type="button" onClick={addChecklistItem}
-                className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-colors">
+                className="px-3 py-2 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] rounded-lg text-sm font-medium transition-colors">
                 + Add
               </button>
             </div>
           </div>
 
           {/* Footer */}
-          <div className="flex justify-end gap-3 pt-2 border-t border-white/8">
+          <div className="flex justify-end gap-3 pt-2 border-t border-[var(--border-subtle)]">
             <button type="button" onClick={onClose}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors">
+              className="px-4 py-2 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] rounded-lg text-sm font-medium transition-colors">
               Cancel
             </button>
             <button type="submit" disabled={submitting}
@@ -710,23 +710,23 @@ function CycleDetailDrawer({ cycle, onClose, onAction, pushToast }: {
 
   return (
     <div className="fixed inset-0 z-[100] flex justify-end" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-slate-950 w-full max-w-[480px] h-full flex flex-col shadow-2xl border-l border-white/8 overflow-y-auto">
+      <div className="bg-[var(--bg-canvas)] w-full max-w-[480px] h-full flex flex-col shadow-2xl border-l border-[var(--border-subtle)] overflow-y-auto">
         {/* Drawer Header */}
-        <div className="flex items-start justify-between p-6 border-b border-white/8 sticky top-0 bg-slate-950 z-10">
+        <div className="flex items-start justify-between p-6 border-b border-[var(--border-subtle)] sticky top-0 bg-[var(--bg-canvas)] z-10">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-mono text-slate-500">{d.cycle_code}</span>
+              <span className="text-xs font-mono text-[var(--text-faint)]">{d.cycle_code}</span>
               <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${statusBadge(d.status)}`}>{d.status}</span>
             </div>
-            <h2 className="text-white font-bold text-base">{d.name}</h2>
-            <p className="text-slate-400 text-sm mt-0.5">{d.asset_name ?? 'Unknown Asset'}</p>
+            <h2 className="text-[var(--text-main)] font-bold text-base">{d.name}</h2>
+            <p className="text-[var(--text-muted)] text-sm mt-0.5">{d.asset_name ?? 'Unknown Asset'}</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/5 mt-1">✕</button>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[var(--bg-surface-hover)] mt-1">✕</button>
         </div>
 
         {loading && (
           <div className="flex-1 flex items-center justify-center">
-            <div className="w-6 h-6 border-2 border-slate-700 border-t-yellow-500 rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-[var(--border-subtle)] border-t-yellow-500 rounded-full animate-spin" />
           </div>
         )}
 
@@ -744,14 +744,14 @@ function CycleDetailDrawer({ cycle, onClose, onAction, pushToast }: {
                 ['Assigned To', d.assigned_to || '—'],
                 ['Category', d.category || '—'],
               ].map(([k, v]) => k === 'Days Remaining' ? (
-                <div key={k} className="bg-slate-800/50 rounded-lg p-3">
-                  <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">{k}</div>
+                <div key={k} className="bg-[var(--bg-surface)]/50 rounded-lg p-3">
+                  <div className="text-[10px] text-[var(--text-faint)] uppercase tracking-wide mb-1">{k}</div>
                   {daysRemainingPill(d.days_remaining)}
                 </div>
               ) : (
-                <div key={k} className="bg-slate-800/50 rounded-lg p-3">
-                  <div className="text-[10px] text-slate-500 uppercase tracking-wide mb-1">{k}</div>
-                  <div className="text-slate-200 text-sm font-medium truncate">{v || '—'}</div>
+                <div key={k} className="bg-[var(--bg-surface)]/50 rounded-lg p-3">
+                  <div className="text-[10px] text-[var(--text-faint)] uppercase tracking-wide mb-1">{k}</div>
+                  <div className="text-[var(--text-main)] text-sm font-medium truncate">{v || '—'}</div>
                 </div>
               ))}
             </div>
@@ -759,20 +759,20 @@ function CycleDetailDrawer({ cycle, onClose, onAction, pushToast }: {
             {/* Description */}
             {d.description && (
               <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Description</p>
-                <p className="text-slate-300 text-sm leading-relaxed">{d.description}</p>
+                <p className="text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wide mb-1.5">Description</p>
+                <p className="text-[var(--text-muted)] text-sm leading-relaxed">{d.description}</p>
               </div>
             )}
 
             {/* Checklist */}
             {checklist.length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Checklist ({checklist.length} items)</p>
+                <p className="text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wide mb-2">Checklist ({checklist.length} items)</p>
                 <div className="space-y-1.5">
                   {checklist.map((item, i) => (
-                    <div key={i} className="flex items-center gap-2 bg-slate-800/40 rounded-lg px-3 py-2">
+                    <div key={i} className="flex items-center gap-2 bg-[var(--bg-surface)]/40 rounded-lg px-3 py-2">
                       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${item.is_mandatory ? 'bg-red-400' : 'bg-slate-500'}`} />
-                      <span className="text-slate-300 text-sm flex-1">{item.description}</span>
+                      <span className="text-[var(--text-muted)] text-sm flex-1">{item.description}</span>
                       {item.is_mandatory && <span className="text-[10px] text-red-400">Required</span>}
                     </div>
                   ))}
@@ -782,22 +782,22 @@ function CycleDetailDrawer({ cycle, onClose, onAction, pushToast }: {
 
             {/* Last 5 Tickets */}
             <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Recent Tickets</p>
+              <p className="text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wide mb-2">Recent Tickets</p>
               {tickets.length === 0 ? (
-                <p className="text-slate-600 text-sm italic">No tickets generated yet</p>
+                <p className="text-[var(--text-faint)] text-sm italic">No tickets generated yet</p>
               ) : (
                 <div className="space-y-2">
                   {tickets.map(tk => (
-                    <div key={tk.id} className="flex items-center justify-between bg-slate-800/40 rounded-lg px-3 py-2">
+                    <div key={tk.id} className="flex items-center justify-between bg-[var(--bg-surface)]/40 rounded-lg px-3 py-2">
                       <div>
-                        <span className="text-xs font-mono text-slate-400">{tk.ticket_code}</span>
-                        <div className="text-slate-300 text-xs">{formatDate(tk.scheduled_date)}</div>
+                        <span className="text-xs font-mono text-[var(--text-muted)]">{tk.ticket_code}</span>
+                        <div className="text-[var(--text-muted)] text-xs">{formatDate(tk.scheduled_date)}</div>
                       </div>
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase ${
                         tk.status === 'COMPLETED' ? 'bg-emerald-500/20 text-emerald-400' :
                         tk.status === 'IN_PROGRESS' ? 'bg-amber-500/20 text-amber-400' :
                         tk.status === 'OPEN' ? 'bg-blue-500/20 text-blue-400' :
-                        'bg-slate-700 text-slate-500'
+                        'bg-[var(--bg-surface-hover)] text-[var(--text-faint)]'
                       }`}>{tk.status}</span>
                     </div>
                   ))}
@@ -808,26 +808,26 @@ function CycleDetailDrawer({ cycle, onClose, onAction, pushToast }: {
             {/* Notes */}
             {d.notes && (
               <div>
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Notes</p>
-                <p className="text-slate-400 text-sm">{d.notes}</p>
+                <p className="text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wide mb-1.5">Notes</p>
+                <p className="text-[var(--text-muted)] text-sm">{d.notes}</p>
               </div>
             )}
           </div>
         )}
 
         {/* Actions */}
-        <div className="p-6 border-t border-white/8 flex gap-2 flex-wrap">
+        <div className="p-6 border-t border-[var(--border-subtle)] flex gap-2 flex-wrap">
           {d.status === 'ACTIVE' && (
             <button onClick={() => doAction('pause')} disabled={!!acting}
-              className="flex-1 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50">
-              {acting === 'pause' ? <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : '⏸'}
+              className="flex-1 px-3 py-2 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50">
+              {acting === 'pause' ? <span className="w-3.5 h-3.5 border-2 border-[var(--border-strong)] border-t-white rounded-full animate-spin" /> : '⏸'}
               Pause
             </button>
           )}
           {d.status === 'PAUSED' && (
             <button onClick={() => doAction('resume')} disabled={!!acting}
               className="flex-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50">
-              {acting === 'resume' ? <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : '▶'}
+              {acting === 'resume' ? <span className="w-3.5 h-3.5 border-2 border-[var(--border-strong)] border-t-white rounded-full animate-spin" /> : '▶'}
               Resume
             </button>
           )}
@@ -970,13 +970,13 @@ export default function SpmDashboardPage() {
       {/* ── Header ── */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">🔧 Scheduled Preventive Maintenance</h1>
-          <p className="text-slate-500 text-xs font-mono mt-1 uppercase tracking-widest">SPM_ALGORITHM_OS</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">🔧 Scheduled Preventive Maintenance</h1>
+          <p className="text-[var(--text-faint)] text-xs font-mono mt-1 uppercase tracking-widest">SPM_ALGORITHM_OS</p>
           {s?.last_run_at && (
-            <p className="text-slate-500 text-xs mt-1">Last run: <span className="text-slate-400">{formatDateTime(s.last_run_at)}</span></p>
+            <p className="text-[var(--text-faint)] text-xs mt-1">Last run: <span className="text-[var(--text-muted)]">{formatDateTime(s.last_run_at)}</span></p>
           )}
           {!s?.last_run_at && (
-            <p className="text-slate-600 text-xs mt-1">Scheduler has never run</p>
+            <p className="text-[var(--text-faint)] text-xs mt-1">Scheduler has never run</p>
           )}
         </div>
         <div className="flex items-center gap-3 shrink-0">
@@ -992,7 +992,7 @@ export default function SpmDashboardPage() {
           </button>
           <button
             onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-lg text-sm border border-white/10 transition-colors"
+            className="flex items-center gap-2 px-4 py-2.5 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] font-semibold rounded-lg text-sm border border-[var(--border-subtle)] transition-colors"
           >
             ⊕ New Cycle
           </button>
@@ -1003,72 +1003,72 @@ export default function SpmDashboardPage() {
       {/* ── KPI Strip ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Cycles */}
-        <div className="bg-slate-900 border border-white/8 rounded-xl p-5">
-          <p className="text-slate-500 text-xs font-semibold uppercase tracking-wide mb-3">Total Cycles</p>
-          <p className="text-3xl font-bold text-white">{s?.total_cycles ?? '—'}</p>
-          <p className="text-slate-600 text-xs mt-1">{s?.paused_cycles ?? 0} paused</p>
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5">
+          <p className="text-[var(--text-faint)] text-xs font-semibold uppercase tracking-wide mb-3">Total Cycles</p>
+          <p className="text-3xl font-bold text-[var(--text-main)]">{s?.total_cycles ?? '—'}</p>
+          <p className="text-[var(--text-faint)] text-xs mt-1">{s?.paused_cycles ?? 0} paused</p>
         </div>
         {/* Active */}
-        <div className="bg-slate-900 border border-white/8 rounded-xl p-5">
-          <p className="text-slate-500 text-xs font-semibold uppercase tracking-wide mb-3">Active</p>
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5">
+          <p className="text-[var(--text-faint)] text-xs font-semibold uppercase tracking-wide mb-3">Active</p>
           <p className="text-3xl font-bold text-emerald-400">{s?.active_cycles ?? '—'}</p>
-          <p className="text-slate-600 text-xs mt-1">{s?.completed_this_month ?? 0} done this month</p>
+          <p className="text-[var(--text-faint)] text-xs mt-1">{s?.completed_this_month ?? 0} done this month</p>
         </div>
         {/* Due in 7 Days */}
-        <div className="bg-slate-900 border border-white/8 rounded-xl p-5">
-          <p className="text-slate-500 text-xs font-semibold uppercase tracking-wide mb-3">Due in 7 Days</p>
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5">
+          <p className="text-[var(--text-faint)] text-xs font-semibold uppercase tracking-wide mb-3">Due in 7 Days</p>
           <p className="text-3xl font-bold text-amber-400">{s?.due_in_7_days ?? '—'}</p>
-          <p className="text-slate-600 text-xs mt-1">{s?.open_tickets ?? 0} open tickets</p>
+          <p className="text-[var(--text-faint)] text-xs mt-1">{s?.open_tickets ?? 0} open tickets</p>
         </div>
         {/* Overdue */}
-        <div className={`bg-slate-900 rounded-xl p-5 transition-all ${(s?.overdue ?? 0) > 0 ? 'border border-red-500/50 shadow-[0_0_12px_rgba(239,68,68,0.15)] animate-pulse-border' : 'border border-white/8'}`}>
-          <p className="text-slate-500 text-xs font-semibold uppercase tracking-wide mb-3">Overdue</p>
-          <p className={`text-3xl font-bold ${(s?.overdue ?? 0) > 0 ? 'text-red-400' : 'text-slate-400'}`}>{s?.overdue ?? '—'}</p>
-          <p className="text-slate-600 text-xs mt-1">{(s?.overdue ?? 0) > 0 ? 'Action required' : 'All on schedule'}</p>
+        <div className={`bg-[var(--bg-surface)] rounded-xl p-5 transition-all ${(s?.overdue ?? 0) > 0 ? 'border border-red-500/50 shadow-[0_0_12px_rgba(239,68,68,0.15)] animate-pulse-border' : 'border border-[var(--border-subtle)]'}`}>
+          <p className="text-[var(--text-faint)] text-xs font-semibold uppercase tracking-wide mb-3">Overdue</p>
+          <p className={`text-3xl font-bold ${(s?.overdue ?? 0) > 0 ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>{s?.overdue ?? '—'}</p>
+          <p className="text-[var(--text-faint)] text-xs mt-1">{(s?.overdue ?? 0) > 0 ? 'Action required' : 'All on schedule'}</p>
         </div>
       </div>
 
       {/* ── Filters ── */}
       <div className="flex flex-wrap gap-3 items-center">
         <div className="relative flex-1 min-w-[200px]">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">🔍</span>
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)] text-sm">🔍</span>
           <input
             value={search}
             onChange={e => handleSearch(e.target.value)}
             placeholder="Search by name, code, or asset…"
-            className="w-full pl-9 pr-4 py-2.5 bg-slate-800 border border-white/10 rounded-lg text-white text-sm placeholder-slate-600 focus:outline-none focus:border-yellow-500/50 transition-colors"
+            className="w-full pl-9 pr-4 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm placeholder-[var(--text-faint)] focus:outline-none focus:border-yellow-500/50 transition-colors"
           />
         </div>
         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-          className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-yellow-500/50 transition-colors">
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-yellow-500/50 transition-colors">
           {STATUSES_FILTER.map(s => <option key={s} value={s}>{s === 'ALL' ? 'All Statuses' : s}</option>)}
         </select>
         <select value={priorityFilter} onChange={e => setPriorityFilter(e.target.value)}
-          className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-yellow-500/50 transition-colors">
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-yellow-500/50 transition-colors">
           {PRIORITIES_FILTER.map(p => <option key={p} value={p}>{p === 'ALL' ? 'All Priorities' : p}</option>)}
         </select>
         <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
-          className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-yellow-500/50 transition-colors">
+          className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-yellow-500/50 transition-colors">
           {MAINTENANCE_TYPES.map(t => <option key={t} value={t}>{t === 'ALL' ? 'All Types' : t}</option>)}
         </select>
       </div>
 
       {/* ── Cycles Table ── */}
-      <div className="bg-slate-900 border border-white/8 rounded-xl overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/8">
-          <h2 className="text-white font-semibold text-sm">Maintenance Cycles</h2>
-          <span className="text-slate-500 text-xs">{cycles.length} cycle{cycles.length !== 1 ? 's' : ''}</span>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--border-subtle)]">
+          <h2 className="text-[var(--text-main)] font-semibold text-sm">Maintenance Cycles</h2>
+          <span className="text-[var(--text-faint)] text-xs">{cycles.length} cycle{cycles.length !== 1 ? 's' : ''}</span>
         </div>
 
         {cyclesLoading ? (
           <div className="flex items-center justify-center py-16">
-            <div className="w-6 h-6 border-2 border-slate-700 border-t-yellow-500 rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-[var(--border-subtle)] border-t-yellow-500 rounded-full animate-spin" />
           </div>
         ) : cycles.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
             <span className="text-4xl">🔧</span>
-            <p className="text-slate-400 font-medium">No maintenance cycles found</p>
-            <p className="text-slate-600 text-sm">Create your first cycle to start tracking preventive maintenance</p>
+            <p className="text-[var(--text-muted)] font-medium">No maintenance cycles found</p>
+            <p className="text-[var(--text-faint)] text-sm">Create your first cycle to start tracking preventive maintenance</p>
             <button onClick={() => setShowAddModal(true)}
               className="mt-2 px-4 py-2 bg-yellow-500 hover:bg-yellow-400 text-black font-semibold rounded-lg text-sm transition-colors">
               ⊕ New Cycle
@@ -1078,7 +1078,7 @@ export default function SpmDashboardPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-slate-500 text-xs uppercase tracking-wide border-b border-white/8">
+                <tr className="text-[var(--text-faint)] text-xs uppercase tracking-wide border-b border-[var(--border-subtle)]">
                   <th className="text-left px-4 py-3 font-semibold">Cycle Code</th>
                   <th className="text-left px-4 py-3 font-semibold">Asset</th>
                   <th className="text-left px-4 py-3 font-semibold">Category</th>
@@ -1096,24 +1096,24 @@ export default function SpmDashboardPage() {
                   <tr
                     key={cycle.id}
                     onClick={() => setSelectedCycle(cycle)}
-                    className={`cursor-pointer transition-colors hover:bg-white/5 ${idx % 2 === 0 ? 'bg-slate-800/40' : 'bg-slate-900'}`}
+                    className={`cursor-pointer transition-colors hover:bg-[var(--bg-surface-hover)] ${idx % 2 === 0 ? 'bg-[var(--bg-surface)]/40' : 'bg-[var(--bg-surface)]'}`}
                   >
-                    <td className="px-4 py-3 font-mono text-xs text-slate-400">{cycle.cycle_code}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-[var(--text-muted)]">{cycle.cycle_code}</td>
                     <td className="px-4 py-3">
-                      <div className="text-white font-medium text-sm">{cycle.asset_name ?? '—'}</div>
-                      {cycle.asset_no && <div className="text-slate-500 text-xs">{cycle.asset_no}</div>}
+                      <div className="text-[var(--text-main)] font-medium text-sm">{cycle.asset_name ?? '—'}</div>
+                      {cycle.asset_no && <div className="text-[var(--text-faint)] text-xs">{cycle.asset_no}</div>}
                     </td>
-                    <td className="px-4 py-3 text-slate-400 text-xs">{cycle.category ?? '—'}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{cycle.category ?? '—'}</td>
                     <td className="px-4 py-3">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-700/60 text-slate-400 uppercase tracking-wide">{cycle.maintenance_type}</span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-[var(--bg-surface-hover)]/60 text-[var(--text-muted)] uppercase tracking-wide">{cycle.maintenance_type}</span>
                     </td>
-                    <td className="px-4 py-3 text-center text-slate-400 text-xs">{cycle.interval_days}d</td>
+                    <td className="px-4 py-3 text-center text-[var(--text-muted)] text-xs">{cycle.interval_days}d</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${priorityBadge(cycle.priority)}`}>
                         {cycle.priority}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-slate-400 text-xs whitespace-nowrap">{formatDate(cycle.next_run_date)}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)] text-xs whitespace-nowrap">{formatDate(cycle.next_run_date)}</td>
                     <td className="px-4 py-3 text-center">{daysRemainingPill(cycle.days_remaining)}</td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${statusBadge(cycle.status)}`}>
@@ -1127,7 +1127,7 @@ export default function SpmDashboardPage() {
                           <button
                             onClick={e => cycleAction(cycle, 'pause', e)}
                             title="Pause"
-                            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-slate-700 text-slate-400 hover:text-white transition-colors text-xs"
+                            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors text-xs"
                           >⏸</button>
                         )}
                         {cycle.status === 'PAUSED' && (
@@ -1141,14 +1141,14 @@ export default function SpmDashboardPage() {
                         <button
                           onClick={e => { e.stopPropagation(); setSelectedCycle(cycle); }}
                           title="View Details"
-                          className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-slate-700 text-slate-400 hover:text-white transition-colors text-xs"
+                          className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors text-xs"
                         >✎</button>
                         {/* Archive */}
                         {cycle.status !== 'ARCHIVED' && (
                           <button
                             onClick={e => cycleAction(cycle, 'archive', e)}
                             title="Archive"
-                            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-red-500/20 text-slate-500 hover:text-red-400 transition-colors text-xs"
+                            className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-red-500/20 text-[var(--text-faint)] hover:text-red-400 transition-colors text-xs"
                           >🗑</button>
                         )}
                       </div>

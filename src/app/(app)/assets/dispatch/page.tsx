@@ -32,7 +32,7 @@ interface AssetOption {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  PENDING: 'bg-slate-700 text-slate-400 border-slate-600',
+  PENDING: 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border-[var(--border-strong)]',
   DISPATCHED: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
   ACCEPTED: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
   COMPLETED: 'bg-green-500/20 text-green-400 border-green-500/30',
@@ -120,10 +120,10 @@ export default function FieldDispatchPage() {
 
   if (loading) return (
     <div className="p-8 space-y-4">
-      <div className="h-8 bg-slate-800 rounded w-48 animate-pulse" />
+      <div className="h-8 bg-[var(--bg-surface)] rounded w-48 animate-pulse" />
       <div className="grid grid-cols-2 gap-6">
-        <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-20 bg-slate-800 rounded-xl animate-pulse" />)}</div>
-        <div className="h-96 bg-slate-800 rounded-xl animate-pulse" />
+        <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-20 bg-[var(--bg-surface)] rounded-xl animate-pulse" />)}</div>
+        <div className="h-96 bg-[var(--bg-surface)] rounded-xl animate-pulse" />
       </div>
     </div>
   );
@@ -133,35 +133,35 @@ export default function FieldDispatchPage() {
       {toast && <div className="fixed top-4 right-4 z-50 bg-emerald-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm">{toast}</div>}
 
       <div className="flex items-center justify-between">
-        <div><h1 className="text-2xl font-bold text-white">Field Dispatch</h1><p className="text-slate-400 text-sm">Manage asset dispatches to field technicians</p></div>
-        <button onClick={() => { setShowCreate(true); setSelected(null); }} className="bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-semibold px-4 py-2 rounded-lg text-sm">+ New Dispatch</button>
+        <div><h1 className="text-2xl font-bold text-[var(--text-main)]">Field Dispatch</h1><p className="text-[var(--text-muted)] text-sm">Manage asset dispatches to field technicians</p></div>
+        <button onClick={() => { setShowCreate(true); setSelected(null); }} className="bg-yellow-400 hover:bg-yellow-300 text-white font-semibold px-4 py-2 rounded-lg text-sm">+ New Dispatch</button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left: Dispatch List */}
         <div className="space-y-4">
           <div className="flex gap-3">
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white flex-1">
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] flex-1">
               {STATUSES.map(s => <option key={s}>{s}</option>)}
             </select>
-            <input value={techFilter} onChange={e => setTechFilter(e.target.value)} placeholder="Filter by technician..." className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white flex-1 placeholder-slate-500" />
+            <input value={techFilter} onChange={e => setTechFilter(e.target.value)} placeholder="Filter by technician..." className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] flex-1 placeholder-[var(--text-faint)]" />
           </div>
 
           {filtered.length === 0 ? (
-            <div className="bg-slate-900 border border-white/8 rounded-xl p-10 text-center text-slate-500">
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-10 text-center text-[var(--text-faint)]">
               <div className="text-4xl mb-2">🚚</div><p>No dispatches found.</p>
             </div>
           ) : filtered.map(d => (
             <button key={d.id} onClick={() => { setSelected(d); setShowCreate(false); }}
-              className={`w-full text-left bg-slate-900 border rounded-xl p-4 transition-all ${selected?.id === d.id ? 'border-yellow-500/50 bg-yellow-500/5' : 'border-white/8 hover:border-white/20'}`}>
+              className={`w-full text-left bg-[var(--bg-surface)] border rounded-xl p-4 transition-all ${selected?.id === d.id ? 'border-yellow-500/50 bg-yellow-500/5' : 'border-[var(--border-subtle)] hover:border-[var(--border-strong)]'}`}>
               <div className="flex items-start justify-between mb-2">
                 <div>
                   <p className="text-yellow-300 font-mono text-xs">{d.dispatch_no}</p>
-                  <p className="text-white font-semibold text-sm">{d.technician_name}</p>
+                  <p className="text-[var(--text-main)] font-semibold text-sm">{d.technician_name}</p>
                 </div>
                 <span className={`inline-block px-2 py-0.5 rounded-full text-xs border ${STATUS_COLORS[d.status]}`}>{d.status}</span>
               </div>
-              <div className="flex items-center gap-4 text-xs text-slate-400">
+              <div className="flex items-center gap-4 text-xs text-[var(--text-muted)]">
                 <span>📦 {d.items?.length ?? 0} item(s)</span>
                 {d.work_order_no && <span>WO: {d.work_order_no}</span>}
                 {d.dispatched_at && <span>{new Date(d.dispatched_at).toLocaleDateString()}</span>}
@@ -173,8 +173,8 @@ export default function FieldDispatchPage() {
         {/* Right: Create / Detail */}
         <div>
           {showCreate && (
-            <div className="bg-slate-900 border border-white/8 rounded-xl p-5 space-y-4">
-              <h2 className="text-white font-semibold">New Dispatch</h2>
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5 space-y-4">
+              <h2 className="text-[var(--text-main)] font-semibold">New Dispatch</h2>
               <div className="grid grid-cols-2 gap-3">
                 {[
                   { label: 'Technician Name*', key: 'technician_name' },
@@ -183,14 +183,14 @@ export default function FieldDispatchPage() {
                   { label: 'Work Order No', key: 'work_order_no' },
                 ].map(f => (
                   <div key={f.key}>
-                    <label className="block text-xs text-slate-400 mb-1">{f.label}</label>
-                    <input value={(form as unknown as Record<string, string>)[f.key]} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">{f.label}</label>
+                    <input value={(form as unknown as Record<string, string>)[f.key]} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
                   </div>
                 ))}
               </div>
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs text-slate-400 font-medium">Items</label>
+                  <label className="text-xs text-[var(--text-muted)] font-medium">Items</label>
                   <button onClick={addItem} className="text-xs text-yellow-400 hover:text-yellow-300">+ Add Item</button>
                 </div>
                 <div className="space-y-2">
@@ -201,13 +201,13 @@ export default function FieldDispatchPage() {
                           const a = assets.find(x => x.id === e.target.value);
                           setItem(i, 'asset_id', e.target.value);
                           setItem(i, 'asset_name', a?.name ?? '');
-                        }} className="w-full bg-slate-800 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white">
+                        }} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2 py-1.5 text-xs text-[var(--text-main)]">
                           <option value="">— Select Asset —</option>
                           {assets.map(a => <option key={a.id} value={a.id}>{a.name} ({a.asset_no})</option>)}
                         </select>
                       </div>
                       <div className="w-20">
-                        <input type="number" min={1} value={item.quantity} onChange={e => setItem(i, 'quantity', parseInt(e.target.value) || 1)} className="w-full bg-slate-800 border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white text-center" />
+                        <input type="number" min={1} value={item.quantity} onChange={e => setItem(i, 'quantity', parseInt(e.target.value) || 1)} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-2 py-1.5 text-xs text-[var(--text-main)] text-center" />
                       </div>
                       {form.items.length > 1 && (
                         <button onClick={() => removeItem(i)} className="text-red-400 hover:text-red-300 text-sm mt-1">✕</button>
@@ -217,8 +217,8 @@ export default function FieldDispatchPage() {
                 </div>
               </div>
               <div className="flex gap-3 justify-end pt-2">
-                <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
-                <button onClick={submitCreate} disabled={submitting || !form.technician_name} className="bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-semibold px-5 py-2 rounded-lg text-sm disabled:opacity-50">
+                <button onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-main)]">Cancel</button>
+                <button onClick={submitCreate} disabled={submitting || !form.technician_name} className="bg-yellow-400 hover:bg-yellow-300 text-white font-semibold px-5 py-2 rounded-lg text-sm disabled:opacity-50">
                   {submitting ? 'Creating...' : 'Create Dispatch'}
                 </button>
               </div>
@@ -226,28 +226,28 @@ export default function FieldDispatchPage() {
           )}
 
           {selected && !showCreate && (
-            <div className="bg-slate-900 border border-white/8 rounded-xl p-5 space-y-5">
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5 space-y-5">
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-yellow-300 font-mono text-xs">{selected.dispatch_no}</p>
-                  <h2 className="text-white font-semibold text-lg">{selected.technician_name}</h2>
-                  {selected.technician_phone && <p className="text-slate-400 text-sm">{selected.technician_phone}</p>}
+                  <h2 className="text-[var(--text-main)] font-semibold text-lg">{selected.technician_name}</h2>
+                  {selected.technician_phone && <p className="text-[var(--text-muted)] text-sm">{selected.technician_phone}</p>}
                 </div>
                 <span className={`inline-block px-3 py-1 rounded-full text-xs border ${STATUS_COLORS[selected.status]}`}>{selected.status}</span>
               </div>
 
               <div className="grid grid-cols-2 gap-3 text-sm">
-                {selected.from_warehouse && <div><span className="text-slate-400">Warehouse: </span><span className="text-slate-200">{selected.from_warehouse}</span></div>}
-                {selected.work_order_no && <div><span className="text-slate-400">Work Order: </span><span className="text-slate-200">{selected.work_order_no}</span></div>}
-                {selected.dispatched_at && <div><span className="text-slate-400">Dispatched: </span><span className="text-slate-200">{new Date(selected.dispatched_at).toLocaleString()}</span></div>}
+                {selected.from_warehouse && <div><span className="text-[var(--text-muted)]">Warehouse: </span><span className="text-[var(--text-main)]">{selected.from_warehouse}</span></div>}
+                {selected.work_order_no && <div><span className="text-[var(--text-muted)]">Work Order: </span><span className="text-[var(--text-main)]">{selected.work_order_no}</span></div>}
+                {selected.dispatched_at && <div><span className="text-[var(--text-muted)]">Dispatched: </span><span className="text-[var(--text-main)]">{new Date(selected.dispatched_at).toLocaleString()}</span></div>}
               </div>
 
               {/* Items Table */}
               <div>
-                <h3 className="text-white font-medium text-sm mb-2">Items</h3>
+                <h3 className="text-[var(--text-main)] font-medium text-sm mb-2">Items</h3>
                 <table className="w-full text-xs">
-                  <thead className="border-b border-white/8">
-                    <tr className="text-slate-400">
+                  <thead className="border-b border-[var(--border-subtle)]">
+                    <tr className="text-[var(--text-muted)]">
                       <th className="text-left pb-2">Asset</th>
                       <th className="text-right pb-2">Disp.</th>
                       <th className="text-right pb-2">Acc.</th>
@@ -257,7 +257,7 @@ export default function FieldDispatchPage() {
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {(selected.items ?? []).map((it, i) => (
-                      <tr key={i} className="text-slate-300">
+                      <tr key={i} className="text-[var(--text-muted)]">
                         <td className="py-2">{it.asset_name}</td>
                         <td className="py-2 text-right">{it.qty_dispatched ?? it.quantity}</td>
                         <td className="py-2 text-right">{it.qty_accepted ?? '—'}</td>
@@ -270,7 +270,7 @@ export default function FieldDispatchPage() {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex flex-wrap gap-2 pt-2 border-t border-white/8">
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-[var(--border-subtle)]">
                 {selected.status === 'DISPATCHED' && (
                   <button onClick={() => updateStatus(selected.id, 'ACCEPTED')} disabled={submitting} className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg text-sm disabled:opacity-50">✓ Mark Accepted</button>
                 )}
@@ -288,7 +288,7 @@ export default function FieldDispatchPage() {
           )}
 
           {!selected && !showCreate && (
-            <div className="bg-slate-900 border border-white/8 rounded-xl p-12 text-center text-slate-500">
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-12 text-center text-[var(--text-faint)]">
               <div className="text-4xl mb-2">🚚</div>
               <p>Select a dispatch or create a new one</p>
             </div>

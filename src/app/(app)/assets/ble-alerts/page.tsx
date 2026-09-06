@@ -35,7 +35,7 @@ const STATUS_STYLES: Record<string, string> = {
   OPEN: 'bg-red-500/20 text-red-400 border-red-500/40',
   ACKNOWLEDGED: 'bg-amber-500/20 text-amber-400 border-amber-500/40',
   RESOLVED: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40',
-  FALSE_POSITIVE: 'bg-slate-700 text-slate-400 border-slate-600',
+  FALSE_POSITIVE: 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border-[var(--border-strong)]',
 };
 
 function RelativeTime({ dt }: { dt: string }) {
@@ -45,7 +45,7 @@ function RelativeTime({ dt }: { dt: string }) {
   else if (diff < 3600) label = `${Math.floor(diff / 60)}m ago`;
   else if (diff < 86400) label = `${Math.floor(diff / 3600)}h ago`;
   else label = `${Math.floor(diff / 86400)}d ago`;
-  return <span title={new Date(dt).toLocaleString()} className="text-slate-400 text-xs cursor-default">{label}</span>;
+  return <span title={new Date(dt).toLocaleString()} className="text-[var(--text-muted)] text-xs cursor-default">{label}</span>;
 }
 
 export default function BLEAlertsPage() {
@@ -136,10 +136,10 @@ export default function BLEAlertsPage() {
 
   const timelineStep = (label: string, timestamp?: string, active = false) => (
     <div className={`flex items-start gap-3 ${active ? 'opacity-100' : 'opacity-40'}`}>
-      <div className={`w-3 h-3 rounded-full mt-0.5 flex-shrink-0 ${active ? 'bg-yellow-400' : 'bg-slate-600'}`} />
+      <div className={`w-3 h-3 rounded-full mt-0.5 flex-shrink-0 ${active ? 'bg-yellow-400' : 'bg-[var(--bg-surface-hover)]'}`} />
       <div>
-        <p className={`text-xs font-medium ${active ? 'text-white' : 'text-slate-500'}`}>{label}</p>
-        {timestamp && <p className="text-xs text-slate-500">{new Date(timestamp).toLocaleString()}</p>}
+        <p className={`text-xs font-medium ${active ? 'text-[var(--text-main)]' : 'text-[var(--text-faint)]'}`}>{label}</p>
+        {timestamp && <p className="text-xs text-[var(--text-faint)]">{new Date(timestamp).toLocaleString()}</p>}
       </div>
     </div>
   );
@@ -155,10 +155,10 @@ export default function BLEAlertsPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">🚨 BLE Movement Alerts</h1>
-          <p className="text-slate-400 text-xs mt-1">Zone violation alerts from BLE tracking</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">🚨 BLE Movement Alerts</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-1">Zone violation alerts from BLE tracking</p>
         </div>
-        <button onClick={load} className="text-xs bg-slate-800 border border-white/8 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">
+        <button onClick={load} className="text-xs bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] px-3 py-1.5 rounded-lg">
           Refresh
         </button>
       </div>
@@ -172,16 +172,16 @@ export default function BLEAlertsPage() {
           { label: 'Acknowledged', value: ackCount, color: 'text-amber-400', bg: 'border-amber-500/20' },
           { label: 'Resolved', value: resolvedCount, color: 'text-emerald-400', bg: 'border-emerald-500/20' },
         ].map(k => (
-          <div key={k.label} className={`bg-slate-900 border ${k.bg} rounded-xl p-5`}>
+          <div key={k.label} className={`bg-[var(--bg-surface)] border ${k.bg} rounded-xl p-5`}>
             {loading ? (
               <div className="space-y-2">
-                <div className="h-8 bg-slate-800 rounded animate-pulse w-12" />
-                <div className="h-3 bg-slate-800 rounded animate-pulse w-24" />
+                <div className="h-8 bg-[var(--bg-surface)] rounded animate-pulse w-12" />
+                <div className="h-3 bg-[var(--bg-surface)] rounded animate-pulse w-24" />
               </div>
             ) : (
               <>
                 <p className={`text-3xl font-bold ${k.color}`}>{k.value}</p>
-                <p className="text-slate-400 text-sm mt-1">{k.label}</p>
+                <p className="text-[var(--text-muted)] text-sm mt-1">{k.label}</p>
               </>
             )}
           </div>
@@ -189,14 +189,14 @@ export default function BLEAlertsPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-slate-900 border border-white/8 rounded-xl p-4">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div>
-            <label className="block text-xs text-slate-400 mb-1">Status</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Status</label>
             <select
               value={statusFilter}
               onChange={e => setStatusFilter(e.target.value)}
-              className="w-full bg-slate-800 border border-white/8 rounded-lg px-3 py-2 text-sm text-white"
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]"
             >
               <option value="">All Statuses</option>
               {['OPEN', 'ACKNOWLEDGED', 'RESOLVED', 'FALSE_POSITIVE'].map(s => (
@@ -205,11 +205,11 @@ export default function BLEAlertsPage() {
             </select>
           </div>
           <div>
-            <label className="block text-xs text-slate-400 mb-1">Severity</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Severity</label>
             <select
               value={severityFilter}
               onChange={e => setSeverityFilter(e.target.value)}
-              className="w-full bg-slate-800 border border-white/8 rounded-lg px-3 py-2 text-sm text-white"
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]"
             >
               <option value="">All Severities</option>
               {['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(s => (
@@ -218,28 +218,28 @@ export default function BLEAlertsPage() {
             </select>
           </div>
           <div>
-            <label className="block text-xs text-slate-400 mb-1">From</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">From</label>
             <input
               type="datetime-local"
               value={fromFilter}
               onChange={e => setFromFilter(e.target.value)}
-              className="w-full bg-slate-800 border border-white/8 rounded-lg px-3 py-2 text-sm text-white"
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]"
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-400 mb-1">To</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">To</label>
             <input
               type="datetime-local"
               value={toFilter}
               onChange={e => setToFilter(e.target.value)}
-              className="w-full bg-slate-800 border border-white/8 rounded-lg px-3 py-2 text-sm text-white"
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]"
             />
           </div>
         </div>
         <div className="flex justify-end mt-2">
           <button
             onClick={() => { setStatusFilter(''); setSeverityFilter(''); setFromFilter(''); setToFilter(''); }}
-            className="text-xs text-slate-400 hover:text-white"
+            className="text-xs text-[var(--text-muted)] hover:text-[var(--text-main)]"
           >
             Clear filters
           </button>
@@ -247,9 +247,9 @@ export default function BLEAlertsPage() {
       </div>
 
       {/* Alerts Table */}
-      <div className="bg-slate-900 border border-white/8 rounded-xl overflow-hidden">
-        <div className="px-5 py-3 border-b border-white/8 flex items-center justify-between">
-          <span className="text-sm text-slate-400">{filteredAlerts.length} alerts</span>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
+        <div className="px-5 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
+          <span className="text-sm text-[var(--text-muted)]">{filteredAlerts.length} alerts</span>
           {openCount > 0 && (
             <span className="text-xs bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-full animate-pulse">
               {openCount} require attention
@@ -258,8 +258,8 @@ export default function BLEAlertsPage() {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-slate-800/50 border-b border-white/8">
-              <tr className="text-slate-400 text-xs uppercase">
+            <thead className="bg-[var(--bg-surface)]/50 border-b border-[var(--border-subtle)]">
+              <tr className="text-[var(--text-muted)] text-xs uppercase">
                 {['Time', 'Asset', 'Tag MAC', 'Zone Transition', 'Severity', 'Status', 'Actions'].map(h => (
                   <th key={h} className="text-left px-4 py-3 font-medium">{h}</th>
                 ))}
@@ -271,14 +271,14 @@ export default function BLEAlertsPage() {
                   <tr key={i}>
                     {Array.from({ length: 7 }).map((_, j) => (
                       <td key={j} className="px-4 py-3">
-                        <div className="h-4 bg-slate-800 rounded animate-pulse" />
+                        <div className="h-4 bg-[var(--bg-surface)] rounded animate-pulse" />
                       </td>
                     ))}
                   </tr>
                 ))
               ) : filteredAlerts.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-16 text-center text-slate-500">
+                  <td colSpan={7} className="px-4 py-16 text-center text-[var(--text-faint)]">
                     <div className="text-4xl mb-3">✅</div>
                     <p className="font-medium">No alerts found.</p>
                     <p className="text-sm mt-1">All clear — no zone violations detected.</p>
@@ -287,23 +287,23 @@ export default function BLEAlertsPage() {
               ) : filteredAlerts.map(a => (
                 <tr
                   key={a.id}
-                  className={`transition-colors cursor-pointer ${a.status === 'OPEN' ? 'hover:bg-red-500/5' : 'hover:bg-white/3'}`}
+                  className={`transition-colors cursor-pointer ${a.status === 'OPEN' ? 'hover:bg-red-500/5' : 'hover:bg-[var(--bg-surface-hover)]'}`}
                   onClick={() => openModal(a)}
                 >
                   <td className="px-4 py-3 whitespace-nowrap">
                     <RelativeTime dt={a.detected_at} />
                   </td>
                   <td className="px-4 py-3">
-                    <div className="text-white text-xs font-medium">{a.asset_name ?? '—'}</div>
+                    <div className="text-[var(--text-main)] text-xs font-medium">{a.asset_name ?? '—'}</div>
                   </td>
                   <td className="px-4 py-3">
                     <code className="text-yellow-300 font-mono text-xs bg-yellow-300/5 px-1.5 py-0.5 rounded">{a.tag_mac}</code>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2 text-xs">
-                      <span className="text-slate-300 max-w-[120px] truncate" title={a.from_zone}>{a.from_zone ?? '—'}</span>
+                      <span className="text-[var(--text-muted)] max-w-[120px] truncate" title={a.from_zone}>{a.from_zone ?? '—'}</span>
                       <span className="text-yellow-500 font-bold flex-shrink-0">→</span>
-                      <span className="text-white font-medium max-w-[120px] truncate" title={a.to_zone}>{a.to_zone ?? '—'}</span>
+                      <span className="text-[var(--text-main)] font-medium max-w-[120px] truncate" title={a.to_zone}>{a.to_zone ?? '—'}</span>
                     </div>
                   </td>
                   <td className="px-4 py-3">
@@ -336,14 +336,14 @@ export default function BLEAlertsPage() {
                           </button>
                           <button
                             onClick={() => markFalsePositive(a)}
-                            className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-400 px-2 py-1 rounded"
+                            className="text-xs bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] px-2 py-1 rounded"
                           >
                             FP
                           </button>
                         </>
                       )}
                       {(a.status === 'RESOLVED' || a.status === 'FALSE_POSITIVE') && (
-                        <span className="text-xs text-slate-600 italic">
+                        <span className="text-xs text-[var(--text-faint)] italic">
                           {a.status === 'RESOLVED' ? 'Resolved' : 'False Positive'}
                         </span>
                       )}
@@ -359,38 +359,38 @@ export default function BLEAlertsPage() {
       {/* Alert Detail Modal */}
       {selectedAlert && (
         <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setSelectedAlert(null)}>
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-5 border-b border-white/8">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)]">
               <div className="flex items-center gap-3">
-                <h2 className="text-white font-semibold">Alert Detail</h2>
+                <h2 className="text-[var(--text-main)] font-semibold">Alert Detail</h2>
                 <span className={`px-2 py-0.5 rounded-full text-xs border ${SEVERITY_STYLES[selectedAlert.severity]}`}>{selectedAlert.severity}</span>
                 <span className={`px-2 py-0.5 rounded-full text-xs border ${STATUS_STYLES[selectedAlert.status]}`}>{selectedAlert.status}</span>
               </div>
-              <button onClick={() => setSelectedAlert(null)} className="text-slate-400 hover:text-white text-xl">✕</button>
+              <button onClick={() => setSelectedAlert(null)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">✕</button>
             </div>
 
             <div className="p-5 space-y-5">
               {/* Asset & Tag info */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="bg-slate-950 rounded-xl p-4 border border-white/8">
-                  <p className="text-xs text-slate-400 mb-2 uppercase tracking-wider font-medium">Asset</p>
-                  <p className="text-white font-semibold">{selectedAlert.asset_name ?? 'Unassigned'}</p>
+                <div className="bg-[var(--bg-canvas)] rounded-xl p-4 border border-[var(--border-subtle)]">
+                  <p className="text-xs text-[var(--text-muted)] mb-2 uppercase tracking-wider font-medium">Asset</p>
+                  <p className="text-[var(--text-main)] font-semibold">{selectedAlert.asset_name ?? 'Unassigned'}</p>
                   <code className="text-yellow-300 font-mono text-xs mt-1 block">{selectedAlert.tag_mac}</code>
                 </div>
-                <div className="bg-slate-950 rounded-xl p-4 border border-white/8">
-                  <p className="text-xs text-slate-400 mb-2 uppercase tracking-wider font-medium">Gateway</p>
-                  <p className="text-white font-semibold">{selectedAlert.gateway_name ?? '—'}</p>
-                  <code className="text-slate-400 font-mono text-xs mt-1 block">{selectedAlert.gateway_code ?? '—'}</code>
+                <div className="bg-[var(--bg-canvas)] rounded-xl p-4 border border-[var(--border-subtle)]">
+                  <p className="text-xs text-[var(--text-muted)] mb-2 uppercase tracking-wider font-medium">Gateway</p>
+                  <p className="text-[var(--text-main)] font-semibold">{selectedAlert.gateway_name ?? '—'}</p>
+                  <code className="text-[var(--text-muted)] font-mono text-xs mt-1 block">{selectedAlert.gateway_code ?? '—'}</code>
                 </div>
               </div>
 
               {/* Zone transition diagram */}
-              <div className="bg-slate-950 rounded-xl p-4 border border-white/8">
-                <p className="text-xs text-slate-400 mb-3 uppercase tracking-wider font-medium">Zone Transition</p>
+              <div className="bg-[var(--bg-canvas)] rounded-xl p-4 border border-[var(--border-subtle)]">
+                <p className="text-xs text-[var(--text-muted)] mb-3 uppercase tracking-wider font-medium">Zone Transition</p>
                 <div className="flex items-center gap-4">
-                  <div className="flex-1 bg-slate-800 rounded-lg p-3 text-center">
-                    <p className="text-xs text-slate-500 mb-1">From Zone</p>
-                    <p className="text-white font-semibold">{selectedAlert.from_zone ?? 'Unknown'}</p>
+                  <div className="flex-1 bg-[var(--bg-surface)] rounded-lg p-3 text-center">
+                    <p className="text-xs text-[var(--text-faint)] mb-1">From Zone</p>
+                    <p className="text-[var(--text-main)] font-semibold">{selectedAlert.from_zone ?? 'Unknown'}</p>
                   </div>
                   <div className="text-3xl text-yellow-400 font-bold flex-shrink-0">→</div>
                   <div className="flex-1 bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-center">
@@ -401,16 +401,16 @@ export default function BLEAlertsPage() {
               </div>
 
               {/* Timeline */}
-              <div className="bg-slate-950 rounded-xl p-4 border border-white/8">
-                <p className="text-xs text-slate-400 mb-3 uppercase tracking-wider font-medium">Timeline</p>
+              <div className="bg-[var(--bg-canvas)] rounded-xl p-4 border border-[var(--border-subtle)]">
+                <p className="text-xs text-[var(--text-muted)] mb-3 uppercase tracking-wider font-medium">Timeline</p>
                 <div className="space-y-3 relative pl-1">
-                  <div className="absolute left-1.5 top-2 bottom-2 w-px bg-slate-700" />
+                  <div className="absolute left-1.5 top-2 bottom-2 w-px bg-[var(--bg-surface-hover)]" />
                   {timelineStep('Detected', selectedAlert.detected_at, true)}
                   {timelineStep('Acknowledged', selectedAlert.acknowledged_at, !!selectedAlert.acknowledged_at)}
                   {timelineStep('Resolved', selectedAlert.resolved_at, !!selectedAlert.resolved_at)}
                 </div>
                 {selectedAlert.acknowledged_by && (
-                  <p className="text-xs text-slate-500 mt-3">Acknowledged by: <span className="text-slate-300">{selectedAlert.acknowledged_by}</span></p>
+                  <p className="text-xs text-[var(--text-faint)] mt-3">Acknowledged by: <span className="text-[var(--text-muted)]">{selectedAlert.acknowledged_by}</span></p>
                 )}
               </div>
 
@@ -418,18 +418,18 @@ export default function BLEAlertsPage() {
               {selectedAlert.status === 'OPEN' && (
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Acknowledged By</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Acknowledged By</label>
                     <input
                       value={acknowledgedBy}
                       onChange={e => setAcknowledgedBy(e.target.value)}
                       placeholder="Your name or ID"
-                      className="w-full bg-slate-800 border border-white/8 rounded-lg px-3 py-2 text-sm text-white"
+                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]"
                     />
                   </div>
                   <button
                     onClick={() => acknowledge(selectedAlert)}
                     disabled={actionLoading}
-                    className="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold py-2 rounded-lg text-sm disabled:opacity-50"
+                    className="w-full bg-amber-500 hover:bg-amber-400 text-white font-semibold py-2 rounded-lg text-sm disabled:opacity-50"
                   >
                     {actionLoading ? 'Processing...' : '✓ Acknowledge Alert'}
                   </button>
@@ -439,13 +439,13 @@ export default function BLEAlertsPage() {
               {selectedAlert.status === 'ACKNOWLEDGED' && (
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Resolution Notes</label>
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Resolution Notes</label>
                     <textarea
                       value={resolutionNotes}
                       onChange={e => setResolutionNotes(e.target.value)}
                       rows={3}
                       placeholder="Describe how this was resolved..."
-                      className="w-full bg-slate-800 border border-white/8 rounded-lg px-3 py-2 text-sm text-white resize-none"
+                      className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] resize-none"
                     />
                   </div>
                   <div className="flex gap-3">
@@ -459,7 +459,7 @@ export default function BLEAlertsPage() {
                     <button
                       onClick={() => markFalsePositive(selectedAlert)}
                       disabled={actionLoading}
-                      className="px-4 bg-slate-700 hover:bg-slate-600 text-slate-300 font-medium py-2 rounded-lg text-sm"
+                      className="px-4 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] font-medium py-2 rounded-lg text-sm"
                     >
                       False Positive
                     </button>
@@ -468,9 +468,9 @@ export default function BLEAlertsPage() {
               )}
 
               {selectedAlert.resolution_notes && (
-                <div className="bg-slate-950 rounded-xl p-4 border border-white/8">
-                  <p className="text-xs text-slate-400 mb-1 uppercase tracking-wider font-medium">Resolution Notes</p>
-                  <p className="text-slate-300 text-sm">{selectedAlert.resolution_notes}</p>
+                <div className="bg-[var(--bg-canvas)] rounded-xl p-4 border border-[var(--border-subtle)]">
+                  <p className="text-xs text-[var(--text-muted)] mb-1 uppercase tracking-wider font-medium">Resolution Notes</p>
+                  <p className="text-[var(--text-muted)] text-sm">{selectedAlert.resolution_notes}</p>
                 </div>
               )}
             </div>

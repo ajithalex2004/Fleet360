@@ -105,8 +105,8 @@ export default function AssetTimelinePage() {
   return (
     <div className="p-8 space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-white">Asset Timeline</h1>
-        <p className="text-slate-400 text-xs">Full movement and event history for any asset</p>
+        <h1 className="text-2xl font-bold text-[var(--text-main)]">Asset Timeline</h1>
+        <p className="text-[var(--text-muted)] text-xs">Full movement and event history for any asset</p>
       </div>
 
       {/* Asset Search */}
@@ -117,26 +117,26 @@ export default function AssetTimelinePage() {
           onFocus={() => setShowDropdown(true)}
           onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
           placeholder="Search by asset name or number..."
-          className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:border-yellow-500/50 focus:outline-none"
+          className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-3 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:border-yellow-500/50 focus:outline-none"
         />
         {showDropdown && search && filteredAssets.length > 0 && (
-          <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-slate-800 border border-white/10 rounded-xl shadow-xl overflow-hidden">
+          <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl shadow-xl overflow-hidden">
             {filteredAssets.map(a => (
-              <button key={a.id} onMouseDown={() => selectAsset(a)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 text-left border-b border-white/5 last:border-0">
+              <button key={a.id} onMouseDown={() => selectAsset(a)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--bg-surface-hover)] text-left border-b border-[var(--border-subtle)] last:border-0">
                 <div>
-                  <p className="text-white text-sm font-medium">{a.name}</p>
-                  <p className="text-slate-400 text-xs font-mono">{a.asset_no}</p>
+                  <p className="text-[var(--text-main)] text-sm font-medium">{a.name}</p>
+                  <p className="text-[var(--text-muted)] text-xs font-mono">{a.asset_no}</p>
                 </div>
               </button>
             ))}
           </div>
         )}
-        {assetsLoading && <div className="absolute right-4 top-3.5 text-slate-500 text-sm animate-pulse">Loading...</div>}
+        {assetsLoading && <div className="absolute right-4 top-3.5 text-[var(--text-faint)] text-sm animate-pulse">Loading...</div>}
       </div>
 
       {/* Timeline */}
       {!selectedAsset && (
-        <div className="bg-slate-900 border border-white/8 rounded-xl p-12 text-center text-slate-500">
+        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-12 text-center text-[var(--text-faint)]">
           <div className="text-5xl mb-3">🕐</div>
           <p className="font-medium">Select an asset to view its timeline</p>
           <p className="text-sm mt-1">All movements, transfers, dispatches, and events will be shown here.</p>
@@ -145,19 +145,19 @@ export default function AssetTimelinePage() {
 
       {selectedAsset && (
         <div>
-          <div className="mb-4 bg-slate-900 border border-white/8 rounded-xl p-4 flex items-center justify-between">
+          <div className="mb-4 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4 flex items-center justify-between">
             <div>
-              <h2 className="text-white font-semibold">{selectedAsset.name}</h2>
-              <p className="text-slate-400 text-xs font-mono">{selectedAsset.asset_no}</p>
+              <h2 className="text-[var(--text-main)] font-semibold">{selectedAsset.name}</h2>
+              <p className="text-[var(--text-muted)] text-xs font-mono">{selectedAsset.asset_no}</p>
             </div>
-            {loading && <span className="text-slate-400 text-sm animate-pulse">Loading timeline...</span>}
-            {!loading && <span className="text-slate-400 text-sm">{movements.length} events</span>}
+            {loading && <span className="text-[var(--text-muted)] text-sm animate-pulse">Loading timeline...</span>}
+            {!loading && <span className="text-[var(--text-muted)] text-sm">{movements.length} events</span>}
           </div>
 
           {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-red-400 text-sm mb-4">{error}</div>}
 
           {!loading && movements.length === 0 && (
-            <div className="bg-slate-900 border border-white/8 rounded-xl p-12 text-center text-slate-500">
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-12 text-center text-[var(--text-faint)]">
               <div className="text-4xl mb-2">📭</div>
               <p>No movement history found for this asset.</p>
             </div>
@@ -165,7 +165,7 @@ export default function AssetTimelinePage() {
 
           {movements.length > 0 && (
             <div className="relative">
-              <div className="absolute left-6 top-0 bottom-0 w-px bg-slate-700" />
+              <div className="absolute left-6 top-0 bottom-0 w-px bg-[var(--bg-surface-hover)]" />
               <div className="space-y-4">
                 {movements.map((m, i) => {
                   const icon = MOVEMENT_ICONS[m.movement_type] ?? '📋';
@@ -175,40 +175,40 @@ export default function AssetTimelinePage() {
                       <div className={`w-12 h-12 rounded-full border-2 flex items-center justify-center text-xl flex-shrink-0 z-10 ${color}`}>
                         {icon}
                       </div>
-                      <div className="flex-1 bg-slate-900 border border-white/8 rounded-xl p-4">
+                      <div className="flex-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4">
                         <div className="flex items-start justify-between mb-2">
                           <div>
-                            <span className="text-white font-semibold">{m.movement_type?.replace('_', ' ')}</span>
-                            {m.reference_no && <span className="ml-2 text-xs text-slate-500 font-mono">{m.reference_no}</span>}
+                            <span className="text-[var(--text-main)] font-semibold">{m.movement_type?.replace('_', ' ')}</span>
+                            {m.reference_no && <span className="ml-2 text-xs text-[var(--text-faint)] font-mono">{m.reference_no}</span>}
                           </div>
-                          <time className="text-slate-500 text-xs flex-shrink-0 ml-4">
+                          <time className="text-[var(--text-faint)] text-xs flex-shrink-0 ml-4">
                             {new Date(m.performed_at).toLocaleString('en-AE', { dateStyle: 'medium', timeStyle: 'short' })}
                           </time>
                         </div>
 
                         {(m.from_location || m.to_location) && (
                           <div className="flex items-center gap-2 text-sm mb-1">
-                            {m.from_location && <span className="text-slate-400">{m.from_location}</span>}
-                            {m.from_location && m.to_location && <span className="text-slate-600">→</span>}
-                            {m.to_location && <span className="text-slate-200">{m.to_location}</span>}
+                            {m.from_location && <span className="text-[var(--text-muted)]">{m.from_location}</span>}
+                            {m.from_location && m.to_location && <span className="text-[var(--text-faint)]">→</span>}
+                            {m.to_location && <span className="text-[var(--text-main)]">{m.to_location}</span>}
                           </div>
                         )}
 
                         {(m.from_custodian || m.to_custodian) && (
-                          <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
+                          <div className="flex items-center gap-2 text-xs text-[var(--text-muted)] mb-1">
                             <span>👤</span>
                             {m.from_custodian && <span>{m.from_custodian}</span>}
                             {m.from_custodian && m.to_custodian && <span>→</span>}
-                            {m.to_custodian && <span className="text-slate-300">{m.to_custodian}</span>}
+                            {m.to_custodian && <span className="text-[var(--text-muted)]">{m.to_custodian}</span>}
                           </div>
                         )}
 
                         {m.performed_by && (
-                          <p className="text-slate-500 text-xs">By: {m.performed_by}</p>
+                          <p className="text-[var(--text-faint)] text-xs">By: {m.performed_by}</p>
                         )}
 
                         {m.notes && (
-                          <p className="mt-2 text-slate-400 text-xs italic border-t border-white/5 pt-2">{m.notes}</p>
+                          <p className="mt-2 text-[var(--text-muted)] text-xs italic border-t border-[var(--border-subtle)] pt-2">{m.notes}</p>
                         )}
                       </div>
                     </div>

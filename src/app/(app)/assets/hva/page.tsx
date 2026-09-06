@@ -49,10 +49,10 @@ function daysDiff(dateStr?: string) {
 
 function CalibBadge({ date }: { date?: string }) {
   const d = daysDiff(date);
-  if (d === null) return <span className="text-slate-500">—</span>;
+  if (d === null) return <span className="text-[var(--text-faint)]">—</span>;
   if (d < 0) return <span className="bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-full text-xs">OVERDUE</span>;
   if (d <= 30) return <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full text-xs">{d}d</span>;
-  return <span className="text-slate-400 text-xs">{new Date(date!).toLocaleDateString()}</span>;
+  return <span className="text-[var(--text-muted)] text-xs">{new Date(date!).toLocaleDateString()}</span>;
 }
 
 const EMPTY_FORM: Partial<HVA> = {
@@ -98,12 +98,12 @@ export default function HVAPage() {
 
   const F = (key: keyof HVA, label: string, type = 'text') => (
     <div>
-      <label className="block text-xs text-slate-400 mb-1">{label}</label>
+      <label className="block text-xs text-[var(--text-muted)] mb-1">{label}</label>
       <input
         type={type}
         value={(form[key] as string | number) ?? ''}
         onChange={e => setForm(p => ({ ...p, [key]: type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value }))}
-        className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+        className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]"
       />
     </div>
   );
@@ -126,8 +126,8 @@ export default function HVAPage() {
 
   if (loading) return (
     <div className="p-8 space-y-4">
-      <div className="h-8 bg-slate-800 rounded w-48 animate-pulse" />
-      {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-12 bg-slate-800 rounded animate-pulse" />)}
+      <div className="h-8 bg-[var(--bg-surface)] rounded w-48 animate-pulse" />
+      {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-12 bg-[var(--bg-surface)] rounded animate-pulse" />)}
     </div>
   );
 
@@ -136,17 +136,17 @@ export default function HVAPage() {
       {toast && <div className="fixed top-4 right-4 z-50 bg-emerald-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm">{toast}</div>}
 
       <div className="flex items-center justify-between">
-        <div><h1 className="text-2xl font-bold text-white">High Value Assets</h1><p className="text-slate-400 text-sm">Critical asset tracking with compliance monitoring</p></div>
-        <button onClick={openAdd} className="bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-semibold px-4 py-2 rounded-lg text-sm">+ Add HVA</button>
+        <div><h1 className="text-2xl font-bold text-[var(--text-main)]">High Value Assets</h1><p className="text-[var(--text-muted)] text-sm">Critical asset tracking with compliance monitoring</p></div>
+        <button onClick={openAdd} className="bg-yellow-400 hover:bg-yellow-300 text-white font-semibold px-4 py-2 rounded-lg text-sm">+ Add HVA</button>
       </div>
 
       {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-red-400 text-sm">{error}</div>}
 
-      <div className="bg-slate-900 border border-white/8 rounded-xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-slate-800/50 border-b border-white/8">
-              <tr className="text-slate-400 text-xs uppercase">
+            <thead className="bg-[var(--bg-surface)]/50 border-b border-[var(--border-subtle)]">
+              <tr className="text-[var(--text-muted)] text-xs uppercase">
                 {['Asset No', 'Name', 'Domain', 'Serial #', 'Custodian', 'Condition', 'Calibration Due', 'Insurance Expiry', 'Value AED', 'Status', 'Actions'].map(h => (
                   <th key={h} className="text-left px-4 py-3 font-medium">{h}</th>
                 ))}
@@ -154,38 +154,38 @@ export default function HVAPage() {
             </thead>
             <tbody className="divide-y divide-white/5">
               {items.length === 0 ? (
-                <tr><td colSpan={11} className="px-4 py-12 text-center text-slate-500">
+                <tr><td colSpan={11} className="px-4 py-12 text-center text-[var(--text-faint)]">
                   <div className="text-4xl mb-2">💎</div><p>No high value assets registered yet.</p>
                 </td></tr>
               ) : items.map(h => {
                 const condBad = h.condition === 'POOR' || h.condition === 'CONDEMNED';
                 const insurDays = daysDiff(h.insurance_expiry);
                 return (
-                  <tr key={h.id} className="hover:bg-white/3 transition-colors">
+                  <tr key={h.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                     <td className="px-4 py-3 text-yellow-300 font-mono text-xs">{h.asset_no}</td>
-                    <td className="px-4 py-3 text-white font-medium">{h.name}</td>
-                    <td className="px-4 py-3 text-slate-400">{h.domain}</td>
-                    <td className="px-4 py-3 text-slate-400 font-mono text-xs">{h.serial_number ?? '—'}</td>
-                    <td className="px-4 py-3 text-slate-300">{h.custodian_name ?? '—'}</td>
+                    <td className="px-4 py-3 text-[var(--text-main)] font-medium">{h.name}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)]">{h.domain}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)] font-mono text-xs">{h.serial_number ?? '—'}</td>
+                    <td className="px-4 py-3 text-[var(--text-muted)]">{h.custodian_name ?? '—'}</td>
                     <td className="px-4 py-3">
-                      <span className={`text-xs font-medium ${condBad ? 'text-red-400' : 'text-slate-300'}`}>{h.condition ?? '—'}</span>
+                      <span className={`text-xs font-medium ${condBad ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>{h.condition ?? '—'}</span>
                     </td>
                     <td className="px-4 py-3"><CalibBadge date={h.calibration_due_date} /></td>
                     <td className="px-4 py-3">
                       {h.insurance_expiry ? (
                         insurDays !== null && insurDays <= 30
                           ? <span className="bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full text-xs">{insurDays}d</span>
-                          : <span className="text-slate-400 text-xs">{new Date(h.insurance_expiry).toLocaleDateString()}</span>
-                      ) : <span className="text-slate-500">—</span>}
+                          : <span className="text-[var(--text-muted)] text-xs">{new Date(h.insurance_expiry).toLocaleDateString()}</span>
+                      ) : <span className="text-[var(--text-faint)]">—</span>}
                     </td>
                     <td className="px-4 py-3 text-yellow-300 font-medium">{h.current_value_aed?.toLocaleString() ?? '—'}</td>
                     <td className="px-4 py-3">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs border ${h.status === 'ACTIVE' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-slate-700 text-slate-400 border-slate-600'}`}>
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs border ${h.status === 'ACTIVE' ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border-[var(--border-strong)]'}`}>
                         {h.status ?? 'ACTIVE'}
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <button onClick={() => openEdit(h)} className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-1 rounded">Edit</button>
+                      <button onClick={() => openEdit(h)} className="text-xs bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] px-2 py-1 rounded">Edit</button>
                     </td>
                   </tr>
                 );
@@ -197,14 +197,14 @@ export default function HVAPage() {
 
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between p-5 border-b border-white/8 flex-shrink-0">
-              <h2 className="text-white font-semibold">{editItem ? 'Edit HVA' : 'Add High Value Asset'}</h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white text-xl">✕</button>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)] flex-shrink-0">
+              <h2 className="text-[var(--text-main)] font-semibold">{editItem ? 'Edit HVA' : 'Add High Value Asset'}</h2>
+              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">✕</button>
             </div>
-            <div className="flex border-b border-white/8 flex-shrink-0">
+            <div className="flex border-b border-[var(--border-subtle)] flex-shrink-0">
               {TABS.map((t, i) => (
-                <button key={t} onClick={() => setTab(i)} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${tab === i ? 'border-yellow-400 text-yellow-300' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>{t}</button>
+                <button key={t} onClick={() => setTab(i)} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${tab === i ? 'border-yellow-400 text-yellow-300' : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>{t}</button>
               ))}
             </div>
             <div className="flex-1 overflow-y-auto p-5">
@@ -214,8 +214,8 @@ export default function HVAPage() {
                   {F('oem_part_number', 'OEM Part #')} {F('manufacturer', 'Manufacturer')}
                   {F('model', 'Model')} {F('year', 'Year', 'number')}
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Domain</label>
-                    <select value={form.domain ?? 'GENERAL'} onChange={e => setForm(p => ({ ...p, domain: e.target.value }))} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Domain</label>
+                    <select value={form.domain ?? 'GENERAL'} onChange={e => setForm(p => ({ ...p, domain: e.target.value }))} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]">
                       {DOMAINS.map(d => <option key={d}>{d}</option>)}
                     </select>
                   </div>
@@ -223,8 +223,8 @@ export default function HVAPage() {
                   {F('purchase_date', 'Purchase Date', 'date')} {F('purchase_cost_aed', 'Purchase Cost AED', 'number')}
                   {F('current_value_aed', 'Current Value AED', 'number')}
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Condition</label>
-                    <select value={form.condition ?? 'GOOD'} onChange={e => setForm(p => ({ ...p, condition: e.target.value }))} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+                    <label className="block text-xs text-[var(--text-muted)] mb-1">Condition</label>
+                    <select value={form.condition ?? 'GOOD'} onChange={e => setForm(p => ({ ...p, condition: e.target.value }))} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]">
                       {CONDITIONS.map(c => <option key={c}>{c}</option>)}
                     </select>
                   </div>
@@ -254,9 +254,9 @@ export default function HVAPage() {
                 </div>
               )}
             </div>
-            <div className="flex gap-3 justify-end p-5 border-t border-white/8 flex-shrink-0">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
-              <button onClick={submit} disabled={submitting} className="bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-semibold px-5 py-2 rounded-lg text-sm disabled:opacity-50">
+            <div className="flex gap-3 justify-end p-5 border-t border-[var(--border-subtle)] flex-shrink-0">
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-main)]">Cancel</button>
+              <button onClick={submit} disabled={submitting} className="bg-yellow-400 hover:bg-yellow-300 text-white font-semibold px-5 py-2 rounded-lg text-sm disabled:opacity-50">
                 {submitting ? 'Saving...' : editItem ? 'Update' : 'Create'}
               </button>
             </div>

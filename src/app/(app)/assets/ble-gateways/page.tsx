@@ -33,7 +33,7 @@ const STATUS_COLORS: Record<string, string> = {
   ONLINE: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
   OFFLINE: 'bg-red-500/20 text-red-400 border-red-500/30',
   DEGRADED: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-  MAINTENANCE: 'bg-slate-700 text-slate-400 border-slate-600',
+  MAINTENANCE: 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border-[var(--border-strong)]',
 };
 
 const LOCATION_TYPES = ['WAREHOUSE', 'AMBULANCE', 'VEHICLE', 'FACILITY', 'FIELD', 'OTHER'];
@@ -49,10 +49,10 @@ function RssiBar({ rssi }: { rssi: number }) {
   const color = pct > 66 ? 'bg-emerald-500' : pct > 33 ? 'bg-amber-500' : 'bg-red-500';
   return (
     <div className="flex items-center gap-2">
-      <div className="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+      <div className="w-16 h-1.5 bg-[var(--bg-surface-hover)] rounded-full overflow-hidden">
         <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-xs text-slate-400">{rssi} dBm</span>
+      <span className="text-xs text-[var(--text-muted)]">{rssi} dBm</span>
     </div>
   );
 }
@@ -66,17 +66,17 @@ function CodeBlock({ code, language = '' }: { code: string; language?: string })
   };
   return (
     <div className="relative group">
-      <div className="bg-slate-950 border border-white/8 rounded-lg p-4 font-mono text-xs text-slate-300 overflow-x-auto whitespace-pre">
+      <div className="bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg p-4 font-mono text-xs text-[var(--text-muted)] overflow-x-auto whitespace-pre">
         {code}
       </div>
       <button
         onClick={copy}
-        className="absolute top-2 right-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+        className="absolute top-2 right-2 bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:text-[var(--text-main)] text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
       >
         {copied ? '✓ Copied' : 'Copy'}
       </button>
       {language && (
-        <span className="absolute top-2 left-3 text-[10px] text-slate-600 font-sans">{language}</span>
+        <span className="absolute top-2 left-3 text-[10px] text-[var(--text-faint)] font-sans">{language}</span>
       )}
     </div>
   );
@@ -322,8 +322,8 @@ void sendDetection(String tagMac, int rssi, int battery) {
 
   if (loading) return (
     <div className="p-8 space-y-4">
-      <div className="h-8 bg-slate-800 rounded w-48 animate-pulse" />
-      {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-12 bg-slate-800 rounded animate-pulse" />)}
+      <div className="h-8 bg-[var(--bg-surface)] rounded w-48 animate-pulse" />
+      {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-12 bg-[var(--bg-surface)] rounded animate-pulse" />)}
     </div>
   );
 
@@ -339,10 +339,10 @@ void sendDetection(String tagMac, int rssi, int battery) {
 
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">BLE Gateways</h1>
-          <p className="text-slate-400 text-xs">Location gateway network status & hardware integration</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">BLE Gateways</h1>
+          <p className="text-[var(--text-muted)] text-xs">Location gateway network status & hardware integration</p>
         </div>
-        <button onClick={openAdd} className="bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-semibold px-4 py-2 rounded-lg text-sm">+ Add Gateway</button>
+        <button onClick={openAdd} className="bg-yellow-400 hover:bg-yellow-300 text-white font-semibold px-4 py-2 rounded-lg text-sm">+ Add Gateway</button>
       </div>
 
       {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-red-400 text-sm">{error}</div>}
@@ -354,11 +354,11 @@ void sendDetection(String tagMac, int rssi, int battery) {
         </div>
       )}
 
-      <div className="bg-slate-900 border border-white/8 rounded-xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-slate-800/50 border-b border-white/8">
-              <tr className="text-slate-400 text-xs uppercase">
+            <thead className="bg-[var(--bg-surface)]/50 border-b border-[var(--border-subtle)]">
+              <tr className="text-[var(--text-muted)] text-xs uppercase">
                 {['Gateway Code', 'Name', 'Location Type', 'Location Name', 'Zone', 'Tags Visible', 'Last Heartbeat', 'Status', 'Actions'].map(h => (
                   <th key={h} className="text-left px-4 py-3 font-medium">{h}</th>
                 ))}
@@ -366,7 +366,7 @@ void sendDetection(String tagMac, int rssi, int battery) {
             </thead>
             <tbody className="divide-y divide-white/5">
               {gateways.length === 0 ? (
-                <tr><td colSpan={9} className="px-4 py-12 text-center text-slate-500">
+                <tr><td colSpan={9} className="px-4 py-12 text-center text-[var(--text-faint)]">
                   <div className="text-4xl mb-2">📶</div><p>No BLE gateways configured yet.</p>
                 </td></tr>
               ) : gateways.map(g => {
@@ -377,17 +377,17 @@ void sendDetection(String tagMac, int rssi, int battery) {
                 return (
                   <React.Fragment key={g.id}>
                     <tr
-                      className={`hover:bg-white/3 transition-colors cursor-pointer ${isExpanded ? 'bg-yellow-300/5 border-b-0' : ''}`}
+                      className={`hover:bg-[var(--bg-surface-hover)] transition-colors cursor-pointer ${isExpanded ? 'bg-yellow-300/5 border-b-0' : ''}`}
                       onClick={() => isExpanded ? setDrawerGateway(null) : openDrawer(g)}
                     >
                       <td className="px-4 py-3 text-yellow-300 font-mono text-xs">{g.gateway_code}</td>
-                      <td className="px-4 py-3 text-white font-medium">{g.name}</td>
-                      <td className="px-4 py-3 text-slate-400">{g.location_type ?? '—'}</td>
-                      <td className="px-4 py-3 text-slate-300">{g.location_name ?? '—'}</td>
-                      <td className="px-4 py-3 text-slate-400">{g.location_zone ?? '—'}</td>
-                      <td className="px-4 py-3 text-slate-300 font-medium">{g.tags_visible ?? 0}</td>
+                      <td className="px-4 py-3 text-[var(--text-main)] font-medium">{g.name}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{g.location_type ?? '—'}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{g.location_name ?? '—'}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{g.location_zone ?? '—'}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)] font-medium">{g.tags_visible ?? 0}</td>
                       <td className="px-4 py-3">
-                        <span className={`text-xs ${overdue ? 'text-red-400' : 'text-slate-400'}`}>
+                        <span className={`text-xs ${overdue ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>
                           {ago !== null ? `${ago}m ago` : '—'}
                           {overdue && <span className="ml-1">⚠️</span>}
                         </span>
@@ -402,7 +402,7 @@ void sendDetection(String tagMac, int rssi, int battery) {
                       </td>
                       <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center gap-2">
-                          <button onClick={() => openEdit(g)} className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-1 rounded">Edit</button>
+                          <button onClick={() => openEdit(g)} className="text-xs bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] px-2 py-1 rounded">Edit</button>
                           <button
                             onClick={() => isExpanded ? setDrawerGateway(null) : openDrawer(g)}
                             className="text-xs bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-300 px-2 py-1 rounded border border-yellow-500/30"
@@ -415,14 +415,14 @@ void sendDetection(String tagMac, int rssi, int battery) {
                     {isExpanded && (
                       <tr>
                         <td colSpan={9} className="px-0 pt-0 pb-0">
-                          <div className="bg-slate-950/70 border-t border-yellow-500/20 border-b border-white/8 p-6">
+                          <div className="bg-[var(--bg-canvas)]/70 border-t border-yellow-500/20 border-b border-[var(--border-subtle)] p-6">
                             <div className="flex items-center gap-2 mb-4">
                               <span className="text-yellow-400 font-semibold text-sm">⚡ Hardware Integration Panel</span>
-                              <span className="text-slate-500 text-xs">— {g.name} ({g.gateway_code})</span>
+                              <span className="text-[var(--text-faint)] text-xs">— {g.name} ({g.gateway_code})</span>
                             </div>
 
                             {/* Tabs */}
-                            <div className="flex gap-1 mb-5 bg-slate-900 p-1 rounded-lg w-fit border border-white/8">
+                            <div className="flex gap-1 mb-5 bg-[var(--bg-surface)] p-1 rounded-lg w-fit border border-[var(--border-subtle)]">
                               {[
                                 { key: 'apikey', label: '🔑 API Key Management' },
                                 { key: 'guide', label: '📖 Integration Guide' },
@@ -430,7 +430,7 @@ void sendDetection(String tagMac, int rssi, int battery) {
                                 <button
                                   key={t.key}
                                   onClick={() => setDrawerTab(t.key as 'apikey' | 'guide')}
-                                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${drawerTab === t.key ? 'bg-yellow-400 text-slate-950' : 'text-slate-400 hover:text-white'}`}
+                                  className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${drawerTab === t.key ? 'bg-yellow-400 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
                                 >
                                   {t.label}
                                 </button>
@@ -440,24 +440,24 @@ void sendDetection(String tagMac, int rssi, int battery) {
                             {drawerTab === 'apikey' && (
                               <div className="space-y-4 max-w-2xl">
                                 {/* Current key status */}
-                                <div className="bg-slate-900 border border-white/8 rounded-xl p-4">
-                                  <p className="text-xs text-slate-400 mb-2 font-medium uppercase tracking-wider">Current API Key Status</p>
+                                <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4">
+                                  <p className="text-xs text-[var(--text-muted)] mb-2 font-medium uppercase tracking-wider">Current API Key Status</p>
                                   {g.api_key_prefix ? (
                                     <div className="space-y-2">
                                       <div className="flex items-center gap-3">
                                         <span className="w-2 h-2 rounded-full bg-emerald-400" />
                                         <code className="font-mono text-sm text-emerald-400">{g.api_key_prefix}...</code>
-                                        <span className="text-xs text-slate-500">Key active</span>
+                                        <span className="text-xs text-[var(--text-faint)]">Key active</span>
                                       </div>
                                       {g.api_key_created_at && (
-                                        <p className="text-xs text-slate-500 ml-5">
+                                        <p className="text-xs text-[var(--text-faint)] ml-5">
                                           Generated {new Date(g.api_key_created_at).toLocaleDateString()} at {new Date(g.api_key_created_at).toLocaleTimeString()}
                                         </p>
                                       )}
                                     </div>
                                   ) : (
-                                    <div className="flex items-center gap-2 text-slate-500 text-sm">
-                                      <span className="w-2 h-2 rounded-full bg-slate-600" />
+                                    <div className="flex items-center gap-2 text-[var(--text-faint)] text-sm">
+                                      <span className="w-2 h-2 rounded-full bg-[var(--bg-surface-hover)]" />
                                       No key generated — click below to generate one
                                     </div>
                                   )}
@@ -471,20 +471,20 @@ void sendDetection(String tagMac, int rssi, int battery) {
                                       <span>Copy this key now — it will never be shown again</span>
                                     </div>
                                     <div className="relative">
-                                      <div className="bg-slate-950 border border-amber-500/30 rounded-lg px-4 py-3 font-mono text-sm text-yellow-300 break-all">
+                                      <div className="bg-[var(--bg-canvas)] border border-amber-500/30 rounded-lg px-4 py-3 font-mono text-sm text-yellow-300 break-all">
                                         {keygenResult.raw_key}
                                       </div>
                                       <button
                                         onClick={copyKey}
-                                        className={`absolute top-2 right-2 text-xs px-3 py-1 rounded font-medium transition-all ${keyCopied ? 'bg-emerald-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-300'}`}
+                                        className={`absolute top-2 right-2 text-xs px-3 py-1 rounded font-medium transition-all ${keyCopied ? 'bg-emerald-600 text-white' : 'bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'}`}
                                       >
                                         {keyCopied ? '✓ Copied!' : 'Copy'}
                                       </button>
                                     </div>
-                                    <div className="text-xs text-slate-400 space-y-1">
-                                      <p><span className="text-slate-500">Prefix:</span> <code className="font-mono">{keygenResult.prefix}</code></p>
-                                      <p><span className="text-slate-500">Created:</span> {new Date(keygenResult.created_at).toLocaleString()}</p>
-                                      <p><span className="text-slate-500">Gateway Code:</span> <code className="font-mono">{keygenResult.gateway_code}</code></p>
+                                    <div className="text-xs text-[var(--text-muted)] space-y-1">
+                                      <p><span className="text-[var(--text-faint)]">Prefix:</span> <code className="font-mono">{keygenResult.prefix}</code></p>
+                                      <p><span className="text-[var(--text-faint)]">Created:</span> {new Date(keygenResult.created_at).toLocaleString()}</p>
+                                      <p><span className="text-[var(--text-faint)]">Gateway Code:</span> <code className="font-mono">{keygenResult.gateway_code}</code></p>
                                     </div>
                                   </div>
                                 )}
@@ -495,7 +495,7 @@ void sendDetection(String tagMac, int rssi, int battery) {
                                     <button
                                       onClick={() => handleKeygen(false)}
                                       disabled={keygenLoading}
-                                      className="bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-semibold px-4 py-2 rounded-lg text-sm disabled:opacity-50"
+                                      className="bg-yellow-400 hover:bg-yellow-300 text-white font-semibold px-4 py-2 rounded-lg text-sm disabled:opacity-50"
                                     >
                                       {keygenLoading ? 'Generating...' : '🔑 Generate API Key'}
                                     </button>
@@ -508,12 +508,12 @@ void sendDetection(String tagMac, int rssi, int battery) {
                                           <button onClick={() => handleKeygen(true)} disabled={keygenLoading} className="text-xs bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded">
                                             {keygenLoading ? 'Rotating...' : 'Yes, Rotate'}
                                           </button>
-                                          <button onClick={() => setShowRotateConfirm(false)} className="text-xs text-slate-400 hover:text-white px-2 py-1">Cancel</button>
+                                          <button onClick={() => setShowRotateConfirm(false)} className="text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] px-2 py-1">Cancel</button>
                                         </div>
                                       ) : (
                                         <button
                                           onClick={() => setShowRotateConfirm(true)}
-                                          className="bg-slate-700 hover:bg-slate-600 text-slate-300 font-medium px-4 py-2 rounded-lg text-sm"
+                                          className="bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] font-medium px-4 py-2 rounded-lg text-sm"
                                         >
                                           🔄 Rotate Key
                                         </button>
@@ -523,20 +523,20 @@ void sendDetection(String tagMac, int rssi, int battery) {
                                 </div>
 
                                 {/* Test Connection */}
-                                <div className="pt-2 border-t border-white/8">
-                                  <p className="text-xs text-slate-400 mb-2 font-medium">Test Gateway Connection</p>
+                                <div className="pt-2 border-t border-[var(--border-subtle)]">
+                                  <p className="text-xs text-[var(--text-muted)] mb-2 font-medium">Test Gateway Connection</p>
                                   <button
                                     onClick={testConnection}
                                     disabled={testLoading}
-                                    className="bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm px-4 py-2 rounded-lg disabled:opacity-50"
+                                    className="bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-sm px-4 py-2 rounded-lg disabled:opacity-50"
                                   >
                                     {testLoading ? '⏳ Sending test...' : '🔌 Test Connection'}
                                   </button>
-                                  <p className="text-xs text-slate-500 mt-1">Sends a dummy tag detection (TEST:00:00:00:00:01) to verify the ingest endpoint.</p>
+                                  <p className="text-xs text-[var(--text-faint)] mt-1">Sends a dummy tag detection (TEST:00:00:00:00:01) to verify the ingest endpoint.</p>
                                   {testResult && (
                                     <div className="mt-3">
-                                      <p className="text-xs text-slate-400 mb-1">API Response:</p>
-                                      <div className="bg-slate-950 border border-white/8 rounded-lg p-3 font-mono text-xs text-slate-300 max-h-48 overflow-auto whitespace-pre">
+                                      <p className="text-xs text-[var(--text-muted)] mb-1">API Response:</p>
+                                      <div className="bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg p-3 font-mono text-xs text-[var(--text-muted)] max-h-48 overflow-auto whitespace-pre">
                                         {testResult}
                                       </div>
                                     </div>
@@ -548,23 +548,23 @@ void sendDetection(String tagMac, int rssi, int battery) {
                             {drawerTab === 'guide' && docs && (
                               <div className="space-y-6 max-w-3xl">
                                 <div>
-                                  <p className="text-sm font-semibold text-white mb-2">HTTP Request Format</p>
+                                  <p className="text-sm font-semibold text-[var(--text-main)] mb-2">HTTP Request Format</p>
                                   <CodeBlock code={docs.httpExample} language="HTTP" />
                                 </div>
                                 <div>
-                                  <p className="text-sm font-semibold text-white mb-2">cURL Example</p>
+                                  <p className="text-sm font-semibold text-[var(--text-main)] mb-2">cURL Example</p>
                                   <CodeBlock code={docs.curlExample} language="bash" />
                                 </div>
                                 <div>
-                                  <p className="text-sm font-semibold text-white mb-2">Python (requests)</p>
+                                  <p className="text-sm font-semibold text-[var(--text-main)] mb-2">Python (requests)</p>
                                   <CodeBlock code={docs.pythonExample} language="python" />
                                 </div>
                                 <div>
-                                  <p className="text-sm font-semibold text-white mb-2">Arduino / ESP32</p>
+                                  <p className="text-sm font-semibold text-[var(--text-main)] mb-2">Arduino / ESP32</p>
                                   <CodeBlock code={docs.arduinoExample} language="C++" />
                                 </div>
-                                <div className="bg-slate-900 border border-white/8 rounded-xl p-4 text-xs text-slate-400 space-y-1">
-                                  <p className="text-white text-sm font-medium mb-2">Field Reference</p>
+                                <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4 text-xs text-[var(--text-muted)] space-y-1">
+                                  <p className="text-[var(--text-main)] text-sm font-medium mb-2">Field Reference</p>
                                   <div className="grid grid-cols-2 gap-x-8 gap-y-1">
                                     {[
                                       ['gateway_code', 'Your gateway identifier'],
@@ -598,64 +598,64 @@ void sendDetection(String tagMac, int rssi, int battery) {
 
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-5 border-b border-white/8">
-              <h2 className="text-white font-semibold">{editGateway ? 'Edit Gateway' : 'Add BLE Gateway'}</h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white text-xl">✕</button>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)]">
+              <h2 className="text-[var(--text-main)] font-semibold">{editGateway ? 'Edit Gateway' : 'Add BLE Gateway'}</h2>
+              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">✕</button>
             </div>
             <div className="p-5 grid grid-cols-2 gap-4">
               <div className="col-span-2">
-                <label className="block text-xs text-slate-400 mb-1">Gateway Name*</label>
-                <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+                <label className="block text-xs text-[var(--text-muted)] mb-1">Gateway Name*</label>
+                <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Location Type</label>
-                <select value={form.location_type} onChange={e => setForm(p => ({ ...p, location_type: e.target.value }))} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+                <label className="block text-xs text-[var(--text-muted)] mb-1">Location Type</label>
+                <select value={form.location_type} onChange={e => setForm(p => ({ ...p, location_type: e.target.value }))} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]">
                   {LOCATION_TYPES.map(t => <option key={t}>{t}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Location Name</label>
-                <input value={form.location_name} onChange={e => setForm(p => ({ ...p, location_name: e.target.value }))} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+                <label className="block text-xs text-[var(--text-muted)] mb-1">Location Name</label>
+                <input value={form.location_name} onChange={e => setForm(p => ({ ...p, location_name: e.target.value }))} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Zone</label>
-                <input value={form.location_zone} onChange={e => setForm(p => ({ ...p, location_zone: e.target.value }))} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+                <label className="block text-xs text-[var(--text-muted)] mb-1">Zone</label>
+                <input value={form.location_zone} onChange={e => setForm(p => ({ ...p, location_zone: e.target.value }))} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
               </div>
               {(form.location_type === 'AMBULANCE' || form.location_type === 'VEHICLE') && (
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Vehicle ID</label>
-                  <input value={form.vehicle_id} onChange={e => setForm(p => ({ ...p, vehicle_id: e.target.value }))} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+                  <label className="block text-xs text-[var(--text-muted)] mb-1">Vehicle ID</label>
+                  <input value={form.vehicle_id} onChange={e => setForm(p => ({ ...p, vehicle_id: e.target.value }))} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
                 </div>
               )}
               <div>
-                <label className="block text-xs text-slate-400 mb-1">IP Address</label>
-                <input value={form.ip_address} onChange={e => setForm(p => ({ ...p, ip_address: e.target.value }))} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+                <label className="block text-xs text-[var(--text-muted)] mb-1">IP Address</label>
+                <input value={form.ip_address} onChange={e => setForm(p => ({ ...p, ip_address: e.target.value }))} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Firmware Version</label>
-                <input value={form.firmware_version} onChange={e => setForm(p => ({ ...p, firmware_version: e.target.value }))} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+                <label className="block text-xs text-[var(--text-muted)] mb-1">Firmware Version</label>
+                <input value={form.firmware_version} onChange={e => setForm(p => ({ ...p, firmware_version: e.target.value }))} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Latitude</label>
-                <input value={form.lat} onChange={e => setForm(p => ({ ...p, lat: e.target.value }))} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+                <label className="block text-xs text-[var(--text-muted)] mb-1">Latitude</label>
+                <input value={form.lat} onChange={e => setForm(p => ({ ...p, lat: e.target.value }))} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Longitude</label>
-                <input value={form.lng} onChange={e => setForm(p => ({ ...p, lng: e.target.value }))} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+                <label className="block text-xs text-[var(--text-muted)] mb-1">Longitude</label>
+                <input value={form.lng} onChange={e => setForm(p => ({ ...p, lng: e.target.value }))} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Offline Threshold (min)</label>
-                <input type="number" value={form.offline_threshold_min} onChange={e => setForm(p => ({ ...p, offline_threshold_min: parseInt(e.target.value) || 10 }))} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+                <label className="block text-xs text-[var(--text-muted)] mb-1">Offline Threshold (min)</label>
+                <input type="number" value={form.offline_threshold_min} onChange={e => setForm(p => ({ ...p, offline_threshold_min: parseInt(e.target.value) || 10 }))} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
               </div>
               <div className="flex items-center gap-2 mt-4">
                 <input type="checkbox" checked={form.alert_on_offline} onChange={e => setForm(p => ({ ...p, alert_on_offline: e.target.checked }))} id="alertOnOffline" className="w-4 h-4 rounded" />
-                <label htmlFor="alertOnOffline" className="text-sm text-slate-300">Alert when offline</label>
+                <label htmlFor="alertOnOffline" className="text-sm text-[var(--text-muted)]">Alert when offline</label>
               </div>
             </div>
-            <div className="flex gap-3 justify-end p-5 border-t border-white/8">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
-              <button onClick={submit} disabled={submitting || !form.name} className="bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-semibold px-5 py-2 rounded-lg text-sm disabled:opacity-50">
+            <div className="flex gap-3 justify-end p-5 border-t border-[var(--border-subtle)]">
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-main)]">Cancel</button>
+              <button onClick={submit} disabled={submitting || !form.name} className="bg-yellow-400 hover:bg-yellow-300 text-white font-semibold px-5 py-2 rounded-lg text-sm disabled:opacity-50">
                 {submitting ? 'Saving...' : editGateway ? 'Update' : 'Create'}
               </button>
             </div>

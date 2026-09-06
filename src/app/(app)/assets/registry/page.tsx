@@ -40,7 +40,7 @@ const statusBadge = (status: string) => {
     LOW_STOCK: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
     OUT_OF_STOCK: 'bg-red-500/20 text-red-400 border-red-500/30',
   };
-  return map[status] ?? 'bg-slate-700 text-slate-400 border-slate-600';
+  return map[status] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border-[var(--border-strong)]';
 };
 
 function StockBar({ current, threshold }: { current: number; threshold: number }) {
@@ -48,10 +48,10 @@ function StockBar({ current, threshold }: { current: number; threshold: number }
   const color = pct <= 0 ? 'bg-red-500' : pct < 50 ? 'bg-amber-500' : 'bg-emerald-500';
   return (
     <div className="flex items-center gap-2">
-      <div className="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+      <div className="w-16 h-1.5 bg-[var(--bg-surface-hover)] rounded-full overflow-hidden">
         <div className={`h-full ${color} rounded-full`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-xs text-slate-500">{current}</span>
+      <span className="text-xs text-[var(--text-faint)]">{current}</span>
     </div>
   );
 }
@@ -154,8 +154,8 @@ export default function AssetRegistryPage() {
 
   if (loading) return (
     <div className="p-8 space-y-4">
-      <div className="h-8 bg-slate-800 rounded w-48 animate-pulse" />
-      {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-12 bg-slate-800 rounded animate-pulse" />)}
+      <div className="h-8 bg-[var(--bg-surface)] rounded w-48 animate-pulse" />
+      {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-12 bg-[var(--bg-surface)] rounded animate-pulse" />)}
     </div>
   );
 
@@ -164,33 +164,33 @@ export default function AssetRegistryPage() {
       {toast && <div className="fixed top-4 right-4 z-50 bg-emerald-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm">{toast}</div>}
 
       <div className="flex items-center justify-between">
-        <div><h1 className="text-2xl font-bold text-white">Asset Catalog</h1><p className="text-slate-400 text-sm">Manage all assets across domains</p></div>
-        <button onClick={openAdd} className="bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-semibold px-4 py-2 rounded-lg text-sm transition-colors">+ Add Asset</button>
+        <div><h1 className="text-2xl font-bold text-[var(--text-main)]">Asset Catalog</h1><p className="text-[var(--text-muted)] text-sm">Manage all assets across domains</p></div>
+        <button onClick={openAdd} className="bg-yellow-400 hover:bg-yellow-300 text-white font-semibold px-4 py-2 rounded-lg text-sm transition-colors">+ Add Asset</button>
       </div>
 
       {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-red-400 text-sm">{error}</div>}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or asset no..." className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 w-64" />
-        <select value={domain} onChange={e => setDomain(e.target.value)} className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or asset no..." className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] w-64" />
+        <select value={domain} onChange={e => setDomain(e.target.value)} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]">
           {DOMAINS.map(d => <option key={d}>{d}</option>)}
         </select>
-        <select value={status} onChange={e => setStatus(e.target.value)} className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+        <select value={status} onChange={e => setStatus(e.target.value)} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]">
           {STATUSES.map(s => <option key={s}>{s}</option>)}
         </select>
-        <select value={catFilter} onChange={e => setCatFilter(e.target.value)} className="bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+        <select value={catFilter} onChange={e => setCatFilter(e.target.value)} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]">
           <option value="">All Categories</option>
           {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
       </div>
 
       {/* Table */}
-      <div className="bg-slate-900 border border-white/8 rounded-xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-slate-800/50 border-b border-white/8">
-              <tr className="text-slate-400 text-xs uppercase">
+            <thead className="bg-[var(--bg-surface)]/50 border-b border-[var(--border-subtle)]">
+              <tr className="text-[var(--text-muted)] text-xs uppercase">
                 {['Asset No', 'Name', 'Category', 'Domain', 'OEM Part #', 'Unit', 'Stock', 'Reorder', 'Status', 'Unit Cost', 'Total Value', 'Actions'].map(h => (
                   <th key={h} className="text-left px-4 py-3 font-medium">{h}</th>
                 ))}
@@ -198,28 +198,28 @@ export default function AssetRegistryPage() {
             </thead>
             <tbody className="divide-y divide-white/5">
               {filtered.length === 0 ? (
-                <tr><td colSpan={12} className="px-4 py-12 text-center text-slate-500">
+                <tr><td colSpan={12} className="px-4 py-12 text-center text-[var(--text-faint)]">
                   <div className="text-4xl mb-2">📦</div>
                   <p>No assets found</p>
                 </td></tr>
               ) : filtered.map(a => (
-                <tr key={a.id} className="hover:bg-white/3 transition-colors">
+                <tr key={a.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                   <td className="px-4 py-3 text-yellow-300 font-mono text-xs">{a.asset_no}</td>
-                  <td className="px-4 py-3 text-white font-medium">{a.name}</td>
-                  <td className="px-4 py-3 text-slate-400">{a.category_name ?? '—'}</td>
-                  <td className="px-4 py-3 text-slate-400">{a.domain}</td>
-                  <td className="px-4 py-3 text-slate-400 font-mono text-xs">{a.oem_part_number ?? '—'}</td>
-                  <td className="px-4 py-3 text-slate-400">{a.unit_of_measure ?? '—'}</td>
+                  <td className="px-4 py-3 text-[var(--text-main)] font-medium">{a.name}</td>
+                  <td className="px-4 py-3 text-[var(--text-muted)]">{a.category_name ?? '—'}</td>
+                  <td className="px-4 py-3 text-[var(--text-muted)]">{a.domain}</td>
+                  <td className="px-4 py-3 text-[var(--text-muted)] font-mono text-xs">{a.oem_part_number ?? '—'}</td>
+                  <td className="px-4 py-3 text-[var(--text-muted)]">{a.unit_of_measure ?? '—'}</td>
                   <td className="px-4 py-3"><StockBar current={a.current_stock} threshold={a.reorder_threshold} /></td>
-                  <td className="px-4 py-3 text-slate-400">{a.reorder_threshold}</td>
+                  <td className="px-4 py-3 text-[var(--text-muted)]">{a.reorder_threshold}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-block px-2 py-0.5 rounded-full text-xs border ${statusBadge(a.stock_status)}`}>{a.stock_status?.replace('_', ' ')}</span>
                   </td>
-                  <td className="px-4 py-3 text-slate-300">{a.unit_cost_aed?.toFixed(2)}</td>
+                  <td className="px-4 py-3 text-[var(--text-muted)]">{a.unit_cost_aed?.toFixed(2)}</td>
                   <td className="px-4 py-3 text-yellow-300 font-medium">{(a.total_value_aed ?? 0).toLocaleString()}</td>
                   <td className="px-4 py-3 flex gap-2">
-                    <button onClick={() => openEdit(a)} className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-1 rounded">Edit</button>
-                    <Link href={`/assets/timeline?asset_id=${a.id}`} className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-1 rounded">Timeline</Link>
+                    <button onClick={() => openEdit(a)} className="text-xs bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] px-2 py-1 rounded">Edit</button>
+                    <Link href={`/assets/timeline?asset_id=${a.id}`} className="text-xs bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] px-2 py-1 rounded">Timeline</Link>
                   </td>
                 </tr>
               ))}
@@ -231,10 +231,10 @@ export default function AssetRegistryPage() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-white/8">
-              <h2 className="text-white font-semibold">{editAsset ? 'Edit Asset' : 'Add New Asset'}</h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white text-xl">✕</button>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-[var(--border-subtle)]">
+              <h2 className="text-[var(--text-main)] font-semibold">{editAsset ? 'Edit Asset' : 'Add New Asset'}</h2>
+              <button onClick={() => setShowModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">✕</button>
             </div>
             <div className="p-6 grid grid-cols-2 gap-4">
               {[
@@ -253,24 +253,24 @@ export default function AssetRegistryPage() {
                 { label: 'Bin Location', key: 'bin_location', type: 'text' },
               ].map(f => (
                 <div key={f.key} className={f.full ? 'col-span-2' : ''}>
-                  <label className="block text-xs text-slate-400 mb-1">{f.label}</label>
+                  <label className="block text-xs text-[var(--text-muted)] mb-1">{f.label}</label>
                   <input
                     type={f.type}
                     value={(form as Record<string, unknown>)[f.key] as string}
                     onChange={e => setForm(prev => ({ ...prev, [f.key]: f.type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value }))}
-                    className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                    className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]"
                   />
                 </div>
               ))}
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Domain</label>
-                <select value={form.domain} onChange={e => setForm(p => ({ ...p, domain: e.target.value }))} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+                <label className="block text-xs text-[var(--text-muted)] mb-1">Domain</label>
+                <select value={form.domain} onChange={e => setForm(p => ({ ...p, domain: e.target.value }))} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]">
                   {DOMAINS.filter(d => d !== 'ALL').map(d => <option key={d}>{d}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Category</label>
-                <select value={form.category_id} onChange={e => setForm(p => ({ ...p, category_id: e.target.value }))} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+                <label className="block text-xs text-[var(--text-muted)] mb-1">Category</label>
+                <select value={form.category_id} onChange={e => setForm(p => ({ ...p, category_id: e.target.value }))} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]">
                   <option value="">— Select —</option>
                   {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
@@ -282,20 +282,20 @@ export default function AssetRegistryPage() {
                   { label: 'Requires Calibration', key: 'requires_calibration' },
                   { label: 'BLE Tracked', key: 'is_ble_tracked' },
                 ].map(cb => (
-                  <label key={cb.key} className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                  <label key={cb.key} className="flex items-center gap-2 text-sm text-[var(--text-muted)] cursor-pointer">
                     <input type="checkbox" checked={(form as Record<string, unknown>)[cb.key] as boolean} onChange={e => setForm(p => ({ ...p, [cb.key]: e.target.checked }))} className="w-4 h-4 rounded" />
                     {cb.label}
                   </label>
                 ))}
               </div>
               <div className="col-span-2">
-                <label className="block text-xs text-slate-400 mb-1">Notes</label>
-                <textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} rows={2} className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+                <label className="block text-xs text-[var(--text-muted)] mb-1">Notes</label>
+                <textarea value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} rows={2} className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
               </div>
             </div>
-            <div className="flex gap-3 justify-end p-6 border-t border-white/8">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
-              <button onClick={submit} disabled={submitting} className="bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-semibold px-5 py-2 rounded-lg text-sm disabled:opacity-50">
+            <div className="flex gap-3 justify-end p-6 border-t border-[var(--border-subtle)]">
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-main)]">Cancel</button>
+              <button onClick={submit} disabled={submitting} className="bg-yellow-400 hover:bg-yellow-300 text-white font-semibold px-5 py-2 rounded-lg text-sm disabled:opacity-50">
                 {submitting ? 'Saving...' : editAsset ? 'Update' : 'Create'}
               </button>
             </div>

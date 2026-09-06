@@ -39,7 +39,7 @@ function RssiBar({ rssi }: { rssi: number }) {
   const color = pct > 66 ? 'bg-emerald-500' : pct > 33 ? 'bg-amber-500' : 'bg-red-500';
   return (
     <div className="flex items-center gap-2">
-      <div className="w-14 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+      <div className="w-14 h-1.5 bg-[var(--bg-surface-hover)] rounded-full overflow-hidden">
         <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
       </div>
       <span className={`text-xs font-mono ${pct > 66 ? 'text-emerald-400' : pct > 33 ? 'text-amber-400' : 'text-red-400'}`}>{rssi}</span>
@@ -48,7 +48,7 @@ function RssiBar({ rssi }: { rssi: number }) {
 }
 
 function BatteryPill({ pct }: { pct?: number }) {
-  if (pct === undefined || pct === null) return <span className="text-slate-600 text-xs">—</span>;
+  if (pct === undefined || pct === null) return <span className="text-[var(--text-faint)] text-xs">—</span>;
   const color = pct > 50 ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
     : pct > 20 ? 'bg-amber-500/20 text-amber-400 border-amber-500/30'
     : 'bg-red-500/20 text-red-400 border-red-500/30';
@@ -67,7 +67,7 @@ function RelativeTime({ dt }: { dt: string }) {
   else if (diff < 3600) label = `${Math.floor(diff / 60)}m ago`;
   else if (diff < 86400) label = `${Math.floor(diff / 3600)}h ago`;
   else label = `${Math.floor(diff / 86400)}d ago`;
-  return <span title={new Date(dt).toLocaleString()} className="text-slate-400 text-xs cursor-default">{label}</span>;
+  return <span title={new Date(dt).toLocaleString()} className="text-[var(--text-muted)] text-xs cursor-default">{label}</span>;
 }
 
 export default function BLEDetectionsPage() {
@@ -162,25 +162,25 @@ export default function BLEDetectionsPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">📡 BLE Detection Log</h1>
-          <p className="text-slate-400 text-xs mt-1">Real-time signal feed from connected gateways</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">📡 BLE Detection Log</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-1">Real-time signal feed from connected gateways</p>
         </div>
         <div className="flex items-center gap-3">
           {lastRefresh && (
-            <span className="text-xs text-slate-500">Last refresh: {lastRefresh.toLocaleTimeString()}</span>
+            <span className="text-xs text-[var(--text-faint)]">Last refresh: {lastRefresh.toLocaleTimeString()}</span>
           )}
           <button
             onClick={() => setAutoRefresh(v => !v)}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${
               autoRefresh
                 ? 'bg-yellow-400/10 border-yellow-500/40 text-yellow-400'
-                : 'bg-slate-800 border-white/8 text-slate-400 hover:text-white'
+                : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)]'
             }`}
           >
-            <span className={`w-2 h-2 rounded-full ${autoRefresh ? 'bg-yellow-400 animate-pulse' : 'bg-slate-600'}`} />
+            <span className={`w-2 h-2 rounded-full ${autoRefresh ? 'bg-yellow-400 animate-pulse' : 'bg-[var(--bg-surface-hover)]'}`} />
             🔄 Auto-refresh {autoRefresh ? 'ON' : 'OFF'}
           </button>
-          <button onClick={loadDetections} className="text-xs bg-slate-800 border border-white/8 text-slate-300 hover:text-white px-3 py-1.5 rounded-lg">
+          <button onClick={loadDetections} className="text-xs bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] px-3 py-1.5 rounded-lg">
             Refresh
           </button>
         </div>
@@ -191,16 +191,16 @@ export default function BLEDetectionsPage() {
       {/* KPI strip */}
       <div className="grid grid-cols-4 gap-4">
         {kpis.map(k => (
-          <div key={k.label} className="bg-slate-900 border border-white/8 rounded-xl p-4">
+          <div key={k.label} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4">
             {statsLoading ? (
               <div className="space-y-2">
-                <div className="h-7 bg-slate-800 rounded animate-pulse w-16" />
-                <div className="h-3 bg-slate-800 rounded animate-pulse w-24" />
+                <div className="h-7 bg-[var(--bg-surface)] rounded animate-pulse w-16" />
+                <div className="h-3 bg-[var(--bg-surface)] rounded animate-pulse w-24" />
               </div>
             ) : (
               <>
                 <p className={`text-2xl font-bold ${k.color}`}>{k.value}</p>
-                <p className="text-slate-400 text-xs mt-1">{k.label}</p>
+                <p className="text-[var(--text-muted)] text-xs mt-1">{k.label}</p>
               </>
             )}
           </div>
@@ -208,14 +208,14 @@ export default function BLEDetectionsPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-slate-900 border border-white/8 rounded-xl p-4">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4">
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <div className="lg:col-span-2">
-            <label className="block text-xs text-slate-400 mb-1">Gateway</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Gateway</label>
             <select
               value={gatewayFilter}
               onChange={e => { setGatewayFilter(e.target.value); setPage(1); }}
-              className="w-full bg-slate-800 border border-white/8 rounded-lg px-3 py-2 text-sm text-white"
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]"
             >
               <option value="">All Gateways</option>
               {gateways.map(g => (
@@ -224,38 +224,38 @@ export default function BLEDetectionsPage() {
             </select>
           </div>
           <div>
-            <label className="block text-xs text-slate-400 mb-1">Tag MAC</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Tag MAC</label>
             <input
               value={tagMacFilter}
               onChange={e => { setTagMacFilter(e.target.value); setPage(1); }}
               placeholder="AA:BB:CC..."
-              className="w-full bg-slate-800 border border-white/8 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 font-mono"
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] font-mono"
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-400 mb-1">From</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">From</label>
             <input
               type="datetime-local"
               value={fromFilter}
               onChange={e => { setFromFilter(e.target.value); setPage(1); }}
-              className="w-full bg-slate-800 border border-white/8 rounded-lg px-3 py-2 text-sm text-white"
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]"
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-400 mb-1">To</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">To</label>
             <input
               type="datetime-local"
               value={toFilter}
               onChange={e => { setToFilter(e.target.value); setPage(1); }}
-              className="w-full bg-slate-800 border border-white/8 rounded-lg px-3 py-2 text-sm text-white"
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]"
             />
           </div>
           <div>
-            <label className="block text-xs text-slate-400 mb-1">Limit</label>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Limit</label>
             <select
               value={limit}
               onChange={e => { setLimit(Number(e.target.value)); setPage(1); }}
-              className="w-full bg-slate-800 border border-white/8 rounded-lg px-3 py-2 text-sm text-white"
+              className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]"
             >
               {[50, 100, 200].map(l => <option key={l}>{l}</option>)}
             </select>
@@ -264,7 +264,7 @@ export default function BLEDetectionsPage() {
         <div className="flex justify-end mt-3">
           <button
             onClick={() => { setGatewayFilter(''); setTagMacFilter(''); setFromFilter(''); setToFilter(''); setPage(1); }}
-            className="text-xs text-slate-400 hover:text-white"
+            className="text-xs text-[var(--text-muted)] hover:text-[var(--text-main)]"
           >
             Clear filters
           </button>
@@ -272,19 +272,19 @@ export default function BLEDetectionsPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-slate-900 border border-white/8 rounded-xl overflow-hidden">
-        <div className="px-5 py-3 border-b border-white/8 flex items-center justify-between">
-          <span className="text-sm text-slate-400">{total.toLocaleString()} detections total</span>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl overflow-hidden">
+        <div className="px-5 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
+          <span className="text-sm text-[var(--text-muted)]">{total.toLocaleString()} detections total</span>
           {stats?.last_detection_at && (
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-[var(--text-faint)]">
               Last detection: <RelativeTime dt={stats.last_detection_at} />
             </span>
           )}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-slate-800/50 border-b border-white/8">
-              <tr className="text-slate-400 text-xs uppercase">
+            <thead className="bg-[var(--bg-surface)]/50 border-b border-[var(--border-subtle)]">
+              <tr className="text-[var(--text-muted)] text-xs uppercase">
                 {['Time', 'Gateway', 'Zone', 'Tag MAC', 'Asset Name', 'RSSI Signal', 'Battery', ''].map(h => (
                   <th key={h} className="text-left px-4 py-3 font-medium">{h}</th>
                 ))}
@@ -296,31 +296,31 @@ export default function BLEDetectionsPage() {
                   <tr key={i}>
                     {Array.from({ length: 8 }).map((_, j) => (
                       <td key={j} className="px-4 py-3">
-                        <div className="h-4 bg-slate-800 rounded animate-pulse" style={{ width: `${40 + Math.random() * 60}%` }} />
+                        <div className="h-4 bg-[var(--bg-surface)] rounded animate-pulse" style={{ width: `${40 + Math.random() * 60}%` }} />
                       </td>
                     ))}
                   </tr>
                 ))
               ) : detections.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-16 text-center text-slate-500">
+                  <td colSpan={8} className="px-4 py-16 text-center text-[var(--text-faint)]">
                     <div className="text-4xl mb-3">📡</div>
                     <p className="font-medium">No detections received yet.</p>
                     <p className="text-sm mt-1">Connect a BLE gateway to start receiving data.</p>
                   </td>
                 </tr>
               ) : detections.map(d => (
-                <tr key={d.id} className="hover:bg-white/3 transition-colors">
+                <tr key={d.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                   <td className="px-4 py-3 whitespace-nowrap">
                     <RelativeTime dt={d.detected_at} />
                   </td>
                   <td className="px-4 py-3">
-                    <div className="text-white text-xs font-medium">{d.gateway_name ?? d.gateway_code ?? d.gateway_id}</div>
+                    <div className="text-[var(--text-main)] text-xs font-medium">{d.gateway_name ?? d.gateway_code ?? d.gateway_id}</div>
                     {d.gateway_code && d.gateway_name && (
-                      <div className="text-slate-600 text-xs font-mono">{d.gateway_code}</div>
+                      <div className="text-[var(--text-faint)] text-xs font-mono">{d.gateway_code}</div>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-slate-400 text-xs">{d.zone ?? '—'}</td>
+                  <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{d.zone ?? '—'}</td>
                   <td className="px-4 py-3">
                     <code className="text-yellow-300 font-mono text-xs bg-yellow-300/5 px-1.5 py-0.5 rounded">{d.tag_mac}</code>
                   </td>
@@ -330,7 +330,7 @@ export default function BLEDetectionsPage() {
                         {d.asset_name}
                       </a>
                     ) : (
-                      <span className="text-slate-500 text-xs italic">Unassigned</span>
+                      <span className="text-[var(--text-faint)] text-xs italic">Unassigned</span>
                     )}
                   </td>
                   <td className="px-4 py-3">
@@ -340,7 +340,7 @@ export default function BLEDetectionsPage() {
                     <BatteryPill pct={d.battery_pct} />
                   </td>
                   <td className="px-4 py-3">
-                    <span className="text-[10px] text-slate-600 font-mono" title={new Date(d.detected_at).toLocaleString()}>
+                    <span className="text-[10px] text-[var(--text-faint)] font-mono" title={new Date(d.detected_at).toLocaleString()}>
                       {new Date(d.detected_at).toLocaleTimeString()}
                     </span>
                   </td>
@@ -352,15 +352,15 @@ export default function BLEDetectionsPage() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-5 py-3 border-t border-white/8">
-            <span className="text-xs text-slate-500">
+          <div className="flex items-center justify-between px-5 py-3 border-t border-[var(--border-subtle)]">
+            <span className="text-xs text-[var(--text-faint)]">
               Page {page} of {totalPages} — {total.toLocaleString()} results
             </span>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="text-xs px-3 py-1.5 bg-slate-800 border border-white/8 text-slate-400 hover:text-white rounded-lg disabled:opacity-40"
+                className="text-xs px-3 py-1.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] rounded-lg disabled:opacity-40"
               >
                 ← Prev
               </button>
@@ -371,7 +371,7 @@ export default function BLEDetectionsPage() {
                   <button
                     key={pg}
                     onClick={() => setPage(pg)}
-                    className={`text-xs px-3 py-1.5 rounded-lg border ${pg === page ? 'bg-yellow-400 text-slate-950 border-yellow-400 font-semibold' : 'bg-slate-800 border-white/8 text-slate-400 hover:text-white'}`}
+                    className={`text-xs px-3 py-1.5 rounded-lg border ${pg === page ? 'bg-yellow-400 text-white border-yellow-400 font-semibold' : 'bg-[var(--bg-surface)] border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
                   >
                     {pg}
                   </button>
@@ -380,7 +380,7 @@ export default function BLEDetectionsPage() {
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="text-xs px-3 py-1.5 bg-slate-800 border border-white/8 text-slate-400 hover:text-white rounded-lg disabled:opacity-40"
+                className="text-xs px-3 py-1.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] rounded-lg disabled:opacity-40"
               >
                 Next →
               </button>
