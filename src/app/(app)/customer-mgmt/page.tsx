@@ -498,7 +498,7 @@ export default function CustomerPage() {
                               return(<button type="button" key={m} onClick={()=>{
                                 const upd=sel?cur.filter((x:string)=>x!==m):[...cur,m];
                                 set('allowedPaymentMethods',JSON.stringify(upd));
-                              }} className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${sel?'bg-cyan-600 text-white':'bg-slate-600 text-slate-300 hover:bg-slate-500'}`}>{ (m || '').replace('_',' ') }</button>);
+                              }} className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${sel?'bg-cyan-600 text-white':'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-elevated)]'}`}>{ (m || '').replace('_',' ') }</button>);
                             })}
                           </div>
                         </Fld>
