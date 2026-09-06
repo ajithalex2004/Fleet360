@@ -80,7 +80,7 @@ export default function SalikPage() {
   const getStatusColor = (status: string) => {
     if (status === 'active') return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
     if (status === 'low_balance') return 'bg-amber-500/20 text-amber-400 border-amber-500/30';
-    return 'bg-slate-500/20 text-slate-300 border-slate-500/30';
+    return 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30';
   };
 
   const getBalanceColor = (balance: number) => {
@@ -94,8 +94,8 @@ export default function SalikPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-2">Salik Accounts</h1>
-          <p className="text-xs text-slate-400">Manage toll tag accounts and balances</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Salik Accounts</h1>
+          <p className="text-xs text-[var(--text-muted)]">Manage toll tag accounts and balances</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
@@ -109,12 +109,12 @@ export default function SalikPage() {
       {lowBalanceAccounts.length > 0 && (
         <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-6">
           <p className="text-rose-400 font-semibold mb-3">Low Balance Alert</p>
-          <p className="text-slate-300 text-sm">
+          <p className="text-[var(--text-muted)] text-sm">
             {lowBalanceAccounts.length} account(s) with balance below AED 50:
           </p>
           <ul className="mt-2 space-y-1">
             {lowBalanceAccounts.map((acc) => (
-              <li key={acc.id} className="text-slate-400 text-sm">
+              <li key={acc.id} className="text-[var(--text-muted)] text-sm">
                 • {acc.tagNumber} ({acc.vehicle}) - AED {Number(acc.balance ?? 0).toFixed(2)}
               </li>
             ))}
@@ -123,35 +123,35 @@ export default function SalikPage() {
       )}
 
       {/* Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
         <table className="w-full">
           <thead>
-            <tr className="bg-slate-800/50 border-b border-white/5">
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Tag Number</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Vehicle</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Balance (AED)</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Auto-Recharge</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Recharge Amount</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Status</th>
+            <tr className="bg-[var(--bg-surface)]/50 border-b border-[var(--border-subtle)]">
+              <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Tag Number</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Vehicle</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Balance (AED)</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Auto-Recharge</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Recharge Amount</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Status</th>
             </tr>
           </thead>
           <tbody>
             {accounts.length > 0 ? (
               accounts.map((account) => (
-                <tr key={account.id} className="border-b border-white/5 hover:bg-white/5">
-                  <td className="px-6 py-4 text-sm text-white font-medium">{account.tagNumber}</td>
-                  <td className="px-6 py-4 text-sm text-white">{account.vehicle}</td>
+                <tr key={account.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]">
+                  <td className="px-6 py-4 text-sm text-[var(--text-main)] font-medium">{account.tagNumber}</td>
+                  <td className="px-6 py-4 text-sm text-[var(--text-main)]">{account.vehicle}</td>
                   <td className={`px-6 py-4 text-sm font-medium ${getBalanceColor(account.balance)}`}>
                     AED {Number(account.balance ?? 0).toFixed(2)}
                   </td>
-                  <td className="px-6 py-4 text-sm text-white">
+                  <td className="px-6 py-4 text-sm text-[var(--text-main)]">
                     {account.autoRecharge ? (
                       <span className="text-emerald-400">Yes</span>
                     ) : (
-                      <span className="text-slate-200">No</span>
+                      <span className="text-[var(--text-main)]">No</span>
                     )}
                   </td>
-                  <td className="px-6 py-4 text-sm text-white">AED {account.rechargeAmount}</td>
+                  <td className="px-6 py-4 text-sm text-[var(--text-main)]">AED {account.rechargeAmount}</td>
                   <td className="px-6 py-4 text-sm">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(account.status)}`}>
                       {account.status.replace('_', ' ')}
@@ -161,7 +161,7 @@ export default function SalikPage() {
               ))
             ) : (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-slate-200">
+                <td colSpan={6} className="px-6 py-8 text-center text-[var(--text-main)]">
                   No Salik accounts found
                 </td>
               </tr>
@@ -173,38 +173,38 @@ export default function SalikPage() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 rounded-2xl border border-white/10 p-8 w-full max-w-md">
-            <h2 className="text-2xl font-bold text-white mb-6">Add Salik Account</h2>
+          <div className="bg-[var(--bg-surface)] rounded-2xl border border-[var(--border-subtle)] p-8 w-full max-w-md">
+            <h2 className="text-2xl font-bold text-[var(--text-main)] mb-6">Add Salik Account</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">Tag Number</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1">Tag Number</label>
                 <input
                   type="text"
                   value={formData.tagNumber}
                   onChange={(e) => setFormData({ ...formData, tagNumber: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500"
                   placeholder="SAL-12345"
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">Vehicle</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1">Vehicle</label>
                 <input
                   type="text"
                   value={formData.vehicle}
                   onChange={(e) => setFormData({ ...formData, vehicle: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500"
                   placeholder="Vehicle ID"
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">Initial Balance (AED)</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1">Initial Balance (AED)</label>
                 <input
                   type="number"
                   value={formData.initialBalance}
                   onChange={(e) => setFormData({ ...formData, initialBalance: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500"
                   placeholder="500"
                   required
                 />
@@ -215,20 +215,20 @@ export default function SalikPage() {
                   id="autoRecharge"
                   checked={formData.autoRecharge}
                   onChange={(e) => setFormData({ ...formData, autoRecharge: e.target.checked })}
-                  className="w-4 h-4 cursor-pointer text-white"
+                  className="w-4 h-4 cursor-pointer text-[var(--text-main)]"
                 />
-                <label htmlFor="autoRecharge" className="text-sm text-slate-300 cursor-pointer">
+                <label htmlFor="autoRecharge" className="text-sm text-[var(--text-muted)] cursor-pointer">
                   Enable Auto-Recharge
                 </label>
               </div>
               {formData.autoRecharge && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">Recharge Amount (AED)</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-1">Recharge Amount (AED)</label>
                   <input
                     type="number"
                     value={formData.rechargeAmount}
                     onChange={(e) => setFormData({ ...formData, rechargeAmount: e.target.value })}
-                    className="w-full bg-slate-700/50 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500"
                     placeholder="200"
                     required
                   />
@@ -238,7 +238,7 @@ export default function SalikPage() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 px-4 py-2 rounded-lg bg-slate-700 text-white font-medium hover:bg-slate-600 transition-all"
+                  className="flex-1 px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] text-[var(--text-main)] font-medium hover:bg-[var(--bg-surface-hover)] transition-all"
                 >
                   Cancel
                 </button>

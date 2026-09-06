@@ -60,7 +60,7 @@ export default function ComplianceDashboard() {
 
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {[...Array(3)].map((_, i) => <div key={i} className="h-28 bg-slate-800/60 rounded-2xl animate-pulse" />)}
+          {[...Array(3)].map((_, i) => <div key={i} className="h-28 bg-[var(--bg-surface)]/60 rounded-2xl animate-pulse" />)}
         </div>
       ) : (
         <>
@@ -83,7 +83,7 @@ export default function ComplianceDashboard() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-white/10 text-slate-500 text-[11px] uppercase tracking-wider">
+                    <tr className="border-b border-[var(--border-subtle)] text-[var(--text-faint)] text-[11px] uppercase tracking-wider">
                       <th className="text-left py-2 font-medium">Entity</th>
                       <th className="text-left py-2 font-medium">Entity ID</th>
                       <th className="text-left py-2 font-medium">Document</th>
@@ -93,11 +93,11 @@ export default function ComplianceDashboard() {
                   </thead>
                   <tbody className="divide-y divide-white/5">
                     {criticalExpirations.slice(0, 10).map(item => (
-                      <tr key={item.id} className="hover:bg-white/[0.02] transition-colors">
-                        <td className="py-3 text-white font-medium">{item.entityType}</td>
-                        <td className="py-3 text-slate-300 font-mono text-xs">{item.entityId}</td>
-                        <td className="py-3 text-slate-300">{item.docType}</td>
-                        <td className="py-3 text-slate-400 text-xs">{new Date(item.expiryDate).toLocaleDateString('en-AE')}</td>
+                      <tr key={item.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
+                        <td className="py-3 text-[var(--text-main)] font-medium">{item.entityType}</td>
+                        <td className="py-3 text-[var(--text-muted)] font-mono text-xs">{item.entityId}</td>
+                        <td className="py-3 text-[var(--text-muted)]">{item.docType}</td>
+                        <td className="py-3 text-[var(--text-muted)] text-xs">{new Date(item.expiryDate).toLocaleDateString('en-AE')}</td>
                         <td className="py-3">
                           <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${urgencyClass(item.daysRemaining)}`}>
                             {item.daysRemaining} days
@@ -111,7 +111,7 @@ export default function ComplianceDashboard() {
             ) : (
               <div className="text-center py-8">
                 <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-2" />
-                <p className="text-slate-400 text-sm">No critical expirations</p>
+                <p className="text-[var(--text-muted)] text-sm">No critical expirations</p>
               </div>
             )}
           </Panel>

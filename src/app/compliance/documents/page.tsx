@@ -119,8 +119,8 @@ export default function DocumentsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white mb-2">Compliance Documents</h1>
-          <p className="text-xs text-slate-400">Manage all regulatory documents and permits</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-2">Compliance Documents</h1>
+          <p className="text-xs text-[var(--text-muted)]">Manage all regulatory documents and permits</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
@@ -133,11 +133,11 @@ export default function DocumentsPage() {
       {/* Filters */}
       <div className="flex gap-4 flex-wrap">
         <div>
-          <label className="block text-xs text-slate-400 mb-2 font-medium">Entity Type</label>
+          <label className="block text-xs text-[var(--text-muted)] mb-2 font-medium">Entity Type</label>
           <select
             value={entityFilter}
             onChange={(e) => setEntityFilter(e.target.value)}
-            className="bg-slate-800/50 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
+            className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-blue-500"
           >
             <option value="all">All Types</option>
             <option value="Vehicle">Vehicle</option>
@@ -146,11 +146,11 @@ export default function DocumentsPage() {
           </select>
         </div>
         <div>
-          <label className="block text-xs text-slate-400 mb-2 font-medium">Status</label>
+          <label className="block text-xs text-[var(--text-muted)] mb-2 font-medium">Status</label>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-slate-800/50 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
+            className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-blue-500"
           >
             <option value="all">All Status</option>
             <option value="active">Active</option>
@@ -161,34 +161,34 @@ export default function DocumentsPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
         <table className="w-full">
           <thead>
-            <tr className="bg-slate-800/50 border-b border-white/5">
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Entity Type</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Entity ID</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Doc Type</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Authority</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Doc Number</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Issue Date</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Expiry Date</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Days Remaining</th>
-              <th className="px-6 py-3 text-left text-xs font-semibold text-slate-300">Status</th>
+            <tr className="bg-[var(--bg-surface)]/50 border-b border-[var(--border-subtle)]">
+              <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Entity Type</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Entity ID</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Doc Type</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Authority</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Doc Number</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Issue Date</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Expiry Date</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Days Remaining</th>
+              <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Status</th>
             </tr>
           </thead>
           <tbody>
             {filteredDocs.length > 0 ? (
               filteredDocs.map((doc) => (
-                <tr key={doc.id} className="border-b border-white/5 hover:bg-white/5">
-                  <td className="px-6 py-4 text-sm text-white font-medium">{doc.entityType}</td>
-                  <td className="px-6 py-4 text-sm text-white">{doc.entityId}</td>
-                  <td className="px-6 py-4 text-sm text-white">{doc.docType}</td>
-                  <td className="px-6 py-4 text-sm text-white">{doc.authority}</td>
-                  <td className="px-6 py-4 text-sm text-white font-mono text-xs">{doc.docNumber}</td>
-                  <td className="px-6 py-4 text-sm text-slate-200">
+                <tr key={doc.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]">
+                  <td className="px-6 py-4 text-sm text-[var(--text-main)] font-medium">{doc.entityType}</td>
+                  <td className="px-6 py-4 text-sm text-[var(--text-main)]">{doc.entityId}</td>
+                  <td className="px-6 py-4 text-sm text-[var(--text-main)]">{doc.docType}</td>
+                  <td className="px-6 py-4 text-sm text-[var(--text-main)]">{doc.authority}</td>
+                  <td className="px-6 py-4 text-sm text-[var(--text-main)] font-mono text-xs">{doc.docNumber}</td>
+                  <td className="px-6 py-4 text-sm text-[var(--text-main)]">
                     {new Date(doc.issueDate).toLocaleDateString()}
                   </td>
-                  <td className="px-6 py-4 text-sm text-slate-200">
+                  <td className="px-6 py-4 text-sm text-[var(--text-main)]">
                     {new Date(doc.expiryDate).toLocaleDateString()}
                   </td>
                   <td className={`px-6 py-4 text-sm font-medium ${getDaysColor(doc.daysUntilExpiry)}`}>
@@ -203,7 +203,7 @@ export default function DocumentsPage() {
               ))
             ) : (
               <tr>
-                <td colSpan={9} className="px-6 py-8 text-center text-slate-200">
+                <td colSpan={9} className="px-6 py-8 text-center text-[var(--text-main)]">
                   No documents found
                 </td>
               </tr>
@@ -215,16 +215,16 @@ export default function DocumentsPage() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 rounded-2xl border border-white/10 p-8 w-full max-w-lg max-h-screen overflow-y-auto">
-            <h2 className="text-2xl font-bold text-white mb-6">New Document</h2>
+          <div className="bg-[var(--bg-surface)] rounded-2xl border border-[var(--border-subtle)] p-8 w-full max-w-lg max-h-screen overflow-y-auto">
+            <h2 className="text-2xl font-bold text-[var(--text-main)] mb-6">New Document</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">Entity Type</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-1">Entity Type</label>
                   <select
                     value={formData.entityType}
                     onChange={(e) => setFormData({ ...formData, entityType: e.target.value })}
-                    className="w-full bg-slate-700/50 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] focus:outline-none focus:border-blue-500"
                   >
                     <option value="Vehicle">Vehicle</option>
                     <option value="Driver">Driver</option>
@@ -232,23 +232,23 @@ export default function DocumentsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">Entity ID</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-1">Entity ID</label>
                   <input
                     type="text"
                     value={formData.entityId}
                     onChange={(e) => setFormData({ ...formData, entityId: e.target.value })}
-                    className="w-full bg-slate-700/50 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500"
                     placeholder="V-001"
                     required
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">Doc Type</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1">Doc Type</label>
                 <select
                   value={formData.docType}
                   onChange={(e) => setFormData({ ...formData, docType: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] focus:outline-none focus:border-blue-500"
                 >
                   <option value="RTA_PERMIT">RTA Permit</option>
                   <option value="INSURANCE">Insurance</option>
@@ -260,23 +260,23 @@ export default function DocumentsPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">Authority</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-1">Authority</label>
                   <input
                     type="text"
                     value={formData.authority}
                     onChange={(e) => setFormData({ ...formData, authority: e.target.value })}
-                    className="w-full bg-slate-700/50 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500"
                     placeholder="RTA Dubai"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">Doc Number</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-1">Doc Number</label>
                   <input
                     type="text"
                     value={formData.docNumber}
                     onChange={(e) => setFormData({ ...formData, docNumber: e.target.value })}
-                    className="w-full bg-slate-700/50 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500"
                     placeholder="DOC-123456"
                     required
                   />
@@ -284,43 +284,43 @@ export default function DocumentsPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">Issue Date</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-1">Issue Date</label>
                   <input
                     type="date"
                     value={formData.issueDate}
                     onChange={(e) => setFormData({ ...formData, issueDate: e.target.value })}
-                    className="w-full bg-slate-700/50 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] focus:outline-none focus:border-blue-500"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">Expiry Date</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-1">Expiry Date</label>
                   <input
                     type="date"
                     value={formData.expiryDate}
                     onChange={(e) => setFormData({ ...formData, expiryDate: e.target.value })}
-                    className="w-full bg-slate-700/50 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                    className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] focus:outline-none focus:border-blue-500"
                     required
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">Reminder Days</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1">Reminder Days</label>
                 <input
                   type="number"
                   value={formData.reminderDays}
                   onChange={(e) => setFormData({ ...formData, reminderDays: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500"
                   placeholder="30"
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">Notes</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1">Notes</label>
                 <textarea
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full bg-slate-700/50 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500"
                   placeholder="Additional notes..."
                   rows={2}
                 />
@@ -329,7 +329,7 @@ export default function DocumentsPage() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 px-4 py-2 rounded-lg bg-slate-700 text-white font-medium hover:bg-slate-600 transition-all"
+                  className="flex-1 px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] text-[var(--text-main)] font-medium hover:bg-[var(--bg-surface-hover)] transition-all"
                 >
                   Cancel
                 </button>
