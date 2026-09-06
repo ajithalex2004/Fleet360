@@ -150,13 +150,13 @@ export default function DriverDashboard() {
               <div className="bg-emerald-500 h-full transition-all" style={{ width: `${okPct}%` }}    title={`OK: ${s.ok}`} />
               <div className="bg-amber-500   h-full transition-all" style={{ width: `${warnPct}%` }}  title={`Warning: ${s.warning}`} />
               <div className="bg-rose-500    h-full transition-all" style={{ width: `${critPct}%` }}  title={`Critical: ${s.critical}`} />
-              <div className="bg-slate-600   h-full transition-all" style={{ width: `${incPct}%` }}   title={`Incomplete: ${s.incomplete}`} />
+              <div className="bg-[var(--bg-surface-hover)]   h-full transition-all" style={{ width: `${incPct}%` }}   title={`Incomplete: ${s.incomplete}`} />
             </div>
             <div className="flex items-center gap-5 mt-3 text-[11px] text-[var(--text-muted)] flex-wrap">
               <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" /> OK ({okPct}%)</span>
               <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500" /> Expiring ({warnPct}%)</span>
               <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-rose-500" /> Critical ({critPct}%)</span>
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-slate-600" /> Incomplete ({incPct}%)</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-[var(--bg-surface-hover)]" /> Incomplete ({incPct}%)</span>
             </div>
           </Panel>
 
