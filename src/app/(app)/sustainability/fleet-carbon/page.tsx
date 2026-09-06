@@ -63,29 +63,29 @@ export default function FleetCarbonPage() {
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold text-white">Fleet Carbon Analysis</h1>
-        <p className="text-slate-400 text-xs mt-1">Vehicle-level Scope 1 & 2 emissions · Fuel composition · Decarbonisation roadmap</p>
+        <h1 className="text-2xl font-bold text-[var(--text-main)]">Fleet Carbon Analysis</h1>
+        <p className="text-[var(--text-muted)] text-xs mt-1">Vehicle-level Scope 1 & 2 emissions · Fuel composition · Decarbonisation roadmap</p>
       </div>
 
       {loading ? (
         <div className="animate-pulse space-y-4">
-          {[...Array(3)].map((_, i) => <div key={i} className="h-32 bg-slate-800/60 rounded-2xl" />)}
+          {[...Array(3)].map((_, i) => <div key={i} className="h-32 bg-[var(--bg-surface)]/60 rounded-2xl" />)}
         </div>
       ) : (
         <>
           {/* Fleet composition */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {fuelTypes.map(f => (
-              <div key={f.type} className={`bg-slate-900 border border-white/10 rounded-2xl p-5`}>
+              <div key={f.type} className={`bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5`}>
                 <div className="flex items-center justify-between mb-3">
                   <span className={`text-xs font-bold px-2.5 py-1 rounded-full bg-${f.color}-500/10 text-${f.color}-400 border border-${f.color}-500/20`}>{f.type}</span>
-                  <span className="text-slate-500 text-xs">{f.pct}% fleet</span>
+                  <span className="text-[var(--text-faint)] text-xs">{f.pct}% fleet</span>
                 </div>
-                <p className="text-3xl font-bold text-white">{f.count}</p>
-                <p className="text-slate-400 text-xs mt-1">vehicles</p>
-                {f.co2 > 0 && <p className="text-slate-600 text-xs mt-2">{f.co2} kg CO₂e/L</p>}
+                <p className="text-3xl font-bold text-[var(--text-main)]">{f.count}</p>
+                <p className="text-[var(--text-muted)] text-xs mt-1">vehicles</p>
+                {f.co2 > 0 && <p className="text-[var(--text-faint)] text-xs mt-2">{f.co2} kg CO₂e/L</p>}
                 {f.co2 === 0 && <p className="text-emerald-600 text-xs mt-2">Zero direct emissions</p>}
-                <div className="mt-3 h-1 bg-slate-800 rounded-full overflow-hidden">
+                <div className="mt-3 h-1 bg-[var(--bg-surface)] rounded-full overflow-hidden">
                   <div className={`h-full bg-${f.color}-500 rounded-full transition-all`} style={{ width: `${f.pct}%` }} />
                 </div>
               </div>
@@ -94,8 +94,8 @@ export default function FleetCarbonPage() {
 
           {/* Scope emissions breakdown */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="bg-slate-900 border border-white/10 rounded-2xl p-5">
-              <h2 className="text-white font-semibold mb-4 flex items-center gap-2">🏭 GHG Emissions by Scope</h2>
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5">
+              <h2 className="text-[var(--text-main)] font-semibold mb-4 flex items-center gap-2">🏭 GHG Emissions by Scope</h2>
               <div className="space-y-4">
                 {[
                   { label: 'Scope 1 — Direct (fuel combustion)', kg: scope?.scope1.total_kg ?? 0, color: 'bg-red-500', desc: 'Diesel + petrol burnt in fleet' },
@@ -107,21 +107,21 @@ export default function FleetCarbonPage() {
                   return (
                     <div key={s.label}>
                       <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="text-slate-300">{s.label}</span>
-                        <span className="text-white font-semibold">{(s.kg / 1000).toFixed(2)} t CO₂e</span>
+                        <span className="text-[var(--text-muted)]">{s.label}</span>
+                        <span className="text-[var(--text-main)] font-semibold">{(s.kg / 1000).toFixed(2)} t CO₂e</span>
                       </div>
-                      <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                      <div className="h-2 bg-[var(--bg-surface)] rounded-full overflow-hidden">
                         <div className={`h-full ${s.color} rounded-full`} style={{ width: `${pct}%` }} />
                       </div>
-                      <p className="text-slate-600 text-xs mt-1">{s.desc} · {pct}% of total</p>
+                      <p className="text-[var(--text-faint)] text-xs mt-1">{s.desc} · {pct}% of total</p>
                     </div>
                   );
                 })}
               </div>
             </div>
 
-            <div className="bg-slate-900 border border-white/10 rounded-2xl p-5">
-              <h2 className="text-white font-semibold mb-4 flex items-center gap-2">⚡ Operational Metrics</h2>
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5">
+              <h2 className="text-[var(--text-main)] font-semibold mb-4 flex items-center gap-2">⚡ Operational Metrics</h2>
               <div className="space-y-3">
                 {[
                   { label: 'Total Fleet Distance', value: `${((fleet?.total_km ?? 0) / 1000).toFixed(0)}k km`, sub: 'All vehicles combined' },
@@ -130,12 +130,12 @@ export default function FleetCarbonPage() {
                   { label: 'Petrol Consumed', value: `${(fleet?.petrol_litres ?? 0).toLocaleString()} L`, sub: `${((fleet?.petrol_litres ?? 0) * 2.31 / 1000).toFixed(2)} t CO₂e` },
                   { label: 'Carbon Intensity', value: `${carbonIntensity} kg/km`, sub: 'Scope 1+2 per km driven' },
                 ].map(m => (
-                  <div key={m.label} className="flex items-center justify-between py-2 border-b border-white/5">
+                  <div key={m.label} className="flex items-center justify-between py-2 border-b border-[var(--border-subtle)]">
                     <div>
-                      <p className="text-slate-300 text-sm">{m.label}</p>
-                      <p className="text-slate-600 text-xs">{m.sub}</p>
+                      <p className="text-[var(--text-muted)] text-sm">{m.label}</p>
+                      <p className="text-[var(--text-faint)] text-xs">{m.sub}</p>
                     </div>
-                    <p className="text-white font-semibold text-sm">{m.value}</p>
+                    <p className="text-[var(--text-main)] font-semibold text-sm">{m.value}</p>
                   </div>
                 ))}
               </div>
@@ -157,11 +157,11 @@ export default function FleetCarbonPage() {
                 { year: '2030', target: '50% EV fleet + hybrid', current: `${fleet?.ev_percent ?? 0}%`, status: 'Roadmap target' },
                 { year: '2050', target: 'Net Zero Operations', current: 'Planning phase', status: '🎯 Strategic goal' },
               ].map(r => (
-                <div key={r.year} className="bg-slate-900/60 border border-white/10 rounded-xl p-4">
+                <div key={r.year} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-4">
                   <p className="text-emerald-400 text-lg font-bold">{r.year}</p>
-                  <p className="text-white text-sm font-medium mt-1">{r.target}</p>
-                  <p className="text-slate-400 text-xs mt-1">Current: {r.current}</p>
-                  <p className="text-slate-500 text-xs mt-2">{r.status}</p>
+                  <p className="text-[var(--text-main)] text-sm font-medium mt-1">{r.target}</p>
+                  <p className="text-[var(--text-muted)] text-xs mt-1">Current: {r.current}</p>
+                  <p className="text-[var(--text-faint)] text-xs mt-2">{r.status}</p>
                 </div>
               ))}
             </div>

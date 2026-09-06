@@ -42,13 +42,13 @@ export default function ModalShiftPage() {
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold text-white">Modal Shift Analysis</h1>
-        <p className="text-slate-400 text-xs mt-1">Scope 3 avoided emissions · Private car displacement · GHG Protocol Project Standard</p>
+        <h1 className="text-2xl font-bold text-[var(--text-main)]">Modal Shift Analysis</h1>
+        <p className="text-[var(--text-muted)] text-xs mt-1">Scope 3 avoided emissions · Private car displacement · GHG Protocol Project Standard</p>
       </div>
 
       {loading ? (
         <div className="animate-pulse space-y-4">
-          {[...Array(3)].map((_, i) => <div key={i} className="h-32 bg-slate-800/60 rounded-2xl" />)}
+          {[...Array(3)].map((_, i) => <div key={i} className="h-32 bg-[var(--bg-surface)]/60 rounded-2xl" />)}
         </div>
       ) : (
         <>
@@ -60,17 +60,17 @@ export default function ModalShiftPage() {
               { icon: '🌿', label: 'CO₂ Avoided (Scope 3)', value: `${(totalCO2Avoided / 1000).toFixed(1)} t`, sub: 'modal shift benefit', color: 'text-emerald-400' },
               { icon: '📊', label: 'Avg Bus Occupancy', value: `${Math.round(ms?.avg_occupancy_pct ?? 0)}%`, sub: 'vehicle fill rate', color: 'text-amber-400' },
             ].map(k => (
-              <div key={k.label} className="bg-slate-900 border border-white/10 rounded-2xl p-5">
-                <p className="text-slate-400 text-xs">{k.icon} {k.label}</p>
+              <div key={k.label} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5">
+                <p className="text-[var(--text-muted)] text-xs">{k.icon} {k.label}</p>
                 <p className={`text-3xl font-bold mt-1 ${k.color}`}>{k.value}</p>
-                <p className="text-slate-600 text-xs mt-1">{k.sub}</p>
+                <p className="text-[var(--text-faint)] text-xs mt-1">{k.sub}</p>
               </div>
             ))}
           </div>
 
           {/* Methodology explanation */}
-          <div className="bg-slate-900 border border-emerald-500/20 rounded-2xl p-6">
-            <h2 className="text-white font-semibold mb-4 flex items-center gap-2">🔬 How Modal Shift CO₂ is Calculated</h2>
+          <div className="bg-[var(--bg-surface)] border border-emerald-500/20 rounded-2xl p-6">
+            <h2 className="text-[var(--text-main)] font-semibold mb-4 flex items-center gap-2">🔬 How Modal Shift CO₂ is Calculated</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
               {[
                 {
@@ -92,12 +92,12 @@ export default function ModalShiftPage() {
                   color: 'violet',
                 },
               ].map(s => (
-                <div key={s.step} className={`bg-slate-800/60 border border-${s.color}-500/20 rounded-xl p-4`}>
+                <div key={s.step} className={`bg-[var(--bg-surface)]/60 border border-${s.color}-500/20 rounded-xl p-4`}>
                   <div className={`w-8 h-8 rounded-lg bg-${s.color}-500/10 border border-${s.color}-500/20 flex items-center justify-center text-${s.color}-400 font-bold text-xs mb-3`}>
                     {s.step}
                   </div>
-                  <p className="text-white font-medium text-sm">{s.title}</p>
-                  <p className="text-slate-400 text-xs mt-2 leading-relaxed">{s.desc}</p>
+                  <p className="text-[var(--text-main)] font-medium text-sm">{s.title}</p>
+                  <p className="text-[var(--text-muted)] text-xs mt-2 leading-relaxed">{s.desc}</p>
                 </div>
               ))}
             </div>
@@ -105,8 +105,8 @@ export default function ModalShiftPage() {
 
           {/* By service breakdown */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="bg-slate-900 border border-white/10 rounded-2xl p-5">
-              <h2 className="text-white font-semibold mb-4">Modal Shift by Service</h2>
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5">
+              <h2 className="text-[var(--text-main)] font-semibold mb-4">Modal Shift by Service</h2>
               <div className="space-y-4">
                 {[
                   { label: '🚌 Staff Transport', trips: ms?.bus_trips ?? 0, pct: ms?.avg_occupancy_pct ?? 0 },
@@ -118,24 +118,24 @@ export default function ModalShiftPage() {
                   return (
                     <div key={s.label}>
                       <div className="flex items-center justify-between text-xs mb-1.5">
-                        <span className="text-slate-300">{s.label}</span>
-                        <span className="text-white font-semibold">{s.trips.toLocaleString()} trips</span>
+                        <span className="text-[var(--text-muted)]">{s.label}</span>
+                        <span className="text-[var(--text-main)] font-semibold">{s.trips.toLocaleString()} trips</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="flex-1 h-2 bg-[var(--bg-surface)] rounded-full overflow-hidden">
                           <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${sharePct}%` }} />
                         </div>
-                        <span className="text-slate-500 text-xs w-8 text-right">{sharePct}%</span>
+                        <span className="text-[var(--text-faint)] text-xs w-8 text-right">{sharePct}%</span>
                       </div>
-                      <p className="text-slate-600 text-xs mt-1">Avg occupancy: {Math.round(s.pct)}%</p>
+                      <p className="text-[var(--text-faint)] text-xs mt-1">Avg occupancy: {Math.round(s.pct)}%</p>
                     </div>
                   );
                 })}
               </div>
             </div>
 
-            <div className="bg-slate-900 border border-white/10 rounded-2xl p-5">
-              <h2 className="text-white font-semibold mb-4">School Bus Environmental Impact</h2>
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5">
+              <h2 className="text-[var(--text-main)] font-semibold mb-4">School Bus Environmental Impact</h2>
               <div className="space-y-3">
                 {[
                   { label: 'Total School Trips', value: (sb?.trips ?? 0).toLocaleString() },
@@ -144,9 +144,9 @@ export default function ModalShiftPage() {
                   { label: 'CO₂ Avoided', value: `${((sb?.co2_avoided_kg ?? 0) / 1000).toFixed(2)} t CO₂e` },
                   { label: 'Cars Removed Equivalent', value: (sb?.cars_removed ?? 0).toLocaleString() },
                 ].map(m => (
-                  <div key={m.label} className="flex items-center justify-between py-2 border-b border-white/5">
-                    <span className="text-slate-400 text-sm">{m.label}</span>
-                    <span className="text-white font-semibold text-sm">{m.value}</span>
+                  <div key={m.label} className="flex items-center justify-between py-2 border-b border-[var(--border-subtle)]">
+                    <span className="text-[var(--text-muted)] text-sm">{m.label}</span>
+                    <span className="text-[var(--text-main)] font-semibold text-sm">{m.value}</span>
                   </div>
                 ))}
               </div>
@@ -158,7 +158,7 @@ export default function ModalShiftPage() {
             <span className="text-3xl flex-shrink-0">🇦🇪</span>
             <div>
               <p className="text-emerald-400 font-semibold text-sm">UAE Sustainable Mobility Strategy Alignment</p>
-              <p className="text-slate-400 text-xs mt-2 leading-relaxed">
+              <p className="text-white/70 text-xs mt-2 leading-relaxed">
                 The UAE National Climate Change Plan 2017-2050 and Dubai Integrated Energy Strategy target a 30% reduction in transport emissions by 2030.
                 Every 1,000 shared trips provided by this platform removes approximately <strong className="text-white">3.06 tonnes CO₂e</strong> from the UAE&apos;s transport sector carbon footprint —
                 directly contributing to the UAE&apos;s COP28 pledge to reduce GHG emissions by 40% from a business-as-usual baseline by 2030.

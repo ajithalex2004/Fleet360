@@ -53,18 +53,18 @@ export default function PaperlessPage() {
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold text-white">Paperless Operations</h1>
-        <p className="text-slate-400 text-xs mt-1">Digital transformation impact · Paper waste reduction · Carbon offset from digitisation</p>
+        <h1 className="text-2xl font-bold text-[var(--text-main)]">Paperless Operations</h1>
+        <p className="text-[var(--text-muted)] text-xs mt-1">Digital transformation impact · Paper waste reduction · Carbon offset from digitisation</p>
       </div>
 
       {loading ? (
         <div className="animate-pulse space-y-4">
-          {[...Array(3)].map((_, i) => <div key={i} className="h-32 bg-slate-800/60 rounded-2xl" />)}
+          {[...Array(3)].map((_, i) => <div key={i} className="h-32 bg-[var(--bg-surface)]/60 rounded-2xl" />)}
         </div>
       ) : (
         <>
           {/* Score hero */}
-          <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 flex items-center gap-8">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 flex items-center gap-8">
             <div className="relative flex-shrink-0">
               <div className={`w-32 h-32 rounded-full bg-gradient-to-br ${scoreBg} flex items-center justify-center shadow-2xl`}>
                 <div className="text-center">
@@ -75,16 +75,16 @@ export default function PaperlessPage() {
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-3 mb-2">
-                <h2 className="text-2xl font-bold text-white">Paperless Score</h2>
+                <h2 className="text-2xl font-bold text-[var(--text-main)]">Paperless Score</h2>
                 <span className={`text-sm font-semibold px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 ${scoreColor}`}>{scoreLabel}</span>
               </div>
-              <p className="text-slate-400 text-sm">
+              <p className="text-[var(--text-muted)] text-sm">
                 Measures what percentage of operational documents (trip sheets, invoices, inspection reports, attendance) are processed digitally vs. paper-based equivalents.
               </p>
-              <div className="mt-4 h-2 bg-slate-800 rounded-full overflow-hidden">
+              <div className="mt-4 h-2 bg-[var(--bg-surface)] rounded-full overflow-hidden">
                 <div className={`h-full bg-gradient-to-r ${scoreBg} rounded-full transition-all duration-1000`} style={{ width: `${score}%` }} />
               </div>
-              <div className="flex items-center justify-between text-xs text-slate-500 mt-1.5">
+              <div className="flex items-center justify-between text-xs text-[var(--text-faint)] mt-1.5">
                 <span>0 — Paper-only</span>
                 <span>100 — Fully Digital</span>
               </div>
@@ -99,10 +99,10 @@ export default function PaperlessPage() {
               { icon: '🌿', label: 'CO₂ Offset', value: `${((p?.co2_saved_kg ?? 0) / 1000).toFixed(2)} t`, sub: 'paper production avoided', color: 'text-emerald-400' },
               { icon: '🌳', label: 'Trees Equivalent', value: Math.round(p?.trees_equivalent ?? 0).toLocaleString(), sub: 'paper trees saved', color: 'text-green-400' },
             ].map(k => (
-              <div key={k.label} className="bg-slate-900 border border-white/10 rounded-2xl p-5">
-                <p className="text-slate-400 text-xs">{k.icon} {k.label}</p>
+              <div key={k.label} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5">
+                <p className="text-[var(--text-muted)] text-xs">{k.icon} {k.label}</p>
                 <p className={`text-3xl font-bold mt-1 ${k.color}`}>{k.value}</p>
-                <p className="text-slate-600 text-xs mt-1">{k.sub}</p>
+                <p className="text-[var(--text-faint)] text-xs mt-1">{k.sub}</p>
               </div>
             ))}
           </div>
@@ -110,37 +110,37 @@ export default function PaperlessPage() {
           {/* Paper facts */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {PAPER_FACTS.map(f => (
-              <div key={f.label} className="bg-slate-800/40 border border-white/5 rounded-xl p-4 text-center">
+              <div key={f.label} className="bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] rounded-xl p-4 text-center">
                 <p className="text-2xl mb-2">{f.icon}</p>
-                <p className="text-white font-bold text-lg">{f.value}</p>
-                <p className="text-slate-500 text-xs mt-1 leading-relaxed">{f.label}</p>
+                <p className="text-[var(--text-main)] font-bold text-lg">{f.value}</p>
+                <p className="text-[var(--text-faint)] text-xs mt-1 leading-relaxed">{f.label}</p>
               </div>
             ))}
           </div>
 
           {/* Initiatives grid */}
           <div>
-            <h2 className="text-white font-semibold mb-4">Digital Initiatives Status</h2>
+            <h2 className="text-[var(--text-main)] font-semibold mb-4">Digital Initiatives Status</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {INITIATIVES.map(ini => (
                 <div key={ini.title} className={`flex items-start gap-3 p-4 rounded-xl border transition-colors ${
                   ini.implemented
                     ? 'bg-emerald-500/5 border-emerald-500/20'
-                    : 'bg-slate-900/50 border-white/5'
+                    : 'bg-[var(--bg-surface)]/50 border-[var(--border-subtle)]'
                 }`}>
                   <span className="text-xl flex-shrink-0">{ini.icon}</span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-white font-medium text-sm">{ini.title}</p>
+                      <p className="text-[var(--text-main)] font-medium text-sm">{ini.title}</p>
                       {ini.implemented
                         ? <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full">Live</span>
-                        : <span className="text-xs bg-slate-700/60 text-slate-400 border border-white/10 px-2 py-0.5 rounded-full">Planned</span>
+                        : <span className="text-xs bg-[var(--bg-surface-hover)]/60 text-[var(--text-muted)] border border-[var(--border-subtle)] px-2 py-0.5 rounded-full">Planned</span>
                       }
                     </div>
-                    <p className="text-slate-400 text-xs mt-1 leading-relaxed">{ini.desc}</p>
+                    <p className="text-[var(--text-muted)] text-xs mt-1 leading-relaxed">{ini.desc}</p>
                   </div>
-                  <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${ini.implemented ? 'bg-emerald-500' : 'bg-slate-700'}`}>
-                    {ini.implemented ? <span className="text-white text-xs">✓</span> : <span className="text-slate-500 text-xs">○</span>}
+                  <div className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 ${ini.implemented ? 'bg-emerald-500' : 'bg-[var(--bg-surface-hover)]'}`}>
+                    {ini.implemented ? <span className="text-[var(--text-main)] text-xs">✓</span> : <span className="text-[var(--text-faint)] text-xs">○</span>}
                   </div>
                 </div>
               ))}
@@ -148,18 +148,18 @@ export default function PaperlessPage() {
           </div>
 
           {/* Progress to full digital */}
-          <div className="bg-slate-900 border border-white/10 rounded-2xl p-5">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-white font-semibold">Progress to Fully Digital Operations</h2>
+              <h2 className="text-[var(--text-main)] font-semibold">Progress to Fully Digital Operations</h2>
               <span className="text-emerald-400 font-bold">{INITIATIVES.filter(i => i.implemented).length}/{INITIATIVES.length} initiatives live</span>
             </div>
-            <div className="h-3 bg-slate-800 rounded-full overflow-hidden">
+            <div className="h-3 bg-[var(--bg-surface)] rounded-full overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-emerald-500 to-green-600 rounded-full"
                 style={{ width: `${Math.round((INITIATIVES.filter(i => i.implemented).length / INITIATIVES.length) * 100)}%` }}
               />
             </div>
-            <p className="text-slate-500 text-xs mt-3">
+            <p className="text-[var(--text-faint)] text-xs mt-3">
               {totalDocs.toLocaleString()} total digital documents processed · eliminating an estimated {Math.round((p?.trees_equivalent ?? 0))} trees worth of paper consumption.
             </p>
           </div>

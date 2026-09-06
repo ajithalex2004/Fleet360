@@ -72,14 +72,14 @@ export default function SettingsPage() {
     label: string; field: keyof Settings; type?: string; step?: string; desc?: string;
   }) => (
     <div className="space-y-1.5">
-      <label className="block text-slate-300 text-sm font-medium">{label}</label>
-      {desc && <p className="text-slate-500 text-xs">{desc}</p>}
+      <label className="block text-[var(--text-muted)] text-sm font-medium">{label}</label>
+      {desc && <p className="text-[var(--text-faint)] text-xs">{desc}</p>}
       <input
         type={type}
         step={step}
         value={settings[field] as string | number}
         onChange={e => setSettings(s => ({ ...s, [field]: type === 'number' ? parseFloat(e.target.value) : e.target.value }))}
-        className="w-full bg-slate-800 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-emerald-500/50 transition-colors"
+        className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:border-emerald-500/50 transition-colors"
       />
     </div>
   );
@@ -87,7 +87,7 @@ export default function SettingsPage() {
   if (loading) return (
     <div className="p-6">
       <div className="animate-pulse space-y-4">
-        {[...Array(4)].map((_, i) => <div key={i} className="h-32 bg-slate-800/60 rounded-2xl" />)}
+        {[...Array(4)].map((_, i) => <div key={i} className="h-32 bg-[var(--bg-surface)]/60 rounded-2xl" />)}
       </div>
     </div>
   );
@@ -96,8 +96,8 @@ export default function SettingsPage() {
     <div className="p-6 space-y-6 max-w-4xl mx-auto">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Methodology Settings</h1>
-          <p className="text-slate-400 text-xs mt-1">Configure emission factors, baseline assumptions and reporting parameters</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Methodology Settings</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-1">Configure emission factors, baseline assumptions and reporting parameters</p>
         </div>
         <button
           onClick={handleSave}
@@ -119,8 +119,8 @@ export default function SettingsPage() {
       </div>
 
       {/* Baseline settings */}
-      <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 space-y-5">
-        <h2 className="text-white font-semibold flex items-center gap-2">📐 Baseline Assumptions</h2>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 space-y-5">
+        <h2 className="text-[var(--text-main)] font-semibold flex items-center gap-2">📐 Baseline Assumptions</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <Field
             label="Baseline Year"
@@ -150,8 +150,8 @@ export default function SettingsPage() {
       </div>
 
       {/* Emission factors */}
-      <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 space-y-5">
-        <h2 className="text-white font-semibold flex items-center gap-2">🔬 Emission Factors</h2>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-6 space-y-5">
+        <h2 className="text-[var(--text-main)] font-semibold flex items-center gap-2">🔬 Emission Factors</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <Field
             label="Diesel EF (kg CO₂e/L)"
@@ -187,14 +187,14 @@ export default function SettingsPage() {
       </div>
 
       {/* Reference table */}
-      <div className="bg-slate-900 border border-white/10 rounded-2xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-white/10">
-          <h2 className="text-white font-semibold">Emission Factor Reference Sources</h2>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-[var(--border-subtle)]">
+          <h2 className="text-[var(--text-main)] font-semibold">Emission Factor Reference Sources</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-800/50 text-xs text-slate-400">
+              <tr className="bg-[var(--bg-surface)]/50 text-xs text-[var(--text-muted)]">
                 <th className="text-left px-6 py-3">Factor</th>
                 <th className="text-right px-4 py-3">Value</th>
                 <th className="text-left px-4 py-3">Source</th>
@@ -203,13 +203,13 @@ export default function SettingsPage() {
             </thead>
             <tbody className="divide-y divide-white/5">
               {EF_SOURCES.map(ef => (
-                <tr key={ef.factor} className="hover:bg-white/5">
-                  <td className="px-6 py-3 text-slate-300">{ef.factor}</td>
-                  <td className="px-4 py-3 text-right font-mono text-white text-xs">{ef.value}</td>
-                  <td className="px-4 py-3 text-slate-500 text-xs">{ef.source}</td>
+                <tr key={ef.factor} className="hover:bg-[var(--bg-surface-hover)]">
+                  <td className="px-6 py-3 text-[var(--text-muted)]">{ef.factor}</td>
+                  <td className="px-4 py-3 text-right font-mono text-[var(--text-main)] text-xs">{ef.value}</td>
+                  <td className="px-4 py-3 text-[var(--text-faint)] text-xs">{ef.source}</td>
                   <td className="px-4 py-3 text-center">
                     {ef.locked
-                      ? <span className="text-xs bg-slate-700/60 text-slate-400 border border-white/10 px-2 py-0.5 rounded-full">🔒 Locked</span>
+                      ? <span className="text-xs bg-[var(--bg-surface-hover)]/60 text-[var(--text-muted)] border border-[var(--border-subtle)] px-2 py-0.5 rounded-full">🔒 Locked</span>
                       : <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full">✏️ Editable</span>
                     }
                   </td>
@@ -221,9 +221,9 @@ export default function SettingsPage() {
       </div>
 
       {/* Audit trail notice */}
-      <div className="flex items-start gap-3 p-4 rounded-xl bg-slate-900/60 border border-white/5">
+      <div className="flex items-start gap-3 p-4 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]">
         <span className="text-xl">🗂️</span>
-        <p className="text-slate-500 text-xs leading-relaxed">
+        <p className="text-[var(--text-faint)] text-xs leading-relaxed">
           All settings changes are logged with timestamp and user ID for ISO 14064 audit trail purposes.
           Changes take effect immediately for new calculations; historical snapshots retain the settings active at time of generation.
           For certification submissions, provide the methodology change log to your third-party verifier.

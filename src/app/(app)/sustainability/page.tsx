@@ -88,9 +88,9 @@ function fmtDate(d: string) {
 
 const CERT_CONFIG = {
   GOLD:     { color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/30', icon: '🥇', label: 'Gold Certified' },
-  SILVER:   { color: 'text-slate-300',  bg: 'bg-slate-500/10 border-slate-500/30',  icon: '🥈', label: 'Silver Certified' },
+  SILVER:   { color: 'text-[var(--text-muted)]',  bg: 'bg-slate-500/10 border-slate-500/30',  icon: '🥈', label: 'Silver Certified' },
   BRONZE:   { color: 'text-amber-500',  bg: 'bg-amber-500/10 border-amber-500/30',  icon: '🥉', label: 'Bronze Certified' },
-  BASELINE: { color: 'text-slate-400',  bg: 'bg-slate-800/60 border-white/10',       icon: '📋', label: 'Baseline' },
+  BASELINE: { color: 'text-[var(--text-muted)]',  bg: 'bg-[var(--bg-surface)]/60 border-[var(--border-subtle)]',       icon: '📋', label: 'Baseline' },
 };
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -146,13 +146,13 @@ function ProgressBar({ pct, color = 'emerald', label, sublabel }: {
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-sm">
-        <span className="text-slate-300">{label}</span>
+        <span className="text-[var(--text-muted)]">{label}</span>
         <div className="flex items-center gap-2">
-          {sublabel && <span className="text-xs text-slate-500">{sublabel}</span>}
-          <span className="text-white font-semibold">{fmtNum(pct, 1)}%</span>
+          {sublabel && <span className="text-xs text-[var(--text-faint)]">{sublabel}</span>}
+          <span className="text-[var(--text-main)] font-semibold">{fmtNum(pct, 1)}%</span>
         </div>
       </div>
-      <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+      <div className="h-2 bg-[var(--bg-surface)] rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full transition-all duration-700 ${colors[color] ?? colors.emerald}`}
           style={{ width: `${Math.min(pct, 100)}%` }}
@@ -164,7 +164,7 @@ function ProgressBar({ pct, color = 'emerald', label, sublabel }: {
 
 function TrendChart({ data }: { data: SustainabilityDashboard['trend'] }) {
   if (!data.length) return (
-    <div className="h-48 flex items-center justify-center text-slate-500 text-sm">No trend data available</div>
+    <div className="h-48 flex items-center justify-center text-[var(--text-faint)] text-sm">No trend data available</div>
   );
   const maxVal = Math.max(...data.map(d => d.co2_baseline), 1);
   return (
@@ -177,7 +177,7 @@ function TrendChart({ data }: { data: SustainabilityDashboard['trend'] }) {
             <div className="w-full flex items-end gap-0.5 h-40">
               {/* Baseline bar */}
               <div
-                className="flex-1 bg-slate-700/50 rounded-t-sm transition-all"
+                className="flex-1 bg-[var(--bg-surface-hover)]/50 rounded-t-sm transition-all"
                 style={{ height: `${baseH}%` }}
                 title={`Baseline: ${fmtNum(d.co2_baseline)} kg CO₂`}
               />
@@ -190,11 +190,11 @@ function TrendChart({ data }: { data: SustainabilityDashboard['trend'] }) {
             </div>
             {/* Avoided label */}
             {d.co2_avoided > 0 && (
-              <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] text-emerald-400 font-medium hidden group-hover:block whitespace-nowrap bg-slate-900 px-1 rounded z-10">
+              <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] text-emerald-400 font-medium hidden group-hover:block whitespace-nowrap bg-[var(--bg-surface)] px-1 rounded z-10">
                 -{fmtNum(d.co2_avoided)}kg
               </span>
             )}
-            <span className="text-[9px] text-slate-600 text-center leading-tight">
+            <span className="text-[9px] text-[var(--text-faint)] text-center leading-tight">
               {d.month.slice(5)}
             </span>
           </div>
@@ -247,7 +247,7 @@ export default function SustainabilityPage() {
             <select
               value={months}
               onChange={e => setMonths(parseInt(e.target.value))}
-              className="bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none"
+              className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none"
             >
               <option value={3}>Last 3 months</option>
               <option value={6}>Last 6 months</option>
@@ -255,7 +255,7 @@ export default function SustainabilityPage() {
               <option value={24}>Last 24 months</option>
             </select>
             <button onClick={load}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 transition-colors">
+              className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--bg-surface)] transition-colors">
               <RefreshCw className="w-3.5 h-3.5" /> Refresh
             </button>
             <button onClick={() => window.print()}
@@ -272,7 +272,7 @@ export default function SustainabilityPage() {
           <span className="text-2xl">🇦🇪</span>
           <div>
             <p className="text-emerald-300 font-semibold text-sm">UAE Net Zero 2050 Strategic Initiative</p>
-            <p className="text-slate-400 text-xs">Transport sector · Mohammed Bin Rashid Al Maktoum Global Initiatives · Dubai Carbon Centre of Excellence</p>
+            <p className="text-[var(--text-muted)] text-xs">Transport sector · Mohammed Bin Rashid Al Maktoum Global Initiatives · Dubai Carbon Centre of Excellence</p>
           </div>
         </div>
         <div className="flex items-center gap-3 text-xs">
@@ -288,7 +288,7 @@ export default function SustainabilityPage() {
         <div className="flex items-center justify-center py-24">
           <div className="flex flex-col items-center gap-3">
             <div className="w-10 h-10 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
-            <p className="text-slate-400 text-sm">Computing sustainability metrics…</p>
+            <p className="text-[var(--text-muted)] text-sm">Computing sustainability metrics…</p>
           </div>
         </div>
       )}
@@ -347,18 +347,18 @@ export default function SustainabilityPage() {
           </div>
 
           {/* ── Certification Readiness ── */}
-          <div className={`rounded-2xl border p-5 ${cert?.bg ?? 'bg-slate-900/60 border-white/10'}`}>
+          <div className={`rounded-2xl border p-5 ${cert?.bg ?? 'bg-[var(--bg-surface)]/60 border-[var(--border-subtle)]'}`}>
             <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
               <div>
                 <p className={`text-lg font-bold ${cert?.color}`}>{cert?.icon} ISO 14064 Certification Readiness</p>
-                <p className="text-slate-400 text-xs mt-0.5">Based on data completeness, emission reductions evidenced, EV adoption and paperless operations</p>
+                <p className="text-[var(--text-muted)] text-xs mt-0.5">Based on data completeness, emission reductions evidenced, EV adoption and paperless operations</p>
               </div>
               <div className="text-right">
-                <p className="text-3xl font-bold text-white">{data.certification.readiness_score}<span className="text-slate-400 text-lg">/100</span></p>
+                <p className="text-3xl font-bold text-[var(--text-main)]">{data.certification.readiness_score}<span className="text-[var(--text-muted)] text-lg">/100</span></p>
                 <p className={`text-sm font-semibold ${cert?.color}`}>{cert?.label}</p>
               </div>
             </div>
-            <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden">
+            <div className="w-full bg-[var(--bg-surface)] rounded-full h-3 overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-1000 ${
                   data.certification.level === 'GOLD'   ? 'bg-gradient-to-r from-yellow-500 to-amber-400' :
@@ -369,17 +369,17 @@ export default function SustainabilityPage() {
                 style={{ width: `${data.certification.readiness_score}%` }}
               />
             </div>
-            <div className="flex justify-between mt-2 text-xs text-slate-500">
+            <div className="flex justify-between mt-2 text-xs text-[var(--text-faint)]">
               <span>0 — Baseline</span><span>40 — Bronze</span><span>60 — Silver</span><span>80 — Gold</span>
             </div>
           </div>
 
           {/* ── Tab bar ── */}
-          <div className="flex gap-1 bg-slate-900/60 border border-white/10 rounded-xl p-1 w-fit">
+          <div className="flex gap-1 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-1 w-fit">
             {(['overview', 'fleet', 'modules', 'scope'] as const).map(t => (
               <button key={t} onClick={() => setActiveTab(t)}
                 className={`px-4 py-1.5 rounded-lg text-sm font-medium capitalize transition-colors ${
-                  activeTab === t ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-white'
+                  activeTab === t ? 'bg-emerald-600 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
                 }`}>
                 {t === 'overview' ? '📊 Overview' : t === 'fleet' ? '🚗 Fleet' : t === 'modules' ? '🏗️ Modules' : '🔬 GHG Scope'}
               </button>
@@ -390,14 +390,14 @@ export default function SustainabilityPage() {
           {activeTab === 'overview' && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* CO2 Trend Chart */}
-              <div className="lg:col-span-2 bg-slate-900/60 border border-white/10 rounded-2xl p-5">
+              <div className="lg:col-span-2 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5">
                 <div className="flex items-center justify-between mb-5">
                   <div>
-                    <h2 className="text-base font-semibold text-white">CO₂ Reduction Trend</h2>
-                    <p className="text-xs text-slate-400 mt-0.5">Baseline vs actual emissions · monthly</p>
+                    <h2 className="text-base font-semibold text-[var(--text-main)]">CO₂ Reduction Trend</h2>
+                    <p className="text-xs text-[var(--text-muted)] mt-0.5">Baseline vs actual emissions · monthly</p>
                   </div>
                   <div className="flex items-center gap-4 text-xs">
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-slate-700/80" /> Baseline</span>
+                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-[var(--bg-surface-hover)]/80" /> Baseline</span>
                     <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-500" /> Actual</span>
                   </div>
                 </div>
@@ -407,8 +407,8 @@ export default function SustainabilityPage() {
               {/* Right column: metrics */}
               <div className="space-y-4">
                 {/* School bus occupancy */}
-                <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5">
-                  <h3 className="text-sm font-semibold text-white mb-4">Key Performance Rates</h3>
+                <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5">
+                  <h3 className="text-sm font-semibold text-[var(--text-main)] mb-4">Key Performance Rates</h3>
                   <div className="space-y-4">
                     <ProgressBar
                       pct={data.school_bus.occupancy_pct}
@@ -438,23 +438,23 @@ export default function SustainabilityPage() {
                 </div>
 
                 {/* Modal shift */}
-                <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-5">
-                  <h3 className="text-sm font-semibold text-white mb-3">Modal Shift Impact</h3>
+                <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5">
+                  <h3 className="text-sm font-semibold text-[var(--text-main)] mb-3">Modal Shift Impact</h3>
                   <div className="space-y-3">
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-400">Trips Consolidated</span>
-                      <span className="text-white font-semibold">{fmtNum(data.modal_shift.trips_consolidated)}</span>
+                      <span className="text-[var(--text-muted)]">Trips Consolidated</span>
+                      <span className="text-[var(--text-main)] font-semibold">{fmtNum(data.modal_shift.trips_consolidated)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-400">Car Trips Removed</span>
+                      <span className="text-[var(--text-muted)]">Car Trips Removed</span>
                       <span className="text-emerald-400 font-semibold">{fmtNum(data.modal_shift.car_equiv_removed)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-400">CO₂ from Modal Shift</span>
-                      <span className="text-white font-semibold">{fmtNum(data.modal_shift.co2_from_modal_shift)} kg</span>
+                      <span className="text-[var(--text-muted)]">CO₂ from Modal Shift</span>
+                      <span className="text-[var(--text-main)] font-semibold">{fmtNum(data.modal_shift.co2_from_modal_shift)} kg</span>
                     </div>
-                    <div className="pt-2 border-t border-white/5">
-                      <p className="text-xs text-slate-500">Scope 3 calculation: UAE avg 18km commute × 0.170 kg CO₂e/km per private car</p>
+                    <div className="pt-2 border-t border-[var(--border-subtle)]">
+                      <p className="text-xs text-[var(--text-faint)]">Scope 3 calculation: UAE avg 18km commute × 0.170 kg CO₂e/km per private car</p>
                     </div>
                   </div>
                 </div>
@@ -465,53 +465,53 @@ export default function SustainabilityPage() {
           {/* ── Fleet Tab ── */}
           {activeTab === 'fleet' && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-6">
-                <h2 className="text-base font-semibold text-white mb-5">Fleet Composition & EV Adoption</h2>
+              <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-6">
+                <h2 className="text-base font-semibold text-[var(--text-main)] mb-5">Fleet Composition & EV Adoption</h2>
                 <div className="space-y-4">
-                  <div className="flex justify-between items-center p-4 bg-slate-800/60 rounded-xl">
+                  <div className="flex justify-between items-center p-4 bg-[var(--bg-surface)]/60 rounded-xl">
                     <div className="flex items-center gap-3">
                       <span className="text-2xl">⚡</span>
                       <div>
-                        <p className="text-white font-medium">Electric Vehicles</p>
-                        <p className="text-xs text-slate-400">Zero Scope 1 emissions</p>
+                        <p className="text-[var(--text-main)] font-medium">Electric Vehicles</p>
+                        <p className="text-xs text-[var(--text-muted)]">Zero Scope 1 emissions</p>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className="text-xl font-bold text-emerald-400">{fl?.ev_vehicles ?? 0}</p>
-                      <p className="text-xs text-slate-500">{fmtNum(fl?.ev_pct ?? 0, 1)}% of fleet</p>
+                      <p className="text-xs text-[var(--text-faint)]">{fmtNum(fl?.ev_pct ?? 0, 1)}% of fleet</p>
                     </div>
                   </div>
-                  <div className="flex justify-between items-center p-4 bg-slate-800/60 rounded-xl">
+                  <div className="flex justify-between items-center p-4 bg-[var(--bg-surface)]/60 rounded-xl">
                     <div className="flex items-center gap-3">
                       <span className="text-2xl">⛽</span>
                       <div>
-                        <p className="text-white font-medium">ICE Vehicles</p>
-                        <p className="text-xs text-slate-400">Scope 1 emission source</p>
+                        <p className="text-[var(--text-main)] font-medium">ICE Vehicles</p>
+                        <p className="text-xs text-[var(--text-muted)]">Scope 1 emission source</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-xl font-bold text-white">{(fl?.total_vehicles ?? 0) - (fl?.ev_vehicles ?? 0)}</p>
-                      <p className="text-xs text-slate-500">{fmtNum(100 - (fl?.ev_pct ?? 0), 1)}% of fleet</p>
+                      <p className="text-xl font-bold text-[var(--text-main)]">{(fl?.total_vehicles ?? 0) - (fl?.ev_vehicles ?? 0)}</p>
+                      <p className="text-xs text-[var(--text-faint)]">{fmtNum(100 - (fl?.ev_pct ?? 0), 1)}% of fleet</p>
                     </div>
                   </div>
-                  <div className="flex justify-between items-center p-4 bg-slate-800/60 rounded-xl">
+                  <div className="flex justify-between items-center p-4 bg-[var(--bg-surface)]/60 rounded-xl">
                     <div className="flex items-center gap-3">
                       <span className="text-2xl">🚌</span>
                       <div>
-                        <p className="text-white font-medium">Total Capacity</p>
-                        <p className="text-xs text-slate-400">Seats available platform-wide</p>
+                        <p className="text-[var(--text-main)] font-medium">Total Capacity</p>
+                        <p className="text-xs text-[var(--text-muted)]">Seats available platform-wide</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-xl font-bold text-white">{fmtNum(fl?.total_capacity ?? 0)}</p>
-                      <p className="text-xs text-slate-500">seats</p>
+                      <p className="text-xl font-bold text-[var(--text-main)]">{fmtNum(fl?.total_capacity ?? 0)}</p>
+                      <p className="text-xs text-[var(--text-faint)]">seats</p>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-6">
-                <h2 className="text-base font-semibold text-white mb-5">Distance & Energy</h2>
+              <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-6">
+                <h2 className="text-base font-semibold text-[var(--text-main)] mb-5">Distance & Energy</h2>
                 <div className="space-y-4">
                   {[
                     { label: 'Total km Operated', value: fmtNum(ov?.total_km ?? 0), unit: 'km', icon: '🛣️', note: 'All modules combined' },
@@ -524,13 +524,13 @@ export default function SustainabilityPage() {
                       <div className="flex items-center gap-2">
                         <span>{item.icon}</span>
                         <div>
-                          <p className="text-slate-300 text-sm">{item.label}</p>
-                          <p className="text-xs text-slate-500">{item.note}</p>
+                          <p className="text-[var(--text-muted)] text-sm">{item.label}</p>
+                          <p className="text-xs text-[var(--text-faint)]">{item.note}</p>
                         </div>
                       </div>
                       <div className="text-right">
-                        <span className="text-white font-semibold">{item.value}</span>
-                        <span className="text-slate-400 text-xs ml-1">{item.unit}</span>
+                        <span className="text-[var(--text-main)] font-semibold">{item.value}</span>
+                        <span className="text-[var(--text-muted)] text-xs ml-1">{item.unit}</span>
                       </div>
                     </div>
                   ))}
@@ -542,31 +542,31 @@ export default function SustainabilityPage() {
           {/* ── Modules Tab ── */}
           {activeTab === 'modules' && (
             <div className="space-y-4">
-              <div className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden">
-                <div className="px-6 py-4 border-b border-white/10">
-                  <h2 className="text-base font-semibold text-white">CO₂ Reduction by Module</h2>
-                  <p className="text-xs text-slate-400 mt-0.5">Platform contribution to UAE transport emission reduction</p>
+              <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
+                <div className="px-6 py-4 border-b border-[var(--border-subtle)]">
+                  <h2 className="text-base font-semibold text-[var(--text-main)]">CO₂ Reduction by Module</h2>
+                  <p className="text-xs text-[var(--text-muted)] mt-0.5">Platform contribution to UAE transport emission reduction</p>
                 </div>
                 {(() => {
                   const maxAvoided = Math.max(...data.module_breakdown.map(m => m.co2_avoided), 1);
                   return (
                     <div className="divide-y divide-white/5">
                       {data.module_breakdown.map(mod => (
-                        <div key={mod.module} className="px-6 py-4 hover:bg-white/5 transition-colors">
+                        <div key={mod.module} className="px-6 py-4 hover:bg-[var(--bg-surface-hover)] transition-colors">
                           <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-xl flex-shrink-0">
+                            <div className="w-10 h-10 rounded-xl bg-[var(--bg-surface)] flex items-center justify-center text-xl flex-shrink-0">
                               {mod.icon}
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between mb-2">
-                                <p className="text-white font-medium text-sm">{mod.label}</p>
+                                <p className="text-[var(--text-main)] font-medium text-sm">{mod.label}</p>
                                 <div className="flex items-center gap-4 text-sm">
-                                  <span className="text-slate-400">{fmtNum(mod.km)} km</span>
-                                  <span className="text-slate-400">{fmtNum(mod.fuel_litres)} L</span>
+                                  <span className="text-[var(--text-muted)]">{fmtNum(mod.km)} km</span>
+                                  <span className="text-[var(--text-muted)]">{fmtNum(mod.fuel_litres)} L</span>
                                   <span className="text-emerald-400 font-semibold">{fmtNum(mod.co2_avoided)} kg avoided</span>
                                 </div>
                               </div>
-                              <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                              <div className="h-2 bg-[var(--bg-surface)] rounded-full overflow-hidden">
                                 <div
                                   className="h-full bg-gradient-to-r from-emerald-500 to-green-400 rounded-full"
                                   style={{ width: `${(mod.co2_avoided / maxAvoided) * 100}%` }}
@@ -608,29 +608,29 @@ export default function SustainabilityPage() {
                     source: 'GHG Protocol Project Standard §5.4',
                   },
                 ].map(s => (
-                  <div key={s.scope} className="bg-slate-900/60 border border-white/10 rounded-2xl p-5">
+                  <div key={s.scope} className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-5">
                     <div className="flex items-start justify-between mb-3">
                       <div className="flex items-center gap-3">
                         <span className="text-2xl">{s.icon}</span>
                         <div>
-                          <p className="text-white font-semibold">{s.scope}</p>
-                          <p className="text-xs text-slate-500">{s.source}</p>
+                          <p className="text-[var(--text-main)] font-semibold">{s.scope}</p>
+                          <p className="text-xs text-[var(--text-faint)]">{s.source}</p>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="text-xl font-bold text-white">{fmtNum(s.kg, 1)} <span className="text-slate-400 text-sm">kg CO₂e</span></p>
-                        <p className="text-xs text-slate-500">{fmtNum(s.kg / 1000, 3)} tonnes</p>
+                        <p className="text-xl font-bold text-[var(--text-main)]">{fmtNum(s.kg, 1)} <span className="text-[var(--text-muted)] text-sm">kg CO₂e</span></p>
+                        <p className="text-xs text-[var(--text-faint)]">{fmtNum(s.kg / 1000, 3)} tonnes</p>
                       </div>
                     </div>
-                    <p className="text-xs text-slate-400 leading-relaxed">{s.desc}</p>
+                    <p className="text-xs text-[var(--text-muted)] leading-relaxed">{s.desc}</p>
                   </div>
                 ))}
               </div>
 
               {/* Methodology transparency */}
-              <div className="bg-slate-900/60 border border-white/10 rounded-2xl p-6">
-                <h3 className="text-base font-semibold text-white mb-4">Methodology Transparency</h3>
-                <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+              <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-2xl p-6">
+                <h3 className="text-base font-semibold text-[var(--text-main)] mb-4">Methodology Transparency</h3>
+                <p className="text-xs text-[var(--text-muted)] mb-4 leading-relaxed">
                   All emissions are calculated in accordance with the GHG Protocol Project Standard and ISO 14064-1:2018. Emission factors are sourced from IPCC AR6 Working Group III (2022) and the UK BEIS Greenhouse Gas Reporting Conversion Factors 2023. The UAE electricity grid factor is sourced from UAE Ministry of Energy &amp; Infrastructure (2023).
                 </p>
                 <div className="space-y-3">
@@ -642,16 +642,16 @@ export default function SustainabilityPage() {
                     { label: 'ISO Reference', value: data.methodology.iso_reference.replace(/_/g, ' ') },
                     { label: 'Private Car Baseline', value: 'UAE avg 18km commute · 1.2 occ · 0.170 kg/km' },
                   ].map(item => (
-                    <div key={item.label} className="flex flex-col gap-0.5 py-2 border-b border-white/5 last:border-0">
-                      <p className="text-xs text-slate-500 uppercase tracking-wide">{item.label}</p>
-                      <p className="text-sm text-white">{item.value}</p>
+                    <div key={item.label} className="flex flex-col gap-0.5 py-2 border-b border-[var(--border-subtle)] last:border-0">
+                      <p className="text-xs text-[var(--text-faint)] uppercase tracking-wide">{item.label}</p>
+                      <p className="text-sm text-[var(--text-main)]">{item.value}</p>
                     </div>
                   ))}
                 </div>
 
                 <div className="mt-4 p-3 bg-emerald-900/20 border border-emerald-500/20 rounded-xl">
                   <p className="text-emerald-400 text-xs font-semibold mb-1">Conservative Estimation Principle</p>
-                  <p className="text-slate-400 text-xs leading-relaxed">
+                  <p className="text-[var(--text-muted)] text-xs leading-relaxed">
                     Per ISO 14064-1 §6.3.2: where data uncertainty exists, we apply conservative estimates that may understate the true emission reduction. Verified third-party audit recommended annually.
                   </p>
                 </div>
@@ -661,26 +661,26 @@ export default function SustainabilityPage() {
 
           {/* ── Bottom summary row ── */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-            <div className="bg-slate-900/60 border border-emerald-500/20 rounded-2xl p-5 text-center">
+            <div className="bg-[var(--bg-surface)]/60 border border-emerald-500/20 rounded-2xl p-5 text-center">
               <p className="text-4xl font-bold text-emerald-400 mb-1">{fmtNum(ov?.co2_avoided_tonnes ?? 0, 2)}</p>
-              <p className="text-white font-medium">Tonnes CO₂e Avoided</p>
-              <p className="text-xs text-slate-500 mt-1">vs unoptimised baseline · {fmtDate(data.period.start)} – {fmtDate(data.period.end)}</p>
+              <p className="text-[var(--text-main)] font-medium">Tonnes CO₂e Avoided</p>
+              <p className="text-xs text-[var(--text-faint)] mt-1">vs unoptimised baseline · {fmtDate(data.period.start)} – {fmtDate(data.period.end)}</p>
             </div>
-            <div className="bg-slate-900/60 border border-blue-500/20 rounded-2xl p-5 text-center">
+            <div className="bg-[var(--bg-surface)]/60 border border-blue-500/20 rounded-2xl p-5 text-center">
               <p className="text-4xl font-bold text-blue-400 mb-1">{fmtNum(ov?.fuel_saved_litres ?? 0)}</p>
-              <p className="text-white font-medium">Litres of Fuel Saved</p>
-              <p className="text-xs text-slate-500 mt-1">Route optimisation benefit · GHG Protocol Project Standard</p>
+              <p className="text-[var(--text-main)] font-medium">Litres of Fuel Saved</p>
+              <p className="text-xs text-[var(--text-faint)] mt-1">Route optimisation benefit · GHG Protocol Project Standard</p>
             </div>
-            <div className="bg-slate-900/60 border border-purple-500/20 rounded-2xl p-5 text-center">
+            <div className="bg-[var(--bg-surface)]/60 border border-purple-500/20 rounded-2xl p-5 text-center">
               <p className="text-4xl font-bold text-purple-400 mb-1">{fmtNum(data.modal_shift.car_equiv_removed)}</p>
-              <p className="text-white font-medium">Private Cars Removed</p>
-              <p className="text-xs text-slate-500 mt-1">Modal shift · Scope 3 avoided emissions</p>
+              <p className="text-[var(--text-main)] font-medium">Private Cars Removed</p>
+              <p className="text-xs text-[var(--text-faint)] mt-1">Modal shift · Scope 3 avoided emissions</p>
             </div>
           </div>
 
           {/* ── GHG Protocol footer ── */}
-          <div className="border-t border-white/5 pt-4 text-center">
-            <p className="text-xs text-slate-600">
+          <div className="border-t border-[var(--border-subtle)] pt-4 text-center">
+            <p className="text-xs text-[var(--text-faint)]">
               Fleet360 Sustainability Report · Calculated per GHG Protocol Project Standard (2005) &amp; ISO 14064-1:2018 ·
               UAE Ministry of Energy &amp; Infrastructure grid factor (2023) · IPCC AR6 WGIII emission factors ·
               This report is prepared for internal management and external disclosure purposes.
@@ -693,8 +693,8 @@ export default function SustainabilityPage() {
       {!loading && !data && (
         <div className="flex flex-col items-center justify-center py-24 gap-3">
           <span className="text-4xl">🌱</span>
-          <p className="text-white font-medium">No sustainability data available</p>
-          <p className="text-slate-400 text-sm">Start logging trips, fuel consumption and vehicle usage to generate your ESG report.</p>
+          <p className="text-[var(--text-main)] font-medium">No sustainability data available</p>
+          <p className="text-[var(--text-muted)] text-sm">Start logging trips, fuel consumption and vehicle usage to generate your ESG report.</p>
         </div>
       )}
     </div>

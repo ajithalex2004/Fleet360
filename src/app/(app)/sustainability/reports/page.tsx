@@ -59,8 +59,8 @@ export default function EmissionReportsPage() {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Emission Reports</h1>
-          <p className="text-slate-400 text-xs mt-1">GHG Protocol Project Standard · ISO 14064-1:2018 · Monthly verified snapshots</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Emission Reports</h1>
+          <p className="text-[var(--text-muted)] text-xs mt-1">GHG Protocol Project Standard · ISO 14064-1:2018 · Monthly verified snapshots</p>
         </div>
         <button className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm px-4 py-2 rounded-xl transition-colors">
           <span>⬇</span> Export CSV
@@ -72,28 +72,28 @@ export default function EmissionReportsPage() {
         {[
           { icon: '🌿', label: 'Total CO₂ Avoided (12m)', value: `${(totalAvoided / 1000).toFixed(1)} t`, color: 'text-emerald-400' },
           { icon: '⛽', label: 'Fuel Saved (12m)', value: `${totalFuel.toLocaleString()} L`, color: 'text-amber-400' },
-          { icon: '🏭', label: 'Actual Emissions (12m)', value: `${(totalActual / 1000).toFixed(1)} t CO₂e`, color: 'text-slate-300' },
+          { icon: '🏭', label: 'Actual Emissions (12m)', value: `${(totalActual / 1000).toFixed(1)} t CO₂e`, color: 'text-[var(--text-muted)]' },
         ].map(k => (
-          <div key={k.label} className="bg-slate-900 border border-white/10 rounded-2xl p-5">
-            <p className="text-slate-400 text-xs">{k.icon} {k.label}</p>
+          <div key={k.label} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5">
+            <p className="text-[var(--text-muted)] text-xs">{k.icon} {k.label}</p>
             <p className={`text-3xl font-bold mt-1 ${k.color}`}>{k.value}</p>
           </div>
         ))}
       </div>
 
       {/* Emission factors transparency */}
-      <div className="bg-slate-900 border border-emerald-500/20 rounded-2xl p-5">
-        <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
+      <div className="bg-[var(--bg-surface)] border border-emerald-500/20 rounded-2xl p-5">
+        <h2 className="text-[var(--text-main)] font-semibold mb-4 flex items-center gap-2">
           <span className="text-lg">🔬</span> Emission Factor Methodology
         </h2>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-white/10">
-                <th className="text-left text-slate-400 font-medium py-2 pr-4">GHG Scope</th>
-                <th className="text-left text-slate-400 font-medium py-2 pr-4">Source</th>
-                <th className="text-left text-slate-400 font-medium py-2 pr-4">Emission Factor</th>
-                <th className="text-left text-slate-400 font-medium py-2">Standard</th>
+              <tr className="border-b border-[var(--border-subtle)]">
+                <th className="text-left text-[var(--text-muted)] font-medium py-2 pr-4">GHG Scope</th>
+                <th className="text-left text-[var(--text-muted)] font-medium py-2 pr-4">Source</th>
+                <th className="text-left text-[var(--text-muted)] font-medium py-2 pr-4">Emission Factor</th>
+                <th className="text-left text-[var(--text-muted)] font-medium py-2">Standard</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
@@ -102,37 +102,37 @@ export default function EmissionReportsPage() {
                   <td className="py-3 pr-4">
                     <span className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs px-2 py-0.5 rounded-full">{s.scope}</span>
                   </td>
-                  <td className="py-3 pr-4 text-slate-300 text-xs">{s.label}</td>
-                  <td className="py-3 pr-4 text-white font-mono text-xs">{s.factor}</td>
-                  <td className="py-3 text-slate-400 text-xs">{s.standard}</td>
+                  <td className="py-3 pr-4 text-[var(--text-muted)] text-xs">{s.label}</td>
+                  <td className="py-3 pr-4 text-[var(--text-main)] font-mono text-xs">{s.factor}</td>
+                  <td className="py-3 text-[var(--text-muted)] text-xs">{s.standard}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <p className="text-slate-600 text-xs mt-4 border-t border-white/5 pt-4">
+        <p className="text-[var(--text-faint)] text-xs mt-4 border-t border-[var(--border-subtle)] pt-4">
           All calculations follow conservative estimation methodology per ISO 14064-1 §6.3.3. Baseline assumes 20% routing efficiency improvement vs unoptimised operation. Uncertainty range ±15%.
         </p>
       </div>
 
       {/* Monthly report table */}
-      <div className="bg-slate-900 border border-white/10 rounded-2xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
-          <h2 className="text-white font-semibold">Monthly Emission Snapshots</h2>
-          <span className="text-xs text-slate-500">Verified · GHG Protocol compliant</span>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-[var(--border-subtle)] flex items-center justify-between">
+          <h2 className="text-[var(--text-main)] font-semibold">Monthly Emission Snapshots</h2>
+          <span className="text-xs text-[var(--text-faint)]">Verified · GHG Protocol compliant</span>
         </div>
         {loading ? (
-          <div className="p-12 text-center text-slate-500 text-sm">Loading emission data…</div>
+          <div className="p-12 text-center text-[var(--text-faint)] text-sm">Loading emission data…</div>
         ) : snapshots.length === 0 ? (
           <div className="p-12 text-center">
-            <p className="text-slate-400 text-sm">No emission snapshots yet.</p>
-            <p className="text-slate-600 text-xs mt-2">Snapshots are generated automatically at month-end when operational data is present.</p>
+            <p className="text-[var(--text-muted)] text-sm">No emission snapshots yet.</p>
+            <p className="text-[var(--text-faint)] text-xs mt-2">Snapshots are generated automatically at month-end when operational data is present.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-slate-800/50 text-xs text-slate-400">
+                <tr className="bg-[var(--bg-surface)]/50 text-xs text-[var(--text-muted)]">
                   <th className="text-left px-6 py-3">Period</th>
                   <th className="text-right px-4 py-3">Baseline (t CO₂e)</th>
                   <th className="text-right px-4 py-3">Actual (t CO₂e)</th>
@@ -148,13 +148,13 @@ export default function EmissionReportsPage() {
                   const baseline_t = row.co2_baseline_kg / 1000;
                   const reduction_pct = baseline_t > 0 ? Math.round((avoided_t / baseline_t) * 100) : 0;
                   return (
-                    <tr key={row.id} className="hover:bg-white/5 transition-colors">
+                    <tr key={row.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                       <td className="px-6 py-4">
-                        <p className="text-white font-medium">{row.period_label}</p>
-                        <p className="text-slate-500 text-xs">Monthly snapshot</p>
+                        <p className="text-[var(--text-main)] font-medium">{row.period_label}</p>
+                        <p className="text-[var(--text-faint)] text-xs">Monthly snapshot</p>
                       </td>
-                      <td className="px-4 py-4 text-right text-slate-400">{baseline_t.toFixed(2)}</td>
-                      <td className="px-4 py-4 text-right text-slate-300">{actual_t.toFixed(2)}</td>
+                      <td className="px-4 py-4 text-right text-[var(--text-muted)]">{baseline_t.toFixed(2)}</td>
+                      <td className="px-4 py-4 text-right text-[var(--text-muted)]">{actual_t.toFixed(2)}</td>
                       <td className="px-4 py-4 text-right">
                         <span className="text-emerald-400 font-semibold">{avoided_t.toFixed(2)}</span>
                         <span className="text-xs text-emerald-600 ml-1">({reduction_pct}%↓)</span>
@@ -178,11 +178,11 @@ export default function EmissionReportsPage() {
       </div>
 
       {/* ISO 14064 footer */}
-      <div className="flex items-center gap-3 p-4 rounded-xl bg-slate-900/60 border border-white/5">
+      <div className="flex items-center gap-3 p-4 rounded-xl bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)]">
         <span className="text-2xl">🌍</span>
-        <p className="text-slate-500 text-xs leading-relaxed">
-          This report is prepared in accordance with the <strong className="text-slate-400">ISO 14064-1:2018</strong> standard for quantification and reporting of greenhouse gas emissions.
-          Emission reductions are calculated against a conservative baseline using <strong className="text-slate-400">GHG Protocol Project Standard</strong> methodology.
+        <p className="text-[var(--text-faint)] text-xs leading-relaxed">
+          This report is prepared in accordance with the <strong className="text-[var(--text-muted)]">ISO 14064-1:2018</strong> standard for quantification and reporting of greenhouse gas emissions.
+          Emission reductions are calculated against a conservative baseline using <strong className="text-[var(--text-muted)]">GHG Protocol Project Standard</strong> methodology.
           External third-party verification is recommended annually for regulatory submissions to UAE Ministry of Climate Change and Environment (MOCCAE).
         </p>
       </div>
