@@ -104,7 +104,7 @@ function statusColor(s: string) {
   if (s === 'COMPLETED') return 'text-emerald-400';
   if (s === 'FAILED')    return 'text-red-400';
   if (s === 'PARTIAL')   return 'text-amber-400';
-  return 'text-slate-400';
+  return 'text-[var(--text-muted)]';
 }
 
 function statusDot(s: string | null) {
@@ -177,13 +177,13 @@ function ThresholdEditor({
   if (!key) return null;
 
   return (
-    <div className="bg-slate-800/60 rounded-lg px-3 py-2 flex items-center justify-between gap-2 mb-2">
-      <span className="text-xs text-slate-400 truncate">{label}</span>
+    <div className="bg-[var(--bg-surface)] rounded-lg px-3 py-2 flex items-center justify-between gap-2 mb-2">
+      <span className="text-xs text-[var(--text-muted)] truncate">{label}</span>
       {open ? (
         <div className="flex items-center gap-1 flex-shrink-0">
           {options ? (
             <select
-              className="bg-slate-700 border border-slate-600 rounded px-2 py-0.5 text-xs text-white"
+              className="bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded px-2 py-0.5 text-xs text-[var(--text-main)]"
               value={val}
               onChange={e => setVal(e.target.value)}
             >
@@ -197,10 +197,10 @@ function ThresholdEditor({
               step={config.step as number}
               value={val}
               onChange={e => setVal(e.target.value)}
-              className="w-20 bg-slate-700 border border-slate-600 rounded px-2 py-0.5 text-xs text-white text-right"
+              className="w-20 bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded px-2 py-0.5 text-xs text-[var(--text-main)] text-right"
             />
           )}
-          <span className="text-xs text-slate-500">{unit}</span>
+          <span className="text-xs text-[var(--text-faint)]">{unit}</span>
           <button
             onClick={handleSave}
             disabled={saving}
@@ -210,7 +210,7 @@ function ThresholdEditor({
           </button>
           <button
             onClick={() => setOpen(false)}
-            className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-600 text-slate-300 hover:bg-slate-500"
+            className="text-[10px] font-bold px-2 py-0.5 rounded bg-[var(--bg-surface-hover)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
           >
             ✕
           </button>
@@ -250,16 +250,16 @@ function BatchAgentCard({
   };
 
   return (
-    <div className={`bg-slate-800/50 border rounded-2xl p-5 flex flex-col gap-3 transition-all ${
+    <div className={`bg-[var(--bg-surface)] border rounded-2xl p-5 flex flex-col gap-3 transition-all ${
       agent.pendingCount > 0
         ? 'border-amber-500/40 shadow-amber-500/10 shadow-lg'
-        : 'border-white/10 hover:border-white/20'
+        : 'border-[var(--border-subtle)] hover:border-[var(--border-strong)]'
     }`}>
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-sm font-bold text-white leading-tight">{agent.name}</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">{agent.module} · {agent.model}</div>
+          <div className="text-sm font-bold text-[var(--text-main)] leading-tight">{agent.name}</div>
+          <div className="text-[11px] text-[var(--text-faint)] mt-0.5">{agent.module} · {agent.model}</div>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           {agent.pendingCount > 0 && (
@@ -273,19 +273,19 @@ function BatchAgentCard({
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-2">
-        <div className="bg-slate-900/60 rounded-xl px-3 py-2">
-          <div className="text-lg font-bold text-white">{agent.stats7d.items_processed.toLocaleString()}</div>
-          <div className="text-[10px] text-slate-500">Items processed 7d</div>
+        <div className="bg-[var(--bg-surface-hover)] rounded-xl px-3 py-2">
+          <div className="text-lg font-bold text-[var(--text-main)]">{agent.stats7d.items_processed.toLocaleString()}</div>
+          <div className="text-[10px] text-[var(--text-faint)]">Items processed 7d</div>
         </div>
-        <div className="bg-slate-900/60 rounded-xl px-3 py-2">
-          <div className="text-lg font-bold text-white">{agent.stats7d.actions_created.toLocaleString()}</div>
-          <div className="text-[10px] text-slate-500">Actions created 7d</div>
+        <div className="bg-[var(--bg-surface-hover)] rounded-xl px-3 py-2">
+          <div className="text-lg font-bold text-[var(--text-main)]">{agent.stats7d.actions_created.toLocaleString()}</div>
+          <div className="text-[10px] text-[var(--text-faint)]">Actions created 7d</div>
         </div>
       </div>
 
       {/* Last run */}
       {agent.lastRun ? (
-        <div className="flex items-center gap-2 text-[11px] text-slate-500">
+        <div className="flex items-center gap-2 text-[11px] text-[var(--text-faint)]">
           <span className={`font-semibold ${statusColor(agent.lastRun.status)}`}>
             {agent.lastRun.status}
           </span>
@@ -295,7 +295,7 @@ function BatchAgentCard({
           <span>{(agent.lastRun.duration_ms / 1000).toFixed(1)}s</span>
         </div>
       ) : (
-        <div className="text-[11px] text-slate-600">No runs yet</div>
+        <div className="text-[11px] text-[var(--text-faint)]">No runs yet</div>
       )}
 
       {/* Threshold */}
@@ -318,7 +318,7 @@ function BatchAgentCard({
         </button>
         <Link
           href={agent.resultsHref}
-          className="flex items-center justify-center gap-1 px-4 py-2 rounded-xl bg-slate-700/50 hover:bg-slate-700 border border-white/10 text-slate-400 text-xs font-medium transition-all"
+          className="flex items-center justify-center gap-1 px-4 py-2 rounded-xl bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-xs font-medium transition-all"
         >
           Results →
         </Link>
@@ -332,7 +332,7 @@ function BatchAgentCard({
             className="flex items-center justify-between w-full text-[11px] font-bold text-amber-400 mb-2"
           >
             <span>⏳ {agent.pendingCount} route{agent.pendingCount > 1 ? 's' : ''} awaiting approval</span>
-            <span className="text-slate-500">{showFeed ? '▲' : '▼'}</span>
+            <span className="text-[var(--text-faint)]">{showFeed ? '▲' : '▼'}</span>
           </button>
           {showFeed && (
             <div className="space-y-2">
@@ -340,8 +340,8 @@ function BatchAgentCard({
                 <div key={item.id} className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-3">
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div>
-                      <div className="text-xs font-semibold text-white">{item.route_name}</div>
-                      <div className="text-[10px] text-slate-400">
+                      <div className="text-xs font-semibold text-[var(--text-main)]">{item.route_name}</div>
+                      <div className="text-[10px] text-[var(--text-muted)]">
                         {item.route_number} · Saves {item.distance_saved_km.toFixed(1)} km
                         ({item.distance_saved_pct.toFixed(0)}%) · {item.matched_stop_count} stops
                       </div>
@@ -393,8 +393,8 @@ function ConvAgentCard({ agent }: { agent: ConvAgent }) {
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
-          <div className="text-sm font-bold text-white">{agent.name}</div>
-          <div className="text-[11px] text-slate-500 mt-0.5">{agent.model}</div>
+          <div className="text-sm font-bold text-[var(--text-main)]">{agent.name}</div>
+          <div className="text-[11px] text-[var(--text-faint)] mt-0.5">{agent.model}</div>
         </div>
         <div className="flex items-center gap-1.5 bg-emerald-900/60 border border-emerald-500/30 rounded-full px-2.5 py-1">
           <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -405,9 +405,9 @@ function ConvAgentCard({ agent }: { agent: ConvAgent }) {
       {/* Stats */}
       <div className="grid grid-cols-2 gap-2">
         {statPairs.map(([label, value]) => (
-          <div key={label} className="bg-slate-900/50 rounded-xl px-3 py-2">
-            <div className="text-lg font-bold text-white">{typeof value === 'number' ? value.toLocaleString() : value}</div>
-            <div className="text-[10px] text-slate-500">{label}</div>
+          <div key={label} className="bg-[var(--bg-surface-hover)] rounded-xl px-3 py-2">
+            <div className="text-lg font-bold text-[var(--text-main)]">{typeof value === 'number' ? value.toLocaleString() : value}</div>
+            <div className="text-[10px] text-[var(--text-faint)]">{label}</div>
           </div>
         ))}
       </div>
@@ -415,10 +415,10 @@ function ConvAgentCard({ agent }: { agent: ConvAgent }) {
       {/* Endpoint */}
       <button
         onClick={copy}
-        className="flex items-center justify-between bg-slate-900/60 rounded-xl px-3 py-2 hover:bg-slate-800/60 transition-all group"
+        className="flex items-center justify-between bg-[var(--bg-surface-hover)] rounded-xl px-3 py-2 hover:bg-[var(--bg-surface-elevated)] transition-all group"
       >
         <span className="text-[10px] font-mono text-emerald-400 truncate">{agent.endpoint}</span>
-        <span className="text-[10px] text-slate-500 group-hover:text-slate-300 flex-shrink-0 ml-2">
+        <span className="text-[10px] text-[var(--text-faint)] group-hover:text-[var(--text-muted)] flex-shrink-0 ml-2">
           {copied ? '✓ copied' : '⎘ copy'}
         </span>
       </button>
@@ -442,26 +442,26 @@ function ActivityFeed({ rows }: { rows: FeedRow[] }) {
   };
 
   return (
-    <div className="bg-slate-800/40 border border-white/10 rounded-2xl p-5">
-      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Activity Feed</h3>
+    <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5">
+      <h3 className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-4">Activity Feed</h3>
       {rows.length === 0 ? (
-        <p className="text-sm text-slate-600 text-center py-6">No agent runs yet — trigger an agent to see activity here.</p>
+        <p className="text-sm text-[var(--text-faint)] text-center py-6">No agent runs yet — trigger an agent to see activity here.</p>
       ) : (
         <div className="space-y-1">
           {rows.map((row, i) => (
-            <div key={i} className="flex items-start gap-3 py-2.5 border-b border-white/5 last:border-0">
+            <div key={i} className="flex items-start gap-3 py-2.5 border-b border-[var(--border-subtle)] last:border-0">
               <span className="text-base flex-shrink-0 mt-0.5">{AGENT_ICONS[row.agent_id] ?? '🤖'}</span>
               <div className="flex-1 min-w-0">
-                <div className="text-xs text-slate-300">
-                  <span className="font-semibold text-white">{row.agent_id.replace(/-/g, ' ')}</span>
+                <div className="text-xs text-[var(--text-muted)]">
+                  <span className="font-semibold text-[var(--text-main)]">{row.agent_id.replace(/-/g, ' ')}</span>
                   {' — '}
                   {agentFeedLabel(row.agent_id, row.actions_created, row.items_processed)}
                 </div>
-                <div className="text-[10px] text-slate-600 mt-0.5">{row.event_type}</div>
+                <div className="text-[10px] text-[var(--text-faint)] mt-0.5">{row.event_type}</div>
               </div>
               <div className="flex-shrink-0 text-right">
                 <div className={`text-[10px] font-semibold ${statusColor(row.status)}`}>{row.status}</div>
-                <div className="text-[10px] text-slate-600">{fmtTime(row.created_at)}</div>
+                <div className="text-[10px] text-[var(--text-faint)]">{fmtTime(row.created_at)}</div>
               </div>
             </div>
           ))}
@@ -549,7 +549,7 @@ export default function AgentsPage() {
   const strip = data?.commandStrip;
 
   return (
-    <div className="min-h-full bg-slate-900 p-6 space-y-8">
+    <div className="min-h-full bg-[var(--bg-canvas)] p-6 space-y-8">
 
       {/* Toast */}
       {toast && (
@@ -569,7 +569,7 @@ export default function AgentsPage() {
         accent="violet"
         actions={
           <button onClick={loadData}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 border border-white/10 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 transition-colors">
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] transition-colors">
             <RefreshCw className="w-3.5 h-3.5" /> Refresh
           </button>
         }
@@ -579,7 +579,7 @@ export default function AgentsPage() {
       {loading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="bg-slate-800/50 border border-white/10 rounded-2xl p-5 animate-pulse h-24" />
+            <div key={i} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 animate-pulse h-24" />
           ))}
         </div>
       ) : (
@@ -587,14 +587,14 @@ export default function AgentsPage() {
           {[
             { label: 'Active Agents',       value: strip?.activeAgents ?? 0,               color: 'text-emerald-400', icon: '🟢' },
             { label: 'Actions Today',        value: strip?.actionsToday ?? 0,               color: 'text-blue-400',    icon: '⚡' },
-            { label: 'Awaiting Approval',    value: strip?.pendingApprovals ?? 0,           color: strip?.pendingApprovals ? 'text-amber-400' : 'text-slate-400', icon: '⏳' },
+            { label: 'Awaiting Approval',    value: strip?.pendingApprovals ?? 0,           color: strip?.pendingApprovals ? 'text-amber-400' : 'text-[var(--text-muted)]', icon: '⏳' },
             { label: 'Route km Saved 7d',   value: `${strip?.routeKmSaved7d ?? 0} km`,     color: 'text-purple-400',  icon: '🗺️' },
             { label: 'Anomalies Flagged 7d', value: strip?.anomaliesFlagged7d ?? 0,         color: 'text-red-400',     icon: '🔍' },
           ].map(k => (
-            <div key={k.label} className="bg-slate-800/50 border border-white/10 rounded-2xl p-5">
+            <div key={k.label} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5">
               <div className="text-lg mb-1">{k.icon}</div>
               <div className={`text-2xl font-bold ${k.color}`}>{k.value}</div>
-              <div className="text-[11px] text-slate-500 mt-1">{k.label}</div>
+              <div className="text-[11px] text-[var(--text-faint)] mt-1">{k.label}</div>
             </div>
           ))}
         </div>
@@ -606,13 +606,13 @@ export default function AgentsPage() {
           <span className="text-[11px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-full px-3 py-1 uppercase tracking-wider">
             Batch Agents
           </span>
-          <span className="text-sm text-slate-400">On-demand &amp; scheduled intelligence</span>
+          <span className="text-sm text-[var(--text-muted)]">On-demand &amp; scheduled intelligence</span>
         </div>
 
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {[...Array(7)].map((_, i) => (
-              <div key={i} className="bg-slate-800/50 border border-white/10 rounded-2xl p-5 animate-pulse h-52" />
+              <div key={i} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 animate-pulse h-52" />
             ))}
           </div>
         ) : (
@@ -637,13 +637,13 @@ export default function AgentsPage() {
           <span className="text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full px-3 py-1 uppercase tracking-wider">
             Conversational Agents
           </span>
-          <span className="text-sm text-slate-400">Always-on · 24/7 live</span>
+          <span className="text-sm text-[var(--text-muted)]">Always-on · 24/7 live</span>
         </div>
 
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {[...Array(3)].map((_, i) => (
-              <div key={i} className="bg-slate-800/50 border border-white/10 rounded-2xl p-5 animate-pulse h-44" />
+              <div key={i} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 animate-pulse h-44" />
             ))}
           </div>
         ) : (

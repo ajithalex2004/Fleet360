@@ -26,7 +26,7 @@ export default function AgentsShell({ children }: { children: React.ReactNode })
 
   return (
     <ModuleGuard moduleId="agents" moduleName="AI Agent Ecosystem" moduleIcon="🤖">
-      <div className="flex flex-col h-screen bg-slate-900">
+      <div className="flex flex-col h-screen bg-[var(--bg-canvas)]">
         <PlatformHomeBar
           moduleName="AI Agent Ecosystem"
           moduleIcon="🤖"
@@ -34,21 +34,21 @@ export default function AgentsShell({ children }: { children: React.ReactNode })
         />
         <div className="flex flex-1 overflow-hidden">
           {/* Global cross-module sidebar */}
-          <div className="w-52 flex-shrink-0 border-r border-white/10 bg-slate-900/80 overflow-y-auto hidden md:flex flex-col">
+          <div className="w-52 flex-shrink-0 border-r border-[var(--border-subtle)] bg-[var(--bg-surface)]/80 overflow-y-auto hidden md:flex flex-col">
             {/* Module header */}
-            <div className="p-4 border-b border-white/10">
+            <div className="p-4 border-b border-[var(--border-subtle)]">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-base">🤖</div>
                 <div>
-                  <p className="text-white font-semibold text-xs">AI Agents</p>
-                  <p className="text-slate-500 text-[10px]">Smart Mobility</p>
+                  <p className="text-[var(--text-main)] font-semibold text-xs">AI Agents</p>
+                  <p className="text-[var(--text-faint)] text-[10px]">Smart Mobility</p>
                 </div>
               </div>
             </div>
 
             {/* Module quick-nav */}
             <nav className="p-3 flex-1">
-              <p className="px-2 mb-2 text-[9px] font-bold uppercase tracking-widest text-slate-600">All Modules</p>
+              <p className="px-2 mb-2 text-[9px] font-bold uppercase tracking-widest text-[var(--text-faint)]">All Modules</p>
               <div className="space-y-0.5">
                 {GLOBAL_MODULES.map(item => {
                   const active = item.href === '/agents'
@@ -61,7 +61,7 @@ export default function AgentsShell({ children }: { children: React.ReactNode })
                       className={`flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all text-xs font-medium ${
                         active
                           ? 'bg-gradient-to-r from-violet-500/20 to-purple-500/20 text-violet-300 border border-violet-500/30'
-                          : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                          : 'text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]'
                       }`}
                     >
                       <span className="text-sm leading-none">{item.icon}</span>
@@ -75,7 +75,7 @@ export default function AgentsShell({ children }: { children: React.ReactNode })
             {/* Footer badge */}
             <div className="p-3 mx-3 mb-3 rounded-xl bg-violet-500/10 border border-violet-500/20">
               <p className="text-violet-400 text-[10px] font-bold mb-0.5">10 AGENTS LIVE</p>
-              <p className="text-slate-500 text-[9px]">Autonomous · Always watching</p>
+              <p className="text-[var(--text-faint)] text-[9px]">Autonomous · Always watching</p>
             </div>
           </div>
 
