@@ -22,6 +22,13 @@ You have real-time access to the following live operational and BI reporting dat
 - System alerts and compliance warnings
 - Active bookings and dispatch
 - Comprehensive KPI dashboards
+- Transport Services Domain KPI Tiles:
+  * Rent-A-Car (RAC) KPI (ADR, utilization, active agreements, overdue returns, fines)
+  * Staff Transportation (STS) KPI (PCE optimization, shift occupancy, route adherence)
+  * School Bus Transportation KPI (RFID student attendance, guardian alerts, DOT safety)
+  * Logistics & Heavy Freight KPI (trips in transit, ePOD completion rate, cold chain telematics)
+  * Corporate Long-Term Leasing KPI (active leases, monthly lease billing, contract renewals)
+  * VIP Limousine & Chauffeur KPI (luxury utilization, VIP airport trips, guest CSAT)
 - Fleet Utilization BI Reports (utilization %, uptime, idle & workshop days)
 - Revenue & Financial BI Reports (multi-LOB breakdown, RAC, STS, Leasing, Logistics)
 - Maintenance & Workshop BI Cost Reports (repair costs, average cost per asset, top failure categories)
@@ -41,6 +48,12 @@ TOOL USAGE RULES:
 - For "alerts / warnings / issues" → call showAlerts
 - For "bookings / rentals / reservations" → call showBookings
 - For "KPI / overview / summary / dashboard" → call showKPIDashboard
+- For "RAC / Rent-A-Car KPI / rental counter / ADR / daily rate" → call showRACKPI
+- For "Staff Bus / STS / staff transportation / PCE / shift occupancy" → call showStaffBusKPI
+- For "School Bus / student attendance / RFID / guardian alerts / DOT" → call showSchoolBusKPI
+- For "Logistics / freight / heavy trucks / ePOD / cold chain / cargo" → call showLogisticsKPI
+- For "Leasing / long-term leases / lease renewals / B2B contracts" → call showLeasingKPI
+- For "Limousine / VIP Chauffeur / luxury fleet / airport transfer" → call showChauffeurKPI
 - For "utilization report / fleet utilization / asset uptime / idle days" → call generateUtilizationReport
 - For "revenue report / financial report / LOB breakdown / income analytics" → call generateRevenueReport
 - For "maintenance cost report / repair spend / workshop TCO / parts costs" → call generateMaintenanceCostReport
@@ -130,6 +143,72 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
         properties: {
           greeting: { type: 'string' },
         },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'showRACKPI',
+      description: 'Display specialized Rent-A-Car (RAC) KPI tile with ADR, fleet utilization, active agreements, overdue returns, and unbilled fines.',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'showStaffBusKPI',
+      description: 'Display specialized Staff Transportation (STS) KPI tile with PCE optimization, shift loads, on-time departure rate, and driver rosters.',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'showSchoolBusKPI',
+      description: 'Display specialized School Bus Transportation KPI tile with student RFID scan rates, guardian WhatsApp SMS rate, and DOT compliance.',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'showLogisticsKPI',
+      description: 'Display specialized Heavy Freight & Logistics KPI tile with trips in transit, digital ePOD completion, and cold chain telematics.',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'showLeasingKPI',
+      description: 'Display specialized Long-Term Leasing KPI tile with active corporate leases, monthly run-rate billing, and upcoming renewals.',
+      parameters: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'showChauffeurKPI',
+      description: 'Display specialized Limousine & VIP Chauffeur KPI tile with luxury fleet utilization, VIP airport transfers, and guest CSAT.',
+      parameters: {
+        type: 'object',
+        properties: {},
       },
     },
   },

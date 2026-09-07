@@ -10,6 +10,12 @@ import ReportUtilizationCard from '@/components/ops-assistant/ReportUtilizationC
 import ReportRevenueCard     from '@/components/ops-assistant/ReportRevenueCard';
 import ReportMaintenanceCard from '@/components/ops-assistant/ReportMaintenanceCard';
 import ReportScheduleCard    from '@/components/ops-assistant/ReportScheduleCard';
+import ServiceRACKPICard     from '@/components/ops-assistant/tiles/ServiceRACKPICard';
+import ServiceStaffBusKPICard from '@/components/ops-assistant/tiles/ServiceStaffBusKPICard';
+import ServiceSchoolBusKPICard from '@/components/ops-assistant/tiles/ServiceSchoolBusKPICard';
+import ServiceLogisticsKPICard from '@/components/ops-assistant/tiles/ServiceLogisticsKPICard';
+import ServiceLeasingKPICard from '@/components/ops-assistant/tiles/ServiceLeasingKPICard';
+import ServiceChauffeurKPICard from '@/components/ops-assistant/tiles/ServiceChauffeurKPICard';
 
 // ── TheSys / Crayon component renderer ───────────────────────────────────────
 // The TheSys model returns <content thesys="true"> JSON component trees.
@@ -27,7 +33,7 @@ const ICON_MAP: Record<string, string> = {
   gauge: '📊', car: '🚗', 'calendar-days': '📅', wrench: '🔧',
   'alert-triangle': '⚠️', truck: '🚛', users: '👥', 'map-pin': '📍',
   'bar-chart': '📈', clipboard: '📋', bell: '🔔', shield: '🛡️',
-  dollar: '💰', clock: '⏰',
+  dollar: '💰', clock: '⏰', spark: '✨', graduation: '🎓',
 };
 
 // Map button name / label to a chat prompt
@@ -38,6 +44,12 @@ const BUTTON_PROMPTS: Record<string, string> = {
   cta_view_maintenance:  'Show critical and high priority maintenance requests',
   cta_view_alerts:       'Show all critical alerts and warnings',
   cta_staff_buses:       'Show staff transportation vehicles',
+  cta_rac_kpi:           'Show Rent-A-Car (RAC) KPI tile',
+  cta_staff_bus_kpi:     'Show Staff Transportation (STS) KPI tile',
+  cta_school_bus_kpi:    'Show School Bus Transportation KPI tile',
+  cta_logistics_kpi:     'Show Logistics and Freight KPI tile',
+  cta_leasing_kpi:       'Show Corporate Long-Term Leasing KPI tile',
+  cta_chauffeur_kpi:     'Show VIP Limousine and Chauffeur KPI tile',
   cta_utilization_report:'Generate a fleet utilization BI report',
   cta_revenue_report:    'Generate a revenue breakdown report by line of business',
   cta_maint_cost_report: 'Show workshop maintenance cost analysis',
@@ -216,6 +228,8 @@ function parseThesysContent(text: string): { plain: string; nodes: CrayonNode[] 
 type ToolName =
   | 'showFleetStatus' | 'showVehicles' | 'showMaintenanceRequests'
   | 'showAlerts'      | 'showBookings' | 'showKPIDashboard'
+  | 'showRACKPI'      | 'showStaffBusKPI' | 'showSchoolBusKPI'
+  | 'showLogisticsKPI'| 'showLeasingKPI'  | 'showChauffeurKPI'
   | 'generateUtilizationReport' | 'generateRevenueReport'
   | 'generateMaintenanceCostReport' | 'scheduleReport';
 
@@ -239,6 +253,12 @@ function ToolComponent({ call }: { call: ToolCall }) {
     case 'showAlerts':                   return <AlertsCard            {...(call.args as Record<string, never>)} />;
     case 'showBookings':                 return <BookingsCard          {...(call.args as Record<string, never>)} />;
     case 'showKPIDashboard':             return <KPIDashboard          {...(call.args as Record<string, never>)} />;
+    case 'showRACKPI':                   return <ServiceRACKPICard />;
+    case 'showStaffBusKPI':              return <ServiceStaffBusKPICard />;
+    case 'showSchoolBusKPI':             return <ServiceSchoolBusKPICard />;
+    case 'showLogisticsKPI':             return <ServiceLogisticsKPICard />;
+    case 'showLeasingKPI':               return <ServiceLeasingKPICard />;
+    case 'showChauffeurKPI':             return <ServiceChauffeurKPICard />;
     case 'generateUtilizationReport':    return <ReportUtilizationCard {...(call.args as any)} />;
     case 'generateRevenueReport':        return <ReportRevenueCard     {...(call.args as any)} />;
     case 'generateMaintenanceCostReport':return <ReportMaintenanceCard {...(call.args as any)} />;
@@ -255,13 +275,16 @@ interface SidebarStats {
 
 const QUICK = [
   { icon: '🎯', label: 'Full Overview',       prompt: 'Show me the full operations dashboard' },
+  { icon: '🚗', label: 'Rent-A-Car (RAC) KPI',prompt: 'Show Rent-A-Car (RAC) KPI tile' },
+  { icon: '🚍', label: 'Staff Bus (STS) KPI', prompt: 'Show Staff Transportation (STS) KPI tile' },
+  { icon: '🎓', label: 'School Bus KPI',      prompt: 'Show School Bus Transportation KPI tile' },
+  { icon: '🚛', label: 'Logistics Freight KPI',prompt: 'Show Logistics and Freight KPI tile' },
+  { icon: '📄', label: 'Leasing KPI',         prompt: 'Show Corporate Long-Term Leasing KPI tile' },
+  { icon: '✨', label: 'VIP Chauffeur KPI',   prompt: 'Show VIP Limousine and Chauffeur KPI tile' },
   { icon: '📊', label: 'Utilization Report',  prompt: 'Generate a fleet utilization BI report' },
   { icon: '💰', label: 'Revenue Breakdown',   prompt: 'Generate a revenue breakdown report by line of business' },
   { icon: '🔧', label: 'Maintenance Cost BI', prompt: 'Show workshop maintenance cost analysis' },
-  { icon: '🚗', label: 'Fleet Status',        prompt: 'Show me the current fleet status' },
-  { icon: '✅', label: 'Available Vehicles',  prompt: 'Show me all available vehicles' },
   { icon: '⚠️', label: 'Alerts',              prompt: 'Show all critical alerts' },
-  { icon: '📋', label: 'Active Bookings',     prompt: 'Show active and confirmed bookings' },
   { icon: '⏰', label: 'Scheduled Reports',   prompt: 'Show automated scheduled BI reports' },
 ];
 
