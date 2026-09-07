@@ -123,13 +123,13 @@ export default function MaintenanceRequestsPage() {
 
     // Filter State
     const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
+    const last7Days = new Date(today);
+    last7Days.setDate(last7Days.getDate() - 7);
     const todayStr = today.toISOString().split('T')[0];
-    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    const last7DaysStr = last7Days.toISOString().split('T')[0];
 
     const [searchTerm, setSearchTerm] = useState('');
-    const [dateRange, setDateRange] = useState({ start: yesterdayStr, end: todayStr });
+    const [dateRange, setDateRange] = useState({ start: last7DaysStr, end: todayStr });
     const [statusFilter, setStatusFilter] = useState<string[]>([]);
 
     useEffect(() => {
@@ -280,7 +280,7 @@ export default function MaintenanceRequestsPage() {
                 onStatusChange={setStatusFilter}
                 statusOptions={Object.values(MaintenanceStatus)}
                 placeholder="Search requests..."
-                defaultStartDate={yesterdayStr}
+                defaultStartDate={last7DaysStr}
                 defaultEndDate={todayStr}
             />
 
