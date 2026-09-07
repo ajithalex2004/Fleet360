@@ -30,8 +30,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Pin, Settings, Eye, EyeOff, type LucideIcon } from 'lucide-react';
-import { MODULES, moduleFromPathname, type ModuleDef, type SubPage } from '@/lib/nav/modules';
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Pin, Settings, Eye, EyeOff, type LucideIcon } from 'lucide-react';
+import { MODULES, NAV_CATEGORIES, moduleFromPathname, type ModuleDef, type SubPage, type NavCategory } from '@/lib/nav/modules';
 import { openTab, WorkspaceTabsFullError } from './workspace-tabs-store';
 import { usePermissions } from '@/contexts/PermissionContext';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -39,6 +39,7 @@ import ThemeToggle from '@/components/ThemeToggle';
 const COLLAPSE_KEY = 'fleet360-sidebar-collapsed-v1';
 const PINNED_KEY = 'fleet360-sidebar-pinned-v1';
 const HIDDEN_MODULES_KEY = 'fleet360-sidebar-hidden-modules-v1';
+const CAT_COLLAPSED_KEY = 'fleet360-sidebar-cat-collapsed-v1';
 
 interface Props {
   /** Notify the AppShell when a tab open fails because the cap is reached. */
@@ -60,6 +61,7 @@ export default function Sidebar({ onTabsFull }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [hiddenModules, setHiddenModules] = useState<Set<string>>(new Set());
+  const [collapsedCats, setCollapsedCats] = useState<Set<NavCategory>>(new Set());
   const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
@@ -68,8 +70,20 @@ export default function Sidebar({ onTabsFull }: Props) {
       if (window.localStorage.getItem(PINNED_KEY) === '1') setPinned(true);
       const hidden = window.localStorage.getItem(HIDDEN_MODULES_KEY);
       if (hidden) setHiddenModules(new Set(JSON.parse(hidden)));
+      const collapsedCatsData = window.localStorage.getItem(CAT_COLLAPSED_KEY);
+      if (collapsedCatsData) setCollapsedCats(new Set(JSON.parse(collapsedCatsData)));
     } catch {}
   }, []);
+
+  const toggleCategory = (catId: NavCategory) => {
+    setCollapsedCats(prev => {
+      const next = new Set(prev);
+      if (next.has(catId)) next.delete(catId);
+      else next.add(catId);
+      try { window.localStorage.setItem(CAT_COLLAPSED_KEY, JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  };
 
   const toggleCollapsed = () => {
     if (pinned) return; // Don't collapse when pinned
@@ -173,60 +187,114 @@ export default function Sidebar({ onTabsFull }: Props) {
       </div>
 
       <nav ref={navRef} className="flex-1 overflow-y-auto overflow-x-visible p-2">
-        <ul className="space-y-0.5">
-          {MODULES.filter(m => !hiddenModules.has(m.id)).map(m => {
-            const isActive = activeModule?.id === m.id;
+        {NAV_CATEGORIES.map((cat, catIdx) => {
+          const catModules = MODULES.filter(m => m.category === cat.id && !hiddenModules.has(m.id));
+          if (catModules.length === 0) return null;
+          const isCatCollapsed = collapsedCats.has(cat.id);
+          const CatIcon = cat.icon;
+
+          if (collapsed) {
             return (
-              <li key={m.id}>
-                <NavRow
-                  module={m}
-                  collapsed={collapsed}
-                  active={isActive}
-                  moduleId={m.id}
-                  onTabOpen={openTab}
-                  onTabsFull={onTabsFull}
-                  onHide={hideModule}
-                  onHover={(el) => {
-                    if (!collapsed || !m.subPages?.length) return;
-                    const rect = el.getBoundingClientRect();
-                    const parent = navRef.current?.getBoundingClientRect();
-                    setFlyoutTop(rect.top - (parent?.top ?? 0));
-                    setFlyoutFor(m.id);
-                  }}
-                />
-                {!collapsed && isActive && visibleSubPages(m.subPages)?.length ? (
-                  <ul className="mt-0.5 mb-1 space-y-0.5 pl-2 border-l border-[var(--border-subtle)] ml-4">
-                    {visibleSubPages(m.subPages)!.map((sp, idx, arr) => {
-                      // Emit a caption row before the first item of each new group.
-                      // Undefined group = ungrouped (renders flush, no header).
-                      const prevGroup = idx > 0 ? arr[idx - 1].group : undefined;
-                      const showHeader = sp.group && sp.group !== prevGroup;
-                      return (
-                        <React.Fragment key={sp.href}>
-                          {showHeader && (
-                            <li aria-hidden="true" className={`px-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)] ${idx > 0 ? 'pt-2' : ''}`}>
-                              {sp.group}
-                            </li>
-                          )}
-                          <li>
-                            <SubRow
-                              page={sp}
-                              parentIcon={m.icon}
-                              active={pathname === sp.href}
-                              moduleId={m.id}
-                              onTabOpen={openTab}
-                              onTabsFull={onTabsFull}
-                            />
-                          </li>
-                        </React.Fragment>
-                      );
-                    })}
-                  </ul>
-                ) : null}
-              </li>
+              <div key={cat.id}>
+                {catIdx > 0 && <div className="my-1.5 mx-2 border-t border-[var(--border-subtle)]/60" />}
+                <ul className="space-y-0.5">
+                  {catModules.map(m => {
+                    const isActive = activeModule?.id === m.id;
+                    return (
+                      <li key={m.id}>
+                        <NavRow
+                          module={m}
+                          collapsed={true}
+                          active={isActive}
+                          moduleId={m.id}
+                          onTabOpen={openTab}
+                          onTabsFull={onTabsFull}
+                          onHide={hideModule}
+                          onHover={(el) => {
+                            if (!m.subPages?.length) return;
+                            const rect = el.getBoundingClientRect();
+                            const parent = navRef.current?.getBoundingClientRect();
+                            setFlyoutTop(rect.top - (parent?.top ?? 0));
+                            setFlyoutFor(m.id);
+                          }}
+                        />
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             );
-          })}
-        </ul>
+          }
+
+          return (
+            <div key={cat.id} className="mb-2.5">
+              <button
+                type="button"
+                onClick={() => toggleCategory(cat.id)}
+                className="group flex w-full items-center justify-between px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] hover:text-[var(--text-main)] transition-colors rounded-md hover:bg-[var(--bg-surface-hover)] select-none"
+              >
+                <span className="flex items-center gap-1.5 truncate">
+                  <CatIcon className="h-3 w-3 text-[var(--text-faint)] group-hover:text-cyan-400 transition-colors" />
+                  <span>{cat.label}</span>
+                </span>
+                <ChevronDown
+                  className={`h-3 w-3 text-[var(--text-faint)] transition-transform duration-150 ${
+                    isCatCollapsed ? '-rotate-90' : ''
+                  }`}
+                />
+              </button>
+
+              {!isCatCollapsed && (
+                <ul className="mt-0.5 space-y-0.5">
+                  {catModules.map(m => {
+                    const isActive = activeModule?.id === m.id;
+                    return (
+                      <li key={m.id}>
+                        <NavRow
+                          module={m}
+                          collapsed={false}
+                          active={isActive}
+                          moduleId={m.id}
+                          onTabOpen={openTab}
+                          onTabsFull={onTabsFull}
+                          onHide={hideModule}
+                          onHover={() => {}}
+                        />
+                        {isActive && visibleSubPages(m.subPages)?.length ? (
+                          <ul className="mt-0.5 mb-1 space-y-0.5 pl-2 border-l border-[var(--border-subtle)] ml-4">
+                            {visibleSubPages(m.subPages)!.map((sp, idx, arr) => {
+                              const prevGroup = idx > 0 ? arr[idx - 1].group : undefined;
+                              const showHeader = sp.group && sp.group !== prevGroup;
+                              return (
+                                <React.Fragment key={sp.href}>
+                                  {showHeader && (
+                                    <li aria-hidden="true" className={`px-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)] ${idx > 0 ? 'pt-2' : ''}`}>
+                                      {sp.group}
+                                    </li>
+                                  )}
+                                  <li>
+                                    <SubRow
+                                      page={sp}
+                                      parentIcon={m.icon}
+                                      active={pathname === sp.href}
+                                      moduleId={m.id}
+                                      onTabOpen={openTab}
+                                      onTabsFull={onTabsFull}
+                                    />
+                                  </li>
+                                </React.Fragment>
+                              );
+                            })}
+                          </ul>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          );
+        })}
       </nav>
 
       {/* Settings panel - show/hide modules, theme */}
@@ -277,6 +345,7 @@ export default function Sidebar({ onTabsFull }: Props) {
         const m = MODULES.find(x => x.id === flyoutFor);
         const visible = visibleSubPages(m?.subPages);
         if (!m || !visible?.length) return null;
+        const categoryDef = NAV_CATEGORIES.find(c => c.id === m.category);
         return (
           <div
             className="absolute left-[60px] z-50 min-w-[220px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-1.5 shadow-2xl"
@@ -284,7 +353,12 @@ export default function Sidebar({ onTabsFull }: Props) {
             onMouseEnter={() => setFlyoutFor(m.id)}
             onMouseLeave={() => setFlyoutFor(null)}
           >
-            <div className="border-b border-[var(--border-subtle)] px-2 pb-1.5 pt-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-faint)]">{m.label}</div>
+            <div className="border-b border-[var(--border-subtle)] px-2 pb-1.5 pt-1">
+              <div className="text-[9px] font-bold uppercase tracking-wider text-cyan-400">
+                {categoryDef?.label ?? m.category}
+              </div>
+              <div className="text-[12px] font-semibold text-[var(--text-main)]">{m.label}</div>
+            </div>
             <ul className="mt-1 space-y-0.5">
               {visible.map((sp, idx, arr) => {
                 const ActiveIcon: LucideIcon = sp.icon ?? m.icon;

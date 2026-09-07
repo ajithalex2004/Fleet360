@@ -33,6 +33,67 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
+export type NavCategory =
+  | 'intelligence'
+  | 'services'
+  | 'operations'
+  | 'assets'
+  | 'governance'
+  | 'enterprise';
+
+export interface NavCategoryDef {
+  id: NavCategory;
+  label: string;
+  shortLabel: string;
+  icon: LucideIcon;
+  description: string;
+}
+
+export const NAV_CATEGORIES: NavCategoryDef[] = [
+  {
+    id: 'intelligence',
+    label: 'AI & Intelligence',
+    shortLabel: 'Intelligence',
+    icon: Bot,
+    description: 'Autonomous copilot agents, platform governance & service triage',
+  },
+  {
+    id: 'services',
+    label: 'Transport Services',
+    shortLabel: 'Services',
+    icon: Bus,
+    description: 'Staff transport, school buses, logistics, leasing & rental verticals',
+  },
+  {
+    id: 'operations',
+    label: 'Live Operations',
+    shortLabel: 'Operations',
+    icon: Radio,
+    description: 'Central dispatch, private exchange marketplace & incident response',
+  },
+  {
+    id: 'assets',
+    label: 'Fleet & Assets',
+    shortLabel: 'Assets',
+    icon: CarFront,
+    description: 'Vehicles, maintenance work orders, driver workforce & BLE tags',
+  },
+  {
+    id: 'governance',
+    label: 'Governance & ESG',
+    shortLabel: 'Governance',
+    icon: ShieldCheck,
+    description: 'UAE compliance vault, sustainability carbon & performance BI',
+  },
+  {
+    id: 'enterprise',
+    label: 'Enterprise & Admin',
+    shortLabel: 'Enterprise',
+    icon: Settings,
+    description: 'Financial ledger, corporate tax, roles & platform configuration',
+  },
+];
+
 export interface SubPage {
   /** Display label in the sidebar / tab. Sentence case. */
   label: string;
@@ -59,6 +120,8 @@ export interface SubPage {
 
 export interface ModuleDef {
   id: string;
+  /** Operational category in the sidebar & platform hub */
+  category: NavCategory;
   /** Display label in the sidebar. Sentence case. */
   label: string;
   /** Landing href when the module is clicked directly. */
@@ -69,142 +132,39 @@ export interface ModuleDef {
 }
 
 export const MODULES: ModuleDef[] = [
+  // ── 1. AI & INTELLIGENCE ──────────────────────────────────────────
   {
-    id: 'exchange',
-    label: 'Fleet360 Exchange',
-    href: '/exchange/dashboard',
-    icon: ArrowLeftRight,
-    subPages: [
-      { label: 'Dashboard', href: '/exchange/dashboard', icon: LayoutDashboard },
-      { label: 'Marketplace Feed', href: '/exchange/marketplace', icon: Globe, group: 'Sourcing' },
-      { label: 'Jobs & Requests', href: '/exchange/jobs', icon: Briefcase, group: 'Sourcing' },
-      { label: 'Quotations', href: '/exchange/quotations', icon: DollarSign, group: 'Sourcing' },
-      { label: 'Performance Scorecard', href: '/exchange/scorecard', icon: Trophy, group: 'Operations' },
-      { label: 'Settlement Statements', href: '/exchange/statements', icon: Receipt, group: 'Settlement' },
-      { label: 'Fleet Register', href: '/exchange/fleet', icon: Truck, group: 'Network' },
-      { label: 'Driver Roster', href: '/exchange/drivers', icon: Users, group: 'Network' },
-      { label: 'Compliance Vault', href: '/exchange/compliance', icon: ShieldCheck, group: 'Network' },
-      { label: 'Company Profile', href: '/exchange/profile', icon: Building2, group: 'Network' },
-    ],
+    id: 'agents',
+    category: 'intelligence',
+    label: 'AI agents',
+    href: '/agents',
+    icon: Bot,
   },
-  { id: 'service-tickets', label: 'Service tickets', href: '/service-tickets', icon: Headphones },
-  { id: 'agents',          label: 'AI agents',       href: '/agents',          icon: Bot },
   {
-    id: 'ai-platform', label: 'AI platform', href: '/ai-platform', icon: Brain,
+    id: 'ai-platform',
+    category: 'intelligence',
+    label: 'AI platform',
+    href: '/ai-platform',
+    icon: Brain,
     subPages: [
       { label: 'Predictive maintenance', href: '/ai-platform/predictive', icon: Sparkles },
     ],
   },
-
   {
-    id: 'maintenance', label: 'Maintenance', href: '/maintenance', icon: Wrench,
-    subPages: [
-      { label: 'Dashboard',           href: '/maintenance',                    icon: LayoutDashboard },
-      { label: 'Requests list',       href: '/maintenance/requests',           icon: ClipboardList },
-      { label: 'Maintenance history', href: '/maintenance/history',            icon: History },
-      { label: 'Approvals',           href: '/maintenance/approvals',          icon: CheckCircle2 },
-      { label: 'Analytics',           href: '/maintenance/analytics',          icon: BarChart3 },
-      { label: 'Work orders',         href: '/maintenance/work-orders',        icon: Wrench },
-      // PM Engine
-      { label: 'PM plans',            href: '/maintenance/pm-plans',           icon: ClipboardList },
-      { label: 'Schedule',            href: '/maintenance/schedule',           icon: Calendar },
-      // Read-only consumer views (domains owned by external modules)
-      { label: 'Garage assignments',  href: '/maintenance/garage-assignments', icon: Building2 },
-      { label: 'Predictive alerts',   href: '/maintenance/predictive-alerts',  icon: Sparkles },
-      // Phase C
-      { label: 'Warranties',          href: '/maintenance/warranty',           icon: ShieldCheck },
-      // Phase E
-      { label: 'Breakdowns',          href: '/maintenance/breakdown',          icon: AlertTriangle },
-      // Phase F
-      { label: 'SLA',                 href: '/maintenance/sla',                icon: TrendingUp },
-      // Phase G
-      { label: 'Risk scores',         href: '/maintenance/risk',               icon: Gauge },
-    ],
+    id: 'service-tickets',
+    category: 'intelligence',
+    label: 'Service tickets',
+    href: '/service-tickets',
+    icon: Headphones,
   },
 
+  // ── 2. TRANSPORT SERVICES (LOB) ───────────────────────────────────
   {
-    id: 'leasing', label: 'Leasing', href: '/leasing', icon: FileText,
-    subPages: [
-      { label: 'Dashboard',           href: '/leasing',                     icon: LayoutDashboard },
-
-      // Sales — lead capture through quotation.
-      { label: 'Inquiries',           href: '/leasing/inquiries',           icon: MessageCircle,  group: 'Sales' },
-      { label: 'Lead channels',       href: '/leasing/lead-channels',       icon: Radio,           group: 'Sales' },
-      { label: 'CRM & leads',         href: '/leasing/crm',                 icon: Target,          group: 'Sales' },
-      { label: 'Quotations',          href: '/leasing/quotations',          icon: FileText,        group: 'Sales' },
-      { label: 'Credit assessments',  href: '/leasing/credit-assessments',  icon: ShieldCheck,     group: 'Sales' },
-
-      // Contracts — post-sale lifecycle events.
-      { label: 'Lease agreements',    href: '/leasing/contracts-v2',        icon: FileText,        group: 'Contracts' },
-      { label: 'Amendments',          href: '/leasing/amendments',          icon: RefreshCw,       group: 'Contracts' },
-      { label: 'Renewals',            href: '/leasing/renewals',            icon: RefreshCw,       group: 'Contracts' },
-      { label: 'Early terminations',  href: '/leasing/early-terminations',  icon: AlertTriangle,   group: 'Contracts' },
-      { label: 'Transfers',           href: '/leasing/transfers',           icon: ArrowLeftRight,  group: 'Contracts' },
-
-      // Fleet & drivers — in-life vehicle and driver operations.
-      { label: 'Drivers',             href: '/leasing/drivers',             icon: UserCog,         group: 'Fleet & drivers' },
-      { label: 'Mileage',             href: '/leasing/mileage',             icon: Activity,        group: 'Fleet & drivers' },
-      { label: 'Vehicle exchanges',   href: '/leasing/vehicle-exchange',    icon: Repeat,          group: 'Fleet & drivers' },
-      { label: 'Handover',            href: '/leasing/handover',            icon: Send,            group: 'Fleet & drivers' },
-      { label: 'Field operations',    href: '/leasing/field',               icon: Smartphone,      group: 'Fleet & drivers' },
-
-      // Billing & records — leasing-native billing paperwork and document
-      // vault. Insurance, fuel, traffic fines, payments/receipts and
-      // receivables are intentionally NOT here — those pages are retired
-      // redirect stubs pointing at /fleet/* and /finance/*, where the real
-      // functionality (and its own nav entry) already lives.
-      { label: 'Pre-billing',         href: '/leasing/pre-billing',         icon: Receipt,         group: 'Billing & records' },
-      { label: 'Invoices',            href: '/leasing/invoices',            icon: CreditCard,      group: 'Billing & records' },
-      { label: 'Documents',           href: '/leasing/documents',           icon: Paperclip,       group: 'Billing & records' },
-
-      // Master data.
-      { label: 'Lessees',             href: '/leasing/lessees',             icon: Users,           group: 'Master data' },
-      { label: 'Branch staff',        href: '/leasing/staff',               icon: Building2,       group: 'Master data' },
-      { label: 'Bulk import',         href: '/leasing/import',              icon: Package,         group: 'Master data' },
-
-      // Monitoring.
-      { label: 'Alerts',              href: '/leasing/alerts',              icon: Bell,            group: 'Monitoring' },
-      { label: 'Analytics',           href: '/leasing/analytics',           icon: BarChart3,       group: 'Monitoring' },
-    ],
-  },
-  {
-    id: 'rental', label: 'Rent-a-Car', href: '/rental', icon: Car,
-    subPages: [
-      { label: 'Dashboard',     href: '/rental',               icon: LayoutDashboard },
-      { label: 'Counter',       href: '/rental/counter',       icon: Smartphone },
-      { label: 'Inquiries',     href: '/rental/inquiries',     icon: MessageCircle },
-      { label: 'Quotations',    href: '/rental/quotations',    icon: FileText },
-      { label: 'Bookings',      href: '/rental/bookings',      icon: Calendar },
-      { label: 'Agreements',    href: '/rental/agreements',    icon: FileText },
-      { label: 'Handover',      href: '/rental/handover',      icon: Send },
-      { label: 'Renewals',      href: '/rental/renewals',      icon: RefreshCw },
-      { label: 'Damage claims', href: '/rental/damage-claims', icon: AlertTriangle },
-      { label: 'Invoices',      href: '/rental/invoices',      icon: Receipt },
-      { label: 'Ancillaries',   href: '/rental/ancillaries',   icon: Tag },
-      { label: 'Pricing',       href: '/rental/pricing',       icon: DollarSign },
-      { label: 'Rates',         href: '/rental/rates',         icon: Tag },
-      { label: 'Availability',  href: '/rental/availability',  icon: Calendar },
-      { label: 'Channels',      href: '/rental/channels',      icon: Network },
-      { label: 'Customers',     href: '/rental/customers',     icon: Users },
-      { label: 'Documents',     href: '/rental/documents',     icon: FileText },
-      { label: 'Insurance',     href: '/rental/insurance',     icon: Shield },
-      { label: 'Branches',      href: '/rental/branches',      icon: Building2 },
-      { label: 'Staff',         href: '/rental/staff',         icon: Users },
-      { label: 'Transfers',     href: '/rental/transfers',     icon: ArrowLeftRight },
-      { label: 'Alerts',        href: '/rental/alerts',        icon: Bell },
-      { label: 'Analytics',     href: '/rental/analytics',     icon: BarChart3 },
-    ],
-  },
-  {
-    id: 'locations', label: 'Locations', href: '/locations', icon: MapPin,
-    // Shared geospatial catalogue — one row = one Place from spatial.places.
-    // Every module reads/writes here; the in-page filter picks the type.
-    // Per-type sidebar shortcuts (Stops / Geofences / Depots / …) will land
-    // in Phase 2 once the sub-page router supports querystring matching.
-  },
-
-  {
-    id: 'bus-ops', label: 'Staff transport', href: '/bus-ops', icon: Bus,
+    id: 'bus-ops',
+    category: 'services',
+    label: 'Staff transport',
+    href: '/bus-ops',
+    icon: Bus,
     subPages: [
       // Overview — no group; Dashboard sits flush at the top.
       { label: 'Dashboard',           href: '/bus-ops',                     icon: LayoutDashboard },
@@ -214,16 +174,6 @@ export const MODULES: ModuleDef[] = [
       { label: 'Route Optimization',  href: '/bus-ops/route-planner',       icon: Route,           group: 'Planning' },
       { label: 'Schedules',           href: '/bus-ops/schedules',           icon: Calendar,        group: 'Planning' },
       { label: 'Schedule Templates',  href: '/bus-ops/schedule-templates',  icon: Repeat,          group: 'Planning' },
-      // Planning Engine (runcut/block/roster + CBA + PCE constraints +
-      // headway) was reachable only from a dashboard tile despite being the
-      // P0 planning surface. Listed here for parity with the other Planning
-      // entries.
-      //
-      // Planning Constraints and Planning Optimizer are tabs of it rather
-      // than their own entries — the same treatment as CBA rules and
-      // Headway, which are also tabs and deliberately absent from this
-      // list. Both old paths still resolve, redirecting to ?tab=constraints
-      // and ?tab=optimizer respectively.
       { label: 'Planning Engine',     href: '/bus-ops/planning-engine',     icon: Sparkles,        group: 'Planning' },
       { label: 'Route Consolidation', href: '/bus-ops/route-consolidation', icon: GitMerge,        group: 'Planning' },
       { label: 'Transport Calendars', href: '/bus-ops/transport-calendars', icon: CalendarCheck2,  group: 'Planning' },
@@ -258,7 +208,11 @@ export const MODULES: ModuleDef[] = [
     ],
   },
   {
-    id: 'school-bus', label: 'School bus', href: '/school-bus', icon: School,
+    id: 'school-bus',
+    category: 'services',
+    label: 'School bus',
+    href: '/school-bus',
+    icon: School,
     subPages: [
       { label: 'Dashboard',         href: '/school-bus',                   icon: LayoutDashboard },
       { label: 'Students',          href: '/school-bus/students',          icon: GraduationCap },
@@ -280,9 +234,12 @@ export const MODULES: ModuleDef[] = [
       { label: 'Analytics',         href: '/school-bus/analytics',         icon: BarChart3 },
     ],
   },
-
   {
-    id: 'logistics', label: 'Logistics', href: '/logistics', icon: Truck,
+    id: 'logistics',
+    category: 'services',
+    label: 'Logistics',
+    href: '/logistics',
+    icon: Truck,
     subPages: [
       { label: 'Dashboard',           href: '/logistics',                   icon: LayoutDashboard },
       { label: 'Control tower',       href: '/logistics/control-tower',     icon: Radar },
@@ -302,9 +259,114 @@ export const MODULES: ModuleDef[] = [
       { label: 'Analytics',           href: '/logistics/analytics',         icon: BarChart3 },
     ],
   },
-
   {
-    id: 'incidents', label: 'Incidents', href: '/incidents', icon: Siren,
+    id: 'leasing',
+    category: 'services',
+    label: 'Leasing',
+    href: '/leasing',
+    icon: FileText,
+    subPages: [
+      { label: 'Dashboard',           href: '/leasing',                     icon: LayoutDashboard },
+      { label: 'Inquiries',           href: '/leasing/inquiries',           icon: MessageCircle,  group: 'Sales' },
+      { label: 'Lead channels',       href: '/leasing/lead-channels',       icon: Radio,           group: 'Sales' },
+      { label: 'CRM & leads',         href: '/leasing/crm',                 icon: Target,          group: 'Sales' },
+      { label: 'Quotations',          href: '/leasing/quotations',          icon: FileText,        group: 'Sales' },
+      { label: 'Credit assessments',  href: '/leasing/credit-assessments',  icon: ShieldCheck,     group: 'Sales' },
+      { label: 'Lease agreements',    href: '/leasing/contracts-v2',        icon: FileText,        group: 'Contracts' },
+      { label: 'Amendments',          href: '/leasing/amendments',          icon: RefreshCw,       group: 'Contracts' },
+      { label: 'Renewals',            href: '/leasing/renewals',            icon: RefreshCw,       group: 'Contracts' },
+      { label: 'Early terminations',  href: '/leasing/early-terminations',  icon: AlertTriangle,   group: 'Contracts' },
+      { label: 'Transfers',           href: '/leasing/transfers',           icon: ArrowLeftRight,  group: 'Contracts' },
+      { label: 'Drivers',             href: '/leasing/drivers',             icon: UserCog,         group: 'Fleet & drivers' },
+      { label: 'Mileage',             href: '/leasing/mileage',             icon: Activity,        group: 'Fleet & drivers' },
+      { label: 'Vehicle exchanges',   href: '/leasing/vehicle-exchange',    icon: Repeat,          group: 'Fleet & drivers' },
+      { label: 'Handover',            href: '/leasing/handover',            icon: Send,            group: 'Fleet & drivers' },
+      { label: 'Field operations',    href: '/leasing/field',               icon: Smartphone,      group: 'Fleet & drivers' },
+      { label: 'Pre-billing',         href: '/leasing/pre-billing',         icon: Receipt,         group: 'Billing & records' },
+      { label: 'Invoices',            href: '/leasing/invoices',            icon: CreditCard,      group: 'Billing & records' },
+      { label: 'Documents',           href: '/leasing/documents',           icon: Paperclip,       group: 'Billing & records' },
+      { label: 'Lessees',             href: '/leasing/lessees',             icon: Users,           group: 'Master data' },
+      { label: 'Branch staff',        href: '/leasing/staff',               icon: Building2,       group: 'Master data' },
+      { label: 'Bulk import',         href: '/leasing/import',              icon: Package,         group: 'Master data' },
+      { label: 'Alerts',              href: '/leasing/alerts',              icon: Bell,            group: 'Monitoring' },
+      { label: 'Analytics',           href: '/leasing/analytics',           icon: BarChart3,       group: 'Monitoring' },
+    ],
+  },
+  {
+    id: 'rental',
+    category: 'services',
+    label: 'Rent-a-Car',
+    href: '/rental',
+    icon: Car,
+    subPages: [
+      { label: 'Dashboard',     href: '/rental',               icon: LayoutDashboard },
+      { label: 'Counter',       href: '/rental/counter',       icon: Smartphone },
+      { label: 'Inquiries',     href: '/rental/inquiries',     icon: MessageCircle },
+      { label: 'Quotations',    href: '/rental/quotations',    icon: FileText },
+      { label: 'Bookings',      href: '/rental/bookings',      icon: Calendar },
+      { label: 'Agreements',    href: '/rental/agreements',    icon: FileText },
+      { label: 'Handover',      href: '/rental/handover',      icon: Send },
+      { label: 'Renewals',      href: '/rental/renewals',      icon: RefreshCw },
+      { label: 'Damage claims', href: '/rental/damage-claims', icon: AlertTriangle },
+      { label: 'Invoices',      href: '/rental/invoices',      icon: Receipt },
+      { label: 'Ancillaries',   href: '/rental/ancillaries',   icon: Tag },
+      { label: 'Pricing',       href: '/rental/pricing',       icon: DollarSign },
+      { label: 'Rates',         href: '/rental/rates',         icon: Tag },
+      { label: 'Availability',  href: '/rental/availability',  icon: Calendar },
+      { label: 'Channels',      href: '/rental/channels',      icon: Network },
+      { label: 'Customers',     href: '/rental/customers',     icon: Users },
+      { label: 'Documents',     href: '/rental/documents',     icon: FileText },
+      { label: 'Insurance',     href: '/rental/insurance',     icon: Shield },
+      { label: 'Branches',      href: '/rental/branches',      icon: Building2 },
+      { label: 'Staff',         href: '/rental/staff',         icon: Users },
+      { label: 'Transfers',     href: '/rental/transfers',     icon: ArrowLeftRight },
+      { label: 'Alerts',        href: '/rental/alerts',        icon: Bell },
+      { label: 'Analytics',     href: '/rental/analytics',     icon: BarChart3 },
+    ],
+  },
+
+  // ── 3. LIVE OPERATIONS & DISPATCH ────────────────────────────────
+  {
+    id: 'dispatch',
+    category: 'operations',
+    label: 'Dispatch',
+    href: '/dispatch',
+    icon: Radio,
+    subPages: [
+      { label: 'Dashboard',  href: '/dispatch',            icon: LayoutDashboard },
+      { label: 'Command',    href: '/dispatch/command',    icon: Radio },
+      { label: 'Jobs',       href: '/dispatch/jobs',       icon: ClipboardList },
+      { label: 'Ambulance',  href: '/dispatch/ambulance',  icon: Send },
+      { label: 'School bus', href: '/dispatch/school-bus', icon: School },
+      { label: 'Merge',      href: '/dispatch/merge',      icon: Network },
+      { label: 'Analytics',  href: '/dispatch/analytics',  icon: BarChart3 },
+    ],
+  },
+  {
+    id: 'exchange',
+    category: 'operations',
+    label: 'Fleet360 Exchange',
+    href: '/exchange/dashboard',
+    icon: ArrowLeftRight,
+    subPages: [
+      { label: 'Dashboard', href: '/exchange/dashboard', icon: LayoutDashboard },
+      { label: 'Marketplace Feed', href: '/exchange/marketplace', icon: Globe, group: 'Sourcing' },
+      { label: 'Jobs & Requests', href: '/exchange/jobs', icon: Briefcase, group: 'Sourcing' },
+      { label: 'Quotations', href: '/exchange/quotations', icon: DollarSign, group: 'Sourcing' },
+      { label: 'Performance Scorecard', href: '/exchange/scorecard', icon: Trophy, group: 'Operations' },
+      { label: 'Settlement Statements', href: '/exchange/statements', icon: Receipt, group: 'Settlement' },
+      { label: 'Fleet Register', href: '/exchange/fleet', icon: Truck, group: 'Network' },
+      { label: 'Driver Roster', href: '/exchange/drivers', icon: Users, group: 'Network' },
+      { label: 'Compliance Vault', href: '/exchange/compliance', icon: ShieldCheck, group: 'Network' },
+      { label: 'Company Profile', href: '/exchange/profile', icon: Building2, group: 'Network' },
+    ],
+  },
+  {
+    id: 'incidents',
+    category: 'operations',
+    label: 'Incidents',
+    href: '/incidents',
+    icon: Siren,
     subPages: [
       { label: 'Dashboard', href: '/incidents',           icon: LayoutDashboard },
       { label: 'Active',    href: '/incidents/active',    icon: AlertTriangle },
@@ -312,9 +374,44 @@ export const MODULES: ModuleDef[] = [
       { label: 'Reports',   href: '/incidents/reports',   icon: FileText },
     ],
   },
-
   {
-    id: 'fleet', label: 'Fleet', href: '/fleet', icon: CarFront,
+    id: 'booking-portal',
+    category: 'operations',
+    label: 'Booking portal',
+    href: '/booking-portal',
+    icon: Smartphone,
+    subPages: [
+      { label: 'Dashboard',   href: '/booking-portal',             icon: LayoutDashboard },
+      { label: 'New booking', href: '/booking-portal/new',         icon: Send },
+      { label: 'My bookings', href: '/booking-portal/my-bookings', icon: BookOpen },
+      { label: 'Approvals',   href: '/booking-portal/approvals',   icon: CheckCircle2 },
+    ],
+  },
+  {
+    id: 'mobile-apps',
+    category: 'operations',
+    label: 'Mobile apps',
+    href: '/mobile-apps',
+    icon: AppWindow,
+    subPages: [
+      { label: 'Booking App', href: '/m', icon: Smartphone },
+      { label: 'PWA Gallery', href: '/mobile-apps', icon: AppWindow },
+      { label: 'STS Driver', href: '/bus-ops/driver', icon: BusFront },
+      { label: 'STS Passenger', href: '/bus-ops/passenger', icon: UserCheck },
+      { label: 'RAC Counter', href: '/rental/counter', icon: FileCheck },
+      { label: 'Leasing Field', href: '/leasing/field', icon: Wrench },
+      { label: 'SchoolBus Parent', href: '/school-bus/parent', icon: Users },
+      { label: 'SchoolBus Driver', href: '/school-bus/driver', icon: BusFront },
+    ],
+  },
+
+  // ── 4. FLEET, ASSETS & WORKFORCE ──────────────────────────────────
+  {
+    id: 'fleet',
+    category: 'assets',
+    label: 'Fleet',
+    href: '/fleet',
+    icon: CarFront,
     subPages: [
       { label: 'Dashboard',             href: '/fleet',                icon: LayoutDashboard },
       { label: 'Live Telematics & IoT', href: '/fleet/telematics',     icon: Radio },
@@ -334,9 +431,131 @@ export const MODULES: ModuleDef[] = [
       { label: 'Predictive maintenance', href: '/fleet/intelligence',  icon: Brain },
     ],
   },
-
   {
-    id: 'vendors', label: 'Vendors & Partners', href: '/vendors', icon: Building2,
+    id: 'maintenance',
+    category: 'assets',
+    label: 'Maintenance',
+    href: '/maintenance',
+    icon: Wrench,
+    subPages: [
+      { label: 'Dashboard',           href: '/maintenance',                    icon: LayoutDashboard },
+      { label: 'Requests list',       href: '/maintenance/requests',           icon: ClipboardList },
+      { label: 'Maintenance history', href: '/maintenance/history',            icon: History },
+      { label: 'Approvals',           href: '/maintenance/approvals',          icon: CheckCircle2 },
+      { label: 'Analytics',           href: '/maintenance/analytics',          icon: BarChart3 },
+      { label: 'Work orders',         href: '/maintenance/work-orders',        icon: Wrench },
+      { label: 'PM plans',            href: '/maintenance/pm-plans',           icon: ClipboardList },
+      { label: 'Schedule',            href: '/maintenance/schedule',           icon: Calendar },
+      { label: 'Garage assignments',  href: '/maintenance/garage-assignments', icon: Building2 },
+      { label: 'Predictive alerts',   href: '/maintenance/predictive-alerts',  icon: Sparkles },
+      { label: 'Warranties',          href: '/maintenance/warranty',           icon: ShieldCheck },
+      { label: 'Breakdowns',          href: '/maintenance/breakdown',          icon: AlertTriangle },
+      { label: 'SLA',                 href: '/maintenance/sla',                icon: TrendingUp },
+      { label: 'Risk scores',         href: '/maintenance/risk',               icon: Gauge },
+    ],
+  },
+  {
+    id: 'driver-mgmt',
+    category: 'assets',
+    label: 'Drivers',
+    href: '/driver-mgmt',
+    icon: UserCog,
+    subPages: [
+      { label: 'Dashboard',    href: '/driver-mgmt',             icon: LayoutDashboard },
+      { label: 'Profiles',     href: '/driver-mgmt/profiles',    icon: Users },
+      { label: 'Documents',    href: '/driver-mgmt/documents',   icon: FileText },
+      { label: 'Shifts',       href: '/driver-mgmt/shifts',      icon: Calendar },
+      { label: 'Training',     href: '/driver-mgmt/training',    icon: GraduationCap },
+      { label: 'Performance',  href: '/driver-mgmt/performance', icon: Trophy },
+    ],
+  },
+  {
+    id: 'assets',
+    category: 'assets',
+    label: 'Assets',
+    href: '/assets',
+    icon: Package,
+    subPages: [
+      { label: 'Dashboard',      href: '/assets',                icon: LayoutDashboard },
+      { label: 'Registry',       href: '/assets/registry',       icon: ClipboardList },
+      { label: 'Categories',     href: '/assets/categories',     icon: Tag },
+      { label: 'Stock',          href: '/assets/stock',          icon: Package },
+      { label: 'Transactions',   href: '/assets/transactions',   icon: ArrowLeftRight },
+      { label: 'Timeline',       href: '/assets/timeline',       icon: History },
+      { label: 'Map',            href: '/assets/map',            icon: MapPin },
+      { label: 'Dispatch',       href: '/assets/dispatch',       icon: Radio },
+      { label: 'HVA',            href: '/assets/hva',            icon: Shield },
+      { label: 'Medical',        href: '/assets/medical',        icon: Send },
+      { label: 'Personnel',      href: '/assets/personnel',      icon: Users },
+      { label: 'Returns',        href: '/assets/returns',        icon: ArrowLeftRight },
+      { label: 'SPM',            href: '/assets/spm',            icon: Sliders },
+      { label: 'BLE tags',       href: '/assets/ble-tags',       icon: Tag },
+      { label: 'BLE zones',      href: '/assets/ble-zones',      icon: MapPin },
+      { label: 'BLE gateways',   href: '/assets/ble-gateways',   icon: Network },
+      { label: 'BLE detections', href: '/assets/ble-detections', icon: Activity },
+      { label: 'BLE alerts',     href: '/assets/ble-alerts',     icon: Bell },
+    ],
+  },
+  {
+    id: 'locations',
+    category: 'assets',
+    label: 'Locations',
+    href: '/locations',
+    icon: MapPin,
+  },
+
+  // ── 5. GOVERNANCE, ESG & COMPLIANCE ───────────────────────────────
+  {
+    id: 'compliance',
+    category: 'governance',
+    label: 'Compliance',
+    href: '/compliance',
+    icon: ShieldCheck,
+    subPages: [
+      { label: 'Dashboard', href: '/compliance',           icon: LayoutDashboard },
+      { label: 'Documents', href: '/compliance/documents', icon: FileText },
+      { label: 'Insurance', href: '/compliance/insurance', icon: Shield },
+      { label: 'Permits',   href: '/compliance/permits',   icon: FileText },
+      { label: 'Salik',     href: '/compliance/salik',     icon: CreditCard },
+    ],
+  },
+  {
+    id: 'sustainability',
+    category: 'governance',
+    label: 'Sustainability',
+    href: '/sustainability',
+    icon: Leaf,
+    subPages: [
+      { label: 'Dashboard',      href: '/sustainability',                icon: LayoutDashboard },
+      { label: 'Fleet carbon',   href: '/sustainability/fleet-carbon',   icon: Leaf },
+      { label: 'Modal shift',    href: '/sustainability/modal-shift',    icon: ArrowLeftRight },
+      { label: 'Paperless',      href: '/sustainability/paperless',      icon: FileText },
+      { label: 'Certifications', href: '/sustainability/certifications', icon: ShieldCheck },
+      { label: 'Reports',        href: '/sustainability/reports',        icon: BarChart3 },
+      { label: 'Settings',       href: '/sustainability/settings',       icon: Settings },
+    ],
+  },
+  {
+    id: 'reports',
+    category: 'governance',
+    label: 'Reports',
+    href: '/reports',
+    icon: BarChart3,
+    subPages: [
+      { label: 'Dashboard',          href: '/reports',                    icon: LayoutDashboard },
+      { label: 'Fleet utilisation',  href: '/reports/fleet-utilization',  icon: CarFront },
+      { label: 'Revenue',            href: '/reports/revenue',            icon: DollarSign },
+      { label: 'Maintenance',        href: '/reports/maintenance',        icon: Wrench },
+      { label: 'Driver performance', href: '/reports/driver-performance', icon: Trophy },
+      { label: 'Scheduled reports',  href: '/reports/scheduled',          icon: Calendar },
+    ],
+  },
+  {
+    id: 'vendors',
+    category: 'governance',
+    label: 'Vendors & Partners',
+    href: '/vendors',
+    icon: Building2,
     subPages: [
       { label: 'Overview',              href: '/vendors',              icon: LayoutDashboard },
       { label: 'Outsource Management',  href: '/exchange/jobs',        icon: ArrowLeftRight, group: 'Transport Outsourcing' },
@@ -347,51 +566,25 @@ export const MODULES: ModuleDef[] = [
       { label: 'Garage portal',         href: '/vendors/garage-portal', icon: Send,          group: 'Maintenance & Garages' },
     ],
   },
-
   {
-    id: 'driver-mgmt', label: 'Drivers', href: '/driver-mgmt', icon: UserCog,
-    subPages: [
-      { label: 'Dashboard',    href: '/driver-mgmt',             icon: LayoutDashboard },
-      { label: 'Profiles',     href: '/driver-mgmt/profiles',    icon: Users },
-      { label: 'Documents',    href: '/driver-mgmt/documents',   icon: FileText },
-      { label: 'Shifts',       href: '/driver-mgmt/shifts',      icon: Calendar },
-      { label: 'Training',     href: '/driver-mgmt/training',    icon: GraduationCap },
-      { label: 'Performance',  href: '/driver-mgmt/performance', icon: Trophy },
-    ],
-  },
-
-  {
-    id: 'customer-mgmt', label: 'Customers', href: '/customer-mgmt', icon: Building2,
+    id: 'customer-mgmt',
+    category: 'governance',
+    label: 'Customers',
+    href: '/customer-mgmt',
+    icon: Building2,
     subPages: [
       { label: 'Customers',       href: '/customer-mgmt',           icon: Users },
       { label: 'Hierarchy setup', href: '/customer-mgmt/hierarchy', icon: Network },
     ],
   },
 
+  // ── 6. ENTERPRISE & ADMIN ─────────────────────────────────────────
   {
-    id: 'booking-portal', label: 'Booking portal', href: '/booking-portal', icon: Smartphone,
-    subPages: [
-      { label: 'Dashboard',   href: '/booking-portal',             icon: LayoutDashboard },
-      { label: 'New booking', href: '/booking-portal/new',         icon: Send },
-      { label: 'My bookings', href: '/booking-portal/my-bookings', icon: BookOpen },
-      { label: 'Approvals',   href: '/booking-portal/approvals',   icon: CheckCircle2 },
-    ],
-  },
-  {
-    id: 'dispatch', label: 'Dispatch', href: '/dispatch', icon: Radio,
-    subPages: [
-      { label: 'Dashboard',  href: '/dispatch',            icon: LayoutDashboard },
-      { label: 'Command',    href: '/dispatch/command',    icon: Radio },
-      { label: 'Jobs',       href: '/dispatch/jobs',       icon: ClipboardList },
-      { label: 'Ambulance',  href: '/dispatch/ambulance',  icon: Send },
-      { label: 'School bus', href: '/dispatch/school-bus', icon: School },
-      { label: 'Merge',      href: '/dispatch/merge',      icon: Network },
-      { label: 'Analytics',  href: '/dispatch/analytics',  icon: BarChart3 },
-    ],
-  },
-
-  {
-    id: 'finance', label: 'Finance', href: '/finance', icon: Banknote,
+    id: 'finance',
+    category: 'enterprise',
+    label: 'Finance',
+    href: '/finance',
+    icon: Banknote,
     subPages: [
       { label: 'Dashboard',            href: '/finance',                     icon: LayoutDashboard },
       { label: 'Invoices',             href: '/finance/invoices',            icon: FileText },
@@ -424,82 +617,12 @@ export const MODULES: ModuleDef[] = [
       { label: 'Anomaly detection',    href: '/finance/anomalies',           icon: AlertTriangle },
     ],
   },
-
   {
-    id: 'compliance', label: 'Compliance', href: '/compliance', icon: ShieldCheck,
-    subPages: [
-      { label: 'Dashboard', href: '/compliance',           icon: LayoutDashboard },
-      { label: 'Documents', href: '/compliance/documents', icon: FileText },
-      { label: 'Insurance', href: '/compliance/insurance', icon: Shield },
-      { label: 'Permits',   href: '/compliance/permits',   icon: FileText },
-      { label: 'Salik',     href: '/compliance/salik',     icon: CreditCard },
-    ],
-  },
-  {
-    id: 'mobile-apps',
-    label: 'Mobile apps',
-    href: '/mobile-apps',
-    icon: AppWindow,
-    subPages: [
-      { label: 'Booking App', href: '/m', icon: Smartphone },
-      { label: 'PWA Gallery', href: '/mobile-apps', icon: AppWindow },
-      { label: 'STS Driver', href: '/bus-ops/driver', icon: BusFront },
-      { label: 'STS Passenger', href: '/bus-ops/passenger', icon: UserCheck },
-      { label: 'RAC Counter', href: '/rental/counter', icon: FileCheck },
-      { label: 'Leasing Field', href: '/leasing/field', icon: Wrench },
-      { label: 'SchoolBus Parent', href: '/school-bus/parent', icon: Users },
-      { label: 'SchoolBus Driver', href: '/school-bus/driver', icon: BusFront },
-    ],
-  },
-  {
-    id: 'reports', label: 'Reports', href: '/reports', icon: BarChart3,
-    subPages: [
-      { label: 'Dashboard',          href: '/reports',                    icon: LayoutDashboard },
-      { label: 'Fleet utilisation',  href: '/reports/fleet-utilization',  icon: CarFront },
-      { label: 'Revenue',            href: '/reports/revenue',            icon: DollarSign },
-      { label: 'Maintenance',        href: '/reports/maintenance',        icon: Wrench },
-      { label: 'Driver performance', href: '/reports/driver-performance', icon: Trophy },
-      { label: 'Scheduled reports',  href: '/reports/scheduled',          icon: Calendar },
-    ],
-  },
-  {
-    id: 'sustainability', label: 'Sustainability', href: '/sustainability', icon: Leaf,
-    subPages: [
-      { label: 'Dashboard',      href: '/sustainability',                icon: LayoutDashboard },
-      { label: 'Fleet carbon',   href: '/sustainability/fleet-carbon',   icon: Leaf },
-      { label: 'Modal shift',    href: '/sustainability/modal-shift',    icon: ArrowLeftRight },
-      { label: 'Paperless',      href: '/sustainability/paperless',      icon: FileText },
-      { label: 'Certifications', href: '/sustainability/certifications', icon: ShieldCheck },
-      { label: 'Reports',        href: '/sustainability/reports',        icon: BarChart3 },
-      { label: 'Settings',       href: '/sustainability/settings',       icon: Settings },
-    ],
-  },
-  {
-    id: 'assets', label: 'Assets', href: '/assets', icon: Package,
-    subPages: [
-      { label: 'Dashboard',      href: '/assets',                icon: LayoutDashboard },
-      { label: 'Registry',       href: '/assets/registry',       icon: ClipboardList },
-      { label: 'Categories',     href: '/assets/categories',     icon: Tag },
-      { label: 'Stock',          href: '/assets/stock',          icon: Package },
-      { label: 'Transactions',   href: '/assets/transactions',   icon: ArrowLeftRight },
-      { label: 'Timeline',       href: '/assets/timeline',       icon: History },
-      { label: 'Map',            href: '/assets/map',            icon: MapPin },
-      { label: 'Dispatch',       href: '/assets/dispatch',       icon: Radio },
-      { label: 'HVA',            href: '/assets/hva',            icon: Shield },
-      { label: 'Medical',        href: '/assets/medical',        icon: Send },
-      { label: 'Personnel',      href: '/assets/personnel',      icon: Users },
-      { label: 'Returns',        href: '/assets/returns',        icon: ArrowLeftRight },
-      { label: 'SPM',            href: '/assets/spm',            icon: Sliders },
-      { label: 'BLE tags',       href: '/assets/ble-tags',       icon: Tag },
-      { label: 'BLE zones',      href: '/assets/ble-zones',      icon: MapPin },
-      { label: 'BLE gateways',   href: '/assets/ble-gateways',   icon: Network },
-      { label: 'BLE detections', href: '/assets/ble-detections', icon: Activity },
-      { label: 'BLE alerts',     href: '/assets/ble-alerts',     icon: Bell },
-    ],
-  },
-
-  {
-    id: 'admin', label: 'Admin', href: '/admin', icon: Settings,
+    id: 'admin',
+    category: 'enterprise',
+    label: 'Admin',
+    href: '/admin',
+    icon: Settings,
     subPages: [
       { label: 'Overview',                href: '/admin',                       icon: LayoutDashboard },
       { label: 'Users',                   href: '/admin/users',                 icon: Users },
@@ -519,13 +642,16 @@ export const MODULES: ModuleDef[] = [
       { label: 'Workflow management',     href: '/admin/workflows',             icon: Workflow, superOnly: true },
       { label: 'Subscription',            href: '/admin/subscription',          icon: CreditCard },
       { label: 'Brand preview',           href: '/admin/brand-preview',         icon: Eye, superOnly: true },
-    ],
-  },
 ];
 
 /** Look up a module by id. */
 export function getModule(id: string | null | undefined): ModuleDef | undefined {
   return id ? MODULES.find(m => m.id === id) : undefined;
+}
+
+/** Get all modules belonging to a specific category */
+export function getModulesByCategory(category: NavCategory): ModuleDef[] {
+  return MODULES.filter(m => m.category === category);
 }
 
 /**
