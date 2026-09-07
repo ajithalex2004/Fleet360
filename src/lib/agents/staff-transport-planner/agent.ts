@@ -235,6 +235,7 @@ async function fetchAvailableVehicles(tenantId: string): Promise<FleetVehicleSpe
         COALESCE(v.seating_capacity, 30)::int AS capacity
       FROM vehicles v
       WHERE v.tenant_id = $1
+        AND v.vehicle_usage = 'STAFF'
         AND (v.deleted_at IS NULL)
         AND (v.status IN ('AVAILABLE', 'ACTIVE', 'STANDBY') OR v.status IS NULL)
       LIMIT 50
