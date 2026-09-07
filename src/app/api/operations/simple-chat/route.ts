@@ -15,13 +15,17 @@ import { logInteraction } from '@/lib/agents/ops-assistant/agent';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 const SYSTEM_PROMPT = `You are the Fleet360 Operations Assistant — an expert AI embedded in a Smart Transport Management Platform used by fleet operators, dispatchers, and operations managers in the UAE.
 
-You have real-time access to the following live data via tools:
+You have real-time access to the following live operational and BI reporting data via tools:
 - Fleet status (vehicle counts by status, lifecycle, and usage)
 - Live vehicle inventory (available, rented, maintenance, reserved)
 - Maintenance requests and work orders
 - System alerts and compliance warnings
 - Active bookings and dispatch
 - Comprehensive KPI dashboards
+- Fleet Utilization BI Reports (utilization %, uptime, idle & workshop days)
+- Revenue & Financial BI Reports (multi-LOB breakdown, RAC, STS, Leasing, Logistics)
+- Maintenance & Workshop BI Cost Reports (repair costs, average cost per asset, top failure categories)
+- Automated Scheduled BI Reports (managing and configuring automated PDF/CSV report crons)
 
 YOUR PERSONALITY:
 - Professional, precise, proactive
@@ -36,7 +40,11 @@ TOOL USAGE RULES:
 - For "maintenance / repairs / work orders" → call showMaintenanceRequests
 - For "alerts / warnings / issues" → call showAlerts
 - For "bookings / rentals / reservations" → call showBookings
-- For "KPI / overview / summary / dashboard" → call showKPIDashboard`;
+- For "KPI / overview / summary / dashboard" → call showKPIDashboard
+- For "utilization report / fleet utilization / asset uptime / idle days" → call generateUtilizationReport
+- For "revenue report / financial report / LOB breakdown / income analytics" → call generateRevenueReport
+- For "maintenance cost report / repair spend / workshop TCO / parts costs" → call generateMaintenanceCostReport
+- For "schedule report / automated report / email report weekly / recurring BI export" → call scheduleReport`;
 
 const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
   {
@@ -121,6 +129,65 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
         type: 'object',
         properties: {
           greeting: { type: 'string' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'generateUtilizationReport',
+      description: 'Generate and display a Fleet Utilization BI Report analyzing asset uptime, active/idle/maintenance days, and vehicle revenue.',
+      parameters: {
+        type: 'object',
+        properties: {
+          fromDate: { type: 'string', description: 'ISO date or YYYY-MM-DD starting date' },
+          toDate:   { type: 'string', description: 'ISO date or YYYY-MM-DD ending date' },
+          title:    { type: 'string', description: 'Custom report title' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'generateRevenueReport',
+      description: 'Generate and display a Revenue & Financial BI Report with breakdown across business lines (Rent-a-Car, Staff Transport, Leasing, Logistics).',
+      parameters: {
+        type: 'object',
+        properties: {
+          period: { type: 'string', enum: ['monthly', 'quarterly', 'yearly'] },
+          title:  { type: 'string', description: 'Custom report title' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'generateMaintenanceCostReport',
+      description: 'Generate and display a Workshop & Maintenance Cost BI Report showing repair spends, cost per vehicle, and category breakdown.',
+      parameters: {
+        type: 'object',
+        properties: {
+          fromDate: { type: 'string', description: 'ISO date or YYYY-MM-DD starting date' },
+          toDate:   { type: 'string', description: 'ISO date or YYYY-MM-DD ending date' },
+          title:    { type: 'string', description: 'Custom report title' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'scheduleReport',
+      description: 'Display active automated BI report cron schedules or confirm a newly requested automated report schedule.',
+      parameters: {
+        type: 'object',
+        properties: {
+          reportType: { type: 'string', description: 'Type of report (e.g., Fleet Utilization, Revenue BI, Maintenance Costs)' },
+          frequency:  { type: 'string', enum: ['daily', 'weekly', 'monthly'] },
+          title:      { type: 'string', description: 'Custom title' },
         },
       },
     },

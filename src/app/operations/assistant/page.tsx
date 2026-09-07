@@ -6,6 +6,10 @@ import MaintenanceCard   from '@/components/ops-assistant/MaintenanceCard';
 import AlertsCard        from '@/components/ops-assistant/AlertsCard';
 import BookingsCard      from '@/components/ops-assistant/BookingsCard';
 import KPIDashboard      from '@/components/ops-assistant/KPIDashboard';
+import ReportUtilizationCard from '@/components/ops-assistant/ReportUtilizationCard';
+import ReportRevenueCard     from '@/components/ops-assistant/ReportRevenueCard';
+import ReportMaintenanceCard from '@/components/ops-assistant/ReportMaintenanceCard';
+import ReportScheduleCard    from '@/components/ops-assistant/ReportScheduleCard';
 
 // ── TheSys / Crayon component renderer ───────────────────────────────────────
 // The TheSys model returns <content thesys="true"> JSON component trees.
@@ -23,6 +27,7 @@ const ICON_MAP: Record<string, string> = {
   gauge: '📊', car: '🚗', 'calendar-days': '📅', wrench: '🔧',
   'alert-triangle': '⚠️', truck: '🚛', users: '👥', 'map-pin': '📍',
   'bar-chart': '📈', clipboard: '📋', bell: '🔔', shield: '🛡️',
+  dollar: '💰', clock: '⏰',
 };
 
 // Map button name / label to a chat prompt
@@ -33,7 +38,10 @@ const BUTTON_PROMPTS: Record<string, string> = {
   cta_view_maintenance:  'Show critical and high priority maintenance requests',
   cta_view_alerts:       'Show all critical alerts and warnings',
   cta_staff_buses:       'Show staff transportation vehicles',
-  // fallbacks by label keyword
+  cta_utilization_report:'Generate a fleet utilization BI report',
+  cta_revenue_report:    'Generate a revenue breakdown report by line of business',
+  cta_maint_cost_report: 'Show workshop maintenance cost analysis',
+  cta_schedule_report:   'Show automated scheduled reports',
 };
 
 function CrayonRender({ node }: { node: CrayonNode | string | unknown }): React.ReactElement | null {
@@ -207,7 +215,9 @@ function parseThesysContent(text: string): { plain: string; nodes: CrayonNode[] 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type ToolName =
   | 'showFleetStatus' | 'showVehicles' | 'showMaintenanceRequests'
-  | 'showAlerts'      | 'showBookings' | 'showKPIDashboard';
+  | 'showAlerts'      | 'showBookings' | 'showKPIDashboard'
+  | 'generateUtilizationReport' | 'generateRevenueReport'
+  | 'generateMaintenanceCostReport' | 'scheduleReport';
 
 interface ToolCall { name: ToolName; args: Record<string, unknown> }
 
@@ -223,13 +233,17 @@ interface Message {
 // ── Tool renderer ─────────────────────────────────────────────────────────────
 function ToolComponent({ call }: { call: ToolCall }) {
   switch (call.name) {
-    case 'showFleetStatus':         return <FleetStatusCard   {...(call.args as Record<string, never>)} />;
-    case 'showVehicles':            return <VehiclesCard       {...(call.args as Record<string, never>)} />;
-    case 'showMaintenanceRequests': return <MaintenanceCard    {...(call.args as Record<string, never>)} />;
-    case 'showAlerts':              return <AlertsCard         {...(call.args as Record<string, never>)} />;
-    case 'showBookings':            return <BookingsCard       {...(call.args as Record<string, never>)} />;
-    case 'showKPIDashboard':        return <KPIDashboard       {...(call.args as Record<string, never>)} />;
-    default:                        return null;
+    case 'showFleetStatus':              return <FleetStatusCard       {...(call.args as Record<string, never>)} />;
+    case 'showVehicles':                 return <VehiclesCard          {...(call.args as Record<string, never>)} />;
+    case 'showMaintenanceRequests':      return <MaintenanceCard       {...(call.args as Record<string, never>)} />;
+    case 'showAlerts':                   return <AlertsCard            {...(call.args as Record<string, never>)} />;
+    case 'showBookings':                 return <BookingsCard          {...(call.args as Record<string, never>)} />;
+    case 'showKPIDashboard':             return <KPIDashboard          {...(call.args as Record<string, never>)} />;
+    case 'generateUtilizationReport':    return <ReportUtilizationCard {...(call.args as any)} />;
+    case 'generateRevenueReport':        return <ReportRevenueCard     {...(call.args as any)} />;
+    case 'generateMaintenanceCostReport':return <ReportMaintenanceCard {...(call.args as any)} />;
+    case 'scheduleReport':               return <ReportScheduleCard    {...(call.args as any)} />;
+    default:                             return null;
   }
 }
 
@@ -240,14 +254,15 @@ interface SidebarStats {
 }
 
 const QUICK = [
-  { icon: '🎯', label: 'Full Overview',   prompt: 'Show me the full operations dashboard' },
-  { icon: '🚗', label: 'Fleet Status',    prompt: 'Show me the current fleet status' },
-  { icon: '✅', label: 'Available Vehicles', prompt: 'Show me all available vehicles' },
-  { icon: '🔧', label: 'Maintenance',     prompt: 'Show critical maintenance requests' },
-  { icon: '⚠️', label: 'Alerts',          prompt: 'Show all critical alerts' },
-  { icon: '📋', label: 'Active Bookings', prompt: 'Show active and confirmed bookings' },
-  { icon: '📄', label: 'Doc Expiries',    prompt: 'Which vehicles have documents expiring soon?' },
-  { icon: '🚌', label: 'Staff Buses',     prompt: 'Show staff transportation vehicles' },
+  { icon: '🎯', label: 'Full Overview',       prompt: 'Show me the full operations dashboard' },
+  { icon: '📊', label: 'Utilization Report',  prompt: 'Generate a fleet utilization BI report' },
+  { icon: '💰', label: 'Revenue Breakdown',   prompt: 'Generate a revenue breakdown report by line of business' },
+  { icon: '🔧', label: 'Maintenance Cost BI', prompt: 'Show workshop maintenance cost analysis' },
+  { icon: '🚗', label: 'Fleet Status',        prompt: 'Show me the current fleet status' },
+  { icon: '✅', label: 'Available Vehicles',  prompt: 'Show me all available vehicles' },
+  { icon: '⚠️', label: 'Alerts',              prompt: 'Show all critical alerts' },
+  { icon: '📋', label: 'Active Bookings',     prompt: 'Show active and confirmed bookings' },
+  { icon: '⏰', label: 'Scheduled Reports',   prompt: 'Show automated scheduled BI reports' },
 ];
 
 function Sidebar({ onCommand }: { onCommand: (p: string) => void }) {
