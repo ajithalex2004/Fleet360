@@ -9,13 +9,64 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { AgentDefinition, AgentEvent, AgentRunResult } from '../types';
+import { AgentDefinition, AgentEvent, AgentRunResult, StaffTransportPlanRecommendation } from '../types';
 import { ensureAgentSchema } from '../schema';
 import {
   EmployeePickupRequirement,
   FleetVehicleSpec,
   optimizeStaffTransportPlan,
 } from './optimizer';
+
+// ── UI shape adapter ──────────────────────────────────────────────────────────
+// optimizeStaffTransportPlan() returns the raw optimizer working shape
+// (StaffTransportPlanRecommendation, defined in ../types) — field names like
+// routeId/recommendedVehicleSize/totalPassengers/seatUtilizationPct that
+// mirror the optimizer's own internal computation. The Planning Engine's
+// drawer (StaffTransportAiDrawer.tsx) was built against a differently-named
+// UI-facing shape (id/vehicleType/passengerCount/utilizationPercent/...) that
+// was never reconciled with the optimizer's actual output, so every nested
+// route/chain/stop field silently rendered blank. This maps one to the other
+// before persistence, since the DB stores the JSON the UI reads back.
+function friendlyVehicleType(size: 'VAN_14' | 'COASTER_30' | 'COACH_50'): string {
+  return size === 'COACH_50' ? 'COACH' : size === 'COASTER_30' ? 'MINIBUS' : 'VAN';
+}
+
+function toUiShape(rec: StaffTransportPlanRecommendation) {
+  return {
+    ...rec,
+    routes: rec.routes.map((r) => ({
+      id: r.routeId,
+      shiftName: r.shiftName,
+      vehicleType: friendlyVehicleType(r.recommendedVehicleSize),
+      capacity: r.recommendedCapacity,
+      passengerCount: r.totalPassengers,
+      utilizationPercent: r.seatUtilizationPct,
+      calculatedDepartureTime: r.calculatedDepartureTime,
+      arrivalTime: r.targetArrivalTime,
+      stops: r.stops.map((s, i) => ({
+        name: s.stopName,
+        passengerCount: s.passengerCount,
+        scheduledTime: s.estimatedPickupTime,
+        sequenceNumber: i + 1,
+      })),
+      totalDistanceKm: r.totalDistanceKm,
+      estimatedDurationMins: r.totalDurationMin,
+    })),
+    vehicleReuseChains: rec.vehicleReuseChains.map((c, i) => {
+      const gaps = c.chainedRoutes.slice(0, -1).map((l) => l.turnaroundBufferMin);
+      return {
+        chainId: c.vehicleCode || `CHAIN-${i + 1}`,
+        vehicleType: c.vehicleType,
+        routeIds: c.chainedRoutes.map((l) => l.routeId),
+        shiftsServed: c.chainedRoutes.map((l) => l.shiftName),
+        deadheadDistanceKm: c.totalDeadheadKm,
+        bufferMinutesBetweenShifts: gaps.length > 0
+          ? Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length)
+          : 0,
+      };
+    }),
+  };
+}
 
 // Sample enterprise staff transport requirements if DB is unseeded
 const DEFAULT_STAFF_REQUIREMENTS: EmployeePickupRequirement[] = [
@@ -126,6 +177,16 @@ const DEFAULT_STAFF_REQUIREMENTS: EmployeePickupRequirement[] = [
 
 async function fetchRequirementsFromDb(tenantId: string): Promise<EmployeePickupRequirement[]> {
   try {
+    // Guard against querying a table that may not exist yet in this tenant's
+    // environment — a failed statement here would otherwise poison the rest
+    // of the caller's transaction (Postgres aborts the whole transaction on
+    // any error, not just the statement that failed), taking down the
+    // subsequent recommendation INSERT along with it.
+    const [{ exists }] = await prisma.$queryRawUnsafe<{ exists: boolean }[]>(
+      `SELECT to_regclass('public.bus_ops_manifests') IS NOT NULL AS exists`,
+    );
+    if (!exists) return DEFAULT_STAFF_REQUIREMENTS;
+
     const rows = await prisma.$queryRawUnsafe<any[]>(`
       SELECT
         r.id::text,
@@ -208,7 +269,7 @@ async function runStaffTransportPlanner(event: AgentEvent): Promise<AgentRunResu
   // Log execution start
   await prisma.$executeRawUnsafe(
     `INSERT INTO agent_runs (id, agent_id, tenant_id, event_type, status, created_at)
-     VALUES ($1, 'staff-transport-planner', $2, $3, 'RUNNING', NOW())`,
+     VALUES ($1::uuid, 'staff-transport-planner', $2, $3, 'RUNNING', NOW())`,
     runId,
     tenantId,
     event.event_type,
@@ -221,7 +282,7 @@ async function runStaffTransportPlanner(event: AgentEvent): Promise<AgentRunResu
   ]);
 
   // Execute optimization engine
-  const recommendation = optimizeStaffTransportPlan(requirements, vehicles, tenantId);
+  const recommendation = toUiShape(optimizeStaffTransportPlan(requirements, vehicles, tenantId));
 
   // Persist plan recommendation to database
   await prisma.$executeRawUnsafe(
@@ -263,7 +324,7 @@ async function runStaffTransportPlanner(event: AgentEvent): Promise<AgentRunResu
        items_processed = $1,
        actions_created = $2,
        duration_ms     = $3,
-       output          = $4
+       output          = $4::jsonb
      WHERE id = $5::uuid`,
     requirements.length,
     recommendation.routes.length,
