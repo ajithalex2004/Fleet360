@@ -642,6 +642,8 @@ export const MODULES: ModuleDef[] = [
       { label: 'Workflow management',     href: '/admin/workflows',             icon: Workflow, superOnly: true },
       { label: 'Subscription',            href: '/admin/subscription',          icon: CreditCard },
       { label: 'Brand preview',           href: '/admin/brand-preview',         icon: Eye, superOnly: true },
+    ],
+  },
 ];
 
 /** Look up a module by id. */
