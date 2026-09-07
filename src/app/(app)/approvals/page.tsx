@@ -60,9 +60,9 @@ const STATUS_STYLES: Record<string, string> = {
   APPROVED:    'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
   REJECTED:    'bg-rose-500/20 text-rose-400 border-rose-500/30',
   PENDING:     'bg-amber-500/20 text-amber-400 border-amber-500/30',
-  WAITING:     'bg-slate-500/20 text-slate-400 border-slate-500/30',
+  WAITING:     'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30',
   IN_PROGRESS: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  CANCELLED:   'bg-slate-500/20 text-slate-400 border-slate-500/30',
+  CANCELLED:   'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30',
 };
 
 type ViewMode = 'my' | 'all';
@@ -166,7 +166,7 @@ export default function ApprovalsPage() {
   const ApprovalCard = ({ a }: { a: PendingApproval }) => (
     <div
       onClick={() => { setSelectedApproval(a); loadHistory(a.workflowInstanceId); setActionMsg(''); setActionComments(''); }}
-      className={`bg-slate-800/50 border rounded-2xl p-4 cursor-pointer transition-all hover:border-violet-500/30 ${selectedApproval?.stepInstanceId === a.stepInstanceId ? 'border-violet-500/50 bg-violet-500/10' : 'border-white/10'}`}
+      className={`bg-[var(--bg-surface)] border rounded-2xl p-4 cursor-pointer transition-all hover:border-violet-500/30 ${selectedApproval?.stepInstanceId === a.stepInstanceId ? 'border-violet-500/50 bg-violet-500/10' : 'border-[var(--border-subtle)]'}`}
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <span className={`px-2 py-0.5 rounded-full text-xs font-bold bg-gradient-to-r ${MODULE_COLORS[a.module] ?? 'from-slate-500 to-slate-600'} text-white flex-shrink-0`}>
@@ -176,22 +176,22 @@ export default function ApprovalsPage() {
           <span className="px-2 py-0.5 rounded-full text-xs bg-rose-500/20 text-rose-400 border border-rose-500/30 flex-shrink-0">Overdue</span>
         )}
       </div>
-      <p className="text-white font-bold text-sm">{a.referenceNumber}</p>
-      <p className="text-slate-400 text-xs mt-0.5">{a.stepName}</p>
+      <p className="text-[var(--text-main)] font-bold text-sm">{a.referenceNumber}</p>
+      <p className="text-[var(--text-muted)] text-xs mt-0.5">{a.stepName}</p>
       {viewMode === 'all' && (
         <div className="mt-1.5 flex items-center gap-1.5">
-          <span className="w-4 h-4 rounded-full bg-slate-600 flex items-center justify-center text-[9px] text-slate-300 flex-shrink-0">
+          <span className="w-4 h-4 rounded-full bg-[var(--bg-surface-hover)] flex items-center justify-center text-[9px] text-[var(--text-muted)] flex-shrink-0">
             {(a.assignedToEmail ?? 'U')[0].toUpperCase()}
           </span>
-          <p className="text-xs text-slate-500 truncate">{a.assignedToEmail ?? 'Unassigned'}</p>
+          <p className="text-xs text-[var(--text-faint)] truncate">{a.assignedToEmail ?? 'Unassigned'}</p>
         </div>
       )}
-      <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+      <div className="mt-2 flex items-center justify-between text-xs text-[var(--text-faint)]">
         <span>By: {a.initiatedByName || a.initiatedByEmail}</span>
         <span>{fmt(a.receivedAt)}</span>
       </div>
       {a.dueAt && (
-        <p className={`text-xs mt-1 ${isOverdue(a.dueAt) ? 'text-rose-400' : 'text-slate-500'}`}>
+        <p className={`text-xs mt-1 ${isOverdue(a.dueAt) ? 'text-rose-400' : 'text-[var(--text-faint)]'}`}>
           Due: {fmt(a.dueAt)}
         </p>
       )}
@@ -206,18 +206,18 @@ export default function ApprovalsPage() {
         icon={ClipboardCheck}
         accent="violet"
         actions={
-          <div className="flex items-center gap-1 bg-slate-800/60 border border-white/10 rounded-xl p-1">
+          <div className="flex items-center gap-1 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-1">
             <button
               onClick={() => { setViewMode('my'); setSelectedApproval(null); }}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${viewMode === 'my' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${viewMode === 'my' ? 'bg-violet-600 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
               My approvals
             </button>
             <button
               onClick={() => { setViewMode('all'); setSelectedApproval(null); }}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${viewMode === 'all' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'}`}>
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${viewMode === 'all' ? 'bg-violet-600 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}>
               All pending
               {allPending.length > 0 && viewMode !== 'all' && (
-                <span className="ml-2 px-1.5 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold">
+                <span className="ml-2 px-1.5 py-0.5 rounded-full bg-amber-500 text-slate-900 text-[10px] font-bold">
                   {allPending.length}
                 </span>
               )}
@@ -230,26 +230,26 @@ export default function ApprovalsPage() {
       {viewMode === 'my' && (
         <>
           {!email ? (
-            <div className="bg-slate-800/50 border border-white/10 rounded-2xl p-8 max-w-md mx-auto mt-12">
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-8 max-w-md mx-auto mt-12">
               <div className="text-center mb-6">
                 <div className="w-16 h-16 rounded-2xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center mx-auto mb-4">
                   <span className="text-3xl font-bold text-violet-400">A</span>
                 </div>
-                <h2 className="text-white font-bold text-lg">Enter Your Email</h2>
-                <p className="text-slate-400 text-sm mt-1">To see approvals assigned to you</p>
+                <h2 className="text-[var(--text-main)] font-bold text-lg">Enter Your Email</h2>
+                <p className="text-[var(--text-muted)] text-sm mt-1">To see approvals assigned to you</p>
               </div>
               <div className="flex gap-2">
                 <input type="email" value={emailInput} onChange={e => setEmailInput(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && emailInput) setEmail(emailInput); }}
                   placeholder="your.email@company.com"
-                  className="flex-1 px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500/50" />
+                  className="flex-1 px-3 py-2.5 bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-violet-500/50" />
                 <button onClick={() => { if (emailInput) setEmail(emailInput); }}
                   disabled={!emailInput}
                   className="px-5 py-2.5 rounded-xl bg-violet-600 text-white font-semibold text-sm hover:bg-violet-500 transition-all disabled:opacity-50">
                   View
                 </button>
               </div>
-              <div className="mt-4 pt-4 border-t border-white/10 text-center">
+              <div className="mt-4 pt-4 border-t border-[var(--border-subtle)] text-center">
                 <button onClick={() => setViewMode('all')} className="text-violet-400 hover:text-violet-300 text-xs font-medium transition-colors">
                   View All Pending Approvals (Admin)
                 </button>
@@ -257,33 +257,33 @@ export default function ApprovalsPage() {
             </div>
           ) : (
             <>
-              <div className="flex items-center justify-between bg-slate-800/40 border border-white/10 rounded-xl px-4 py-3">
+              <div className="flex items-center justify-between bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-3">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-violet-500/20 border border-violet-500/30 flex items-center justify-center">
                     <span className="text-violet-400 text-xs font-bold">{email[0]?.toUpperCase()}</span>
                   </div>
                   <div>
-                    <p className="text-white text-sm font-semibold">{email}</p>
-                    <p className="text-slate-500 text-xs">{approvals.length} pending approval{approvals.length !== 1 ? 's' : ''}</p>
+                    <p className="text-[var(--text-main)] text-sm font-semibold">{email}</p>
+                    <p className="text-[var(--text-faint)] text-xs">{approvals.length} pending approval{approvals.length !== 1 ? 's' : ''}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <button onClick={() => loadMyApprovals(email)}
-                    className="text-slate-500 hover:text-slate-300 text-xs transition-colors">Refresh</button>
+                    className="text-[var(--text-faint)] hover:text-[var(--text-muted)] text-xs transition-colors">Refresh</button>
                   <button onClick={() => { setEmail(''); setEmailInput(''); setApprovals([]); setSelectedApproval(null); }}
-                    className="text-slate-500 hover:text-slate-300 text-xs font-medium transition-colors">Switch User</button>
+                    className="text-[var(--text-faint)] hover:text-[var(--text-muted)] text-xs font-medium transition-colors">Switch User</button>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                 <div className="lg:col-span-2 space-y-3">
                   {loading ? (
-                    <div className="text-slate-500 text-sm text-center py-8 animate-pulse">Loading...</div>
+                    <div className="text-[var(--text-faint)] text-sm text-center py-8 animate-pulse">Loading...</div>
                   ) : approvals.length === 0 ? (
-                    <div className="bg-slate-800/40 border border-dashed border-white/10 rounded-2xl p-10 text-center">
+                    <div className="bg-[var(--bg-surface)] border border-dashed border-[var(--border-subtle)] rounded-2xl p-10 text-center">
                       <p className="text-4xl mb-3">&#10003;</p>
-                      <p className="text-white font-semibold mb-1">All caught up!</p>
-                      <p className="text-slate-500 text-sm">No pending approvals for this email.</p>
+                      <p className="text-[var(--text-main)] font-semibold mb-1">All caught up!</p>
+                      <p className="text-[var(--text-faint)] text-sm">No pending approvals for this email.</p>
                       <button onClick={() => setViewMode('all')} className="mt-4 text-violet-400 hover:text-violet-300 text-xs font-medium transition-colors">
                         Check All Pending
                       </button>
@@ -304,16 +304,16 @@ export default function ApprovalsPage() {
         <>
           {/* Module filter */}
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider">Module:</span>
+            <span className="text-[var(--text-faint)] text-xs font-semibold uppercase tracking-wider">Module:</span>
             {modules.map(m => (
               <button key={m} onClick={() => setModuleFilter(m)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${moduleFilter === m ? `bg-gradient-to-r ${MODULE_COLORS[m] ?? 'from-slate-600 to-slate-700'} text-white` : 'bg-slate-800/60 text-slate-400 border border-white/5 hover:text-white'}`}>
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${moduleFilter === m ? `bg-gradient-to-r ${MODULE_COLORS[m] ?? 'from-slate-600 to-slate-700'} text-white` : 'bg-[var(--bg-surface)] text-[var(--text-muted)] border border-[var(--border-subtle)] hover:text-[var(--text-main)]'}`}>
                 {m.replace(/_/g, ' ')}
-                {m !== 'ALL' && <span className="ml-1.5 text-slate-300">{allPending.filter(a => a.module === m).length}</span>}
-                {m === 'ALL' && <span className="ml-1.5 text-slate-300">{allPending.length}</span>}
+                {m !== 'ALL' && <span className="ml-1.5 text-[var(--text-muted)]">{allPending.filter(a => a.module === m).length}</span>}
+                {m === 'ALL' && <span className="ml-1.5 text-[var(--text-muted)]">{allPending.length}</span>}
               </button>
             ))}
-            <button onClick={loadAllPending} className="ml-auto text-slate-500 hover:text-slate-300 text-xs transition-colors px-2 py-1.5">
+            <button onClick={loadAllPending} className="ml-auto text-[var(--text-faint)] hover:text-[var(--text-muted)] text-xs transition-colors px-2 py-1.5">
               Refresh
             </button>
           </div>
@@ -321,20 +321,20 @@ export default function ApprovalsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
             <div className="lg:col-span-2 space-y-3">
               {allLoading ? (
-                <div className="text-slate-500 text-sm text-center py-8 animate-pulse">Loading all pending...</div>
+                <div className="text-[var(--text-faint)] text-sm text-center py-8 animate-pulse">Loading all pending...</div>
               ) : displayList.length === 0 ? (
-                <div className="bg-slate-800/40 border border-dashed border-white/10 rounded-2xl p-10 text-center">
+                <div className="bg-[var(--bg-surface)] border border-dashed border-[var(--border-subtle)] rounded-2xl p-10 text-center">
                   <p className="text-4xl mb-3">&#10003;</p>
-                  <p className="text-white font-semibold mb-1">No pending approvals</p>
-                  <p className="text-slate-500 text-sm">
+                  <p className="text-[var(--text-main)] font-semibold mb-1">No pending approvals</p>
+                  <p className="text-[var(--text-faint)] text-sm">
                     {allPending.length === 0
                       ? 'No workflows have been triggered yet. Submit a record for approval to see it here.'
                       : `No pending approvals in ${moduleFilter} module.`}
                   </p>
                   {allPending.length === 0 && (
-                    <div className="mt-4 p-3 bg-slate-700/30 rounded-xl border border-white/10 text-left">
-                      <p className="text-xs font-semibold text-slate-400 mb-2">Checklist to see items here:</p>
-                      <ol className="text-xs text-slate-500 space-y-1 list-decimal list-inside">
+                    <div className="mt-4 p-3 bg-[var(--bg-surface-hover)] rounded-xl border border-[var(--border-subtle)] text-left">
+                      <p className="text-xs font-semibold text-[var(--text-muted)] mb-2">Checklist to see items here:</p>
+                      <ol className="text-xs text-[var(--text-faint)] space-y-1 list-decimal list-inside">
                         <li>Define a workflow in Admin &gt; Workflow Management</li>
                         <li>Set Assignee Type to &quot;Specific User&quot; with a valid email</li>
                         <li>Mark the workflow as Active</li>
@@ -357,18 +357,18 @@ export default function ApprovalsPage() {
   function ActionPanel() {
     if (!selectedApproval) {
       return (
-        <div className="bg-slate-800/40 border border-dashed border-white/10 rounded-2xl p-12 text-center h-full flex flex-col items-center justify-center min-h-[320px]">
-          <div className="w-12 h-12 rounded-2xl bg-slate-700/50 border border-white/10 flex items-center justify-center mx-auto mb-4">
+        <div className="bg-[var(--bg-surface)] border border-dashed border-[var(--border-subtle)] rounded-2xl p-12 text-center h-full flex flex-col items-center justify-center min-h-[320px]">
+          <div className="w-12 h-12 rounded-2xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] flex items-center justify-center mx-auto mb-4">
             <span className="text-2xl">&#128394;</span>
           </div>
-          <p className="text-white font-semibold mb-1">Select an approval</p>
-          <p className="text-slate-500 text-sm">Click an item on the left to review and take action</p>
+          <p className="text-[var(--text-main)] font-semibold mb-1">Select an approval</p>
+          <p className="text-[var(--text-faint)] text-sm">Click an item on the left to review and take action</p>
         </div>
       );
     }
 
     return (
-      <div className="bg-slate-800/50 border border-white/10 rounded-2xl overflow-hidden">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
         {/* Header */}
         <div className={`p-5 bg-gradient-to-r ${MODULE_COLORS[selectedApproval.module] ?? 'from-slate-700 to-slate-800'} bg-opacity-20`}>
           <div className="flex items-center gap-2 mb-1">
@@ -392,33 +392,33 @@ export default function ApprovalsPage() {
               ...(selectedApproval.assignedToEmail ? [{ label: 'Assigned To', value: selectedApproval.assignedToEmail }] : []),
               ...(selectedApproval.dueAt ? [{ label: 'Due By', value: fmt(selectedApproval.dueAt) }] : []),
             ].map(({ label, value }) => (
-              <div key={label} className="bg-slate-700/30 border border-white/10 rounded-xl p-3">
-                <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">{label}</p>
-                <p className="text-sm font-semibold text-white truncate">{value}</p>
+              <div key={label} className="bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl p-3">
+                <p className="text-xs text-[var(--text-faint)] uppercase tracking-wider mb-1">{label}</p>
+                <p className="text-sm font-semibold text-[var(--text-main)] truncate">{value}</p>
               </div>
             ))}
           </div>
 
           {/* Workflow Timeline */}
           {historyLoading ? (
-            <div className="text-slate-500 text-sm animate-pulse py-4 text-center">Loading timeline...</div>
+            <div className="text-[var(--text-faint)] text-sm animate-pulse py-4 text-center">Loading timeline...</div>
           ) : history && (
             <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Approval Timeline</p>
+              <p className="text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wider mb-3">Approval Timeline</p>
               <div className="space-y-2">
                 {history.steps.map(s => (
-                  <div key={s.id} className={`flex items-start gap-3 p-3 rounded-xl border ${s.status === 'PENDING' ? 'bg-amber-500/10 border-amber-500/20' : s.status === 'APPROVED' ? 'bg-emerald-500/10 border-emerald-500/20' : s.status === 'REJECTED' ? 'bg-rose-500/10 border-rose-500/20' : 'bg-slate-700/20 border-white/5'}`}>
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${s.status === 'PENDING' ? 'bg-amber-500/30 text-amber-400' : s.status === 'APPROVED' ? 'bg-emerald-500/30 text-emerald-400' : s.status === 'REJECTED' ? 'bg-rose-500/30 text-rose-400' : 'bg-slate-600/50 text-slate-400'}`}>
+                  <div key={s.id} className={`flex items-start gap-3 p-3 rounded-xl border ${s.status === 'PENDING' ? 'bg-amber-500/10 border-amber-500/20' : s.status === 'APPROVED' ? 'bg-emerald-500/10 border-emerald-500/20' : s.status === 'REJECTED' ? 'bg-rose-500/10 border-rose-500/20' : 'bg-[var(--bg-surface-hover)] border-[var(--border-subtle)]'}`}>
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${s.status === 'PENDING' ? 'bg-amber-500/30 text-amber-400' : s.status === 'APPROVED' ? 'bg-emerald-500/30 text-emerald-400' : s.status === 'REJECTED' ? 'bg-rose-500/30 text-rose-400' : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'}`}>
                       {s.stepOrder}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
-                        <p className={`text-sm font-semibold truncate ${s.status === 'PENDING' ? 'text-white' : 'text-slate-300'}`}>{s.stepName}</p>
+                        <p className={`text-sm font-semibold truncate ${s.status === 'PENDING' ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)]'}`}>{s.stepName}</p>
                         <span className={`px-2 py-0.5 rounded-full text-xs border flex-shrink-0 ${STATUS_STYLES[s.status] ?? STATUS_STYLES.WAITING}`}>{s.status}</span>
                       </div>
-                      {s.assignedToEmail && <p className="text-xs text-slate-500 mt-0.5">{s.assignedToEmail}</p>}
-                      {s.actionedAt && <p className="text-xs text-slate-500 mt-0.5">{fmt(s.actionedAt)} by {s.actionedByEmail}</p>}
-                      {s.comments && <p className="text-xs text-slate-400 mt-1 italic">&#34;{s.comments}&#34;</p>}
+                      {s.assignedToEmail && <p className="text-xs text-[var(--text-faint)] mt-0.5">{s.assignedToEmail}</p>}
+                      {s.actionedAt && <p className="text-xs text-[var(--text-faint)] mt-0.5">{fmt(s.actionedAt)} by {s.actionedByEmail}</p>}
+                      {s.comments && <p className="text-xs text-[var(--text-muted)] mt-1 italic">&#34;{s.comments}&#34;</p>}
                     </div>
                   </div>
                 ))}
@@ -427,8 +427,8 @@ export default function ApprovalsPage() {
           )}
 
           {/* Action */}
-          <div className="border-t border-white/10 pt-4 space-y-3">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Your Decision</p>
+          <div className="border-t border-[var(--border-subtle)] pt-4 space-y-3">
+            <p className="text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wider">Your Decision</p>
             {viewMode === 'my' && !email && (
               <p className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
                 Switch to &ldquo;My Approvals&rdquo; and enter your email to take action.
@@ -436,7 +436,7 @@ export default function ApprovalsPage() {
             )}
             <textarea value={actionComments} onChange={e => setActionComments(e.target.value)}
               rows={3} placeholder="Add comments (required for rejection, optional for approval)..."
-              className="w-full px-3 py-2.5 bg-slate-900/60 border border-white/10 rounded-lg text-white placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500/50 resize-none" />
+              className="w-full px-3 py-2.5 bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-violet-500/50 resize-none" />
             {actionMsg && (
               <div className={`px-4 py-2.5 rounded-xl text-sm border ${actionMsg.startsWith('Error') ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
                 {actionMsg}

@@ -49,7 +49,7 @@ export default function DriverFeedbackPage() {
             case 'Medium': return 'bg-yellow-100 text-yellow-700 border-yellow-300';
             case 'High': return 'bg-orange-100 text-orange-700 border-orange-300';
             case 'Critical': return 'bg-red-100 text-red-700 border-red-300';
-            default: return 'bg-slate-100 text-slate-700 border-slate-300';
+            default: return 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border-[var(--border-subtle)]';
         }
     };
 
@@ -57,8 +57,8 @@ export default function DriverFeedbackPage() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900">Driver Feedback</h1>
-                    <p className="text-xs mt-1 text-slate-500">Report issues and provide feedback on repairs</p>
+                    <h1 className="text-2xl font-bold text-[var(--text-main)]">Driver Feedback</h1>
+                    <p className="text-xs mt-1 text-[var(--text-muted)]">Report issues and provide feedback on repairs</p>
                 </div>
                 <button
                     onClick={() => setShowReportModal(true)}
@@ -71,8 +71,8 @@ export default function DriverFeedbackPage() {
             {/* Feedback List */}
             <div className="grid grid-cols-1 gap-4">
                 {feedbackList.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-12 text-center">
-                        <p className="text-slate-500">No feedback submitted yet.</p>
+                    <div className="rounded-xl border border-dashed border-[var(--border-subtle)] bg-[var(--bg-surface)] p-12 text-center">
+                        <p className="text-[var(--text-muted)]">No feedback submitted yet.</p>
                         <button
                             onClick={() => setShowReportModal(true)}
                             className="mt-4 text-sm font-medium text-blue-600 hover:text-blue-800"
@@ -82,11 +82,11 @@ export default function DriverFeedbackPage() {
                     </div>
                 ) : (
                     feedbackList.map(feedback => (
-                        <div key={feedback.id} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                        <div key={feedback.id} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-sm">
                             <div className="flex items-start justify-between mb-3">
                                 <div>
-                                    <h3 className="text-lg font-bold text-slate-900">{feedback.issueReported}</h3>
-                                    <p className="text-sm text-slate-500 mt-1">
+                                    <h3 className="text-lg font-bold text-[var(--text-main)]">{feedback.issueReported}</h3>
+                                    <p className="text-sm text-[var(--text-muted)] mt-1">
                                         {new Date(feedback.submittedDate).toLocaleString()} • {feedback.category}
                                     </p>
                                 </div>
@@ -95,8 +95,8 @@ export default function DriverFeedbackPage() {
                                 </span>
                             </div>
                             {feedback.satisfactionRating && (
-                                <div className="mt-4 pt-4 border-t border-slate-200">
-                                    <p className="text-sm text-slate-600">Repair Satisfaction: {feedback.satisfactionRating}/5 ⭐</p>
+                                <div className="mt-4 pt-4 border-t border-[var(--border-subtle)]">
+                                    <p className="text-sm text-[var(--text-muted)]">Repair Satisfaction: {feedback.satisfactionRating}/5 ⭐</p>
                                 </div>
                             )}
                         </div>
@@ -107,11 +107,11 @@ export default function DriverFeedbackPage() {
             {/* Report Modal */}
             {showReportModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl">
-                        <div className="p-6 border-b border-slate-200">
+                    <div className="bg-[var(--bg-surface)] rounded-2xl w-full max-w-2xl shadow-2xl">
+                        <div className="p-6 border-b border-[var(--border-subtle)]">
                             <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-bold text-slate-900">Report Issue</h3>
-                                <button onClick={() => setShowReportModal(false)} className="text-slate-400 hover:text-slate-600">
+                                <h3 className="text-lg font-bold text-[var(--text-main)]">Report Issue</h3>
+                                <button onClick={() => setShowReportModal(false)} className="text-[var(--text-faint)] hover:text-[var(--text-main)]">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
                                     </svg>
@@ -121,34 +121,34 @@ export default function DriverFeedbackPage() {
 
                         <div className="p-6 space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Vehicle ID</label>
+                                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Vehicle ID</label>
                                 <input
                                     type="text"
                                     value={formData.vehicleId}
                                     onChange={(e) => setFormData({ ...formData, vehicleId: e.target.value })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                     placeholder="e.g., v1"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-700 mb-2">Issue Description *</label>
+                                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Issue Description *</label>
                                 <textarea
                                     rows={4}
                                     value={formData.issueReported}
                                     onChange={(e) => setFormData({ ...formData, issueReported: e.target.value })}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                     placeholder="Describe the issue you're experiencing..."
                                 />
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Severity</label>
+                                    <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Severity</label>
                                     <select
                                         value={formData.severity}
                                         onChange={(e) => setFormData({ ...formData, severity: e.target.value as any })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                        className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                     >
                                         <option value="Low">Low</option>
                                         <option value="Medium">Medium</option>
@@ -157,11 +157,11 @@ export default function DriverFeedbackPage() {
                                     </select>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-2">Category</label>
+                                    <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Category</label>
                                     <select
                                         value={formData.category}
                                         onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 bg-white text-slate-900"
+                                        className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                                     >
                                         <option value="Engine">Engine</option>
                                         <option value="Brakes">Brakes</option>
@@ -174,10 +174,10 @@ export default function DriverFeedbackPage() {
                             </div>
                         </div>
 
-                        <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
+                        <div className="p-6 border-t border-[var(--border-subtle)] flex justify-end gap-3">
                             <button
                                 onClick={() => setShowReportModal(false)}
-                                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+                                className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
                             >
                                 Cancel
                             </button>

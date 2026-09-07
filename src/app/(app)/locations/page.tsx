@@ -63,7 +63,7 @@ const TYPE_PILL: Record<string, string> = {
   STOP:               'bg-violet-500/20 text-violet-300 border-violet-500/40',
   GEOFENCE:           'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
   DEPOT:              'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
-  GARAGE:             'bg-slate-500/20 text-slate-200 border-slate-500/40',
+  GARAGE:             'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/40',
   WAREHOUSE:          'bg-orange-500/20 text-orange-300 border-orange-500/40',
   OPERATIONAL_ZONE:   'bg-teal-500/20 text-teal-300 border-teal-500/40',
   ORIGIN_DESTINATION: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
@@ -78,7 +78,7 @@ export default function LocationsPage() {
   // useSearchParams needs a Suspense boundary in Next 15 — provided by the
   // wrapper at the bottom of the file.
   return (
-    <React.Suspense fallback={<div className="text-slate-500 text-sm py-10 text-center">Loading…</div>}>
+    <React.Suspense fallback={<div className="text-[var(--text-faint)] text-sm py-10 text-center">Loading…</div>}>
       <LocationsPageInner />
     </React.Suspense>
   );
@@ -198,7 +198,7 @@ function LocationsPageInner() {
         accent="cyan"
         actions={
           <button onClick={openNew}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 px-4 py-2.5 text-sm text-white font-semibold">
+            className="inline-flex items-center gap-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 px-4 py-2.5 text-sm text-[var(--text-main)] font-semibold">
             <Plus className="w-4 h-4" /> Add location
           </button>
         }
@@ -207,32 +207,32 @@ function LocationsPageInner() {
       {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-300 text-sm">{error}</div>}
 
       {/* Filters */}
-      <div className="rounded-2xl bg-slate-800/50 border border-white/10 p-4 flex flex-wrap items-center gap-3">
+      <div className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4 flex flex-wrap items-center gap-3">
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search name or code…"
-          className="bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-sm w-64 focus:border-cyan-500/40 outline-none" />
+          className="bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm w-64 focus:border-cyan-500/40 outline-none text-[var(--text-main)]" />
         <select value={typeFilter} onChange={e => setTF(e.target.value as PlaceType | 'ALL')}
-          className="bg-slate-900 border border-white/10 rounded-lg px-3 py-2 text-sm">
+          className="bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]">
           <option value="ALL">All types</option>
           {PLACE_TYPES.map(t => <option key={t} value={t}>{PLACE_TYPE_LABELS[t]}</option>)}
         </select>
-        <div className="ml-auto text-xs text-slate-400">{filtered.length} of {places.length}</div>
+        <div className="ml-auto text-xs text-[var(--text-muted)]">{filtered.length} of {places.length}</div>
       </div>
 
       {loading ? (
-        <div className="py-10 text-center text-slate-400 text-sm animate-pulse">Loading places…</div>
+        <div className="py-10 text-center text-[var(--text-muted)] text-sm animate-pulse">Loading places…</div>
       ) : places.length === 0 ? (
-        <div className="py-16 text-center text-slate-400 text-sm">
+        <div className="py-16 text-center text-[var(--text-muted)] text-sm">
           No locations yet. Click <strong>Add location</strong> to create your first geofence, depot or stop.
         </div>
       ) : (
         <div className="space-y-8">
           {grouped.map(g => (
             <section key={g.label}>
-              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-2">{g.label}</h3>
-              <div className="rounded-2xl bg-slate-800/50 border border-white/10 overflow-hidden">
+              <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-faint)] mb-2">{g.label}</h3>
+              <div className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] overflow-hidden">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-white/5 text-xs text-slate-400">
+                    <tr className="border-b border-[var(--border-subtle)] text-xs text-[var(--text-muted)]">
                       <th className="px-4 py-2 text-left">Name</th>
                       <th className="px-4 py-2 text-left">Type</th>
                       <th className="px-4 py-2 text-left">Shape</th>
@@ -244,28 +244,28 @@ function LocationsPageInner() {
                   </thead>
                   <tbody>
                     {g.types.flatMap(t => t.rows).map(p => (
-                      <tr key={p.id} className="border-b border-white/5 hover:bg-white/5">
+                      <tr key={p.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]">
                         <td className="px-4 py-2">
-                          <div className="text-sm text-white">{p.name}</div>
-                          {p.code && <div className="text-[10px] text-slate-500 font-mono">{p.code}</div>}
+                          <div className="text-sm text-[var(--text-main)]">{p.name}</div>
+                          {p.code && <div className="text-[10px] text-[var(--text-faint)] font-mono">{p.code}</div>}
                         </td>
                         <td className="px-4 py-2">
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${TYPE_PILL[p.type] ?? 'bg-slate-500/20 text-slate-300 border-slate-500/40'}`}>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${TYPE_PILL[p.type] ?? 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/40'}`}>
                             {PLACE_TYPE_LABELS[p.type as PlaceType] ?? p.type}
                           </span>
                         </td>
-                        <td className="px-4 py-2 text-xs text-slate-400">{p.shape}</td>
-                        <td className="px-4 py-2 text-xs text-slate-300">{p.address ?? '—'}</td>
-                        <td className="px-4 py-2 text-[11px] text-slate-500 italic">{p.sourceModule ?? '—'}</td>
+                        <td className="px-4 py-2 text-xs text-[var(--text-muted)]">{p.shape}</td>
+                        <td className="px-4 py-2 text-xs text-[var(--text-muted)]">{p.address ?? '—'}</td>
+                        <td className="px-4 py-2 text-[11px] text-[var(--text-faint)] italic">{p.sourceModule ?? '—'}</td>
                         <td className="px-4 py-2">
                           {p.active
                             ? <span className="text-[10px] text-emerald-300">Active</span>
-                            : <span className="text-[10px] text-slate-500">Inactive</span>}
+                            : <span className="text-[10px] text-[var(--text-faint)]">Inactive</span>}
                         </td>
                         <td className="px-4 py-2 text-right">
                           <div className="flex gap-1 justify-end">
-                            <button onClick={() => openEdit(p)} className="text-slate-400 hover:text-cyan-300 p-1" title="Edit"><Edit className="w-3.5 h-3.5" /></button>
-                            <button onClick={() => remove(p)}   className="text-slate-400 hover:text-rose-300 p-1" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => openEdit(p)} className="text-[var(--text-muted)] hover:text-cyan-300 p-1" title="Edit"><Edit className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => remove(p)}   className="text-[var(--text-muted)] hover:text-rose-300 p-1" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                           </div>
                         </td>
                       </tr>
@@ -281,64 +281,64 @@ function LocationsPageInner() {
       {/* Edit / New modal */}
       {edit && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <form onSubmit={submit} className="bg-slate-900 border border-white/10 rounded-2xl p-5 w-full max-w-2xl space-y-4">
+          <form onSubmit={submit} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-5 w-full max-w-2xl space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white">{edit.id ? 'Edit location' : 'Add location'}</h3>
-              <button type="button" onClick={() => setEdit(null)} className="text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
+              <h3 className="text-lg font-bold text-[var(--text-main)]">{edit.id ? 'Edit location' : 'Add location'}</h3>
+              <button type="button" onClick={() => setEdit(null)} className="text-[var(--text-muted)] hover:text-[var(--text-main)]"><X className="w-4 h-4" /></button>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <label className="text-xs text-slate-300">
+              <label className="text-xs text-[var(--text-muted)]">
                 Name*
                 <input required value={edit.name} onChange={e => setEdit({ ...edit, name: e.target.value })}
-                  className="mt-1 w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+                  className="mt-1 w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
               </label>
-              <label className="text-xs text-slate-300">
+              <label className="text-xs text-[var(--text-muted)]">
                 Code
                 <input value={edit.code} onChange={e => setEdit({ ...edit, code: e.target.value })} placeholder="GAR-DUB-01"
-                  className="mt-1 w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white font-mono" />
+                  className="mt-1 w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] font-mono" />
               </label>
-              <label className="text-xs text-slate-300">
+              <label className="text-xs text-[var(--text-muted)]">
                 Type*
                 <select value={edit.type} onChange={e => setEdit({ ...edit, type: e.target.value as PlaceType })}
-                  className="mt-1 w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+                  className="mt-1 w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]">
                   {PLACE_TYPES.map(t => <option key={t} value={t}>{PLACE_TYPE_LABELS[t]}</option>)}
                 </select>
               </label>
-              <label className="text-xs text-slate-300">
+              <label className="text-xs text-[var(--text-muted)]">
                 Shape*
                 <select value={edit.shape} onChange={e => setEdit({ ...edit, shape: e.target.value as PlaceShape })}
-                  className="mt-1 w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white">
+                  className="mt-1 w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]">
                   {PLACE_SHAPES.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </label>
-              <label className="text-xs text-slate-300">
+              <label className="text-xs text-[var(--text-muted)]">
                 Center latitude
                 <input value={edit.centerLat} onChange={e => setEdit({ ...edit, centerLat: e.target.value })} placeholder="25.276"
-                  className="mt-1 w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white font-mono" />
+                  className="mt-1 w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] font-mono" />
               </label>
-              <label className="text-xs text-slate-300">
+              <label className="text-xs text-[var(--text-muted)]">
                 Center longitude
                 <input value={edit.centerLng} onChange={e => setEdit({ ...edit, centerLng: e.target.value })} placeholder="55.296"
-                  className="mt-1 w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white font-mono" />
+                  className="mt-1 w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] font-mono" />
               </label>
               {edit.shape === 'CIRCLE' && (
-                <label className="text-xs text-slate-300 col-span-2">
+                <label className="text-xs text-[var(--text-muted)] col-span-2">
                   Radius (metres)*
                   <input value={edit.radiusM} onChange={e => setEdit({ ...edit, radiusM: e.target.value })} placeholder="200"
-                    className="mt-1 w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white font-mono" />
+                    className="mt-1 w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] font-mono" />
                 </label>
               )}
-              <label className="text-xs text-slate-300 col-span-2">
+              <label className="text-xs text-[var(--text-muted)] col-span-2">
                 Address
                 <input value={edit.address} onChange={e => setEdit({ ...edit, address: e.target.value })} placeholder="Sheikh Zayed Road, Dubai"
-                  className="mt-1 w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+                  className="mt-1 w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
               </label>
-              <label className="text-xs text-slate-300 col-span-2">
+              <label className="text-xs text-[var(--text-muted)] col-span-2">
                 Description
                 <textarea value={edit.description} onChange={e => setEdit({ ...edit, description: e.target.value })} rows={2}
-                  className="mt-1 w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-sm text-white" />
+                  className="mt-1 w-full bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)]" />
               </label>
-              <label className="text-xs text-slate-300 col-span-2 flex items-center gap-2">
+              <label className="text-xs text-[var(--text-muted)] col-span-2 flex items-center gap-2">
                 <input type="checkbox" checked={edit.active} onChange={e => setEdit({ ...edit, active: e.target.checked })} />
                 Active
               </label>
@@ -351,9 +351,9 @@ function LocationsPageInner() {
             )}
             <div className="flex gap-2 justify-end">
               <button type="button" onClick={() => setEdit(null)}
-                className="px-4 py-2 rounded-lg text-sm text-slate-300 hover:bg-white/5">Cancel</button>
+                className="px-4 py-2 rounded-lg text-sm text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]">Cancel</button>
               <button type="submit" disabled={saving}
-                className="px-4 py-2 rounded-lg text-sm bg-cyan-600 hover:bg-cyan-500 text-white font-semibold disabled:opacity-50">
+                className="px-4 py-2 rounded-lg text-sm bg-cyan-600 hover:bg-cyan-500 text-[var(--text-main)] font-semibold disabled:opacity-50">
                 {saving ? 'Saving…' : (edit.id ? 'Save' : 'Create')}
               </button>
             </div>
