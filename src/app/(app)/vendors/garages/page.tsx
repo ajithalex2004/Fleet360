@@ -81,8 +81,8 @@ export default function VendorGaragesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Garage Management</h1>
-          <p className="text-xs mt-1 text-slate-500">Register and manage approved repair centres.</p>
+          <h1 className="text-2xl font-bold text-[var(--text-main)]">Garage Management</h1>
+          <p className="text-xs mt-1 text-[var(--text-faint)]">Register and manage approved repair centres.</p>
         </div>
         <button
           onClick={() => setShowAddModal(true)}
@@ -96,30 +96,30 @@ export default function VendorGaragesPage() {
         <p className="text-sm text-amber-300">
           <span className="font-semibold">Domain ownership:</span> Garage master data is managed
           here. Previously split across{' '}
-          <code className="rounded bg-slate-800 px-1 text-xs">/maintenance/garage</code> and{' '}
-          <code className="rounded bg-slate-800 px-1 text-xs">/maintenance/data-masters/garages</code>.
+          <code className="rounded bg-[var(--bg-surface)] px-1 text-xs">/maintenance/garage</code> and{' '}
+          <code className="rounded bg-[var(--bg-surface)] px-1 text-xs">/maintenance/data-masters/garages</code>.
           Maintenance retains a read-only view at{' '}
-          <code className="rounded bg-slate-800 px-1 text-xs">/maintenance/garage-assignments</code>.
+          <code className="rounded bg-[var(--bg-surface)] px-1 text-xs">/maintenance/garage-assignments</code>.
         </p>
       </div>
 
       {loading ? (
-        <div className="p-12 text-center text-slate-500">Loading garages...</div>
+        <div className="p-12 text-center text-[var(--text-faint)]">Loading garages...</div>
       ) : garages.length === 0 ? (
-        <div className="rounded-xl border border-white/10 bg-slate-900 p-12 text-center">
-          <Building2 className="mx-auto h-8 w-8 text-slate-600" />
-          <p className="mt-3 font-medium text-white">No garages registered yet</p>
-          <p className="mt-1 text-sm text-slate-500">Click "+ Add Garage" to register your first repair centre.</p>
+        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-12 text-center">
+          <Building2 className="mx-auto h-8 w-8 text-[var(--text-faint)]" />
+          <p className="mt-3 font-medium text-[var(--text-main)]">No garages registered yet</p>
+          <p className="mt-1 text-sm text-[var(--text-faint)]">Click "+ Add Garage" to register your first repair centre.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {garages.map(g => (
-            <div key={g.id} className="rounded-xl border border-white/10 bg-slate-900 p-5 space-y-3">
+            <div key={g.id} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5 space-y-3">
               <div className="flex items-start justify-between">
                 <div>
-                  <h3 className="font-semibold text-white">{g.name}</h3>
+                  <h3 className="font-semibold text-[var(--text-main)]">{g.name}</h3>
                   {g.location && (
-                    <div className="flex items-center gap-1 mt-1 text-xs text-slate-500">
+                    <div className="flex items-center gap-1 mt-1 text-xs text-[var(--text-faint)]">
                       <MapPin className="h-3 w-3" />
                       {g.location}
                     </div>
@@ -133,7 +133,7 @@ export default function VendorGaragesPage() {
               </div>
 
               {(g.contactPerson || g.email) && (
-                <div className="space-y-1 text-xs text-slate-400 border-t border-white/5 pt-3">
+                <div className="space-y-1 text-xs text-[var(--text-muted)] border-t border-[var(--border-subtle)] pt-3">
                   {g.contactPerson && (
                     <div className="flex items-center gap-1">
                       <User className="h-3 w-3" />
@@ -149,11 +149,11 @@ export default function VendorGaragesPage() {
                 </div>
               )}
 
-              <div className="flex items-center gap-3 text-xs text-slate-400 border-t border-white/5 pt-3">
+              <div className="flex items-center gap-3 text-xs text-[var(--text-muted)] border-t border-[var(--border-subtle)] pt-3">
                 {g.specialties?.length > 0 && (
                   <div className="flex flex-wrap gap-1">
                     {g.specialties.map((s, i) => (
-                      <span key={i} className="rounded bg-slate-800 px-1.5 py-0.5 text-[11px] text-slate-300">
+                      <span key={i} className="rounded bg-[var(--bg-surface)] px-1.5 py-0.5 text-[11px] text-[var(--text-muted)]">
                         {s}
                       </span>
                     ))}
@@ -173,12 +173,12 @@ export default function VendorGaragesPage() {
 
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-slate-900 rounded-2xl w-full max-w-lg shadow-2xl">
-            <div className="p-6 border-b border-white/10 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white">Add Garage</h3>
+          <div className="bg-[var(--bg-surface)] rounded-2xl w-full max-w-lg shadow-2xl">
+            <div className="p-6 border-b border-[var(--border-subtle)] flex items-center justify-between">
+              <h3 className="text-lg font-bold text-[var(--text-main)]">Add Garage</h3>
               <button
                 onClick={() => { setShowAddModal(false); setForm(EMPTY_FORM); }}
-                className="text-slate-400 hover:text-slate-300"
+                className="text-[var(--text-muted)] hover:text-[var(--text-muted)]"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -186,96 +186,96 @@ export default function VendorGaragesPage() {
 
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Garage Name *</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Garage Name *</label>
                 <input
                   type="text"
                   value={form.name}
                   onChange={e => setForm({ ...form, name: e.target.value })}
-                  className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                  className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                   placeholder="e.g. Autopro Service Centre"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Location</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Location</label>
                 <input
                   type="text"
                   value={form.location}
                   onChange={e => setForm({ ...form, location: e.target.value })}
-                  className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                  className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                   placeholder="e.g. Musaffah, Abu Dhabi"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Contact Person</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Contact Person</label>
                   <input
                     type="text"
                     value={form.contactPerson}
                     onChange={e => setForm({ ...form, contactPerson: e.target.value })}
-                    className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Designation</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Designation</label>
                   <input
                     type="text"
                     value={form.designation}
                     onChange={e => setForm({ ...form, designation: e.target.value })}
-                    className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Email</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Email</label>
                   <input
                     type="email"
                     value={form.email}
                     onChange={e => setForm({ ...form, email: e.target.value })}
-                    className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">Contact Number</label>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Contact Number</label>
                   <input
                     type="text"
                     value={form.contactNumber}
                     onChange={e => setForm({ ...form, contactNumber: e.target.value })}
-                    className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                    className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                     placeholder="+971 2 555 0101"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Specialties</label>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Specialties</label>
                 <input
                   type="text"
                   value={form.specialties}
                   onChange={e => setForm({ ...form, specialties: e.target.value })}
-                  className="w-full rounded-lg border border-white/15 px-3 py-2 bg-slate-900 text-white"
+                  className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 bg-[var(--bg-surface)] text-[var(--text-main)]"
                   placeholder="Comma-separated, e.g. General, Electrical, Heavy Vehicles"
                 />
               </div>
 
-              <label className="flex items-center gap-2 text-sm text-slate-300">
+              <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
                 <input
                   type="checkbox"
                   checked={form.isInternal}
                   onChange={e => setForm({ ...form, isInternal: e.target.checked })}
-                  className="h-4 w-4 rounded border-white/15"
+                  className="h-4 w-4 rounded border-[var(--border-subtle)]"
                 />
                 Internal garage (owned/operated in-house)
               </label>
             </div>
 
-            <div className="p-6 border-t border-white/10 flex justify-end gap-3">
+            <div className="p-6 border-t border-[var(--border-subtle)] flex justify-end gap-3">
               <button
                 onClick={() => { setShowAddModal(false); setForm(EMPTY_FORM); }}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-300 hover:bg-white/10"
+                className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]"
               >
                 Cancel
               </button>
