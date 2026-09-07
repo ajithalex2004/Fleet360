@@ -252,9 +252,7 @@ async function runStaffTransportPlanner(event: AgentEvent): Promise<AgentRunResu
     JSON.stringify(recommendation.routes),
     JSON.stringify(recommendation.vehicleReuseChains),
     runId,
-  ).catch((err) => {
-    console.error('[staff-transport-planner] Failed to persist recommendation:', err);
-  });
+  );
 
   const durationMs = Date.now() - t0;
 

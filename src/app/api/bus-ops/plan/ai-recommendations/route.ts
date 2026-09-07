@@ -5,7 +5,6 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureAgentSchema } from '@/lib/agents/schema';
 import { dispatch as agentDispatch } from '@/lib/agents/orchestrator';
-import { runStaffTransportPlannerAgent } from '@/lib/agents/staff-transport-planner/agent';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 import { revalidateCache } from '@/lib/server-cache';
@@ -105,8 +104,22 @@ export async function POST(req: NextRequest) {
       const { action, recommendationId, options } = body;
 
       if (action === 'TRIGGER_AI' || !action) {
-        // Run Staff Transport Planner Agent directly
-        const result = await runStaffTransportPlannerAgent(tenantId, options);
+        // Run Staff Transport Planner Agent via the orchestrator (the single
+        // entry point for all agent invocations — also handles agent_runs
+        // logging, ROI metrics, and governance/budget checks).
+        const result = await agentDispatch({
+          tenant_id: tenantId,
+          agent_id: 'staff-transport-planner',
+          event_type: 'manual.trigger',
+          payload: options,
+        });
+        if (result.status === 'FAILED') {
+          return NextResponse.json({
+            ok: false,
+            error: result.error || 'Staff Transport Planner Agent run failed.',
+            result,
+          }, { status: 502 });
+        }
         return NextResponse.json({
           ok: true,
           message: 'Staff Transport Planner Agent executed successfully.',
