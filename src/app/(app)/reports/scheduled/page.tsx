@@ -73,7 +73,7 @@ export default function ScheduledReportsPage() {
 
   const getStatusColor = (status: string) => {
     if (status === 'active') return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
-    if (status === 'paused') return 'bg-slate-500/20 text-slate-300 border-slate-500/30';
+    if (status === 'paused') return 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30';
     return 'bg-rose-500/20 text-rose-400 border-rose-500/30';
   };
 
