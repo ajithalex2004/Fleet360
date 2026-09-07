@@ -390,14 +390,80 @@ const MODULES: ModuleDef[] = [
   },
 ];
 
+interface CategorySectionDef {
+  id: 'intelligence' | 'services' | 'operations' | 'assets' | 'governance' | 'enterprise';
+  label: string;
+  shortLabel: string;
+  icon: React.ComponentType<{ className?: string }>;
+  color: string;
+  badgeText: string;
+  description: string;
+}
+
+const PLATFORM_CATEGORIES: CategorySectionDef[] = [
+  {
+    id: 'intelligence',
+    label: 'AI & Intelligence',
+    shortLabel: 'Intelligence',
+    icon: Bot,
+    color: 'text-violet-400 bg-violet-500/10 border-violet-500/20',
+    badgeText: 'AUTONOMOUS COPILOTS',
+    description: 'Autonomous AI copilots, platform governance, predictive maintenance triage & WhatsApp dispatch',
+  },
+  {
+    id: 'services',
+    label: 'Transport & Services',
+    shortLabel: 'Services',
+    icon: Bus,
+    color: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+    badgeText: 'LINES OF BUSINESS',
+    description: 'Staff transport shuttles, student bus attendance, logistics freight & Rent-A-Car operations',
+  },
+  {
+    id: 'operations',
+    label: 'Core Fleet Operations',
+    shortLabel: 'Operations',
+    icon: Radio,
+    color: 'text-sky-400 bg-sky-500/10 border-sky-500/20',
+    badgeText: 'LIVE RADAR & DISPATCH',
+    description: 'Live dispatch radar, carrier marketplace exchange, emergency response triage & driver PWAs',
+  },
+  {
+    id: 'assets',
+    label: 'Assets & People',
+    shortLabel: 'Assets & People',
+    icon: CarFront,
+    color: 'text-teal-400 bg-teal-500/10 border-teal-500/20',
+    badgeText: 'FLEET & WORKFORCE',
+    description: 'Vehicle lifecycle master, workshop repair work orders, driver HOS shifts & BLE asset inventory',
+  },
+  {
+    id: 'governance',
+    label: 'Safety & Governance',
+    shortLabel: 'Governance',
+    icon: ShieldCheck,
+    color: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
+    badgeText: 'COMPLIANCE & ESG',
+    description: 'RTA commercial road permits, GHG carbon tracking, cross-module BI analytics & customer CRM',
+  },
+  {
+    id: 'enterprise',
+    label: 'Enterprise & Admin',
+    shortLabel: 'Enterprise',
+    icon: CircleDollarSign,
+    color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+    badgeText: 'FINANCE & BILLING',
+    description: 'FTA tax invoices, Salik toll reconciliation, 5% VAT engine & platform enterprise settings',
+  },
+];
+
 const CATEGORIES = [
   { id: 'all', label: 'All Modules', count: MODULES.length },
-  { id: 'intelligence', label: '🤖 AI & Intelligence', count: MODULES.filter(m => m.category === 'intelligence').length },
-  { id: 'services', label: '🚍 Transport Services', count: MODULES.filter(m => m.category === 'services').length },
-  { id: 'operations', label: '📡 Live Operations', count: MODULES.filter(m => m.category === 'operations').length },
-  { id: 'assets', label: '🚚 Fleet & Assets', count: MODULES.filter(m => m.category === 'assets').length },
-  { id: 'governance', label: '🛡️ Governance & ESG', count: MODULES.filter(m => m.category === 'governance').length },
-  { id: 'enterprise', label: '💼 Enterprise & Admin', count: MODULES.filter(m => m.category === 'enterprise').length },
+  ...PLATFORM_CATEGORIES.map(cat => ({
+    id: cat.id,
+    label: cat.label,
+    count: MODULES.filter(m => m.category === cat.id).length,
+  })),
 ];
 
 export default function PlatformPage() {
@@ -410,14 +476,27 @@ export default function PlatformPage() {
     }
   };
 
-  const filteredModules = MODULES.filter(mod => {
-    const matchesCategory = selectedCategory === 'all' || mod.category === selectedCategory;
-    const matchesSearch = !searchQuery.trim() || 
-      mod.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      mod.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      mod.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchesCategory && matchesSearch;
-  });
+  const visibleCategories = PLATFORM_CATEGORIES.filter(
+    cat => selectedCategory === 'all' || cat.id === selectedCategory
+  );
+
+  const getFilteredModulesForCategory = (categoryId: string) => {
+    return MODULES.filter(mod => {
+      if (mod.category !== categoryId) return false;
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        mod.title.toLowerCase().includes(q) ||
+        mod.description.toLowerCase().includes(q) ||
+        mod.tags.some(t => t.toLowerCase().includes(q))
+      );
+    });
+  };
+
+  const totalMatches = visibleCategories.reduce(
+    (sum, cat) => sum + getFilteredModulesForCategory(cat.id).length,
+    0
+  );
 
   return (
     <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-main)] transition-colors duration-150 flex flex-col">
@@ -467,7 +546,7 @@ export default function PlatformPage() {
       </nav>
 
       {/* Main Container */}
-      <main className="max-w-7xl mx-auto px-6 py-10 flex-1 w-full space-y-8">
+      <main className="max-w-7xl mx-auto px-6 py-10 flex-1 w-full space-y-10">
         {/* Hero Section */}
         <div className="text-center max-w-3xl mx-auto space-y-3">
           <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]/60 px-3.5 py-1">
@@ -529,89 +608,144 @@ export default function PlatformPage() {
           })}
         </div>
 
-        {/* Bento Grid Module Layout */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredModules.map(mod => {
-            const isFlagship = mod.flagship;
+        {/* Empty State */}
+        {totalMatches === 0 && (
+          <div className="py-16 text-center space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] flex items-center justify-center mx-auto text-[var(--text-muted)]">
+              <Search className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-[var(--text-main)]">No modules found</h3>
+            <p className="text-xs text-[var(--text-muted)] max-w-sm mx-auto">
+              No modules matched &quot;{searchQuery}&quot;. Try searching for a different keyword or selecting a different category filter.
+            </p>
+            <button
+              onClick={() => { setSearchQuery(''); setSelectedCategory('all'); }}
+              className="px-3.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold hover:bg-emerald-500/20 transition-all"
+            >
+              Reset Filters
+            </button>
+          </div>
+        )}
 
-            return (
-              <div
-                key={mod.id}
-                className={`group relative bg-[var(--bg-surface)] border border-[var(--border-subtle)] ${mod.borderAccent} rounded-2xl p-5 hover:shadow-xl transition-all duration-200 flex flex-col justify-between ${
-                  isFlagship ? 'lg:col-span-1 shadow-sm' : ''
-                }`}
-              >
-                <div>
-                  {/* Card Header: Icon + Status Pill */}
-                  <div className="flex items-start justify-between gap-3 mb-3.5">
-                    <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${mod.gradient} border border-[var(--border-subtle)] flex items-center justify-center flex-shrink-0 shadow-sm`}>
-                      {mod.icon}
-                    </div>
+        {/* Categorized Widget Sections */}
+        {visibleCategories.map(cat => {
+          const catModules = getFilteredModulesForCategory(cat.id);
+          if (catModules.length === 0) return null;
+          const CatIcon = cat.icon;
 
-                    <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      <span className="text-emerald-500 text-[10px] font-bold font-mono tracking-wider">{mod.status}</span>
-                    </div>
+          return (
+            <section key={cat.id} className="space-y-4">
+              {/* Category Section Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[var(--border-subtle)] pb-3.5">
+                <div className="flex items-center gap-3">
+                  <div className={`w-9 h-9 rounded-xl border ${cat.color} flex items-center justify-center flex-shrink-0 shadow-sm`}>
+                    <CatIcon className="w-4 h-4" />
                   </div>
-
-                  {/* Title & Description */}
-                  <Link href={mod.href} className="block group-hover:text-emerald-500 transition-colors">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-[var(--text-main)] font-bold text-base tracking-tight group-hover:text-emerald-500 transition-colors">
-                        {mod.title}
-                      </h3>
-                      <ArrowUpRight className="w-4 h-4 text-[var(--text-muted)] group-hover:text-emerald-500 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
-                    </div>
-                    <p className="text-[var(--text-muted)] text-xs mt-1.5 leading-relaxed line-clamp-2">
-                      {mod.description}
-                    </p>
-                  </Link>
-
-                  {/* Feature Tags */}
-                  <div className="flex flex-wrap gap-1.5 mt-3.5 mb-4">
-                    {mod.tags.map(tag => (
-                      <span 
-                        key={tag}
-                        className="text-[10px] font-medium bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] rounded-md px-2 py-0.5"
-                      >
-                        {tag}
+                  <div>
+                    <div className="flex items-center gap-2.5">
+                      <h2 className="text-base sm:text-lg font-extrabold text-[var(--text-main)] tracking-tight">
+                        {cat.label}
+                      </h2>
+                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)]">
+                        {catModules.length} {catModules.length === 1 ? 'Module' : 'Modules'}
                       </span>
-                    ))}
+                      <span className="hidden md:inline-block text-[9px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        {cat.badgeText}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                      {cat.description}
+                    </p>
                   </div>
                 </div>
-
-                {/* Bottom Stats Grid (if available) */}
-                {mod.stats && mod.stats.length > 0 && (
-                  <div className="border-t border-[var(--border-subtle)] pt-3 mt-auto">
-                    <div className={`grid ${mod.stats.length >= 4 ? 'grid-cols-4' : mod.stats.length === 3 ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
-                      {mod.stats.map(stat => (
-                        <div key={stat.label} className="min-w-0">
-                          <p className="text-[9px] uppercase font-bold text-[var(--text-muted)] truncate">{stat.label}</p>
-                          <p className="text-xs font-bold font-mono text-[var(--text-main)] mt-0.5 truncate">{stat.value}</p>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Quick Action Buttons for Flagship Modules */}
-                    {mod.quickActions && mod.quickActions.length > 0 && (
-                      <div className="flex items-center gap-2 mt-3 pt-2.5 border-t border-[var(--border-subtle)]">
-                        {mod.quickActions.map(action => (
-                          <Link
-                            key={action.label}
-                            href={action.href}
-                            className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] hover:border-emerald-500/40 text-[10px] font-semibold text-[var(--text-main)] hover:text-emerald-500 transition-all"
-                          >
-                            {action.label}
-                          </Link>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
-            );
-          })}
-        </div>
+
+              {/* Bento Grid Module Cards for this Category */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {catModules.map(mod => {
+                  const isFlagship = mod.flagship;
+
+                  return (
+                    <div
+                      key={mod.id}
+                      className={`group relative bg-[var(--bg-surface)] border border-[var(--border-subtle)] ${mod.borderAccent} rounded-2xl p-5 hover:shadow-xl transition-all duration-200 flex flex-col justify-between ${
+                        isFlagship ? 'shadow-sm' : ''
+                      }`}
+                    >
+                      <div>
+                        {/* Card Header: Icon + Status Pill */}
+                        <div className="flex items-start justify-between gap-3 mb-3.5">
+                          <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${mod.gradient} border border-[var(--border-subtle)] flex items-center justify-center flex-shrink-0 shadow-sm`}>
+                            {mod.icon}
+                          </div>
+
+                          <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            <span className="text-emerald-500 text-[10px] font-bold font-mono tracking-wider">{mod.status}</span>
+                          </div>
+                        </div>
+
+                        {/* Title & Description */}
+                        <Link href={mod.href} className="block group-hover:text-emerald-500 transition-colors">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-[var(--text-main)] font-bold text-base tracking-tight group-hover:text-emerald-500 transition-colors">
+                              {mod.title}
+                            </h3>
+                            <ArrowUpRight className="w-4 h-4 text-[var(--text-muted)] group-hover:text-emerald-500 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
+                          </div>
+                          <p className="text-[var(--text-muted)] text-xs mt-1.5 leading-relaxed line-clamp-2">
+                            {mod.description}
+                          </p>
+                        </Link>
+
+                        {/* Feature Tags */}
+                        <div className="flex flex-wrap gap-1.5 mt-3.5 mb-4">
+                          {mod.tags.map(tag => (
+                            <span 
+                              key={tag}
+                              className="text-[10px] font-medium bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] rounded-md px-2 py-0.5"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Bottom Stats Grid (if available) */}
+                      {mod.stats && mod.stats.length > 0 && (
+                        <div className="border-t border-[var(--border-subtle)] pt-3 mt-auto">
+                          <div className={`grid ${mod.stats.length >= 4 ? 'grid-cols-4' : mod.stats.length === 3 ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
+                            {mod.stats.map(stat => (
+                              <div key={stat.label} className="min-w-0">
+                                <p className="text-[9px] uppercase font-bold text-[var(--text-muted)] truncate">{stat.label}</p>
+                                <p className="text-xs font-bold font-mono text-[var(--text-main)] mt-0.5 truncate">{stat.value}</p>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Quick Action Buttons for Flagship Modules */}
+                          {mod.quickActions && mod.quickActions.length > 0 && (
+                            <div className="flex items-center gap-2 mt-3 pt-2.5 border-t border-[var(--border-subtle)]">
+                              {mod.quickActions.map(action => (
+                                <Link
+                                  key={action.label}
+                                  href={action.href}
+                                  className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] hover:border-emerald-500/40 text-[10px] font-semibold text-[var(--text-main)] hover:text-emerald-500 transition-all"
+                                >
+                                  {action.label}
+                                </Link>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })}
 
         {/* Footer */}
         <footer className="border-t border-[var(--border-subtle)] pt-6 mt-12 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[var(--text-muted)]">
