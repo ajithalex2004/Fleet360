@@ -14,10 +14,12 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 export type ThemeChoice = 'light' | 'dark' | 'auto';
 type Resolved = 'light' | 'dark';
 
-interface ThemeCtxValue {
+export interface ThemeCtxValue {
   choice: ThemeChoice;
   resolved: Resolved;
   setChoice: (c: ThemeChoice) => void;
+  theme: Resolved;
+  setTheme: (c: ThemeChoice) => void;
 }
 
 const STORAGE_KEY = 'fleet360-theme';
@@ -73,11 +75,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     applyResolved(r);
   }, []);
 
-  return <ThemeCtx.Provider value={{ choice, resolved, setChoice }}>{children}</ThemeCtx.Provider>;
+  return (
+    <ThemeCtx.Provider value={{ choice, resolved, setChoice, theme: resolved, setTheme: setChoice }}>
+      {children}
+    </ThemeCtx.Provider>
+  );
 }
 
 export function useTheme(): ThemeCtxValue {
   const ctx = useContext(ThemeCtx);
-  if (!ctx) return { choice: 'dark', resolved: 'dark', setChoice: () => {} };
-  return ctx;
+  if (!ctx) return { choice: 'dark', resolved: 'dark', setChoice: () => {}, theme: 'dark', setTheme: () => {} };
+  return {
+    ...ctx,
+    theme: ctx.theme ?? ctx.resolved,
+    setTheme: ctx.setTheme ?? ctx.setChoice,
+  };
 }

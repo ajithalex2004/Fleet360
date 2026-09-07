@@ -365,9 +365,28 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
   return <PermissionContext.Provider value={ctx}>{children}</PermissionContext.Provider>;
 }
 
-export function usePermissions() {
+export function usePermissions(): PermissionContextType {
   const ctx = useContext(PermissionContext);
-  if (!ctx) throw new Error('usePermissions must be used within PermissionProvider');
+  if (!ctx) {
+    return {
+      user: null,
+      tenant: null,
+      permissions: [],
+      isLoading: false,
+      isAuthenticated: false,
+      can: () => false,
+      canView: () => false,
+      canCreate: () => false,
+      canEdit: () => false,
+      canDelete: () => false,
+      canApprove: () => false,
+      canExport: () => false,
+      hasModule: () => true,
+      switchTenant: async () => {},
+      refreshPermissions: async () => {},
+      setCurrentUser: async () => {},
+    };
+  }
   return ctx;
 }
 

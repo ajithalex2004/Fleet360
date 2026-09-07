@@ -90,11 +90,13 @@ export default function CommandPalette() {
         {
           id: 'action-theme',
           type: 'action',
-          title: `Switch Theme (Currently ${theme})`,
+          title: `Switch Theme (Currently ${theme || 'dark'})`,
           subtitle: 'Toggle between Aura Obsidian (Dark) and Crisp Light Mode',
           badge: 'Appearance',
           action: () => {
-            setTheme(theme === 'dark' ? 'light' : 'dark');
+            if (typeof setTheme === 'function') {
+              setTheme(theme === 'dark' ? 'light' : 'dark');
+            }
             setOpen(false);
           },
         },
