@@ -215,7 +215,7 @@ interface Message {
   id:           string;
   role:         'user' | 'assistant';
   text?:        string;
-  toolCall?:    ToolCall;
+  toolCalls?:   ToolCall[];
   thesysNodes?: CrayonNode[];
   loading?:     boolean;
 }
@@ -392,9 +392,9 @@ function Bubble({ msg }: { msg: Message }) {
               </ChatCtx.Consumer>
             )}
             {/* Our custom tool components */}
-            {msg.toolCall && (
-              <div className="w-full">
-                <ToolComponent call={msg.toolCall} />
+            {msg.toolCalls && msg.toolCalls.length > 0 && (
+              <div className="w-full space-y-3">
+                {msg.toolCalls.map((call, i) => <ToolComponent key={i} call={call} />)}
               </div>
             )}
           </div>
@@ -446,7 +446,7 @@ export default function OperationsAssistantPage() {
       const decoder = new TextDecoder();
       let   buffer  = '';
       let   aiText  = '';
-      let   aiTool: ToolCall | undefined;
+      const aiTools: ToolCall[] = [];
 
       while (true) {
         const { done, value } = await reader.read();
@@ -461,7 +461,7 @@ export default function OperationsAssistantPage() {
           try {
             const evt = JSON.parse(line.slice(6));
             if (evt.type === 'text')      aiText += evt.content;
-            if (evt.type === 'tool_call') aiTool  = { name: evt.name, args: evt.args };
+            if (evt.type === 'tool_call') aiTools.push({ name: evt.name, args: evt.args });
             if (evt.type === 'error')     aiText  = `Error: ${evt.message}`;
           } catch { /* partial line */ }
         }
@@ -483,7 +483,7 @@ export default function OperationsAssistantPage() {
                 loading:      hasPartialContent,
                 text:         plain || undefined,
                 thesysNodes:  nodes.length > 0 ? nodes : undefined,
-                toolCall:     aiTool,
+                toolCalls:    aiTools.length > 0 ? [...aiTools] : undefined,
               }
             : m
         ));

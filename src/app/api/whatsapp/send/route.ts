@@ -3,11 +3,11 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { sendWhatsAppMessage, WHATSAPP_FROM_NUMBER } from '@/lib/whatsapp/twilio-client';
+import { ensureAgentSchema } from '@/lib/agents/schema';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID ?? '';
-const AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN ?? '';
-const FROM_NUMBER = process.env.TWILIO_WHATSAPP_NUMBER ?? 'whatsapp:+14155238886';
 
 interface SendPayload {
   to: string;
@@ -41,35 +41,6 @@ async function getTemplateBody(templateName: string, vars: Record<string, string
   }
 }
 
-async function sendViaTwilio(to: string, body: string): Promise<{ sid: string; status: string } | null> {
-  if (!ACCOUNT_SID || !AUTH_TOKEN) return null;
-
-  const formData = new URLSearchParams();
-  formData.append('From', FROM_NUMBER);
-  formData.append('To', `whatsapp:${to}`);
-  formData.append('Body', body);
-
-  const resp = await fetch(
-    `https://api.twilio.com/2010-04-01/Accounts/${ACCOUNT_SID}/Messages.json`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${ACCOUNT_SID}:${AUTH_TOKEN}`).toString('base64')}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: formData.toString(),
-    }
-  );
-
-  if (!resp.ok) {
-    const errText = await resp.text();
-    console.error('[WhatsApp Send] Twilio error:', errText);
-    return null;
-  }
-
-  const data = await resp.json() as { sid: string; status: string };
-  return data;
-}
 
 export async function POST(req: NextRequest) {
 
@@ -78,6 +49,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  await ensureAgentSchema();
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
@@ -108,12 +80,12 @@ export async function POST(req: NextRequest) {
         }
 
         // Send via Twilio
-        const twilioResp = await sendViaTwilio(normalizedTo, messageBody);
+        const twilioResp = await sendWhatsAppMessage(normalizedTo, messageBody);
         const messageSid = twilioResp?.sid ?? null;
         const status = twilioResp ? 'SENT' : (ACCOUNT_SID ? 'FAILED' : 'LOGGED');
 
         // Store outbound message
-        const fromNumber = FROM_NUMBER.replace('whatsapp:', '');
+        const fromNumber = WHATSAPP_FROM_NUMBER;
         await tx.$executeRawUnsafe(
           `INSERT INTO whatsapp_messages
              (direction, from_number, to_number, message_body, message_sid, status,
@@ -147,6 +119,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  await ensureAgentSchema();
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {

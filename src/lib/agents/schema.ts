@@ -423,6 +423,64 @@ async function _doInit(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_agent_approvals_tenant_status ON agent_approvals(tenant_id, status);
       CREATE INDEX IF NOT EXISTS idx_agent_approvals_agent_id      ON agent_approvals(agent_id);
       CREATE INDEX IF NOT EXISTS idx_agent_approvals_created_at    ON agent_approvals(created_at DESC);
+
+      -- ── whatsapp_messages ──────────────────────────────────────────────────────
+      CREATE TABLE IF NOT EXISTS whatsapp_messages (
+        id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id      TEXT NOT NULL DEFAULT 'default',
+        direction      TEXT NOT NULL,
+        from_number    TEXT NOT NULL,
+        to_number      TEXT NOT NULL,
+        message_body   TEXT NOT NULL,
+        message_sid    TEXT,
+        status         TEXT NOT NULL DEFAULT 'RECEIVED',
+        message_type   TEXT NOT NULL DEFAULT 'TEXT',
+        template_name  TEXT,
+        module         TEXT NOT NULL DEFAULT 'GENERAL',
+        intent         TEXT NOT NULL DEFAULT 'GENERAL',
+        auto_replied   BOOLEAN NOT NULL DEFAULT false,
+        raw_payload    JSONB,
+        created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_tenant     ON whatsapp_messages(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_from       ON whatsapp_messages(from_number);
+      CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_created_at ON whatsapp_messages(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_whatsapp_messages_direction  ON whatsapp_messages(direction);
+
+      -- ── whatsapp_templates ─────────────────────────────────────────────────────
+      CREATE TABLE IF NOT EXISTS whatsapp_templates (
+        id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        template_name  TEXT NOT NULL UNIQUE,
+        body_en        TEXT NOT NULL,
+        body_ar        TEXT,
+        is_active      BOOLEAN NOT NULL DEFAULT true,
+        usage_count    INT NOT NULL DEFAULT 0,
+        created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      -- Default auto-reply templates, one per classified intent — safe to
+      -- re-run, only inserts on first migration. Matches the pre-existing
+      -- whatsapp_templates schema (display_name + category required, seen
+      -- already in booking_confirmation_en/ar etc). One row per intent with
+      -- both languages on the same row — simpler than the business
+      -- notification templates' per-language row split, which doesn't buy
+      -- anything extra for a same-content auto-reply.
+      INSERT INTO whatsapp_templates (template_name, display_name, category, language, body_en, body_ar) VALUES
+        ('auto_reply_inquiry', 'Auto-Reply: Inquiry', 'AUTO_REPLY', 'en',
+         'Thanks for reaching out to Fleet360! For vehicle availability, pricing, or booking a rental, one of our team will follow up shortly. You can also call our hotline for immediate assistance.',
+         'شكرًا لتواصلك مع Fleet360! بخصوص توفر المركبات أو الأسعار أو الحجز، سيتواصل معك أحد أفراد فريقنا قريبًا.'),
+        ('auto_reply_payment', 'Auto-Reply: Payment', 'AUTO_REPLY', 'en',
+         'Thanks for your message about billing or payment. Our finance team will review your account and get back to you shortly. For urgent payment queries, please call our support line.',
+         'شكرًا لرسالتك بخصوص الفوترة أو الدفع. سيقوم فريق المالية لدينا بمراجعة حسابك والرد عليك قريبًا.'),
+        ('auto_reply_renewal', 'Auto-Reply: Renewal', 'AUTO_REPLY', 'en',
+         'Thanks for your interest in renewing or extending your contract. Our team will review your current agreement and reach out with renewal options shortly.',
+         'شكرًا لاهتمامك بتجديد أو تمديد عقدك. سيقوم فريقنا بمراجعة اتفاقيتك الحالية والتواصل معك بخيارات التجديد قريبًا.'),
+        ('auto_reply_general', 'Auto-Reply: General', 'AUTO_REPLY', 'en',
+         'Thanks for contacting Fleet360! We''ve received your message and a member of our team will respond as soon as possible.',
+         'شكرًا لتواصلك مع Fleet360! لقد استلمنا رسالتك وسيقوم أحد أفراد فريقنا بالرد عليك في أقرب وقت ممكن.')
+      ON CONFLICT (template_name) DO NOTHING;
     END
     $DDL$
   `);

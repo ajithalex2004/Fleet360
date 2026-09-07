@@ -101,6 +101,15 @@ export const PUBLIC_PREFIXES: readonly string[] = [
   // require an operator session.
   '/api/cron/',
   '/api/jobs/',
+  // Inbound webhooks from external providers (Twilio, Meta WhatsApp
+  // Business, Stripe-adjacent status callbacks). These are POSTed by the
+  // provider's own servers, which can never present an xl-session cookie.
+  // Same shape as /api/bus-ops/gateway/ above — the handler itself is the
+  // auth boundary (Twilio/Meta signature or payload-shape validation).
+  // Without this every webhook POST was 401'd here before ever reaching
+  // the route, so provider callbacks and inbound messages were silently
+  // unreachable in every environment.
+  '/api/webhooks/',
 ];
 
 // ── Protected UI routes ──────────────────────────────────────────────────────

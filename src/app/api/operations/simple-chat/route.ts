@@ -169,9 +169,11 @@ export async function POST(req: NextRequest) {
           stream: true,
         });
 
-        let textAccum    = '';
-        let toolName     = '';
-        let toolArgsRaw  = '';
+        let textAccum = '';
+        // Accumulate each distinct tool call by its stream index — a single
+        // turn can request multiple tools (e.g. "show me the full dashboard"),
+        // and each gets its own index in delta.tool_calls[].
+        const toolCallsByIndex = new Map<number, { name: string; argsRaw: string }>();
 
         for await (const chunk of completion) {
           const delta = chunk.choices?.[0]?.delta;
@@ -183,28 +185,39 @@ export async function POST(req: NextRequest) {
             send({ type: 'text', content: delta.content });
           }
 
-          // Tool call streaming
-          if (delta.tool_calls?.[0]) {
-            const tc = delta.tool_calls[0];
-            if (tc.function?.name)      toolName     += tc.function.name;
-            if (tc.function?.arguments) toolArgsRaw  += tc.function.arguments;
+          // Tool call streaming — one or more calls, each identified by index
+          for (const tc of delta.tool_calls ?? []) {
+            const idx = tc.index ?? 0;
+            const entry = toolCallsByIndex.get(idx) ?? { name: '', argsRaw: '' };
+            if (tc.function?.name)      entry.name    += tc.function.name;
+            if (tc.function?.arguments) entry.argsRaw += tc.function.arguments;
+            toolCallsByIndex.set(idx, entry);
           }
         }
 
-        // Emit tool call as one event when complete
-        if (toolName) {
-          let args = {};
-          try { args = JSON.parse(toolArgsRaw); } catch { /* partial args */ }
-          send({ type: 'tool_call', name: toolName, args });
+        const toolCalls = [...toolCallsByIndex.values()].filter(tc => tc.name);
+
+        // Emit each completed tool call as its own event
+        if (toolCalls.length > 0) {
+          toolCalls.forEach((tc, i) => {
+            let args = {};
+            try { args = JSON.parse(tc.argsRaw); } catch { /* partial args */ }
+            send({ type: 'tool_call', name: tc.name, args, callId: `tc${i}` });
+          });
           sessionStore.addMessage(tenantId, threadId, {
             role: 'assistant',
             content: null,
-            tool_calls: [{ id: 'tc1', type: 'function', function: { name: toolName, arguments: toolArgsRaw } }],
+            tool_calls: toolCalls.map((tc, i) => ({
+              id: `tc${i}`, type: 'function',
+              function: { name: tc.name, arguments: tc.argsRaw },
+            })),
           });
-          sessionStore.addMessage(tenantId, threadId, {
-            role: 'tool',
-            tool_call_id: 'tc1',
-            content: `[${toolName} displayed to user]`,
+          toolCalls.forEach((tc, i) => {
+            sessionStore.addMessage(tenantId, threadId, {
+              role: 'tool',
+              tool_call_id: `tc${i}`,
+              content: `[${tc.name} displayed to user]`,
+            });
           });
         } else if (textAccum) {
           sessionStore.addMessage(tenantId, threadId, { role: 'assistant', content: textAccum });
@@ -213,7 +226,7 @@ export async function POST(req: NextRequest) {
         // Log to agent_runs for ecosystem visibility (fire-and-forget)
         logInteraction({
           threadId,
-          toolsInvoked: toolName ? [toolName] : [],
+          toolsInvoked: toolCalls.map(tc => tc.name),
           messageCount: sessionStore.getMessages(tenantId, threadId).length,
           durationMs:   Date.now() - t0,
         });

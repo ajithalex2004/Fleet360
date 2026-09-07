@@ -134,7 +134,7 @@ async function persistRun(event: AgentEvent, result: AgentRunResult): Promise<vo
        business_outcome, decision_quality_score, human_feedback
      ) VALUES (
        $1,$2,$3,$4,
-       $5,$6,$7,$8,
+       $5::jsonb,$6::jsonb,$7,$8,
        $9,$10,$11,
        $12,$13,$14,$15,$16,
        $17,$18,$19,$20,
