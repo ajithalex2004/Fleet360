@@ -190,6 +190,7 @@ export async function GET(req: NextRequest) {
     'dispatch-optimiser',
     'driver-coach',
     'demand-forecasting',
+    'staff-transport-planner',
   ];
 
   // Batch 1: shared data needed by multiple sections (≤4 concurrent)
@@ -226,6 +227,7 @@ export async function GET(req: NextRequest) {
     'dispatch-optimiser':     { name: 'Smart Dispatch Optimiser',module: 'Dispatch',        model: 'Statistical (15-factor)', resultsHref: '/dispatch/jobs' },
     'driver-coach':           { name: 'Driver Coaching',         module: 'Fleet / Driver',  model: 'GPT-4o',            resultsHref: '/fleet/intelligence' },
     'demand-forecasting':     { name: 'Demand Forecasting',      module: 'Fleet / RAC',     model: 'Moving Avg + GPT-4o', resultsHref: '/fleet/intelligence' },
+    'staff-transport-planner':{ name: 'Staff Transport Planning', module: 'Staff Transport', model: 'Bin-Packing + Clustering', resultsHref: '/bus-ops/planning-engine' },
   };
 
   const batchAgents = BATCH_IDS.map((id, i) => {
@@ -243,7 +245,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     commandStrip: {
-      activeAgents: 7,
+      activeAgents: BATCH_IDS.length,
       ...kpis,
     },
     batchAgents,

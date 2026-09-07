@@ -7,7 +7,7 @@ import { PageHeader } from '@/components/ui/page-theme';
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface LastRun {
   status: string;
-  at: string;
+  created_at: string;
   duration_ms: number;
   items_processed: number;
   actions_created: number;
@@ -123,6 +123,7 @@ function agentFeedLabel(agentId: string, actions: number, items: number) {
     'dispatch-optimiser':     (a, i) => `${i} jobs scored · ${a} recommendations made`,
     'driver-coach':           (a, i) => `${i} drivers reviewed · ${a} coaching plans created`,
     'demand-forecasting':     (a, i) => `${i} segments forecast · ${a} alerts raised`,
+    'staff-transport-planner': (a, i) => `${i} staff requirements analysed · ${a} routes planned`,
     'whatsapp-agent':         (a, i) => `${i} messages received · ${a} resolved`,
     'chat-widget':            (a, i) => `${i} chat sessions · ${a} bookings made`,
     'ops-assistant':          (a, i) => `${i} queries answered · ${a} tools invoked`,
@@ -290,7 +291,7 @@ function BatchAgentCard({
             {agent.lastRun.status}
           </span>
           <span>·</span>
-          <span>{fmtTime(agent.lastRun.at)}</span>
+          <span>{fmtTime(agent.lastRun.created_at)}</span>
           <span>·</span>
           <span>{(agent.lastRun.duration_ms / 1000).toFixed(1)}s</span>
         </div>
@@ -436,6 +437,7 @@ function ActivityFeed({ rows }: { rows: FeedRow[] }) {
     'dispatch-optimiser':     '📡',
     'driver-coach':           '🎯',
     'demand-forecasting':     '📈',
+    'staff-transport-planner': '🚌',
     'whatsapp-agent':         '💬',
     'chat-widget':            '🤖',
     'ops-assistant':          '🖥️',
@@ -564,7 +566,7 @@ export default function AgentsPage() {
 
       <PageHeader
         title="AI Agent Ecosystem"
-        subtitle="10 agents · autonomous intelligence across every module · real-time control"
+        subtitle="11 agents · autonomous intelligence across every module · real-time control"
         icon={Bot}
         accent="violet"
         actions={
