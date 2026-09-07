@@ -293,7 +293,7 @@ export default function QuotationsPage() {
               }`}
             >
               {tab}
-              <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs ${activeTab === tab ? 'bg-[var(--bg-surface-hover)]' : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'}`}>
+              <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs ${activeTab === tab ? 'bg-white/20' : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'}`}>
                 {getCount(tab)}
               </span>
             </button>

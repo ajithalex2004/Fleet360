@@ -430,7 +430,7 @@ export default function PlatformSettingsPage() {
             }`}>
             {saving   ? <><span className="animate-spin">⟳</span> Saving…</> :
              saved    ? <><span className="text-emerald-400">✓</span> Saved!</> :
-             hasDirty ? <><span>💾</span> Save Changes <span className="ml-1 bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-xs px-1.5 py-0.5 rounded-full">{Object.keys(dirty).length}</span></> :
+             hasDirty ? <><span>💾</span> Save Changes <span className="ml-1 bg-white/20 text-white text-xs px-1.5 py-0.5 rounded-full">{Object.keys(dirty).length}</span></> :
                         <><span>💾</span> Save Changes</>}
           </button>
         </div>

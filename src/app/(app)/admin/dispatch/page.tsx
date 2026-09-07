@@ -221,7 +221,7 @@ export default function AdminDispatchPage() {
           <Link href="/dispatch/command"
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-bold text-sm hover:opacity-90 transition-all shadow-lg shadow-blue-500/20">
             🚦 Command Centre
-            <span className="text-[10px] bg-[var(--bg-surface-hover)] px-1.5 py-0.5 rounded font-semibold">LIVE</span>
+            <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded font-semibold">LIVE</span>
           </Link>
         </div>
       </div>

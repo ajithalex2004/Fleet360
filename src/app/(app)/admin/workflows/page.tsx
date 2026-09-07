@@ -410,7 +410,7 @@ export default function WorkflowsPage() {
         {MODULES.map(m => (
           <button key={m.key} onClick={() => { setActiveModule(m.key); setSelectedWf(null); setWfSteps([]); }}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${activeModule === m.key ? `bg-gradient-to-r ${m.color} text-white shadow-lg` : 'bg-[var(--bg-surface)]/60 text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]/60 border border-[var(--border-subtle)]'}`}>
-            <span className={`w-5 h-5 rounded flex items-center justify-center text-xs font-bold ${activeModule === m.key ? 'bg-[var(--bg-surface-hover)]' : 'bg-[var(--bg-surface-hover)]'}`}>{m.icon}</span>
+            <span className={`w-5 h-5 rounded flex items-center justify-center text-xs font-bold ${activeModule === m.key ? 'bg-white/20' : 'bg-[var(--bg-surface-hover)]'}`}>{m.icon}</span>
             {m.label}
           </button>
         ))}
