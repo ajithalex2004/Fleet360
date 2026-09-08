@@ -487,13 +487,30 @@ export default function AgentsPage() {
   };
 
   const loadData = useCallback(async () => {
-    const [ecoRes, thrRes] = await Promise.all([
-      fetch('/api/agents/ecosystem').then(r => r.json()).catch(() => null),
-      fetch('/api/agents/thresholds').then(r => r.json()).catch(() => ({ thresholds: {} })),
-    ]);
-    if (ecoRes) setData(ecoRes);
-    setThresholds(thrRes.thresholds ?? {});
-    setLoading(false);
+    try {
+      const [ecoRes, thrRes] = await Promise.all([
+        fetch('/api/agents/ecosystem')
+          .then(async r => {
+            if (!r.ok) return null;
+            return r.json();
+          })
+          .catch(() => null),
+        fetch('/api/agents/thresholds')
+          .then(async r => {
+            if (!r.ok) return { thresholds: {} };
+            return r.json();
+          })
+          .catch(() => ({ thresholds: {} })),
+      ]);
+      if (ecoRes && Array.isArray(ecoRes.batchAgents) && ecoRes.batchAgents.length > 0) {
+        setData(ecoRes);
+      }
+      setThresholds(thrRes?.thresholds ?? {});
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);

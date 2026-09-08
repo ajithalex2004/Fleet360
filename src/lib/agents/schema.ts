@@ -32,6 +32,9 @@ async function _doInit(): Promise<void> {
   await prisma.$executeRawUnsafe(`
     DO $DDL$
     BEGIN
+      -- ── Ensure ai schema exists ───────────────────────────────────────────────
+      CREATE SCHEMA IF NOT EXISTS ai;
+
       -- ── agent_runs ─────────────────────────────────────────────────────────────
       CREATE TABLE IF NOT EXISTS agent_runs (
         id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
