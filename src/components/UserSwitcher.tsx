@@ -96,24 +96,46 @@ export default function UserSwitcher() {
 
   return (
     <div className="relative" ref={dropdownRef}>
-      {/* Trigger button */}
+      {/* Trigger button - Modern Option 1 Active Status Capsule */}
       <button
         onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-2.5 pl-2 pr-3 py-1.5 rounded-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] transition-all group"
+        className={`flex items-center gap-2.5 pl-2 pr-3 py-1.5 rounded-xl border transition-all duration-200 group cursor-pointer select-none ${
+          open
+            ? 'border-[var(--border-strong)] bg-[var(--bg-surface-elevated)] shadow-sm'
+            : 'border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]/70 hover:border-[var(--border-strong)] hover:bg-[var(--bg-surface-hover)]'
+        }`}
+        title={`${displayName} (${tLabel(user.roleName ?? '')})`}
       >
-        {/* Avatar */}
-        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-          {initials}
+        {/* Avatar with Active Online Status Dot */}
+        <div className="relative flex-shrink-0">
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 flex items-center justify-center text-white text-[11px] font-bold shadow-sm tracking-tight">
+            {initials}
+          </div>
+          <span className="absolute -bottom-0.5 -right-0.5 rtl:-right-auto rtl:-left-0.5 w-2 h-2 bg-emerald-500 rounded-full ring-2 ring-[var(--bg-surface)]" />
         </div>
-        <div className="text-left rtl:text-right hidden sm:block">
-          <div className="text-[var(--text-main)] text-xs font-medium leading-tight">{displayName}</div>
-          <div className="text-[var(--text-muted)] text-xs leading-tight">{tLabel(user.roleName ?? '')}</div>
+
+        {/* User details with refined typography hierarchy */}
+        <div className="text-left rtl:text-right hidden sm:flex flex-col min-w-0 pr-0.5">
+          <div className="text-[var(--text-main)] text-xs font-semibold leading-tight truncate max-w-[130px] group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors">
+            {displayName}
+          </div>
+          <div className="text-[var(--text-muted)] text-[11px] leading-tight truncate max-w-[130px] mt-0.5">
+            {tLabel(user.roleName ?? '')}
+          </div>
         </div>
-        {canSwitch && (
-          <svg className={`w-3.5 h-3.5 text-[var(--text-muted)] transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="m19 9-7 7-7-7" />
-          </svg>
-        )}
+
+        {/* Smooth animated chevron */}
+        <svg
+          className={`w-3.5 h-3.5 text-[var(--text-muted)] group-hover:text-[var(--text-main)] transition-transform duration-200 flex-shrink-0 ${
+            open ? 'rotate-180' : ''
+          }`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="m19 9-7 7-7-7" />
+        </svg>
       </button>
 
       {/* Dropdown */}

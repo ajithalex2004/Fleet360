@@ -21,7 +21,7 @@ function SessionFallback({ label }: { label: string }) {
  * SessionFallback / UserSwitcher / Sign-in based on live auth state.
  */
 function SsrPlaceholder() {
-  return <div className="w-32 h-9 rounded-full bg-slate-800/60 border border-white/10 animate-pulse" />;
+  return <div className="w-32 h-9 rounded-xl bg-slate-800/60 border border-white/10 animate-pulse" />;
 }
 
 export default function PlatformSessionSlot() {

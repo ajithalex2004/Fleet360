@@ -20,7 +20,7 @@ interface Props {
  * "Not signed in" once PermissionProvider has read localStorage.
  */
 function SessionSlotPlaceholder() {
-  return <div className="w-32 h-9 rounded-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] animate-pulse" />;
+  return <div className="w-32 h-9 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] animate-pulse" />;
 }
 
 function AuthSlot() {
