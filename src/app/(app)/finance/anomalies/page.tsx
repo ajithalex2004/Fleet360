@@ -140,7 +140,7 @@ export default function FinanceAnomaliesPage() {
   async function handleRunAudit() {
     setRunning(true);
     try {
-      await fetch('/api/agents/orchestrator', {
+      await fetch('/api/agents/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ agent_id: 'finance-anomaly', event_type: 'manual.trigger' }),
