@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'agent_id is required' }, { status: 400 });
     }
 
-    const result = await triggerFullScan(agent_id, tenant_id ?? 'default');
+    const result = await triggerFullScan(agent_id, tenant_id ?? tenantId);
     return NextResponse.json(result, { status: result.status === 'FAILED' ? 500 : 200 });
     } catch (err) {
     console.error('[agents/run]', err);
