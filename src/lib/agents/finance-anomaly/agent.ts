@@ -295,24 +295,27 @@ async function fetchDriverExpenses(tenantId: string): Promise<DriverExpenseRecor
 
 async function fetchTripTolls(tenantId: string): Promise<TripTollRecord[]> {
   try {
+    // toll_transactions is a genuinely new table (migration 20260910000037,
+    // design approved this session) — no toll-transaction log existed
+    // anywhere before. Real columns throughout, no fabricated fallbacks.
     const rows = await prisma.$queryRawUnsafe<any[]>(`
       SELECT
         t.id::text,
-        t.trip_id::text AS "tripId",
-        t.rental_agreement_id::text AS "rentalAgreementId",
-        t.vehicle_id::text AS "vehicleId",
+        t.trip_id AS "tripId",
+        t.rental_agreement_id AS "rentalAgreementId",
+        t.vehicle_id AS "vehicleId",
         COALESCE(v.vehicle_code, v.plate_number, 'VEH') AS "vehicleCode",
-        t.driver_id::text AS "driverId",
-        COALESCE(t.toll_gate_name, 'Al Barsha Salik') AS "tollGateName",
-        COALESCE(t.amount, 4.0)::float8 AS "tollAmount",
-        t.timestamp::text AS timestamp,
-        COALESCE(t.is_billed_to_customer, false) AS "isBilledToCustomer",
-        COALESCE(t.is_deducted_from_driver, false) AS "isDeductedFromDriver",
-        COALESCE(t.responsible_party, 'CUSTOMER') AS "responsibleParty"
+        t.driver_id AS "driverId",
+        t.toll_gate_name AS "tollGateName",
+        t.toll_amount::float8 AS "tollAmount",
+        t.occurred_at::text AS timestamp,
+        t.is_billed_to_customer AS "isBilledToCustomer",
+        t.is_deducted_from_driver AS "isDeductedFromDriver",
+        t.responsible_party AS "responsibleParty"
       FROM toll_transactions t
       LEFT JOIN vehicles v ON v.id = t.vehicle_id
       WHERE t.tenant_id = $1
-      ORDER BY t.timestamp DESC
+      ORDER BY t.occurred_at DESC
       LIMIT 500
     `, tenantId);
 
@@ -324,7 +327,7 @@ async function fetchTripTolls(tenantId: string): Promise<TripTollRecord[]> {
       vehicleCode: r.vehicleCode,
       driverId: r.driverId,
       tollGateName: r.tollGateName,
-      tollAmount: Number(r.tollAmount ?? 4.0),
+      tollAmount: Number(r.tollAmount ?? 0),
       timestamp: r.timestamp,
       isBilledToCustomer: Boolean(r.isBilledToCustomer),
       isDeductedFromDriver: Boolean(r.isDeductedFromDriver),
@@ -410,14 +413,19 @@ async function fetchContractAudits(tenantId: string): Promise<ContractAuditRecor
 
 async function fetchProcurementRecords(tenantId: string): Promise<ProcurementRecord[]> {
   try {
+    // purchase_orders is a genuinely new table (migration 20260910000037,
+    // design approved this session) — no PO model existed anywhere before.
+    // invoiced_amount is nullable (a PO may not be invoiced yet); 0 is the
+    // factually correct value for "nothing invoiced against this PO yet",
+    // and correctly never trips the invoiced-vs-authorized variance check.
     const rows = await prisma.$queryRawUnsafe<any[]>(`
       SELECT
         po.id::text,
-        COALESCE(po.po_number, po.id::text) AS "poNumber",
-        COALESCE(po.vendor_name, 'Supplier') AS "vendorName",
-        COALESCE(po.item_name, 'Tires & Spare Parts') AS "itemName",
-        COALESCE(po.authorized_amount, 5000)::float8 AS "authorizedPoAmount",
-        COALESCE(po.invoiced_amount, 6400)::float8 AS "invoicedAmount",
+        po.po_number AS "poNumber",
+        po.vendor_name AS "vendorName",
+        po.item_name AS "itemName",
+        po.authorized_po_amount::float8 AS "authorizedPoAmount",
+        po.invoiced_amount::float8 AS "invoicedAmount",
         po.po_date::text AS "poDate",
         po.invoice_date::text AS "invoiceDate"
       FROM purchase_orders po

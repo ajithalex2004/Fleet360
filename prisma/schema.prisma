@@ -6267,6 +6267,91 @@ enum PartnerPerformanceTier {
   @@schema("public")
 }
 
+// Salik/Darb toll-gate crossings. One row per gate ping — tag-per-vehicle,
+// matching how UAE toll tags actually work. vehicleId/driverId are plain
+// columns (no Prisma @relation) to avoid touching the shared Vehicle/Driver
+// models; the FK constraint is still enforced at the DB level in the
+// migration. tripId is a loose polymorphic reference (no FK) since trips
+// live in different tables per module (staff transport, school bus,
+// logistics, rental) — same pattern as OutsourceRequest.sourceReferenceId.
+model TollTransaction {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId  String   @map("tenant_id")
+
+  vehicleId         String  @map("vehicle_id")
+  driverId          String? @map("driver_id")
+  tripId            String? @map("trip_id")
+  rentalAgreementId String? @map("rental_agreement_id")
+
+  tollGateName String   @map("toll_gate_name")
+  tollProvider String   @default("SALIK") @map("toll_provider") // SALIK | DARB | OTHER
+  tollAmount   Decimal  @map("toll_amount") @db.Decimal(10, 2)
+  currency     String   @default("AED")
+  occurredAt   DateTime @map("occurred_at") @db.Timestamptz(6)
+
+  // CUSTOMER | DRIVER | FLEET
+  responsibleParty    String  @default("FLEET") @map("responsible_party")
+  isBilledToCustomer  Boolean @default(false) @map("is_billed_to_customer")
+  billedInvoiceId     String? @map("billed_invoice_id")
+  isDeductedFromDriver Boolean @default(false) @map("is_deducted_from_driver")
+  driverDeductionRef  String? @map("driver_deduction_ref")
+
+  // MANUAL | SALIK_API | DARB_API | IMPORT
+  source String  @default("MANUAL")
+  notes  String?
+
+  @@index([tenantId], map: "idx_toll_transactions_tenant")
+  @@index([vehicleId], map: "idx_toll_transactions_vehicle")
+  @@index([occurredAt], map: "idx_toll_transactions_occurred_at")
+  @@map("toll_transactions")
+  @@schema("public")
+}
+
+// Purchase orders and payable-against-PO tracking. vendorName/vendorId are
+// freeform (no vendor master table exists anywhere in this schema — matches
+// finance_payables' established pattern). sourceType/sourceId are a loose
+// polymorphic reference (e.g. tying a PO back to a specific WorkOrder),
+// same pattern as finance_payables' own sourceType/sourceId.
+model PurchaseOrder {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId  String   @map("tenant_id")
+
+  poNumber   String  @map("po_number")
+  vendorName String  @map("vendor_name")
+  vendorId   String? @map("vendor_id")
+
+  itemName  String @map("item_name")
+  lineItems Json   @default("[]") @map("line_items")
+  category  String? // PARTS | FUEL_BULK | EQUIPMENT | SERVICES | OTHER
+
+  authorizedPoAmount Decimal  @map("authorized_po_amount") @db.Decimal(12, 2)
+  invoicedAmount     Decimal? @map("invoiced_amount") @db.Decimal(12, 2)
+  currency           String   @default("AED")
+
+  poDate      DateTime  @map("po_date") @db.Date
+  invoiceDate DateTime? @map("invoice_date") @db.Date
+
+  // DRAFT | APPROVED | PARTIALLY_INVOICED | INVOICED | CLOSED | CANCELLED
+  status String @default("DRAFT")
+
+  sourceType String? @map("source_type")
+  sourceId   String? @map("source_id")
+
+  requestedBy String? @map("requested_by")
+  approvedBy  String? @map("approved_by")
+  notes       String?
+
+  @@unique([tenantId, poNumber], map: "uq_purchase_orders_tenant_po_number")
+  @@index([tenantId], map: "idx_purchase_orders_tenant")
+  @@index([status], map: "idx_purchase_orders_status")
+  @@map("purchase_orders")
+  @@schema("public")
+}
+
 model TransportPartner {
   id                    String                    @id @default(uuid())
   createdAt             DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
