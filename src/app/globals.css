@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 
 /* Binds Tailwind's dark: variant to the app's own html.dark toggle (set by
    ThemeProvider from localStorage) instead of Tailwind v4's default, which
@@ -6,6 +7,13 @@
    dark:* utility class flips on the visitor's OS setting and desyncs from
    the in-app Light/Dark switch. */
 @custom-variant dark (&:where(.dark, .dark *));
+
+/* Arabic RTL & Typography */
+html[lang="ar"], html[dir="rtl"] {
+  font-family: 'Cairo', system-ui, -apple-system, sans-serif;
+  letter-spacing: normal;
+}
+
 
 /* ════════════════════════════════════════════════════════════════════════════
    LINEAR / VERCEL MODERN ENTERPRISE DESIGN SYSTEM

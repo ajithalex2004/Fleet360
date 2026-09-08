@@ -293,6 +293,23 @@ const arabicLabels: Record<string, string> = {
   'Paperless Ops':            'عمليات بلا ورق',
   'Certifications':           'الشهادات',
   'Methodology Settings':     'إعدادات المنهجية',
+  // ── Nav item labels — AI & Transport Services ────────────────
+  'AI Agents':                'وكلاء الذكاء الاصطناعي',
+  'AI Agent Ecosystem':       'منظومة وكلاء الذكاء الاصطناعي',
+  'Operations Assistant':     'المساعد التشغيلي الذكي',
+  'AI Copilot':               'المساعد الذكي',
+  'Predictive Maintenance':   'الصيانة التنبؤية',
+  'Driver Coaching':          'تدريب السائقين',
+  'Demand Forecasting':       'التنبؤ بالطلب',
+  'Incident Auto-Triage':     'فرز الحوادث التلقائي',
+  'Smart Dispatch':           'التوزيع الذكي',
+  'Transport Services':       'خدمات النقل',
+  'Rent-A-Car':               'تأجير السيارات',
+  'Staff Transport':          'نقل الموظفين',
+  'School Bus':               'الحافلات المدرسية',
+  'Freight & Logistics':      'الشحن واللوجستيات',
+  'Corporate Leasing':        'التأجير المؤسسي',
+  'VIP Limousine':            'الليموزين الفاخر',
   // ── Common page phrases ───────────────────────────────────
   'Loading…':               '...جار التحميل',
   'No data found':          'لا توجد بيانات',
@@ -318,19 +335,24 @@ const arabicLabels: Record<string, string> = {
 };
 
 const LanguageContext = createContext<LanguageContextValue>({
-  language: 'en',
-  isRTL: false,
+  language: 'ar',
+  isRTL: true,
   setLanguage: () => {},
   t: (key) => key,
   tLabel: (english) => english,
 });
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguageState] = useState<Language>('en');
+  // Default to 'ar' for Arabic-First platform experience
+  const [language, setLanguageState] = useState<Language>('ar');
 
   useEffect(() => {
     const saved = localStorage.getItem('xlai_language') as Language | null;
-    if (saved === 'ar' || saved === 'en') setLanguageState(saved);
+    if (saved === 'ar' || saved === 'en') {
+      setLanguageState(saved);
+    } else {
+      setLanguageState('ar');
+    }
   }, []);
 
   useEffect(() => {

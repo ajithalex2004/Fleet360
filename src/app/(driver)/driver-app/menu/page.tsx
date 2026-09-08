@@ -24,6 +24,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface ShiftInfo {
   id: string;
@@ -85,6 +86,7 @@ const ACCENT_TEXT: Record<MenuCard['accent'], string> = {
 
 export default function MenuPage() {
   const router = useRouter();
+  const { language, setLanguage, t } = useLanguage();
   const [shift, setShift] = useState<ShiftInfo | null | undefined>(undefined);
   const [signingOut, setSigningOut] = useState(false);
   const [endingShift, setEndingShift] = useState(false);
@@ -117,9 +119,7 @@ export default function MenuPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // Fetch recent fuel + expense entries for the active shift.
-  // Closes the loop on the "During the shift" cards so the driver
-  // can verify a fill-up was logged without leaving the menu.
+  // Fetch recent fuel + expense entries for this shift
   useEffect(() => {
     if (!shift?.id) {
       setRecent(undefined);
@@ -145,17 +145,17 @@ export default function MenuPage() {
     return () => { cancelled = true; };
   }, [shift?.id]);
 
-  // End the current shift (but keep the session cookie). The driver
-  // lands on /shift-ended which offers "start a new shift" or "sign out".
+  // End the current shift (but keep the session cookie).
   const endShift = useCallback(async () => {
     if (endingShift || signingOut) return;
     if (!shift?.id) {
-      // No active shift — just route to the shift-ended page.
       router.push('/driver-app/shift-ended');
       return;
     }
     if (!window.confirm(
-      'End this shift? Any fuel or expense entries saved after this point will attach to your next shift.',
+      language === 'ar'
+        ? 'إنهاء هذه الوردية؟ أي مدخلات وقود أو مصروفات مسجلة بعد هذه النقطة سترفق بالوردية التالية.'
+        : 'End this shift? Any fuel or expense entries saved after this point will attach to your next shift.',
     )) {
       return;
     }
@@ -171,13 +171,14 @@ export default function MenuPage() {
       window.alert(e instanceof Error ? e.message : 'end failed');
       setEndingShift(false);
     }
-  }, [shift, endingShift, signingOut, router]);
+  }, [shift, endingShift, signingOut, router, language]);
 
-  // Sign out: close the shift AND clear the session cookies. The
-  // user goes back to the launcher with a clean state.
+  // Sign out: close the shift AND clear the session cookies.
   const signOut = useCallback(async () => {
     if (signingOut || endingShift) return;
-    if (!window.confirm('Sign out? Your active shift will be closed.')) return;
+    if (!window.confirm(
+      language === 'ar' ? 'تسجيل الخروج؟ سيتم إغلاق ورديتك النشطة.' : 'Sign out? Your active shift will be closed.',
+    )) return;
     setSigningOut(true);
     try {
       // 1. Close the active shift (best-effort).
@@ -201,75 +202,84 @@ export default function MenuPage() {
     } catch {
       setSigningOut(false);
     }
-  }, [shift, signingOut, endingShift]);
+  }, [shift, signingOut, endingShift, language]);
 
-  // Primary actions (top row) — high frequency during a shift
+  // Primary actions (top row)
   const primaryCards: MenuCard[] = [
     {
       href: '/driver-app/shift-checklist',
       emoji: '🛡️',
-      title: 'Driver Checklist',
+      title: language === 'ar' ? 'فحص ما قبل الرحلة' : 'Driver Checklist',
       subtitle: shift?.hasChecklist
-        ? 'Update your shift checklist'
-        : 'Complete your shift checklist',
+        ? (language === 'ar' ? 'تم اعتماد فحص السلامة بنجاح ✓' : 'Update your shift checklist')
+        : (language === 'ar' ? 'إجراء فحص السلامة الإلزامي' : 'Complete your shift checklist'),
       accent: 'violet',
-      badge: shift?.hasChecklist ? 'Done' : 'Required',
+      badge: shift?.hasChecklist
+        ? (language === 'ar' ? 'مكتمل' : 'Done')
+        : (language === 'ar' ? 'إلزامي' : 'Required'),
     },
     {
       href: '/driver-app/today',
       emoji: '📅',
-      title: "Today's Trips",
-      subtitle: 'View assigned trips and DVIR history',
+      title: language === 'ar' ? 'رحلات اليوم' : "Today's Trips",
+      subtitle: language === 'ar' ? 'عرض الرحلات المخصصة وسجل DVIR' : 'View assigned trips and DVIR history',
       accent: 'sky',
     },
   ];
 
-  // Secondary actions (middle row) — shift-level data capture
+  // Secondary actions (middle row)
   const secondaryCards: MenuCard[] = [
     {
       href: '/driver-app/fuel-entry',
       emoji: '⛽',
-      title: 'Fuel Entry',
-      subtitle: 'Log a fill-up with bill photo and location',
+      title: language === 'ar' ? 'تعبئة الوقود' : 'Fuel Entry',
+      subtitle: language === 'ar' ? 'تسجيل إيصال وتكلفة الوقود والموقع' : 'Log a fill-up with bill photo and location',
       accent: 'amber',
     },
     {
       href: '/driver-app/expenses',
       emoji: '🧾',
-      title: 'Expenses',
-      subtitle: 'Tolls, parking, meals, fines per trip',
+      title: language === 'ar' ? 'المصروفات والرسوم' : 'Expenses',
+      subtitle: language === 'ar' ? 'بوابات سالك والمواقف والوجبات' : 'Tolls, parking, meals, fines per trip',
       accent: 'emerald',
     },
     {
       href: '/driver-app/report',
       emoji: '🛠️',
-      title: 'Report Issue',
-      subtitle: 'Maintenance, renewal, washing, accident, breakdown, complaint',
+      title: language === 'ar' ? 'الإبلاغ عن عطل / حادث' : 'Report Issue',
+      subtitle: language === 'ar' ? 'صيانة، حوادث، أعطال، أو بلاغات' : 'Maintenance, renewal, washing, accident, breakdown',
       accent: 'rose',
     },
   ];
 
-  // Tertiary actions (bottom row) — history & tools
+  // Tertiary actions (bottom row)
   const tertiaryCards: MenuCard[] = [
     {
       href: '/driver-app/shift-history',
       emoji: '📜',
-      title: 'Shift History',
-      subtitle: 'Past shifts with checklist + fuel + expenses',
+      title: language === 'ar' ? 'سجل الورديات' : 'Shift History',
+      subtitle: language === 'ar' ? 'الورديات السابقة مع سجلات الفحص والوقود' : 'Past shifts with checklist + fuel + expenses',
       accent: 'slate',
     },
     {
       href: '/driver-app/trip-history',
       emoji: '🛣️',
-      title: 'Trip History',
-      subtitle: 'Completed trips with DVIR + costs',
+      title: language === 'ar' ? 'سجل الرحلات' : 'Trip History',
+      subtitle: language === 'ar' ? 'الرحلات المكتملة مع سجلات DVIR والتكاليف' : 'Completed trips with DVIR + costs',
       accent: 'slate',
     },
     {
       href: '/driver-app/reports',
       emoji: '📋',
-      title: 'My Reports',
-      subtitle: 'Requests you filed + incidents you logged',
+      title: language === 'ar' ? 'تقارير السائق' : 'Driver Reports',
+      subtitle: language === 'ar' ? 'عرض وحفظ وتصدير تقارير السائق' : 'View, save, filter, and export driver reports',
+      accent: 'slate',
+    },
+    {
+      href: '/driver-app/behavior',
+      emoji: '🎯',
+      title: language === 'ar' ? 'أداء القيادة' : 'Driver Behavior',
+      subtitle: language === 'ar' ? 'تقييم السلامة، الكبح المفاجئ، والسرعة' : 'Speed, braking, idling, and performance score',
       accent: 'slate',
     },
   ];
@@ -279,10 +289,16 @@ export default function MenuPage() {
       key={c.href}
       type="button"
       onClick={() => router.push(c.href)}
-      className={`group relative flex flex-col items-start gap-2 rounded-2xl border px-4 py-4 text-left transition ${ACCENT_CLASSES[c.accent]}`}
+      className={`group relative flex items-start gap-3 rounded-2xl border p-4 text-start transition active:scale-95 ${ACCENT_CLASSES[c.accent]}`}
     >
       {c.badge && (
-        <span className={`absolute right-3 top-3 rounded-full bg-black/30 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider ${ACCENT_TEXT[c.accent]}`}>
+        <span
+          className={`absolute end-3 top-3 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+            c.badge === 'Done' || c.badge === 'مكتمل'
+              ? 'bg-emerald-500/20 text-emerald-300'
+              : 'bg-amber-500/20 text-amber-300'
+          }`}
+        >
           {c.badge}
         </span>
       )}
@@ -299,29 +315,43 @@ export default function MenuPage() {
       <header className="border-b border-white/10 bg-slate-900/95 px-4 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-[11px] uppercase tracking-wider text-slate-400">Driver App</div>
-            <div className="text-xl font-bold text-white">Menu</div>
-          </div>
-          {shift && (
-            <div className="text-right">
-              <div className="text-[10px] uppercase tracking-wider text-slate-400">Shift started</div>
-              <div className="text-xs font-medium text-emerald-300">
-                {new Date(shift.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </div>
+            <div className="text-[11px] uppercase tracking-wider text-slate-400">
+              {language === 'ar' ? 'تطبيق السائق' : 'Driver App'}
             </div>
-          )}
+            <div className="text-xl font-bold text-white">
+              {language === 'ar' ? 'القائمة الرئيسية' : 'Menu'}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setLanguage(language === 'ar' ? 'en' : 'ar')}
+              className="flex items-center gap-1 rounded-lg border border-white/10 bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-200 hover:bg-slate-700 active:scale-95 transition"
+            >
+              <span>{language === 'ar' ? '🇦🇪' : '🇬🇧'}</span>
+              <span>{language === 'ar' ? 'العربية' : 'EN'}</span>
+            </button>
+            {shift && (
+              <div className="text-right">
+                <div className="text-[10px] uppercase tracking-wider text-slate-400">
+                  {language === 'ar' ? 'بدء الوردية' : 'Shift started'}
+                </div>
+                <div className="text-xs font-medium text-emerald-300">
+                  {new Date(shift.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
       <main className="space-y-3 px-4 py-4">
         {shift === null && (
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
-            No active shift. <button
+            {language === 'ar' ? 'لا توجد وردية نشطة. ' : 'No active shift. '}
+            <button
               type="button"
               onClick={() => router.push('/driver-app/shift-checklist')}
-              className="underline"
-            >
-              Start a new shift
             </button>
           </div>
         )}

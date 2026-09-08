@@ -19,7 +19,7 @@
  *   Verdict aggregation
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { PrismaClient } from '@prisma/client';
 import { validateResourceAssignment, type ValidateAssignmentInput } from '@/lib/bus-ops/validate-assignment';
 
@@ -67,6 +67,15 @@ function buildPrismaMock(facts: MockFacts): PrismaClient {
 
 const T   = 'tenant-A';
 const now = new Date('2026-08-14T09:00:00Z');
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(now);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 const baseInput = (overrides: Partial<ValidateAssignmentInput> = {}): ValidateAssignmentInput => ({
   tenantId:      T,
@@ -397,6 +406,7 @@ describe('verdict aggregation', () => {
       vehicle: okVehicle,
       driver:  okDriver,
       hasShiftForDate: true,
+      latestGpsPingAt: new Date(now.getTime() - 5 * 60_000),
     });
     const res = await validateResourceAssignment(baseInput(), prisma);
     expect(res.verdict).toBe('PASS');
