@@ -54,7 +54,7 @@ export const NAV_CATEGORIES: NavCategoryDef[] = [
     id: 'intelligence',
     label: 'AI & Intelligence',
     shortLabel: 'Intelligence',
-    icon: Bot,
+    icon: Sparkles,
     description: 'Autonomous copilot agents, platform governance & service triage',
   },
   {
@@ -138,7 +138,7 @@ export const MODULES: ModuleDef[] = [
     category: 'intelligence',
     label: 'AI agents',
     href: '/agents',
-    icon: Bot,
+    icon: Sparkles,
   },
   {
     id: 'ai-platform',

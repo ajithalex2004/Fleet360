@@ -59,7 +59,7 @@ const MODULES: ModuleDef[] = [
     category: 'intelligence',
     description: '10 autonomous AI copilots — predictive maintenance, smart dispatch optimizer, accident triage, WhatsApp RAC booking assistant, and compliance ratchets.',
     href: '/agents',
-    icon: <Bot className="w-5 h-5 text-violet-400" />,
+    icon: <Sparkles className="w-5 h-5 text-violet-400" />,
     gradient: 'from-violet-500/20 to-purple-500/10',
     borderAccent: 'hover:border-violet-500/50',
     tags: ['10 AI Agents', 'Predictive Triage', 'Smart Dispatch', 'WhatsApp AI'],

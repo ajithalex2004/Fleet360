@@ -10,7 +10,7 @@ import ThemeToggle from '@/components/ThemeToggle';
 
 interface Props {
   moduleName: string;
-  moduleIcon?: string;
+  moduleIcon?: React.ReactNode;
   accentColor?: string;
 }
 

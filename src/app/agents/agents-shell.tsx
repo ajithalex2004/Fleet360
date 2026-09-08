@@ -3,6 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { Sparkles } from 'lucide-react';
 import PlatformHomeBar from '@/components/PlatformHomeBar';
 import ModuleGuard from '@/components/ModuleGuard';
 
@@ -17,7 +18,7 @@ const GLOBAL_MODULES = [
   { href: '/dispatch',   label: 'Dispatch',      icon: '📡' },
   { href: '/incidents',  label: 'Incidents',     icon: '🚑' },
   { href: '/finance',    label: 'Finance',       icon: '💰' },
-  { href: '/agents',     label: 'AI Agents',     icon: '🤖' },
+  { href: '/agents',     label: 'AI Agents',     icon: '✨' },
   { href: '/admin',      label: 'Admin',         icon: '⚙️' },
 ];
 
@@ -25,11 +26,11 @@ export default function AgentsShell({ children }: { children: React.ReactNode })
   const pathname = usePathname();
 
   return (
-    <ModuleGuard moduleId="agents" moduleName="AI Agent Ecosystem" moduleIcon="🤖">
+    <ModuleGuard moduleId="agents" moduleName="AI Agent Ecosystem" moduleIcon={<Sparkles className="w-3.5 h-3.5 text-white" />}>
       <div className="flex flex-col h-screen bg-[var(--bg-canvas)]">
         <PlatformHomeBar
           moduleName="AI Agent Ecosystem"
-          moduleIcon="🤖"
+          moduleIcon={<Sparkles className="w-3.5 h-3.5 text-white" />}
           accentColor="from-violet-500 to-purple-600"
         />
         <div className="flex flex-1 overflow-hidden">
@@ -38,7 +39,9 @@ export default function AgentsShell({ children }: { children: React.ReactNode })
             {/* Module header */}
             <div className="p-4 border-b border-[var(--border-subtle)]">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-base">🤖</div>
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white shadow-sm">
+                  <Sparkles className="w-4 h-4 text-white" />
+                </div>
                 <div>
                   <p className="text-[var(--text-main)] font-semibold text-xs">AI Agents</p>
                   <p className="text-[var(--text-faint)] text-[10px]">Smart Mobility</p>
