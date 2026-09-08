@@ -1,7 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import UserSwitcher from '@/components/UserSwitcher';
@@ -42,7 +41,7 @@ function AuthSlot() {
   );
 }
 
-import { Bot, ArrowLeft, Search } from 'lucide-react';
+import { ArrowLeft, Search } from 'lucide-react';
 
 export default function PlatformHomeBar({
   moduleName,
@@ -51,8 +50,6 @@ export default function PlatformHomeBar({
 }: Props) {
   const { tenant } = usePermissions();
   const { tLabel } = useLanguage();
-  const pathname = usePathname();
-  const isAgentsPage = pathname?.startsWith('/agents');
 
   const openPalette = () => {
     if (typeof window !== 'undefined') {
@@ -62,7 +59,7 @@ export default function PlatformHomeBar({
 
   return (
     <div className="flex items-center justify-between px-4 py-2 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] z-50 backdrop-blur-md flex-shrink-0 transition-colors">
-      {/* Left: back to platform home + AI Agents quick link + Command Palette */}
+      {/* Left: back to platform home + Command Palette */}
       <div className="flex items-center gap-2">
         <Link
           href="/platform"
@@ -72,16 +69,6 @@ export default function PlatformHomeBar({
           <span className="hidden lg:inline whitespace-nowrap">FLEET360</span>
           <span className="lg:hidden">{tLabel('Home')}</span>
         </Link>
-        {/* AI Agents quick-access — visible on every module page except /agents itself */}
-        {!isAgentsPage && (
-          <Link
-            href="/agents"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-500/10 hover:bg-violet-500/15 border border-violet-500/20 text-violet-400 text-xs font-medium transition-all"
-          >
-            <Bot className="w-3.5 h-3.5" />
-            <span className="whitespace-nowrap">{tLabel('AI Agents')}</span>
-          </Link>
-        )}
 
         {/* Global ⌘K Omni-Search Button */}
         <button
