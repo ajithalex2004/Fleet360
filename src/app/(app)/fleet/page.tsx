@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { CarFront, Gauge, ArrowRight } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useFetchedData, invalidate, invalidatePrefix } from '@/hooks/useFetchedData';
 import type { MaintenanceRiskScore } from '@/types/maintenance';
 
@@ -33,6 +34,8 @@ const EMPTY_STATS: FleetStats = {
 interface RiskApiResponse { scores: MaintenanceRiskScore[] }
 
 export default function FleetDashboard() {
+  const { tLabel } = useLanguage();
+
   // Session-scoped fetch cache — 1st visit hits the cached server endpoint
   // (unstable_cache + private s-maxage), 2nd visit in the same tab is
   // instant from the in-memory Map. `refresh` busts the session cache
@@ -80,8 +83,8 @@ export default function FleetDashboard() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Fleet Dashboard"
-        subtitle="Overview of your fleet operations"
+        title={tLabel("Fleet Dashboard")}
+        subtitle={tLabel("Overview of your fleet operations")}
         icon={CarFront}
         accent="amber"
       />
@@ -100,7 +103,7 @@ export default function FleetDashboard() {
           { label: 'Expiring docs (30d)', value: stats.expiringDocs,   tone: stats.expiringDocs > 0 ? 'from-rose-500 to-pink-600' : 'from-slate-500 to-slate-700' },
         ].map(card => (
           <div key={card.label} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.tone} p-5 shadow-sm`}>
-            <p className="text-sm font-medium text-white/80">{card.label}</p>
+            <p className="text-sm font-medium text-white/80">{tLabel(card.label)}</p>
             <p className="mt-3 text-3xl font-bold text-white">{card.value}</p>
           </div>
         ))}
@@ -108,11 +111,11 @@ export default function FleetDashboard() {
 
       {/* Fleet Health Summary */}
       <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6">
-        <h2 className="text-xl font-bold text-[var(--text-main)] mb-6">Fleet Health Summary</h2>
+        <h2 className="text-xl font-bold text-[var(--text-main)] mb-6">{tLabel("Fleet Health Summary")}</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-[var(--text-muted)] text-sm">Vehicle Availability</p>
+              <p className="text-[var(--text-muted)] text-sm">{tLabel("Vehicle Availability")}</p>
               <span className="text-[var(--text-main)] font-medium">92%</span>
             </div>
             <div className="w-full bg-[var(--bg-surface-hover)] rounded-full h-2">
@@ -121,7 +124,7 @@ export default function FleetDashboard() {
           </div>
           <div>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-[var(--text-muted)] text-sm">Maintenance Status</p>
+              <p className="text-[var(--text-muted)] text-sm">{tLabel("Maintenance Status")}</p>
               <span className="text-[var(--text-main)] font-medium">88%</span>
             </div>
             <div className="w-full bg-[var(--bg-surface-hover)] rounded-full h-2">
@@ -130,7 +133,7 @@ export default function FleetDashboard() {
           </div>
           <div>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-[var(--text-muted)] text-sm">Compliance Status</p>
+              <p className="text-[var(--text-muted)] text-sm">{tLabel("Compliance Status")}</p>
               <span className="text-[var(--text-main)] font-medium">85%</span>
             </div>
             <div className="w-full bg-[var(--bg-surface-hover)] rounded-full h-2">
@@ -146,15 +149,15 @@ export default function FleetDashboard() {
           <div>
             <h2 className="text-xl font-bold text-[var(--text-main)] flex items-center gap-2">
               <Gauge className="w-5 h-5 text-orange-400" />
-              Risk Heat
+              {tLabel("Risk Heat")}
             </h2>
-            <p className="text-[var(--text-muted)] text-sm mt-0.5">Top 5 highest-risk vehicles — maintenance score 0–100</p>
+            <p className="text-[var(--text-muted)] text-sm mt-0.5">{tLabel("Top 5 highest-risk vehicles — maintenance score 0–100")}</p>
           </div>
           <Link
             href="/maintenance/risk"
             className="flex items-center gap-1.5 text-xs text-orange-400 hover:text-orange-300 transition-colors"
           >
-            View all <ArrowRight className="w-3.5 h-3.5" />
+            {tLabel("View all")} <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
 
@@ -163,7 +166,7 @@ export default function FleetDashboard() {
             <div className="w-6 h-6 border-2 border-[var(--border-strong)] border-t-orange-500 rounded-full animate-spin" />
           </div>
         ) : top5Risk.length === 0 ? (
-          <p className="text-[var(--text-faint)] text-sm text-center py-6">No vehicle risk data available</p>
+          <p className="text-[var(--text-faint)] text-sm text-center py-6">{tLabel("No vehicle risk data available")}</p>
         ) : (
           <div className="space-y-2">
             {top5Risk.map((rs, i) => {
@@ -197,25 +200,25 @@ export default function FleetDashboard() {
       {/* Document Expiry Alert Table */}
       <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6">
         <div className="mb-6">
-          <h2 className="text-xl font-bold text-[var(--text-main)]">Document Expiry Alert</h2>
-          <p className="text-[var(--text-muted)] text-sm mt-1">Top 5 upcoming expirations in the next 30 days</p>
+          <h2 className="text-xl font-bold text-[var(--text-main)]">{tLabel("Document Expiry Alert")}</h2>
+          <p className="text-[var(--text-muted)] text-sm mt-1">{tLabel("Top 5 upcoming expirations in the next 30 days")}</p>
         </div>
 
         {expiringDocs.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-4xl mb-3">📭</div>
-            <p className="text-[var(--text-muted)]">No expiring documents in the next 30 days</p>
+            <p className="text-[var(--text-muted)]">{tLabel("No expiring documents in the next 30 days")}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-[var(--bg-surface)]/50">
                 <tr className="border-b border-[var(--border-subtle)]">
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Vehicle</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">License Plate</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Document Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Expiry Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">Days Remaining</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">{tLabel("Vehicle")}</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">{tLabel("License Plate")}</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">{tLabel("Document Type")}</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">{tLabel("Expiry Date")}</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">{tLabel("Days Remaining")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -237,7 +240,7 @@ export default function FleetDashboard() {
                             : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                         }`}
                       >
-                        {doc.daysRemaining} days
+                        {doc.daysRemaining} {tLabel("days")}
                       </span>
                     </td>
                   </tr>
