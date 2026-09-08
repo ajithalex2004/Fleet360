@@ -36,6 +36,7 @@
 
 import React from 'react';
 import type { LucideIcon } from 'lucide-react';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 /**
  * Brand-rolled accents (royal-maritime palette).
@@ -72,7 +73,10 @@ interface PageHeaderProps {
 }
 
 export function PageHeader({ title, subtitle, icon: Icon, accent = 'default', actions }: PageHeaderProps) {
+  const { tLabel } = useLanguage();
   const a = ACCENTS[accent] ?? ACCENTS.default;
+  const translatedTitle = tLabel(title);
+  const translatedSubtitle = subtitle ? tLabel(subtitle) : undefined;
   return (
     <div className="flex items-start justify-between flex-wrap gap-4 pb-5 border-b border-[var(--border-subtle)]">
       <div className="flex items-start gap-3.5 min-w-0">
@@ -82,8 +86,8 @@ export function PageHeader({ title, subtitle, icon: Icon, accent = 'default', ac
           </div>
         )}
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">{title}</h1>
-          {subtitle && <p className="text-xs text-[var(--text-muted)] mt-1 max-w-3xl leading-relaxed">{subtitle}</p>}
+          <h1 className="text-2xl font-bold text-[var(--text-main)] tracking-tight">{translatedTitle}</h1>
+          {translatedSubtitle && <p className="text-xs text-[var(--text-muted)] mt-1 max-w-3xl leading-relaxed">{translatedSubtitle}</p>}
         </div>
       </div>
       {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
@@ -102,11 +106,14 @@ interface KpiCardProps {
 }
 
 export function KpiCard({ label, value, sub, icon: Icon, accent = 'default' }: KpiCardProps) {
+  const { tLabel } = useLanguage();
   const a = ACCENTS[accent] ?? ACCENTS.default;
+  const translatedLabel = tLabel(label);
+  const translatedSub = sub ? tLabel(sub) : undefined;
   return (
     <div className="rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4 shadow-sm hover:border-[var(--border-strong)] transition-all duration-150">
       <div className="flex items-start justify-between gap-2 mb-2.5">
-        <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-semibold">{label}</span>
+        <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-semibold">{translatedLabel}</span>
         {Icon && (
           <div className={`w-7 h-7 rounded-lg ${a.bg} flex items-center justify-center`}>
             <Icon className={`w-3.5 h-3.5 ${a.text}`} strokeWidth={2} />
@@ -114,7 +121,7 @@ export function KpiCard({ label, value, sub, icon: Icon, accent = 'default' }: K
         )}
       </div>
       <div className="text-2xl font-bold font-mono text-[var(--text-main)] tracking-tight">{value}</div>
-      {sub && <div className="text-xs text-[var(--text-muted)] mt-1 font-medium">{sub}</div>}
+      {translatedSub && <div className="text-xs text-[var(--text-muted)] mt-1 font-medium">{translatedSub}</div>}
     </div>
   );
 }
@@ -132,10 +139,13 @@ interface PanelProps {
 }
 
 export function Panel({ title, subtitle, icon: Icon, accent = 'default', actions, children, className = '' }: PanelProps) {
+  const { tLabel } = useLanguage();
   const a = ACCENTS[accent] ?? ACCENTS.default;
+  const translatedTitle = title ? tLabel(title) : undefined;
+  const translatedSubtitle = subtitle ? tLabel(subtitle) : undefined;
   return (
     <section className={`rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] shadow-sm overflow-hidden ${className}`}>
-      {(title || actions) && (
+      {(translatedTitle || actions) && (
         <header className="flex items-start justify-between gap-3 px-5 py-3.5 border-b border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]">
           <div className="flex items-start gap-3 min-w-0">
             {Icon && (
@@ -144,8 +154,8 @@ export function Panel({ title, subtitle, icon: Icon, accent = 'default', actions
               </div>
             )}
             <div className="min-w-0">
-              {title && <h3 className="text-sm font-semibold text-[var(--text-main)]">{title}</h3>}
-              {subtitle && <p className="text-xs text-[var(--text-muted)] mt-0.5">{subtitle}</p>}
+              {translatedTitle && <h3 className="text-sm font-semibold text-[var(--text-main)]">{translatedTitle}</h3>}
+              {translatedSubtitle && <p className="text-xs text-[var(--text-muted)] mt-0.5">{translatedSubtitle}</p>}
             </div>
           </div>
           {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
@@ -175,11 +185,14 @@ const PILLS: Record<string, string> = {
 };
 
 export function StatusPill({ status, label }: { status?: string; label?: string }) {
-  const key = (status ?? '').toLowerCase().replace(/[\s-]/g, '_');
+  const { tLabel } = useLanguage();
+  const rawStatus = status ?? '—';
+  const key = rawStatus.toLowerCase().replace(/[\s-]/g, '_');
   const cls = PILLS[key] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)] border-[var(--border-strong)]';
+  const displayLabel = label ? tLabel(label) : tLabel(rawStatus.toUpperCase());
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono border ${cls}`}>
-      {label ?? (status ?? '—').toUpperCase()}
+      {displayLabel}
     </span>
   );
 }
@@ -202,6 +215,7 @@ interface TabStripProps {
 }
 
 export function TabStrip({ tabs, activeId, onChange, accent = 'default', label }: TabStripProps) {
+  const { tLabel } = useLanguage();
   const a = ACCENTS[accent] ?? ACCENTS.default;
 
   const move = (dir: 1 | -1 | 'first' | 'last') => {
@@ -227,7 +241,7 @@ export function TabStrip({ tabs, activeId, onChange, accent = 'default', label }
   return (
     <div
       role="tablist"
-      aria-label={label}
+      aria-label={tLabel(label)}
       onKeyDown={onKeyDown}
       className="flex items-center gap-1.5 border-b border-[var(--border-subtle)] -mb-px overflow-x-auto pb-1"
     >
@@ -254,7 +268,7 @@ export function TabStrip({ tabs, activeId, onChange, accent = 'default', label }
             ].join(' ')}
           >
             {Icon && <Icon className={`w-4 h-4 ${isActive ? 'text-cyan-400' : 'text-[var(--text-muted)]'}`} strokeWidth={2} />}
-            {t.label}
+            {tLabel(t.label)}
             {t.badge && (
               <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
                 {t.badge}

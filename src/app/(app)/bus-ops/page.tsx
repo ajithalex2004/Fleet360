@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { PageHeader, Panel, StatusPill } from '@/components/bus-ops/theme';
 import { useFetchedData } from '@/hooks/useFetchedData';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export default function BusOpsDashboard() {
   // Session-scoped fetch cache — 1st visit hits the cached server endpoints
@@ -19,6 +20,7 @@ export default function BusOpsDashboard() {
   const { data: requestsRaw,  loading: requestsLoading }  = useFetchedData<any[]>('/api/bus-ops/transport-requests');
   const { data: me } = useFetchedData<{ role?: string }>('/api/auth/me');
   const isTenantAdmin = me?.role === 'TENANT_ADMIN' || me?.role === 'SUPER_ADMIN';
+  const { tLabel } = useLanguage();
 
   const routes    = Array.isArray(routesRaw)    ? routesRaw    : [];
   const schedules = Array.isArray(schedulesRaw) ? schedulesRaw : [];
@@ -35,7 +37,7 @@ export default function BusOpsDashboard() {
   const openIncidents = incidents.filter((i: any) => i.status === 'OPEN');
   const pendingReqs   = requests.filter((r: any) => r.status === 'PENDING');
 
-  if (loading) return <div className="flex items-center justify-center h-full"><div className="text-[var(--text-muted)] animate-pulse">Loading dashboard...</div></div>;
+  if (loading) return <div className="flex items-center justify-center h-full"><div className="text-[var(--text-muted)] animate-pulse">{tLabel('Loading dashboard...')}</div></div>;
 
   return (
     <div className="space-y-6">
@@ -58,7 +60,7 @@ export default function BusOpsDashboard() {
         ].map(card => (
           <Link key={card.label} href={card.href} className={`block relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.tone} p-4 shadow-sm`}>
             <p className="text-2xl font-bold text-white">{card.value}</p>
-            <p className="mt-1 text-xs font-medium text-white/80">{card.label}</p>
+            <p className="mt-1 text-xs font-medium text-white/80">{tLabel(card.label)}</p>
           </Link>
         ))}
       </div>
@@ -70,13 +72,13 @@ export default function BusOpsDashboard() {
         accent="violet"
         actions={
           <Link href="/bus-ops/schedules" className="text-xs text-violet-300 hover:text-violet-200 inline-flex items-center gap-1">
-            View all <ArrowRight className="w-3.5 h-3.5" />
+            {tLabel('View all')} <ArrowRight className="w-3.5 h-3.5 rtl:rotate-180" />
           </Link>
         }
       >
         {todayTrips.length === 0 ? (
           <div className="text-center text-[var(--text-muted)] py-6 text-sm">
-            No trips scheduled for today. <Link href="/bus-ops/schedules" className="text-violet-300 hover:underline">Create one.</Link>
+            {tLabel('No trips scheduled for today.')} <Link href="/bus-ops/schedules" className="text-violet-300 hover:underline">{tLabel('Create one.')}</Link>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -107,12 +109,12 @@ export default function BusOpsDashboard() {
           accent="rose"
           actions={
             <Link href="/bus-ops/incidents" className="text-xs text-rose-300 hover:text-rose-200 inline-flex items-center gap-1">
-              View all <ArrowRight className="w-3.5 h-3.5" />
+              {tLabel('View all')} <ArrowRight className="w-3.5 h-3.5 rtl:rotate-180" />
             </Link>
           }
         >
           {openIncidents.length === 0 ? (
-            <div className="text-center text-[var(--text-muted)] py-6 text-sm">No open incidents</div>
+            <div className="text-center text-[var(--text-muted)] py-6 text-sm">{tLabel('No open incidents')}</div>
           ) : (
             <div className="space-y-2">
               {openIncidents.slice(0,4).map((inc: any) => (
@@ -133,7 +135,7 @@ export default function BusOpsDashboard() {
         {isTenantAdmin && (
           <Panel title="Planning" icon={Shield} accent="violet">
             <p className="text-xs text-[var(--text-faint)] mb-3">
-              Author PCE rules first, then analyse and apply route consolidations. Constraints gate every apply.
+              {tLabel('Author PCE rules first, then analyse and apply route consolidations. Constraints gate every apply.')}
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {[
@@ -170,11 +172,11 @@ export default function BusOpsDashboard() {
                     className="flex items-start gap-3 p-3 rounded-xl bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] hover:border-violet-500/30 hover:bg-[var(--bg-surface)]/60 transition-all"
                   >
                     <Icon className="w-4 h-4 text-violet-300 shrink-0 mt-0.5" strokeWidth={1.75} />
-                    <div className="min-w-0">
-                      <div className="text-xs font-medium text-[var(--text-main)]">{link.label}</div>
-                      <div className="text-[11px] text-[var(--text-faint)] mt-0.5">{link.desc}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-medium text-[var(--text-main)]">{tLabel(link.label)}</div>
+                      <div className="text-[11px] text-[var(--text-faint)] mt-0.5">{tLabel(link.desc)}</div>
                     </div>
-                    <ArrowRight className="w-3.5 h-3.5 text-[var(--text-faint)] shrink-0 mt-0.5 ml-auto" />
+                    <ArrowRight className="w-3.5 h-3.5 text-[var(--text-faint)] shrink-0 mt-0.5 ml-auto rtl:rotate-180" />
                   </Link>
                 );
               })}
@@ -224,7 +226,7 @@ export default function BusOpsDashboard() {
                 <Link key={link.label} href={link.href}
                   className="flex items-center gap-2.5 p-3 rounded-xl bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] hover:border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]/60 transition-all">
                   <Icon className="w-4 h-4 text-[var(--text-muted)] shrink-0" strokeWidth={1.75} />
-                  <span className="text-xs text-[var(--text-main)] truncate flex-1">{link.label}</span>
+                  <span className="text-xs text-[var(--text-main)] truncate flex-1">{tLabel(link.label)}</span>
                   {(link as any).badge && (
                     <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
                       (link as any).badge === 'P0'

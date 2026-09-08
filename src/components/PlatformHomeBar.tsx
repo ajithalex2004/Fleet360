@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { usePermissions } from '@/contexts/PermissionContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import UserSwitcher from '@/components/UserSwitcher';
 import BranchSelector from '@/components/BranchSelector';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
@@ -27,6 +28,7 @@ function AuthSlot() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
   const { isAuthenticated } = usePermissions();
+  const { tLabel } = useLanguage();
 
   if (!mounted) return <SessionSlotPlaceholder />;
   if (isAuthenticated) return <UserSwitcher />;
@@ -35,7 +37,7 @@ function AuthSlot() {
       href="/platform"
       className="text-xs px-3 py-1.5 rounded-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors"
     >
-      Not signed in
+      {tLabel('Not signed in')}
     </Link>
   );
 }
@@ -48,6 +50,7 @@ export default function PlatformHomeBar({
   accentColor = 'from-blue-500 to-indigo-600',
 }: Props) {
   const { tenant } = usePermissions();
+  const { tLabel } = useLanguage();
   const pathname = usePathname();
   const isAgentsPage = pathname?.startsWith('/agents');
 
@@ -65,9 +68,9 @@ export default function PlatformHomeBar({
           href="/platform"
           className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] hover:border-[var(--border-strong)] text-xs font-medium tracking-wide transition-all group min-w-0"
         >
-          <ArrowLeft className="w-3.5 h-3.5 flex-shrink-0 group-hover:-translate-x-0.5 transition-transform" />
+          <ArrowLeft className="w-3.5 h-3.5 flex-shrink-0 group-hover:-translate-x-0.5 rtl:group-hover:translate-x-0.5 rtl:rotate-180 transition-transform" />
           <span className="hidden lg:inline whitespace-nowrap">FLEET360</span>
-          <span className="lg:hidden">HOME</span>
+          <span className="lg:hidden">{tLabel('Home')}</span>
         </Link>
         {/* AI Agents quick-access — visible on every module page except /agents itself */}
         {!isAgentsPage && (
@@ -76,7 +79,7 @@ export default function PlatformHomeBar({
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-500/10 hover:bg-violet-500/15 border border-violet-500/20 text-violet-400 text-xs font-medium transition-all"
           >
             <Bot className="w-3.5 h-3.5" />
-            <span className="whitespace-nowrap">AI Agents</span>
+            <span className="whitespace-nowrap">{tLabel('AI Agents')}</span>
           </Link>
         )}
 
@@ -84,10 +87,10 @@ export default function PlatformHomeBar({
         <button
           onClick={openPalette}
           className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] text-[var(--text-muted)] hover:text-[var(--text-main)] text-xs transition-all cursor-pointer group"
-          title="Search anything (⌘K or Ctrl+K)"
+          title={tLabel('Search...')}
         >
           <Search className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover:text-emerald-500 transition-colors" />
-          <span className="hidden sm:inline">Search...</span>
+          <span className="hidden sm:inline">{tLabel('Search...')}</span>
           <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)] font-mono text-[10px] text-[var(--text-muted)] group-hover:border-emerald-500/40">
             <span>⌘</span>K
           </kbd>
@@ -102,7 +105,7 @@ export default function PlatformHomeBar({
           {moduleIcon}
         </div>
         <span className="text-[var(--text-faint)] text-xs">/</span>
-        <span className="text-[var(--text-main)] text-sm font-bold tracking-tight whitespace-nowrap">{moduleName}</span>
+        <span className="text-[var(--text-main)] text-sm font-bold tracking-tight whitespace-nowrap">{tLabel(moduleName)}</span>
         {tenant && (
           <>
             <span className="text-[var(--text-faint)] text-xs hidden md:inline">/</span>

@@ -297,19 +297,112 @@ const arabicLabels: Record<string, string> = {
   'AI Agents':                'وكلاء الذكاء الاصطناعي',
   'AI Agent Ecosystem':       'منظومة وكلاء الذكاء الاصطناعي',
   'Operations Assistant':     'المساعد التشغيلي الذكي',
-  'AI Copilot':               'المساعد الذكي',
-  'Predictive Maintenance':   'الصيانة التنبؤية',
-  'Driver Coaching':          'تدريب السائقين',
-  'Demand Forecasting':       'التنبؤ بالطلب',
-  'Incident Auto-Triage':     'فرز الحوادث التلقائي',
-  'Smart Dispatch':           'التوزيع الذكي',
-  'Transport Services':       'خدمات النقل',
-  'Rent-A-Car':               'تأجير السيارات',
-  'Staff Transport':          'نقل الموظفين',
-  'School Bus':               'الحافلات المدرسية',
-  'Freight & Logistics':      'الشحن واللوجستيات',
-  'Corporate Leasing':        'التأجير المؤسسي',
-  'VIP Limousine':            'الليموزين الفاخر',
+  // ── Nav Categories & Global Layout ────────────────────────
+  'AI & Intelligence':      'الذكاء الاصطناعي والتحليلات',
+  'Transport Services':     'خدمات النقل',
+  'Live Operations':        'العمليات المباشرة',
+  'Fleet & Assets':         'الأسطول والأصول',
+  'Governance & ESG':       'الحوكمة والاستدامة',
+  'Enterprise & Admin':     'المؤسسة والإدارة',
+  'Menu Settings':          'إعدادات القائمة',
+  'Hidden Modules':         'الوحدات المخفية',
+  'Hide from menu':         'إخفاء من القائمة',
+  'Pin sidebar (keep expanded)': 'تثبيت الشريط الجانبي',
+  'Unpin sidebar':          'إلغاء تثبيت الشريط',
+  'Expand sidebar':         'توسيع الشريط الجانبي',
+  'Collapse sidebar':       'طي الشريط الجانبي',
+  'Search...':              'بحث...',
+  'Search':                 'بحث',
+  'Not signed in':          'غير مسجل الدخول',
+  'Home':                   'الرئيسية',
+  'FLEET360':               'فليت 360',
+  'Mobility platform':      'منصة التنقل الذكي',
+  'Platform Admin':         'مسؤول المنصة',
+  'Super Administrator':    'المشرف العام',
+  // ── Module & Sub-page Labels ──────────────────────────────
+  'AI agents':              'وكلاء الذكاء الاصطناعي',
+  'AI platform':            'منصة الذكاء الاصطناعي',
+  'AI Platform':            'منصة الذكاء الاصطناعي',
+  'Predictive maintenance': 'الصيانة التنبؤية',
+  'Service tickets':        'تذاكر الخدمة',
+  'Staff transport':        'نقل الموظفين',
+  'Staff Transportation':   'نقل الموظفين',
+  'School bus':             'الحافلات المدرسية',
+  'Logistics':              'اللوجستيات',
+  'Vehicle leasing':        'تأجير المركبات',
+  'Rent-a-car':             'تأجير السيارات',
+  'Vehicle maintenance':    'صيانة المركبات',
+  'Fleet management':       'إدارة الأسطول',
+  'Finance ERP':            'المالية والمحاسبة',
+  'Sustainability & ESG':   'الاستدامة والحوكمة',
+  // ── Bus Ops / Staff Transport Pages & Groups ──────────────
+  'Planning':               'التخطيط',
+  'Tracking':               'التتبع',
+  'Workforce':              'القوى العاملة',
+  'Requests':               'الطلبات',
+  'Analytics':              'التحليلات',
+  'Routes':                 'المسارات',
+  'Route Optimization':     'تحسين المسارات',
+  'Route planner':          'مخطط المسارات',
+  'Schedules':              'الجداول الزمنية',
+  'Schedule Templates':     'قوالب الجداول',
+  'Planning Engine':        'محرك التخطيط',
+  'Route Consolidation':    'دمج المسارات',
+  'Transport Calendars':    'تقاويم النقل',
+  'Trip Monitor':           'مراقب الرحلات',
+  'Outsource Management':   'إدارة الإسناد الخارجي',
+  'SLA Monitor & Alerts':   'مراقبة اتفاقيات الخدمة',
+  'Optimisation Status':    'حالة التحسين',
+  'Demand forecast':        'التنبؤ بالطلب',
+  'Demand Forecasting':     'التنبؤ بالطلب',
+  'Live Fleet Map':         'خريطة الأسطول المباشرة',
+  'Geofences':              'السياج الجغرافي',
+  'Gateways':               'البوابات',
+  'Passengers':             'الركاب',
+  'Employees':              'الموظفون',
+  'Drivers Performance':    'أداء السائقين',
+  'Driver Fatigue & Rest':  'إجهاد وراحة السائقين',
+  'Ad-hoc & Overtime':      'الطلبات الخاصة والعمل الإضافي',
+  'Transport requests':     'طلبات النقل',
+  'Incidents':              'الحوادث',
+  'Cost Allocation':        'توزيع التكاليف',
+  'Cost Allocation & Recharge': 'توزيع التكاليف وإعادة الفوترة',
+  'ESG Carbon Footprint':   'البصمة الكربونية ESG',
+  // ── KPI & Dashboard Phrases ───────────────────────────────
+  'Active Routes':          'المسارات النشطة',
+  "Today's Trips":          'رحلات اليوم',
+  'In Progress':            'قيد التنفيذ',
+  'Staff Registered':       'الموظفون المسجلون',
+  'Open Incidents':         'الحوادث المفتوحة',
+  'Pending Requests':       'الطلبات المعلقة',
+  'Quick Actions':          'إجراءات سريعة',
+  'Planning Constraints (PCE)': 'قيود التخطيط (PCE)',
+  'Vehicle/Resource Optimization': 'تحسين المركبات والموارد',
+  'Shift SLA Monitor':      'مراقبة اتفاقية مستوى الخدمة',
+  'Driver Shifts':          'ورديات السائقين',
+  'Vehicle Doc Expiry':     'صلاحية وثائق المركبة',
+  'Ad-Hoc / Overtime Dispatch': 'توزيع المهام الإضافية',
+  'Power BI Connector':     'رابط Power BI',
+  'Multilayer GIS':         'نظم المعلومات الجغرافية',
+  'Rider App (PWA)':        'تطبيق الراكب (PWA)',
+  'Add Route':              'إضافة مسار',
+  'New Trip':               'رحلة جديدة',
+  'Register Staff':         'تسجيل موظف',
+  'Log Incident':           'تسجيل حادث',
+  'Manage Passengers':      'إدارة الركاب',
+  'View all':               'عرض الكل',
+  'No trips scheduled for today.': 'لا توجد رحلات مجدولة لليوم.',
+  'No trips scheduled for today. Create one.': 'لا توجد رحلات مجدولة لليوم. إنشاء رحلة.',
+  'Create one.':            'إنشاء رحلة.',
+  'No open incidents':      'لا توجد حوادث مفتوحة',
+  'Loading dashboard...':   'جارٍ تحميل لوحة التحكم...',
+  'Real-time overview of routes, trips, passengers, and incidents.': 'نظرة عامة فورية على المسارات والرحلات والركاب والحوادث.',
+  'Real-time overview of routes, trips, passengers, and incidents': 'نظرة عامة فورية على المسارات والرحلات والركاب والحوادث',
+  'Author PCE rules first, then analyse and apply route consolidations. Constraints gate every apply.': 'قم بإعداد قواعد محرك القيود أولاً، ثم حلل وطبق دمج المسارات.',
+  'BLOCK / WARN / PENALTY rules for plans & merges': 'قواعد المنع / التحذير / الجزاءات للخطط والدمج',
+  'Analyse pairs, apply merges, history & revert': 'تحليل الأزواج وتطبيق الدمج والسجل والتراجع',
+  'Runcutting / blocking / roster, plus CBA and headway rules': 'تقسيم الجولات والجدولة والمناوبات وقواعد التقاطر',
+  'Sequential vehicle reuse opportunities — advisory only': 'فرص إعادة استخدام المركبات المتتالية — استشارية فقط',
   // ── Common page phrases ───────────────────────────────────
   'Loading…':               '...جار التحميل',
   'No data found':          'لا توجد بيانات',
@@ -321,7 +414,6 @@ const arabicLabels: Record<string, string> = {
   'Approve':                'موافقة',
   'Reject':                 'رفض',
   'Submit':                 'إرسال',
-  'Search':                 'بحث',
   'Export XLSX':            'تصدير XLSX',
   'New':                    'جديد',
   'Create':                 'إنشاء',
@@ -333,6 +425,12 @@ const arabicLabels: Record<string, string> = {
   'Process Refund':         'معالجة الاسترداد',
   'Forfeit Deposit':        'مصادرة الوديعة',
 };
+
+// Normalized lowercase map for case-insensitive lookup
+const lowerArabicMap: Record<string, string> = {};
+for (const [k, v] of Object.entries(arabicLabels)) {
+  lowerArabicMap[k.toLowerCase().trim()] = v;
+}
 
 const LanguageContext = createContext<LanguageContextValue>({
   language: 'ar',
@@ -366,9 +464,18 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const t = (key: string): string =>
     translations[key]?.[language] ?? translations[key]?.en ?? key;
 
-  /** Translate by the English label value — used in sidebar layouts */
-  const tLabel = (english: string): string =>
-    language === 'ar' ? (arabicLabels[english] ?? english) : english;
+  /** Translate by English label value — case-insensitive with punctuation trim */
+  const tLabel = (english: string): string => {
+    if (language !== 'ar') return english;
+    if (!english || typeof english !== 'string') return english;
+    const trimmed = english.trim();
+    if (arabicLabels[trimmed]) return arabicLabels[trimmed];
+    const lower = trimmed.toLowerCase();
+    if (lowerArabicMap[lower]) return lowerArabicMap[lower];
+    const stripped = lower.replace(/[:.]$/, '').trim();
+    if (lowerArabicMap[stripped]) return lowerArabicMap[stripped];
+    return english;
+  };
 
   return (
     <LanguageContext.Provider value={{ language, isRTL: language === 'ar', setLanguage, t, tLabel }}>

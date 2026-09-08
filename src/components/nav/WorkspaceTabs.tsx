@@ -15,6 +15,7 @@ import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
 import { resolveRoute } from '@/lib/nav/modules';
+import { useLanguage } from '@/contexts/LanguageContext';
 import {
   activateTab, closeTab, openTab, useWorkspaceTabs, WorkspaceTabsFullError,
 } from './workspace-tabs-store';
@@ -25,6 +26,7 @@ interface Props {
 
 export default function WorkspaceTabs({ onTabsFull }: Props) {
   const { tabs, activeKey } = useWorkspaceTabs();
+  const { tLabel } = useLanguage();
   const router = useRouter();
   const pathname = usePathname() ?? '';
 
@@ -67,6 +69,7 @@ export default function WorkspaceTabs({ onTabsFull }: Props) {
     <div className="flex min-h-[38px] items-stretch gap-1 overflow-x-auto border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] backdrop-blur-xl px-2">
       {tabs.map(t => {
         const isActive = t.key === activeKey;
+        const tabLabel = tLabel(t.label);
         return (
           <div
             key={t.key}
@@ -78,14 +81,14 @@ export default function WorkspaceTabs({ onTabsFull }: Props) {
                 ? 'border-t-2 border-t-cyan-400 bg-[var(--bg-canvas)] text-cyan-500 font-bold shadow-md'
                 : 'border-t-2 border-t-transparent text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]'
             }`}
-            title={t.label}
+            title={tabLabel}
           >
-            <span className="truncate">{t.label}</span>
+            <span className="truncate">{tabLabel}</span>
             <button
               type="button"
               onClick={(e) => handleClose(t.key, e)}
-              aria-label={`Close ${t.label}`}
-              className="-mr-1 ml-1 rounded-md p-0.5 text-[var(--text-faint)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)] transition-colors"
+              aria-label={`Close ${tabLabel}`}
+              className="-mr-1 ml-1 rtl:-ml-1 rtl:mr-1 rounded-md p-0.5 text-[var(--text-faint)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)] transition-colors"
             >
               <X className="h-3 w-3" />
             </button>

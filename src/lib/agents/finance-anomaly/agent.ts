@@ -86,26 +86,34 @@ async function fetchMaintenanceRecords(tenantId: string): Promise<MaintenanceRec
 
 async function fetchFuelRecords(tenantId: string): Promise<FuelLogRecord[]> {
   try {
+    // fuel_logs has no fuel_card_no/station_name/station_lat/station_lng/
+    // odometer_km columns — the real names are fuel_card_id/station/mileage,
+    // and there's no GPS capture on fuel purchases at all (no vehicle_locations
+    // join target either). GPS fields go NULL; detectFuelAnomalies() already
+    // guards its GPS-mismatch check on all four being present, so that one
+    // detector just stays dormant until fuel purchases ever capture location —
+    // the tank-overfill and UAE grade-benchmark checks don't need it.
+    // vehicles has no fuel_tank_capacity_liters column either; estimate from
+    // vehicle_group rather than a single flat number across the whole fleet.
     const rows = await prisma.$queryRawUnsafe<any[]>(`
       SELECT
         fl.id::text,
         fl.vehicle_id::text AS "vehicleId",
         COALESCE(v.vehicle_code, v.plate_number, 'VEH') AS "vehicleCode",
-        fl.fuel_card_no AS "fuelCardNumber",
+        fl.fuel_card_id AS "fuelCardNumber",
         COALESCE(v.fuel_type, 'SPECIAL_95') AS "fuelGrade",
         fl.liters::float8 AS liters,
         fl.total_cost::float8 AS "totalCost",
-        COALESCE(v.fuel_tank_capacity_liters, 60)::float8 AS "tankCapacityLiters",
+        CASE WHEN v.vehicle_group IN ('BUS','VAN') THEN 100.0 ELSE 60.0 END AS "tankCapacityLiters",
         fl.fuel_date::text AS "fuelDate",
-        fl.station_name AS "stationName",
-        fl.station_lat::float8 AS "stationLat",
-        fl.station_lng::float8 AS "stationLng",
-        vl.lat::float8 AS "vehicleLatAtTime",
-        vl.lng::float8 AS "vehicleLngAtTime",
-        fl.odometer_km::int AS "odometerKm"
+        fl.station AS "stationName",
+        NULL::float8 AS "stationLat",
+        NULL::float8 AS "stationLng",
+        NULL::float8 AS "vehicleLatAtTime",
+        NULL::float8 AS "vehicleLngAtTime",
+        fl.mileage::int AS "odometerKm"
       FROM fuel_logs fl
       LEFT JOIN vehicles v ON v.id = fl.vehicle_id
-      LEFT JOIN vehicle_locations vl ON vl.vehicle_id = fl.vehicle_id::text
       WHERE fl.tenant_id = $1
       ORDER BY fl.fuel_date DESC
       LIMIT 500
@@ -122,10 +130,10 @@ async function fetchFuelRecords(tenantId: string): Promise<FuelLogRecord[]> {
       tankCapacityLiters: Number(r.tankCapacityLiters ?? 60),
       fuelDate: r.fuelDate,
       stationName: r.stationName,
-      stationLat: r.stationLat !== null ? Number(r.stationLat) : null,
-      stationLng: r.stationLng !== null ? Number(r.stationLng) : null,
-      vehicleLatAtTime: r.vehicleLatAtTime !== null ? Number(r.vehicleLatAtTime) : null,
-      vehicleLngAtTime: r.vehicleLngAtTime !== null ? Number(r.vehicleLngAtTime) : null,
+      stationLat: null,
+      stationLng: null,
+      vehicleLatAtTime: null,
+      vehicleLngAtTime: null,
       odometerKm: r.odometerKm !== null ? Number(r.odometerKm) : undefined,
     }));
   } catch {

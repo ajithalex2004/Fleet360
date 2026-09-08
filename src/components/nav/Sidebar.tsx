@@ -34,6 +34,7 @@ import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Pi
 import { MODULES, NAV_CATEGORIES, moduleFromPathname, type ModuleDef, type SubPage, type NavCategory } from '@/lib/nav/modules';
 import { openTab, WorkspaceTabsFullError } from './workspace-tabs-store';
 import { usePermissions } from '@/contexts/PermissionContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import ThemeToggle from '@/components/ThemeToggle';
 
 const COLLAPSE_KEY = 'fleet360-sidebar-collapsed-v1';
@@ -50,6 +51,7 @@ export default function Sidebar({ onTabsFull }: Props) {
   const pathname = usePathname() ?? '';
   const router = useRouter();
   const activeModule = useMemo(() => moduleFromPathname(pathname), [pathname]);
+  const { tLabel } = useLanguage();
 
   // Hide superOnly sub-pages from non-SUPER_ADMIN users. Page-level access is
   // still enforced by the API; this keeps the sidebar uncluttered.
@@ -165,13 +167,13 @@ export default function Sidebar({ onTabsFull }: Props) {
         {!collapsed && (
           <div className="leading-tight">
             <div className="text-sm font-semibold text-[var(--text-main)]">Fleet360</div>
-            <div className="text-[10px] uppercase tracking-wider text-[var(--text-faint)]">Mobility platform</div>
+            <div className="text-[10px] uppercase tracking-wider text-[var(--text-faint)]">{tLabel('Mobility platform')}</div>
           </div>
         )}
         <button
           type="button"
           onClick={togglePinned}
-          title={pinned ? 'Unpin sidebar' : 'Pin sidebar (keep expanded)'}
+          title={pinned ? tLabel('Unpin sidebar') : tLabel('Pin sidebar (keep expanded)')}
           className={`ml-auto rounded-md p-1 transition-colors ${pinned ? 'text-amber-400 bg-amber-500/10' : 'text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]'}`}
         >
           <Pin className={`h-4 w-4 ${pinned ? 'fill-current' : ''}`} />
@@ -179,10 +181,10 @@ export default function Sidebar({ onTabsFull }: Props) {
         <button
           type="button"
           onClick={toggleCollapsed}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={collapsed ? tLabel('Expand sidebar') : tLabel('Collapse sidebar')}
           className="rounded-md p-1 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]"
         >
-          {collapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
+          {collapsed ? <ChevronsRight className="h-4 w-4 rtl:rotate-180" /> : <ChevronsLeft className="h-4 w-4 rtl:rotate-180" />}
         </button>
       </div>
 
@@ -235,11 +237,11 @@ export default function Sidebar({ onTabsFull }: Props) {
               >
                 <span className="flex items-center gap-1.5 truncate">
                   <CatIcon className="h-3 w-3 text-[var(--text-faint)] group-hover:text-cyan-400 transition-colors" />
-                  <span>{cat.label}</span>
+                  <span>{tLabel(cat.label)}</span>
                 </span>
                 <ChevronDown
                   className={`h-3 w-3 text-[var(--text-faint)] transition-transform duration-150 ${
-                    isCatCollapsed ? '-rotate-90' : ''
+                    isCatCollapsed ? '-rotate-90 rtl:rotate-90' : ''
                   }`}
                 />
               </button>
@@ -261,7 +263,7 @@ export default function Sidebar({ onTabsFull }: Props) {
                           onHover={() => {}}
                         />
                         {isActive && visibleSubPages(m.subPages)?.length ? (
-                          <ul className="mt-0.5 mb-1 space-y-0.5 pl-2 border-l border-[var(--border-subtle)] ml-4">
+                          <ul className="mt-0.5 mb-1 space-y-0.5 pl-2 rtl:pl-0 rtl:pr-2 border-l rtl:border-l-0 rtl:border-r border-[var(--border-subtle)] ml-4 rtl:ml-0 rtl:mr-4">
                             {visibleSubPages(m.subPages)!.map((sp, idx, arr) => {
                               const prevGroup = idx > 0 ? arr[idx - 1].group : undefined;
                               const showHeader = sp.group && sp.group !== prevGroup;
@@ -269,7 +271,7 @@ export default function Sidebar({ onTabsFull }: Props) {
                                 <React.Fragment key={sp.href}>
                                   {showHeader && (
                                     <li aria-hidden="true" className={`px-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)] ${idx > 0 ? 'pt-2' : ''}`}>
-                                      {sp.group}
+                                      {tLabel(sp.group)}
                                     </li>
                                   )}
                                   <li>
@@ -309,7 +311,7 @@ export default function Sidebar({ onTabsFull }: Props) {
             className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)] transition-colors"
           >
             <Settings className="h-4 w-4" />
-            <span className="text-[13px]">Menu Settings</span>
+            <span className="text-[13px]">{tLabel('Menu Settings')}</span>
           </button>
         </div>
       )}
@@ -318,7 +320,7 @@ export default function Sidebar({ onTabsFull }: Props) {
       {showSettings && !collapsed && hiddenModules.size > 0 && (
         <div className="absolute bottom-14 left-2 right-2 max-h-64 overflow-y-auto rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-2 shadow-2xl">
           <div className="border-b border-[var(--border-subtle)] px-2 pb-2 mb-2 text-xs font-semibold uppercase tracking-wider text-[var(--text-faint)]">
-            Hidden Modules
+            {tLabel('Hidden Modules')}
           </div>
           <ul className="space-y-1">
             {MODULES.filter(m => hiddenModules.has(m.id)).map(m => {
@@ -331,7 +333,7 @@ export default function Sidebar({ onTabsFull }: Props) {
                     className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)] transition-colors"
                   >
                     <Icon className="h-4 w-4 text-[var(--text-muted)]" />
-                    <span className="flex-1 text-left text-[13px] truncate">{m.label}</span>
+                    <span className="flex-1 text-left rtl:text-right text-[13px] truncate">{tLabel(m.label)}</span>
                     <Eye className="h-3.5 w-3.5 text-emerald-400" />
                   </button>
                 </li>
@@ -348,16 +350,16 @@ export default function Sidebar({ onTabsFull }: Props) {
         const categoryDef = NAV_CATEGORIES.find(c => c.id === m.category);
         return (
           <div
-            className="absolute left-[60px] z-50 min-w-[220px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-1.5 shadow-2xl"
+            className="absolute left-[60px] rtl:left-auto rtl:right-[60px] z-50 min-w-[220px] rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-elevated)] p-1.5 shadow-2xl"
             style={{ top: Math.max(8, flyoutTop) + 'px' }}
             onMouseEnter={() => setFlyoutFor(m.id)}
             onMouseLeave={() => setFlyoutFor(null)}
           >
             <div className="border-b border-[var(--border-subtle)] px-2 pb-1.5 pt-1">
               <div className="text-[9px] font-bold uppercase tracking-wider text-cyan-400">
-                {categoryDef?.label ?? m.category}
+                {tLabel(categoryDef?.label ?? m.category)}
               </div>
-              <div className="text-[12px] font-semibold text-[var(--text-main)]">{m.label}</div>
+              <div className="text-[12px] font-semibold text-[var(--text-main)]">{tLabel(m.label)}</div>
             </div>
             <ul className="mt-1 space-y-0.5">
               {visible.map((sp, idx, arr) => {
@@ -369,21 +371,21 @@ export default function Sidebar({ onTabsFull }: Props) {
                   <React.Fragment key={sp.href}>
                     {showHeader && (
                       <li aria-hidden="true" className={`px-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)] ${idx > 0 ? 'pt-2' : ''}`}>
-                        {sp.group}
+                        {tLabel(sp.group)}
                       </li>
                     )}
                     <li>
                       <button
                         type="button"
                         onClick={() => navigate(m.id, { label: sp.label, href: sp.href, icon: ActiveIcon })}
-                        className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors ${
+                        className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left rtl:text-right text-[13px] transition-colors ${
                           isActive
-                            ? 'bg-cyan-500/15 text-cyan-300 font-bold border-l-2 border-cyan-400'
+                            ? 'bg-cyan-500/15 text-cyan-300 font-bold border-l-2 rtl:border-l-0 rtl:border-r-2 border-cyan-400'
                             : 'text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]'
                         }`}
                       >
                         <ActiveIcon className={`h-3.5 w-3.5 flex-shrink-0 ${isActive ? 'text-cyan-400' : 'text-[var(--text-muted)]'}`} />
-                        <span className="truncate">{sp.label}</span>
+                        <span className="truncate">{tLabel(sp.label)}</span>
                       </button>
                     </li>
                   </React.Fragment>
@@ -406,10 +408,13 @@ function NavRow({
   onHover: (el: HTMLElement) => void;
   onHide: (moduleId: string) => void;
 }) {
+  const { tLabel } = useLanguage();
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuPos, setContextMenuPos] = useState({ x: 0, y: 0 });
 
   const Icon = m.icon;
+  const label = tLabel(m.label);
+
   const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     try {
       onTabOpen({ key: m.href, label: m.label, moduleId, iconName: m.icon.displayName ?? 'Circle' });
@@ -448,21 +453,21 @@ function NavRow({
           prefetchHref(m.href);
           onHover(e.currentTarget);
         }}
-        title={collapsed ? m.label : undefined}
-        className={`flex w-full items-center gap-2.5 rounded-xl text-left transition-all ${
+        title={collapsed ? label : undefined}
+        className={`flex w-full items-center gap-2.5 rounded-xl text-left rtl:text-right transition-all ${
           collapsed ? 'justify-center py-2.5' : 'px-2.5 py-2'
         } ${
           active
-            ? 'bg-cyan-500/15 text-cyan-300 font-bold border-l-2 border-cyan-400 shadow-sm shadow-cyan-500/10'
+            ? 'bg-cyan-500/15 text-cyan-300 font-bold border-l-2 rtl:border-l-0 rtl:border-r-2 border-cyan-400 shadow-sm shadow-cyan-500/10'
             : 'text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]'
         }`}
       >
         <Icon className={`h-4 w-4 flex-shrink-0 ${active ? 'text-cyan-400' : 'text-[var(--text-muted)]'}`} />
-        {!collapsed && <span className="flex-1 truncate text-[13px]">{m.label}</span>}
+        {!collapsed && <span className="flex-1 truncate text-[13px]">{label}</span>}
         {!collapsed && m.subPages && m.subPages.length > 0 && (
           active
-            ? <ChevronLeft className="h-3.5 w-3.5 rotate-[-90deg] text-cyan-400" />
-            : <ChevronRight className="h-3.5 w-3.5 text-[var(--text-faint)]" />
+            ? <ChevronLeft className="h-3.5 w-3.5 rotate-[-90deg] rtl:rotate-90 text-cyan-400" />
+            : <ChevronRight className="h-3.5 w-3.5 rtl:rotate-180 text-[var(--text-faint)]" />
         )}
       </Link>
 
@@ -478,10 +483,10 @@ function NavRow({
               onHide(m.id);
               setShowContextMenu(false);
             }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left rtl:text-right text-sm text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]"
           >
             <EyeOff className="h-4 w-4 text-[var(--text-muted)]" />
-            <span>Hide from menu</span>
+            <span>{tLabel('Hide from menu')}</span>
           </button>
         </div>
       )}
@@ -496,7 +501,10 @@ function SubRow({
   onTabOpen: (t: { key: string; label: string; moduleId: string; iconName: string }) => void;
   onTabsFull?: (message: string) => void;
 }) {
+  const { tLabel } = useLanguage();
   const Icon = page.icon ?? parentIcon;
+  const label = tLabel(page.label);
+
   const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     try {
       onTabOpen({
@@ -517,14 +525,14 @@ function SubRow({
       prefetch
       onClick={handleClick}
       onMouseEnter={() => prefetchHref(page.href)}
-      className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12px] transition-colors ${
+      className={`flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left rtl:text-right text-[12px] transition-colors ${
         active
           ? 'bg-cyan-500/10 text-cyan-300 font-bold'
           : 'text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] hover:text-[var(--text-main)]'
       }`}
     >
       <Icon className={`h-3 w-3 flex-shrink-0 ${active ? 'text-cyan-400' : 'text-[var(--text-faint)]'}`} />
-      <span className="truncate">{page.label}</span>
+      <span className="truncate">{label}</span>
     </Link>
   );
 }
