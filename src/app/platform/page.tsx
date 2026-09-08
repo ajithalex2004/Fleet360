@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import ThemeToggle from '@/components/ThemeToggle';
 import PlatformSessionSlot from './PlatformSessionSlot';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { 
   Car, 
   Bot, 
@@ -467,6 +468,7 @@ const CATEGORIES = [
 ];
 
 export default function PlatformPage() {
+  const { tLabel } = useLanguage();
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -510,7 +512,7 @@ export default function PlatformPage() {
             <div className="flex items-center gap-2">
               <span className="text-[var(--text-main)] font-bold text-sm tracking-tight">Fleet360</span>
               <span className="text-[10px] font-mono font-bold bg-blue-500/10 text-blue-500 px-2 py-0.5 rounded-full border border-blue-500/20">
-                ENTERPRISE
+                {tLabel('ENTERPRISE')}
               </span>
             </div>
           </div>
@@ -521,7 +523,7 @@ export default function PlatformPage() {
               className="hidden md:flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] text-[var(--text-muted)] hover:text-[var(--text-main)] text-xs transition-all cursor-pointer group"
             >
               <Search className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover:text-emerald-500 transition-colors" />
-              <span>Omni Search</span>
+              <span>{tLabel('Omni Search')}</span>
               <kbd className="px-1.5 py-0.5 rounded bg-[var(--bg-surface)] border border-[var(--border-subtle)] font-mono text-[10px] text-[var(--text-muted)] group-hover:border-emerald-500/40">
                 ⌘K
               </kbd>
@@ -532,13 +534,13 @@ export default function PlatformPage() {
               href="/approvals" 
               className="px-3 py-1.5 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] text-xs font-semibold text-[var(--text-main)] transition-all"
             >
-              Approvals
+              {tLabel('Approvals')}
             </Link>
             <Link 
               href="/admin" 
               className="px-3 py-1.5 rounded-xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] text-xs font-semibold text-[var(--text-main)] transition-all"
             >
-              Admin
+              {tLabel('Admin')}
             </Link>
             <PlatformSessionSlot />
           </div>
@@ -552,15 +554,15 @@ export default function PlatformPage() {
           <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)]/60 px-3.5 py-1">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             <span className="text-[var(--text-muted)] text-[11px] font-bold tracking-wide uppercase">
-              Autonomous Transport & Fleet Operations
+              {tLabel('Autonomous Transport & Fleet Operations')}
             </span>
           </div>
 
           <h1 className="text-3xl sm:text-4xl font-extrabold text-[var(--text-main)] tracking-tight">
-            Fleet360 Platform Command
+            {tLabel('Fleet360 Platform Command')}
           </h1>
           <p className="text-[var(--text-muted)] text-sm leading-relaxed">
-            Multi-modal transport operations, predictive maintenance, staff dispatch, and ESG fleet intelligence in one unified system.
+            {tLabel('Multi-modal transport operations, predictive maintenance, staff dispatch, and ESG fleet intelligence in one unified system.')}
           </p>
 
           {/* Search Bar Input */}
@@ -571,13 +573,13 @@ export default function PlatformPage() {
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search modules, features, tariffs, permits, telematics..."
+                placeholder={tLabel('Search modules, features, tariffs, permits, telematics...')}
                 className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl pl-10 pr-12 py-2.5 text-[var(--text-main)] placeholder-[var(--text-muted)] text-xs focus:outline-none focus:border-emerald-500/60 shadow-sm transition-all"
               />
               <button
                 onClick={openPalette}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)]"
-                title="Open Universal Command Palette"
+                title={tLabel('Open Universal Command Palette')}
               >
                 ⌘K
               </button>
@@ -599,7 +601,7 @@ export default function PlatformPage() {
                     : 'bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-[var(--text-main)] hover:border-[var(--border-strong)]'
                 }`}
               >
-                <span>{cat.label}</span>
+                <span>{tLabel(cat.label)}</span>
                 <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'}`}>
                   {cat.count}
                 </span>
@@ -614,15 +616,15 @@ export default function PlatformPage() {
             <div className="w-12 h-12 rounded-2xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] flex items-center justify-center mx-auto text-[var(--text-muted)]">
               <Search className="w-6 h-6" />
             </div>
-            <h3 className="text-base font-bold text-[var(--text-main)]">No modules found</h3>
+            <h3 className="text-base font-bold text-[var(--text-main)]">{tLabel('No modules found')}</h3>
             <p className="text-xs text-[var(--text-muted)] max-w-sm mx-auto">
-              No modules matched &quot;{searchQuery}&quot;. Try searching for a different keyword or selecting a different category filter.
+              {tLabel('No modules matched')} &quot;{searchQuery}&quot;.
             </p>
             <button
               onClick={() => { setSearchQuery(''); setSelectedCategory('all'); }}
               className="px-3.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold hover:bg-emerald-500/20 transition-all"
             >
-              Reset Filters
+              {tLabel('Reset Filters')}
             </button>
           </div>
         )}
@@ -644,17 +646,17 @@ export default function PlatformPage() {
                   <div>
                     <div className="flex items-center gap-2.5">
                       <h2 className="text-base sm:text-lg font-extrabold text-[var(--text-main)] tracking-tight">
-                        {cat.label}
+                        {tLabel(cat.label)}
                       </h2>
                       <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)]">
-                        {catModules.length} {catModules.length === 1 ? 'Module' : 'Modules'}
+                        {catModules.length} {tLabel(catModules.length === 1 ? 'Module' : 'Modules')}
                       </span>
                       <span className="hidden md:inline-block text-[9px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                        {cat.badgeText}
+                        {tLabel(cat.badgeText)}
                       </span>
                     </div>
                     <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                      {cat.description}
+                      {tLabel(cat.description)}
                     </p>
                   </div>
                 </div>
@@ -681,7 +683,7 @@ export default function PlatformPage() {
 
                           <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            <span className="text-emerald-500 text-[10px] font-bold font-mono tracking-wider">{mod.status}</span>
+                            <span className="text-emerald-500 text-[10px] font-bold font-mono tracking-wider">{tLabel(mod.status)}</span>
                           </div>
                         </div>
 
@@ -689,12 +691,12 @@ export default function PlatformPage() {
                         <Link href={mod.href} className="block group-hover:text-emerald-500 transition-colors">
                           <div className="flex items-center justify-between">
                             <h3 className="text-[var(--text-main)] font-bold text-base tracking-tight group-hover:text-emerald-500 transition-colors">
-                              {mod.title}
+                              {tLabel(mod.title)}
                             </h3>
                             <ArrowUpRight className="w-4 h-4 text-[var(--text-muted)] group-hover:text-emerald-500 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
                           </div>
                           <p className="text-[var(--text-muted)] text-xs mt-1.5 leading-relaxed line-clamp-2">
-                            {mod.description}
+                            {tLabel(mod.description)}
                           </p>
                         </Link>
 
@@ -705,7 +707,7 @@ export default function PlatformPage() {
                               key={tag}
                               className="text-[10px] font-medium bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)] rounded-md px-2 py-0.5"
                             >
-                              {tag}
+                              {tLabel(tag)}
                             </span>
                           ))}
                         </div>
@@ -717,8 +719,8 @@ export default function PlatformPage() {
                           <div className={`grid ${mod.stats.length >= 4 ? 'grid-cols-4' : mod.stats.length === 3 ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
                             {mod.stats.map(stat => (
                               <div key={stat.label} className="min-w-0">
-                                <p className="text-[9px] uppercase font-bold text-[var(--text-muted)] truncate">{stat.label}</p>
-                                <p className="text-xs font-bold font-mono text-[var(--text-main)] mt-0.5 truncate">{stat.value}</p>
+                                <p className="text-[9px] uppercase font-bold text-[var(--text-muted)] truncate">{tLabel(stat.label)}</p>
+                                <p className="text-xs font-bold font-mono text-[var(--text-main)] mt-0.5 truncate">{tLabel(String(stat.value))}</p>
                               </div>
                             ))}
                           </div>
@@ -732,7 +734,7 @@ export default function PlatformPage() {
                                   href={action.href}
                                   className="px-2.5 py-1 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] hover:border-emerald-500/40 text-[10px] font-semibold text-[var(--text-main)] hover:text-emerald-500 transition-all"
                                 >
-                                  {action.label}
+                                  {tLabel(action.label)}
                                 </Link>
                               ))}
                             </div>

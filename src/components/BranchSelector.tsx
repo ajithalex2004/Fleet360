@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useRef, useEffect } from 'react';
 import { useBranch, EMIRATE_LABELS, EMIRATE_FLAGS, Branch } from '@/contexts/BranchContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface Props {
   /** compact mode for use inside PlatformHomeBar */
@@ -9,6 +10,7 @@ interface Props {
 
 export default function BranchSelector({ compact = false }: Props) {
   const { branches, activeBranch, setActiveBranch, loading } = useBranch();
+  const { tLabel } = useLanguage();
   const [open, setOpen] = useState(false);
   const ref  = useRef<HTMLDivElement>(null);
 
@@ -26,7 +28,7 @@ export default function BranchSelector({ compact = false }: Props) {
   const emirateFlag  = activeBranch ? (EMIRATE_FLAGS[activeBranch.emirate] ?? '🏢') : '🌐';
   const displayLabel = activeBranch
     ? activeBranch.branch_name
-    : 'All Branches';
+    : tLabel('All Branches');
 
   const expiryWarning = (branch: Branch): 'ok' | 'warn' | 'expired' => {
     if (!branch.trade_license_expiry) return 'ok';
@@ -50,7 +52,7 @@ export default function BranchSelector({ compact = false }: Props) {
       >
         <span>{emirateFlag}</span>
         <span className={`font-medium truncate max-w-36 ${activeBranch ? 'text-emerald-300' : 'text-[var(--text-muted)]'}`}>
-          {loading ? 'Loading…' : displayLabel}
+          {loading ? tLabel('Loading…') : displayLabel}
         </span>
         {activeBranch && (
           <span className="text-xs text-[var(--text-faint)] bg-[var(--bg-surface-hover)] px-1.5 py-0.5 rounded font-mono hidden sm:inline">
@@ -64,11 +66,11 @@ export default function BranchSelector({ compact = false }: Props) {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-72 bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl shadow-black/50 z-[200] overflow-hidden">
+        <div className="absolute right-0 rtl:right-auto rtl:left-0 top-full mt-2 w-72 bg-[var(--bg-surface-elevated)] border border-[var(--border-subtle)] rounded-2xl shadow-2xl shadow-black/50 z-[200] overflow-hidden">
           {/* Header */}
           <div className="px-4 py-3 border-b border-[var(--border-subtle)] flex items-center justify-between">
-            <p className="text-[var(--text-main)] text-sm font-semibold">Select Branch</p>
-            <p className="text-[var(--text-faint)] text-xs">{branches.length} branch{branches.length !== 1 ? 'es' : ''}</p>
+            <p className="text-[var(--text-main)] text-sm font-semibold">{tLabel('Select Branch')}</p>
+            <p className="text-[var(--text-faint)] text-xs">{branches.length} {tLabel(branches.length !== 1 ? 'branches' : 'branch')}</p>
           </div>
 
           {/* All Branches option */}
@@ -77,9 +79,9 @@ export default function BranchSelector({ compact = false }: Props) {
             className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--bg-surface-hover)] transition-colors border-b border-[var(--border-subtle)] ${!activeBranch ? 'bg-emerald-500/10' : ''}`}
           >
             <span className="text-xl">🌐</span>
-            <div className="text-left flex-1">
-              <p className={`text-sm font-medium ${!activeBranch ? 'text-emerald-300' : 'text-[var(--text-main)]'}`}>All Branches</p>
-              <p className="text-xs text-[var(--text-faint)]">Consolidated view across all regions</p>
+            <div className="text-left rtl:text-right flex-1">
+              <p className={`text-sm font-medium ${!activeBranch ? 'text-emerald-300' : 'text-[var(--text-main)]'}`}>{tLabel('All Branches')}</p>
+              <p className="text-xs text-[var(--text-faint)]">{tLabel('Consolidated view across all regions')}</p>
             </div>
             {!activeBranch && <span className="text-emerald-400 text-xs">✓</span>}
           </button>
@@ -96,7 +98,7 @@ export default function BranchSelector({ compact = false }: Props) {
                   className={`w-full flex items-start gap-3 px-4 py-3 hover:bg-[var(--bg-surface-hover)] transition-colors border-b border-[var(--border-subtle)] last:border-0 ${isActive ? 'bg-emerald-500/10' : ''}`}
                 >
                   <span className="text-xl flex-shrink-0 mt-0.5">{EMIRATE_FLAGS[branch.emirate] ?? '🏢'}</span>
-                  <div className="text-left flex-1 min-w-0">
+                  <div className="text-left rtl:text-right flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className={`text-sm font-medium truncate ${isActive ? 'text-emerald-300' : 'text-[var(--text-main)]'}`}>
                         {branch.branch_name}
@@ -105,22 +107,22 @@ export default function BranchSelector({ compact = false }: Props) {
                         <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 rounded-full">HQ</span>
                       )}
                       {warn === 'expired' && (
-                        <span className="text-[10px] bg-red-500/10 text-red-400 border border-red-500/20 px-1.5 rounded-full">License Expired</span>
+                        <span className="text-[10px] bg-red-500/10 text-red-400 border border-red-500/20 px-1.5 rounded-full">{tLabel('License Expired')}</span>
                       )}
                       {warn === 'warn' && (
-                        <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 rounded-full">Expiring Soon</span>
+                        <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 rounded-full">{tLabel('Expiring Soon')}</span>
                       )}
                     </div>
                     <p className="text-xs text-[var(--text-faint)] mt-0.5">
-                      {EMIRATE_LABELS[branch.emirate] ?? branch.emirate}
-                      {branch.trade_license_no && <span className="ml-2 font-mono text-[var(--text-faint)]">{branch.trade_license_no}</span>}
+                      {tLabel(EMIRATE_LABELS[branch.emirate] ?? branch.emirate)}
+                      {branch.trade_license_no && <span className="ml-2 rtl:ml-0 rtl:mr-2 font-mono text-[var(--text-faint)]">{branch.trade_license_no}</span>}
                     </p>
                     <div className="flex items-center gap-3 mt-1">
                       {branch.cost_center_code && (
                         <span className="text-[10px] font-mono bg-[var(--bg-surface-hover)] text-[var(--text-muted)] px-1.5 py-0.5 rounded">{branch.cost_center_code}</span>
                       )}
-                      <span className="text-[10px] text-[var(--text-faint)]">{branch.vehicle_count} vehicles</span>
-                      <span className="text-[10px] text-[var(--text-faint)]">{branch.invoice_count} invoices</span>
+                      <span className="text-[10px] text-[var(--text-faint)]">{branch.vehicle_count} {tLabel('vehicles')}</span>
+                      <span className="text-[10px] text-[var(--text-faint)]">{branch.invoice_count} {tLabel('invoices')}</span>
                     </div>
                   </div>
                   {isActive && <span className="text-emerald-400 text-xs flex-shrink-0 mt-0.5">✓</span>}
@@ -131,7 +133,7 @@ export default function BranchSelector({ compact = false }: Props) {
 
           {/* Footer hint */}
           <div className="px-4 py-2 border-t border-[var(--border-subtle)] bg-[var(--bg-canvas)]">
-            <p className="text-[var(--text-faint)] text-xs">Branch selection filters invoices, vehicles &amp; reports</p>
+            <p className="text-[var(--text-faint)] text-xs">{tLabel('Branch selection filters invoices, vehicles & reports')}</p>
           </div>
         </div>
       )}
