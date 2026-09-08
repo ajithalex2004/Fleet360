@@ -530,7 +530,6 @@ export default function AgentsPage() {
         body: JSON.stringify({
           agent_id: agentId,
           event_type: 'manual.trigger',
-          tenant_id: 'default',
         }),
       });
       const result = await res.json();

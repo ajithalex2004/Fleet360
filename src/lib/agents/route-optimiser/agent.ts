@@ -116,10 +116,10 @@ export async function runRouteOptimiser(event: AgentEvent): Promise<AgentRunResu
         iterations_2opt, solver_duration_ms,
         estimated_duration_min,
         original_sequence, optimised_sequence,
-        status, applied_at, agent_run_id
+        status, applied_at, agent_run_id, tenant_id
       ) VALUES (
         $1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14::jsonb,
-        $15, ${status === 'AUTO_APPLIED' ? 'NOW()' : 'NULL'}, NULL
+        $15, ${status === 'AUTO_APPLIED' ? 'NOW()' : 'NULL'}, NULL, $16
       )
       ON CONFLICT (route_id) DO UPDATE SET
         original_stop_count    = EXCLUDED.original_stop_count,
@@ -152,6 +152,7 @@ export async function runRouteOptimiser(event: AgentEvent): Promise<AgentRunResu
       JSON.stringify(stops.map(s => ({ stopName: s.name, sequence: s.sequence }))),
       JSON.stringify(optimisedSeq),
       status,
+      tenantId,
     ).catch(() => {});
 
     if (status === 'AUTO_APPLIED') singleRouteAutoApplied++;

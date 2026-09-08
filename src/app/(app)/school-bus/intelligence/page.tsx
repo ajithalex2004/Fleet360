@@ -141,7 +141,7 @@ export default function SchoolBusIntelligencePage() {
       const res = await fetch('/api/agents/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agent_id: 'route-optimiser', tenant_id: 'default' }),
+        body: JSON.stringify({ agent_id: 'route-optimiser' }),
       });
       const data = await res.json();
       setLastRun(new Date().toLocaleString());

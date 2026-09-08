@@ -163,7 +163,6 @@ export default function FleetIntelligencePage() {
         body: JSON.stringify({
           agent_id: 'predictive-maintenance',
           event_type: 'manual.trigger',
-          tenant_id: 'default',
         }),
       });
       const json = await res.json();

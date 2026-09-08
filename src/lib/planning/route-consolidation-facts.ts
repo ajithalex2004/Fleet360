@@ -98,26 +98,47 @@ export async function loadConsolidationFacts(
       _count: { _all: true },
     }),
     // Most recent non-cancelled schedule per route — used to infer shift + direction + times.
-    // `distinct` on routeId with a descending departure order gives us the
-    // freshest single row per route without loading the full schedule set.
-    prisma.tripSchedule.findMany({
-      where: {
-        tenantId: input.tenantId,
-        deletedAt: null,
-        status: { not: 'CANCELLED' },
-        ...(input.routeIds ? { routeId: { in: input.routeIds } } : {}),
-      },
-      select: { routeId: true, shiftType: true, direction: true, departureTime: true, arrivalTime: true },
-      orderBy: { departureTime: 'desc' },
-      distinct: ['routeId'],
-    }),
+    // Dedup to one row per route happens in JS below (scheduleByRoute).
+    //
+    // Raw SQL, not the typed client: trip_schedules.tenant_id is a native
+    // uuid column in the real DB even though schema.prisma declares it plain
+    // String (the column predates schema.prisma tracking it — see the model
+    // comment). The actual bug that surfaced this was callers passing the
+    // literal string 'default' as tenantId instead of the real authenticated
+    // tenant (fixed at the callers — see route-optimiser trigger buttons),
+    // but the *error* that produced was a confusing, mis-attributed Prisma-
+    // internal "Error creating UUID" via the typed client, instead of
+    // Postgres's own clear "invalid input syntax for type uuid" — because
+    // this is the only tenant_id among this file's four tables that's
+    // uuid-typed rather than text. Raw SQL with an explicit ::uuid cast
+    // gives the honest Postgres error if a bad value ever reaches this
+    // again, rather than a hard-to-diagnose engine-level one.
+    prisma.$queryRawUnsafe<Array<{
+      routeId: string; shiftType: string | null; direction: string | null;
+      departureTime: Date; arrivalTime: Date | null;
+    }>>(
+      `SELECT route_id AS "routeId", shift_type AS "shiftType", direction,
+              departure_time AS "departureTime", arrival_time AS "arrivalTime"
+       FROM trip_schedules
+       WHERE tenant_id = $1::uuid AND deleted_at IS NULL
+         AND status IS DISTINCT FROM 'CANCELLED'
+         ${input.routeIds ? 'AND route_id = ANY($2::text[])' : ''}
+       ORDER BY departure_time DESC`,
+      ...(input.routeIds ? [input.tenantId, input.routeIds] : [input.tenantId]),
+    ),
     prisma.planningConstraint.findMany({
       where: { tenantId: input.tenantId, deletedAt: null, isEnabled: true },
     }),
   ]);
 
   const enrolmentByRoute = new Map(enrolmentRows.map((r) => [r.routeId, r._count._all]));
-  const scheduleByRoute = new Map(scheduleRows.map((r) => [r.routeId, r]));
+  // scheduleRows is ordered departureTime DESC (most recent first) and is no
+  // longer deduped by the query itself — keep only the first (most recent)
+  // row seen per route.
+  const scheduleByRoute = new Map<string, (typeof scheduleRows)[number]>();
+  for (const r of scheduleRows) {
+    if (!scheduleByRoute.has(r.routeId)) scheduleByRoute.set(r.routeId, r);
+  }
 
   const formatTime = (date: Date | null): string | null => {
     if (!date) return null;
