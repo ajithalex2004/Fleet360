@@ -125,7 +125,6 @@ function agentFeedLabel(agentId: string, actions: number, items: number) {
     'demand-forecasting':     (a, i) => `${i} segments forecast · ${a} alerts raised`,
     'staff-transport-planner': (a, i) => `${i} staff requirements analysed · ${a} routes planned`,
     'whatsapp-agent':         (a, i) => `${i} messages received · ${a} resolved`,
-    'chat-widget':            (a, i) => `${i} chat sessions · ${a} bookings made`,
     'ops-assistant':          (a, i) => `${i} queries answered · ${a} tools invoked`,
   };
   return map[agentId]?.(actions, items) ?? `${items} processed · ${actions} actions`;
@@ -385,8 +384,6 @@ function ConvAgentCard({ agent }: { agent: ConvAgent }) {
 
   const statPairs: [string, string | number][] = agent.id === 'whatsapp-agent'
     ? [['Messages 7d', s.sessions ?? 0], ['Resolved', `${s.resolvedRate ?? 0}%`]]
-    : agent.id === 'chat-widget'
-    ? [['Sessions 7d', s.sessions ?? 0], ['Bookings made', s.bookings_created ?? 0]]
     : [['Queries 7d', s.total_queries ?? 0], ['Tools invoked', s.tools_invoked ?? 0]];
 
   return (
@@ -439,7 +436,6 @@ function ActivityFeed({ rows }: { rows: FeedRow[] }) {
     'demand-forecasting':     '📈',
     'staff-transport-planner': '🚌',
     'whatsapp-agent':         '💬',
-    'chat-widget':            '🤖',
     'ops-assistant':          '🖥️',
   };
 

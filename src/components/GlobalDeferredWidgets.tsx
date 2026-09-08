@@ -15,11 +15,6 @@ const SubscriptionBanner = dynamic(() => import('@/components/SubscriptionBanner
   ssr: false,
   loading: () => null,
 });
-const ChatWidgetLoader = dynamic(() => import('@/components/Communication/ChatWidgetLoader'), {
-  ssr: false,
-  loading: () => null,
-});
-
 export default function GlobalDeferredWidgets() {
   const [enabled, setEnabled] = useState(false);
 
@@ -41,7 +36,6 @@ export default function GlobalDeferredWidgets() {
       <BrandingProvider />
       <ImpersonationBanner />
       <SubscriptionBanner />
-      <ChatWidgetLoader />
     </>
   );
 }

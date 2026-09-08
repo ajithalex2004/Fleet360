@@ -69,11 +69,6 @@ async function getWhatsAppAgent(): Promise<AgentDefinition> {
   return WHATSAPP_AGENT;
 }
 
-async function getChatWidgetAgent(): Promise<AgentDefinition> {
-  const { CHAT_WIDGET_AGENT } = await import('./chat-widget/agent');
-  return CHAT_WIDGET_AGENT;
-}
-
 async function getOpsAssistantAgent(): Promise<AgentDefinition> {
   const { OPS_ASSISTANT_AGENT } = await import('./ops-assistant/agent');
   return OPS_ASSISTANT_AGENT;
@@ -95,7 +90,6 @@ const AGENT_LOADERS: Record<AgentId, () => Promise<AgentDefinition>> = {
   'document-intelligence':      async () => { throw new Error('Not yet implemented'); },
   // ── Conversational (always-on, stats wrappers) ─────────────────────────────
   'whatsapp-agent':             getWhatsAppAgent,
-  'chat-widget':                getChatWidgetAgent,
   'ops-assistant':              getOpsAssistantAgent,
 };
 
@@ -311,18 +305,6 @@ export const AGENT_CATALOGUE = [
     agentType: 'CONVERSATIONAL',
     endpoint: 'POST /api/webhooks/whatsapp',
     tools: ['intent_detection', 'auto_reply', 'message_log'],
-  },
-  {
-    id: 'chat-widget' as AgentId,
-    name: 'Platform Chat Widget',
-    description: 'Global chat widget on every platform page. TheSys GPT-5, SSE streaming, createBooking tool.',
-    version: '1.0.0',
-    status: 'live',
-    model: 'TheSys GPT-5',
-    module: 'All Modules',
-    agentType: 'CONVERSATIONAL',
-    endpoint: 'POST /api/chat',
-    tools: ['createBooking'],
   },
   {
     id: 'ops-assistant' as AgentId,

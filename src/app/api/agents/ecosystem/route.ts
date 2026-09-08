@@ -99,23 +99,6 @@ async function whatsAppStats(tenantId: string) {
   };
 }
 
-async function chatWidgetStats(tenantId: string) {
-  const rows = await prisma.$queryRawUnsafe<{
-    sessions: number; total_messages: number; bookings_created: number; avg_ms: number;
-  }[]>(
-    `SELECT
-       COUNT(*)::int AS sessions,
-       COALESCE(SUM(items_processed),0)::int AS total_messages,
-       COALESCE(SUM(actions_created),0)::int AS bookings_created,
-       COALESCE(AVG(duration_ms),0)::int AS avg_ms
-     FROM agent_runs
-     WHERE agent_id = 'chat-widget' AND tenant_id = $1
-       AND created_at >= NOW() - INTERVAL '7 days'`,
-    tenantId,
-  ).catch(() => [{ sessions: 0, total_messages: 0, bookings_created: 0, avg_ms: 0 }]);
-  return rows[0] ?? { sessions: 0, total_messages: 0, bookings_created: 0, avg_ms: 0 };
-}
-
 async function opsAssistantStats(tenantId: string) {
   const rows = await prisma.$queryRawUnsafe<{
     sessions: number; total_queries: number; tools_invoked: number; avg_ms: number;
@@ -233,7 +216,7 @@ export async function GET(req: NextRequest) {
     ]);
 
     // Batch 2: KPIs + conversational stats (≤4 concurrent, reuses pendingRoutes)
-    const [kpis, waStats, chatStats, opsStats] = await Promise.all([
+    const [kpis, waStats, opsStats] = await Promise.all([
       commandStripKPIs(tenantId, pendingRoutes.length, coachPending, forecastPending).catch(() => ({
         actionsToday: 0,
         routeKmSaved7d: 0,
@@ -241,7 +224,6 @@ export async function GET(req: NextRequest) {
         pendingApprovals: 0,
       })),
       whatsAppStats(tenantId).catch(() => ({ sessions: 0, resolved: 0, resolvedRate: 0, avgResponseMs: 0 })),
-      chatWidgetStats(tenantId).catch(() => ({ sessions: 0, total_messages: 0, bookings_created: 0, avg_ms: 0 })),
       opsAssistantStats(tenantId).catch(() => ({ sessions: 0, total_queries: 0, tools_invoked: 0, avg_ms: 0 })),
     ]);
 
@@ -288,13 +270,6 @@ export async function GET(req: NextRequest) {
           stats7d: waStats,
         },
         {
-          id: 'chat-widget',
-          name: 'Platform Chat Widget',
-          model: 'TheSys GPT-5',
-          endpoint: 'POST /api/chat',
-          stats7d: chatStats,
-        },
-        {
           id: 'ops-assistant',
           name: 'Fleet360 Ops Assistant',
           model: 'TheSys GPT-5',
@@ -332,13 +307,6 @@ export async function GET(req: NextRequest) {
           model: 'Rule-based',
           endpoint: 'POST /api/webhooks/whatsapp',
           stats7d: { sessions: 0, resolved: 0, resolvedRate: 0, avgResponseMs: 0 },
-        },
-        {
-          id: 'chat-widget',
-          name: 'Platform Chat Widget',
-          model: 'TheSys GPT-5',
-          endpoint: 'POST /api/chat',
-          stats7d: { sessions: 0, total_messages: 0, bookings_created: 0, avg_ms: 0 },
         },
         {
           id: 'ops-assistant',
