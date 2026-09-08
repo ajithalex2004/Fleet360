@@ -1,8 +1,9 @@
 'use client';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Car } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
-import { useFetchedData, invalidate, invalidatePrefix } from '@/hooks/useFetchedData';
+import { useFetchedData } from '@/hooks/useFetchedData';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface Booking {
   id: string;
@@ -30,6 +31,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function RentalDashboard() {
+  const { tLabel } = useLanguage();
   // Session-scoped fetch cache — 1st visit hits the cached server endpoints
   // (unstable_cache + private s-maxage), 2nd visit in the same tab is
   // instant from the in-memory Map.
@@ -68,15 +70,15 @@ export default function RentalDashboard() {
   const recentBookings    = [...bookings].sort((a,b) => new Date(b.pickupDate).getTime() - new Date(a.pickupDate).getTime()).slice(0, 8);
 
   const statCards = [
-    { title: 'Active Bookings',   value: activeBookings,                    change: `${pendingBookings} pending`,         color: 'from-emerald-500 to-teal-600' },
-    { title: 'Total Revenue',     value: `AED ${monthRevenue.toLocaleString()}`, change: 'All time',                      color: 'from-amber-500 to-orange-600' },
-    { title: 'Customers',         value: customers.length,                  change: `${customers.filter(c=>c.blacklisted).length} blacklisted`, color: 'from-blue-500 to-indigo-600' },
-    { title: 'Open Claims',       value: openClaims,                        change: `${claims.length} total`,             color: 'from-rose-500 to-pink-600' },
+    { title: 'Active Bookings',   value: activeBookings,                    change: `${pendingBookings} ${tLabel('pending')}`,         color: 'from-emerald-500 to-teal-600' },
+    { title: 'Total Revenue',     value: `AED ${monthRevenue.toLocaleString()}`, change: tLabel('All time'),                      color: 'from-amber-500 to-orange-600' },
+    { title: 'Customers',         value: customers.length,                  change: `${customers.filter(c=>c.blacklisted).length} ${tLabel('blacklisted')}`, color: 'from-blue-500 to-indigo-600' },
+    { title: 'Open Claims',       value: openClaims,                        change: `${claims.length} ${tLabel('total')}`,             color: 'from-rose-500 to-pink-600' },
   ];
 
   if (loading) return (
     <div className="flex items-center justify-center h-full">
-      <div className="text-[var(--text-muted)] animate-pulse">Loading dashboard...</div>
+      <div className="text-[var(--text-muted)] animate-pulse">{tLabel('Loading dashboard...')}</div>
     </div>
   );
 
@@ -93,9 +95,9 @@ export default function RentalDashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
         {statCards.map((card) => (
           <div key={card.title} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.color} p-6`}>
-            <div className="text-3xl font-bold text-[var(--text-main)]">{card.value}</div>
-            <div className="mt-1 text-sm font-medium text-[var(--text-main)]/80">{card.title}</div>
-            <div className="mt-1 text-xs text-[var(--text-main)]/60">{card.change}</div>
+            <div className="text-3xl font-bold text-white">{card.value}</div>
+            <div className="mt-1 text-sm font-medium text-white/80">{tLabel(card.title)}</div>
+            <div className="mt-1 text-xs text-white/60">{card.change}</div>
           </div>
         ))}
       </div>
@@ -105,7 +107,7 @@ export default function RentalDashboard() {
         {['PENDING','CONFIRMED','ACTIVE','COMPLETED','CANCELLED'].map(s => (
           <div key={s} className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-xl p-4 text-center">
             <div className="text-2xl font-bold text-[var(--text-main)]">{bookings.filter(b => (b.status ?? 'PENDING') === s).length}</div>
-            <div className="text-xs text-[var(--text-muted)] mt-1">{s.charAt(0) + s.slice(1).toLowerCase()}</div>
+            <div className="text-xs text-[var(--text-muted)] mt-1">{tLabel(s)}</div>
           </div>
         ))}
       </div>
@@ -113,22 +115,22 @@ export default function RentalDashboard() {
       {/* Recent Bookings */}
       <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 backdrop-blur-sm">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-[var(--text-main)]">Recent Bookings</h2>
-          <a href="/rental/bookings" className="text-sm text-emerald-400 hover:text-emerald-300">View all</a>
+          <h2 className="text-lg font-semibold text-[var(--text-main)]">{tLabel('Recent Bookings')}</h2>
+          <a href="/rental/bookings" className="text-sm text-emerald-400 hover:text-emerald-300">{tLabel('View all')}</a>
         </div>
         {recentBookings.length === 0 ? (
-          <div className="text-center text-[var(--text-muted)] py-8">No bookings yet. <a href="/rental/bookings" className="text-emerald-400 hover:underline">Create one.</a></div>
+          <div className="text-center text-[var(--text-muted)] py-8">{tLabel('No bookings yet.')} <a href="/rental/bookings" className="text-emerald-400 hover:underline">{tLabel('Create one.')}</a></div>
         ) : (
           <table className="w-full">
             <thead>
               <tr className="border-b border-[var(--border-subtle)]">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">REF</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">CUSTOMER</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">CATEGORY</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">PICKUP</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">RETURN</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">AMOUNT</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)]">STATUS</th>
+                <th className="px-4 py-3 text-left rtl:text-right text-xs font-semibold text-[var(--text-muted)]">{tLabel('REF')}</th>
+                <th className="px-4 py-3 text-left rtl:text-right text-xs font-semibold text-[var(--text-muted)]">{tLabel('CUSTOMER')}</th>
+                <th className="px-4 py-3 text-left rtl:text-right text-xs font-semibold text-[var(--text-muted)]">{tLabel('CATEGORY')}</th>
+                <th className="px-4 py-3 text-left rtl:text-right text-xs font-semibold text-[var(--text-muted)]">{tLabel('PICKUP')}</th>
+                <th className="px-4 py-3 text-left rtl:text-right text-xs font-semibold text-[var(--text-muted)]">{tLabel('RETURN')}</th>
+                <th className="px-4 py-3 text-left rtl:text-right text-xs font-semibold text-[var(--text-muted)]">{tLabel('AMOUNT')}</th>
+                <th className="px-4 py-3 text-left rtl:text-right text-xs font-semibold text-[var(--text-muted)]">{tLabel('STATUS')}</th>
               </tr>
             </thead>
             <tbody>
@@ -146,7 +148,7 @@ export default function RentalDashboard() {
                     </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_COLORS[status] ?? STATUS_COLORS.PENDING}`}>
-                        {status}
+                        {tLabel(status)}
                       </span>
                     </td>
                   </tr>
@@ -167,7 +169,7 @@ export default function RentalDashboard() {
         ].map(link => (
           <a key={link.label} href={link.href}
             className={`block text-center py-3 px-4 rounded-xl bg-gradient-to-r ${link.color} text-white text-sm font-medium hover:opacity-90 transition-all`}>
-            {link.label}
+            {tLabel(link.label)}
           </a>
         ))}
       </div>

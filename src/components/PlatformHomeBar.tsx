@@ -109,7 +109,7 @@ export default function PlatformHomeBar({
         {tenant && (
           <>
             <span className="text-[var(--text-faint)] text-xs hidden md:inline">/</span>
-            <span className="text-[var(--text-faint)] text-xs font-medium hidden md:inline truncate max-w-32">{tenant.name}</span>
+            <span className="text-[var(--text-faint)] text-xs font-medium hidden md:inline truncate max-w-32">{tLabel(tenant.name)}</span>
           </>
         )}
       </div>

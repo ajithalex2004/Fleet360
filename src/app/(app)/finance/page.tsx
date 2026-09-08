@@ -1,8 +1,9 @@
 'use client';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Banknote, RefreshCw, X } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 import { useFetchedData } from '@/hooks/useFetchedData';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface ModuleStat {
   label: string;
@@ -69,6 +70,7 @@ const MODULE_META: Record<string, { icon: string; color: string; bar: string }> 
 };
 
 export default function FinanceDashboard() {
+  const { tLabel } = useLanguage();
   const [from, setFrom] = useState('');
   const [to, setTo]     = useState('');
 
@@ -92,13 +94,6 @@ export default function FinanceDashboard() {
 
   const s   = data?.summary;
   const mods = data?.modules;
-  const maxRevenue = Math.max(
-    mods?.rental.total      ?? 0,
-    mods?.leasing.total     ?? 0,
-    mods?.general.total     ?? 0,
-    mods?.maintenance.total ?? 0,
-    1,
-  );
 
   return (
     <div className="space-y-6">
@@ -110,24 +105,24 @@ export default function FinanceDashboard() {
         actions={
           <>
             <div className="flex items-center gap-2">
-              <label className="text-xs text-[var(--text-muted)]">From</label>
+              <label className="text-xs text-[var(--text-muted)]">{tLabel('From')}</label>
               <input type="date" value={from} onChange={e => setFrom(e.target.value)}
                 className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-emerald-500/50" />
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-xs text-[var(--text-muted)]">To</label>
+              <label className="text-xs text-[var(--text-muted)]">{tLabel('To')}</label>
               <input type="date" value={to} onChange={e => setTo(e.target.value)}
                 className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-emerald-500/50" />
             </div>
             {(from || to) && (
               <button onClick={() => { setFrom(''); setTo(''); }}
                 className="inline-flex items-center gap-1 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-3 py-2 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)]">
-                <X className="w-3 h-3" /> Clear
+                <X className="w-3 h-3" /> {tLabel('Clear')}
               </button>
             )}
             <button onClick={reload}
               className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]">
-              <RefreshCw className="w-3.5 h-3.5" /> Refresh
+              <RefreshCw className="w-3.5 h-3.5" /> {tLabel('Refresh')}
             </button>
           </>
         }
@@ -136,8 +131,8 @@ export default function FinanceDashboard() {
       {error && (
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-2.5 flex items-center gap-3 text-sm">
           <span className="text-amber-400">⚠</span>
-          <span className="text-amber-300 flex-1 text-xs">{error}</span>
-          <button onClick={reload} className="px-3 py-1 bg-amber-500/20 rounded-lg text-xs text-amber-300 hover:bg-amber-500/30">Retry</button>
+          <span className="text-amber-300 flex-1 text-xs">{tLabel(error)}</span>
+          <button onClick={reload} className="px-3 py-1 bg-amber-500/20 rounded-lg text-xs text-amber-300 hover:bg-amber-500/30">{tLabel('Retry')}</button>
         </div>
       )}
 
@@ -169,23 +164,23 @@ export default function FinanceDashboard() {
                 value: s.grossProfit,
                 icon: '💰',
                 tone: s.grossProfit >= 0 ? 'from-emerald-500 to-teal-600' : 'from-red-500 to-rose-600',
-                sub: `${s.grossMarginPct}% margin`,
+                sub: `${s.grossMarginPct}% ${tLabel('margin')}`,
               },
               {
                 label: 'Cash Received',
                 value: mods?.payments.total ?? 0,
                 icon: '💳',
                 tone: 'from-blue-500 to-indigo-600',
-                sub: `${mods?.payments.transactionCount ?? 0} transactions`,
+                sub: `${mods?.payments.transactionCount ?? 0} ${tLabel('transactions')}`,
               },
             ].map(card => (
               <div key={card.label} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.tone} p-6 shadow-sm`}>
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-white/80 text-sm font-medium">{card.label}</p>
+                  <p className="text-white/80 text-sm font-medium">{tLabel(card.label)}</p>
                   <span className="text-2xl">{card.icon}</span>
                 </div>
                 <p className="text-3xl font-bold text-white">AED {fmt(card.value)}</p>
-                <p className="text-xs text-white/60 mt-1">{card.sub}</p>
+                <p className="text-xs text-white/60 mt-1">{tLabel(card.sub)}</p>
               </div>
             ))}
           </div>
@@ -193,17 +188,17 @@ export default function FinanceDashboard() {
           {/* Gross Margin Bar */}
           <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-[var(--text-main)]">P&amp;L Overview</h2>
+              <h2 className="text-lg font-semibold text-[var(--text-main)]">{tLabel('P&L Overview')}</h2>
               <span className={`text-sm font-bold px-3 py-1 rounded-full ${
                 s.grossMarginPct >= 30 ? 'bg-green-500/20 text-green-400' :
                 s.grossMarginPct >= 0  ? 'bg-amber-500/20 text-amber-400' :
                 'bg-red-500/20 text-red-400'
-              }`}>{s.grossMarginPct}% margin</span>
+              }`}>{s.grossMarginPct}% {tLabel('margin')}</span>
             </div>
             <div className="space-y-3">
               <div>
                 <div className="flex justify-between text-xs text-[var(--text-muted)] mb-1">
-                  <span>Revenue</span><span>AED {fmt(s.totalRevenue)}</span>
+                  <span>{tLabel('Revenue')}</span><span>AED {fmt(s.totalRevenue)}</span>
                 </div>
                 <div className="h-2.5 bg-[var(--bg-surface-hover)] rounded-full overflow-hidden">
                   <div className="h-full bg-emerald-500 rounded-full" style={{ width: '100%' }} />
@@ -211,7 +206,7 @@ export default function FinanceDashboard() {
               </div>
               <div>
                 <div className="flex justify-between text-xs text-[var(--text-muted)] mb-1">
-                  <span>Costs</span><span>AED {fmt(s.totalCosts)}</span>
+                  <span>{tLabel('Costs')}</span><span>AED {fmt(s.totalCosts)}</span>
                 </div>
                 <div className="h-2.5 bg-[var(--bg-surface-hover)] rounded-full overflow-hidden">
                   <div className="h-full bg-amber-500 rounded-full" style={{ width: `${pct(s.totalCosts, s.totalRevenue)}%` }} />
@@ -219,7 +214,7 @@ export default function FinanceDashboard() {
               </div>
               <div>
                 <div className="flex justify-between text-xs text-[var(--text-muted)] mb-1">
-                  <span>Gross Profit</span><span>AED {fmt(s.grossProfit)}</span>
+                  <span>{tLabel('Gross Profit')}</span><span>AED {fmt(s.grossProfit)}</span>
                 </div>
                 <div className="h-2.5 bg-[var(--bg-surface-hover)] rounded-full overflow-hidden">
                   <div className={`h-full rounded-full ${s.grossProfit >= 0 ? 'bg-teal-400' : 'bg-red-500'}`}
@@ -232,15 +227,15 @@ export default function FinanceDashboard() {
           {/* Module Breakdown */}
           <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
             <div className="px-6 py-5 border-b border-[var(--border-subtle)]">
-              <h2 className="text-lg font-semibold text-[var(--text-main)]">Revenue &amp; Cost by Module</h2>
-              <p className="text-sm text-[var(--text-muted)] mt-0.5">Each module owns its own transactions — Finance aggregates read-only</p>
+              <h2 className="text-lg font-semibold text-[var(--text-main)]">{tLabel('Revenue & Cost by Module')}</h2>
+              <p className="text-sm text-[var(--text-muted)] mt-0.5">{tLabel('Each module owns its own transactions — Finance aggregates read-only')}</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-[var(--bg-surface)]/60">
                   <tr>
                     {['Module', 'Type', 'Amount (AED)', 'Documents', 'Share of Revenue', ''].map(h => (
-                      <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">{h}</th>
+                      <th key={h} className="px-5 py-3 text-left rtl:text-right text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">{tLabel(h)}</th>
                     ))}
                   </tr>
                 </thead>
@@ -254,7 +249,7 @@ export default function FinanceDashboard() {
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-3">
                             <span className="text-xl">{meta.icon}</span>
-                            <span className="font-medium text-[var(--text-main)]">{mod.label}</span>
+                            <span className="font-medium text-[var(--text-main)]">{tLabel(mod.label)}</span>
                           </div>
                         </td>
                         <td className="px-5 py-4">
@@ -263,7 +258,7 @@ export default function FinanceDashboard() {
                             mod.type === 'cost'    ? 'bg-amber-500/20 text-amber-400' :
                             'bg-blue-500/20 text-blue-400'
                           }`}>
-                            {mod.type.toUpperCase()}
+                            {tLabel(mod.type.toUpperCase())}
                           </span>
                         </td>
                         <td className="px-5 py-4">
@@ -272,8 +267,8 @@ export default function FinanceDashboard() {
                           </span>
                         </td>
                         <td className="px-5 py-4 text-[var(--text-muted)] text-xs">
-                          {mod.invoiceCount !== undefined && `${mod.invoiceCount} invoices`}
-                          {mod.transactionCount !== undefined && `${mod.transactionCount} txns`}
+                          {mod.invoiceCount !== undefined && `${mod.invoiceCount} ${tLabel('invoices')}`}
+                          {mod.transactionCount !== undefined && `${mod.transactionCount} ${tLabel('txns')}`}
                         </td>
                         <td className="px-5 py-4 w-48">
                           {share !== null ? (
@@ -281,17 +276,17 @@ export default function FinanceDashboard() {
                               <div className="flex-1 h-2 bg-[var(--bg-surface-hover)] rounded-full overflow-hidden">
                                 <div className={`h-full ${meta.bar} rounded-full`} style={{ width: `${share}%` }} />
                               </div>
-                              <span className="text-xs text-[var(--text-muted)] w-8 text-right">{share}%</span>
+                              <span className="text-xs text-[var(--text-muted)] w-8 text-right rtl:text-left">{share}%</span>
                             </div>
                           ) : (
                             <span className="text-xs text-[var(--text-faint)]">—</span>
                           )}
                         </td>
                         <td className="px-5 py-4">
-                          {key === 'rental'      && <a href="/rental/invoices" className="text-xs text-blue-400 hover:underline">View →</a>}
-                          {key === 'leasing'     && <a href="/leasing/invoices" className="text-xs text-violet-400 hover:underline">View →</a>}
-                          {key === 'maintenance' && <a href="/maintenance/invoices" className="text-xs text-amber-400 hover:underline">View →</a>}
-                          {key === 'payments'    && <a href="/finance/payments" className="text-xs text-green-400 hover:underline">View →</a>}
+                          {key === 'rental'      && <a href="/rental/invoices" className="text-xs text-blue-400 hover:underline">{tLabel('View →')}</a>}
+                          {key === 'leasing'     && <a href="/leasing/invoices" className="text-xs text-violet-400 hover:underline">{tLabel('View →')}</a>}
+                          {key === 'maintenance' && <a href="/maintenance/invoices" className="text-xs text-amber-400 hover:underline">{tLabel('View →')}</a>}
+                          {key === 'payments'    && <a href="/finance/payments" className="text-xs text-green-400 hover:underline">{tLabel('View →')}</a>}
                         </td>
                       </tr>
                     );
@@ -314,7 +309,7 @@ export default function FinanceDashboard() {
                 const max = Math.max(...rows.map(r => r.total), 1);
                 return (
                   <div key={key} className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6">
-                    <h3 className="text-base font-semibold text-[var(--text-main)] mb-5">{label}</h3>
+                    <h3 className="text-base font-semibold text-[var(--text-main)] mb-5">{tLabel(label)}</h3>
                     <div className="space-y-3">
                       {rows.map(r => (
                         <div key={r.month} className="flex items-center gap-3">
@@ -327,7 +322,7 @@ export default function FinanceDashboard() {
                               )}
                             </div>
                           </div>
-                          <span className={`text-xs font-semibold w-24 text-right ${textColor}`}>AED {fmt(r.total)}</span>
+                          <span className={`text-xs font-semibold w-24 text-right rtl:text-left ${textColor}`}>AED {fmt(r.total)}</span>
                         </div>
                       ))}
                     </div>
@@ -341,11 +336,9 @@ export default function FinanceDashboard() {
           <div className="bg-[var(--bg-surface)]/30 border border-[var(--border-subtle)] rounded-2xl p-5 flex items-start gap-4">
             <span className="text-2xl">ℹ️</span>
             <div>
-              <p className="text-sm font-semibold text-[var(--text-main)] mb-1">Hub-and-Spoke Finance Architecture</p>
+              <p className="text-sm font-semibold text-[var(--text-main)] mb-1">{tLabel('Hub-and-Spoke Finance Architecture')}</p>
               <p className="text-sm text-[var(--text-muted)]">
-                Finance Hub is a <em>read-only aggregation layer</em>. Each operational module (Rental, Leasing, Maintenance) independently
-                processes its own payments without Finance team approval. This dashboard consolidates those numbers in real time.
-                No transaction is blocked waiting for Finance — the hub reads, never writes.
+                {tLabel('Finance Hub is a read-only aggregation layer. Each operational module (Rental, Leasing, Maintenance) independently processes its own payments without Finance team approval. This dashboard consolidates those numbers in real time. No transaction is blocked waiting for Finance — the hub reads, never writes.')}
               </p>
             </div>
           </div>
