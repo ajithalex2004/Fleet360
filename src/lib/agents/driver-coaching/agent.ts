@@ -17,17 +17,8 @@ interface DriverRow {
   id: string;
   first_name: string;
   last_name: string;
-  employee_id: string | null;
   rag_score: number | null;
-  rag_status: string | null;
-}
-
-interface PerfRow {
-  driver_id: string;
-  avg_speed_score: number | null;
   avg_fuel_score: number | null;
-  avg_safety_score: number | null;
-  violations_last_30d: number | null;
   incidents_last_30d: number | null;
   trips_last_30d: number | null;
 }
@@ -83,15 +74,34 @@ async function runDriverCoaching(event: AgentEvent): Promise<AgentRunResult> {
   const t0 = Date.now();
   const week = weekLabel();
 
-  // 1. Fetch active drivers
+  // 1. Fetch active drivers with their latest known performance snapshot.
+  //    workforce.driver_performance is a monthly-aggregate table (not a
+  //    30-day event log) — there is no drivers.rag_score column and no
+  //    speed/safety/violations metrics table anywhere in the schema, so
+  //    those fields have no live source (see candidates mapping below).
   const drivers = await prisma.$queryRaw<DriverRow[]>`
-    SELECT id::text, first_name, last_name, employee_id,
-           rag_score::float8, rag_status
-    FROM drivers
-    WHERE status IN ('ACTIVE', 'ON_SHIFT', 'AVAILABLE')
-    ORDER BY rag_score ASC NULLS LAST
+    SELECT
+      d.id::text AS id,
+      d.first_name,
+      d.last_name,
+      dp.score::float8           AS rag_score,
+      dp.fuel_efficiency::float8 AS avg_fuel_score,
+      dp.incident_count::int     AS incidents_last_30d,
+      dp.total_trips::int        AS trips_last_30d
+    FROM drivers d
+    LEFT JOIN LATERAL (
+      SELECT score, fuel_efficiency, incident_count, total_trips
+      FROM workforce.driver_performance
+      WHERE driver_id = d.id
+      ORDER BY period_year DESC, period_month DESC, created_at DESC
+      LIMIT 1
+    ) dp ON true
+    WHERE d.tenant_id = ${event.tenant_id}
+      AND d.status IN ('ACTIVE', 'ON_SHIFT', 'AVAILABLE')
+      AND d.deleted_at IS NULL
+    ORDER BY dp.score ASC NULLS LAST
     LIMIT 200
-  `.catch(() => [] as DriverRow[]);
+  `;
 
   if (drivers.length === 0) {
     return {
@@ -101,26 +111,6 @@ async function runDriverCoaching(event: AgentEvent): Promise<AgentRunResult> {
       output: { summary: 'No active drivers found.', plans: [] },
     };
   }
-
-  // 2. Fetch performance summaries (30 days)
-  const perfRows = await prisma.$queryRaw<PerfRow[]>`
-    SELECT
-      d.id::text AS driver_id,
-      AVG(CASE WHEN p.metric_type = 'SPEED' THEN p.score END)::float8    AS avg_speed_score,
-      AVG(CASE WHEN p.metric_type = 'FUEL'  THEN p.score END)::float8    AS avg_fuel_score,
-      AVG(CASE WHEN p.metric_type = 'SAFETY' THEN p.score END)::float8   AS avg_safety_score,
-      COUNT(CASE WHEN p.metric_type = 'VIOLATION' THEN 1 END)::int       AS violations_last_30d,
-      COUNT(CASE WHEN p.metric_type = 'INCIDENT'  THEN 1 END)::int       AS incidents_last_30d,
-      COUNT(DISTINCT t.id)::int                                           AS trips_last_30d
-    FROM drivers d
-    LEFT JOIN driver_performance_metrics p ON p.driver_id = d.id
-      AND p.created_at > NOW() - INTERVAL '30 days'
-    LEFT JOIN trips t ON t.driver_id = d.id
-      AND t.created_at > NOW() - INTERVAL '30 days'
-    GROUP BY d.id
-  `.catch(() => [] as PerfRow[]);
-
-  const perfMap = new Map(perfRows.map(p => [p.driver_id, p]));
 
   let plansGenerated = 0;
   let deterministicCount = 0;
@@ -132,15 +122,17 @@ async function runDriverCoaching(event: AgentEvent): Promise<AgentRunResult> {
 
   const plans: Record<string, unknown>[] = [];
 
-  // Group drivers into deterministic vs AI candidates
+  // Group drivers into deterministic vs AI candidates.
+  // speedScore/safetyScore/violations have no live data source (no
+  // speed-telemetry, safety-scoring, or HOS-violations table exists yet),
+  // so they stay at the same neutral defaults used when data is missing.
   const candidates = drivers.map(driver => {
-    const perf = perfMap.get(driver.id);
-    const speedScore   = perf?.avg_speed_score ?? 70;
-    const fuelScore    = perf?.avg_fuel_score ?? 70;
-    const safetyScore  = perf?.avg_safety_score ?? 70;
-    const violations   = perf?.violations_last_30d ?? 0;
-    const incidents    = perf?.incidents_last_30d ?? 0;
-    const tripsCount   = perf?.trips_last_30d ?? 0;
+    const speedScore   = 70;
+    const fuelScore    = driver.avg_fuel_score ?? 70;
+    const safetyScore  = 70;
+    const violations   = 0;
+    const incidents    = driver.incidents_last_30d ?? 0;
+    const tripsCount   = driver.trips_last_30d ?? 0;
     const ragScore     = driver.rag_score;
     const rating       = overallRating(ragScore);
     const trend        = ragTrend(ragScore);
@@ -196,7 +188,7 @@ async function runDriverCoaching(event: AgentEvent): Promise<AgentRunResult> {
           } else {
             // High-touch AI generated coaching plan for at-risk drivers
             const context = [
-              `Driver: ${item.driver.first_name} ${item.driver.last_name} (${item.driver.employee_id ?? 'N/A'})`,
+              `Driver: ${item.driver.first_name} ${item.driver.last_name}`,
               `Week: ${week}`,
               `RAG Score: ${item.ragScore ?? 'N/A'}/100 (${item.rating})`,
               `Trend: ${item.trend}`,
@@ -210,11 +202,8 @@ async function runDriverCoaching(event: AgentEvent): Promise<AgentRunResult> {
               `Focus Areas: ${item.focusAreas.join(', ')}`,
             ].join('\n');
 
-            const resp = await aiGateway.chat({
-              capability: 'ECONOMY_TEXT',
-              tenantId: event.tenant_id,
-              agentId: 'driver-coach',
-              messages: [
+            const resp = await aiGateway.chat(
+              [
                 {
                   role: 'system',
                   content:
@@ -228,9 +217,13 @@ async function runDriverCoaching(event: AgentEvent): Promise<AgentRunResult> {
                   content: context,
                 },
               ],
-              maxTokens: 350,
-              temperature: 0.3,
-            });
+              {
+                capabilityAlias: 'ECONOMY_TEXT',
+                tenantId: event.tenant_id,
+                maxTokens: 350,
+                temperature: 0.3,
+              },
+            );
 
             coachingPlan = resp.content;
             aiCount++;
