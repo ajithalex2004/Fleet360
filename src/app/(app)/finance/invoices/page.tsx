@@ -483,6 +483,19 @@ function InvoiceDrawer({ invoiceId, onClose, onRefresh }: { invoiceId: string; o
                 Cancel Invoice
               </button>
             )}
+
+            {/* UAE Peppol E-Invoice UBL 2.1 XML Export */}
+            <a
+              href={`/api/finance/invoices/${inv.id}/peppol-xml`}
+              download={`${inv.invoice_number || 'INV'}-peppol.xml`}
+              target="_blank"
+              rel="noreferrer"
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-violet-500/10 hover:bg-violet-500/15 border border-violet-500/30 text-violet-300 font-semibold text-xs transition-all shadow-sm"
+              title="Download compliant UAE MoF Peppol PINT (UBL 2.1 XML) E-Invoice"
+            >
+              <span>📜</span>
+              <span>Download UAE Peppol E-Invoice (XML)</span>
+            </a>
           </div>
 
           {inv.payments?.length > 0 && (
@@ -614,6 +627,32 @@ function FinanceInvoicesInner() {
             <p className={`text-xl font-bold mt-1 ${k.color}`}>{k.value}</p>
           </div>
         ))}
+      </div>
+
+      {/* UAE Peppol E-Invoicing Compliance Strip */}
+      <div className="bg-gradient-to-r from-violet-500/10 via-purple-500/5 to-transparent border border-violet-500/20 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-violet-500/20 border border-violet-500/30 flex items-center justify-center text-lg flex-shrink-0">
+            📜
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-semibold text-[var(--text-main)]">UAE MoF & FTA Peppol E-Invoicing (PINT-UAE)</p>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium">Phase 1 Active</span>
+            </div>
+            <p className="text-xs text-[var(--text-muted)] mt-0.5">
+              Invoices are generated with compliant UBL 2.1 XML, FTA TRN validation, and cryptographic SHA-256 digest hashes alongside bilingual PDF tax invoices.
+            </p>
+          </div>
+        </div>
+        <a
+          href="/api/finance/invoices/INV-DEMO-001/peppol-xml"
+          target="_blank"
+          download="sample-peppol-pint.xml"
+          className="px-3.5 py-1.5 rounded-xl bg-violet-500/15 hover:bg-violet-500/25 border border-violet-500/30 text-violet-300 text-xs font-semibold whitespace-nowrap transition-all shadow-sm flex-shrink-0"
+        >
+          Download Sample XML ↓
+        </a>
       </div>
 
       <div className="flex gap-3">
