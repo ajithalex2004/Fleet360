@@ -148,23 +148,33 @@ async function fetchFuelRecords(tenantId: string): Promise<FuelLogRecord[]> {
 
 async function fetchVendorInvoices(tenantId: string): Promise<VendorInvoiceRecord[]> {
   try {
+    // invoices is a different, garage-repair-invoice model (invoiceNumber,
+    // requestId, garageId, totalAmount, paidAmount — no tenant_id at all,
+    // no vendor/VAT fields). The real AP/vendor-invoice model is
+    // finance_payables (source lineage literally includes VENDOR_INVOICE),
+    // fully specified in schema.prisma but never migrated until now (see
+    // migration 20260910000036).
+    // There's no vendorTrn or per-invoice agreed-rate-card field on
+    // finance_payables, so the rate-card-breach check stays disabled
+    // (agreedRateCardAmount omitted). The missing-TRN check is left live
+    // and genuinely fires on every large invoice, because that's true:
+    // this AP ledger has never captured vendor TRNs, which is itself a
+    // real FTA-compliance gap worth surfacing, not a fabricated one.
     const rows = await prisma.$queryRawUnsafe<any[]>(`
       SELECT
-        i.id::text,
-        COALESCE(i.invoice_number, i.id::text) AS "invoiceNumber",
-        COALESCE(i.vendor_name, 'Vendor') AS "vendorName",
-        i.vendor_trn AS "vendorTrn",
-        i.invoice_date::text AS "invoiceDate",
-        COALESCE(i.subtotal, i.amount, 0)::float8 AS subtotal,
-        COALESCE(i.tax_amount, 0)::float8 AS "vatAmount",
-        COALESCE(i.total_amount, i.amount, 0)::float8 AS "totalAmount",
-        COALESCE(i.agreed_rate, i.subtotal)::float8 AS "agreedRateCardAmount",
-        COALESCE(i.category, 'GENERAL') AS category,
-        COALESCE(i.currency, 'AED') AS currency,
-        i.description
-      FROM invoices i
-      WHERE i.tenant_id = $1
-      ORDER BY i.created_at DESC
+        fp.id::text,
+        fp.payable_number AS "invoiceNumber",
+        fp.vendor_name AS "vendorName",
+        fp.module AS category,
+        fp.issue_date::text AS "invoiceDate",
+        fp.subtotal::float8 AS subtotal,
+        fp.vat_amount::float8 AS "vatAmount",
+        fp.total_amount::float8 AS "totalAmount",
+        fp.currency,
+        fp.description
+      FROM finance_payables fp
+      WHERE fp.tenant_id = $1
+      ORDER BY fp.issue_date DESC
       LIMIT 500
     `, tenantId);
 
@@ -172,13 +182,13 @@ async function fetchVendorInvoices(tenantId: string): Promise<VendorInvoiceRecor
       id: r.id,
       invoiceNumber: r.invoiceNumber,
       vendorName: r.vendorName,
-      vendorTrn: r.vendorTrn,
+      vendorTrn: undefined,
       invoiceDate: r.invoiceDate,
       subtotal: Number(r.subtotal ?? 0),
       vatAmount: Number(r.vatAmount ?? 0),
       totalAmount: Number(r.totalAmount ?? 0),
-      agreedRateCardAmount: r.agreedRateCardAmount !== null ? Number(r.agreedRateCardAmount) : undefined,
-      category: r.category,
+      agreedRateCardAmount: undefined,
+      category: r.category ?? 'GENERAL',
       currency: r.currency,
       description: r.description,
     }));
@@ -238,22 +248,31 @@ async function fetchPartnerSettlements(tenantId: string): Promise<PartnerSettlem
 
 async function fetchDriverExpenses(tenantId: string): Promise<DriverExpenseRecord[]> {
   try {
+    // driver_expenses never existed. finance_expenses is real, tenant-scoped,
+    // and genuinely driver-attributable (driver_id, amount, category,
+    // expense_date) — but there's no distance data anywhere in this schema
+    // (no telematics/GPS distance source usable for arbitrary driver trips;
+    // bus_gps_pings is school-bus-specific). The stream's only detector
+    // check (inflated mileage claim vs telematics distance) needs both
+    // claimedDistanceKm and telematicsDistanceKm to be present to fire, so
+    // leaving them NULL disables it honestly rather than fabricating
+    // distances — same pattern as the other streams' unavailable checks.
     const rows = await prisma.$queryRawUnsafe<any[]>(`
       SELECT
-        de.id::text,
-        de.driver_id::text AS "driverId",
-        d.first_name || ' ' || COALESCE(d.last_name, '') AS "driverName",
-        de.expense_date::text AS "expenseDate",
-        de.category,
-        de.amount::float8 AS "claimedAmount",
-        de.claimed_distance_km::float8 AS "claimedDistanceKm",
-        de.telematics_distance_km::float8 AS "telematicsDistanceKm",
-        COALESCE(de.currency, 'AED') AS currency,
-        de.description
-      FROM driver_expenses de
-      LEFT JOIN drivers d ON d.id = de.driver_id
-      WHERE de.tenant_id = $1
-      ORDER BY de.expense_date DESC
+        fe.id::text,
+        fe.driver_id AS "driverId",
+        COALESCE(d.name, NULLIF(TRIM(d.first_name || ' ' || COALESCE(d.last_name, '')), ''), 'Driver') AS "driverName",
+        fe.expense_date::text AS "expenseDate",
+        fe.category,
+        fe.total_amount::float8 AS "claimedAmount",
+        NULL::float8 AS "claimedDistanceKm",
+        NULL::float8 AS "telematicsDistanceKm",
+        fe.currency,
+        fe.description
+      FROM finance_expenses fe
+      LEFT JOIN drivers d ON d.id = fe.driver_id
+      WHERE fe.tenant_id = $1 AND fe.driver_id IS NOT NULL
+      ORDER BY fe.expense_date DESC
       LIMIT 300
     `, tenantId);
 
@@ -264,8 +283,8 @@ async function fetchDriverExpenses(tenantId: string): Promise<DriverExpenseRecor
       expenseDate: r.expenseDate,
       category: r.category,
       claimedAmount: Number(r.claimedAmount ?? 0),
-      claimedDistanceKm: r.claimedDistanceKm !== null ? Number(r.claimedDistanceKm) : undefined,
-      telematicsDistanceKm: r.telematicsDistanceKm !== null ? Number(r.telematicsDistanceKm) : undefined,
+      claimedDistanceKm: undefined,
+      telematicsDistanceKm: undefined,
       currency: r.currency,
       description: r.description,
     }));
