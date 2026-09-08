@@ -55,6 +55,8 @@ export interface AgentRunTelemetry {
   toolCallsCount?: number;
   agentHopsCount?: number;
   matrixElementsQueried?: number;
+  cacheHits?: number;
+  costAvoidedAed?: number;
   solverDurationMs?: number;
   costUsd?: number;
   costAed?: number;

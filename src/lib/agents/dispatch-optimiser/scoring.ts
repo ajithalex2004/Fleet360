@@ -187,11 +187,14 @@ export function spatialShortlistCandidates(
     lng: c.currentLng ?? 55.2708,
   }));
 
+  // Radius expansion is unconditional inside spatialShortlist itself (it
+  // always widens the search until minCandidates is met or maxRadiusKm is
+  // hit) — there's no adaptiveExpansion option on SpatialShortlistOptions
+  // to turn that off, so passing one here was a no-op.
   const shortlisted = routingIntelligence.spatialShortlist(origin, candidateItems, {
     maxCandidates: options.maxCandidates ?? 20,
     initialRadiusKm: options.initialRadiusKm ?? 10,
     minCandidates: options.minCandidates ?? 3,
-    adaptiveExpansion: true,
   });
 
   return shortlisted.selected.map(s => s.item);
@@ -426,12 +429,15 @@ export async function rankCandidatesWithRouting(
 
     try {
       matrixElementsQueried++;
+      // RoutingIntelligenceOptions has no tenantId — the distance/travel-time
+      // matrix cache is correctly tenant-agnostic (the road distance between
+      // two coordinates doesn't vary by tenant), so there was nothing for a
+      // tenantId to scope here.
       const travel = await routingIntelligence.getTravelTime(
-        { lat: rawCandidate.currentLat, lng: rawCandidate.currentLng },
-        { lat: job.pickupLat, lng: job.pickupLng },
+        { latitude: rawCandidate.currentLat, longitude: rawCandidate.currentLng },
+        { latitude: job.pickupLat, longitude: job.pickupLng },
         {
           tier: 'TRAFFIC_DYNAMIC',
-          tenantId: options.tenantId,
         },
       );
 
