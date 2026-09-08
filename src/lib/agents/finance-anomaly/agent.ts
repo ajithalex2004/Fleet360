@@ -383,7 +383,7 @@ async function persistFlags(flags: AnomalyFlag[], runId: string, tenantId: strin
            severity, confidence, explanation, amount, currency,
            expected_value, actual_value, variance_pct, likely_cause,
            financial_exposure_aed, recommended_action, status, agent_run_id
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,'OPEN',$17)
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16::jsonb,'OPEN',$17::uuid)
          ON CONFLICT (entity_id, detector_id) WHERE status = 'OPEN'
          DO UPDATE SET
            severity               = EXCLUDED.severity,
@@ -434,7 +434,7 @@ async function run(event: AgentEvent): Promise<AgentRunResult> {
   // Log execution start
   await prisma.$executeRawUnsafe(
     `INSERT INTO agent_runs (id, agent_id, tenant_id, event_type, status, created_at)
-     VALUES ($1, 'finance-anomaly', $2, $3, 'RUNNING', NOW())`,
+     VALUES ($1::uuid, 'finance-anomaly', $2, $3, 'RUNNING', NOW())`,
     runId,
     tenantId,
     event.event_type,
@@ -543,8 +543,8 @@ async function run(event: AgentEvent): Promise<AgentRunResult> {
        items_processed = $1,
        actions_created = $2,
        duration_ms     = $3,
-       output          = $4
-     WHERE id = $5`,
+       output          = $4::jsonb
+     WHERE id = $5::uuid`,
     totalItemsProcessed,
     actionsCreated,
     durationMs,

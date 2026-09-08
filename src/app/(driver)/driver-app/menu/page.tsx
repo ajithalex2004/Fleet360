@@ -352,6 +352,9 @@ export default function MenuPage() {
             <button
               type="button"
               onClick={() => router.push('/driver-app/shift-checklist')}
+              className="font-semibold underline underline-offset-2"
+            >
+              {language === 'ar' ? 'بدء قائمة فحص الوردية' : 'Start shift checklist'}
             </button>
           </div>
         )}
