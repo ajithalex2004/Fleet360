@@ -83,13 +83,17 @@ async function runDispatchOptimiser(event: AgentEvent): Promise<AgentRunResult> 
   await ensureDispatchSchema();
 
   // 1. Fetch pending jobs — always scoped to tenant; optionally single job
+  // dispatch_jobs has no required_capacity column (never did — not in the
+  // DDL, not in metadata either), so it's dropped from the SELECT; the
+  // existing `job.required_capacity ?? 1` fallback below already handles
+  // the now-always-undefined value correctly.
   const jobs = await (
     entityId
       ? prisma.$queryRawUnsafe<JobRow[]>(`
           SELECT id::text, service_type, priority, status,
                  pickup_lat::float8, pickup_lng::float8,
                  dropoff_lat::float8, dropoff_lng::float8,
-                 required_capacity::int, sla_deadline::text, zone_id, metadata
+                 sla_deadline::text, zone_id, metadata
           FROM dispatch_jobs
           WHERE tenant_id = $1
             AND id = $2::uuid
@@ -100,7 +104,7 @@ async function runDispatchOptimiser(event: AgentEvent): Promise<AgentRunResult> 
           SELECT id::text, service_type, priority, status,
                  pickup_lat::float8, pickup_lng::float8,
                  dropoff_lat::float8, dropoff_lng::float8,
-                 required_capacity::int, sla_deadline::text, zone_id, metadata
+                 sla_deadline::text, zone_id, metadata
           FROM dispatch_jobs
           WHERE tenant_id = $1
             AND status IN ('PENDING', 'SEARCHING', 'RETRYING')
