@@ -189,19 +189,35 @@ async function fetchVendorInvoices(tenantId: string): Promise<VendorInvoiceRecor
 
 async function fetchPartnerSettlements(tenantId: string): Promise<PartnerSettlementRecord[]> {
   try {
+    // exchange_quotations never existed — the real Fleet360 Exchange /
+    // Partner Settlement pipeline is partner_invoices (the actual billed
+    // settlement) -> outsource_awards (the agreed/awarded price) ->
+    // outsource_requests (source_reference_id is the originating trip),
+    // with transport_partners for the partner name. These tables were
+    // fully modeled in schema.prisma with live app routes under
+    // /api/exchange/*, but had never been migrated into this database
+    // until now (see migration 20260910000035).
+    // There's no proof-of-delivery/telematics-verification field on the
+    // invoice or award, so hasTelematicsProof is always true — that
+    // disables the ghost-trip check rather than firing it on every real
+    // settlement (same honest-disable pattern used for the other streams'
+    // unavailable data).
     const rows = await prisma.$queryRawUnsafe<any[]>(`
       SELECT
-        eq.id::text,
-        COALESCE(eq.vendor_id::text, 'P-101') AS "partnerId",
-        COALESCE(eq.vendor_name, 'Partner Logistics') AS "partnerName",
-        COALESCE(eq.trip_id::text, 'TRIP-882') AS "tripId",
-        COALESCE(eq.quoted_amount, 1200)::float8 AS "agreedQuoteAmount",
-        COALESCE(eq.invoiced_amount, 1450)::float8 AS "invoicedSettlementAmount",
-        COALESCE(eq.has_telematics_proof, true) AS "hasTelematicsProof",
-        COALESCE(eq.created_at, NOW())::text AS "completionDate"
-      FROM exchange_quotations eq
-      WHERE eq.tenant_id = $1
-      ORDER BY eq.created_at DESC
+        pi.id::text,
+        pi.partner_id::text AS "partnerId",
+        COALESCE(tp.trade_name, tp.legal_name) AS "partnerName",
+        orq.source_reference_id AS "tripId",
+        oa.total_awarded::float8 AS "agreedQuoteAmount",
+        pi.total_amount::float8 AS "invoicedSettlementAmount",
+        true AS "hasTelematicsProof",
+        pi.invoice_date::text AS "completionDate"
+      FROM partner_invoices pi
+      JOIN outsource_awards oa ON oa.id = pi.award_id
+      JOIN outsource_requests orq ON orq.id = oa.request_id
+      LEFT JOIN transport_partners tp ON tp.id = pi.partner_id
+      WHERE pi.tenant_id = $1
+      ORDER BY pi.invoice_date DESC
       LIMIT 200
     `, tenantId);
 
