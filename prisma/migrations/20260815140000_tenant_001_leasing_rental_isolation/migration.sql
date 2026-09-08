@@ -91,7 +91,7 @@ ALTER TABLE lease_invoice_lines
 -- Tenant-scoped business uniqueness
 ALTER TABLE lease_quotations DROP CONSTRAINT IF EXISTS lease_quotations_quotation_number_key;
 ALTER TABLE lease_contracts_v2 DROP CONSTRAINT IF EXISTS lease_contracts_v2_contract_number_key;
-ALTER TABLE lease_invoices DROP CONSTRAINT IF EXISTS lease_invoices_invoice_number_key;
+ALTER TABLE lease_invoices DROP CONSTRAINT IF EXISTS lease_invoices_invoice_no_key;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_lease_quotations_tenant_number
   ON lease_quotations(tenant_id, quotation_number)
@@ -100,8 +100,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_lease_contracts_v2_tenant_number
   ON lease_contracts_v2(tenant_id, contract_number)
   WHERE contract_number IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_lease_invoices_tenant_number
-  ON lease_invoices(tenant_id, invoice_number)
-  WHERE invoice_number IS NOT NULL;
+  ON lease_invoices(tenant_id, invoice_no)
+  WHERE invoice_no IS NOT NULL;
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- B. Rental domain — add tenant_id (including inspections, claims, rate events)
