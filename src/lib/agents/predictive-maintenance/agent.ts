@@ -35,7 +35,6 @@ interface VehicleRow {
   license_plate: string | null;
   purchase_date: string | null;
   odometer_reading: number | null;
-  engine_hours: number | null;
 }
 
 interface WoRow {
@@ -75,17 +74,18 @@ interface TelemetryRow {
 // ── Database Fetchers ──────────────────────────────────────────────────────────
 
 async function fetchVehicles(vehicleId?: string): Promise<VehicleRow[]> {
-  const filter = vehicleId ? `AND id = '${vehicleId}'` : '';
+  const filter = vehicleId ? `AND id = $1::uuid` : '';
+  const params = vehicleId ? [vehicleId] : [];
   return prisma.$queryRawUnsafe<VehicleRow[]>(
     `SELECT id, vehicle_code, make, model, license_plate, purchase_date,
-            COALESCE(odometer_reading, 0)::float8 AS odometer_reading,
-            COALESCE(engine_hours, 0)::float8 AS engine_hours
+            COALESCE(odometer_reading, 0)::float8 AS odometer_reading
      FROM vehicles
      WHERE deleted_at IS NULL
        AND status NOT IN ('INACTIVE','SOLD')
        ${filter}
      ORDER BY created_at DESC
      LIMIT 500`,
+    ...params,
   ).catch(() => []);
 }
 
@@ -95,9 +95,8 @@ async function fetchWorkOrderStats(): Promise<WoRow[]> {
     `SELECT
        vehicle_id::text,
        COUNT(*) FILTER (WHERE status IN ('OPEN','IN_PROGRESS','PENDING_PARTS'))::int AS open_count,
-       COUNT(*) FILTER (WHERE created_at >= $1)::int                                 AS recent_count
+       COUNT(*) FILTER (WHERE created_at >= $1::timestamptz)::int                    AS recent_count
      FROM fleet_work_orders
-     WHERE deleted_at IS NULL
      GROUP BY vehicle_id`,
     cutoff,
   ).catch(() => []);
@@ -106,18 +105,28 @@ async function fetchWorkOrderStats(): Promise<WoRow[]> {
 async function fetchFuelStats(): Promise<FuelRow[]> {
   const cutoff90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
   const cutoff30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  // fuel_logs.mileage is an odometer reading at each fill-up, not a per-log
+  // distance — km driven between fill-ups has to come from the delta against
+  // the previous reading for that vehicle (LAG), not a flat SUM(km_driven);
+  // that column never existed on this table.
   return prisma.$queryRawUnsafe<FuelRow[]>(
-    `SELECT
+    `WITH deltas AS (
+       SELECT vehicle_id, fuel_date, liters,
+              GREATEST(mileage - LAG(mileage) OVER (PARTITION BY vehicle_id ORDER BY fuel_date), 0) AS km_driven
+       FROM fuel_logs
+       WHERE mileage IS NOT NULL
+     )
+     SELECT
        vehicle_id::text,
-       CASE WHEN SUM(km_driven) FILTER (WHERE fuel_date >= $1 AND km_driven > 0) > 0
-            THEN ROUND((SUM(liters) FILTER (WHERE fuel_date >= $1 AND km_driven > 0)
-                 / SUM(km_driven) FILTER (WHERE fuel_date >= $1 AND km_driven > 0)) * 100, 2)
+       CASE WHEN SUM(km_driven) FILTER (WHERE fuel_date >= $1::timestamptz AND km_driven > 0) > 0
+            THEN ROUND(((SUM(liters) FILTER (WHERE fuel_date >= $1::timestamptz AND km_driven > 0)
+                 / SUM(km_driven) FILTER (WHERE fuel_date >= $1::timestamptz AND km_driven > 0)) * 100)::numeric, 2)
             ELSE NULL END AS baseline_l_per_100,
-       CASE WHEN SUM(km_driven) FILTER (WHERE fuel_date >= $2 AND km_driven > 0) > 0
-            THEN ROUND((SUM(liters) FILTER (WHERE fuel_date >= $2 AND km_driven > 0)
-                 / SUM(km_driven) FILTER (WHERE fuel_date >= $2 AND km_driven > 0)) * 100, 2)
+       CASE WHEN SUM(km_driven) FILTER (WHERE fuel_date >= $2::timestamptz AND km_driven > 0) > 0
+            THEN ROUND(((SUM(liters) FILTER (WHERE fuel_date >= $2::timestamptz AND km_driven > 0)
+                 / SUM(km_driven) FILTER (WHERE fuel_date >= $2::timestamptz AND km_driven > 0)) * 100)::numeric, 2)
             ELSE NULL END AS recent_l_per_100
-     FROM fuel_logs
+     FROM deltas
      GROUP BY vehicle_id`,
     cutoff90,
     cutoff30,
@@ -125,14 +134,15 @@ async function fetchFuelStats(): Promise<FuelRow[]> {
 }
 
 async function fetchServiceHistory(): Promise<ServiceRow[]> {
+  // fleet_lifecycle_events has no odometer or status column — it's an
+  // immutable log, not a workflow with a completion state.
   return prisma.$queryRawUnsafe<ServiceRow[]>(
     `SELECT DISTINCT ON (vehicle_id)
        vehicle_id::text,
        event_date::TEXT AS last_service_date,
-       odometer_reading::float8 AS last_service_odometer
+       NULL::float8 AS last_service_odometer
      FROM fleet_lifecycle_events
      WHERE event_type IN ('MAINTENANCE','SERVICE','REPAIR')
-       AND status = 'COMPLETED'
      ORDER BY vehicle_id, event_date DESC`,
   ).catch(() => []);
 }
@@ -142,11 +152,10 @@ async function fetchRepairSubsystemHistory(): Promise<RepairHistoryRow[]> {
   return prisma.$queryRawUnsafe<RepairHistoryRow[]>(
     `SELECT
        vehicle_id::text,
-       COALESCE(category, 'GENERAL') AS subsystem,
-       COALESCE(completed_at, created_at)::text AS completed_at
+       COALESCE(wo_type, 'GENERAL') AS subsystem,
+       COALESCE(end_date, created_at)::text AS completed_at
      FROM fleet_work_orders
-     WHERE deleted_at IS NULL
-       AND created_at >= $1
+     WHERE created_at >= $1::timestamptz
      ORDER BY created_at DESC`,
     cutoff,
   ).catch(() => []);
@@ -174,9 +183,8 @@ async function fetchLatestTelematicsAndDTC(): Promise<TelemetryRow[]> {
 async function getExistingPredictiveWOs(): Promise<Set<string>> {
   const rows = await prisma.$queryRawUnsafe<{ vehicle_id: string }[]>(
     `SELECT DISTINCT vehicle_id::text FROM fleet_work_orders
-     WHERE title ILIKE '%predictive maintenance%'
-       AND status IN ('OPEN','IN_PROGRESS','PENDING_PARTS')
-       AND deleted_at IS NULL`,
+     WHERE requested_by = 'Predictive Maintenance Agent'
+       AND status IN ('OPEN','IN_PROGRESS','PENDING_PARTS')`,
   ).catch(() => []);
   return new Set(rows.map((r) => r.vehicle_id));
 }
@@ -198,6 +206,7 @@ async function autoCreateWorkOrder(score: VehicleRiskScore): Promise<string | nu
       : '';
 
     const description =
+      `${title}\n\n` +
       `Auto-generated by 9-Signal Predictive Maintenance Agent (Score: ${score.riskScore.toFixed(3)}).\n` +
       `Risk Level: ${score.riskLevel} | Predicted Failure Window: ${score.predictedFailureWindow}\n` +
       `Primary Trigger: ${score.primaryFailureReason ?? 'Multi-factor degradation'}\n` +
@@ -211,14 +220,23 @@ async function autoCreateWorkOrder(score: VehicleRiskScore): Promise<string | nu
       `Service Overdue: ${score.factors.serviceOverdueDays} days / ${score.factors.serviceOverdueKm} km | ` +
       `Fuel Anomaly Score: ${Math.round(score.factors.fuelAnomalyScore * 100)}%`;
 
+    // fleet_work_orders has no title column (folded into description above)
+    // and wo_number is NOT NULL with no default — match the same 'FWO-NNNNNN'
+    // sequence convention the Fleet Work Orders API uses.
+    const seqResult = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+      `SELECT COUNT(*) AS count FROM fleet_work_orders`,
+    );
+    const seq = Number(seqResult[0].count) + 1;
+    const woNumber = 'FWO-' + String(seq).padStart(6, '0');
+
     await prisma.$executeRawUnsafe(
       `INSERT INTO fleet_work_orders (
-         id, vehicle_id, title, description, status, priority,
-         work_order_type, requested_by, created_at, updated_at
-       ) VALUES ($1,$2,$3,$4,'OPEN',$5,'PREVENTIVE','Predictive Maintenance Agent',$6,$7)`,
+         id, wo_number, vehicle_id, description, status, priority,
+         wo_type, requested_by, created_at, updated_at
+       ) VALUES ($1::uuid,$2,$3::uuid,$4,'OPEN',$5,'PREVENTIVE','Predictive Maintenance Agent',$6,$7)`,
       id,
+      woNumber,
       score.vehicleId,
-      title,
       description,
       priority,
       now,
@@ -237,7 +255,7 @@ async function upsertRiskScore(score: VehicleRiskScore, runId: string, woId?: st
        vehicle_id, vehicle_code, make, model, license_plate,
        risk_score, risk_level, factors, recommended_action,
        predicted_failure_window, auto_work_order_id, agent_run_id, scored_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,NOW())
+     ) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11::uuid,$12::uuid,NOW())
      ON CONFLICT (vehicle_id) DO UPDATE SET
        vehicle_code = EXCLUDED.vehicle_code,
        make = EXCLUDED.make,
@@ -273,7 +291,7 @@ async function run(event: AgentEvent): Promise<AgentRunResult> {
 
   await prisma.$executeRawUnsafe(
     `INSERT INTO agent_runs (id, agent_id, tenant_id, event_type, entity_id, status, created_at)
-     VALUES ($1,'predictive-maintenance',$2,$3,$4,'RUNNING',NOW())`,
+     VALUES ($1::uuid,'predictive-maintenance',$2,$3,$4,'RUNNING',NOW())`,
     runId,
     event.tenant_id,
     event.event_type,
@@ -369,20 +387,27 @@ async function run(event: AgentEvent): Promise<AgentRunResult> {
       historicalRepairs:     repairs,
       activeDtcCodes:        telem?.dtc_codes ?? [],
       sensors,
-      engineOperatingHours:  telem?.engine_hours ?? v.engine_hours ?? null,
+      engineOperatingHours:  telem?.engine_hours ?? null,
     };
 
     const score = scoreVehicleComprehensive(input, fleetAvgWo);
     scores.push(score);
 
-    // Auto-create Preventive Work Order for CRITICAL vehicles
-    let woId: string | null = null;
-    if (score.riskLevel === 'CRITICAL' && !existingPredWOs.has(v.id)) {
-      woId = await autoCreateWorkOrder(score);
-      if (woId) actionsCreated++;
-    }
+    // fleet_risk_scores.vehicle_id and fleet_work_orders.vehicle_id are both
+    // native uuid columns, but vehicles.id isn't guaranteed to be — some rows
+    // in this fleet carry legacy non-uuid string ids (e.g. "veh-a1-..."). The
+    // vehicle still gets scored and counted above; it just can't be persisted
+    // to those two uuid-typed tables without corrupting the write.
+    if (isUuid(v.id)) {
+      // Auto-create Preventive Work Order for CRITICAL vehicles
+      let woId: string | null = null;
+      if (score.riskLevel === 'CRITICAL' && !existingPredWOs.has(v.id)) {
+        woId = await autoCreateWorkOrder(score);
+        if (woId) actionsCreated++;
+      }
 
-    await upsertRiskScore(score, runId, woId);
+      await upsertRiskScore(score, runId, woId);
+    }
   }
 
   const durationMs = Date.now() - started;
@@ -390,8 +415,8 @@ async function run(event: AgentEvent): Promise<AgentRunResult> {
   await prisma.$executeRawUnsafe(
     `UPDATE agent_runs SET
        status='COMPLETED', items_processed=$1, actions_created=$2,
-       duration_ms=$3, output=$4
-     WHERE id=$5`,
+       duration_ms=$3, output=$4::jsonb
+     WHERE id=$5::uuid`,
     scores.length,
     actionsCreated,
     durationMs,
@@ -429,6 +454,11 @@ function buildSummary(scores: VehicleRiskScore[]) {
 }
 
 const SERVICE_INTERVAL_DAYS = 90;
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isUuid(id: string): boolean {
+  return UUID_RE.test(id);
+}
 
 export const PREDICTIVE_MAINTENANCE_AGENT: AgentDefinition = {
   id:          'predictive-maintenance',

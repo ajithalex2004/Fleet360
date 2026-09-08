@@ -42,12 +42,15 @@ const CHUNK_ERROR_RECOVERY = `(function(){var K='fleet360-chunk-reload-at',W=100
 // installs — this unregisters any already-installed worker whose scope
 // isn't correctly narrowed, clears its cache, and reloads once so the
 // affected tab immediately starts hitting the network again.
-const SW_SCOPE_CLEANUP = `(function(){if(!('serviceWorker' in navigator))return;navigator.serviceWorker.getRegistrations().then(function(regs){var bad=regs.filter(function(r){return !(r.scope&&r.scope.indexOf('/rental/counter')!==-1);});if(bad.length===0)return;Promise.all(bad.map(function(r){return r.unregister();})).then(function(){if('caches' in window){caches.keys().then(function(keys){keys.forEach(function(k){caches.delete(k);});}).catch(function(){});}var K='fleet360-sw-cleanup-reload-at',W=10000,last=0;try{last=Number(sessionStorage.getItem(K)||0);}catch(_){}var now=Date.now();if(now-last<W)return;try{sessionStorage.setItem(K,String(now));}catch(_){}window.location.reload();});}).catch(function(){});})();`;
+const SW_SCOPE_CLEANUP = `(function(){if(!('serviceWorker' in navigator))return;var K='fleet360-sw-cleanup-done';try{if(sessionStorage.getItem(K))return;}catch(_){}navigator.serviceWorker.getRegistrations().then(function(regs){var bad=regs.filter(function(r){return (r.scope||'').indexOf('/rental/counter')===-1;});if(bad.length===0)return;Promise.all(bad.map(function(r){return r.unregister();})).then(function(){try{sessionStorage.setItem(K,'1');}catch(_){}var clear=(window.caches&&caches.keys)?caches.keys().then(function(names){return Promise.all(names.map(function(n){return caches.delete(n);}));}):Promise.resolve();clear.catch(function(){}).then(function(){window.location.reload();});});}).catch(function(){});})();`;
+
+const LANG_NO_FLASH = `(function(){try{var l=localStorage.getItem('xlai_language')||'ar';document.documentElement.lang=l;document.documentElement.dir=l==='ar'?'rtl':'ltr';}catch(_){document.documentElement.lang='ar';document.documentElement.dir='rtl';}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="ar" dir="rtl" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: LANG_NO_FLASH }} />
         <script dangerouslySetInnerHTML={{ __html: CHUNK_ERROR_RECOVERY }} />
         <script dangerouslySetInnerHTML={{ __html: SW_SCOPE_CLEANUP }} />
         <script dangerouslySetInnerHTML={{ __html: THEME_NO_FLASH }} />
