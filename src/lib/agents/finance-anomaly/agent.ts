@@ -37,29 +37,36 @@ import {
 
 async function fetchMaintenanceRecords(tenantId: string): Promise<MaintenanceRecord[]> {
   try {
+    // work_orders/garages(FK)/part_usages/parts never existed — the real,
+    // actively-used relational model is "WorkOrder" -> maintenance_requests
+    // (for vehicle_id) -> garages, with parts consumption on "PartUsage".
+    // Both "WorkOrder" and "PartUsage" have no @@map in Prisma, so Postgres
+    // created them with their literal camelCase names — every column/table
+    // reference below needs double-quoting or it silently folds to lowercase
+    // and fails to match.
+    // There is no OEM parts catalog or standard-repair-time (SRT) benchmark
+    // anywhere in this schema, so the parts-inflation and labor-overrun
+    // checks stay disabled (catalogBaselinePrice/standardLaborHours = 0)
+    // rather than invent baseline numbers. The repeat-repair-within-warranty
+    // check needs nothing but real part/date data, so it runs live.
     const rows = await prisma.$queryRawUnsafe<any[]>(`
       SELECT
-        w.id::text,
-        w.vehicle_id::text AS "vehicleId",
+        pu.id::text,
+        mr.vehicle_id AS "vehicleId",
         COALESCE(v.vehicle_code, v.plate_number, 'VEH') AS "vehicleCode",
         w.id::text AS "workOrderId",
-        COALESCE(g.name, 'Main Garage') AS "garageName",
-        COALESCE(p.name, 'Brake Pads & Service') AS "partName",
-        p.part_number AS "partNumber",
-        COALESCE(pu.unit_cost, 450.0)::float8 AS "invoicedPartPrice",
-        COALESCE(p.cost_price, 280.0)::float8 AS "catalogBaselinePrice",
-        COALESCE(w.labor_hours, 3.5)::float8 AS "invoicedLaborHours",
-        2.0::float8 AS "standardLaborHours",
-        120.0::float8 AS "laborRatePerHour",
-        COALESCE(w.created_at, NOW())::text AS "serviceDate",
-        60::int AS "warrantyDays"
-      FROM work_orders w
-      LEFT JOIN vehicles v ON v.id = w.vehicle_id
-      LEFT JOIN garages g ON g.id = w.garage_id
-      LEFT JOIN part_usages pu ON pu.work_order_id = w.id
-      LEFT JOIN parts p ON p.id = pu.part_id
-      WHERE w.tenant_id = $1
-      ORDER BY w.created_at DESC
+        COALESCE(g.name, 'Garage') AS "garageName",
+        pu."partName" AS "partName",
+        pu."unitCost"::float8 AS "invoicedPartPrice",
+        w."totalLaborHours"::float8 AS "invoicedLaborHours",
+        w."startDate"::text AS "serviceDate"
+      FROM "WorkOrder" w
+      JOIN "PartUsage" pu ON pu."workOrderId" = w.id
+      LEFT JOIN maintenance_requests mr ON mr.id = w."requestId"
+      LEFT JOIN garages g ON g.id = w."garageId"
+      LEFT JOIN vehicles v ON v.id = mr.vehicle_id
+      WHERE w.tenant_id = $1 AND mr.vehicle_id IS NOT NULL
+      ORDER BY w."startDate" DESC
       LIMIT 500
     `, tenantId);
 
@@ -70,14 +77,12 @@ async function fetchMaintenanceRecords(tenantId: string): Promise<MaintenanceRec
       workOrderId: r.workOrderId,
       garageName: r.garageName,
       partName: r.partName,
-      partNumber: r.partNumber,
       invoicedPartPrice: Number(r.invoicedPartPrice ?? 0),
-      catalogBaselinePrice: Number(r.catalogBaselinePrice ?? 0),
+      catalogBaselinePrice: 0,
       invoicedLaborHours: Number(r.invoicedLaborHours ?? 0),
-      standardLaborHours: Number(r.standardLaborHours ?? 2.0),
-      laborRatePerHour: Number(r.laborRatePerHour ?? 120.0),
+      standardLaborHours: 0,
+      laborRatePerHour: 0,
       serviceDate: r.serviceDate,
-      warrantyDays: Number(r.warrantyDays ?? 60),
     }));
   } catch {
     return [];

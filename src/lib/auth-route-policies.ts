@@ -151,6 +151,11 @@ export const PROTECTED_UI_PREFIXES: readonly string[] = [
   '/approvals',
   '/ai-platform',
   '/vendors',
+  '/exchange',
+  '/locations',
+  '/outsourcing',
+  '/chat',
+  '/m',
 ];
 
 /**

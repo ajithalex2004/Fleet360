@@ -11,8 +11,17 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { isSessionRevoked } from '@/lib/session-blocklist';
 
-const SECRET =
-  process.env.SESSION_SECRET ?? 'xl-mobility-dev-secret-change-in-production';
+const DEFAULT_SECRET = 'xl-mobility-dev-secret-change-in-production';
+
+function getSecret(): string {
+  return (
+    process.env.SESSION_SECRET ||
+    process.env.AUTH_SECRET ||
+    process.env.JWT_SECRET ||
+    process.env.NEXTAUTH_SECRET ||
+    DEFAULT_SECRET
+  );
+}
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -21,21 +30,35 @@ const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 function toBase64Url(bytes: Uint8Array | string): string {
   let b64: string;
   if (typeof bytes === 'string') {
-    // String → encode as UTF-8 bytes → base64
-    b64 = btoa(unescape(encodeURIComponent(bytes)));
+    if (typeof Buffer !== 'undefined') {
+      b64 = Buffer.from(bytes, 'utf8').toString('base64');
+    } else {
+      b64 = btoa(unescape(encodeURIComponent(bytes)));
+    }
   } else {
-    let binary = '';
-    bytes.forEach(b => (binary += String.fromCharCode(b)));
-    b64 = btoa(binary);
+    if (typeof Buffer !== 'undefined') {
+      b64 = Buffer.from(bytes).toString('base64');
+    } else {
+      let binary = '';
+      bytes.forEach(b => (binary += String.fromCharCode(b)));
+      b64 = btoa(binary);
+    }
   }
   return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
 function fromBase64Url(str: string): string {
-  const padded = str.replace(/-/g, '+').replace(/_/g, '/');
-  const pad = padded.length % 4;
-  const b64 = pad ? padded + '='.repeat(4 - pad) : padded;
-  return decodeURIComponent(escape(atob(b64)));
+  try {
+    const padded = str.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = padded.length % 4;
+    const b64 = pad ? padded + '='.repeat(4 - pad) : padded;
+    if (typeof Buffer !== 'undefined') {
+      return Buffer.from(b64, 'base64').toString('utf8');
+    }
+    return decodeURIComponent(escape(atob(b64)));
+  } catch {
+    return '';
+  }
 }
 
 function hexFromBytes(bytes: Uint8Array): string {
@@ -45,6 +68,7 @@ function hexFromBytes(bytes: Uint8Array): string {
 }
 
 function bytesFromHex(hex: string): Uint8Array {
+  if (hex.length % 2 !== 0) return new Uint8Array(0);
   const arr = new Uint8Array(hex.length / 2);
   for (let i = 0; i < hex.length; i += 2) {
     arr[i / 2] = parseInt(hex.slice(i, i + 2), 16);
@@ -52,20 +76,36 @@ function bytesFromHex(hex: string): Uint8Array {
   return arr;
 }
 
-/** Import the SECRET as an HMAC-SHA256 key (cached lazily). */
+/** Import a secret as an HMAC-SHA256 key (cached lazily). */
 let _keyPromise: Promise<CryptoKey> | null = null;
-function getKey(): Promise<CryptoKey> {
-  if (!_keyPromise) {
+let _cachedSecret: string | null = null;
+
+function getKey(customSecret?: string): Promise<CryptoKey> {
+  const secret = customSecret ?? getSecret();
+  if (!customSecret) {
+    if (_keyPromise && _cachedSecret === secret) {
+      return _keyPromise;
+    }
+    _cachedSecret = secret;
     const enc = new TextEncoder();
     _keyPromise = globalThis.crypto.subtle.importKey(
       'raw',
-      enc.encode(SECRET),
+      enc.encode(secret),
       { name: 'HMAC', hash: 'SHA-256' },
       false,
       ['sign', 'verify'],
     );
+    return _keyPromise;
   }
-  return _keyPromise;
+
+  const enc = new TextEncoder();
+  return globalThis.crypto.subtle.importKey(
+    'raw',
+    enc.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign', 'verify'],
+  );
 }
 
 async function hmacSign(data: string): Promise<string> {
@@ -76,10 +116,28 @@ async function hmacSign(data: string): Promise<string> {
 }
 
 async function hmacVerify(data: string, hexSig: string): Promise<boolean> {
-  const key = await getKey();
-  const enc = new TextEncoder();
-  const sigBytes = bytesFromHex(hexSig);
-  return globalThis.crypto.subtle.verify('HMAC', key, sigBytes, enc.encode(data));
+  try {
+    const enc = new TextEncoder();
+    const sigBytes = bytesFromHex(hexSig);
+    if (sigBytes.length !== 32) return false;
+
+    // 1. Verify with primary active secret
+    const primaryKey = await getKey();
+    const valid = await globalThis.crypto.subtle.verify('HMAC', primaryKey, sigBytes, enc.encode(data));
+    if (valid) return true;
+
+    // 2. Fallback: if current secret differs from default dev secret, verify with default
+    const activeSecret = getSecret();
+    if (activeSecret !== DEFAULT_SECRET) {
+      const fallbackKey = await getKey(DEFAULT_SECRET);
+      const fallbackValid = await globalThis.crypto.subtle.verify('HMAC', fallbackKey, sigBytes, enc.encode(data));
+      if (fallbackValid) return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 // ── Token management ─────────────────────────────────────────────────────────

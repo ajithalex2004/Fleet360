@@ -71,7 +71,9 @@ export async function isSessionRevoked(token: string): Promise<boolean> {
 
   try {
     const key = PREFIX + (await fingerprint(token));
-    const val = await redis.get(key);
+    const lookup = redis.get(key);
+    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 1000));
+    const val = await Promise.race([lookup, timeout]);
     return val !== null;
   } catch (err) {
     console.warn('[session-blocklist] isSessionRevoked failed (allowing):', err);
