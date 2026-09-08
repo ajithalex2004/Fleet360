@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   Send,
 } from 'lucide-react';
+import { enqueueTelemetryPoint, flushBufferedTelemetryBatch } from '@/lib/tracking/offline-telemetry-queue';
 
 export default function PartnerDriverTripPage() {
   const params = useParams();
@@ -89,40 +90,62 @@ export default function PartnerDriverTripPage() {
     } catch {}
   };
 
-  // Continuous HTML5 GPS Telemetry Stream
+  // Continuous HTML5 GPS Telemetry Stream with Offline-First Buffering
   useEffect(() => {
     if (!token || !navigator.geolocation || tripData?.completedAt) return;
+
+    // Listen for online reconnect event to auto-flush any buffered points
+    const handleOnline = () => {
+      flushBufferedTelemetryBatch(token).catch(() => {});
+    };
+    window.addEventListener('online', handleOnline);
 
     const watchId = navigator.geolocation.watchPosition(
       async (pos) => {
         setGpsActive(true);
         setLastPingTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+
+        const pingPayload = {
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          speed: pos.coords.speed ? pos.coords.speed * 3.6 : undefined, // Convert m/s to km/h
+          heading: pos.coords.heading || undefined,
+          accuracy: pos.coords.accuracy,
+          timestamp: new Date().toISOString(),
+        };
+
         try {
           const res = await fetch(`/api/public/partner-driver/${token}/telemetry`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              latitude: pos.coords.latitude,
-              longitude: pos.coords.longitude,
-              speed: pos.coords.speed ? pos.coords.speed * 3.6 : undefined, // Convert m/s to km/h
-              heading: pos.coords.heading || undefined,
-              accuracy: pos.coords.accuracy,
-            }),
+            body: JSON.stringify(pingPayload),
           });
-          const result = await res.json();
-          if (result.geofenceTriggered === 'PICKUP_REACHED' && !tripData?.reachedAt) {
-            setFeedback('📍 Pickup Geofence Entered! Status updated to Reached.');
-            await loadTrip();
+
+          if (res.ok) {
+            // Success -> background flush any accumulated offline batch
+            flushBufferedTelemetryBatch(token).catch(() => {});
+            const result = await res.json();
+            if (result.geofenceTriggered === 'PICKUP_REACHED' && !tripData?.reachedAt) {
+              setFeedback('📍 Pickup Geofence Entered! Status updated to Reached.');
+              await loadTrip();
+            }
+          } else {
+            // Buffer locally if server returned error
+            await enqueueTelemetryPoint(token, pingPayload);
           }
         } catch {
-          // Silent ping failure recovery
+          // Network dropped / offline (e.g. tunnel or basement) -> buffer in IndexedDB
+          await enqueueTelemetryPoint(token, pingPayload);
         }
       },
       () => setGpsActive(false),
       { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
     );
 
-    return () => navigator.geolocation.clearWatch(watchId);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      navigator.geolocation.clearWatch(watchId);
+    };
   }, [token, tripData?.completedAt, tripData?.reachedAt]);
 
   const handleAction = async (action: 'REACHED' | 'STARTED' | 'COMPLETED', podPayload?: any) => {
