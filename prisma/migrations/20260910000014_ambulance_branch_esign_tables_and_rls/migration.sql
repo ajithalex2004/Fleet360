@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS ambulance_calls (
   chief_complaint TEXT,
   pickup_location TEXT        NOT NULL,
   destination     TEXT,
-  vehicle_id      UUID        REFERENCES vehicles(id) ON DELETE SET NULL,
+  vehicle_id      TEXT        REFERENCES vehicles(id) ON DELETE SET NULL,
   driver_id       UUID,
   paramedic_name  TEXT,
   call_received_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
