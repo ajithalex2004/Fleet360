@@ -297,29 +297,51 @@ async function fetchTripTolls(tenantId: string): Promise<TripTollRecord[]> {
 
 async function fetchContractAudits(tenantId: string): Promise<ContractAuditRecord[]> {
   try {
+    // rental_agreements has no agreement_number/start_odometer/return_odometer/
+    // excess_km_rate/excess_km_billed/damage_noted/damage_amount_estimated/
+    // damage_billed columns — the real names are agreement_no/mileage_out
+    // (odometer when the car left)/mileage_in (odometer at check-in), and
+    // status is DRAFT|ACTIVE|COMPLETED|CANCELLED, not ACTIVE|CLOSED|EXPIRED
+    // (COMPLETED maps to the detector's CLOSED).
+    // There is no per-agreement mileage allowance or excess-km rate stored
+    // anywhere in the RAC schema (pricing_rules.included_km_per_day/
+    // excess_km_rate exists but isn't linked to a specific agreement — no FK,
+    // just category-matched at booking time and not persisted), so the
+    // unbilled-excess-mileage check stays disabled (allowedMonthlyKm=0) rather
+    // than invent a flat allowance. Whether excess-km/damage were actually
+    // billed IS real, FK-backed data via rental_additional_charges and
+    // damage_claims, so those two checks run on genuine data.
     const rows = await prisma.$queryRawUnsafe<any[]>(`
       SELECT
         ra.id::text,
-        COALESCE(ra.agreement_number, ra.id::text) AS "contractNumber",
+        COALESCE(ra.agreement_no, ra.id::text) AS "contractNumber",
         ra.vehicle_id::text AS "vehicleId",
         COALESCE(v.vehicle_code, v.plate_number, 'VEH') AS "vehicleCode",
-        COALESCE(ra.customer_id::text, 'CUST-01') AS "customerId",
-        COALESCE(c.name, 'Rental Client') AS "customerName",
-        COALESCE(ra.status, 'CLOSED') AS "contractStatus",
-        COALESCE(ra.monthly_allowed_km, 3000)::int AS "allowedMonthlyKm",
-        COALESCE(ra.start_odometer, 20000)::int AS "startOdometer",
-        COALESCE(ra.return_odometer, 24800)::int AS "checkInOdometer",
-        COALESCE(ra.excess_km_rate, 0.45)::float8 AS "excessKmRateAed",
-        COALESCE(ra.excess_km_billed, false) AS "excessKmBilled",
-        COALESCE(ra.damage_noted, false) AS "damageNoted",
-        COALESCE(ra.damage_amount_estimated, 0)::float8 AS "damageAmountEstimated",
-        COALESCE(ra.damage_billed, false) AS "damageBilled",
-        COALESCE(v.odometer_reading, 25200)::int AS "currentTelematicsOdometer"
+        ra.customer_id::text AS "customerId",
+        COALESCE(rc.full_name, rc.company_name, 'Rental Client') AS "customerName",
+        CASE ra.status WHEN 'COMPLETED' THEN 'CLOSED' ELSE COALESCE(ra.status, 'DRAFT') END AS "contractStatus",
+        ra.mileage_out::int AS "startOdometer",
+        ra.mileage_in::int AS "checkInOdometer",
+        EXISTS (
+          SELECT 1 FROM rental_additional_charges rac
+          WHERE rac.agreement_id = ra.id AND rac.charge_type = 'EXTRA_KM'
+        ) AS "excessKmBilled",
+        (dc.id IS NOT NULL) AS "damageNoted",
+        COALESCE(dc.estimated_cost, 0)::float8 AS "damageAmountEstimated",
+        COALESCE(dc.billed_to_customer, false) AS "damageBilled",
+        COALESCE(v.current_mileage, v.odometer_reading)::int AS "currentTelematicsOdometer"
       FROM rental_agreements ra
       LEFT JOIN vehicles v ON v.id = ra.vehicle_id
-      LEFT JOIN rental_customers c ON c.id = ra.customer_id
-      WHERE ra.tenant_id = $1
-      ORDER BY ra.updated_at DESC
+      LEFT JOIN rental_customers rc ON rc.id = ra.customer_id
+      LEFT JOIN LATERAL (
+        SELECT id, estimated_cost, billed_to_customer
+        FROM damage_claims
+        WHERE booking_id = ra.booking_id
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) dc ON true
+      WHERE ra.tenant_id::text = $1
+      ORDER BY ra.updated_at DESC NULLS LAST
       LIMIT 300
     `, tenantId);
 
@@ -331,10 +353,10 @@ async function fetchContractAudits(tenantId: string): Promise<ContractAuditRecor
       customerId: r.customerId,
       customerName: r.customerName,
       contractStatus: r.contractStatus,
-      allowedMonthlyKm: Number(r.allowedMonthlyKm ?? 3000),
+      allowedMonthlyKm: 0,
       startOdometer: Number(r.startOdometer ?? 0),
       checkInOdometer: r.checkInOdometer !== null ? Number(r.checkInOdometer) : undefined,
-      excessKmRateAed: Number(r.excessKmRateAed ?? 0.45),
+      excessKmRateAed: 0,
       excessKmBilled: Boolean(r.excessKmBilled),
       damageNoted: Boolean(r.damageNoted),
       damageAmountEstimated: r.damageAmountEstimated !== null ? Number(r.damageAmountEstimated) : undefined,
