@@ -61,16 +61,18 @@ export async function runRouteOptimiser(event: AgentEvent): Promise<AgentRunResu
     `SELECT id::text, name, code, origin, destination, route_type,
             total_distance_km::float8, estimated_duration_mins::int, capacity::int
      FROM bus_routes
-     WHERE deleted_at IS NULL AND is_active = true
+     WHERE tenant_id = $1 AND deleted_at IS NULL AND is_active = true
      ORDER BY created_at DESC LIMIT 200`,
+    tenantId,
   ).catch(() => []);
 
   // Fetch stops for bus_routes
   const busStops = await prisma.$queryRawUnsafe<RawStopRow[]>(
     `SELECT route_id::text, stop_name, sequence, gps_lat::float8, gps_lng::float8
      FROM route_stops
-     WHERE gps_lat IS NOT NULL AND gps_lng IS NOT NULL
+     WHERE tenant_id = $1 AND gps_lat IS NOT NULL AND gps_lng IS NOT NULL
      ORDER BY route_id, sequence ASC`,
+    tenantId,
   ).catch(() => []);
 
   const stopsByRoute = new Map<string, GeoStop[]>();
