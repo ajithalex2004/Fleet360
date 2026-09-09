@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { withTenantRls } from '@/lib/rls';
 import {
   fetchShipmentById,
   listShipmentExecutionTimeline,
@@ -56,23 +57,30 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   if ('error' in auth) return auth.error;
 
   try {
-    const [timeline, stops, cargoLines, documents, settlement] = await Promise.all([
-      listShipmentExecutionTimeline({ tenantId: auth.device.tenantId, shipmentOrderId: params.id }),
-      listStops(auth.device.tenantId, params.id),
-      listCargoLines(auth.device.tenantId, params.id),
-      listDocuments(auth.device.tenantId, params.id),
-      getCarrierSettlement(auth.device.tenantId, params.id, auth.device.carrierId),
-    ]);
+    // Wrapped in withTenantRls + sequential awaits: these 5 calls (plus
+    // getCarrierSettlement's own inner queries) each fire a raw query on the
+    // bare prisma client. Run concurrently via Promise.all outside a pinned
+    // transaction, each one opens its own interactive transaction — the same
+    // pattern that broke the Neon pooler (2-concurrent-transaction limit) in
+    // /api/agents/ecosystem. withTenantRls pins one connection; every raw
+    // query below transparently reuses it via prisma.ts's activeRlsScope().
+    return await withTenantRls(prisma, auth.device.tenantId, async () => {
+      const timeline = await listShipmentExecutionTimeline({ tenantId: auth.device.tenantId, shipmentOrderId: params.id });
+      const stops = await listStops(auth.device.tenantId, params.id);
+      const cargoLines = await listCargoLines(auth.device.tenantId, params.id);
+      const documents = await listDocuments(auth.device.tenantId, params.id);
+      const settlement = await getCarrierSettlement(auth.device.tenantId, params.id, auth.device.carrierId);
 
-    return NextResponse.json({
-      carrierId: auth.device.carrierId,
-      shipment: mapShipment(auth.shipment),
-      stops,
-      cargoLines,
-      documents,
-      timeline,
-      settlement,
-    }, { headers: { 'Cache-Control': 'no-store' } });
+      return NextResponse.json({
+        carrierId: auth.device.carrierId,
+        shipment: mapShipment(auth.shipment),
+        stops,
+        cargoLines,
+        documents,
+        timeline,
+        settlement,
+      }, { headers: { 'Cache-Control': 'no-store' } });
+    });
     } catch (e) {
     console.error('[carrier-portal/app/loads/:id GET]', e);
     return NextResponse.json(
@@ -262,8 +270,9 @@ async function listDocuments(tenantId: string, shipmentOrderId: string) {
 }
 
 async function getCarrierSettlement(tenantId: string, shipmentOrderId: string, carrierId: string) {
-  const [summary, charges, postings, payouts] = await Promise.all([
-    prisma.$queryRawUnsafe<Array<{
+  // Sequential, not Promise.all: called from inside withTenantRls's pinned
+  // transaction (see GET above) — see the comment there.
+  const summary = await prisma.$queryRawUnsafe<Array<{
       carrier_payable: string | number | null;
       settlement_id: string | null;
       settlement_no: string | null;
@@ -296,8 +305,8 @@ async function getCarrierSettlement(tenantId: string, shipmentOrderId: string, c
       tenantId,
       shipmentOrderId,
       carrierId,
-    ).catch(() => []),
-    prisma.$queryRawUnsafe<Array<{
+    ).catch(() => []);
+  const charges = await prisma.$queryRawUnsafe<Array<{
       id: string;
       charge_type: string;
       description: string | null;
@@ -314,8 +323,8 @@ async function getCarrierSettlement(tenantId: string, shipmentOrderId: string, c
         ORDER BY created_at DESC`,
       tenantId,
       shipmentOrderId,
-    ).catch(() => []),
-    prisma.$queryRawUnsafe<Array<{
+    ).catch(() => []);
+  const postings = await prisma.$queryRawUnsafe<Array<{
       id: string;
       posting_type: string;
       source_record_id: string;
@@ -335,8 +344,8 @@ async function getCarrierSettlement(tenantId: string, shipmentOrderId: string, c
         ORDER BY created_at DESC`,
       tenantId,
       shipmentOrderId,
-    ).catch(() => []),
-    prisma.$queryRawUnsafe<Array<{
+    ).catch(() => []);
+  const payouts = await prisma.$queryRawUnsafe<Array<{
       id: string;
       payout_no: string;
       net_payable_amount: string | number;
@@ -351,8 +360,7 @@ async function getCarrierSettlement(tenantId: string, shipmentOrderId: string, c
         ORDER BY dp.created_at DESC`,
       tenantId,
       shipmentOrderId,
-    ).catch(() => []),
-  ]);
+    ).catch(() => []);
 
   const row = summary[0];
   return row ? {
