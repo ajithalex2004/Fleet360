@@ -73,36 +73,44 @@ interface TelemetryRow {
 
 // ── Database Fetchers ──────────────────────────────────────────────────────────
 
-async function fetchVehicles(vehicleId?: string): Promise<VehicleRow[]> {
-  const filter = vehicleId ? `AND id = $1::uuid` : '';
+async function fetchVehicles(tenantId: string, vehicleId?: string): Promise<VehicleRow[]> {
+  const filter = vehicleId ? `AND id = $2::uuid` : '';
   const params = vehicleId ? [vehicleId] : [];
   return prisma.$queryRawUnsafe<VehicleRow[]>(
     `SELECT id, vehicle_code, make, model, license_plate, purchase_date,
             COALESCE(odometer_reading, 0)::float8 AS odometer_reading
      FROM vehicles
-     WHERE deleted_at IS NULL
+     WHERE tenant_id = $1
+       AND deleted_at IS NULL
        AND status NOT IN ('INACTIVE','SOLD')
        ${filter}
      ORDER BY created_at DESC
      LIMIT 500`,
+    tenantId,
     ...params,
   ).catch(() => []);
 }
 
-async function fetchWorkOrderStats(): Promise<WoRow[]> {
+async function fetchWorkOrderStats(tenantId: string): Promise<WoRow[]> {
   const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+  // fleet_work_orders has no tenant_id column - scope via a join against
+  // vehicles (which has it) on the shared vehicle_id, matching the same
+  // pattern used everywhere else this table needs tenant scoping.
   return prisma.$queryRawUnsafe<WoRow[]>(
     `SELECT
-       vehicle_id::text,
-       COUNT(*) FILTER (WHERE status IN ('OPEN','IN_PROGRESS','PENDING_PARTS'))::int AS open_count,
-       COUNT(*) FILTER (WHERE created_at >= $1::timestamptz)::int                    AS recent_count
-     FROM fleet_work_orders
-     GROUP BY vehicle_id`,
+       fwo.vehicle_id::text,
+       COUNT(*) FILTER (WHERE fwo.status IN ('OPEN','IN_PROGRESS','PENDING_PARTS'))::int AS open_count,
+       COUNT(*) FILTER (WHERE fwo.created_at >= $1::timestamptz)::int                    AS recent_count
+     FROM fleet_work_orders fwo
+     JOIN vehicles v ON v.id = fwo.vehicle_id::text
+     WHERE v.tenant_id = $2
+     GROUP BY fwo.vehicle_id`,
     cutoff,
+    tenantId,
   ).catch(() => []);
 }
 
-async function fetchFuelStats(): Promise<FuelRow[]> {
+async function fetchFuelStats(tenantId: string): Promise<FuelRow[]> {
   const cutoff90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
   const cutoff30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   // fuel_logs.mileage is an odometer reading at each fill-up, not a per-log
@@ -114,7 +122,7 @@ async function fetchFuelStats(): Promise<FuelRow[]> {
        SELECT vehicle_id, fuel_date, liters,
               GREATEST(mileage - LAG(mileage) OVER (PARTITION BY vehicle_id ORDER BY fuel_date), 0) AS km_driven
        FROM fuel_logs
-       WHERE mileage IS NOT NULL
+       WHERE mileage IS NOT NULL AND tenant_id = $3
      )
      SELECT
        vehicle_id::text,
@@ -130,34 +138,42 @@ async function fetchFuelStats(): Promise<FuelRow[]> {
      GROUP BY vehicle_id`,
     cutoff90,
     cutoff30,
+    tenantId,
   ).catch(() => []);
 }
 
-async function fetchServiceHistory(): Promise<ServiceRow[]> {
-  // fleet_lifecycle_events has no odometer or status column — it's an
-  // immutable log, not a workflow with a completion state.
+async function fetchServiceHistory(tenantId: string): Promise<ServiceRow[]> {
+  // fleet_lifecycle_events has no odometer, status, or tenant_id column —
+  // it's an immutable log, not a workflow with a completion state. Scope
+  // via a join against vehicles for the tenant_id it doesn't carry itself.
   return prisma.$queryRawUnsafe<ServiceRow[]>(
-    `SELECT DISTINCT ON (vehicle_id)
-       vehicle_id::text,
-       event_date::TEXT AS last_service_date,
+    `SELECT DISTINCT ON (fle.vehicle_id)
+       fle.vehicle_id::text,
+       fle.event_date::TEXT AS last_service_date,
        NULL::float8 AS last_service_odometer
-     FROM fleet_lifecycle_events
-     WHERE event_type IN ('MAINTENANCE','SERVICE','REPAIR')
-     ORDER BY vehicle_id, event_date DESC`,
+     FROM fleet_lifecycle_events fle
+     JOIN vehicles v ON v.id = fle.vehicle_id::text
+     WHERE v.tenant_id = $1
+       AND fle.event_type IN ('MAINTENANCE','SERVICE','REPAIR')
+     ORDER BY fle.vehicle_id, fle.event_date DESC`,
+    tenantId,
   ).catch(() => []);
 }
 
-async function fetchRepairSubsystemHistory(): Promise<RepairHistoryRow[]> {
+async function fetchRepairSubsystemHistory(tenantId: string): Promise<RepairHistoryRow[]> {
   const cutoff = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString();
   return prisma.$queryRawUnsafe<RepairHistoryRow[]>(
     `SELECT
-       vehicle_id::text,
-       COALESCE(wo_type, 'GENERAL') AS subsystem,
-       COALESCE(end_date, created_at)::text AS completed_at
-     FROM fleet_work_orders
-     WHERE created_at >= $1::timestamptz
-     ORDER BY created_at DESC`,
+       fwo.vehicle_id::text,
+       COALESCE(fwo.wo_type, 'GENERAL') AS subsystem,
+       COALESCE(fwo.end_date, fwo.created_at)::text AS completed_at
+     FROM fleet_work_orders fwo
+     JOIN vehicles v ON v.id = fwo.vehicle_id::text
+     WHERE fwo.created_at >= $1::timestamptz
+       AND v.tenant_id = $2
+     ORDER BY fwo.created_at DESC`,
     cutoff,
+    tenantId,
   ).catch(() => []);
 }
 
@@ -180,11 +196,15 @@ async function fetchLatestTelematicsAndDTC(): Promise<TelemetryRow[]> {
   ).catch(() => []);
 }
 
-async function getExistingPredictiveWOs(): Promise<Set<string>> {
+async function getExistingPredictiveWOs(tenantId: string): Promise<Set<string>> {
   const rows = await prisma.$queryRawUnsafe<{ vehicle_id: string }[]>(
-    `SELECT DISTINCT vehicle_id::text FROM fleet_work_orders
-     WHERE requested_by = 'Predictive Maintenance Agent'
-       AND status IN ('OPEN','IN_PROGRESS','PENDING_PARTS')`,
+    `SELECT DISTINCT fwo.vehicle_id::text
+     FROM fleet_work_orders fwo
+     JOIN vehicles v ON v.id = fwo.vehicle_id::text
+     WHERE fwo.requested_by = 'Predictive Maintenance Agent'
+       AND fwo.status IN ('OPEN','IN_PROGRESS','PENDING_PARTS')
+       AND v.tenant_id = $1`,
+    tenantId,
   ).catch(() => []);
   return new Set(rows.map((r) => r.vehicle_id));
 }
@@ -307,13 +327,13 @@ async function run(event: AgentEvent): Promise<AgentRunResult> {
     telemetryData,
     existingPredWOs,
   ] = await Promise.all([
-    fetchVehicles(event.entity_id),
-    fetchWorkOrderStats(),
-    fetchFuelStats(),
-    fetchServiceHistory(),
-    fetchRepairSubsystemHistory(),
+    fetchVehicles(event.tenant_id, event.entity_id),
+    fetchWorkOrderStats(event.tenant_id),
+    fetchFuelStats(event.tenant_id),
+    fetchServiceHistory(event.tenant_id),
+    fetchRepairSubsystemHistory(event.tenant_id),
     fetchLatestTelematicsAndDTC(),
-    getExistingPredictiveWOs(),
+    getExistingPredictiveWOs(event.tenant_id),
   ]);
 
   // Build lookup maps
