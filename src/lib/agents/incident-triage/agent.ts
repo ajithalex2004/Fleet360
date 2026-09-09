@@ -161,11 +161,8 @@ async function runIncidentTriage(event: AgentEvent): Promise<AgentRunResult> {
           `Nearest Unit: ${nearestUnit?.vehicle_code ?? 'None available'} (ETA: ${etaMin ?? '?'} min)`,
         ].join('\n');
 
-        const aiResp = await aiGateway.chat({
-          capability: 'ECONOMY_TEXT',
-          tenantId: event.tenant_id,
-          agentId: 'incident-triage',
-          messages: [
+        const aiResp = await aiGateway.chat(
+          [
             {
               role: 'system',
               content:
@@ -178,8 +175,12 @@ async function runIncidentTriage(event: AgentEvent): Promise<AgentRunResult> {
               content: incidentContext,
             },
           ],
-          maxTokens: 200,
-        });
+          {
+            capabilityAlias: 'ECONOMY_TEXT',
+            tenantId: event.tenant_id,
+            maxTokens: 200,
+          },
+        );
 
         recommendation = aiResp.content;
         aiCount++;

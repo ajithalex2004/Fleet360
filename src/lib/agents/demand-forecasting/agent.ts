@@ -243,11 +243,8 @@ async function runDemandForecasting(event: AgentEvent): Promise<AgentRunResult> 
         `- ${f.segment}: ${f.forecastValue} bookings (${f.trendDirection} trend, target fleet: ${f.recommendedFleetSize})`
       ).join('\n');
 
-      const macroResp = await aiGateway.chat({
-        capability: 'ECONOMY_TEXT',
-        tenantId: event.tenant_id,
-        agentId: 'demand-forecasting',
-        messages: [
+      const macroResp = await aiGateway.chat(
+        [
           {
             role: 'system',
             content: 'You are an executive fleet demand analyst for a UAE transport operator. Write a 2-sentence macro demand forecast summary.',
@@ -257,8 +254,12 @@ async function runDemandForecasting(event: AgentEvent): Promise<AgentRunResult> 
             content: `Forecast Period: ${forecastPeriod}\nTotal Segments: ${forecastsCreated}\nTop Segments:\n${topSegments}`,
           },
         ],
-        maxTokens: 150,
-      });
+        {
+          capabilityAlias: 'ECONOMY_TEXT',
+          tenantId: event.tenant_id,
+          maxTokens: 150,
+        },
+      );
 
       executiveSummary = macroResp.content;
       aiTokensUsed = macroResp.telemetry.inputTokens + macroResp.telemetry.outputTokens;
