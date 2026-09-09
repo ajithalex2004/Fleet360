@@ -97,12 +97,16 @@ const ALIAS_MODEL_MAP: Record<
 > = {
   DETERMINISTIC_RULES:  { openai: 'none', gemini: 'none', anthropic: 'none' },
   LOCAL_STATISTICAL:    { openai: 'none', gemini: 'none', anthropic: 'none' },
-  ECONOMY_TEXT:         { openai: 'gpt-4o-mini', gemini: 'gemini-1.5-flash', anthropic: 'claude-3-5-haiku-20241022' },
-  STANDARD_REASONING:   { openai: 'gpt-4o', gemini: 'gemini-1.5-pro', anthropic: 'claude-3-5-sonnet-20241022' },
-  ADVANCED_REASONING:   { openai: 'o3-mini', gemini: 'gemini-1.5-pro', anthropic: 'claude-3-5-sonnet-20241022' },
-  VISION_FAST:          { openai: 'gpt-4o-mini', gemini: 'gemini-1.5-flash', anthropic: 'claude-3-5-haiku-20241022' },
-  VISION_HIGH_ACCURACY: { openai: 'gpt-4o', gemini: 'gemini-1.5-pro', anthropic: 'claude-3-5-sonnet-20241022' },
-  STRUCTURED_EXTRACTION:{ openai: 'gpt-4o-mini', gemini: 'gemini-1.5-flash', anthropic: 'claude-3-5-haiku-20241022' },
+  // gemini-1.5-flash/-pro were fully retired from the v1beta API (confirmed
+  // live via ListModels against a real key: HTTP 404 model-not-found). Using
+  // Google's "latest" aliases instead of pinning a dated version avoids this
+  // exact rot recurring every time Google retires a model generation.
+  ECONOMY_TEXT:         { openai: 'gpt-4o-mini', gemini: 'gemini-flash-latest', anthropic: 'claude-3-5-haiku-20241022' },
+  STANDARD_REASONING:   { openai: 'gpt-4o', gemini: 'gemini-pro-latest', anthropic: 'claude-3-5-sonnet-20241022' },
+  ADVANCED_REASONING:   { openai: 'o3-mini', gemini: 'gemini-pro-latest', anthropic: 'claude-3-5-sonnet-20241022' },
+  VISION_FAST:          { openai: 'gpt-4o-mini', gemini: 'gemini-flash-latest', anthropic: 'claude-3-5-haiku-20241022' },
+  VISION_HIGH_ACCURACY: { openai: 'gpt-4o', gemini: 'gemini-pro-latest', anthropic: 'claude-3-5-sonnet-20241022' },
+  STRUCTURED_EXTRACTION:{ openai: 'gpt-4o-mini', gemini: 'gemini-flash-latest', anthropic: 'claude-3-5-haiku-20241022' },
 };
 
 export class AIGatewayService {
