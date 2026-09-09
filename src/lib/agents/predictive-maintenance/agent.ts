@@ -275,7 +275,7 @@ async function upsertRiskScore(score: VehicleRiskScore, runId: string, woId?: st
        vehicle_id, vehicle_code, make, model, license_plate,
        risk_score, risk_level, factors, recommended_action,
        predicted_failure_window, auto_work_order_id, agent_run_id, scored_at
-     ) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11::uuid,$12::uuid,NOW())
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11::uuid,$12::uuid,NOW())
      ON CONFLICT (vehicle_id) DO UPDATE SET
        vehicle_code = EXCLUDED.vehicle_code,
        make = EXCLUDED.make,
@@ -413,21 +413,19 @@ async function run(event: AgentEvent): Promise<AgentRunResult> {
     const score = scoreVehicleComprehensive(input, fleetAvgWo);
     scores.push(score);
 
-    // fleet_risk_scores.vehicle_id and fleet_work_orders.vehicle_id are both
-    // native uuid columns, but vehicles.id isn't guaranteed to be — some rows
-    // in this fleet carry legacy non-uuid string ids (e.g. "veh-a1-..."). The
-    // vehicle still gets scored and counted above; it just can't be persisted
-    // to those two uuid-typed tables without corrupting the write.
-    if (isUuid(v.id)) {
-      // Auto-create Preventive Work Order for CRITICAL vehicles
-      let woId: string | null = null;
-      if (score.riskLevel === 'CRITICAL' && !existingPredWOs.has(v.id)) {
-        woId = await autoCreateWorkOrder(score);
-        if (woId) actionsCreated++;
-      }
-
-      await upsertRiskScore(score, runId, woId);
+    // fleet_work_orders.vehicle_id is still a native uuid column, but
+    // vehicles.id isn't guaranteed to be — some rows in this fleet carry
+    // legacy non-uuid string ids (e.g. "veh-a1-..."). Those vehicles can
+    // still get a persisted risk score (fleet_risk_scores.vehicle_id is now
+    // TEXT, matching vehicles.id) - they just can't get an auto-created work
+    // order without corrupting that write, so only that half stays gated.
+    let woId: string | null = null;
+    if (isUuid(v.id) && score.riskLevel === 'CRITICAL' && !existingPredWOs.has(v.id)) {
+      woId = await autoCreateWorkOrder(score);
+      if (woId) actionsCreated++;
     }
+
+    await upsertRiskScore(score, runId, woId);
   }
 
   const durationMs = Date.now() - started;

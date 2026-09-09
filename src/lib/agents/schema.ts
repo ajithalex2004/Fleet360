@@ -183,7 +183,10 @@ async function _doInit(): Promise<void> {
       -- ── fleet_risk_scores ──────────────────────────────────────────────────────
       CREATE TABLE IF NOT EXISTS fleet_risk_scores (
         id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        vehicle_id               UUID NOT NULL,
+        -- TEXT, not UUID: vehicles.id is TEXT (holds both real UUIDs and
+        -- legacy non-UUID ids), so this must match to avoid excluding any
+        -- vehicle from ever getting a persisted risk score.
+        vehicle_id               TEXT NOT NULL,
         vehicle_code             TEXT,
         make                     TEXT,
         model                    TEXT,
