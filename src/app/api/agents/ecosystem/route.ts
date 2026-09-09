@@ -66,11 +66,11 @@ async function coachingPendingCount() {
   return rows[0]?.cnt ?? 0;
 }
 
-async function forecastPendingCount() {
-  const rows = await prisma.$queryRawUnsafe<{ cnt: number }[]>(
-    `SELECT COUNT(*)::int AS cnt FROM demand_forecasts WHERE status = 'PENDING'`,
-  ).catch(() => [{ cnt: 0 }]);
-  return rows[0]?.cnt ?? 0;
+// demand_forecasts (see schema.ts) has no status/approval column — the
+// forecasting agent writes forecasts directly with no pending-review
+// workflow, unlike driver_coaching_plans. There is nothing to count here.
+function forecastPendingCount(): number {
+  return 0;
 }
 
 // ── Conversational stats ───────────────────────────────────────────────────────
@@ -117,30 +117,34 @@ async function opsAssistantStats(tenantId: string) {
 }
 
 // ── Command strip KPIs — single query to reduce pool pressure ─────────────────
+// Sequential, not Promise.all: these all run inside the request's single
+// tenant-scoped interactive transaction (see GET below), which is pinned to
+// one pooled connection. Firing raw queries concurrently on it is not
+// something Prisma supports (see runSequential in @/lib/rls) — it also
+// re-triggers the "2 concurrent interactive transactions breaks the Neon
+// pooler" failure this route was rewritten to avoid.
 async function commandStripKPIs(
   tenantId: string,
   routePendingCount: number,
   coachPending: number,
   forecastPending: number,
 ) {
-  const [actionsToday, routeKm, anomalies] = await Promise.all([
-    prisma.$queryRawUnsafe<{ cnt: number }[]>(
-      `SELECT COALESCE(SUM(actions_created),0)::int AS cnt FROM agent_runs
-       WHERE tenant_id = $1 AND created_at >= CURRENT_DATE`,
-      tenantId,
-    ).catch(() => [{ cnt: 0 }]),
-    // route_optimisation_results has no tenant_id column — see routePendingItems().
-    prisma.$queryRawUnsafe<{ km: number }[]>(
-      `SELECT COALESCE(SUM(distance_saved_km),0)::float8 AS km
-       FROM route_optimisation_results
-       WHERE created_at >= NOW() - INTERVAL '7 days'`,
-    ).catch(() => [{ km: 0 }]),
-    prisma.$queryRawUnsafe<{ cnt: number }[]>(
-      `SELECT COUNT(*)::int AS cnt FROM ai.agent_anomaly_flags
-       WHERE tenant_id = $1 AND created_at >= NOW() - INTERVAL '7 days'`,
-      tenantId,
-    ).catch(() => [{ cnt: 0 }]),
-  ]);
+  const actionsToday = await prisma.$queryRawUnsafe<{ cnt: number }[]>(
+    `SELECT COALESCE(SUM(actions_created),0)::int AS cnt FROM agent_runs
+     WHERE tenant_id = $1 AND created_at >= CURRENT_DATE`,
+    tenantId,
+  ).catch(() => [{ cnt: 0 }]);
+  // route_optimisation_results has no tenant_id column — see routePendingItems().
+  const routeKm = await prisma.$queryRawUnsafe<{ km: number }[]>(
+    `SELECT COALESCE(SUM(distance_saved_km),0)::float8 AS km
+     FROM route_optimisation_results
+     WHERE created_at >= NOW() - INTERVAL '7 days'`,
+  ).catch(() => [{ km: 0 }]);
+  const anomalies = await prisma.$queryRawUnsafe<{ cnt: number }[]>(
+    `SELECT COUNT(*)::int AS cnt FROM ai.agent_anomaly_flags
+     WHERE tenant_id = $1 AND created_at >= NOW() - INTERVAL '7 days'`,
+    tenantId,
+  ).catch(() => [{ cnt: 0 }]);
 
   return {
     actionsToday: actionsToday[0]?.cnt ?? 0,
@@ -204,81 +208,77 @@ export async function GET(req: NextRequest) {
   };
 
   try {
-    // Run DDL sequentially first to avoid pool pressure during init
+    // Run DDL first to avoid pool pressure during init (cached after first run).
     await ensureAgentSchema().catch(() => {});
 
-    // Batch 1: shared data needed by multiple sections (≤4 concurrent)
-    const [pendingRoutes, coachPending, forecastPending, feed] = await Promise.all([
-      routePendingItems().catch(() => []),
-      coachingPendingCount().catch(() => 0),
-      forecastPendingCount().catch(() => 0),
-      activityFeed(tenantId).catch(() => []),
-    ]);
+    // Everything below runs inside ONE tenant-scoped interactive transaction,
+    // pinned to a single pooled connection. Every prisma.$queryRawUnsafe call
+    // in the helpers above transparently reuses this same tx (see
+    // activeRlsScope() in prisma.ts) instead of opening its own transaction.
+    //
+    // This used to run ~20+ raw queries as separate implicit transactions,
+    // batched via Promise.all — which is exactly the load pattern proven (see
+    // defaultSweepConcurrency() in @/lib/rls) to break Neon's pooled endpoint
+    // at as few as 2 concurrent interactive transactions. That amplification,
+    // firing every ~30s from the /agents dashboard poll, was the source of
+    // the P2028 "Unable to start a transaction" / connection-reset errors.
+    // Fix: one transaction, sequential awaits — same pattern already used by
+    // the sibling /api/agents/thresholds route.
+    return await withTenantRls(prisma, tenantId, async () => {
+      const pendingRoutes = await routePendingItems().catch(() => []);
+      const coachPending = await coachingPendingCount().catch(() => 0);
+      const forecastPending = forecastPendingCount();
+      const feed = await activityFeed(tenantId).catch(() => []);
 
-    // Batch 2: KPIs + conversational stats (≤4 concurrent, reuses pendingRoutes)
-    const [kpis, waStats, opsStats] = await Promise.all([
-      commandStripKPIs(tenantId, pendingRoutes.length, coachPending, forecastPending).catch(() => ({
+      const kpis = await commandStripKPIs(tenantId, pendingRoutes.length, coachPending, forecastPending).catch(() => ({
         actionsToday: 0,
         routeKmSaved7d: 0,
         anomaliesFlagged7d: 0,
         pendingApprovals: 0,
-      })),
-      whatsAppStats(tenantId).catch(() => ({ sessions: 0, resolved: 0, resolvedRate: 0, avgResponseMs: 0 })),
-      opsAssistantStats(tenantId).catch(() => ({ sessions: 0, total_queries: 0, tools_invoked: 0, avg_ms: 0 })),
-    ]);
+      }));
+      const waStats = await whatsAppStats(tenantId).catch(() => ({ sessions: 0, resolved: 0, resolvedRate: 0, avgResponseMs: 0 }));
+      const opsStats = await opsAssistantStats(tenantId).catch(() => ({ sessions: 0, total_queries: 0, tools_invoked: 0, avg_ms: 0 }));
 
-    // Batch 3: per-batch-agent last-run + 7d stats — run 2 at a time to stay within pool
-    const batchStats: [Awaited<ReturnType<typeof agentLastRun>>, Awaited<ReturnType<typeof agent7dStats>>][] = [];
-    for (let i = 0; i < BATCH_IDS.length; i += 2) {
-      const chunk = BATCH_IDS.slice(i, i + 2);
-      const results = await Promise.all(
-        chunk.map(id =>
-          Promise.all([
-            agentLastRun(id, tenantId).catch(() => null),
-            agent7dStats(id, tenantId).catch(() => ({ runs: 0, items_processed: 0, actions_created: 0 })),
-          ]),
-        ),
-      );
-      batchStats.push(...results);
-    }
+      const batchAgents = [];
+      for (const id of BATCH_IDS) {
+        const lastRun = await agentLastRun(id, tenantId).catch(() => null);
+        const stats7d = await agent7dStats(id, tenantId).catch(() => ({ runs: 0, items_processed: 0, actions_created: 0 }));
+        const pendingItems = id === 'route-optimiser' ? pendingRoutes : [];
+        batchAgents.push({
+          id,
+          ...BATCH_META[id],
+          lastRun,
+          stats7d,
+          pendingCount: pendingItems.length,
+          pendingItems,
+        });
+      }
 
-    const batchAgents = BATCH_IDS.map((id, i) => {
-      const [lastRun, stats7d] = batchStats[i] || [null, { runs: 0, items_processed: 0, actions_created: 0 }];
-      const pendingItems = id === 'route-optimiser' ? pendingRoutes : [];
-      return {
-        id,
-        ...BATCH_META[id],
-        lastRun,
-        stats7d: stats7d ?? { runs: 0, items_processed: 0, actions_created: 0 },
-        pendingCount: pendingItems.length,
-        pendingItems,
-      };
-    });
-
-    return NextResponse.json({
-      commandStrip: {
-        activeAgents: BATCH_IDS.length,
-        ...kpis,
-      },
-      batchAgents,
-      convAgents: [
-        {
-          id: 'whatsapp-agent',
-          name: 'WhatsApp AI Agent',
-          model: 'Rule-based',
-          endpoint: 'POST /api/webhooks/whatsapp',
-          stats7d: waStats,
+      return NextResponse.json({
+        commandStrip: {
+          activeAgents: BATCH_IDS.length,
+          ...kpis,
         },
-        {
-          id: 'ops-assistant',
-          name: 'Fleet360 Ops Assistant',
-          model: 'TheSys GPT-5',
-          endpoint: 'POST /api/operations/simple-chat',
-          stats7d: opsStats,
-        },
-      ],
-      activityFeed: feed,
-      generatedAt: new Date().toISOString(),
+        batchAgents,
+        convAgents: [
+          {
+            id: 'whatsapp-agent',
+            name: 'WhatsApp AI Agent',
+            model: 'Rule-based',
+            endpoint: 'POST /api/webhooks/whatsapp',
+            stats7d: waStats,
+          },
+          {
+            id: 'ops-assistant',
+            name: 'Fleet360 Ops Assistant',
+            model: 'TheSys GPT-5',
+            endpoint: 'POST /api/operations/simple-chat',
+            stats7d: opsStats,
+          },
+        ],
+        activityFeed: feed,
+        generatedAt: new Date().toISOString(),
+      });
     });
   } catch (err: unknown) {
     // If DB fails completely, return fallback static ecosystem structure
