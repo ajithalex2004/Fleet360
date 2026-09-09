@@ -138,8 +138,8 @@ async function runDispatchOptimiser(event: AgentEvent): Promise<AgentRunResult> 
            COALESCE(v.type, v.vehicle_group, 'SEDAN') AS vehicle_type,
            COALESCE(v.seating_capacity, 4)::int AS capacity,
            v.status,
-           vl.lat::float8 AS current_lat,
-           vl.lng::float8 AS current_lng,
+           vl.latitude::float8 AS current_lat,
+           vl.longitude::float8 AS current_lng,
            r.risk_score::float8,
            v.registration_expiry,
            v.insurance_expiry,
@@ -147,7 +147,7 @@ async function runDispatchOptimiser(event: AgentEvent): Promise<AgentRunResult> 
            v.home_depot_id::text
     FROM vehicles v
     LEFT JOIN vehicle_locations vl ON vl.vehicle_id = v.id::text
-    LEFT JOIN fleet_risk_scores r ON r.vehicle_id = v.id
+    LEFT JOIN fleet_risk_scores r ON r.vehicle_id::text = v.id
     WHERE v.tenant_id = $1
       AND (v.deleted_at IS NULL)
       AND (v.status IN ('AVAILABLE', 'STANDBY', 'ACTIVE') OR v.status IS NULL)
@@ -167,8 +167,8 @@ async function runDispatchOptimiser(event: AgentEvent): Promise<AgentRunResult> 
            da.hours_worked_today::float8,
            da.shift_start,
            da.shift_end,
-           vl.lat::float8 AS current_lat,
-           vl.lng::float8 AS current_lng,
+           vl.latitude::float8 AS current_lat,
+           vl.longitude::float8 AS current_lng,
            d.communication_language AS language,
            COALESCE(d.license_type, 'LIGHT') AS license_class,
            d.license_expiry,
