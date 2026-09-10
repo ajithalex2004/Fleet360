@@ -115,6 +115,11 @@ export async function getPublicTicketTrackingData(
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
     tokenOrReadableId
   );
+  // P0 Security: readable_id (e.g. "MNT-000123") is sequential and enumerable.
+  // Only an unguessable UUID or a cryptographically random 24-64 char trackingToken
+  // may resolve a ticket here — never the human-readable ticket number.
+  const isSecureToken = /^[a-f0-9]{24,64}$/i.test(tokenOrReadableId);
+  if (!isUuid && !isSecureToken) return null;
 
   const [row] = await prisma.$queryRawUnsafe<
     Array<{
@@ -134,7 +139,7 @@ export async function getPublicTicketTrackingData(
       ? `SELECT id, readable_id, ticket_type, title, description, status, priority, created_at, vehicle_id, custom_fields
          FROM service_tickets WHERE id = $1::uuid AND deleted_at IS NULL`
       : `SELECT id, readable_id, ticket_type, title, description, status, priority, created_at, vehicle_id, custom_fields
-         FROM service_tickets WHERE (readable_id = $1 OR custom_fields->>'publicToken' = $1) AND deleted_at IS NULL`,
+         FROM service_tickets WHERE custom_fields->>'trackingToken' = $1 AND deleted_at IS NULL`,
     tokenOrReadableId
   );
 
@@ -200,6 +205,12 @@ export async function submitTicketCsatFeedback(
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
     tokenOrReadableId
   );
+  // P0 Security: same enumeration guard as getPublicTicketTrackingData — never
+  // accept the sequential readable_id here.
+  const isSecureToken = /^[a-f0-9]{24,64}$/i.test(tokenOrReadableId);
+  if (!isUuid && !isSecureToken) {
+    throw new Error('Invalid tracking token');
+  }
 
   await prisma.$executeRawUnsafe(
     isUuid
@@ -210,7 +221,7 @@ export async function submitTicketCsatFeedback(
       : `UPDATE service_tickets
          SET custom_fields = custom_fields || jsonb_build_object('csatFeedback', $2::jsonb),
              updated_at = NOW()
-         WHERE (readable_id = $1 OR custom_fields->>'publicToken' = $1)`,
+         WHERE custom_fields->>'trackingToken' = $1`,
     tokenOrReadableId,
     JSON.stringify(feedbackData)
   );

@@ -132,13 +132,14 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
           );
         }
 
-        // 2. Caller must have approval role or explicit service_ticket.approve permission
+        // 2. Caller must have an approval role.
+        // x-user-role is set unconditionally by middleware from the trusted session
+        // (src/middleware.ts) and cannot be forged by the client. Do not also trust
+        // an x-user-permissions header here — middleware never sets one, so it would
+        // pass through client input verbatim and let any caller grant themselves
+        // approver status.
         const userRole = req.headers.get('x-user-role') || '';
-        const userPerms = req.headers.get('x-user-permissions')?.split(',') || [];
-        const isApprover =
-          ['TENANT_ADMIN', 'FLEET_MANAGER', 'OPERATIONS_MANAGER', 'SUPER_ADMIN'].includes(userRole) ||
-          userPerms.includes('service_ticket.approve') ||
-          userPerms.includes('*:*:*');
+        const isApprover = ['TENANT_ADMIN', 'FLEET_MANAGER', 'OPERATIONS_MANAGER', 'SUPER_ADMIN'].includes(userRole);
 
         if (!isApprover) {
           return NextResponse.json(
