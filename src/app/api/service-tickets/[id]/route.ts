@@ -158,6 +158,24 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         }
       }
 
+      // P0 Governance: Operations Triage can route a ticket (Forward) but has
+      // no authority to action it. Mirrors the client-side gate in
+      // src/app/service-tickets/page.tsx (canProgress) — enforced here too so
+      // a direct API call can't bypass the button-level UI restriction.
+      const PROGRESSION_STATUSES = ['Acknowledged', 'Assigned', 'Escalated', 'Resolved'];
+      if (PROGRESSION_STATUSES.includes(body.status as string)) {
+        const existingCustomFields = (existing.custom_fields && typeof existing.custom_fields === 'object')
+          ? (existing.custom_fields as Record<string, unknown>)
+          : {};
+        const assignedDepartment = (existingCustomFields.assignedDepartment as string) || 'OPERATIONS_TRIAGE';
+        if (assignedDepartment === 'OPERATIONS_TRIAGE') {
+          return NextResponse.json(
+            { ok: false, error: 'This ticket is still in Operations Triage — forward it to the owning department before taking further action.' },
+            { status: 403 }
+          );
+        }
+      }
+
       // P0 Safety: If ticket is resolved/completed and vehicle was linked, check if vehicle can be ungrounded
       if ((body.status === 'Resolved' || body.status === 'Completed') && existing.vehicle_id) {
         try {
