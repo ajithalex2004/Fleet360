@@ -248,6 +248,28 @@ describe('Executable Security Exemption & Boundary Assertion Suite', () => {
       );
       expect((await enterpriseWebhookPOST(reqShortSecret, { params: { id: validConnId } })).status).toBe(401);
 
+      // Empty secret
+      const reqEmptySecret = new NextRequest(
+        `http://localhost:3000/api/integrations/enterprise/webhook/${validConnId}`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-webhook-secret': '' },
+          body: JSON.stringify({ entityType: 'PURCHASE_ORDER', orderId: 'PO-999' }),
+        }
+      );
+      expect((await enterpriseWebhookPOST(reqEmptySecret, { params: { id: validConnId } })).status).toBe(401);
+
+      // Malformed secret
+      const reqMalformedSecret = new NextRequest(
+        `http://localhost:3000/api/integrations/enterprise/webhook/${validConnId}`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-webhook-secret': '???malformed!@@@$$$' },
+          body: JSON.stringify({ entityType: 'PURCHASE_ORDER', orderId: 'PO-999' }),
+        }
+      );
+      expect((await enterpriseWebhookPOST(reqMalformedSecret, { params: { id: validConnId } })).status).toBe(401);
+
       // Longer secret (60+ chars)
       const reqLongSecret = new NextRequest(
         `http://localhost:3000/api/integrations/enterprise/webhook/${validConnId}`,

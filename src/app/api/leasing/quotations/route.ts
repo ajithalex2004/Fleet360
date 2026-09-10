@@ -61,11 +61,14 @@ export async function POST(request: NextRequest) {
     // Strip relational/extra fields that aren't on the LeaseQuotation model
     const {
       vehicles, lineItems, lessee, inquiry,
-      approvalSteps, contracts, lesseeId, monthlyRate, ...quotationData
+      approvalSteps, contracts, lesseeId, monthlyRate, termMonths, ...quotationData
     } = body;
 
     const baseMonthlyRate = quotationData.baseMonthlyRate ?? (monthlyRate != null ? Number(monthlyRate) : null);
     const totalMonthlyRate = quotationData.totalMonthlyRate ?? (monthlyRate != null ? Number(monthlyRate) : null);
+    const durationMonths = quotationData.durationMonths != null
+      ? Number(quotationData.durationMonths)
+      : (termMonths != null ? Number(termMonths) : null);
 
     // No UI today submits itemized lineItems directly — it collects one
     // aggregate cost per category instead (accessoriesCost, servicesCost,
@@ -115,6 +118,7 @@ export async function POST(request: NextRequest) {
         ...quotationData,
         baseMonthlyRate,
         totalMonthlyRate,
+        ...(durationMonths != null ? { durationMonths } : {}),
         tenantId,
         quotationNumber,
         status: quotationData.status ?? 'NEW',
