@@ -94,7 +94,6 @@ export async function POST(request: NextRequest) {
     if (quotationData.driverIncluded && Number(quotationData.driverCost) > 0) {
       autoLineItems.push({ itemType: 'DRIVER', description: 'Driver services', amount: Number(quotationData.driverCost) });
     }
-    const durationMonths = Number(quotationData.durationMonths) || null;
 
     const quotation = await withTenantRls(prisma, tenantId, async (tx) => {
       if (lesseeId) {
