@@ -389,6 +389,7 @@ async function _doInit(): Promise<void> {
       -- ── demand_forecasts ───────────────────────────────────────────────────────
       CREATE TABLE IF NOT EXISTS demand_forecasts (
         id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id           TEXT NOT NULL DEFAULT 'default',
         forecast_period     TEXT NOT NULL,
         vehicle_type        TEXT,
         branch_id           TEXT,
@@ -406,9 +407,10 @@ async function _doInit(): Promise<void> {
         model_used          TEXT NOT NULL DEFAULT 'MOVING_AVG_TREND',
         agent_run_id        UUID,
         created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        CONSTRAINT demand_forecasts_period_segment_key UNIQUE (forecast_period, segment, vehicle_type, branch_id)
+        CONSTRAINT demand_forecasts_period_segment_key UNIQUE (tenant_id, forecast_period, segment, vehicle_type, branch_id)
       );
 
+      CREATE INDEX IF NOT EXISTS idx_demand_tenant   ON demand_forecasts(tenant_id);
       CREATE INDEX IF NOT EXISTS idx_demand_period   ON demand_forecasts(forecast_period);
       CREATE INDEX IF NOT EXISTS idx_demand_segment  ON demand_forecasts(segment);
       CREATE INDEX IF NOT EXISTS idx_demand_created  ON demand_forecasts(created_at DESC);

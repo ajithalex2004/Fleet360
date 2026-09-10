@@ -86,36 +86,19 @@ async function runDemandForecasting(event: AgentEvent): Promise<AgentRunResult> 
   const t0 = Date.now();
   const forecastPeriod = nextWeekLabel(1);
 
-  // 1. Pull 12 weeks of booking demand by vehicle type + branch
+  // 1. Pull 12 weeks of booking demand by service type
   const weeklyData = await prisma.$queryRaw<WeeklyDemand[]>`
     SELECT
-      TO_CHAR(DATE_TRUNC('week', t.created_at), 'IYYY-"W"IW') AS week,
-      v.vehicle_type,
-      v.branch_id::text,
+      TO_CHAR(DATE_TRUNC('week', b.created_at), 'IYYY-"W"IW') AS week,
+      b.service_type AS "vehicleType",
+      NULL AS "branchId",
       COUNT(*)::int AS count
-    FROM trips t
-    JOIN vehicles v ON v.id = t.vehicle_id::uuid
-    WHERE t.created_at >= NOW() - INTERVAL '12 weeks'
-      AND t.status IN ('COMPLETED', 'IN_PROGRESS')
+    FROM dispatch_jobs b
+    WHERE b.tenant_id = ${event.tenant_id}
+      AND b.created_at >= NOW() - INTERVAL '12 weeks'
     GROUP BY 1, 2, 3
     ORDER BY 1
   `.catch(() => [] as WeeklyDemand[]);
-
-  if (weeklyData.length === 0) {
-    const bookingData = await prisma.$queryRaw<WeeklyDemand[]>`
-      SELECT
-        TO_CHAR(DATE_TRUNC('week', b.created_at), 'IYYY-"W"IW') AS week,
-        b.service_type AS vehicle_type,
-        NULL AS branch_id,
-        COUNT(*)::int AS count
-      FROM dispatch_jobs b
-      WHERE b.created_at >= NOW() - INTERVAL '12 weeks'
-      GROUP BY 1, 2, 3
-      ORDER BY 1
-    `.catch(() => [] as WeeklyDemand[]);
-
-    weeklyData.push(...bookingData);
-  }
 
   if (weeklyData.length === 0) {
     return {
@@ -184,12 +167,12 @@ async function runDemandForecasting(event: AgentEvent): Promise<AgentRunResult> 
     // Upsert to demand_forecasts
     await prisma.$executeRawUnsafe(`
       INSERT INTO demand_forecasts (
-        forecast_period, vehicle_type, branch_id, segment,
+        tenant_id, forecast_period, vehicle_type, branch_id, segment,
         historical_avg, forecast_value, confidence_interval_low, confidence_interval_high,
         trend_direction, seasonality_factor, holiday_adjustment,
         recommended_fleet_size, repositioning_actions, narrative, model_used
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14,'MOVING_AVG_TREND')
-      ON CONFLICT (forecast_period, segment, vehicle_type, branch_id) DO UPDATE SET
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15,'MOVING_AVG_TREND')
+      ON CONFLICT (tenant_id, forecast_period, segment, vehicle_type, branch_id) DO UPDATE SET
         historical_avg           = EXCLUDED.historical_avg,
         forecast_value           = EXCLUDED.forecast_value,
         confidence_interval_low  = EXCLUDED.confidence_interval_low,
@@ -201,6 +184,7 @@ async function runDemandForecasting(event: AgentEvent): Promise<AgentRunResult> 
         repositioning_actions    = EXCLUDED.repositioning_actions,
         narrative                = EXCLUDED.narrative
     `,
+      event.tenant_id,
       forecastPeriod,
       vehicleType === 'ALL' ? null : vehicleType,
       branchId === 'ALL' ? null : branchId,
