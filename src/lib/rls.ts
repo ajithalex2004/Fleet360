@@ -253,7 +253,7 @@ export async function withSystemJob<T>(
   // A single-tenant run opens no platform-admin transaction at all.
   const tenants = opts.tenantHeader
     ? [{ id: opts.tenantHeader }]
-    : opts.tenantIds && opts.tenantIds.length > 0
+    : opts.tenantIds !== undefined
     ? opts.tenantIds.map((id) => ({ id }))
     : await withPlatformAdmin(
         prisma,
