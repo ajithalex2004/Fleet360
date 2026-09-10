@@ -31,25 +31,22 @@ const VALID_COST_TYPES: CostType[] = ['TOWING', 'PARTS', 'LABOUR', 'STORAGE', 'R
 const VALID_PAYER_TYPES: PayerType[] = ['TENANT', 'CUSTOMER', 'INSURANCE', 'WARRANTY'];
 
 export async function GET(req: NextRequest, { params }: RouteParams) {
-  let authContext: { tenantId: string; userId: string; role?: string };
-  try {
-    authContext = await requireAuthorizedTenant(req);
-  } catch (authErr: any) {
-    const status = authErr.status || 401;
-    return NextResponse.json({ error: authErr.message || 'Unauthorized' }, { status });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
 
-  const { tenantId } = authContext;
+  const { tenantId } = authz;
   const { id: ticketId } = await params;
 
   if (!ticketId) {
     return NextResponse.json({ error: 'Ticket ID required' }, { status: 400 });
   }
 
-  return withTenantRls(tenantId, async () => {
+  return withTenantRls(prisma, tenantId, async (tx) => {
     try {
       // Verify ticket exists and belongs to tenant
-      const [ticket] = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      const [ticket] = await tx.$queryRawUnsafe<Array<{ id: string }>>(
         `SELECT id FROM service_tickets WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL`,
         ticketId,
         tenantId
@@ -59,8 +56,8 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
         return NextResponse.json({ error: 'Ticket not found' }, { status: 404 });
       }
 
-      const costs = await getCaseCosts(ticketId, tenantId);
-      const summary = await calculateCostSummary(ticketId, tenantId);
+      const costs = await getCaseCosts(ticketId, tenantId, tx);
+      const summary = await calculateCostSummary(ticketId, tenantId, tx);
 
       return NextResponse.json({ costs, summary });
     } catch (err: any) {
@@ -71,15 +68,12 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 }
 
 export async function POST(req: NextRequest, { params }: RouteParams) {
-  let authContext: { tenantId: string; userId: string; role?: string };
-  try {
-    authContext = await requireAuthorizedTenant(req);
-  } catch (authErr: any) {
-    const status = authErr.status || 401;
-    return NextResponse.json({ error: authErr.message || 'Unauthorized' }, { status });
+  const authz = requireAuthorizedTenant(req);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
 
-  const { tenantId, userId } = authContext;
+  const { tenantId, userId } = authz;
   const { id: ticketId } = await params;
 
   if (!ticketId) {
@@ -110,10 +104,10 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     );
   }
 
-  return withTenantRls(tenantId, async () => {
+  return withTenantRls(prisma, tenantId, async (tx) => {
     try {
       // Verify ticket exists
-      const [ticket] = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      const [ticket] = await tx.$queryRawUnsafe<Array<{ id: string }>>(
         `SELECT id FROM service_tickets WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL`,
         ticketId,
         tenantId
@@ -139,7 +133,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         insuranceClaimId: body.insuranceClaimId || null,
         customerRechargeStatus: body.customerRechargeStatus as CustomerRechargeStatus,
         notes: body.notes || null,
-      });
+      }, tx);
 
       // Append entry to ticket history
       const now = new Date();
@@ -156,7 +150,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         note: `Cost Ledger Added: [${costType}] ${costDisplay} (Payer: ${payerType}). Ref: ${costLine.invoiceReference || 'None'}.`,
       };
 
-      await prisma.$executeRawUnsafe(
+      await tx.$executeRawUnsafe(
         `UPDATE service_tickets
          SET history = history || $1::jsonb,
              updated_at = NOW()
@@ -176,7 +170,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         newData: { ...costLine },
       }).catch(() => {});
 
-      const summary = await calculateCostSummary(ticketId, tenantId);
+      const summary = await calculateCostSummary(ticketId, tenantId, tx);
 
       return NextResponse.json({ cost: costLine, summary }, { status: 201 });
     } catch (err: any) {

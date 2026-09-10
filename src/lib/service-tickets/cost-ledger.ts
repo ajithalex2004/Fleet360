@@ -128,8 +128,9 @@ function mapDbRowToCaseCost(row: DbCostRow): CaseCostLine {
 /**
  * Retrieves all cost lines for a specific service ticket within a tenant.
  */
-export async function getCaseCosts(ticketId: string, tenantId: string): Promise<CaseCostLine[]> {
-  const rows = await prisma.$queryRawUnsafe<DbCostRow[]>(
+export async function getCaseCosts(ticketId: string, tenantId: string, client?: any): Promise<CaseCostLine[]> {
+  const db = client || prisma;
+  const rows = await db.$queryRawUnsafe<DbCostRow[]>(
     `SELECT *
      FROM service_case_costs
      WHERE ticket_id = $1::uuid AND tenant_id = $2
@@ -144,8 +145,9 @@ export async function getCaseCosts(ticketId: string, tenantId: string): Promise<
 /**
  * Adds a new cost line to a ticket's cost ledger.
  */
-export async function addCaseCost(data: AddCaseCostInput): Promise<CaseCostLine> {
-  const [row] = await prisma.$queryRawUnsafe<DbCostRow[]>(
+export async function addCaseCost(data: AddCaseCostInput, client?: any): Promise<CaseCostLine> {
+  const db = client || prisma;
+  const [row] = await db.$queryRawUnsafe<DbCostRow[]>(
     `INSERT INTO service_case_costs (
        tenant_id,
        ticket_id,
@@ -337,8 +339,9 @@ export function calculateSummaryFromLines(lines: CaseCostLine[], ticketId: strin
  */
 export async function calculateCostSummary(
   ticketId: string,
-  tenantId: string
+  tenantId: string,
+  client?: any
 ): Promise<CaseCostSummary> {
-  const lines = await getCaseCosts(ticketId, tenantId);
+  const lines = await getCaseCosts(ticketId, tenantId, client);
   return calculateSummaryFromLines(lines, ticketId);
 }

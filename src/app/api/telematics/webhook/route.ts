@@ -10,9 +10,22 @@ export const dynamic = 'force-dynamic';
  *   - `x-tenant-id` header or `?tenantId=...` query param (falls back to active session or default tenant)
  */
 
+import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { normalizeTelemetryBatch, processTelemetryBatch } from '@/lib/telematics/gateway-ingest';
 import { getTenantId } from '@/lib/tenant-context';
+
+function safeCompare(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  try {
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    if (bufA.length !== bufB.length) return false;
+    return crypto.timingSafeEqual(bufA, bufB);
+  } catch {
+    return false;
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,7 +35,7 @@ export async function POST(req: NextRequest) {
 
     // Expected secret or fallback
     const configuredSecret = process.env.TELEMATICS_WEBHOOK_SECRET || 'fleet360-telematics-live';
-    if (secretParam && secretParam !== configuredSecret && secretParam !== 'demo-secret') {
+    if (!secretParam || (!safeCompare(secretParam, configuredSecret) && !safeCompare(secretParam, 'demo-secret'))) {
       return NextResponse.json({ error: 'Unauthorized webhook secret' }, { status: 401 });
     }
 

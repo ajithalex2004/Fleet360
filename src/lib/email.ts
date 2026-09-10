@@ -27,10 +27,10 @@ import { captureException } from './sentry';
 
 export interface EmailSendResult {
   sent: boolean;
-  reason?: 'not_configured' | 'no_recipient' | 'smtp_not_configured' | 'sendgrid_error' | 'smtp_error' | 'network_error';
+  reason?: 'not_configured' | 'no_recipient' | 'smtp_not_configured' | 'sendgrid_error' | 'smtp_error' | 'network_error' | 'quarantined_in_staging';
   status?: number;
   error?: string;
-  transport?: 'sendgrid' | 'smtp';
+  transport?: 'sendgrid' | 'smtp' | 'quarantined';
 }
 
 export interface EmailMessage {
@@ -114,6 +114,13 @@ export function invalidateSmtpCache(): void {
 export async function sendEmail(msg: EmailMessage): Promise<EmailSendResult> {
   const recipients = Array.isArray(msg.to) ? msg.to.filter(Boolean) : [msg.to].filter(Boolean);
   if (recipients.length === 0) return { sent: false, reason: 'no_recipient' };
+
+  if (
+    process.env.DISABLE_OUTBOUND_NOTIFICATIONS === 'true' ||
+    process.env.MOCK_NOTIFICATIONS === 'true'
+  ) {
+    return { sent: false, reason: 'quarantined_in_staging', transport: 'quarantined' };
+  }
 
   // 1. SendGrid takes priority if explicitly configured
   if (process.env.SENDGRID_API_KEY) {

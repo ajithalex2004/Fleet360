@@ -15,6 +15,12 @@ import { GET as portalContractsGET } from '@/app/api/leasing-portal/contracts/ro
 // ── 4. Scheduler Authentication & Authorization Tests ────────────────────────
 import { isJobAuthorized, verifyJobAuthorization } from '@/lib/jobs/registry';
 import { GET as jobsRunGET, POST as jobsRunPOST } from '@/app/api/jobs/run/route';
+import { signSession } from '@/lib/tenant-session';
+
+// ── 5. Notification Quarantine Tests ─────────────────────────────────────────
+import { sendSms } from '@/lib/sms';
+import { sendWhatsApp } from '@/lib/whatsapp';
+import { sendEmail } from '@/lib/email';
 
 // Dynamic mock store for enterprise connections, service tickets, and portal users
 let mockEnterpriseConnections: any[] = [];
@@ -82,6 +88,14 @@ vi.mock('@/lib/prisma', () => ({
   },
 }));
 
+vi.mock('@/lib/telematics/gateway-ingest', async (importOriginal) => {
+  const actual = await importOriginal<any>();
+  return {
+    ...actual,
+    processTelemetryBatch: vi.fn().mockResolvedValue({ processed: 1, failed: 0, alertsTriggered: 0 }),
+  };
+});
+
 vi.mock('@/lib/leasing/esignature-store', () => ({
   getSignature: vi.fn().mockResolvedValue(null),
 }));
@@ -104,20 +118,62 @@ describe('Executable Security Exemption & Boundary Assertion Suite', () => {
   // A. Inbound Webhook Security
   // ───────────────────────────────────────────────────────────────────────────
   describe('Inbound Webhook Security', () => {
-    it('rejects telematics webhook when invalid secret is supplied', async () => {
-      const req = new NextRequest('http://localhost:3000/api/telematics/webhook', {
+    it('rejects telematics webhook with missing, empty, shorter, longer, and malformed secrets', async () => {
+      const payload = JSON.stringify([{ imei: '123456789012345', lat: 25.2, lng: 55.3 }]);
+
+      // 1. Missing secret
+      const reqMissing = new NextRequest('http://localhost:3000/api/telematics/webhook', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: payload,
+      });
+      expect((await telematicsWebhookPOST(reqMissing)).status).toBe(401);
+
+      // 2. Empty secret
+      const reqEmpty = new NextRequest('http://localhost:3000/api/telematics/webhook', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-webhook-secret': '' },
+        body: payload,
+      });
+      expect((await telematicsWebhookPOST(reqEmpty)).status).toBe(401);
+
+      // 3. Shorter secret (5 chars vs 31 chars configured)
+      const reqShort = new NextRequest('http://localhost:3000/api/telematics/webhook', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-webhook-secret': 'short' },
+        body: payload,
+      });
+      expect((await telematicsWebhookPOST(reqShort)).status).toBe(401);
+
+      // 4. Longer secret (60+ chars vs 31 chars configured)
+      const reqLong = new NextRequest('http://localhost:3000/api/telematics/webhook', {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          'x-webhook-secret': 'attacker-wrong-secret',
+          'x-webhook-secret': 'super-secret-telematics-token-with-extra-bytes-padding-and-overflow',
         },
-        body: JSON.stringify([{ imei: '123456789012345', lat: 25.2, lng: 55.3 }]),
+        body: payload,
       });
+      expect((await telematicsWebhookPOST(reqLong)).status).toBe(401);
 
-      const res = await telematicsWebhookPOST(req);
-      expect(res.status).toBe(401);
-      const json = await res.json();
-      expect(json.error).toBe('Unauthorized webhook secret');
+      // 5. Malformed characters / invalid secret
+      const reqMalformed = new NextRequest('http://localhost:3000/api/telematics/webhook', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-webhook-secret': '???malformed!secret@@@$$$' },
+        body: payload,
+      });
+      expect((await telematicsWebhookPOST(reqMalformed)).status).toBe(401);
+
+      // 6. Exactly matching secret succeeds
+      const reqValid = new NextRequest('http://localhost:3000/api/telematics/webhook', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-webhook-secret': 'super-secret-telematics-token',
+        },
+        body: payload,
+      });
+      expect((await telematicsWebhookPOST(reqValid)).status).toBe(200);
     });
 
     it('rejects enterprise webhook when connection ID does not exist in database', async () => {
@@ -180,6 +236,31 @@ describe('Executable Security Exemption & Boundary Assertion Suite', () => {
       );
       const resWrongSecret = await enterpriseWebhookPOST(reqWrongSecret, { params: { id: validConnId } });
       expect(resWrongSecret.status).toBe(401);
+
+      // Shorter secret (5 chars vs 25 chars)
+      const reqShortSecret = new NextRequest(
+        `http://localhost:3000/api/integrations/enterprise/webhook/${validConnId}`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-webhook-secret': 'short' },
+          body: JSON.stringify({ entityType: 'PURCHASE_ORDER', orderId: 'PO-999' }),
+        }
+      );
+      expect((await enterpriseWebhookPOST(reqShortSecret, { params: { id: validConnId } })).status).toBe(401);
+
+      // Longer secret (60+ chars)
+      const reqLongSecret = new NextRequest(
+        `http://localhost:3000/api/integrations/enterprise/webhook/${validConnId}`,
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-webhook-secret': 'correct-erp-shared-secret-with-huge-padding-that-overflows-buffer',
+          },
+          body: JSON.stringify({ entityType: 'PURCHASE_ORDER', orderId: 'PO-999' }),
+        }
+      );
+      expect((await enterpriseWebhookPOST(reqLongSecret, { params: { id: validConnId } })).status).toBe(401);
 
       // 3. Valid secret accepts request
       const reqValidSecret = new NextRequest(
@@ -374,85 +455,116 @@ describe('Executable Security Exemption & Boundary Assertion Suite', () => {
   // D. Job Scheduler Authentication & Authorization Security
   // ───────────────────────────────────────────────────────────────────────────
   describe('Job Scheduler Authorization Security (/api/jobs/run)', () => {
-    it('isJobAuthorized rejects requests with missing or wrong CRON_SECRET and no operator session', () => {
+    it('isJobAuthorized rejects requests with missing or wrong CRON_SECRET and no operator session', async () => {
       const unauthReq = new NextRequest('http://localhost:3000/api/jobs/run?job=dunning-sweep', {
         method: 'POST',
       });
-      expect(isJobAuthorized(unauthReq)).toBe(false);
+      expect(await isJobAuthorized(unauthReq)).toBe(false);
 
       const wrongSecretReq = new NextRequest('http://localhost:3000/api/jobs/run?job=dunning-sweep', {
         method: 'POST',
         headers: { authorization: 'Bearer wrong-secret-token' },
       });
-      expect(isJobAuthorized(wrongSecretReq)).toBe(false);
+      expect(await isJobAuthorized(wrongSecretReq)).toBe(false);
     });
 
-    it('rejects tenant header alone without authenticated user session (unauthenticated spoofing prevention)', () => {
-      const unauthHeaderReq = new NextRequest('http://localhost:3000/api/jobs/run?job=dunning-sweep', {
-        method: 'POST',
-        headers: { 'x-tenant-id': 'tenant-acme-fleet' },
-      });
-      const auth = verifyJobAuthorization(unauthHeaderReq);
-      expect(auth.authorized).toBe(false);
-      expect(auth.status).toBe(401);
-      expect(auth.error).toBe('Unauthenticated tenant header rejected');
-    });
-
-    it('rejects authenticated operator without job execution permissions (role gate)', () => {
-      const readOnlyReq = new NextRequest('http://localhost:3000/api/jobs/run?job=dunning-sweep', {
+    it('strictly rejects forged headers (x-tenant-id, x-user-id, x-user-role) without valid xl-session cookie', async () => {
+      const forgedReq = new NextRequest('http://localhost:3000/api/jobs/run?job=dunning-sweep', {
         method: 'POST',
         headers: {
           'x-tenant-id': 'tenant-acme-fleet',
-          'x-user-id': 'user-readonly-1',
-          'x-user-role': 'READ_ONLY_VIEWER',
+          'x-user-id': 'user-attacker',
+          'x-user-role': 'SUPER_ADMIN',
         },
       });
-      const auth = verifyJobAuthorization(readOnlyReq);
+      const auth = await verifyJobAuthorization(forgedReq, 'dunning-sweep');
       expect(auth.authorized).toBe(false);
-      expect(auth.status).toBe(403);
-      expect(auth.error).toContain('insufficient job execution permissions');
+      expect(auth.status).toBe(401);
+      expect(auth.error).toBe('Unauthorized: Valid operator session required');
     });
 
-    it('rejects authenticated Tenant A operator attempting to supply or switch to Tenant B header', () => {
+    it('rejects operator with invalid or tampered xl-session cookie with 401', async () => {
+      const tamperedReq = new NextRequest('http://localhost:3000/api/jobs/run?job=dunning-sweep', {
+        method: 'POST',
+        headers: {
+          cookie: 'xl-session=invalid-payload.tampered-signature-123',
+        },
+      });
+      const auth = await verifyJobAuthorization(tamperedReq, 'dunning-sweep');
+      expect(auth.authorized).toBe(false);
+      expect(auth.status).toBe(401);
+      expect(auth.error).toBe('Unauthorized: Valid operator session required');
+    });
+
+    it('enforces job-specific role gate (e.g. DISPATCHER denied for dunning-sweep with 403)', async () => {
+      const dispatcherToken = await signSession({
+        userId: 'user-dispatcher-1',
+        tenantId: 'tenant-origin-a',
+        role: 'DISPATCHER',
+        plan: 'ENTERPRISE',
+      });
+      const dispatcherReq = new NextRequest('http://localhost:3000/api/jobs/run?job=dunning-sweep', {
+        method: 'POST',
+        headers: {
+          cookie: `xl-session=${dispatcherToken}`,
+        },
+      });
+      const auth = await verifyJobAuthorization(dispatcherReq, 'dunning-sweep');
+      expect(auth.authorized).toBe(false);
+      expect(auth.status).toBe(403);
+      expect(auth.error).toBe("Forbidden: role 'DISPATCHER' is not authorized to execute job 'dunning-sweep'");
+    });
+
+    it('authorizes operator with allowed job role (e.g. FINANCE for dunning-sweep) and derives identity from verified session', async () => {
+      const financeToken = await signSession({
+        userId: 'user-finance-1',
+        tenantId: 'tenant-origin-a',
+        role: 'FINANCE',
+        plan: 'ENTERPRISE',
+      });
+      // Even if client attempts to forge x-tenant-id in header, verified session tenant is used
+      const financeReq = new NextRequest('http://localhost:3000/api/jobs/run?job=dunning-sweep', {
+        method: 'POST',
+        headers: {
+          cookie: `xl-session=${financeToken}`,
+          'x-tenant-id': 'malicious-forged-tenant',
+        },
+      });
+      const auth = await verifyJobAuthorization(financeReq, 'dunning-sweep');
+      expect(auth.authorized).toBe(true);
+      expect(auth.isCron).toBe(false);
+      expect(auth.tenantId).toBe('tenant-origin-a');
+      expect(auth.userId).toBe('user-finance-1');
+    });
+
+    it('rejects authenticated non-super-admin operator attempting cross-tenant execution via query param', async () => {
+      const financeToken = await signSession({
+        userId: 'user-finance-1',
+        tenantId: 'tenant-origin-a',
+        role: 'FINANCE',
+        plan: 'ENTERPRISE',
+      });
       const crossTenantReq = new NextRequest(
         'http://localhost:3000/api/jobs/run?job=dunning-sweep&tenantId=tenant-target-b',
         {
           method: 'POST',
           headers: {
-            'x-tenant-id': 'tenant-origin-a',
-            'x-user-id': 'user-operator-a',
-            'x-user-role': 'TENANT_ADMIN',
+            cookie: `xl-session=${financeToken}`,
           },
         }
       );
-      const auth = verifyJobAuthorization(crossTenantReq);
+      const auth = await verifyJobAuthorization(crossTenantReq, 'dunning-sweep');
       expect(auth.authorized).toBe(false);
       expect(auth.status).toBe(403);
       expect(auth.error).toContain('cross-tenant execution not permitted');
     });
 
-    it('authorizes valid Tenant A operator and strictly binds execution scope to Tenant A only', () => {
-      const validOperatorReq = new NextRequest('http://localhost:3000/api/jobs/run?job=dunning-sweep', {
-        method: 'POST',
-        headers: {
-          'x-tenant-id': 'tenant-origin-a',
-          'x-user-id': 'user-operator-a',
-          'x-user-role': 'TENANT_ADMIN',
-        },
-      });
-      const auth = verifyJobAuthorization(validOperatorReq);
-      expect(auth.authorized).toBe(true);
-      expect(auth.isCron).toBe(false);
-      expect(auth.tenantId).toBe('tenant-origin-a');
-      expect(auth.userId).toBe('user-operator-a');
-    });
-
-    it('isJobAuthorized accepts valid CRON_SECRET Bearer token for system scheduler and binds scope', () => {
+    it('isJobAuthorized accepts valid CRON_SECRET Bearer token for system scheduler and binds scope', async () => {
       const validCronReq = new NextRequest('http://localhost:3000/api/jobs/run?job=dunning-sweep', {
         method: 'POST',
         headers: { authorization: 'Bearer valid-cron-secret-12345' },
       });
-      const auth = verifyJobAuthorization(validCronReq);
+      const auth = await verifyJobAuthorization(validCronReq, 'dunning-sweep');
       expect(auth.authorized).toBe(true);
       expect(auth.isCron).toBe(true);
       expect(auth.userId).toBe('system:cron');
@@ -466,7 +578,7 @@ describe('Executable Security Exemption & Boundary Assertion Suite', () => {
       const res = await jobsRunPOST(unauthReq);
       expect(res.status).toBe(401);
       const json = await res.json();
-      expect(json.error).toBe('Unauthorized');
+      expect(json.error).toBe('Unauthorized: Valid operator session required');
     });
 
     it('GET /api/jobs/run returns 401 for unauthorized callers', async () => {
@@ -477,6 +589,42 @@ describe('Executable Security Exemption & Boundary Assertion Suite', () => {
       expect(res.status).toBe(401);
       const json = await res.json();
       expect(json.error).toBe('Unauthorized');
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // E. Outbound Notification Quarantine & Suppression in Staging
+  // ───────────────────────────────────────────────────────────────────────────
+  describe('Outbound Notification Quarantine & Suppression', () => {
+    it('suppresses SMS, WhatsApp, and Email when DISABLE_OUTBOUND_NOTIFICATIONS is true', async () => {
+      process.env.DISABLE_OUTBOUND_NOTIFICATIONS = 'true';
+
+      const smsRes = await sendSms({ to: '+971501234567', body: 'Test SMS' });
+      expect(smsRes.sent).toBe(false);
+      expect(smsRes.reason).toBe('quarantined_in_staging');
+
+      const waRes = await sendWhatsApp({ to: '+971501234567', body: 'Test WhatsApp' });
+      expect(waRes.sent).toBe(false);
+      expect(waRes.reason).toBe('quarantined_in_staging');
+
+      const emailRes = await sendEmail({ to: 'customer@example.com', subject: 'Test Email' });
+      expect(emailRes.sent).toBe(false);
+      expect(emailRes.reason).toBe('quarantined_in_staging');
+      expect(emailRes.transport).toBe('quarantined');
+    });
+
+    it('suppresses SMS and WhatsApp when TWILIO credentials are set to DISABLED_IN_STAGING', async () => {
+      delete process.env.DISABLE_OUTBOUND_NOTIFICATIONS;
+      process.env.TWILIO_AUTH_TOKEN = 'DISABLED_IN_STAGING';
+      process.env.TWILIO_ACCOUNT_SID = 'DISABLED_IN_STAGING';
+
+      const smsRes = await sendSms({ to: '+971501234567', body: 'Test SMS' });
+      expect(smsRes.sent).toBe(false);
+      expect(smsRes.reason).toBe('quarantined_in_staging');
+
+      const waRes = await sendWhatsApp({ to: '+971501234567', body: 'Test WhatsApp' });
+      expect(waRes.sent).toBe(false);
+      expect(waRes.reason).toBe('quarantined_in_staging');
     });
   });
 });

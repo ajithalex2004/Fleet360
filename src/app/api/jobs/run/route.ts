@@ -27,7 +27,7 @@ export const maxDuration = 300; // seconds — Vercel Pro plan max
 // entry vercel.json ever pointed here.
 
 export async function GET(request: NextRequest) {
-  if (!isJobAuthorized(request)) {
+  if (!await isJobAuthorized(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -45,15 +45,14 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const start = Date.now();
 
-  const auth = verifyJobAuthorization(request);
+  const jobName = request.nextUrl.searchParams.get('job');
+  const auth = await verifyJobAuthorization(request, jobName);
   if (!auth.authorized) {
     return NextResponse.json(
       { error: auth.error ?? 'Unauthorized' },
       { status: auth.status ?? 401 }
     );
   }
-
-  const jobName = request.nextUrl.searchParams.get('job');
   if (!jobName) {
     return NextResponse.json(
       {

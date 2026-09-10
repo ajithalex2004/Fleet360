@@ -15,14 +15,15 @@ export const dynamic     = 'force-dynamic';
 export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
-  if (!isJobAuthorized(request)) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+  const auth = await verifyJobAuthorization(request, 'auto-close-trips');
+  if (!auth.authorized) {
+    return NextResponse.json({ error: auth.error ?? 'unauthorized' }, { status: auth.status ?? 401 });
   }
 
   const jobDef = JOB_MAP.get('auto-close-trips')!;
   const ctx: JobContext = {
-    tenantId:     request.headers.get('x-tenant-id'),
-    userId:       request.headers.get('x-user-id') ?? 'system:cron',
+    tenantId:     auth.tenantId,
+    userId:       auth.userId ?? 'system:cron',
     searchParams: request.nextUrl.searchParams,
     request,
   };
