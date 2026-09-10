@@ -266,6 +266,200 @@ export class AIDashboardService {
       generatedAt: new Date().toISOString(),
     };
   }
+
+  /**
+   * Aggregate cross-tenant AI token consumption, spend, ROI, and governance limits
+   * for the Super Admin Master Leaderboard.
+   */
+  async getSuperAdminCrossTenantLeaderboard(): Promise<{
+    summary: {
+      totalTenants: number;
+      activeAiTenants: number;
+      totalTokensUsed: number;
+      totalCostAed: number;
+      totalCostUsd: number;
+      totalAvoidedCostAed: number;
+      netFinancialGainAed: number;
+      globalCircuitBreakersTriggered: number;
+    };
+    tenants: CrossTenantLeaderboardItem[];
+  }> {
+    await ensureAgentSchema();
+
+    // 1. Fetch all tenants from the primary tenant table
+    const tenants = await prisma.tenant.findMany({
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        plan: true,
+        createdAt: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    // 2. Fetch all configured tenant AI policies
+    const policies = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT
+         tenant_id AS "tenantId",
+         max_autonomy_level AS "maxAutonomyLevel",
+         daily_budget_aed::float8 AS "dailyBudgetAed",
+         monthly_budget_aed::float8 AS "monthlyBudgetAed",
+         require_human_approval_threshold_aed::float8 AS "requireHumanApprovalThresholdAed",
+         disabled_agents AS "disabledAgents",
+         circuit_breaker_triggered AS "circuitBreakerTriggered"
+       FROM tenant_ai_policies`,
+    ).catch(() => []);
+
+    const policyMap = new Map<string, any>();
+    for (const p of policies) {
+      policyMap.set(p.tenantId, p);
+    }
+
+    // 3. Aggregate token usage, costs, runs, and savings grouped by tenant_id
+    const runAggregates = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT
+         tenant_id AS "tenantId",
+         COUNT(*)::int AS "totalRuns",
+         COUNT(CASE WHEN status = 'SUCCESS' OR status = 'COMPLETED' THEN 1 END)::int AS "successfulRuns",
+         COUNT(CASE WHEN status = 'FAILED' THEN 1 END)::int AS "failedRuns",
+         COALESCE(SUM(input_tokens + output_tokens), 0)::bigint AS "totalTokens",
+         COALESCE(SUM(cost_usd), 0)::float8 AS "totalCostUsd",
+         COALESCE(SUM(cost_aed), 0)::float8 AS "totalCostAed",
+         COALESCE(SUM(COALESCE(actual_savings_aed, estimated_savings_aed, 0)), 0)::float8 AS "totalAvoidedCostAed",
+         MAX(created_at)::text AS "lastActiveAt"
+       FROM agent_runs
+       GROUP BY tenant_id`,
+    ).catch(() => []);
+
+    const runMap = new Map<string, any>();
+    for (const r of runAggregates) {
+      runMap.set(r.tenantId, r);
+    }
+
+    let globalTokens = 0;
+    let globalCostAed = 0;
+    let globalCostUsd = 0;
+    let globalAvoidedCostAed = 0;
+    let activeAiTenantsCount = 0;
+    let circuitBreakersTriggeredCount = 0;
+
+    // Build the combined tenant leaderboard
+    const tenantRows: CrossTenantLeaderboardItem[] = tenants.map((t) => {
+      const runData = runMap.get(t.id) || {
+        totalRuns: 0,
+        successfulRuns: 0,
+        failedRuns: 0,
+        totalTokens: 0,
+        totalCostUsd: 0,
+        totalCostAed: 0,
+        totalAvoidedCostAed: 0,
+        lastActiveAt: null,
+      };
+
+      const polData = policyMap.get(t.id) || {
+        maxAutonomyLevel: 'L3',
+        dailyBudgetAed: 200.0,
+        monthlyBudgetAed: 5000.0,
+        requireHumanApprovalThresholdAed: 500.0,
+        disabledAgents: [],
+        circuitBreakerTriggered: false,
+      };
+
+      const totalTokens = Number(runData.totalTokens || 0);
+      const totalCostAed = parseFloat(Number(runData.totalCostAed || 0).toFixed(2));
+      const totalCostUsd = parseFloat(Number(runData.totalCostUsd || 0).toFixed(4));
+      const totalAvoidedCostAed = parseFloat(Number(runData.totalAvoidedCostAed || 0).toFixed(2));
+      const monthlyBudgetAed = Number(polData.monthlyBudgetAed || 5000.0);
+      const dailyBudgetAed = Number(polData.dailyBudgetAed || 200.0);
+      const circuitBreakerTriggered = Boolean(polData.circuitBreakerTriggered);
+
+      if (totalTokens > 0 || Number(runData.totalRuns) > 0) {
+        activeAiTenantsCount++;
+      }
+      if (circuitBreakerTriggered) {
+        circuitBreakersTriggeredCount++;
+      }
+
+      globalTokens += totalTokens;
+      globalCostAed += totalCostAed;
+      globalCostUsd += totalCostUsd;
+      globalAvoidedCostAed += totalAvoidedCostAed;
+
+      const totalRuns = Number(runData.totalRuns || 0);
+      const successfulRuns = Number(runData.successfulRuns || 0);
+      const successRatePct = totalRuns > 0 ? parseFloat(((successfulRuns / totalRuns) * 100).toFixed(1)) : 100.0;
+      const budgetUtilizationPct = monthlyBudgetAed > 0
+        ? parseFloat(((totalCostAed / monthlyBudgetAed) * 100).toFixed(1))
+        : 0;
+      const roiMultiplier = totalCostAed > 0
+        ? parseFloat((totalAvoidedCostAed / totalCostAed).toFixed(2))
+        : totalAvoidedCostAed > 0 ? 100.0 : 1.0;
+
+      return {
+        tenantId: t.id,
+        tenantName: t.name,
+        tenantCode: t.code,
+        plan: t.plan,
+        totalTokens,
+        totalCostAed,
+        totalCostUsd,
+        totalAvoidedCostAed,
+        netGainAed: parseFloat((totalAvoidedCostAed - totalCostAed).toFixed(2)),
+        roiMultiplier,
+        totalRuns,
+        successfulRuns,
+        successRatePct,
+        dailyBudgetAed,
+        monthlyBudgetAed,
+        budgetUtilizationPct,
+        maxAutonomyLevel: polData.maxAutonomyLevel || 'L3',
+        circuitBreakerTriggered,
+        disabledAgentsCount: Array.isArray(polData.disabledAgents) ? polData.disabledAgents.length : 0,
+        lastActiveAt: runData.lastActiveAt ?? null,
+      };
+    });
+
+    // Sort tenants by total token consumption descending (highest consumers first)
+    tenantRows.sort((a, b) => b.totalTokens - a.totalTokens);
+
+    return {
+      summary: {
+        totalTenants: tenants.length,
+        activeAiTenants: activeAiTenantsCount,
+        totalTokensUsed: globalTokens,
+        totalCostAed: parseFloat(globalCostAed.toFixed(2)),
+        totalCostUsd: parseFloat(globalCostUsd.toFixed(4)),
+        totalAvoidedCostAed: parseFloat(globalAvoidedCostAed.toFixed(2)),
+        netFinancialGainAed: parseFloat((globalAvoidedCostAed - globalCostAed).toFixed(2)),
+        globalCircuitBreakersTriggered: circuitBreakersTriggeredCount,
+      },
+      tenants: tenantRows,
+    };
+  }
+}
+
+export interface CrossTenantLeaderboardItem {
+  tenantId: string;
+  tenantName: string;
+  tenantCode?: string | null;
+  plan: string;
+  totalTokens: number;
+  totalCostAed: number;
+  totalCostUsd: number;
+  totalAvoidedCostAed: number;
+  netGainAed: number;
+  roiMultiplier: number;
+  totalRuns: number;
+  successfulRuns: number;
+  successRatePct: number;
+  dailyBudgetAed: number;
+  monthlyBudgetAed: number;
+  budgetUtilizationPct: number;
+  maxAutonomyLevel: string;
+  circuitBreakerTriggered: boolean;
+  disabledAgentsCount: number;
+  lastActiveAt?: string | null;
 }
 
 /** Global Shared AI Dashboard Service Singleton */

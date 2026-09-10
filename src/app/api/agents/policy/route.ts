@@ -13,7 +13,10 @@ import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { policyService } from '@/lib/agents/governance';
 
 export async function GET(req: NextRequest) {
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  const authz = requireAuthorizedTenant(
+    { headers: req.headers, nextUrl: req.nextUrl },
+    { allowPlatformSwitch: true },
+  );
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
@@ -33,7 +36,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  const authz = requireAuthorizedTenant(
+    { headers: req.headers, nextUrl: req.nextUrl },
+    { allowPlatformSwitch: true },
+  );
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }

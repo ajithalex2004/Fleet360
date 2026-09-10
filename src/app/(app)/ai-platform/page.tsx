@@ -22,7 +22,51 @@ import {
   BarChart3,
   Layers,
   FileCheck,
+  Building2,
+  Users,
+  SlidersHorizontal,
+  ToggleLeft,
+  ToggleRight,
+  Eye,
+  Search,
+  DollarSign,
+  Check,
+  ChevronDown,
 } from 'lucide-react';
+
+interface CrossTenantItem {
+  tenantId: string;
+  tenantName: string;
+  tenantCode?: string | null;
+  plan: string;
+  totalTokens: number;
+  totalCostAed: number;
+  totalCostUsd: number;
+  totalAvoidedCostAed: number;
+  netGainAed: number;
+  roiMultiplier: number;
+  totalRuns: number;
+  successfulRuns: number;
+  successRatePct: number;
+  dailyBudgetAed: number;
+  monthlyBudgetAed: number;
+  budgetUtilizationPct: number;
+  maxAutonomyLevel: string;
+  circuitBreakerTriggered: boolean;
+  disabledAgentsCount: number;
+  lastActiveAt?: string | null;
+}
+
+interface CrossTenantSummary {
+  totalTenants: number;
+  activeAiTenants: number;
+  totalTokensUsed: number;
+  totalCostAed: number;
+  totalCostUsd: number;
+  totalAvoidedCostAed: number;
+  netFinancialGainAed: number;
+  globalCircuitBreakersTriggered: number;
+}
 
 interface RoiSummary {
   totalAgentRuns: number;
@@ -113,14 +157,42 @@ export default function AIPlatformDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [evaluating, setEvaluating] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'approvals' | 'governance' | 'agents'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'leaderboard' | 'approvals' | 'governance' | 'agents'>('overview');
 
-  const fetchDashboard = useCallback(async () => {
+  // Super Admin Cross-Tenant State
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [selectedTenantId, setSelectedTenantId] = useState<string | null>(null);
+  const [tenantsList, setTenantsList] = useState<{ id: string; name: string; code?: string | null }[]>([]);
+  const [leaderboard, setLeaderboard] = useState<CrossTenantItem[]>([]);
+  const [leaderboardSummary, setLeaderboardSummary] = useState<CrossTenantSummary | null>(null);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [searchTenant, setSearchTenant] = useState('');
+  const [editingTenant, setEditingTenant] = useState<CrossTenantItem | null>(null);
+  const [sliderDaily, setSliderDaily] = useState<number>(200);
+  const [sliderMonthly, setSliderMonthly] = useState<number>(5000);
+  const [sliderAutonomy, setSliderAutonomy] = useState<string>('L3');
+  const [savingPolicy, setSavingPolicy] = useState(false);
+  const [policyMsg, setPolicyMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  // Check auth and user role
+  useEffect(() => {
+    fetch('/api/auth/me')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((res) => {
+        if (res && res.isSuperAdmin) {
+          setIsSuperAdmin(true);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const fetchDashboard = useCallback(async (tenantFilter?: string | null) => {
     try {
       setLoading(true);
+      const queryParam = tenantFilter ? `?tenantId=${encodeURIComponent(tenantFilter)}` : '';
       const [dashRes, apprRes] = await Promise.all([
-        fetch('/api/agents/dashboard'),
-        fetch('/api/agents/approvals'),
+        fetch(`/api/agents/dashboard${queryParam}`),
+        fetch(`/api/agents/approvals${queryParam}`),
       ]);
 
       if (dashRes.ok) {
@@ -141,9 +213,115 @@ export default function AIPlatformDashboardPage() {
     }
   }, []);
 
+  const fetchLeaderboard = useCallback(async () => {
+    if (!isSuperAdmin) return;
+    try {
+      setLeaderboardLoading(true);
+      const res = await fetch('/api/agents/admin/leaderboard');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.ok && json.data) {
+          setLeaderboard(json.data.tenants || []);
+          setLeaderboardSummary(json.data.summary || null);
+          setTenantsList(
+            (json.data.tenants || []).map((t: CrossTenantItem) => ({
+              id: t.tenantId,
+              name: t.tenantName,
+              code: t.tenantCode,
+            })),
+          );
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load cross-tenant leaderboard:', err);
+    } finally {
+      setLeaderboardLoading(false);
+    }
+  }, [isSuperAdmin]);
+
   useEffect(() => {
-    fetchDashboard();
-  }, [fetchDashboard]);
+    fetchDashboard(selectedTenantId);
+  }, [fetchDashboard, selectedTenantId]);
+
+  useEffect(() => {
+    if (isSuperAdmin) {
+      fetchLeaderboard();
+    }
+  }, [isSuperAdmin, fetchLeaderboard]);
+
+  const handleSelectTenant = (tenantId: string | null) => {
+    setSelectedTenantId(tenantId);
+    if (tenantId && activeTab === 'leaderboard') {
+      setActiveTab('overview');
+    }
+  };
+
+  const handleOpenQuotaEditor = (item: CrossTenantItem) => {
+    setEditingTenant(item);
+    setSliderDaily(item.dailyBudgetAed);
+    setSliderMonthly(item.monthlyBudgetAed);
+    setSliderAutonomy(item.maxAutonomyLevel || 'L3');
+    setPolicyMsg(null);
+  };
+
+  const handleSaveTenantPolicy = async () => {
+    if (!editingTenant) return;
+    try {
+      setSavingPolicy(true);
+      setPolicyMsg(null);
+      const res = await fetch('/api/agents/admin/leaderboard', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetTenantId: editingTenant.tenantId,
+          updates: {
+            dailyBudgetAed: sliderDaily,
+            monthlyBudgetAed: sliderMonthly,
+            maxAutonomyLevel: sliderAutonomy,
+          },
+        }),
+      });
+
+      const json = await res.json();
+      if (res.ok && json.ok) {
+        setPolicyMsg({ text: 'Quota updated successfully!', type: 'success' });
+        await fetchLeaderboard();
+        if (selectedTenantId === editingTenant.tenantId || !selectedTenantId) {
+          await fetchDashboard(selectedTenantId);
+        }
+        setTimeout(() => setEditingTenant(null), 1200);
+      } else {
+        setPolicyMsg({ text: json.error || 'Failed to update policy', type: 'error' });
+      }
+    } catch (err: any) {
+      setPolicyMsg({ text: err?.message || 'Error updating policy', type: 'error' });
+    } finally {
+      setSavingPolicy(false);
+    }
+  };
+
+  const handleToggleCircuitBreaker = async (item: CrossTenantItem) => {
+    try {
+      const res = await fetch('/api/agents/admin/leaderboard', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetTenantId: item.tenantId,
+          updates: {
+            circuitBreakerTriggered: !item.circuitBreakerTriggered,
+          },
+        }),
+      });
+      if (res.ok) {
+        await fetchLeaderboard();
+        if (selectedTenantId === item.tenantId) {
+          await fetchDashboard(selectedTenantId);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to toggle circuit breaker:', err);
+    }
+  };
 
   const handleReview = async (approvalId: string, decision: 'APPROVED' | 'REJECTED') => {
     try {
@@ -207,7 +385,14 @@ export default function AIPlatformDashboardPage() {
               <Bot className="h-6 w-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-[var(--text-main)]">AI Platform & Governance Hub</h1>
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-2xl font-bold tracking-tight text-[var(--text-main)]">AI Platform & Governance Hub</h1>
+                {isSuperAdmin && (
+                  <span className="rounded-full bg-purple-500/20 border border-purple-500/30 px-2.5 py-0.5 text-[10px] font-bold text-purple-300">
+                    SUPER ADMIN
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-[var(--text-muted)]">
                 Unified cost optimization, routing matrix cache telemetry, L0–L4 autonomy, and approval queue.
               </p>
@@ -215,7 +400,30 @@ export default function AIPlatformDashboardPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Tenant Switcher (Super Admin Only) */}
+          {isSuperAdmin && (
+            <div className="flex items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-1.5 text-xs shadow-sm">
+              <Building2 className="h-4 w-4 text-purple-400" />
+              <span className="text-[11px] font-medium text-[var(--text-muted)]">Client Scope:</span>
+              <select
+                value={selectedTenantId ?? ''}
+                onChange={(e) => handleSelectTenant(e.target.value ? e.target.value : null)}
+                aria-label="Filter telemetry by client"
+                className="bg-transparent text-xs font-semibold text-[var(--text-main)] outline-none cursor-pointer"
+              >
+                <option value="" className="bg-[var(--bg-surface)] text-[var(--text-main)]">
+                  🏢 All Tenants / Default Active
+                </option>
+                {tenantsList.map((t) => (
+                  <option key={t.id} value={t.id} className="bg-[var(--bg-surface)] text-[var(--text-main)]">
+                    {t.name} ({t.code || t.id.slice(0, 8)})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <button
             onClick={handleTriggerEval}
             disabled={evaluating}
@@ -230,7 +438,10 @@ export default function AIPlatformDashboardPage() {
           </button>
 
           <button
-            onClick={fetchDashboard}
+            onClick={() => {
+              fetchDashboard(selectedTenantId);
+              if (isSuperAdmin) fetchLeaderboard();
+            }}
             className="flex items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3.5 py-2 text-xs font-semibold text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] transition-all"
           >
             <RefreshCw className="h-3.5 w-3.5 text-[var(--text-muted)]" />
@@ -241,7 +452,10 @@ export default function AIPlatformDashboardPage() {
 
       {/* Tabs */}
       <div className="flex border-b border-[var(--border-subtle)] gap-2">
-        {(['overview', 'approvals', 'governance', 'agents'] as const).map((tab) => (
+        {((isSuperAdmin
+          ? ['leaderboard', 'overview', 'approvals', 'governance', 'agents']
+          : ['overview', 'approvals', 'governance', 'agents']
+        ) as ('overview' | 'leaderboard' | 'approvals' | 'governance' | 'agents')[]).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -251,7 +465,23 @@ export default function AIPlatformDashboardPage() {
                 : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-main)]'
             }`}
           >
-            {tab === 'overview' && <BarChart3 className="h-4 w-4" />}
+            {tab === 'leaderboard' && (
+              <>
+                <Building2 className="h-4 w-4" />
+                <span>Cross-Tenant Leaderboard</span>
+                {leaderboard.length > 0 && (
+                  <span className="rounded-full bg-purple-500/20 text-purple-300 px-1.5 py-0.2 text-[10px] font-bold">
+                    {leaderboard.length}
+                  </span>
+                )}
+              </>
+            )}
+            {tab === 'overview' && (
+              <>
+                <BarChart3 className="h-4 w-4" />
+                <span>Overview</span>
+              </>
+            )}
             {tab === 'approvals' && (
               <>
                 <FileCheck className="h-4 w-4" />
@@ -263,12 +493,410 @@ export default function AIPlatformDashboardPage() {
                 )}
               </>
             )}
-            {tab === 'governance' && <ShieldCheck className="h-4 w-4" />}
-            {tab === 'agents' && <Layers className="h-4 w-4" />}
-            {tab !== 'approvals' && tab}
+            {tab === 'governance' && (
+              <>
+                <ShieldCheck className="h-4 w-4" />
+                <span>Governance & Limits</span>
+              </>
+            )}
+            {tab === 'agents' && (
+              <>
+                <Layers className="h-4 w-4" />
+                <span>Agents</span>
+              </>
+            )}
           </button>
         ))}
       </div>
+
+      {activeTab === 'leaderboard' && isSuperAdmin && (
+        <div className="space-y-6">
+          {/* Summary Row */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
+              <div className="flex items-center justify-between text-[var(--text-muted)] mb-2">
+                <span className="text-xs font-medium uppercase tracking-wider">Total Enrolled Clients</span>
+                <Users className="h-4 w-4 text-purple-400" />
+              </div>
+              <div className="text-3xl font-extrabold text-[var(--text-main)]">
+                {leaderboardSummary?.totalTenants ?? leaderboard.length}
+              </div>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
+                <span className="text-purple-400 font-semibold">{leaderboardSummary?.activeAiTenants ?? 0}</span> actively consuming AI tokens
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
+              <div className="flex items-center justify-between text-[var(--text-muted)] mb-2">
+                <span className="text-xs font-medium uppercase tracking-wider">Total Fleet Tokens Burned</span>
+                <Cpu className="h-4 w-4 text-indigo-400" />
+              </div>
+              <div className="text-3xl font-extrabold text-[var(--text-main)]">
+                {(leaderboardSummary?.totalTokensUsed ?? 0).toLocaleString()}
+              </div>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
+                Across all tenants & agent dispatches
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
+              <div className="flex items-center justify-between text-[var(--text-muted)] mb-2">
+                <span className="text-xs font-medium uppercase tracking-wider">Total AI Spend (Fleetwide)</span>
+                <DollarSign className="h-4 w-4 text-emerald-400" />
+              </div>
+              <div className="text-3xl font-extrabold text-emerald-400">
+                AED {(leaderboardSummary?.totalCostAed ?? 0).toLocaleString()}
+              </div>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
+                ${(leaderboardSummary?.totalCostUsd ?? 0).toFixed(2)} USD provider cost
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-5">
+              <div className="flex items-center justify-between text-emerald-400 mb-2">
+                <span className="text-xs font-medium uppercase tracking-wider">Avoided Cost (Net Savings)</span>
+                <TrendingUp className="h-4 w-4" />
+              </div>
+              <div className="text-3xl font-extrabold text-[var(--text-main)]">
+                AED {(leaderboardSummary?.totalAvoidedCostAed ?? 0).toLocaleString()}
+              </div>
+              <p className="mt-1 text-xs text-emerald-300 font-medium">
+                Net gain: AED {(leaderboardSummary?.netFinancialGainAed ?? 0).toLocaleString()}
+              </p>
+            </div>
+          </div>
+
+          {/* Master Cross-Tenant Table Card */}
+          <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-[var(--text-main)]">
+                  Client AI Consumption & Governance Leaderboard
+                </h2>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Real-time token burn, AED spend, monthly budget utilization, autonomy levels, and safety circuit breakers.
+                </p>
+              </div>
+
+              {/* Search filter */}
+              <div className="flex items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/80 px-3 py-1.5 text-xs w-full md:w-64">
+                <Search className="h-3.5 w-3.5 text-[var(--text-muted)]" />
+                <input
+                  type="text"
+                  placeholder="Search client or code..."
+                  value={searchTenant}
+                  onChange={(e) => setSearchTenant(e.target.value)}
+                  className="bg-transparent text-xs text-[var(--text-main)] placeholder:text-[var(--text-muted)] outline-none w-full"
+                />
+              </div>
+            </div>
+
+            {leaderboardLoading ? (
+              <div className="py-16 text-center text-[var(--text-muted)]">
+                <RefreshCw className="mx-auto h-6 w-6 animate-spin text-purple-400 mb-2" />
+                <p className="text-xs">Loading multi-tenant ledger...</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-[var(--text-muted)]">
+                  <thead className="border-b border-[var(--border-subtle)] text-[var(--text-muted)] uppercase text-[10px]">
+                    <tr>
+                      <th className="py-3 px-2">Client / Tenant</th>
+                      <th className="py-3 px-2">Plan</th>
+                      <th className="py-3 px-2">Tokens Used</th>
+                      <th className="py-3 px-2">Total AI Spend</th>
+                      <th className="py-3 px-2">Avoided Cost (ROI)</th>
+                      <th className="py-3 px-2 min-w-[170px]">Monthly Quota & Usage</th>
+                      <th className="py-3 px-2">Autonomy Tier</th>
+                      <th className="py-3 px-2">Circuit Breaker</th>
+                      <th className="py-3 px-2 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5">
+                    {leaderboard
+                      .filter((t) =>
+                        searchTenant
+                          ? t.tenantName.toLowerCase().includes(searchTenant.toLowerCase()) ||
+                            (t.tenantCode && t.tenantCode.toLowerCase().includes(searchTenant.toLowerCase())) ||
+                            t.tenantId.toLowerCase().includes(searchTenant.toLowerCase())
+                          : true,
+                      )
+                      .map((t) => {
+                        const isTriggered = t.circuitBreakerTriggered;
+                        const isOverBudget = t.budgetUtilizationPct >= 100;
+                        const isWarning = t.budgetUtilizationPct >= 75 && !isOverBudget;
+
+                        return (
+                          <tr key={t.tenantId} className="hover:bg-[var(--bg-surface-hover)]/40 transition-colors">
+                            {/* Client Name & ID */}
+                            <td className="py-3.5 px-2">
+                              <div className="flex items-center gap-2">
+                                <div className="rounded-md bg-purple-500/10 p-1.5 text-purple-400">
+                                  <Building2 className="h-4 w-4" />
+                                </div>
+                                <div>
+                                  <span className="font-semibold text-[var(--text-main)] block">{t.tenantName}</span>
+                                  <span className="text-[10px] text-[var(--text-faint)]">
+                                    {t.tenantCode ? `${t.tenantCode} • ` : ''}ID: {t.tenantId.slice(0, 8)}...
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Plan */}
+                            <td className="py-3.5 px-2">
+                              <span className="rounded bg-white/5 px-2 py-0.5 text-[10px] font-medium text-[var(--text-muted)] border border-white/10">
+                                {t.plan}
+                              </span>
+                            </td>
+
+                            {/* Tokens Used */}
+                            <td className="py-3.5 px-2 font-mono font-medium text-[var(--text-main)]">
+                              {t.totalTokens.toLocaleString()}
+                            </td>
+
+                            {/* Spend */}
+                            <td className="py-3.5 px-2">
+                              <span className="font-semibold text-emerald-400">AED {t.totalCostAed.toFixed(2)}</span>
+                              <span className="block text-[10px] text-[var(--text-faint)]">${t.totalCostUsd.toFixed(2)} USD</span>
+                            </td>
+
+                            {/* Avoided Cost & ROI */}
+                            <td className="py-3.5 px-2">
+                              <span className="text-[var(--text-main)] font-medium">AED {t.totalAvoidedCostAed.toLocaleString()}</span>
+                              <span className="block text-[10px] text-purple-300 font-semibold">{t.roiMultiplier.toFixed(1)}x Net ROI</span>
+                            </td>
+
+                            {/* Monthly Quota & Usage Bar */}
+                            <td className="py-3.5 px-2">
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between text-[11px]">
+                                  <span className="text-[var(--text-main)] font-medium">
+                                    AED {t.totalCostAed.toFixed(0)} / {t.monthlyBudgetAed.toLocaleString()}
+                                  </span>
+                                  <span
+                                    className={`font-semibold text-[10px] ${
+                                      isOverBudget ? 'text-red-400' : isWarning ? 'text-amber-400' : 'text-emerald-400'
+                                    }`}
+                                  >
+                                    {t.budgetUtilizationPct.toFixed(1)}%
+                                  </span>
+                                </div>
+                                <div className="h-1.5 w-full rounded-full bg-white/5 overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full transition-all duration-300 ${
+                                      isOverBudget
+                                        ? 'bg-red-500'
+                                        : isWarning
+                                        ? 'bg-amber-500'
+                                        : 'bg-emerald-500'
+                                    }`}
+                                    style={{ width: `${Math.min(t.budgetUtilizationPct, 100)}%` }}
+                                  />
+                                </div>
+                                <span className="text-[10px] text-[var(--text-faint)]">
+                                  Daily Cap: AED {t.dailyBudgetAed.toFixed(0)}
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* Autonomy Tier */}
+                            <td className="py-3.5 px-2">
+                              <span className="rounded bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 text-[10px] font-bold text-purple-300">
+                                {t.maxAutonomyLevel}
+                              </span>
+                            </td>
+
+                            {/* Circuit Breaker Status */}
+                            <td className="py-3.5 px-2">
+                              <button
+                                onClick={() => handleToggleCircuitBreaker(t)}
+                                title={isTriggered ? 'Click to Reset & Enable AI' : 'Click to Trip Emergency Freeze'}
+                                className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                                  isTriggered
+                                    ? 'bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30'
+                                    : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25'
+                                }`}
+                              >
+                                {isTriggered ? (
+                                  <>
+                                    <AlertTriangle className="h-3 w-3" />
+                                    <span>TRIPPED</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <ShieldCheck className="h-3 w-3" />
+                                    <span>NORMAL</span>
+                                  </>
+                                )}
+                              </button>
+                            </td>
+
+                            {/* Actions */}
+                            <td className="py-3.5 px-2 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => handleOpenQuotaEditor(t)}
+                                  title="Adjust Quotas & Autonomy"
+                                  className="p-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] hover:border-purple-500/40 hover:text-purple-300 transition-all"
+                                >
+                                  <SlidersHorizontal className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setSelectedTenantId(t.tenantId);
+                                    setActiveTab('overview');
+                                  }}
+                                  title="View Tenant Deep Telemetry"
+                                  className="flex items-center gap-1 rounded-lg border border-purple-500/30 bg-purple-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-purple-300 hover:bg-purple-500/20 transition-all"
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                  <span>Drilldown</span>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Quota & Policy Adjustment Modal */}
+          {editingTenant && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+              <div className="w-full max-w-lg rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 shadow-2xl space-y-5">
+                <div className="flex items-center justify-between border-b border-[var(--border-subtle)] pb-3">
+                  <div className="flex items-center gap-2">
+                    <SlidersHorizontal className="h-5 w-5 text-purple-400" />
+                    <div>
+                      <h3 className="text-base font-bold text-[var(--text-main)]">
+                        Adjust AI Quota & Governance
+                      </h3>
+                      <p className="text-xs text-[var(--text-muted)]">
+                        Client: <span className="font-semibold text-purple-300">{editingTenant.tenantName}</span> ({editingTenant.tenantId})
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setEditingTenant(null)}
+                    className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-white/5"
+                  >
+                    <XCircle className="h-5 w-5" />
+                  </button>
+                </div>
+
+                {policyMsg && (
+                  <div
+                    className={`rounded-lg p-3 text-xs flex items-center gap-2 ${
+                      policyMsg.type === 'success'
+                        ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                        : 'bg-red-500/15 text-red-300 border border-red-500/30'
+                    }`}
+                  >
+                    {policyMsg.type === 'success' ? <Check className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+                    <span>{policyMsg.text}</span>
+                  </div>
+                )}
+
+                {/* Monthly Budget Slider */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <label htmlFor="monthly-budget-slider" className="font-semibold text-[var(--text-main)]">Monthly Spending Limit (AED)</label>
+                    <span className="font-mono text-purple-300 font-bold">AED {sliderMonthly.toLocaleString()}</span>
+                  </div>
+                  <input
+                    id="monthly-budget-slider"
+                    type="range"
+                    min="100"
+                    max="50000"
+                    step="100"
+                    value={sliderMonthly}
+                    onChange={(e) => setSliderMonthly(Number(e.target.value))}
+                    className="w-full accent-purple-500 cursor-pointer"
+                  />
+                  <div className="flex justify-between text-[10px] text-[var(--text-faint)]">
+                    <span>AED 100</span>
+                    <span>AED 10,000</span>
+                    <span>AED 25,000</span>
+                    <span>AED 50,000</span>
+                  </div>
+                </div>
+
+                {/* Daily Budget Slider */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <label htmlFor="daily-budget-slider" className="font-semibold text-[var(--text-main)]">Daily Rate Limit (AED)</label>
+                    <span className="font-mono text-purple-300 font-bold">AED {sliderDaily.toLocaleString()}</span>
+                  </div>
+                  <input
+                    id="daily-budget-slider"
+                    type="range"
+                    min="20"
+                    max="2000"
+                    step="10"
+                    value={sliderDaily}
+                    onChange={(e) => setSliderDaily(Number(e.target.value))}
+                    className="w-full accent-purple-500 cursor-pointer"
+                  />
+                  <div className="flex justify-between text-[10px] text-[var(--text-faint)]">
+                    <span>AED 20</span>
+                    <span>AED 500</span>
+                    <span>AED 1,000</span>
+                    <span>AED 2,000</span>
+                  </div>
+                </div>
+
+                {/* Autonomy Level */}
+                <div className="space-y-2">
+                  <span className="text-xs font-semibold text-[var(--text-main)] block">Max Allowed Autonomy Ceiling</span>
+                  <div className="grid grid-cols-5 gap-1.5 text-center">
+                    {(['L0', 'L1', 'L2', 'L3', 'L4'] as const).map((lvl) => (
+                      <button
+                        key={lvl}
+                        type="button"
+                        onClick={() => setSliderAutonomy(lvl)}
+                        className={`rounded-lg py-2 text-xs font-bold transition-all border ${
+                          sliderAutonomy === lvl
+                            ? 'bg-purple-600 text-white border-purple-500 shadow-md shadow-purple-500/30'
+                            : 'bg-white/5 text-[var(--text-muted)] border-white/10 hover:bg-white/10'
+                        }`}
+                      >
+                        {lvl}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-[var(--text-faint)] mt-1">
+                    L0: Read-Only • L1: Recommendation • L2: Draft • L3: Human Approval • L4: Autonomous
+                  </p>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-[var(--border-subtle)]">
+                  <button
+                    type="button"
+                    onClick={() => setEditingTenant(null)}
+                    className="rounded-lg px-4 py-2 text-xs font-medium text-[var(--text-muted)] hover:bg-white/5 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveTenantPolicy}
+                    disabled={savingPolicy}
+                    className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-md hover:from-purple-500 hover:to-indigo-500 transition-all disabled:opacity-50"
+                  >
+                    {savingPolicy ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                    Save Policy Quota
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {activeTab === 'overview' && (
         <div className="space-y-6">
