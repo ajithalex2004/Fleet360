@@ -13,6 +13,9 @@ jobs:
     runs-on: ubuntu-latest
     
     env:
+      DATABASE_URL: postgresql://user:pass@localhost:5432/ci_mock?sslmode=disable
+      SESSION_SECRET: ci-session-secret-must-be-at-least-32-chars-long
+      OPENAI_API_KEY: ci-dummy-openai-key
       THESYS_API_KEY: dummy-api-key-for-testing
       NEXT_TELEMETRY_DISABLED: "1"
     

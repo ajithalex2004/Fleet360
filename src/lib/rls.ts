@@ -159,6 +159,8 @@ export interface SystemJobContext {
 export interface SystemJobOptions {
   /** Limit the job to a single tenant. Null/omitted = all active tenants. */
   tenantHeader?: string | null;
+  /** Explicit list of tenant IDs to process. Omitted = all active tenants. */
+  tenantIds?: string[];
   /** Per-tenant transaction timeout in ms. Default 30s. */
   timeoutMs?: number;
   /**
@@ -251,6 +253,8 @@ export async function withSystemJob<T>(
   // A single-tenant run opens no platform-admin transaction at all.
   const tenants = opts.tenantHeader
     ? [{ id: opts.tenantHeader }]
+    : opts.tenantIds && opts.tenantIds.length > 0
+    ? opts.tenantIds.map((id) => ({ id }))
     : await withPlatformAdmin(
         prisma,
         (tx) =>
