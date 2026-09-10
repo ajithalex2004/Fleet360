@@ -304,7 +304,9 @@ export class AIDashboardService {
          tenant_id AS "tenantId",
          max_autonomy_level AS "maxAutonomyLevel",
          daily_budget_aed::float8 AS "dailyBudgetAed",
+         COALESCE(weekly_budget_aed, daily_budget_aed * 5)::float8 AS "weeklyBudgetAed",
          monthly_budget_aed::float8 AS "monthlyBudgetAed",
+         tier_quotas AS "tierQuotas",
          require_human_approval_threshold_aed::float8 AS "requireHumanApprovalThresholdAed",
          disabled_agents AS "disabledAgents",
          circuit_breaker_triggered AS "circuitBreakerTriggered"
@@ -360,7 +362,9 @@ export class AIDashboardService {
       const polData = policyMap.get(t.id) || {
         maxAutonomyLevel: 'L3',
         dailyBudgetAed: 200.0,
+        weeklyBudgetAed: 1000.0,
         monthlyBudgetAed: 5000.0,
+        tierQuotas: { ECONOMY_TEXT: 1000, STANDARD_REASONING: 2500, VISION_FAST: 1500 },
         requireHumanApprovalThresholdAed: 500.0,
         disabledAgents: [],
         circuitBreakerTriggered: false,
@@ -371,8 +375,15 @@ export class AIDashboardService {
       const totalCostUsd = parseFloat(Number(runData.totalCostUsd || 0).toFixed(4));
       const totalAvoidedCostAed = parseFloat(Number(runData.totalAvoidedCostAed || 0).toFixed(2));
       const monthlyBudgetAed = Number(polData.monthlyBudgetAed || 5000.0);
+      const weeklyBudgetAed = Number(polData.weeklyBudgetAed || 1000.0);
       const dailyBudgetAed = Number(polData.dailyBudgetAed || 200.0);
       const circuitBreakerTriggered = Boolean(polData.circuitBreakerTriggered);
+      const rawTiers = polData.tierQuotas && typeof polData.tierQuotas === 'object' ? polData.tierQuotas : {};
+      const tierQuotas = {
+        ECONOMY_TEXT: Number(rawTiers.ECONOMY_TEXT ?? 1000),
+        STANDARD_REASONING: Number(rawTiers.STANDARD_REASONING ?? 2500),
+        VISION_FAST: Number(rawTiers.VISION_FAST ?? 1500),
+      };
 
       if (totalTokens > 0 || Number(runData.totalRuns) > 0) {
         activeAiTenantsCount++;
@@ -411,7 +422,9 @@ export class AIDashboardService {
         successfulRuns,
         successRatePct,
         dailyBudgetAed,
+        weeklyBudgetAed,
         monthlyBudgetAed,
+        tierQuotas,
         budgetUtilizationPct,
         maxAutonomyLevel: polData.maxAutonomyLevel || 'L3',
         circuitBreakerTriggered,
@@ -454,7 +467,13 @@ export interface CrossTenantLeaderboardItem {
   successfulRuns: number;
   successRatePct: number;
   dailyBudgetAed: number;
+  weeklyBudgetAed: number;
   monthlyBudgetAed: number;
+  tierQuotas: {
+    ECONOMY_TEXT: number;
+    STANDARD_REASONING: number;
+    VISION_FAST: number;
+  };
   budgetUtilizationPct: number;
   maxAutonomyLevel: string;
   circuitBreakerTriggered: boolean;

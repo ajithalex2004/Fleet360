@@ -420,12 +420,17 @@ async function _doInit(): Promise<void> {
         tenant_id                             TEXT PRIMARY KEY,
         max_autonomy_level                    TEXT NOT NULL DEFAULT 'L3',
         daily_budget_aed                      NUMERIC(10,2) NOT NULL DEFAULT 200.00,
+        weekly_budget_aed                     NUMERIC(10,2) NOT NULL DEFAULT 1000.00,
         monthly_budget_aed                    NUMERIC(10,2) NOT NULL DEFAULT 5000.00,
+        tier_quotas                           JSONB NOT NULL DEFAULT '{"ECONOMY_TEXT": 1000, "STANDARD_REASONING": 2500, "VISION_FAST": 1500}'::jsonb,
         require_human_approval_threshold_aed  NUMERIC(10,2) NOT NULL DEFAULT 500.00,
         disabled_agents                       JSONB NOT NULL DEFAULT '[]'::jsonb,
         circuit_breaker_triggered             BOOLEAN NOT NULL DEFAULT false,
         updated_at                            TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+
+      ALTER TABLE tenant_ai_policies ADD COLUMN IF NOT EXISTS weekly_budget_aed NUMERIC(10,2) NOT NULL DEFAULT 1000.00;
+      ALTER TABLE tenant_ai_policies ADD COLUMN IF NOT EXISTS tier_quotas JSONB NOT NULL DEFAULT '{"ECONOMY_TEXT": 1000, "STANDARD_REASONING": 2500, "VISION_FAST": 1500}'::jsonb;
 
       -- ── agent_approvals (Human-in-the-Loop Review Queue) ─────────────────────
       CREATE TABLE IF NOT EXISTS agent_approvals (

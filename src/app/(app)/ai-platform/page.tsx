@@ -49,7 +49,13 @@ interface CrossTenantItem {
   successfulRuns: number;
   successRatePct: number;
   dailyBudgetAed: number;
+  weeklyBudgetAed?: number;
   monthlyBudgetAed: number;
+  tierQuotas?: {
+    ECONOMY_TEXT?: number;
+    STANDARD_REASONING?: number;
+    VISION_FAST?: number;
+  };
   budgetUtilizationPct: number;
   maxAutonomyLevel: string;
   circuitBreakerTriggered: boolean;
@@ -122,7 +128,13 @@ interface TenantPolicy {
   tenantId: string;
   maxAutonomyLevel: string;
   dailyBudgetAed: number;
+  weeklyBudgetAed?: number;
   monthlyBudgetAed: number;
+  tierQuotas?: {
+    ECONOMY_TEXT?: number;
+    STANDARD_REASONING?: number;
+    VISION_FAST?: number;
+  };
   requireHumanApprovalThresholdAed: number;
   disabledAgents: string[];
   circuitBreakerTriggered: boolean;
@@ -169,7 +181,11 @@ export default function AIPlatformDashboardPage() {
   const [searchTenant, setSearchTenant] = useState('');
   const [editingTenant, setEditingTenant] = useState<CrossTenantItem | null>(null);
   const [sliderDaily, setSliderDaily] = useState<number>(200);
+  const [sliderWeekly, setSliderWeekly] = useState<number>(1000);
   const [sliderMonthly, setSliderMonthly] = useState<number>(5000);
+  const [sliderTierEconomy, setSliderTierEconomy] = useState<number>(1000);
+  const [sliderTierReasoning, setSliderTierReasoning] = useState<number>(2500);
+  const [sliderTierVision, setSliderTierVision] = useState<number>(1500);
   const [sliderAutonomy, setSliderAutonomy] = useState<string>('L3');
   const [savingPolicy, setSavingPolicy] = useState(false);
   const [policyMsg, setPolicyMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
@@ -259,9 +275,40 @@ export default function AIPlatformDashboardPage() {
   const handleOpenQuotaEditor = (item: CrossTenantItem) => {
     setEditingTenant(item);
     setSliderDaily(item.dailyBudgetAed);
+    setSliderWeekly(item.weeklyBudgetAed ?? Math.round(item.dailyBudgetAed * 5));
     setSliderMonthly(item.monthlyBudgetAed);
+    setSliderTierEconomy(item.tierQuotas?.ECONOMY_TEXT ?? 1000);
+    setSliderTierReasoning(item.tierQuotas?.STANDARD_REASONING ?? 2500);
+    setSliderTierVision(item.tierQuotas?.VISION_FAST ?? 1500);
     setSliderAutonomy(item.maxAutonomyLevel || 'L3');
     setPolicyMsg(null);
+  };
+
+  const handleOpenCurrentTenantEditor = () => {
+    if (!data?.policy) return;
+    const item: CrossTenantItem = {
+      tenantId: data.tenantId,
+      tenantName: tenantsList.find((t) => t.id === data.tenantId)?.name || `Tenant (${data.tenantId.slice(0, 8)})`,
+      plan: 'CUSTOM',
+      totalTokens: data.roiSummary.totalTokensUsed,
+      totalCostAed: data.roiSummary.totalCostAed,
+      totalCostUsd: data.roiSummary.totalCostUsd,
+      totalAvoidedCostAed: data.roiSummary.totalAvoidedCostAed,
+      netGainAed: data.roiSummary.netFinancialGainAed,
+      roiMultiplier: data.roiSummary.roiMultiplier,
+      totalRuns: data.roiSummary.totalAgentRuns,
+      successfulRuns: data.roiSummary.successfulRuns,
+      successRatePct: data.roiSummary.successRatePct,
+      dailyBudgetAed: data.policy.dailyBudgetAed,
+      weeklyBudgetAed: data.policy.weeklyBudgetAed ?? Math.round(data.policy.dailyBudgetAed * 5),
+      monthlyBudgetAed: data.policy.monthlyBudgetAed,
+      tierQuotas: data.policy.tierQuotas || { ECONOMY_TEXT: 1000, STANDARD_REASONING: 2500, VISION_FAST: 1500 },
+      budgetUtilizationPct: (data.roiSummary.totalCostAed / (data.policy.monthlyBudgetAed || 1)) * 100,
+      maxAutonomyLevel: data.policy.maxAutonomyLevel,
+      circuitBreakerTriggered: data.policy.circuitBreakerTriggered,
+      disabledAgentsCount: data.policy.disabledAgents.length,
+    };
+    handleOpenQuotaEditor(item);
   };
 
   const handleSaveTenantPolicy = async () => {
@@ -276,7 +323,13 @@ export default function AIPlatformDashboardPage() {
           targetTenantId: editingTenant.tenantId,
           updates: {
             dailyBudgetAed: sliderDaily,
+            weeklyBudgetAed: sliderWeekly,
             monthlyBudgetAed: sliderMonthly,
+            tierQuotas: {
+              ECONOMY_TEXT: sliderTierEconomy,
+              STANDARD_REASONING: sliderTierReasoning,
+              VISION_FAST: sliderTierVision,
+            },
             maxAutonomyLevel: sliderAutonomy,
           },
         }),
@@ -284,7 +337,7 @@ export default function AIPlatformDashboardPage() {
 
       const json = await res.json();
       if (res.ok && json.ok) {
-        setPolicyMsg({ text: 'Quota updated successfully!', type: 'success' });
+        setPolicyMsg({ text: 'Spending limits & tier quotas updated successfully!', type: 'success' });
         await fetchLeaderboard();
         if (selectedTenantId === editingTenant.tenantId || !selectedTenantId) {
           await fetchDashboard(selectedTenantId);
@@ -825,6 +878,30 @@ export default function AIPlatformDashboardPage() {
                   </div>
                 </div>
 
+                {/* Weekly Budget Slider */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <label htmlFor="weekly-budget-slider" className="font-semibold text-[var(--text-main)]">Weekly Spending Limit (AED)</label>
+                    <span className="font-mono text-purple-300 font-bold">AED {sliderWeekly.toLocaleString()}</span>
+                  </div>
+                  <input
+                    id="weekly-budget-slider"
+                    type="range"
+                    min="50"
+                    max="15000"
+                    step="50"
+                    value={sliderWeekly}
+                    onChange={(e) => setSliderWeekly(Number(e.target.value))}
+                    className="w-full accent-purple-500 cursor-pointer"
+                  />
+                  <div className="flex justify-between text-[10px] text-[var(--text-faint)]">
+                    <span>AED 50</span>
+                    <span>AED 2,500</span>
+                    <span>AED 7,500</span>
+                    <span>AED 15,000</span>
+                  </div>
+                </div>
+
                 {/* Daily Budget Slider */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs">
@@ -846,6 +923,65 @@ export default function AIPlatformDashboardPage() {
                     <span>AED 500</span>
                     <span>AED 1,000</span>
                     <span>AED 2,000</span>
+                  </div>
+                </div>
+
+                {/* Capability Tier Spending Limits */}
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 p-3.5 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Cpu className="h-4 w-4 text-purple-400" />
+                    <span className="text-xs font-bold text-[var(--text-main)]">Capability Tier Limits (Monthly AED Caps)</span>
+                  </div>
+
+                  {/* Economy Tier Slider */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-[var(--text-muted)] font-medium">Economy Text (e.g. GPT-4o-mini / Gemini Flash)</span>
+                      <span className="font-mono font-bold text-purple-300">AED {sliderTierEconomy.toLocaleString()}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="50"
+                      max="10000"
+                      step="50"
+                      value={sliderTierEconomy}
+                      onChange={(e) => setSliderTierEconomy(Number(e.target.value))}
+                      className="w-full accent-purple-500 cursor-pointer"
+                    />
+                  </div>
+
+                  {/* Standard Reasoning Slider */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-[var(--text-muted)] font-medium">Standard Reasoning (e.g. GPT-4o / Claude 3.5 Sonnet)</span>
+                      <span className="font-mono font-bold text-indigo-300">AED {sliderTierReasoning.toLocaleString()}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="100"
+                      max="25000"
+                      step="100"
+                      value={sliderTierReasoning}
+                      onChange={(e) => setSliderTierReasoning(Number(e.target.value))}
+                      className="w-full accent-indigo-500 cursor-pointer"
+                    />
+                  </div>
+
+                  {/* Vision Fast Slider */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-[var(--text-muted)] font-medium">Vision Fast / Multimodal OCR</span>
+                      <span className="font-mono font-bold text-cyan-300">AED {sliderTierVision.toLocaleString()}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="50"
+                      max="15000"
+                      step="50"
+                      value={sliderTierVision}
+                      onChange={(e) => setSliderTierVision(Number(e.target.value))}
+                      className="w-full accent-cyan-500 cursor-pointer"
+                    />
                   </div>
                 </div>
 
@@ -1228,14 +1364,27 @@ export default function AIPlatformDashboardPage() {
 
       {activeTab === 'governance' && (
         <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-6 space-y-6">
-          <div>
-            <h2 className="text-base font-semibold text-[var(--text-main)]">Tenant AI Governance & Spending Limits</h2>
-            <p className="text-xs text-[var(--text-muted)]">
-              Configure autonomy ceilings (L0–L4), daily/monthly AED budget circuit breakers, and approval thresholds.
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-base font-semibold text-[var(--text-main)]">Tenant AI Governance & Spending Limits</h2>
+              <p className="text-xs text-[var(--text-muted)]">
+                Configure autonomy ceilings (L0–L4), daily/weekly/monthly AED budget circuit breakers, and capability tier caps.
+              </p>
+            </div>
+            {isSuperAdmin && (
+              <button
+                type="button"
+                onClick={handleOpenCurrentTenantEditor}
+                className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-md hover:from-purple-500 hover:to-indigo-500 transition-all self-start sm:self-auto"
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                Edit Spending Limits & Tier Quotas
+              </button>
+            )}
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Max Autonomy */}
             <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-4">
               <span className="text-xs text-[var(--text-muted)]">Max Allowed Autonomy Tier</span>
               <div className="text-xl font-bold text-[var(--text-main)] mt-1">{policy?.maxAutonomyLevel || 'L3_HUMAN_CONFIRMATION'}</div>
@@ -1244,23 +1393,91 @@ export default function AIPlatformDashboardPage() {
               </p>
             </div>
 
+            {/* Daily Quota */}
             <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-4">
               <span className="text-xs text-[var(--text-muted)]">Daily AI Budget Quota</span>
-              <div className="text-xl font-bold text-[var(--text-main)] mt-1">AED {policy?.dailyBudgetAed?.toFixed(2) || '150.00'}</div>
+              <div className="text-xl font-bold text-[var(--text-main)] mt-1">AED {policy?.dailyBudgetAed?.toFixed(2) || '200.00'}</div>
               <p className="text-[11px] text-[var(--text-faint)] mt-1">
                 Automatic circuit breaker trips if daily cost exceeds this limit.
               </p>
             </div>
 
+            {/* Weekly Quota */}
             <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-4">
-              <span className="text-xs text-[var(--text-muted)]">Human Sign-off Threshold</span>
-              <div className="text-xl font-bold text-[var(--text-main)] mt-1">AED {policy?.requireHumanApprovalThresholdAed?.toFixed(2) || '250.00'}</div>
+              <span className="text-xs text-[var(--text-muted)]">Weekly AI Budget Quota</span>
+              <div className="text-xl font-bold text-indigo-400 mt-1">
+                AED {policy?.weeklyBudgetAed?.toFixed(2) || ((policy?.dailyBudgetAed || 200) * 5).toFixed(2)}
+              </div>
               <p className="text-[11px] text-[var(--text-faint)] mt-1">
-                Mutations with financial impact over this value are held in queue.
+                Rolling weekly safety cap across all active agents.
+              </p>
+            </div>
+
+            {/* Monthly Budget */}
+            <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-4">
+              <span className="text-xs text-[var(--text-muted)]">Monthly AI Spending Limit</span>
+              <div className="text-xl font-bold text-emerald-400 mt-1">AED {policy?.monthlyBudgetAed?.toFixed(2) || '5,000.00'}</div>
+              <p className="text-[11px] text-[var(--text-faint)] mt-1">
+                Master monthly billing threshold before emergency cutoff.
               </p>
             </div>
           </div>
 
+          {/* Capability Tier Spending Limits Breakdown */}
+          <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/30 p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Cpu className="h-4 w-4 text-purple-400" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-main)]">
+                  Capability Tier Quotas (Max Monthly Allocation)
+                </h3>
+              </div>
+              <span className="text-[11px] text-[var(--text-muted)]">Enforced per LLM capability domain</span>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {/* Economy Text Tier */}
+              <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 p-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-purple-300">Tier 1: Economy Text</span>
+                  <span className="font-mono text-[11px] font-bold text-[var(--text-main)]">
+                    AED {(policy?.tierQuotas?.ECONOMY_TEXT ?? 1000).toLocaleString()} Cap
+                  </span>
+                </div>
+                <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                  Fast classifiers, drafting copilot, ticket routing (GPT-4o-mini / Flash).
+                </p>
+              </div>
+
+              {/* Standard Reasoning Tier */}
+              <div className="rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-indigo-300">Tier 2: Standard Reasoning</span>
+                  <span className="font-mono text-[11px] font-bold text-[var(--text-main)]">
+                    AED {(policy?.tierQuotas?.STANDARD_REASONING ?? 2500).toLocaleString()} Cap
+                  </span>
+                </div>
+                <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                  Route solver, dispatch candidate scoring, financial anomaly audits.
+                </p>
+              </div>
+
+              {/* Vision Fast Tier */}
+              <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-cyan-300">Tier 3: Vision & OCR Fast</span>
+                  <span className="font-mono text-[11px] font-bold text-[var(--text-main)]">
+                    AED {(policy?.tierQuotas?.VISION_FAST ?? 1500).toLocaleString()} Cap
+                  </span>
+                </div>
+                <p className="mt-1 text-[10px] text-[var(--text-muted)]">
+                  Mulkiya OCR, damage photo inspections, invoice multimodal parsing.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Circuit Breaker Status */}
           <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <ShieldCheck className="h-5 w-5 text-emerald-400" />

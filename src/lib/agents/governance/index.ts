@@ -14,7 +14,14 @@ export interface TenantPolicy {
   tenantId: string;
   maxAutonomyLevel: AgentAutonomyLevel;
   dailyBudgetAed: number;
+  weeklyBudgetAed: number;
   monthlyBudgetAed: number;
+  tierQuotas: {
+    ECONOMY_TEXT?: number;
+    STANDARD_REASONING?: number;
+    VISION_FAST?: number;
+    [key: string]: number | undefined;
+  };
   requireHumanApprovalThresholdAed: number;
   disabledAgents: string[];
   circuitBreakerTriggered: boolean;
@@ -70,7 +77,13 @@ const AUTONOMY_RANKS: Record<AgentAutonomyLevel, number> = {
 const DEFAULT_POLICY: Omit<TenantPolicy, 'tenantId'> = {
   maxAutonomyLevel: 'L3',
   dailyBudgetAed: 200.0,
+  weeklyBudgetAed: 1000.0,
   monthlyBudgetAed: 5000.0,
+  tierQuotas: {
+    ECONOMY_TEXT: 1000.0,
+    STANDARD_REASONING: 2500.0,
+    VISION_FAST: 1500.0,
+  },
   requireHumanApprovalThresholdAed: 500.0,
   disabledAgents: [],
   circuitBreakerTriggered: false,
@@ -90,7 +103,9 @@ export class PolicyService {
            tenant_id AS "tenantId",
            max_autonomy_level AS "maxAutonomyLevel",
            daily_budget_aed::float8 AS "dailyBudgetAed",
+           COALESCE(weekly_budget_aed, daily_budget_aed * 5)::float8 AS "weeklyBudgetAed",
            monthly_budget_aed::float8 AS "monthlyBudgetAed",
+           tier_quotas AS "tierQuotas",
            require_human_approval_threshold_aed::float8 AS "requireHumanApprovalThresholdAed",
            disabled_agents AS "disabledAgents",
            circuit_breaker_triggered AS "circuitBreakerTriggered"
@@ -101,11 +116,18 @@ export class PolicyService {
 
       if (rows && rows.length > 0) {
         const r = rows[0];
+        const rawTiers = r.tierQuotas && typeof r.tierQuotas === 'object' ? r.tierQuotas : {};
         return {
           tenantId: cleanTenant,
           maxAutonomyLevel: r.maxAutonomyLevel ?? 'L3',
           dailyBudgetAed: r.dailyBudgetAed ?? 200.0,
+          weeklyBudgetAed: r.weeklyBudgetAed ?? 1000.0,
           monthlyBudgetAed: r.monthlyBudgetAed ?? 5000.0,
+          tierQuotas: {
+            ECONOMY_TEXT: Number(rawTiers.ECONOMY_TEXT ?? 1000.0),
+            STANDARD_REASONING: Number(rawTiers.STANDARD_REASONING ?? 2500.0),
+            VISION_FAST: Number(rawTiers.VISION_FAST ?? 1500.0),
+          },
           requireHumanApprovalThresholdAed: r.requireHumanApprovalThresholdAed ?? 500.0,
           disabledAgents: Array.isArray(r.disabledAgents) ? r.disabledAgents : [],
           circuitBreakerTriggered: Boolean(r.circuitBreakerTriggered),
@@ -127,17 +149,26 @@ export class PolicyService {
   async updateTenantPolicy(tenantId: string, updates: Partial<TenantPolicy>): Promise<TenantPolicy> {
     await ensureAgentSchema();
     const current = await this.getTenantPolicy(tenantId);
-    const updated: TenantPolicy = { ...current, ...updates };
+    const updated: TenantPolicy = {
+      ...current,
+      ...updates,
+      tierQuotas: {
+        ...current.tierQuotas,
+        ...(updates.tierQuotas || {}),
+      },
+    };
 
     await prisma.$executeRawUnsafe(
       `INSERT INTO tenant_ai_policies (
-         tenant_id, max_autonomy_level, daily_budget_aed, monthly_budget_aed,
-         require_human_approval_threshold_aed, disabled_agents, circuit_breaker_triggered, updated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,NOW())
+         tenant_id, max_autonomy_level, daily_budget_aed, weekly_budget_aed, monthly_budget_aed,
+         tier_quotas, require_human_approval_threshold_aed, disabled_agents, circuit_breaker_triggered, updated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8::jsonb,$9,NOW())
        ON CONFLICT (tenant_id) DO UPDATE SET
          max_autonomy_level = EXCLUDED.max_autonomy_level,
          daily_budget_aed = EXCLUDED.daily_budget_aed,
+         weekly_budget_aed = EXCLUDED.weekly_budget_aed,
          monthly_budget_aed = EXCLUDED.monthly_budget_aed,
+         tier_quotas = EXCLUDED.tier_quotas,
          require_human_approval_threshold_aed = EXCLUDED.require_human_approval_threshold_aed,
          disabled_agents = EXCLUDED.disabled_agents,
          circuit_breaker_triggered = EXCLUDED.circuit_breaker_triggered,
@@ -145,7 +176,9 @@ export class PolicyService {
       updated.tenantId,
       updated.maxAutonomyLevel,
       updated.dailyBudgetAed,
+      updated.weeklyBudgetAed,
       updated.monthlyBudgetAed,
+      JSON.stringify(updated.tierQuotas),
       updated.requireHumanApprovalThresholdAed,
       JSON.stringify(updated.disabledAgents),
       updated.circuitBreakerTriggered,
