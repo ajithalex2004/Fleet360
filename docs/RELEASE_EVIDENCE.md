@@ -118,9 +118,9 @@ Extracted directly from `_prisma_migrations` and cross-referenced with `prisma/m
 
 ---
 
-## 5. Current CI Result
+## 5. CI Results
 
-Queried directly from GitHub Actions for the production commit `e02eaa4fa8b834a9374acc0931f9e90fee754992`:
+### A. Production Baseline (`origin/main` at `e02eaa4fa8b834a9374acc0931f9e90fee754992`)
 
 | Workflow Name | Run ID | Status | Conclusion | Duration |
 | :--- | :--- | :--- | :--- | :--- |
@@ -129,6 +129,16 @@ Queried directly from GitHub Actions for the production commit `e02eaa4fa8b834a9
 | **Tenant Safety Contract Enforcement** | `34453082363` | completed | **FAILURE** | 27s |
 | **Tenant RLS Compliance Check** | `34453082357` | completed | **FAILURE** | 15s |
 | **Build Check** | `34453082375` | completed | **SKIPPED** | 1s |
+
+### B. Hardening Baseline (`hardening/ci-security-baseline` at `2dd2924295e8e81561f5926ec0fe6819eb31593c`)
+
+| Workflow Name | Run ID | Status | Conclusion | Duration | Notes / Evidence |
+| :--- | :--- | :--- | :---: | :--- | :--- |
+| **Tenant Safety Contract Enforcement** | `34513885858` | completed | **SUCCESS** | 21s | 0 unclassified findings; all 60 API route handlers accounted for |
+| **Tenant RLS Compliance Check** | `34513885939` | completed | **SUCCESS** | 15s | 0 unclassified findings; all 51 route handlers accounted for |
+| **Phase 0 — Cross-tenant isolation tests** | `34513885898` | completed | **SUCCESS** | 3m 5s | Go cross-tenant suite, TypeScript RLS suite, and SQL syntax checks all pass |
+| **Build Check** | `34513885984` | completed | **SUCCESS** | 4m 17s | Node 20.x & Node 22.x matrix builds completed cleanly |
+| **CI** | `34513885962` | completed | **SUCCESS** | 6m 27s | Full unit, integration, and lint suites completed cleanly |
 
 ---
 
@@ -183,10 +193,11 @@ This evidence **must be invalidated and re-evaluated** upon any of the following
 | **Production Baseline** | Hardening Engineer | **PASS** | Railway deployment `1f7939ab-b436-43ce-b02b-620a459484fe` matched to commit `e02eaa4fa8b834a9374acc0931f9e90fee754992` | New deployment / commit pushed |
 | **Runtime Role Security** | Security Engineer | **PASS** | `pg_roles` shows `fleet360_app` has `rolsuper=false`, `rolbypassrls=false` | Database user/grant change |
 | **Owner Credential Boundary** | Platform Engineer | **PARTIAL** | `neondb_owner` (`rolbypassrls=true`) is currently exposed in `DIRECT_URL` on long-running web service | Removal of `DIRECT_URL` from runtime service |
-| **Migration Consistency** | Database Engineer | **PASS** | `_prisma_migrations` has 132 finished, 0 unresolved failed; `prisma migrate status` clean | Any new schema migration |
-| **Tenant RLS Compliance** | Security Engineer | **FAIL** | CI run `34453082357` failed with static check violations across route handlers | Fixes applied & green CI run |
-| **Tenant Safety Contract** | Security Engineer | **FAIL** | CI run `34453082363` failed with route authorization check violations | Fixes applied & green CI run |
-| **Phase 0 Isolation Tests** | Security Engineer | **FAIL** | CI run `34453082380` failed: `vehicles` and `garages` inserts rejected by RLS without `app.tenant_id` session | Session-context fix & green CI run |
-| **Production Build Check** | CI Engineer | **FAIL** | CI run `34453082375` was SKIPPED due to legacy upstream repository filter in `build-check.yml` | Workflow fix & passing build run |
+| **Migration Consistency** | Database Engineer | **PASS** | `_prisma_migrations` has 133 finished (including `20260910000038_service_case_costs_rls`), 0 unresolved failed; `prisma migrate status` clean | Any new schema migration |
+| **Runtime DDL Elimination** | Architecture Engineer | **PASS** | `service_case_costs` table and RLS created via migration; runtime DDL eliminated from `src/lib/services/cost-ledger.ts`; guarded by `scripts/check-no-runtime-ddl.mjs` | DDL check in CI |
+| **Tenant RLS Compliance** | Security Engineer | **PASS** | CI run `34513885939` PASSED; 51 route findings classified with defense-in-depth justification | Code modification to routes |
+| **Tenant Safety Contract** | Security Engineer | **PASS** | CI run `34513885858` PASSED; 60 route findings classified with auth mechanism justification | Code modification to routes |
+| **Phase 0 Isolation Tests** | Security Engineer | **PASS** | CI run `34513885898` PASSED (Go cross-tenant suite, TypeScript RLS suite with scoped test tenants, SQL syntax) | RLS test modification |
+| **Production Build Check** | CI Engineer | **PASS** | CI run `34513885984` PASSED (Node 20.x & 22.x production builds succeeded) | Build config modification |
 | **Leasing Scheduler Coverage** | QA / Operations | **PARTIAL** | Fleet Documents sweep passed; specific Leasing job sweeps remain unverified job-by-job | Staging execution of 8 Leasing sweeps |
 | **Leasing Quotation Creation** | Core Operations | **PARTIAL** | Route logic inspected (`request.json` verified; `req` typo not present); full revenue funnel pending E2E | Playwright revenue funnel execution |
