@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import type { TicketContext360Data } from '@/lib/service-tickets/context-360-engine';
 import type { RecoveryOptionsData } from '@/lib/service-tickets/towing-recovery-engine';
+import { CostLedgerCard } from './cost-ledger-card';
 
 interface ContextDrawer360Props {
   ticketId: string | null;
@@ -139,12 +140,25 @@ export function ContextDrawer360({ ticketId, onClose, onStatusChange }: ContextD
             </span>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            {ticketId && (
+              <a
+                href={`/service-tickets/${ticketId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                title="Open Standalone Ticket & Cost Ledger Page"
+              >
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Action Notice */}
@@ -305,6 +319,16 @@ export function ContextDrawer360({ ticketId, onClose, onStatusChange }: ContextD
                   )}
                 </div>
               </div>
+
+              {/* Case Cost Ledger & Financial Control (Pillar 3) */}
+              {ticketId && (
+                <CostLedgerCard
+                  ticketId={ticketId}
+                  onCostUpdated={() => {
+                    fetchContext(ticketId);
+                  }}
+                />
+              )}
 
               {/* 2. Vehicle Health & Telematics 360 */}
               <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4 space-y-3">

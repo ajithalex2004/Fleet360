@@ -17,7 +17,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { Headphones, Plus, AlertCircle, Clock, ChevronRight, ArrowUpRight, MessageSquare, Star, Send, Inbox } from 'lucide-react';
+import { Headphones, Plus, AlertCircle, Clock, ChevronRight, ArrowUpRight, MessageSquare, Star, Send, Inbox, ExternalLink } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 import { TICKET_TYPES_ORDER, TICKET_DEPARTMENTS } from '@/types/service-tickets';
 import type { TicketType, ServiceTicket, TenantTicketTypeAccess, FormFieldDef, TicketDepartment } from '@/types/service-tickets';
@@ -818,6 +818,14 @@ function TicketCard({ ticket, formFields, typeConfig, selected, onToggleSelect, 
             🔍 360 Context
           </button>
         )}
+        <Link
+          href={`/service-tickets/${ticket.id}`}
+          onClick={(e) => e.stopPropagation()}
+          className="text-[11px] px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-semibold inline-flex items-center gap-1 transition-colors"
+          title="Open Ticket Details & Cost Ledger page"
+        >
+          <ExternalLink className="w-3 h-3 text-slate-400" /> Details
+        </Link>
         {onForward && (
           <button
             onClick={(e) => {
