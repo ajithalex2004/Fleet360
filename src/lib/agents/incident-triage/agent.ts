@@ -1,7 +1,7 @@
 /**
  * Incident Auto-Triage Agent (Phase 7 Severity-Tiered Selective AI Routing)
  * --------------------------------------------------------------------------
- * 1. Fetches open / unassessed incidents from trip_incidents
+ * 1. Fetches open / unassessed incidents from operations.incidents
  * 2. Classifies each using the rules-engine classifier
  * 3. Finds nearest available ambulance / response unit
  * 4. Applies severity-tiered AI routing:
@@ -66,9 +66,10 @@ async function runIncidentTriage(event: AgentEvent): Promise<AgentRunResult> {
     SELECT
       i.id::text, i.incident_no, i.incident_type, i.severity,
       i.description, i.location, i.vehicle_id::text, i.incident_date::text
-    FROM trip_incidents i
+    FROM operations.incidents i
     LEFT JOIN incident_triage_assessments a ON a.incident_id = i.id::text
-    WHERE i.status IN ('OPEN', 'IN_PROGRESS')
+    WHERE i.tenant_id = ${event.tenant_id}::uuid
+      AND i.status IN ('OPEN', 'IN_PROGRESS')
       AND (a.id IS NULL OR i.updated_at > NOW() - INTERVAL '24 hours')
     ORDER BY
       CASE i.severity
@@ -92,7 +93,8 @@ async function runIncidentTriage(event: AgentEvent): Promise<AgentRunResult> {
     SELECT v.id::text, v.vehicle_code, v.status,
            v.current_lat::float8, v.current_lng::float8
     FROM vehicles v
-    WHERE v.vehicle_type ILIKE '%ambulance%'
+    WHERE v.tenant_id = ${event.tenant_id}
+      AND v.vehicle_usage = 'AMBULANCE'
       AND v.status IN ('AVAILABLE', 'STANDBY')
     LIMIT 20
   `.catch(() => [] as AmbulanceRow[]);
@@ -225,7 +227,7 @@ async function runIncidentTriage(event: AgentEvent): Promise<AgentRunResult> {
       // 7. Escalate on the live incident if severity upgraded
       if (triage.severityChanged && (triage.aiSeverity === 'CRITICAL' || triage.aiSeverity === 'HIGH')) {
         await prisma.$executeRawUnsafe(`
-          UPDATE trip_incidents SET severity = $1, updated_at = NOW() WHERE id = $2::uuid
+          UPDATE operations.incidents SET severity = $1, updated_at = NOW() WHERE id = $2
         `, triage.aiSeverity, inc.id).catch(() => {});
         escalated++;
       }
