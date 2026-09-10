@@ -218,6 +218,21 @@ export async function POST(req: NextRequest) {
       if (cfg.rules.vehicle.vehicleRequired && !body.vehicleId) {
         return NextResponse.json({ ok: false, error: `${longLabel} requires a vehicle.` }, { status: 400 });
       }
+      // Whenever a vehicleId is supplied (required or optional), it must
+      // reference a real vehicle owned by this tenant. Without this check a
+      // typo'd or code-instead-of-id value (e.g. "VEH-000095" instead of its
+      // UUID) is stored silently and only surfaces later as a foreign-key
+      // crash when a dependent feature — e.g. Forward's auto-created work
+      // order — tries to use it.
+      if (body.vehicleId) {
+        const [vehicleRow] = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+          `SELECT id::text FROM vehicles WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+          body.vehicleId, tenantId,
+        ).catch(() => []);
+        if (!vehicleRow) {
+          return NextResponse.json({ ok: false, error: 'Vehicle not found for this tenant.' }, { status: 400 });
+        }
+      }
 
       // Validate per-type required fields against the resolved schema.
       const customFields: Record<string, unknown> = (body.customFields && typeof body.customFields === 'object')

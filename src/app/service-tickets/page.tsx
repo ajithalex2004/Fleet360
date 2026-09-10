@@ -52,6 +52,16 @@ interface ServiceTypeConfig {
 }
 type TypeConfigByType = Partial<Record<TicketType, ServiceTypeConfig>>;
 
+/** Minimal shape used to populate the Vehicle ID dropdown on the create
+ *  form — sourced from /api/vehicles (tenant-scoped, Fleet-owned registry). */
+interface VehiclePickerOption {
+  id: string;
+  vehicleCode: string | null;
+  licensePlate: string | null;
+  make: string | null;
+  model: string | null;
+}
+
 // ── Shared visuals ───────────────────────────────────────────────────────────
 const TONE_BG: Record<string, string> = {
   gold: 'bg-amber-500/10', blue: 'bg-blue-500/10', emerald: 'bg-emerald-500/10',
@@ -123,6 +133,7 @@ export default function ServiceTicketsHome() {
   const [accessMap, setAccessMap]     = useState<Map<TicketType, TenantTicketTypeAccess>>(new Map());
   const [formFieldsByType, setFormFieldsByType] = useState<FormFieldsByType>({});
   const [typeConfigByType, setTypeConfigByType] = useState<TypeConfigByType>({});
+  const [vehicles, setVehicles]       = useState<VehiclePickerOption[]>([]);
   const [tickets, setTickets]         = useState<ServiceTicket[]>([]);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState<string | null>(null);
@@ -158,10 +169,11 @@ export default function ServiceTicketsHome() {
       setTenantId(me.tenantId);
       setUserId(me.userId);
 
-      const [matrixRes, ticketsRes, fieldsRes] = await Promise.all([
+      const [matrixRes, ticketsRes, fieldsRes, vehiclesRes] = await Promise.all([
         fetch(`/api/admin/tenants/${me.tenantId}/ticket-types`),
         fetch(`/api/service-tickets`),
         fetch(`/api/service-tickets/form-fields`),
+        fetch(`/api/vehicles`),
       ]);
 
       if (matrixRes.ok) {
@@ -175,6 +187,19 @@ export default function ServiceTicketsHome() {
         const data = await fieldsRes.json();
         setFormFieldsByType(data.formFields ?? {});
         setTypeConfigByType(data.typeConfig ?? {});
+      }
+      if (vehiclesRes.ok) {
+        const data: Array<VehiclePickerOption & { status?: string | null }> = await vehiclesRes.json();
+        const list = Array.isArray(data) ? data : [];
+        const EXCLUDED_STATUSES = new Set(['DECOMMISSIONED', 'SOLD', 'INACTIVE']);
+        setVehicles(
+          list
+            .filter(v => !EXCLUDED_STATUSES.has(v.status ?? ''))
+            .map(v => ({
+              id: v.id, vehicleCode: v.vehicleCode, licensePlate: v.licensePlate,
+              make: v.make, model: v.model,
+            }))
+        );
       }
       if (ticketsRes.ok) {
         const data = await ticketsRes.json();
@@ -497,6 +522,7 @@ export default function ServiceTicketsHome() {
           enabledTypes={enabledTypes.map(c => c.type)}
           formFieldsByType={formFieldsByType}
           typeConfigByType={typeConfigByType}
+          vehicles={vehicles}
           onCreated={(t) => {
             setTickets(prev => [t, ...prev]);
             setShowForm(false);
@@ -654,6 +680,11 @@ function TicketCard({ ticket, formFields, typeConfig, selected, onToggleSelect, 
 
   const dept = ticket.assignedDepartment || 'OPERATIONS_TRIAGE';
   const deptBadge = DEPT_BADGE_STYLE[dept] || DEPT_BADGE_STYLE.OPERATIONS_TRIAGE;
+  // Operations Triage is the generic landing hopper — it has authority to
+  // route a ticket to the owning department (Forward) but not to action it
+  // (Acknowledge/Assign/Escalate/Resolve). Those unlock once a specialist
+  // department actually owns the ticket.
+  const canProgress = dept !== 'OPERATIONS_TRIAGE';
   const source = ticket.source || 'WEB';
   const sourceBadge = SOURCE_BADGES[source] || SOURCE_BADGES.WEB;
 
@@ -850,13 +881,13 @@ function TicketCard({ ticket, formFields, typeConfig, selected, onToggleSelect, 
             </button>
           </>
         )}
-        {ticket.status === 'Pending' && (
+        {canProgress && ticket.status === 'Pending' && (
           <button onClick={() => onStatusChange('Acknowledged')}
             className="text-[11px] px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold inline-flex items-center gap-1">
             ✓ Acknowledge
           </button>
         )}
-        {(ticket.status === 'Pending' || ticket.status === 'Acknowledged') && (
+        {canProgress && (ticket.status === 'Pending' || ticket.status === 'Acknowledged') && (
           <>
             <button onClick={() => onStatusChange('Assigned')}
               className="text-[11px] px-2.5 py-1 rounded-lg bg-violet-600 hover:bg-violet-500 text-white font-semibold">
@@ -868,11 +899,16 @@ function TicketCard({ ticket, formFields, typeConfig, selected, onToggleSelect, 
             </button>
           </>
         )}
-        {['Acknowledged', 'Assigned', 'Escalated', 'In Progress'].includes(ticket.status) && (
+        {canProgress && ['Acknowledged', 'Assigned', 'Escalated', 'In Progress'].includes(ticket.status) && (
           <button onClick={() => onStatusChange('Resolved')}
             className="text-[11px] px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold ml-auto inline-flex items-center gap-1">
             ✓ Resolve <ChevronRight className="w-3 h-3" />
           </button>
+        )}
+        {!canProgress && !awaitingApproval && (
+          <span className="text-[11px] text-slate-500 italic">
+            Route to a department to unlock next actions
+          </span>
         )}
       </div>
     </div>
@@ -884,11 +920,13 @@ function NewTicketForm({
   enabledTypes,
   formFieldsByType,
   typeConfigByType,
+  vehicles,
   onCreated,
   onCancel,
 }: {
   enabledTypes: TicketType[];
   formFieldsByType: FormFieldsByType;
+  vehicles: VehiclePickerOption[];
   typeConfigByType: TypeConfigByType;
   onCreated: (t: ServiceTicket) => void;
   onCancel: () => void;
@@ -1046,14 +1084,35 @@ function NewTicketForm({
           <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
             className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm" />
         </div>
-        <div className="space-y-1 md:col-span-2">
-          <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">
-            Vehicle ID {vehicleRequired && <span className="text-rose-400">*</span>}
-          </label>
-          <input value={vehicleId} onChange={e => setVehicleId(e.target.value)}
-            placeholder={vehicleRequired ? 'Required for this ticket type' : 'Optional'}
-            className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-violet-500" />
-        </div>
+        {vehicleRequired ? (
+          <div className="space-y-1 md:col-span-2">
+            <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">
+              Vehicle <span className="text-rose-400">*</span>
+            </label>
+            <select value={vehicleId} onChange={e => setVehicleId(e.target.value)} required
+              className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+              <option value="">— Select a vehicle —</option>
+              {vehicles.map(v => (
+                <option key={v.id} value={v.id}>
+                  {v.vehicleCode ?? v.id.slice(0, 8)}
+                  {v.licensePlate ? ` · ${v.licensePlate}` : ''}
+                  {v.make || v.model ? ` · ${[v.make, v.model].filter(Boolean).join(' ')}` : ''}
+                </option>
+              ))}
+            </select>
+            {vehicles.length === 0 && (
+              <p className="text-[11px] text-amber-300/90">No active vehicles found for this tenant.</p>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-1 md:col-span-2 opacity-40" title={`${longLabel} doesn't require a vehicle`}>
+            <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">Vehicle</label>
+            <select disabled value=""
+              className="w-full bg-slate-800/50 border border-white/5 rounded-lg px-3 py-2 text-slate-500 text-sm cursor-not-allowed">
+              <option value="">Not applicable for {longLabel}</option>
+            </select>
+          </div>
+        )}
 
         {/* Per-type dynamic fields — driven by resolved formFields
             (admin-edited rules first, compile-time config as fallback). */}

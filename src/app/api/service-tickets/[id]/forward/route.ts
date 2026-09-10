@@ -146,8 +146,10 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     let maintenanceRequestId = existing.maintenance_request_id;
     let createdMr: any = null;
 
-    // WORKSHOP_MAINTENANCE: Auto-provision linked MaintenanceRequest if not already created
-    if (department === 'WORKSHOP_MAINTENANCE' && !maintenanceRequestId) {
+    // WORKSHOP_MAINTENANCE: Auto-provision linked MaintenanceRequest if not already
+    // created. Skipped while the ticket is still Awaiting Approval — a real work
+    // order is a physical-world side effect that shouldn't fire before approval.
+    if (department === 'WORKSHOP_MAINTENANCE' && !maintenanceRequestId && existing.status !== 'Awaiting Approval') {
       try {
         const workOrderNo = `WO-${existing.readable_id || existing.id.substring(0, 8).toUpperCase()}`;
         createdMr = await tx.maintenanceRequest.create({
@@ -201,10 +203,15 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       forwardNotes: body.forwardNotes || existingCustom.forwardNotes,
     };
 
-    // Transition status to 'Assigned' if in an early state
-    const nextStatus = ['Pending', 'Awaiting Approval', 'Acknowledged'].includes(existing.status)
-      ? 'Assigned'
-      : existing.status;
+    // Transition status to 'Assigned' if in an early state. A ticket
+    // 'Awaiting Approval' must stay gated — forwarding it to a department
+    // records where it should go next, but must not be a side-channel
+    // around the segregation-of-duties approval check in PATCH /[id].
+    const nextStatus = existing.status === 'Awaiting Approval'
+      ? existing.status
+      : ['Pending', 'Acknowledged'].includes(existing.status)
+        ? 'Assigned'
+        : existing.status;
 
     const nextAssignee = body.assignee?.trim() || existing.assigned_to;
     const nextPriority = body.priority || existing.priority;
