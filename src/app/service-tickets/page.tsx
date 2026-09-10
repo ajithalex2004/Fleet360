@@ -396,8 +396,8 @@ export default function ServiceTicketsHome() {
   return (
     <div className="space-y-6 max-w-7xl">
       <PageHeader
-        title="Service & Support Ticketing"
-        subtitle="One module · seven ticket types · shared SLA, assignment & notification engines"
+        title="Service & Support Ticket Hub"
+        subtitle="Central operations triage hopper · 7 ticket types · 1-click recovery · replacement fleet swaps"
         icon={Headphones}
         accent="violet"
         actions={

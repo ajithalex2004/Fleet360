@@ -33,7 +33,8 @@ import {
   Command, 
   CheckCircle2, 
   Activity,
-  Plus
+  Plus,
+  Headphones
 } from 'lucide-react';
 
 interface ModuleDef {
@@ -243,6 +244,29 @@ const MODULES: ModuleDef[] = [
     borderAccent: 'hover:border-rose-500/50',
     tags: ['Emergency 999', 'Ambulance Unit', 'Police Reports'],
     status: 'LIVE',
+  },
+  {
+    id: 'service-tickets',
+    title: 'Service & Support Ticket Hub',
+    category: 'operations',
+    description: 'Central operations triage hopper, 1-click towing recovery dispatch, replacement fleet swaps, DVIR defect grounding, and multi-line case cost ledger.',
+    href: '/service-tickets',
+    icon: <Headphones className="w-5 h-5 text-sky-400" />,
+    gradient: 'from-sky-500/20 to-blue-500/10',
+    borderAccent: 'hover:border-sky-500/50',
+    tags: ['Triage Hopper', 'Towing Dispatch', 'Vehicle Swaps', 'Cost Ledger', 'Active SLA'],
+    status: 'LIVE',
+    flagship: true,
+    stats: [
+      { label: 'Acknowledge SLA', value: '< 15m' },
+      { label: 'Pillars Active', value: '4 Pillars' },
+      { label: 'Auto-Grounding', value: 'Instant' },
+    ],
+    quickActions: [
+      { label: 'Triage Hopper', href: '/service-tickets' },
+      { label: 'SLA Matrix', href: '/service-tickets/sla' },
+      { label: 'CSAT Analytics', href: '/service-tickets/csat' },
+    ],
   },
   {
     id: 'booking-portal',

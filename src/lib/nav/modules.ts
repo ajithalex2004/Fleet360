@@ -22,7 +22,7 @@ import {
   Calculator, Repeat, Wallet, DollarSign, Lock, Network, Sliders, FileSearch,
   Sparkles, MessageCircle, Tag, History, CheckCircle2, PieChart, Brain, GitMerge,
   Paperclip, Send, Info, Pin, FileMinus, Target, BookText, TrendingUp, Clock,
-  CalendarCheck2,
+  CalendarCheck2, Star,
   Gauge,
   Cpu,
   Briefcase,
@@ -149,13 +149,6 @@ export const MODULES: ModuleDef[] = [
     subPages: [
       { label: 'Predictive maintenance', href: '/ai-platform/predictive', icon: Sparkles },
     ],
-  },
-  {
-    id: 'service-tickets',
-    category: 'intelligence',
-    label: 'Service tickets',
-    href: '/service-tickets',
-    icon: Headphones,
   },
 
   // ── 2. TRANSPORT SERVICES (LOB) ───────────────────────────────────
@@ -372,6 +365,19 @@ export const MODULES: ModuleDef[] = [
       { label: 'Active',    href: '/incidents/active',    icon: AlertTriangle },
       { label: 'Ambulance', href: '/incidents/ambulance', icon: Send },
       { label: 'Reports',   href: '/incidents/reports',   icon: FileText },
+    ],
+  },
+  {
+    id: 'service-tickets',
+    category: 'operations',
+    label: 'Service & Support Ticket Hub',
+    href: '/service-tickets',
+    icon: Headphones,
+    subPages: [
+      { label: 'Triage Dashboard', href: '/service-tickets', icon: LayoutDashboard },
+      { label: 'SLA Matrix', href: '/service-tickets/sla', icon: Clock },
+      { label: 'CSAT Analytics', href: '/service-tickets/csat', icon: Star },
+      { label: 'Triage Simulator', href: '/service-tickets/simulator', icon: Sparkles },
     ],
   },
   {
