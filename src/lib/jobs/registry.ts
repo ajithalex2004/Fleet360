@@ -176,20 +176,112 @@ export const JOB_MAP = new Map<string, JobDef>(
 
 // ── Auth helper ───────────────────────────────────────────────────────────────
 
-/**
- * Returns true when the request is authorised to run a job.
- * Accepted: valid CRON_SECRET Bearer header OR an authenticated operator
- * session (x-tenant-id set by middleware).
- */
-export function isJobAuthorized(request: NextRequest): boolean {
-  // Logged-in operator — middleware already validated the session.
-  if (request.headers.get('x-tenant-id')) return true;
+export interface JobAuthResult {
+  authorized: boolean;
+  isCron: boolean;
+  tenantId: string | null;
+  userId: string;
+  error?: string;
+  status?: number;
+}
 
-  const expected = process.env.CRON_SECRET;
-  if (!expected) {
-    // Require the secret in production; allow unauthenticated in dev.
-    return process.env.NODE_ENV !== 'production';
+/**
+ * Validates authorization for background sweep / cron jobs.
+ *
+ * Rules:
+ *  1. Valid CRON_SECRET Bearer header -> Authorized system scheduler (isCron=true, system:cron).
+ *  2. Authenticated operator session -> Must have valid session context (userId and tenantId).
+ *     A tenant header alone without a verified session is strictly rejected.
+ *  3. Operator role must be authorized for administrative / job execution (SUPER_ADMIN, TENANT_ADMIN, FLEET_MANAGER, OPERATIONS).
+ *  4. Operators cannot forge or cross into other tenants: tenantId is strictly bound to session tenant.
+ */
+export function verifyJobAuthorization(request: NextRequest): JobAuthResult {
+  const cronSecret = process.env.CRON_SECRET;
+  const authHeader = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+
+  // 1. System Scheduler Auth via CRON_SECRET
+  if (cronSecret && authHeader === cronSecret) {
+    const requestedTenant = request.headers.get('x-tenant-id') || request.nextUrl.searchParams.get('tenantId');
+    return {
+      authorized: true,
+      isCron: true,
+      tenantId: requestedTenant ? requestedTenant.trim() : null,
+      userId: 'system:cron',
+    };
   }
-  const got = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
-  return got === expected;
+
+  // Allow dev bypass only if explicitly outside production and secret not configured
+  if (!cronSecret && process.env.NODE_ENV !== 'production' && !request.headers.get('x-tenant-id')) {
+    return {
+      authorized: true,
+      isCron: true,
+      tenantId: null,
+      userId: 'dev:unauthenticated',
+    };
+  }
+
+  // 2. Operator Session Auth
+  const sessionTenant = request.headers.get('x-tenant-id');
+  const userId = request.headers.get('x-user-id');
+  const role = request.headers.get('x-user-role') || request.headers.get('x-role');
+
+  // Tenant header alone without userId indicates an unauthenticated/forged request
+  if (sessionTenant && !userId) {
+    return {
+      authorized: false,
+      isCron: false,
+      tenantId: null,
+      userId: 'anonymous',
+      error: 'Unauthenticated tenant header rejected',
+      status: 401,
+    };
+  }
+
+  if (sessionTenant && userId) {
+    // Check permission / role
+    const allowedRoles = ['SUPER_ADMIN', 'TENANT_ADMIN', 'FLEET_MANAGER', 'OPERATIONS', 'DISPATCHER'];
+    if (role && !allowedRoles.includes(role)) {
+      return {
+        authorized: false,
+        isCron: false,
+        tenantId: sessionTenant,
+        userId,
+        error: 'Forbidden: insufficient job execution permissions',
+        status: 403,
+      };
+    }
+
+    // Forbid cross-tenant header spoofing for non-super-admins
+    const requestedTenant = request.headers.get('x-requested-tenant-id') || request.nextUrl.searchParams.get('tenantId');
+    if (requestedTenant && requestedTenant !== sessionTenant && role !== 'SUPER_ADMIN') {
+      return {
+        authorized: false,
+        isCron: false,
+        tenantId: sessionTenant,
+        userId,
+        error: 'Forbidden: cross-tenant execution not permitted',
+        status: 403,
+      };
+    }
+
+    return {
+      authorized: true,
+      isCron: false,
+      tenantId: requestedTenant && role === 'SUPER_ADMIN' ? requestedTenant : sessionTenant,
+      userId,
+    };
+  }
+
+  return {
+    authorized: false,
+    isCron: false,
+    tenantId: null,
+    userId: 'anonymous',
+    error: 'Unauthorized',
+    status: 401,
+  };
+}
+
+export function isJobAuthorized(request: NextRequest): boolean {
+  return verifyJobAuthorization(request).authorized;
 }

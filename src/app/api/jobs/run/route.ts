@@ -10,7 +10,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { JOB_MAP, JOB_REGISTRY, isJobAuthorized, type JobContext } from '@/lib/jobs/registry';
+import { JOB_MAP, JOB_REGISTRY, isJobAuthorized, verifyJobAuthorization, type JobContext } from '@/lib/jobs/registry';
 
 export const dynamic     = 'force-dynamic';
 export const maxDuration = 300; // seconds — Vercel Pro plan max
@@ -45,8 +45,12 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const start = Date.now();
 
-  if (!isJobAuthorized(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = verifyJobAuthorization(request);
+  if (!auth.authorized) {
+    return NextResponse.json(
+      { error: auth.error ?? 'Unauthorized' },
+      { status: auth.status ?? 401 }
+    );
   }
 
   const jobName = request.nextUrl.searchParams.get('job');
@@ -74,8 +78,8 @@ export async function POST(request: NextRequest) {
   }
 
   const ctx: JobContext = {
-    tenantId:     request.headers.get('x-tenant-id'),
-    userId:       request.headers.get('x-user-id') ?? 'system:cron',
+    tenantId:     auth.tenantId,
+    userId:       auth.userId,
     searchParams: request.nextUrl.searchParams,
     request,
   };

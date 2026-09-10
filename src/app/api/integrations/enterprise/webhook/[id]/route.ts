@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic';
  *  - Validates connection & optional secret.
  *  - Translates payload into Canonical Agent Event and dispatches relevant Fleet360 AI Agent.
  */
+import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
@@ -16,6 +17,14 @@ import { ensureAgentSchema } from '@/lib/agents/schema';
 import { dispatch } from '@/lib/agents/orchestrator';
 
 export const runtime = 'nodejs';
+
+function safeCompare(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   await ensureAgentSchema();
@@ -36,6 +45,39 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
     const connection = rawConnections[0];
     const tenantId = connection.tenant_id;
+
+    // ── Enforce Authentication on Webhook Calls ──────────────────────────────
+    // Resolve expected secrets from auth_credentials or connection headers
+    const creds = typeof connection.auth_credentials === 'string'
+      ? JSON.parse(connection.auth_credentials)
+      : (connection.auth_credentials || {});
+    const customHeaders = typeof connection.headers === 'string'
+      ? JSON.parse(connection.headers)
+      : (connection.headers || {});
+
+    const expectedSecret =
+      creds.webhookSecret ||
+      creds.apiKey ||
+      creds.token ||
+      creds.secret ||
+      customHeaders['x-webhook-secret'] ||
+      process.env.ENTERPRISE_WEBHOOK_SECRET;
+
+    if (expectedSecret) {
+      const incomingSecret =
+        req.headers.get('x-webhook-secret') ||
+        req.headers.get('x-api-key') ||
+        req.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ||
+        req.nextUrl.searchParams.get('secret');
+
+      if (!incomingSecret || !safeCompare(incomingSecret, expectedSecret)) {
+        return NextResponse.json(
+          { error: 'Unauthorized enterprise webhook request' },
+          { status: 401 }
+        );
+      }
+    }
+
     const rawBody = await req.json().catch(() => ({}));
     const body = stripTenantOwnershipFields(rawBody) as Record<string, any>;
 
