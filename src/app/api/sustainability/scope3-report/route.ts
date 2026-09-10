@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { 
   generateScope3AuditCertificate, 
   EsgTripInput 
@@ -11,8 +12,12 @@ export const dynamic = 'force-dynamic';
  * Generates an Audit-Ready GHG Protocol Scope 3 Carbon Certificate & Departmental Matrix
  */
 export async function POST(req: NextRequest) {
+  const auth = await requireAuthorizedTenant(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
-    const body = await req.json();
+    const rawBody = await req.json();
+    const body = stripTenantOwnershipFields(rawBody);
 
     const clientName = body.clientName || 'Etihad Rail & Logistics PJSC';
     const reportingPeriod = body.reportingPeriod || `Q3-${new Date().getFullYear()}`;

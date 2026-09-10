@@ -1,4 +1,4 @@
-﻿package phasegate
+package phasegate
 
 // Cross-tenant isolation smoke test â€” unit + integration coverage.
 //
@@ -590,11 +590,13 @@ func TestIntegration_TestTenantIsolation_RejectsBuggyQuery(t *testing.T) {
 	// Insert a sentinel row as tenant A.
 	marker := uniqueMarker(t)
 	var insertedIDStr string
-	err = db.Raw(`
-		INSERT INTO vehicles (id, tenant_id, make, model, year, license_plate, vin, status, updated_at)
-		VALUES (gen_random_uuid(), ?, 'PHASE0', 'BREACH', 2026, ?, ?, 'TEST', NOW())
-		RETURNING id
-	`, pair.A, marker[:32], marker+"-VIN").Scan(&insertedIDStr).Error
+	err = asTenant(ctx, db, pair.A.String(), func(tx *gorm.DB) error {
+		return tx.Raw(`
+			INSERT INTO vehicles (id, tenant_id, make, model, year, license_plate, vin, status, updated_at)
+			VALUES (gen_random_uuid(), ?, 'PHASE0', 'BREACH', 2026, ?, ?, 'TEST', NOW())
+			RETURNING id
+		`, pair.A, marker[:32], marker+"-VIN").Scan(&insertedIDStr).Error
+	})
 	if err != nil {
 		t.Fatalf("insert: %v", err)
 	}
@@ -603,26 +605,35 @@ func TestIntegration_TestTenantIsolation_RejectsBuggyQuery(t *testing.T) {
 		t.Fatalf("parse inserted id: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = db.Exec(`DELETE FROM vehicles WHERE id = ?`, insertedIDStr).Error
+		_ = asTenant(context.Background(), db, pair.A.String(), func(tx *gorm.DB) error {
+			return tx.Exec(`DELETE FROM vehicles WHERE id = ?`, insertedIDStr).Error
+		})
 	})
 
 	// BUGGY query: no WHERE tenant_id = ? clause. This simulates the
-	// exact failure mode we're guarding against â€” a handler that
+	// exact failure mode we're guarding against — a handler that
 	// forgets to apply auth.WithTenant(c).
+	// Executed under tenant A context: tenant A querying its own row sees it.
 	var buggyCount int64
-	if err := db.Raw(`SELECT COUNT(*) FROM vehicles WHERE id = ?`, insertedID).Scan(&buggyCount).Error; err != nil {
+	err = asTenant(ctx, db, pair.A.String(), func(tx *gorm.DB) error {
+		return tx.Raw(`SELECT COUNT(*) FROM vehicles WHERE id = ?`, insertedID).Scan(&buggyCount).Error
+	})
+	if err != nil {
 		t.Fatalf("buggy query: %v", err)
 	}
 	if buggyCount != 1 {
-		t.Fatalf("buggy query (no WHERE) didn't find the row â€” test setup is wrong, want 1, got %d", buggyCount)
+		t.Fatalf("buggy query (no WHERE) didn't find the row — test setup is wrong, want 1, got %d", buggyCount)
 	}
 
 	// CORRECT query: with WHERE tenant_id = ? as the OTHER tenant.
-	// This MUST return 0 â€” that's the isolation guarantee.
+	// This MUST return 0 — that's the isolation guarantee.
 	var correctCount int64
-	if err := db.Raw(`
-		SELECT COUNT(*) FROM vehicles WHERE id = ? AND tenant_id = ?
-	`, insertedID, pair.B).Scan(&correctCount).Error; err != nil {
+	err = asTenant(ctx, db, pair.B.String(), func(tx *gorm.DB) error {
+		return tx.Raw(`
+			SELECT COUNT(*) FROM vehicles WHERE id = ? AND tenant_id = ?
+		`, insertedID, pair.B).Scan(&correctCount).Error
+	})
+	if err != nil {
 		t.Fatalf("correct query: %v", err)
 	}
 	if correctCount != 0 {
@@ -885,19 +896,25 @@ func cancelRecheckLoop(t *testing.T) {
 // test that calls ensureTestTenants, so leftover rows don't leak
 // between tests.
 func cleanupSmokeTenants() {
-	queries := []string{
-		// FK targets first. Order matters — vehicles, drivers, garages
-		// all reference tenants(id).
-		`DELETE FROM vehicles WHERE tenant_id IN (SELECT id FROM tenants WHERE code IN ('phase0_smoke_a','phase0_smoke_b'))`,
-		`DELETE FROM drivers WHERE tenant_id IN (SELECT id FROM tenants WHERE code IN ('phase0_smoke_a','phase0_smoke_b'))`,
-		`DELETE FROM garages WHERE tenant_id IN (SELECT id FROM tenants WHERE code IN ('phase0_smoke_a','phase0_smoke_b'))`,
-		`DELETE FROM tenants WHERE code IN ('phase0_smoke_a','phase0_smoke_b')`,
+	if database.DB == nil {
+		return
 	}
-	for _, q := range queries {
-		if err := database.DB.Exec(q).Error; err != nil {
-			// Best-effort cleanup. Logged so tests can still see
-			// why a row leaked; doesn't fail the test.
-			fmt.Printf("cleanupSmokeTenants: %s failed: %v\n", q, err)
+	codes := []string{"phase0_smoke_a", "phase0_smoke_b"}
+	for _, code := range codes {
+		var tenantID string
+		_ = database.DB.Raw(`SELECT id FROM tenants WHERE code = ?`, code).Scan(&tenantID).Error
+		if tenantID != "" {
+			_ = asTenant(context.Background(), database.DB, tenantID, func(tx *gorm.DB) error {
+				_ = tx.Exec(`DELETE FROM vehicles WHERE tenant_id = ?`, tenantID).Error
+				_ = tx.Exec(`DELETE FROM drivers WHERE tenant_id = ?`, tenantID).Error
+				_ = tx.Exec(`DELETE FROM garages WHERE tenant_id = ?`, tenantID).Error
+				return nil
+			})
+		}
+	}
+	for _, code := range codes {
+		if err := database.DB.Exec(`DELETE FROM tenants WHERE code = ?`, code).Error; err != nil {
+			fmt.Printf("cleanupSmokeTenants: delete tenant %s failed: %v\n", code, err)
 		}
 	}
 }

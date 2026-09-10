@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { normalizeTelemetryBatch, processTelemetryBatch } from '@/lib/telematics/gateway-ingest';
-import { resolveTenantContext } from '@/lib/tenant-context';
+import { getTenantId } from '@/lib/tenant-context';
 
 export async function POST(req: NextRequest) {
   try {
@@ -27,11 +27,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Resolve tenant ID
-    let tenantId = tenantParam;
-    if (!tenantId) {
-      const authCtx = resolveTenantContext(req);
-      tenantId = authCtx.tenantId || 'default';
-    }
+    const tenantId = tenantParam || getTenantId(req) || 'default';
 
     const rawBody = await req.json().catch(() => null);
     if (!rawBody) {

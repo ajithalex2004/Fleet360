@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 
 export interface ActiveConsolidationPool {
   poolId: string;
@@ -49,6 +50,9 @@ export const ACTIVE_CONSOLIDATION_POOLS: ActiveConsolidationPool[] = [
 ];
 
 export async function GET(req: NextRequest) {
+  const auth = await requireAuthorizedTenant(req);
+  if (auth instanceof NextResponse) return auth;
+
   return NextResponse.json({
     success: true,
     pools: ACTIVE_CONSOLIDATION_POOLS,
@@ -56,8 +60,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuthorizedTenant(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
-    const body = await req.json();
+    const rawBody = await req.json();
+    const body = stripTenantOwnershipFields(rawBody);
     const { pallets = 2, weightTons = 1.0, corridor = 'E11' } = body;
 
     const matchedPool = ACTIVE_CONSOLIDATION_POOLS.find(

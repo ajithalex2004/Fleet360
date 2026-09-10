@@ -14,6 +14,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
 import { TICKET_DEPARTMENTS, type TicketDepartment } from '@/types/service-tickets';
 
 export const runtime = 'nodejs';
@@ -58,30 +59,32 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Query ticket strictly by trackingToken in custom_fields
-    const rows = await prisma.$queryRawUnsafe<
-      Array<{
-        id: string;
-        ticket_type: string;
-        readable_id: string | null;
-        title: string;
-        description: string | null;
-        priority: string;
-        status: string;
-        created_at: string;
-        updated_at: string;
-        due_date: string | null;
-        history: unknown;
-        custom_fields: Record<string, unknown>;
-      }>
-    >(
-      `SELECT id, ticket_type, readable_id, title, description, priority, status,
-              created_at::text, updated_at::text, due_date::text, history, custom_fields
-       FROM service_tickets
-       WHERE custom_fields->>'trackingToken' = $1
-         AND deleted_at IS NULL
-       LIMIT 1`,
-      sanitizedToken
+    // Query ticket strictly by trackingToken in custom_fields using withPlatformAdmin to allow capability-token lookup across tenants
+    const rows = await withPlatformAdmin(prisma, async (tx) =>
+      tx.$queryRawUnsafe<
+        Array<{
+          id: string;
+          ticket_type: string;
+          readable_id: string | null;
+          title: string;
+          description: string | null;
+          priority: string;
+          status: string;
+          created_at: string;
+          updated_at: string;
+          due_date: string | null;
+          history: unknown;
+          custom_fields: Record<string, unknown>;
+        }>
+      >(
+        `SELECT id, ticket_type, readable_id, title, description, priority, status,
+                created_at::text, updated_at::text, due_date::text, history, custom_fields
+         FROM service_tickets
+         WHERE custom_fields->>'trackingToken' = $1
+           AND deleted_at IS NULL
+         LIMIT 1`,
+        sanitizedToken
+      )
     ).catch(() => []);
 
     const ticket = rows[0];

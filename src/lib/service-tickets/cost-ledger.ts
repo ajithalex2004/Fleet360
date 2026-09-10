@@ -7,7 +7,6 @@
  * - Tracking of estimates vs approved budgets vs actual invoices
  */
 
-import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 
 export type CostType = 'TOWING' | 'PARTS' | 'LABOUR' | 'STORAGE' | 'REPLACEMENT' | 'OTHER';
@@ -81,58 +80,6 @@ export interface CaseCostSummary {
   lineCount: number;
 }
 
-const _g = globalThis as { _costLedgerSchemaInit?: Promise<void> };
-
-function isInsufficientPrivilege(e: unknown): boolean {
-  return (
-    e instanceof Prisma.PrismaClientKnownRequestError &&
-    (e.meta as { code?: string } | undefined)?.code === '42501'
-  );
-}
-
-/**
- * Initializes the service_case_costs table if it doesn't already exist.
- */
-export async function ensureCostLedgerTable(): Promise<void> {
-  if (_g._costLedgerSchemaInit) return _g._costLedgerSchemaInit;
-
-  _g._costLedgerSchemaInit = (async () => {
-    try {
-      await prisma.$executeRawUnsafe(`
-        CREATE TABLE IF NOT EXISTS service_case_costs (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          tenant_id TEXT NOT NULL,
-          ticket_id UUID NOT NULL,
-          cost_type TEXT NOT NULL,
-          estimated_amount NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-          approved_amount NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-          actual_amount NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-          currency TEXT NOT NULL DEFAULT 'AED',
-          payer_type TEXT NOT NULL DEFAULT 'TENANT',
-          vendor_id TEXT,
-          vendor_name TEXT,
-          invoice_reference TEXT,
-          warranty_claim_id TEXT,
-          insurance_claim_id TEXT,
-          customer_recharge_status TEXT NOT NULL DEFAULT 'NOT_APPLICABLE',
-          notes TEXT,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_service_case_costs_tenant_ticket 
-          ON service_case_costs(tenant_id, ticket_id);
-      `);
-    } catch (e) {
-      if (!isInsufficientPrivilege(e)) {
-        delete _g._costLedgerSchemaInit;
-        throw e;
-      }
-    }
-  })();
-
-  return _g._costLedgerSchemaInit;
-}
 
 interface DbCostRow {
   id: string;
@@ -182,8 +129,6 @@ function mapDbRowToCaseCost(row: DbCostRow): CaseCostLine {
  * Retrieves all cost lines for a specific service ticket within a tenant.
  */
 export async function getCaseCosts(ticketId: string, tenantId: string): Promise<CaseCostLine[]> {
-  await ensureCostLedgerTable();
-
   const rows = await prisma.$queryRawUnsafe<DbCostRow[]>(
     `SELECT *
      FROM service_case_costs
@@ -200,8 +145,6 @@ export async function getCaseCosts(ticketId: string, tenantId: string): Promise<
  * Adds a new cost line to a ticket's cost ledger.
  */
 export async function addCaseCost(data: AddCaseCostInput): Promise<CaseCostLine> {
-  await ensureCostLedgerTable();
-
   const [row] = await prisma.$queryRawUnsafe<DbCostRow[]>(
     `INSERT INTO service_case_costs (
        tenant_id,
@@ -253,8 +196,6 @@ export async function updateCaseCost(
   tenantId: string,
   data: UpdateCaseCostInput
 ): Promise<CaseCostLine | null> {
-  await ensureCostLedgerTable();
-
   const setClauses: string[] = ['updated_at = NOW()'];
   const params: unknown[] = [id, tenantId];
   let idx = 3;

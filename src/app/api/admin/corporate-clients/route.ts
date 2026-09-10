@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import {
   CORPORATE_CLIENTS_REGISTRY,
   CorporateClientRecord,
@@ -8,6 +9,9 @@ import {
 } from '@/lib/corporate-clients-registry';
 
 export async function GET(req: NextRequest) {
+  const auth = await requireAuthorizedTenant(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
     const { searchParams } = new URL(req.url);
     const domain = searchParams.get('domain');
@@ -35,8 +39,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuthorizedTenant(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
-    const body = await req.json();
+    const rawBody = await req.json();
+    const body = stripTenantOwnershipFields(rawBody);
     const action = body?.action; // 'CREATE_CLIENT' | 'ADD_USER_TO_ROSTER' | 'DELETE_USER_FROM_ROSTER'
 
     // 1. Add User to Client's Roster

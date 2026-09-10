@@ -1,12 +1,16 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { ChatMessage } from '@/lib/omnichannel-communication';
 
 // In-memory or session storage fallback for live chat threads
 const activeChatStore = new Map<string, ChatMessage[]>();
 
 export async function GET(req: NextRequest) {
+  const auth = await requireAuthorizedTenant(req);
+  if (auth instanceof NextResponse) return auth;
+
   const { searchParams } = new URL(req.url);
   const bookingRef = searchParams.get('bookingRef') || 'DEFAULT';
 
@@ -36,8 +40,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuthorizedTenant(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
-    const body = await req.json();
+    const rawBody = await req.json();
+    const body = stripTenantOwnershipFields(rawBody);
     const {
       bookingRef = 'DEFAULT',
       sender = 'PASSENGER',

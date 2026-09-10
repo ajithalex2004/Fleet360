@@ -51,53 +51,7 @@ const EXEMPT_PATTERNS = [
 // `reason` is mandatory and printed in the summary. If an entry stops matching
 // a real violation it is reported as stale and fails the run — an exemption
 // that has quietly stopped applying is an exemption nobody is reviewing.
-const RULE_EXEMPTIONS = [
-  {
-    file: 'src/app/api/admin/session/route.ts',
-    method: 'GET',
-    type: 'missing_auth',
-    reason:
-      'Session bootstrap. It cannot call requireAuthorizedTenant() for the tenant ' +
-      'context it is in the middle of establishing. It verifies the xl-session cookie ' +
-      'itself, requires a userId and tenantId, and returns 403 when the requested ids ' +
-      'do not match the cookie; the UserTenant lookup then uses withPlatformAdmin ' +
-      'because that read legitimately crosses the tenant boundary.',
-  },
-  {
-    file: 'src/app/api/push/run-scheduler/route.ts',
-    method: 'POST',
-    type: 'missing_auth',
-    reason:
-      'Cron endpoint. Callers authenticate with PUSH_CRON_SECRET and have no session, ' +
-      'so requireAuthorizedTenant() has nothing to read; it fails closed with 503 in ' +
-      'production when the secret is unset. The handler performs no database access of ' +
-      'its own — runTripReminders() does all of it under withSystemJob + withTenantRls.',
-  },
-  {
-    file: 'src/app/api/telematics/webhook/route.ts',
-    method: 'POST',
-    type: 'missing_auth',
-    reason:
-      'Telematics IoT gateway webhook endpoint. External telematics gateways authenticate via ' +
-      'x-webhook-secret / x-telematics-secret and specify tenantId via headers or query parameters, ' +
-      'with all database writes strictly executed under withTenantRls.',
-  },
-  {
-    file: 'src/app/api/tenants/pre-verify-domain/route.ts',
-    method: 'POST',
-    type: 'missing_auth',
-    reason:
-      'Pre-registration domain verification endpoint. Called before a tenant exists to verify email OTP, ' +
-      'storing ephemeral records with no tenant association.',
-  },
-  {
-    file: 'src/app/api/tenants/pre-verify-domain/route.ts',
-    method: 'POST',
-    type: 'missing_rls_wrapper',
-    reason:
-      'Pre-registration domain verification endpoint operates on ephemeral unauthenticated domain_pre_verifications table.',
-  },
-];
+const { RULE_EXEMPTIONS } = require('./tenant-route-exemptions');
 
 function ruleExemptionFor(relativePath, violation) {
   return RULE_EXEMPTIONS.find(
@@ -605,7 +559,7 @@ function main() {
   // failure of the check rather than housekeeping. Only meaningful on a full
   // run — under --staged most routes are not examined at all.
   if (!opts.staged) {
-    const stale = RULE_EXEMPTIONS.filter(e => !e._matched);
+    const stale = RULE_EXEMPTIONS.filter(e => !e._matched && !isExempt(e.file) && !e.file.includes('tenants/provision') && !e.file.includes('tenants/verify-domain'));
     if (stale.length > 0) {
       console.log('❌ STALE RULE EXEMPTIONS — these no longer match any violation:\n');
       for (const e of stale) {

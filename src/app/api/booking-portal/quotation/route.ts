@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 
 export interface QuotationRequest {
   serviceType: string;
@@ -116,8 +117,12 @@ export function calculateInstantQuotation(params: QuotationRequest): QuotationRe
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuthorizedTenant(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
-    const body: QuotationRequest = await req.json();
+    const rawBody = await req.json();
+    const body: QuotationRequest = stripTenantOwnershipFields(rawBody);
     const quotation = calculateInstantQuotation(body);
     return NextResponse.json(quotation);
   } catch (err) {

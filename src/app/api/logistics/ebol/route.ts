@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import {
   createDigitalEBOL,
   DigitalEBOLRecord,
@@ -9,6 +10,9 @@ import {
 const EBOL_STORE: Record<string, DigitalEBOLRecord> = {};
 
 export async function GET(req: NextRequest) {
+  const auth = await requireAuthorizedTenant(req);
+  if (auth instanceof NextResponse) return auth;
+
   const ebolNumber = req.nextUrl.searchParams.get('ebolNumber');
   if (ebolNumber && EBOL_STORE[ebolNumber]) {
     return NextResponse.json({ success: true, ebol: EBOL_STORE[ebolNumber] });
@@ -21,8 +25,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuthorizedTenant(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
-    const body = await req.json();
+    const rawBody = await req.json();
+    const body = stripTenantOwnershipFields(rawBody);
     const ebol = createDigitalEBOL(body);
     EBOL_STORE[ebol.ebolNumber] = ebol;
 

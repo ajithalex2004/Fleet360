@@ -17,6 +17,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { createSignature } from '@/lib/leasing/esignature-store';
 import { acceptRenewal } from '@/lib/leasing/renewal-acceptance';
+import { stripTenantOwnershipFields } from '@/lib/tenant-context';
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -41,7 +42,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       return NextResponse.json({ error: `Renewal is already ${renewal.status.toLowerCase()}` }, { status: 409 });
     }
 
-    const body = await req.json().catch(() => ({})) as { signerName?: string };
+    const rawBody = await req.json().catch(() => ({}));
+    const body = stripTenantOwnershipFields(rawBody) as { signerName?: string };
     const signerName = String(body.signerName ?? '').trim();
     if (!signerName) {
       return NextResponse.json({ error: 'signerName is required' }, { status: 400 });

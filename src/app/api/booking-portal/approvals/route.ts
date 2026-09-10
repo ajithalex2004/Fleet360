@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import {
   evaluateBookingApprovalPolicy,
   BookingPolicyContext,
@@ -121,10 +121,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-      const body = await req.json();
+      const rawBody = await req.json();
+      const body = stripTenantOwnershipFields(rawBody);
       const {
         bookingId,
         action, // 'APPROVE_TIER_1' | 'APPROVE_TIER_2' | 'APPROVE_TIER_3' | 'REJECT'

@@ -11,7 +11,7 @@ export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 import {
@@ -88,7 +88,8 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   let body: any;
   try {
-    body = await req.json();
+    const rawBody = await req.json();
+    body = stripTenantOwnershipFields(rawBody);
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }

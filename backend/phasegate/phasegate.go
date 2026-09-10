@@ -430,7 +430,10 @@ func testTenantIsolation(
 		args = []any{tenantA, garageName}
 	}
 
-	if err := db.WithContext(ctx).Raw(insertSQL, args...).Scan(&insertedIDStr).Error; err != nil {
+	err := asTenant(ctx, db, tenantA.String(), func(tx *gorm.DB) error {
+		return tx.Raw(insertSQL, args...).Scan(&insertedIDStr).Error
+	})
+	if err != nil {
 		return fmt.Errorf("insert as tenant A: %w", err)
 	}
 	insertedID, err := uuid.Parse(insertedIDStr)
@@ -439,18 +442,22 @@ func testTenantIsolation(
 	}
 	// Cleanup at the end of the test, regardless of result.
 	defer func() {
-		_ = db.Exec(`DELETE FROM `+table+` WHERE id = ?`, insertedIDStr).Error
+		_ = asTenant(ctx, db, tenantA.String(), func(tx *gorm.DB) error {
+			return tx.Exec(`DELETE FROM `+table+` WHERE id = ?`, insertedIDStr).Error
+		})
 	}()
 
 	// Now query as tenant B with the WithTenant-equivalent WHERE clause.
-	// We use raw SQL here (not the GORM scope) because the goal is to
-	// verify what the *handler* will see — and a buggy handler could
-	// forget the scope. The production handler MUST apply the scope;
-	// this assertion confirms the DB schema enforces it.
+	// We execute inside asTenant(tenantB) so the session context matches
+	// what a tenant B request would set via withTenantRls, ensuring RLS
+	// is properly active on the connection.
 	var visibleCount int64
-	if err := db.WithContext(ctx).Raw(`
-		SELECT COUNT(*) FROM `+table+` WHERE tenant_id = ? AND id = ?
-	`, tenantB, insertedIDStr).Scan(&visibleCount).Error; err != nil {
+	err = asTenant(ctx, db, tenantB.String(), func(tx *gorm.DB) error {
+		return tx.Raw(`
+			SELECT COUNT(*) FROM `+table+` WHERE tenant_id = ? AND id = ?
+		`, tenantB, insertedIDStr).Scan(&visibleCount).Error
+	})
+	if err != nil {
 		return fmt.Errorf("query as tenant B: %w", err)
 	}
 	if visibleCount != 0 {
