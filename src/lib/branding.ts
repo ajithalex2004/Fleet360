@@ -45,12 +45,13 @@ export async function ensureBrandingColumns(): Promise<void> {
 }
 
 export interface Branding {
-  productName:   string | null;
-  tagline:       string | null;
-  logoUrl:       string | null;
-  faviconUrl:    string | null;
-  primaryColor:  string | null;
-  accentColor:   string | null;
+  productName:     string | null;
+  tagline:         string | null;
+  logoUrl:         string | null;
+  faviconUrl:      string | null;
+  primaryColor:    string | null;
+  accentColor:     string | null;
+  defaultLanguage?: string | null;
 }
 
 interface BrandingRow {
@@ -60,16 +61,18 @@ interface BrandingRow {
   brand_favicon_url:   string | null;
   brand_primary_color: string | null;
   brand_accent_color:  string | null;
+  default_language?:   string | null;
 }
 
 function rowToBranding(r: BrandingRow): Branding {
   return {
-    productName:  r.brand_product_name,
-    tagline:      r.brand_tagline,
-    logoUrl:      r.brand_logo_url,
-    faviconUrl:   r.brand_favicon_url,
-    primaryColor: r.brand_primary_color,
-    accentColor:  r.brand_accent_color,
+    productName:     r.brand_product_name,
+    tagline:         r.brand_tagline,
+    logoUrl:         r.brand_logo_url,
+    faviconUrl:      r.brand_favicon_url,
+    primaryColor:    r.brand_primary_color,
+    accentColor:     r.brand_accent_color,
+    defaultLanguage: r.default_language ?? 'en',
   };
 }
 
@@ -77,7 +80,7 @@ export async function getBranding(tenantId: string): Promise<Branding | null> {
   await ensureBrandingColumns();
   const rows = await prisma.$queryRawUnsafe<BrandingRow[]>(
     `SELECT brand_product_name, brand_tagline, brand_logo_url, brand_favicon_url,
-            brand_primary_color, brand_accent_color
+            brand_primary_color, brand_accent_color, default_language
      FROM tenants WHERE id = $1 LIMIT 1`,
     tenantId,
   ).catch(() => []);
@@ -93,7 +96,7 @@ export async function getBrandingByCode(code: string): Promise<(Branding & { ten
   await ensureBrandingColumns();
   const rows = await prisma.$queryRawUnsafe<(BrandingRow & { id: string; name: string })[]>(
     `SELECT id, name, brand_product_name, brand_tagline, brand_logo_url, brand_favicon_url,
-            brand_primary_color, brand_accent_color
+            brand_primary_color, brand_accent_color, default_language
      FROM tenants
      WHERE code = $1 AND COALESCE(is_active, TRUE) = TRUE
      LIMIT 1`,
@@ -110,7 +113,7 @@ export async function getBrandingByDomain(domain: string): Promise<(Branding & {
   await ensureBrandingColumns();
   const rows = await prisma.$queryRawUnsafe<(BrandingRow & { id: string; name: string })[]>(
     `SELECT id, name, brand_product_name, brand_tagline, brand_logo_url, brand_favicon_url,
-            brand_primary_color, brand_accent_color
+            brand_primary_color, brand_accent_color, default_language
      FROM tenants
      WHERE LOWER(domain) = $1 AND COALESCE(is_active, TRUE) = TRUE
      LIMIT 1`,

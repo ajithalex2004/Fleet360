@@ -13,6 +13,11 @@ async function getPMAgent(): Promise<AgentDefinition> {
   return PREDICTIVE_MAINTENANCE_AGENT;
 }
 
+async function getPreventiveMaintenanceAgent(): Promise<AgentDefinition> {
+  const { PREVENTIVE_MAINTENANCE_AGENT } = await import('./preventive-maintenance/agent');
+  return PREVENTIVE_MAINTENANCE_AGENT;
+}
+
 async function getFinanceAnomalyAgent(): Promise<AgentDefinition> {
   const { FINANCE_ANOMALY_AGENT } = await import('./finance-anomaly/agent');
   return FINANCE_ANOMALY_AGENT;
@@ -26,6 +31,11 @@ async function getRouteOptimiserAgent(): Promise<AgentDefinition> {
 async function getStaffTransportPlannerAgent(): Promise<AgentDefinition> {
   const { STAFF_TRANSPORT_PLANNER_AGENT } = await import('./staff-transport-planner/agent');
   return STAFF_TRANSPORT_PLANNER_AGENT;
+}
+
+async function getStaffTransportDemandAgent(): Promise<AgentDefinition> {
+  const { STAFF_TRANSPORT_DEMAND_AGENT } = await import('./staff-transport-demand/agent');
+  return STAFF_TRANSPORT_DEMAND_AGENT;
 }
 
 async function getIncidentTriageAgent(): Promise<AgentDefinition> {
@@ -63,6 +73,16 @@ async function getFleetWorkforcePlannerAgent(): Promise<AgentDefinition> {
   return fleetWorkforcePlannerAgent as unknown as AgentDefinition;
 }
 
+async function getEnterpriseBridgeAgent(): Promise<AgentDefinition> {
+  const { ENTERPRISE_BRIDGE_AGENT } = await import('./enterprise-bridge/agent');
+  return ENTERPRISE_BRIDGE_AGENT;
+}
+
+async function getDocumentIntelligenceAgent(): Promise<AgentDefinition> {
+  const { DOCUMENT_INTELLIGENCE_AGENT } = await import('./document-intelligence/agent');
+  return DOCUMENT_INTELLIGENCE_AGENT;
+}
+
 // ── Conversational agent wrappers ──────────────────────────────────────────────
 async function getWhatsAppAgent(): Promise<AgentDefinition> {
   const { WHATSAPP_AGENT } = await import('./whatsapp-agent/agent');
@@ -77,9 +97,11 @@ async function getOpsAssistantAgent(): Promise<AgentDefinition> {
 const AGENT_LOADERS: Record<AgentId, () => Promise<AgentDefinition>> = {
   // ── Batch / Scan ────────────────────────────────────────────────────────────
   'predictive-maintenance':     getPMAgent,
+  'preventive-maintenance':     getPreventiveMaintenanceAgent,
   'finance-anomaly':            getFinanceAnomalyAgent,
   'route-optimiser':            getRouteOptimiserAgent,
   'staff-transport-planner':    getStaffTransportPlannerAgent,
+  'staff-transport-demand':     getStaffTransportDemandAgent,
   'incident-triage':            getIncidentTriageAgent,
   'dispatch-optimiser':         getDispatchOptimiserAgent,
   'driver-coach':               getDriverCoachAgent,
@@ -87,7 +109,8 @@ const AGENT_LOADERS: Record<AgentId, () => Promise<AgentDefinition>> = {
   'vehicle-reuse':              getVehicleReuseAgent,
   'compliance':                 getComplianceAgent,
   'fleet-workforce-planner':    getFleetWorkforcePlannerAgent,
-  'document-intelligence':      async () => { throw new Error('Not yet implemented'); },
+  'enterprise-bridge':          getEnterpriseBridgeAgent,
+  'document-intelligence':      getDocumentIntelligenceAgent,
   // ── Conversational (always-on, stats wrappers) ─────────────────────────────
   'whatsapp-agent':             getWhatsAppAgent,
   'ops-assistant':              getOpsAssistantAgent,
@@ -286,10 +309,10 @@ export const AGENT_CATALOGUE = [
   {
     id: 'document-intelligence' as AgentId,
     name: 'Document Intelligence Agent',
-    description: 'Reads vehicle registration cards, insurance docs, and damage photos using Vision AI.',
-    version: '0.1.0',
-    status: 'planned',
-    model: 'GPT-4o Vision',
+    description: 'Multimodal Vision & OCR AI processing 9 document types (Registration/Mulkiya, Insurance, Licenses, Quotations, Invoices, Job Cards, Contracts, POD, Inspection) and auto-populating Fleet360 records.',
+    version: '1.0.0',
+    status: 'live',
+    model: 'Multimodal Vision + OCR',
     module: 'Fleet / RAC / Leasing',
     agentType: 'BATCH',
   },
@@ -316,6 +339,6 @@ export const AGENT_CATALOGUE = [
     module: 'Operations / All Modules',
     agentType: 'CONVERSATIONAL',
     endpoint: 'POST /api/operations/simple-chat',
-    tools: ['showFleetStatus', 'showVehicles', 'showMaintenanceRequests', 'showAlerts', 'showBookings', 'showKPIDashboard', 'createBooking'],
+    tools: ['showFleetStatus', 'showVehicles', 'showMaintenanceRequests', 'showAlerts', 'showBookings', 'showKPIDashboard', 'createBooking', 'showContractClauses'],
   },
 ];

@@ -8,6 +8,7 @@ interface TenantInfo {
   name: string;
   code?: string;
   plan?: string;
+  defaultLanguage?: string;
   enabledModules: string[];
 }
 

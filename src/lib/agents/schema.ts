@@ -508,6 +508,39 @@ async function _doInit(): Promise<void> {
          'Thanks for contacting Fleet360! We''ve received your message and a member of our team will respond as soon as possible.',
          'شكرًا لتواصلك مع Fleet360! لقد استلمنا رسالتك وسيقوم أحد أفراد فريقنا بالرد عليك في أقرب وقت ممكن.')
       ON CONFLICT (template_name) DO NOTHING;
+
+      -- ── preventive_maintenance_forecasts (Continuous Burn-Down & Slot Optimizer) ──
+      CREATE TABLE IF NOT EXISTS preventive_maintenance_forecasts (
+        id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id                TEXT NOT NULL DEFAULT 'default',
+        vehicle_id               TEXT NOT NULL,
+        vehicle_code             TEXT,
+        license_plate            TEXT,
+        make                     TEXT,
+        model                    TEXT,
+        current_odometer_km      NUMERIC(10,2) NOT NULL,
+        current_engine_hours     NUMERIC(10,2) NOT NULL DEFAULT 0,
+        daily_avg_km             NUMERIC(8,2) NOT NULL DEFAULT 0,
+        daily_avg_engine_hours   NUMERIC(8,2) NOT NULL DEFAULT 0,
+        target_service_threshold TEXT NOT NULL,
+        target_trigger_type      TEXT NOT NULL DEFAULT 'ODOMETER',
+        remaining_km             NUMERIC(10,2),
+        remaining_engine_hours   NUMERIC(10,2),
+        estimated_days_to_due    INT NOT NULL,
+        projected_due_date       DATE NOT NULL,
+        urgency_level            TEXT NOT NULL DEFAULT 'UPCOMING',
+        forecast_narrative       TEXT NOT NULL,
+        recommended_slot         JSONB NOT NULL DEFAULT '{}'::jsonb,
+        operational_impact_score NUMERIC(5,2) DEFAULT 0,
+        status                   TEXT NOT NULL DEFAULT 'ACTIVE',
+        agent_run_id             UUID,
+        created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        CONSTRAINT pm_forecasts_vehicle_uniq UNIQUE (tenant_id, vehicle_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_pm_forecasts_tenant_urgency ON preventive_maintenance_forecasts(tenant_id, urgency_level);
+      CREATE INDEX IF NOT EXISTS idx_pm_forecasts_due_date ON preventive_maintenance_forecasts(projected_due_date);
     END
     $DDL$
   `);

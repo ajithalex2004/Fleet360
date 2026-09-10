@@ -226,9 +226,11 @@ export interface AgentEvent {
 export type AgentId =
   // ── Batch / Scan agents ────────────────────────────────────────────────────
   | 'predictive-maintenance'
+  | 'preventive-maintenance'
   | 'finance-anomaly'
   | 'route-optimiser'
   | 'staff-transport-planner'
+  | 'staff-transport-demand'
   | 'incident-triage'
   | 'dispatch-optimiser'
   | 'driver-coach'
@@ -237,6 +239,7 @@ export type AgentId =
   | 'vehicle-reuse'
   | 'compliance'
   | 'fleet-workforce-planner'
+  | 'enterprise-bridge'
   | 'quotation-copilot'
   | 'rental-copilot'
   | 'damage-classifier'
@@ -325,6 +328,48 @@ export interface VehicleRiskScore {
   predictedFailureWindow?: string;
   autoWorkOrderId?: string;
   scoredAt: string;
+}
+
+// ── Preventive Maintenance Continuous Forecaster & Smart Slot Types ───────────
+export type PMUrgencyLevel = 'NORMAL' | 'UPCOMING' | 'DUE_SOON' | 'OVERDUE';
+
+export interface MaintenanceSlotWindow {
+  slotDate: string; // YYYY-MM-DD
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
+  slotType: 'IDLE_WINDOW' | 'SHIFT_CHANGEOVER' | 'WEEKEND_OFF_PEAK' | 'DEDICATED_MAINTENANCE';
+  disruptedTripsCount: number;
+  disruptedPassengersCount: number;
+  depotBayId?: string;
+  depotName?: string;
+  operationalDisruptionScore: number; // lower is better
+  reasoning: string;
+}
+
+export interface PreventiveMaintenanceForecast {
+  id?: string;
+  vehicleId: string;
+  vehicleCode: string;
+  licensePlate: string;
+  make: string;
+  model: string;
+  currentOdometerKm: number;
+  currentEngineHours: number;
+  dailyAvgKm: number;
+  dailyAvgEngineHours: number;
+  targetServiceThreshold: string; // e.g. '20,000 km Service (Intermediate B)'
+  targetTriggerType: 'ODOMETER' | 'ENGINE_HOURS' | 'CALENDAR';
+  remainingKm?: number;
+  remainingEngineHours?: number;
+  estimatedDaysToDue: number;
+  projectedDueDate: string; // YYYY-MM-DD
+  urgencyLevel: PMUrgencyLevel;
+  forecastNarrative: string; // e.g. "Vehicle V-103 will reach its 20,000 km service threshold in approximately 6 operating days."
+  recommendedSlot: MaintenanceSlotWindow;
+  operationalImpactScore: number;
+  status: 'ACTIVE' | 'SCHEDULED' | 'DISMISSED';
+  agentApprovalId?: string;
+  createdAt?: string;
 }
 
 // ── Route Optimisation Types ──────────────────────────────────────────────────
@@ -1032,6 +1077,486 @@ export interface FleetWorkforcePlanningRequest {
   costProfile?: Partial<ResourceCostProfile>;
   lockPreviousPlan?: boolean;
 }
+
+// ── Staff Transport Demand Forecasting Types ─────────────────────────────────
+export type BusCapacityRiskStatus = 'OVER' | 'UNDER' | 'OK';
+export type BusForecastAction = 'SPAWN_EXTRA_TRIP' | 'DOWNSIZE_VEHICLE' | 'CONSOLIDATE_SHIFTS' | 'MAINTAIN';
+export type RecommendedBusSize = 'VAN_14' | 'COASTER_30' | 'COACH_50';
+
+export interface RouteShiftForecastItem {
+  id?: string;
+  routeId: string;
+  routeName: string;
+  shiftType: string;
+  dayOfWeek: number; // 0=Sun..6=Sat
+  dayName: string;
+  forecastPeriod: string; // e.g. "2026-W37"
+  targetDate: string;     // ISO YYYY-MM-DD
+  baselinePax: number;
+  recentAvgPax: number;
+  trendDeltaPax: number;
+  projectedPax: number;
+  vehicleCapacity: number | null;
+  capacityRiskPct: number | null;
+  riskStatus: BusCapacityRiskStatus;
+  confidence: 'LOW' | 'MEDIUM' | 'HIGH';
+  suggestedAction: BusForecastAction;
+  suggestedVehicleSize?: RecommendedBusSize;
+  estimatedSavingsAed: number;
+  explanation: string;
+}
+
+export interface StaffTransportDemandResult {
+  tenantId: string;
+  forecastPeriod: string;
+  weeksOfHistory: number;
+  totalRoutesAnalyzed: number;
+  overCapacityCount: number;
+  underCapacityCount: number;
+  optimalCapacityCount: number;
+  potentialSavingsAed: number;
+  items: RouteShiftForecastItem[];
+  executiveSummary: string;
+  generatedAt: string;
+}
+
+// ── Enterprise Bridge & Canonical Data Model (CDM) Types ─────────────────────
+export type EnterpriseSystemType =
+  | 'SAP_S4HANA'
+  | 'ORACLE_NETSUITE'
+  | 'MS_DYNAMICS_365'
+  | 'ODOO'
+  | 'ZOHO_BOOKS'
+  | 'CUSTOM_REST'
+  | 'CUSTOM_OPENAPI';
+
+export type EnterpriseAuthType =
+  | 'API_KEY'
+  | 'BEARER_TOKEN'
+  | 'BASIC_AUTH'
+  | 'OAUTH2_CLIENT_CREDENTIALS'
+  | 'NETSUITE_TBA'
+  | 'NONE';
+
+export type CanonicalEntityType = 'INVOICE' | 'ROSTER' | 'WORK_ORDER' | 'SHIPMENT_PO';
+export type EnterpriseSyncDirection = 'OUTBOUND' | 'INBOUND';
+export type EnterpriseSyncStatus = 'PENDING' | 'SUCCESS' | 'FAILED' | 'RETRYING' | 'AWAITING_APPROVAL';
+
+// 1. Canonical Invoice (Billing / Accounting)
+export interface CanonicalInvoiceItem {
+  description: string;
+  quantity: number;
+  unitPriceAed: number;
+  vatRatePct: number; // typically 5.0 in UAE
+  vatAmountAed: number;
+  lineTotalAed: number;
+  glAccountCode?: string;
+  costCenter?: string;
+}
+
+export interface CanonicalInvoice {
+  invoiceNumber: string;
+  referenceTripId?: string;
+  referenceBookingId?: string;
+  clientCode: string;
+  clientTaxRegistrationNumber?: string; // TRN 15-digit UAE
+  issueDate: string; // YYYY-MM-DD
+  dueDate: string;
+  currency: 'AED' | 'USD' | 'EUR' | 'SAR';
+  subtotalAed: number;
+  totalVatAed: number;
+  totalAmountAed: number;
+  paymentStatus: 'DRAFT' | 'UNPAID' | 'PAID' | 'DISPUTED';
+  items: CanonicalInvoiceItem[];
+  peppolUblXml?: string;
+  notes?: string;
+}
+
+// 2. Canonical Shift Roster (HRMS / Employee manifests)
+export interface CanonicalRosterPassenger {
+  employeeId: string;
+  fullName: string;
+  department?: string;
+  contactNumber?: string;
+  pickupLocationName: string;
+  pickupLatitude?: number;
+  pickupLongitude?: number;
+  destinationHubName: string;
+  shiftName: string;
+  shiftDate: string; // YYYY-MM-DD
+  targetArrivalTime: string; // HH:MM
+}
+
+export interface CanonicalRoster {
+  rosterBatchId: string;
+  corporateClientId: string;
+  effectiveDate: string;
+  shiftType: string; // MORNING, EVENING, NIGHT, SPLIT
+  totalEmployees: number;
+  passengers: CanonicalRosterPassenger[];
+}
+
+// 3. Canonical Work Order (Maintenance & Spare Parts)
+export interface CanonicalWorkOrder {
+  workOrderNumber: string;
+  vehicleId: string;
+  vehiclePlate: string;
+  vehicleVin?: string;
+  currentOdometerKm?: number;
+  issueDescription: string;
+  telematicsDtcCodes?: string[];
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  estimatedCostAed: number;
+  requiredParts?: Array<{ partNumber: string; partName: string; quantity: number }>;
+  recommendedServiceDate: string;
+  approvalStatus: 'DRAFT' | 'APPROVED' | 'IN_PROGRESS' | 'COMPLETED';
+}
+
+// 4. Canonical Shipment PO (Freight & 3PL Transport Order)
+export interface CanonicalShipmentPO {
+  poNumber: string;
+  waybillNumber?: string;
+  consignorName: string;
+  consignorAddress: string;
+  consigneeName: string;
+  consigneeAddress: string;
+  cargoDescription: string;
+  weightKg: number;
+  volumeCbm?: number;
+  hazardousClass?: string;
+  rateAed: number;
+  carrierTenantId?: string;
+  pickupWindowStart: string;
+  deliveryWindowEnd: string;
+  status: 'PENDING' | 'ACCEPTED' | 'IN_TRANSIT' | 'DELIVERED';
+}
+
+// Enterprise Connection Configuration
+export interface EnterpriseConnectionConfig {
+  id: string;
+  tenantId: string;
+  systemName: string;
+  systemType: EnterpriseSystemType;
+  baseUrl: string;
+  authType: EnterpriseAuthType;
+  authCredentials?: Record<string, any>;
+  headers?: Record<string, string>;
+  fieldMappings?: Record<string, string>; // canonicalField -> externalField
+  openApiSpecUrl?: string;
+  openApiSpecJson?: Record<string, any>;
+  isActive: boolean;
+  rateLimitPerMin: number;
+  lastSyncAt?: string;
+  healthStatus: 'HEALTHY' | 'WARNING' | 'ERROR' | 'UNTESTED';
+  healthMessage?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// Enterprise Sync Event & Audit
+export interface EnterpriseSyncRecord {
+  id: string;
+  tenantId: string;
+  connectionId: string;
+  systemType: EnterpriseSystemType;
+  entityType: CanonicalEntityType;
+  direction: EnterpriseSyncDirection;
+  entityId: string;
+  status: EnterpriseSyncStatus;
+  requestPayload: any;
+  responsePayload?: any;
+  httpStatus?: number;
+  durationMs: number;
+  retryCount: number;
+  errorMessage?: string;
+  agentApprovalId?: string;
+  createdAt: string;
+}
+
+export interface EnterpriseSyncResult {
+  syncId: string;
+  connectionId: string;
+  systemType: EnterpriseSystemType;
+  entityType: CanonicalEntityType;
+  status: EnterpriseSyncStatus;
+  externalReferenceId?: string;
+  financialImpactAed?: number;
+  durationMs: number;
+  retryCount: number;
+  message: string;
+}
+
+// ── Document Intelligence Types (Enterprise Document Control Engine) ───────────
+export type DocIntelligenceCategory =
+  | 'REGISTRATION_CARD'    // UAE Mulkiya / Vehicle Registration
+  | 'INSURANCE_POLICY'     // Commercial Vehicle Insurance Certificate
+  | 'DRIVER_LICENSE'       // UAE Driving License
+  | 'QUOTATION'            // Supplier / Vendor Quotation
+  | 'TAX_INVOICE'          // FTA 5% VAT Tax Invoice / Fuel / Repair Bill
+  | 'INVOICE'              // Alias for Tax Invoice
+  | 'MAINTENANCE_REPORT'   // Workshop Job Card / Service Report
+  | 'CONTRACT'             // Lease Agreement / Client Contract
+  | 'PROOF_OF_DELIVERY'    // Signed Consignment Note / POD
+  | 'INSPECTION_SHEET'     // Vehicle Check-in/Check-out Condition Sheet
+  | 'PARTNER_TRADE_LICENSE' // Partner Commercial License
+  | 'OTHER';
+
+export type DocumentLifecycleStatus =
+  | 'UPLOADED'
+  | 'CLASSIFIED'
+  | 'EXTRACTED'
+  | 'VALIDATED'
+  | 'APPROVED'
+  | 'ACTIVE'
+  | 'EXPIRING'
+  | 'EXPIRED'
+  | 'SUPERSEDED'
+  | 'REJECTED'
+  | 'ARCHIVED';
+
+export interface BoundingBox {
+  top: number;    // % from top (0-100)
+  left: number;   // % from left (0-100)
+  width: number;  // % width (0-100)
+  height: number; // % height (0-100)
+}
+
+export interface FieldGroundingItem {
+  fieldName: string;
+  extractedValue: any;
+  normalizedValue?: string;
+  originalText?: string;
+  originalValueArabic?: string;
+  pageNumber: number;
+  boundingBox?: BoundingBox;
+  confidenceScore: number; // 0.00 to 1.00
+  sourceSnippet?: string;
+  isVerified?: boolean;
+}
+
+export interface DocumentSourceGrounding {
+  documentId?: string;
+  totalPages: number;
+  fields: Record<string, FieldGroundingItem>;
+  groundingQualityScore: number; // 0.00 to 1.00
+}
+
+export interface MasterDataMismatch {
+  field: string;
+  documentValue: any;
+  masterValue: any;
+  severity: 'CRITICAL' | 'WARNING' | 'INFO';
+  description: string;
+}
+
+export interface MasterDataCrossCheckResult {
+  passed: boolean;
+  entityType: 'VEHICLE' | 'DRIVER' | 'PARTNER' | 'INVOICE' | 'WORK_ORDER' | 'NONE';
+  matchedEntityId?: string;
+  matchedEntityName?: string;
+  confidence: number;
+  mismatches: MasterDataMismatch[];
+  summary: string;
+}
+
+export interface DocumentChainItem {
+  docType: 'QUOTATION' | 'PURCHASE_ORDER' | 'WORK_ORDER' | 'INVOICE' | 'PAYMENT';
+  referenceNumber: string;
+  amountAed: number;
+  date: string;
+  status: string;
+}
+
+export interface CrossDocRelationshipResult {
+  hasRelationship: boolean;
+  chain: DocumentChainItem[];
+  quotedAmountAed?: number;
+  poAmountAed?: number;
+  workOrderAmountAed?: number;
+  invoiceAmountAed?: number;
+  varianceAed: number;
+  variancePct: number;
+  isVarianceAcceptable: boolean; // True if variance <= 5%
+  anomalyDetected: boolean;
+  message: string;
+}
+
+export interface DocumentRiskFactor {
+  code: string;
+  label: string;
+  riskPoints: number; // e.g. +35 for master mismatch
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  description: string;
+}
+
+export interface DocumentRiskEvaluation {
+  riskScore: number; // 0 (Zero Risk) to 100 (Max Risk)
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  decision: 'AUTO_PROCESS' | 'HITL_REVIEW_REQUIRED' | 'REJECT';
+  factors: DocumentRiskFactor[];
+  isDuplicate: boolean;
+  duplicateOfDocId?: string;
+  duplicateSimilarityPct?: number;
+  integrityAlerts: string[];
+}
+
+export interface ContractObligationItem {
+  category: 'SLA' | 'TERMINATION' | 'PAYMENT' | 'PENALTY' | 'INSURANCE' | 'MAINTENANCE';
+  clauseNumber?: string;
+  title: string;
+  description: string;
+  penaltyAed?: number;
+  noticePeriodDays?: number;
+  reminderAdvanceDays?: number;
+  recommendedActionDate?: string;
+}
+
+export interface ContractClause {
+  id: string;
+  contractId: string;
+  clauseNumber: string;
+  title: string;
+  content: string;
+  pageNumber: number;
+  obligationType?: string;
+  penaltyAed?: number;
+}
+
+export interface DocumentFeedbackRecord {
+  id: string;
+  tenantId: string;
+  documentId: string;
+  documentType: DocIntelligenceCategory;
+  fieldName: string;
+  predictedValue: string;
+  correctedValue: string;
+  reviewerId: string;
+  modelVersion: string;
+  templateFamily?: string;
+  createdAt: string;
+}
+
+export interface ExtractedVehicleInfo {
+  vin?: string;
+  licensePlate?: string;
+  plateNumber?: string;
+  plateEmirate?: string; // DUBAI, ABU_DHABI, SHARJAH, etc.
+  emirate?: string;
+  plateCode?: string;    // A, B, 1, 2, etc.
+  make?: string;
+  model?: string;
+  year?: number;
+  color?: string;
+  chassisNumber?: string;
+  engineNumber?: string;
+  trafficFileNumber?: string;
+  vehicleClass?: string;
+  ownerName?: string;
+}
+
+export interface ExtractedDriverInfo {
+  fullNameEn?: string;
+  driverName?: string;
+  fullNameAr?: string;
+  licenseNumber?: string;
+  emiratesId?: string;
+  nationality?: string;
+  birthDate?: string;
+  bloodGroup?: string;
+  categories?: string[];
+  heavyBusEligible?: boolean;
+  restrictions?: string[];
+}
+
+export interface ExtractedFinancials {
+  subtotalAed?: number;
+  subtotal?: number;
+  vatRatePct?: number; // 5.0
+  vatAmountAed?: number;
+  taxAmount?: number;
+  totalAmountAed?: number;
+  totalAmount?: number;
+  currency?: string;
+  paymentMethod?: string;
+  paymentTerms?: string;
+  bankAccountIban?: string;
+  bankName?: string;
+  lineItems?: Array<{
+    description: string;
+    quantity: number;
+    unitPriceAed: number;
+    totalPriceAed: number;
+  }>;
+}
+
+export interface ExtractedSupplierInfo {
+  name?: string;
+  supplierName?: string;
+  trnNumber?: string; // 15-digit UAE Tax Registration Number
+  taxNumber?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  issuingAuthority?: string; // RTA, MOI, DED, FTA, etc.
+  tradeLicenseNumber?: string;
+}
+
+export interface DocumentExtractionResult {
+  docCategory: DocIntelligenceCategory;
+  templateFamily?: string;
+  suggestedTitle: string;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  confidenceScore: number; // 0.00 to 1.00
+  referenceNumber?: string;
+  issueDate?: string;     // ISO YYYY-MM-DD
+  expiryDate?: string;    // ISO YYYY-MM-DD
+  vehicle?: ExtractedVehicleInfo;
+  driver?: ExtractedDriverInfo;
+  supplier?: ExtractedSupplierInfo;
+  financials?: ExtractedFinancials;
+  contractObligations?: ContractObligationItem[];
+  grounding?: DocumentSourceGrounding;
+  masterCrossCheck?: MasterDataCrossCheckResult;
+  crossDocRelationship?: CrossDocRelationshipResult;
+  riskEvaluation?: DocumentRiskEvaluation;
+  lifecycleStatus?: DocumentLifecycleStatus;
+  extractedKeyValues?: Record<string, any>;
+  summary: string;
+  rawOcrText?: string;
+  warnings?: string[];
+}
+
+export interface DocumentExtractionRecord {
+  id: string;
+  tenantId: string;
+  fileName: string;
+  fileUrl?: string;
+  fileSize?: number;
+  mimeType?: string;
+  docCategory: DocIntelligenceCategory;
+  templateFamily?: string;
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW';
+  confidenceScore: number;
+  referenceNumber?: string;
+  issueDate?: string;
+  expiryDate?: string;
+  extractedData: DocumentExtractionResult;
+  groundingData?: DocumentSourceGrounding;
+  riskScore: number;
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  autoPopulateStatus: 'APPLIED' | 'PENDING_REVIEW' | 'REJECTED';
+  lifecycleStatus: DocumentLifecycleStatus;
+  linkedEntityType?: 'VEHICLE' | 'DRIVER' | 'INVOICE' | 'WORK_ORDER' | 'SHIPMENT' | 'NONE';
+  linkedEntityId?: string;
+  duplicateHash?: string;
+  appliedAt?: string;
+  appliedBy?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+
+
 
 
 

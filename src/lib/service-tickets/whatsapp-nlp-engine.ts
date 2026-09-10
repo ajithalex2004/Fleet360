@@ -335,28 +335,45 @@ Respond ONLY with a valid JSON object:
 
   try {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: `User Message: "${body}"` }],
-          },
-        ],
-        systemInstruction: {
-          parts: [{ text: systemInstruction }],
+    const payload = JSON.stringify({
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: `User Message: "${body}"` }],
         },
-        generationConfig: {
-          temperature: 0.1,
-          responseMimeType: 'application/json',
-        },
-      }),
+      ],
+      systemInstruction: {
+        parts: [{ text: systemInstruction }],
+      },
+      generationConfig: {
+        temperature: 0.1,
+        responseMimeType: 'application/json',
+      },
     });
 
-    if (!response.ok) {
-      console.warn(`Gemini 2.0 Flash returned HTTP ${response.status}, falling back`);
+    let response: Response | null = null;
+    const maxRetries = 2;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+      });
+
+      if (response.ok) break;
+
+      // Check if transient error (503 UNAVAILABLE, 429)
+      if ((response.status === 503 || response.status === 429) && attempt < maxRetries) {
+        const delay = (process.env.NODE_ENV === 'test' || Boolean(process.env.VITEST)) ? 10 : 800 * Math.pow(2, attempt);
+        console.warn(`[whatsapp-nlp] Gemini 2.0 Flash transient HTTP ${response.status} (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      break;
+    }
+
+    if (!response || !response.ok) {
+      console.warn(`Gemini 2.0 Flash returned HTTP ${response?.status ?? 'error'}, falling back`);
       return fallbackIntent(body, 'FALLBACK');
     }
 

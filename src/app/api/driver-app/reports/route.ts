@@ -42,6 +42,7 @@ import {
   defaultSeverity,
   getRequestSubtypeCatalogue,
 } from '@/lib/driver-reports';
+import { nextReadableId } from '@/lib/service-tickets/schema';
 
 const PostBodySchema = z.object({
   kind: z.enum(['REQUEST', 'INCIDENT']),
@@ -177,9 +178,96 @@ export async function POST(req: NextRequest) {
         )
       `;
 
+      // Centralized Landing Hub: Automatically mirror report to service_tickets
+      let serviceTicketId: string | null = null;
+      let serviceTicketReadableId: string | null = null;
+      try {
+        let vehicleId: string | null = null;
+        if (input.tripId) {
+          const trip = await tx.tripSchedule.findFirst({
+            where: { id: input.tripId, tenantId: ctx.tenantId },
+            select: { vehicleId: true },
+          }).catch(() => null);
+          vehicleId = trip?.vehicleId ?? null;
+        }
+
+        const isBreakdown = input.type === 'BREAKDOWN';
+        const isAccident = input.type === 'ACCIDENT';
+        const ticketType =
+          isBreakdown ? 'TOWING'
+          : isAccident ? 'INCIDENT'
+          : input.type === 'MAINTENANCE' ? 'MAINTENANCE'
+          : input.type === 'CLEANING' ? 'CLEANING'
+          : input.type === 'RENEWAL' ? 'RENEWAL'
+          : input.type === 'PASSENGER_COMPLAINT' ? 'COMPLAINT'
+          : 'SUPPORT';
+
+        const typePrefix =
+          ticketType === 'MAINTENANCE' ? 'MNT'
+          : ticketType === 'TOWING' ? 'TOW'
+          : ticketType === 'INCIDENT' ? 'INC'
+          : ticketType === 'CLEANING' ? 'CLN'
+          : ticketType === 'RENEWAL' ? 'RNW'
+          : ticketType === 'COMPLAINT' ? 'CMP' : 'SUP';
+
+        const ticketPriority =
+          (effectiveSeverity === 'CRITICAL' || effectiveSeverity === 'HIGH' || isBreakdown || isAccident)
+            ? 'High'
+            : (effectiveSeverity === 'MEDIUM' ? 'Medium' : 'Low');
+
+        serviceTicketReadableId = await nextReadableId(ctx.tenantId, ticketType, typePrefix);
+        const historyEntry = {
+          status: 'Pending',
+          date: new Date().toISOString(),
+          actor: `Driver (${ctx.userId})`,
+          note: `Auto-ingested from Driver Mobile App (${input.kind} - ${input.type}${input.subtype ? ` / ${input.subtype}` : ''})`,
+        };
+
+        const customFields = {
+          source: 'DRIVER_APP',
+          assignedDepartment: 'OPERATIONS_TRIAGE',
+          trackingToken: crypto.randomUUID().replace(/-/g, ''),
+          driverReportId: id,
+          kind: input.kind,
+          reportType: input.type,
+          subtype: input.subtype ?? null,
+          tripId: input.tripId ?? null,
+          shiftId: input.shiftId ?? null,
+          location,
+        };
+
+        const [insertedTicket] = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+          `INSERT INTO service_tickets (
+             tenant_id, ticket_type, readable_id, requestor_id, requestor_name,
+             vehicle_id, related_driver_id, title, description, priority, status,
+             history, custom_fields
+           ) VALUES (
+             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'Pending',
+             $11::jsonb, $12::jsonb
+           ) RETURNING id::text`,
+          ctx.tenantId,
+          ticketType,
+          serviceTicketReadableId,
+          ctx.userId,
+          `Driver (${ctx.userId})`,
+          vehicleId,
+          ctx.userId,
+          `[Driver App] ${input.title}`,
+          input.description ?? `Driver reported ${input.kind}: ${input.type}`,
+          ticketPriority,
+          JSON.stringify([historyEntry]),
+          JSON.stringify(customFields),
+        );
+        serviceTicketId = insertedTicket?.id ?? null;
+      } catch (mirrorErr) {
+        console.warn('[driver-app/reports] Failed to mirror to service_tickets:', mirrorErr);
+      }
+
       return NextResponse.json({
         ok: true,
         id,
+        serviceTicketId,
+        serviceTicketReadableId,
         status: 'OPEN',
         kind: input.kind,
         type: input.type,

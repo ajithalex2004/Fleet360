@@ -10,25 +10,28 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getBrandingByCode, getBrandingByDomain } from '@/lib/branding';
-
+import { getBranding, getBrandingByCode, getBrandingByDomain } from '@/lib/branding';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
+
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
-  if (!authz.ok) {
-    return NextResponse.json({ error: authz.error }, { status: authz.status });
-  }
-  const { tenantId } = authz;
-
   const url = new URL(req.url);
   const code   = url.searchParams.get('tenant') ?? '';
   const domain = url.searchParams.get('domain') ?? '';
 
   let branding = null;
-  if (code)   branding = await getBrandingByCode(code.trim());
-  else if (domain) branding = await getBrandingByDomain(domain.trim());
+  if (code) {
+    branding = await getBrandingByCode(code.trim());
+  } else if (domain) {
+    branding = await getBrandingByDomain(domain.trim());
+  } else {
+    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    branding = await getBranding(authz.tenantId);
+  }
 
   return NextResponse.json({ ok: true, branding }, {
     headers: { 'Cache-Control': 'public, max-age=60, stale-while-revalidate=300' },

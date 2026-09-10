@@ -41,6 +41,9 @@ interface Row {
 
 function rowToApi(r: Row, matrix?: SlaMatrix) {
   const priority = r.priority as TicketPriority;
+  const customFields = (r.custom_fields && typeof r.custom_fields === 'object') ? r.custom_fields as Record<string, unknown> : {};
+  const assignedDepartment = (customFields.assignedDepartment as any) || 'OPERATIONS_TRIAGE';
+  const source = (customFields.source as any) || 'WEB';
   return {
     id: r.id, tenantId: r.tenant_id, ticketType: r.ticket_type, readableId: r.readable_id,
     requestorId: r.requestor_id, requestorName: r.requestor_name,
@@ -48,10 +51,12 @@ function rowToApi(r: Row, matrix?: SlaMatrix) {
     title: r.title, description: r.description, priority: r.priority, status: r.status,
     dueDate: r.due_date, assignedTo: r.assigned_to,
     maintenanceRequestId: r.maintenance_request_id,
+    assignedDepartment,
+    source,
     history:     Array.isArray(r.history)     ? r.history     : [],
     attachments: Array.isArray(r.attachments) ? r.attachments : [],
     comments:    Array.isArray(r.comments)    ? r.comments    : [],
-    customFields: (r.custom_fields && typeof r.custom_fields === 'object') ? r.custom_fields as Record<string, unknown> : {},
+    customFields,
     createdAt: r.created_at, updatedAt: r.updated_at,
     slaTargetHours: matrix ? pickSlaHours(matrix, priority) : undefined,
   };
@@ -116,6 +121,69 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 
       const existing = await loadTicket(tenantId, id);
       if (!existing) return NextResponse.json({ ok: false, error: 'Ticket not found' }, { status: 404 });
+
+      // P0 Governance: Segregation of Duties & Approval Authorization
+      if (body.status === 'Approved' || body.status === 'Rejected') {
+        // 1. Requesters cannot approve/reject their own tickets
+        if (userId && existing.requestor_id && userId === existing.requestor_id) {
+          return NextResponse.json(
+            { ok: false, error: 'Requesters cannot approve or reject their own service tickets (segregation of duties).' },
+            { status: 403 }
+          );
+        }
+
+        // 2. Caller must have approval role or explicit service_ticket.approve permission
+        const userRole = req.headers.get('x-user-role') || '';
+        const userPerms = req.headers.get('x-user-permissions')?.split(',') || [];
+        const isApprover =
+          ['TENANT_ADMIN', 'FLEET_MANAGER', 'OPERATIONS_MANAGER', 'SUPER_ADMIN'].includes(userRole) ||
+          userPerms.includes('service_ticket.approve') ||
+          userPerms.includes('*:*:*');
+
+        if (!isApprover) {
+          return NextResponse.json(
+            { ok: false, error: 'You do not have authorization to approve or reject service tickets.' },
+            { status: 403 }
+          );
+        }
+
+        // 3. State transition validity check
+        const validSourceStatuses = ['Pending', 'Awaiting Approval', 'Escalated', 'Open'];
+        if (!validSourceStatuses.includes(existing.status)) {
+          return NextResponse.json(
+            { ok: false, error: `Invalid state transition: ticket in '${existing.status}' cannot be transitioned to '${body.status}'.` },
+            { status: 400 }
+          );
+        }
+      }
+
+      // P0 Safety: If ticket is resolved/completed and vehicle was linked, check if vehicle can be ungrounded
+      if ((body.status === 'Resolved' || body.status === 'Completed') && existing.vehicle_id) {
+        try {
+          const otherCritical = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+            `SELECT id FROM service_tickets
+             WHERE tenant_id = $1
+               AND vehicle_id = $2
+               AND id != $3::uuid
+               AND priority = 'CRITICAL'
+               AND status NOT IN ('Resolved', 'Completed', 'Closed', 'Rejected')
+               AND deleted_at IS NULL
+             LIMIT 1`,
+            tenantId,
+            existing.vehicle_id,
+            id
+          );
+
+          if (!otherCritical || otherCritical.length === 0) {
+            await tx.vehicle.updateMany({
+              where: { id: existing.vehicle_id, status: 'GROUNDED' },
+              data: { status: 'AVAILABLE', isActive: true },
+            });
+          }
+        } catch (unGroundErr) {
+          console.warn('[service-tickets] Failed to check/unground vehicle:', unGroundErr);
+        }
+      }
 
       // Build dynamic UPDATE
       const sets: string[] = [];

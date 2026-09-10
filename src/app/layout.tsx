@@ -44,11 +44,11 @@ const CHUNK_ERROR_RECOVERY = `(function(){var K='fleet360-chunk-reload-at',W=100
 // affected tab immediately starts hitting the network again.
 const SW_SCOPE_CLEANUP = `(function(){if(!('serviceWorker' in navigator))return;var K='fleet360-sw-cleanup-done';try{if(sessionStorage.getItem(K))return;}catch(_){}navigator.serviceWorker.getRegistrations().then(function(regs){var bad=regs.filter(function(r){return (r.scope||'').indexOf('/rental/counter')===-1;});if(bad.length===0)return;Promise.all(bad.map(function(r){return r.unregister();})).then(function(){try{sessionStorage.setItem(K,'1');}catch(_){}var clear=(window.caches&&caches.keys)?caches.keys().then(function(names){return Promise.all(names.map(function(n){return caches.delete(n);}));}):Promise.resolve();clear.catch(function(){}).then(function(){window.location.reload();});});}).catch(function(){});})();`;
 
-const LANG_NO_FLASH = `(function(){try{var l=localStorage.getItem('xlai_language')||'ar';document.documentElement.lang=l;document.documentElement.dir=l==='ar'?'rtl':'ltr';}catch(_){document.documentElement.lang='ar';document.documentElement.dir='rtl';}})();`;
+const LANG_NO_FLASH = `(function(){try{var l=localStorage.getItem('xlai_language')||'en';document.documentElement.lang=l;document.documentElement.dir=l==='ar'?'rtl':'ltr';}catch(_){document.documentElement.lang='en';document.documentElement.dir='ltr';}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ar" dir="rtl" suppressHydrationWarning>
+    <html lang="en" dir="ltr" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: LANG_NO_FLASH }} />
         <script dangerouslySetInnerHTML={{ __html: CHUNK_ERROR_RECOVERY }} />

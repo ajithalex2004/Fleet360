@@ -36,6 +36,8 @@ export interface GatewayOptions {
   forceFresh?: boolean;
   fallbackText?: string;
   responseFormat?: 'text' | 'json';
+  maxRetries?: number;
+  retryBaseDelayMs?: number;
 }
 
 export interface GatewayVisionOptions extends GatewayOptions {
@@ -108,6 +110,94 @@ const ALIAS_MODEL_MAP: Record<
   VISION_HIGH_ACCURACY: { openai: 'gpt-4o', gemini: 'gemini-pro-latest', anthropic: 'claude-3-5-sonnet-20241022' },
   STRUCTURED_EXTRACTION:{ openai: 'gpt-4o-mini', gemini: 'gemini-flash-latest', anthropic: 'claude-3-5-haiku-20241022' },
 };
+
+// ── Resilient HTTP Fetch with Exponential Backoff & Jitter ───────────────────
+
+interface RetryFetchConfig {
+  maxRetries?: number;
+  baseDelayMs?: number;
+  maxDelayMs?: number;
+  providerName: string;
+}
+
+const IS_TEST_ENV = typeof process !== 'undefined' && (process.env.NODE_ENV === 'test' || Boolean(process.env.VITEST));
+
+const DEFAULT_RETRY_CONFIG = {
+  maxRetries: 2,
+  baseDelayMs: IS_TEST_ENV ? 10 : 800,
+  maxDelayMs: IS_TEST_ENV ? 50 : 3500,
+};
+
+function isTransientHttpStatus(status: number): boolean {
+  // 429: Rate limit / quota exhausted
+  // 500: Internal server error
+  // 502: Bad Gateway
+  // 503: Service Unavailable / High demand / UNAVAILABLE
+  // 504: Gateway Timeout
+  // 529: Site overloaded (Anthropic)
+  return status === 429 || status === 500 || status === 502 || status === 503 || status === 504 || status === 529;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function fetchWithExponentialBackoff(
+  url: string,
+  init: RequestInit,
+  config: RetryFetchConfig,
+): Promise<Response> {
+  const maxRetries = config.maxRetries ?? DEFAULT_RETRY_CONFIG.maxRetries;
+  const baseDelayMs = config.baseDelayMs ?? DEFAULT_RETRY_CONFIG.baseDelayMs;
+  const maxDelayMs = config.maxDelayMs ?? DEFAULT_RETRY_CONFIG.maxDelayMs;
+
+  let lastResponse: Response | null = null;
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(url, init);
+      lastResponse = res;
+
+      if (res.ok) {
+        return res;
+      }
+
+      // Check if transient error and we have retries remaining
+      if (isTransientHttpStatus(res.status) && attempt < maxRetries) {
+        const jitter = IS_TEST_ENV ? 0 : Math.floor(Math.random() * 200);
+        const delay = Math.min(maxDelayMs, baseDelayMs * Math.pow(2, attempt)) + jitter;
+
+        console.warn(
+          `[ai-gateway] ${config.providerName} transient HTTP ${res.status} (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay}ms...`
+        );
+
+        await sleep(delay);
+        continue;
+      }
+
+      // Not transient or retries exhausted
+      return res;
+    } catch (networkErr) {
+      lastError = networkErr;
+      if (attempt < maxRetries) {
+        const jitter = IS_TEST_ENV ? 0 : Math.floor(Math.random() * 200);
+        const delay = Math.min(maxDelayMs, baseDelayMs * Math.pow(2, attempt)) + jitter;
+
+        console.warn(
+          `[ai-gateway] ${config.providerName} network exception (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay}ms...`
+        );
+
+        await sleep(delay);
+        continue;
+      }
+      throw networkErr;
+    }
+  }
+
+  if (lastResponse) return lastResponse;
+  throw lastError ?? new Error(`[ai-gateway] ${config.providerName} call failed after ${maxRetries + 1} attempts`);
+}
 
 export class AIGatewayService {
   /**
@@ -405,14 +495,20 @@ export class AIGatewayService {
       payload.response_format = { type: 'json_object' };
     }
 
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const retryConfig: RetryFetchConfig = {
+      providerName: 'OpenAI',
+      maxRetries: options.maxRetries,
+      baseDelayMs: options.retryBaseDelayMs,
+    };
+
+    const res = await fetchWithExponentialBackoff('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify(payload),
-    });
+    }, retryConfig);
 
     if (!res.ok) {
       throw new Error(`OpenAI HTTP ${res.status}: ${await res.text()}`);
@@ -464,58 +560,99 @@ export class AIGatewayService {
     apiKey: string,
   ): Promise<GatewayResponse> {
     const alias = options.capabilityAlias ?? 'ECONOMY_TEXT';
-    const contents = messages.map(m => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }],
-    }));
+    const retryConfig: RetryFetchConfig = {
+      providerName: 'Gemini',
+      maxRetries: options.maxRetries,
+      baseDelayMs: options.retryBaseDelayMs,
+    };
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents }),
-    });
+    const invokeGeminiModel = async (targetModel: string): Promise<GatewayResponse> => {
+      const contents = messages.map(m => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }],
+      }));
 
-    if (!res.ok) {
-      throw new Error(`Gemini HTTP ${res.status}: ${await res.text()}`);
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`;
+      const res = await fetchWithExponentialBackoff(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents }),
+      }, retryConfig);
+
+      if (!res.ok) {
+        const errorBody = await res.text();
+        const err = new Error(`Gemini HTTP ${res.status}: ${errorBody}`);
+        (err as any).status = res.status;
+        (err as any).body = errorBody;
+        throw err;
+      }
+
+      const data = await res.json() as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+        usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+      };
+
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+      const inputTokens = data.usageMetadata?.promptTokenCount ?? 100;
+      const outputTokens = data.usageMetadata?.candidatesTokenCount ?? 50;
+      const cost = calculateTokenCost(alias, inputTokens, outputTokens);
+
+      const telemetry: AgentRunTelemetry = {
+        modelAlias: alias,
+        modelProvider: 'gemini',
+        inputTokens,
+        outputTokens,
+        cachedTokens: 0,
+        costUsd: cost.costUsd,
+        costAed: cost.costAed,
+      };
+
+      return {
+        content: text.trim(),
+        capabilityAlias: alias,
+        model: targetModel,
+        provider: 'gemini',
+        inputTokens,
+        outputTokens,
+        cachedTokens: 0,
+        isCacheHit: false,
+        fromFallback: false,
+        costUsd: cost.costUsd,
+        costAed: cost.costAed,
+        costAvoidedUsd: 0,
+        costAvoidedAed: 0,
+        telemetry,
+      };
+    };
+
+    try {
+      return await invokeGeminiModel(model);
+    } catch (primaryErr: any) {
+      // In-Provider Graceful Model Fallback:
+      // If primary model was a Pro model (gemini-pro-latest, gemini-2.5-pro, etc.) and failed with 503 UNAVAILABLE or capacity exhaustion,
+      // failover to Flash model (gemini-flash-latest) which has significantly higher throughput and separate capacity allocations.
+      const errorMsg = String(primaryErr?.message || primaryErr?.body || '');
+      const isCapacityError =
+        primaryErr?.status === 503 ||
+        errorMsg.includes('UNAVAILABLE') ||
+        errorMsg.includes('high demand');
+
+      const isProModel = model.toLowerCase().includes('pro');
+
+      if (isCapacityError && isProModel && model !== 'gemini-flash-latest') {
+        console.warn(
+          `[ai-gateway] Gemini Pro model (${model}) capacity exhausted / UNAVAILABLE. Initiating in-provider fallback to gemini-flash-latest...`
+        );
+        try {
+          return await invokeGeminiModel('gemini-flash-latest');
+        } catch (flashErr) {
+          console.warn('[ai-gateway] In-provider Flash fallback also failed:', flashErr);
+          throw primaryErr;
+        }
+      }
+
+      throw primaryErr;
     }
-
-    const data = await res.json() as {
-      candidates: Array<{ content: { parts: Array<{ text: string }> } }>;
-      usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
-    };
-
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    const inputTokens = data.usageMetadata?.promptTokenCount ?? 100;
-    const outputTokens = data.usageMetadata?.candidatesTokenCount ?? 50;
-    const cost = calculateTokenCost(alias, inputTokens, outputTokens);
-
-    const telemetry: AgentRunTelemetry = {
-      modelAlias: alias,
-      modelProvider: 'gemini',
-      inputTokens,
-      outputTokens,
-      cachedTokens: 0,
-      costUsd: cost.costUsd,
-      costAed: cost.costAed,
-    };
-
-    return {
-      content: text.trim(),
-      capabilityAlias: alias,
-      model,
-      provider: 'gemini',
-      inputTokens,
-      outputTokens,
-      cachedTokens: 0,
-      isCacheHit: false,
-      fromFallback: false,
-      costUsd: cost.costUsd,
-      costAed: cost.costAed,
-      costAvoidedUsd: 0,
-      costAvoidedAed: 0,
-      telemetry,
-    };
   }
 
   private async callAnthropic(
@@ -538,7 +675,13 @@ export class AIGatewayService {
     };
     if (systemMessage) body.system = systemMessage;
 
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    const retryConfig: RetryFetchConfig = {
+      providerName: 'Anthropic',
+      maxRetries: options.maxRetries,
+      baseDelayMs: options.retryBaseDelayMs,
+    };
+
+    const res = await fetchWithExponentialBackoff('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -546,7 +689,7 @@ export class AIGatewayService {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify(body),
-    });
+    }, retryConfig);
 
     if (!res.ok) {
       throw new Error(`Anthropic HTTP ${res.status}: ${await res.text()}`);

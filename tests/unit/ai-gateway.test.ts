@@ -182,4 +182,115 @@ describe('Phase 4: Shared Fleet360 AI Gateway & Capability Aliases', () => {
       expect(res.model).toBe('deterministic-fallback');
     });
   });
+
+  describe('6. Google GenAI Transient Capacity Resilience & In-Provider Fallback', () => {
+    it('retries on transient HTTP 503 UNAVAILABLE ("high demand") and recovers on subsequent attempt', async () => {
+      const gateway = new AIGatewayService();
+      process.env.GEMINI_API_KEY = 'mock-gemini-key';
+
+      let callCount = 0;
+      const originalFetch = global.fetch;
+      global.fetch = vi.fn().mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          // Attempt 1: Google Capacity Spike
+          return {
+            ok: false,
+            status: 503,
+            text: async () => JSON.stringify({
+              error: {
+                code: 503,
+                message: 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.',
+                status: 'UNAVAILABLE',
+              },
+            }),
+          };
+        }
+        // Attempt 2: Recovered
+        return {
+          ok: true,
+          json: async () => ({
+            candidates: [{ content: { parts: [{ text: 'Operational analysis resumed after transient capacity spike.' }] } }],
+            usageMetadata: { promptTokenCount: 200, candidatesTokenCount: 50 },
+          }),
+        };
+      });
+
+      try {
+        const res = await gateway.chat(
+          [{ role: 'user', content: 'Analyze fleet route telemetry' }],
+          {
+            preferredProvider: 'gemini',
+            retryBaseDelayMs: 5,
+            maxRetries: 2,
+          }
+        );
+
+        expect(callCount).toBe(2);
+        expect(res.provider).toBe('gemini');
+        expect(res.content).toBe('Operational analysis resumed after transient capacity spike.');
+        expect(res.fromFallback).toBe(false);
+      } finally {
+        global.fetch = originalFetch;
+      }
+    });
+
+    it('gracefully degrades from gemini-pro-latest to gemini-flash-latest when Pro capacity is saturated', async () => {
+      const gateway = new AIGatewayService();
+      process.env.GEMINI_API_KEY = 'mock-gemini-key';
+
+      const requestedUrls: string[] = [];
+      const originalFetch = global.fetch;
+      global.fetch = vi.fn().mockImplementation(async (url: string) => {
+        requestedUrls.push(url);
+        if (url.includes('gemini-pro-latest')) {
+          // Pro model is saturated
+          return {
+            ok: false,
+            status: 503,
+            text: async () => JSON.stringify({
+              error: {
+                code: 503,
+                message: 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.',
+                status: 'UNAVAILABLE',
+              },
+            }),
+          };
+        }
+        if (url.includes('gemini-flash-latest')) {
+          // Flash model has available capacity
+          return {
+            ok: true,
+            json: async () => ({
+              candidates: [{ content: { parts: [{ text: 'Flash model completed high-demand reasoning task successfully.' }] } }],
+              usageMetadata: { promptTokenCount: 250, candidatesTokenCount: 60 },
+            }),
+          };
+        }
+        return { ok: false, status: 500 };
+      });
+
+      try {
+        const res = await gateway.chat(
+          [{ role: 'user', content: 'Complex lease dispute arbitration reasoning' }],
+          {
+            preferredProvider: 'gemini',
+            capabilityAlias: 'STANDARD_REASONING', // targets gemini-pro-latest
+            retryBaseDelayMs: 5,
+            maxRetries: 1,
+          }
+        );
+
+        expect(res.provider).toBe('gemini');
+        expect(res.model).toBe('gemini-flash-latest'); // Successfully degraded in-provider
+        expect(res.content).toBe('Flash model completed high-demand reasoning task successfully.');
+        expect(res.fromFallback).toBe(false);
+        // Verify both Pro and Flash were requested
+        expect(requestedUrls.some(u => u.includes('gemini-pro-latest'))).toBe(true);
+        expect(requestedUrls.some(u => u.includes('gemini-flash-latest'))).toBe(true);
+      } finally {
+        global.fetch = originalFetch;
+      }
+    });
+  });
 });

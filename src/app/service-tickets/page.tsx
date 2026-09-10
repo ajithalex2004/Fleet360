@@ -17,14 +17,15 @@
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { Headphones, Plus, AlertCircle, Clock, ChevronRight, ArrowUpRight, MessageSquare, Star } from 'lucide-react';
+import { Headphones, Plus, AlertCircle, Clock, ChevronRight, ArrowUpRight, MessageSquare, Star, Send, Inbox } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
-import { TICKET_TYPES_ORDER } from '@/types/service-tickets';
-import type { TicketType, ServiceTicket, TenantTicketTypeAccess, FormFieldDef } from '@/types/service-tickets';
+import { TICKET_TYPES_ORDER, TICKET_DEPARTMENTS } from '@/types/service-tickets';
+import type { TicketType, ServiceTicket, TenantTicketTypeAccess, FormFieldDef, TicketDepartment } from '@/types/service-tickets';
 import type { ServiceTone } from '@/types/service-config';
 import { getServiceIcon } from '@/lib/service-tickets/icons';
 import { createMaintenanceRequest } from '@/services/mockData';
 import { ContextDrawer360 } from './components/context-drawer-360';
+import { ForwardTicketModal } from './components/forward-ticket-modal';
 
 /** Map of ticket type → resolved form fields, sourced from
  *  /api/service-tickets/form-fields. Empty array for a type means
@@ -126,9 +127,11 @@ export default function ServiceTicketsHome() {
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState<string | null>(null);
 
-  const [activeType, setActiveType]   = useState<TicketType | 'ALL'>('ALL');
-  const [showForm, setShowForm]       = useState(false);
-  const [drawerTicketId, setDrawerTicketId] = useState<string | null>(null);
+  const [activeType, setActiveType]             = useState<TicketType | 'ALL'>('ALL');
+  const [activeDepartment, setActiveDepartment] = useState<TicketDepartment | 'ALL'>('ALL');
+  const [showForm, setShowForm]                 = useState(false);
+  const [drawerTicketId, setDrawerTicketId]     = useState<string | null>(null);
+  const [forwardingTicket, setForwardingTicket] = useState<ServiceTicket | null>(null);
 
   // Bulk select
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -191,9 +194,13 @@ export default function ServiceTicketsHome() {
 
   // ── Filter ────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
-    if (activeType === 'ALL') return tickets;
-    return tickets.filter(t => t.ticketType === activeType);
-  }, [tickets, activeType]);
+    return tickets.filter(t => {
+      const matchesType = activeType === 'ALL' || t.ticketType === activeType;
+      const dept = t.assignedDepartment || 'OPERATIONS_TRIAGE';
+      const matchesDept = activeDepartment === 'ALL' || dept === activeDepartment;
+      return matchesType && matchesDept;
+    });
+  }, [tickets, activeType, activeDepartment]);
 
   // ── Counts per type for tabs ─────────────────────────────────────────
   const countByType = useMemo(() => {
@@ -201,6 +208,17 @@ export default function ServiceTicketsHome() {
     for (const type of TICKET_TYPES_ORDER) out[type] = 0;
     for (const t of tickets) {
       out[t.ticketType] = (out[t.ticketType] ?? 0) + 1;
+    }
+    return out;
+  }, [tickets]);
+
+  // ── Counts per department for tabs ───────────────────────────────────
+  const countByDept = useMemo(() => {
+    const out: Record<string, number> = { ALL: tickets.length };
+    for (const dept of TICKET_DEPARTMENTS) out[dept.key] = 0;
+    for (const t of tickets) {
+      const d = t.assignedDepartment || 'OPERATIONS_TRIAGE';
+      out[d] = (out[d] ?? 0) + 1;
     }
     return out;
   }, [tickets]);
@@ -392,10 +410,76 @@ export default function ServiceTicketsHome() {
         </div>
       )}
 
+      {/* Operations Department Filter */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+            <Inbox className="w-3.5 h-3.5 text-violet-400" /> Operations Department Filter
+          </span>
+          {countByDept.OPERATIONS_TRIAGE > 0 && (
+            <button
+              onClick={() => setActiveDepartment('OPERATIONS_TRIAGE')}
+              className="text-xs font-semibold text-amber-300 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 px-2.5 py-1 rounded-full flex items-center gap-2 transition-colors cursor-pointer"
+            >
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+              <span>{countByDept.OPERATIONS_TRIAGE} tickets pending triage</span>
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-1.5 bg-slate-900/60 border border-white/10 rounded-2xl p-1.5">
+          <button
+            onClick={() => setActiveDepartment('ALL')}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              activeDepartment === 'ALL'
+                ? 'bg-violet-600/30 text-violet-200 border border-violet-500/40 font-semibold'
+                : 'text-slate-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            All Departments
+            <span className="text-[10px] tabular-nums px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-300">
+              {countByDept.ALL}
+            </span>
+          </button>
+          {TICKET_DEPARTMENTS.map((dept) => {
+            const active = activeDepartment === dept.key;
+            const count = countByDept[dept.key] ?? 0;
+            const isTriage = dept.key === 'OPERATIONS_TRIAGE';
+            return (
+              <button
+                key={dept.key}
+                onClick={() => setActiveDepartment(dept.key)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  active
+                    ? isTriage
+                      ? 'bg-amber-500/30 text-amber-200 border border-amber-500/50 font-bold'
+                      : 'bg-white/15 text-white border border-white/30 font-bold'
+                    : isTriage && count > 0
+                      ? 'text-amber-300/90 bg-amber-500/10 hover:bg-amber-500/20'
+                      : 'text-slate-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                {dept.label}
+                <span
+                  className={`text-[10px] tabular-nums px-1.5 py-0.5 rounded-full ${
+                    isTriage && count > 0
+                      ? 'bg-amber-500/40 text-amber-200 font-bold'
+                      : active
+                        ? 'bg-black/30'
+                        : 'bg-slate-700/60'
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* Type tabs */}
       <div className="flex flex-wrap gap-1.5 bg-slate-900/40 border border-white/10 rounded-2xl p-1.5">
         <TabBtn active={activeType === 'ALL'} onClick={() => setActiveType('ALL')}
-          label="All" count={countByType.ALL} tone="violet" />
+          label="All Types" count={countByType.ALL} tone="violet" />
         {enabledTypes.map(({ type, cfg }) => (
           <TabBtn key={type}
             active={activeType === type}
@@ -463,6 +547,7 @@ export default function ServiceTicketsHome() {
               onToggleSelect={() => toggleSelected(t.id)}
               onStatusChange={(status) => handleStatusChange(t, status)}
               onOpen360={() => setDrawerTicketId(t.id)}
+              onForward={() => setForwardingTicket(t)}
             />
           ))}
         </div>
@@ -477,6 +562,19 @@ export default function ServiceTicketsHome() {
           if (target) {
             handleStatusChange(target, newStatus);
             setDrawerTicketId(null);
+          }
+        }}
+      />
+
+      {/* Forward Ticket to Department Modal */}
+      <ForwardTicketModal
+        ticket={forwardingTicket}
+        isOpen={!!forwardingTicket}
+        onClose={() => setForwardingTicket(null)}
+        onSuccess={(updated, createdMr) => {
+          setTickets(prev => prev.map(t => t.id === updated.id ? updated : t));
+          if (createdMr) {
+            alert(`Ticket forwarded to Workshop & Maintenance. Created Work Order #${createdMr.workOrderNo || createdMr.id}`);
           }
         }}
       />
@@ -517,7 +615,27 @@ function BulkBtn({ label, onClick, disabled, cls }: { label: string; onClick: ()
   );
 }
 
-function TicketCard({ ticket, formFields, typeConfig, selected, onToggleSelect, onStatusChange, onOpen360 }: {
+const DEPT_BADGE_STYLE: Record<
+  TicketDepartment,
+  { label: string; bg: string; text: string; border: string }
+> = {
+  OPERATIONS_TRIAGE: { label: 'Triage Hopper', bg: 'bg-slate-500/20', text: 'text-slate-300', border: 'border-slate-500/40' },
+  WORKSHOP_MAINTENANCE: { label: 'Workshop', bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/40' },
+  RECOVERY_DISPATCH: { label: 'Recovery', bg: 'bg-rose-500/20', text: 'text-rose-300', border: 'border-rose-500/40' },
+  SAFETY_COMPLIANCE: { label: 'Compliance', bg: 'bg-violet-500/20', text: 'text-violet-300', border: 'border-violet-500/40' },
+  CUSTOMER_SERVICE: { label: 'Customer Care', bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-500/40' },
+  FACILITIES_CLEANING: { label: 'Cleaning', bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/40' },
+};
+
+const SOURCE_BADGES: Record<string, { label: string; cls: string }> = {
+  DRIVER_APP: { label: 'Driver App', cls: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' },
+  WHATSAPP: { label: 'WhatsApp', cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' },
+  DVIR: { label: 'DVIR Defect', cls: 'bg-amber-500/20 text-amber-300 border-amber-500/40' },
+  TELEMATICS: { label: 'Telematics', cls: 'bg-purple-500/20 text-purple-300 border-purple-500/40' },
+  WEB: { label: 'Web Portal', cls: 'bg-slate-500/20 text-slate-300 border-slate-500/40' },
+};
+
+function TicketCard({ ticket, formFields, typeConfig, selected, onToggleSelect, onStatusChange, onOpen360, onForward }: {
   ticket: ServiceTicket;
   formFields?: FormFieldDef[];
   typeConfig?: ServiceTypeConfig;
@@ -525,6 +643,7 @@ function TicketCard({ ticket, formFields, typeConfig, selected, onToggleSelect, 
   onToggleSelect: () => void;
   onStatusChange: (s: 'Acknowledged' | 'Resolved' | 'Assigned' | 'Escalated' | 'Pending' | 'Rejected') => void;
   onOpen360?: () => void;
+  onForward?: () => void;
 }) {
   const Icon = getServiceIcon(typeConfig?.iconName);
   const tone = typeConfig?.tone ?? 'violet';
@@ -532,6 +651,11 @@ function TicketCard({ ticket, formFields, typeConfig, selected, onToggleSelect, 
   const age = pendingAge(ticket);
   const isHigh = ticket.priority === 'High';
   const awaitingApproval = ticket.status === 'Awaiting Approval';
+
+  const dept = ticket.assignedDepartment || 'OPERATIONS_TRIAGE';
+  const deptBadge = DEPT_BADGE_STYLE[dept] || DEPT_BADGE_STYLE.OPERATIONS_TRIAGE;
+  const source = ticket.source || 'WEB';
+  const sourceBadge = SOURCE_BADGES[source] || SOURCE_BADGES.WEB;
 
   // Surface fields marked `preview: true` from the resolved per-type schema
   // as a small strip below the description. Schema sourced from the parent
@@ -569,9 +693,19 @@ function TicketCard({ ticket, formFields, typeConfig, selected, onToggleSelect, 
       <div className="relative z-10 flex-1">
         {/* ID row */}
         <div className="flex justify-between items-start mb-3 gap-2">
-          <span className="text-[11px] font-mono font-semibold text-slate-300 bg-slate-700/40 px-2 py-0.5 rounded" title={ticket.id}>
-            {ticket.readableId ?? ticket.id.slice(0, 12)}
-          </span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[11px] font-mono font-semibold text-slate-300 bg-slate-700/40 px-2 py-0.5 rounded" title={ticket.id}>
+              {ticket.readableId ?? ticket.id.slice(0, 12)}
+            </span>
+            <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold border ${deptBadge.bg} ${deptBadge.text} ${deptBadge.border}`}>
+              {deptBadge.label}
+            </span>
+            {source !== 'WEB' && (
+              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${sourceBadge.cls}`}>
+                {sourceBadge.label}
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-1.5">
             {age && (
               <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold border tabular-nums inline-flex items-center gap-1 ${
@@ -682,6 +816,18 @@ function TicketCard({ ticket, formFields, typeConfig, selected, onToggleSelect, 
             title="Open Vehicle, Driver, Lease & Incident 360 Drawer"
           >
             🔍 360 Context
+          </button>
+        )}
+        {onForward && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onForward();
+            }}
+            className="text-[11px] px-2.5 py-1 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 text-violet-200 border border-violet-500/40 font-semibold inline-flex items-center gap-1 transition-colors"
+            title="Forward ticket to Workshop, Recovery, Safety, Customer Service, or Cleaning"
+          >
+            <Send className="w-3 h-3" /> Forward
           </button>
         )}
         {awaitingApproval && (

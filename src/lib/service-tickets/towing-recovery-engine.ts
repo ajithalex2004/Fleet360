@@ -149,6 +149,10 @@ export async function getRecoveryAndReplacementOptions(
 
   if (!ticket) return null;
 
+  const customFields = (ticket.custom_fields || {}) as Record<string, unknown>;
+  const towingDetails = customFields.towingDispatch as Record<string, unknown> | undefined;
+  const replacementDetails = customFields.replacementProvision as Record<string, unknown> | undefined;
+
   // 2. Fetch Grounded Vehicle Details
   let vehiclePlate: string | null = null;
   let vehicleGroup = 'BUS';
@@ -195,9 +199,64 @@ export async function getRecoveryAndReplacementOptions(
     currentMileage: v.currentMileage ? Number(v.currentMileage) : 24000,
   }));
 
-  const customFields = ticket.custom_fields || {};
-  const towingDetails = customFields.towingDispatch as RecoveryOptionsData['towingDispatchDetails'];
-  const replacementDetails = customFields.replacementProvision as RecoveryOptionsData['replacementDetails'];
+  // 4. Query Dynamic Recovery & Towing Vendors from Database (Garages)
+  const breakdownLocation =
+    (customFields.extractedLocation as string) || 'Sheikh Zayed Road near Exit 36, Dubai, UAE';
+
+  const dbGarages = await prisma.garage.findMany({
+    where: {
+      tenantId,
+      deletedAt: null,
+    },
+    take: 10,
+    select: {
+      id: true,
+      name: true,
+      location: true,
+      contactNumber: true,
+      contactPerson: true,
+      specialties: true,
+      isInternal: true,
+    },
+  }).catch(() => []);
+
+  const dynamicVendors: RecoveryVendorOption[] = dbGarages
+    .filter((g) => {
+      const specs = (g.specialties || []).map((s) => s.toUpperCase());
+      return (
+        specs.includes('TOWING') ||
+        specs.includes('RECOVERY') ||
+        specs.includes('ROADSIDE') ||
+        specs.includes('BREAKDOWN') ||
+        g.isInternal === false
+      );
+    })
+    .map((g) => {
+      const loc = g.location || breakdownLocation;
+      const eta = calculateRecoveryEta(loc, false);
+      return {
+        id: g.id,
+        name: g.name || 'Approved Garage Recovery Partner',
+        phone: g.contactNumber || '+971 4 000 0000',
+        rating: 4.8,
+        flatbedAvailable: true,
+        heavyTowingAvailable: (g.specialties || []).some((s) =>
+          s.toLowerCase().includes('heavy')
+        ),
+        estimatedEtaMinutes: eta,
+        coverageEmirate: g.location || 'UAE National Coverage',
+      };
+    });
+
+  const approvedVendors: RecoveryVendorOption[] =
+    dynamicVendors.length > 0
+      ? [
+          ...dynamicVendors,
+          ...DEFAULT_APPROVED_VENDORS.filter(
+            (d) => !dynamicVendors.some((v) => v.name.toLowerCase() === d.name.toLowerCase())
+          ),
+        ]
+      : DEFAULT_APPROVED_VENDORS;
 
   return {
     ticketId: ticket.id,
@@ -205,13 +264,12 @@ export async function getRecoveryAndReplacementOptions(
     vehicleId: ticket.vehicle_id,
     vehiclePlate,
     vehicleGroup,
-    breakdownLocation:
-      (customFields.extractedLocation as string) || 'Sheikh Zayed Road near Exit 36, Dubai, UAE',
+    breakdownLocation,
     isTowingDispatched: !!towingDetails,
     isReplacementProvisioned: !!replacementDetails,
     towingDispatchDetails: towingDetails || null,
     replacementDetails: replacementDetails || null,
-    approvedVendors: DEFAULT_APPROVED_VENDORS,
+    approvedVendors,
     availableReplacements: formattedReplacements,
   };
 }
@@ -222,12 +280,26 @@ export async function getRecoveryAndReplacementOptions(
 export async function dispatchTowingVendor(
   params: TowingDispatchParams
 ): Promise<{ ok: boolean; etaMinutes: number; dispatchMessage: string }> {
+  // Check if vendorId corresponds to a registered garage
+  let resolvedVendorName = params.vendorName;
+  try {
+    const matchedGarage = await prisma.garage.findFirst({
+      where: { id: params.vendorId, tenantId: params.tenantId, deletedAt: null },
+      select: { name: true },
+    });
+    if (matchedGarage?.name) {
+      resolvedVendorName = matchedGarage.name;
+    }
+  } catch {
+    // Keep original vendor name
+  }
+
   const etaMinutes = calculateRecoveryEta('Dubai', true);
   const now = new Date();
 
   const dispatchDetails = {
     vendorId: params.vendorId,
-    vendorName: params.vendorName,
+    vendorName: resolvedVendorName,
     dispatchedAt: now.toISOString(),
     etaMinutes,
     trackingStatus: 'DISPATCHED_EN_ROUTE',
@@ -262,17 +334,24 @@ export async function dispatchTowingVendor(
 }
 
 /**
- * Executes 1-Click Replacement Vehicle Provisioning Bridge
+ * Executes 1-Click Replacement Vehicle Provisioning Bridge with Domain Adapters
  */
 export async function provisionReplacementVehicle(
   params: ProvisionReplacementParams
-): Promise<{ ok: boolean; message: string; replacementPlate: string | null }> {
+): Promise<{
+  ok: boolean;
+  message: string;
+  replacementPlate: string | null;
+  domainAction?: string;
+  reassignedTripsCount?: number;
+  reassignedBookingsCount?: number;
+}> {
   const now = new Date();
 
   // 1. Fetch Replacement Vehicle
   const replacementVehicle = await prisma.vehicle.findFirst({
     where: { id: params.replacementVehicleId, tenantId: params.tenantId, deletedAt: null },
-    select: { id: true, licensePlate: true, make: true, model: true },
+    select: { id: true, licensePlate: true, make: true, model: true, vehicleGroup: true, vehicleUsage: true },
   });
 
   if (!replacementVehicle) {
@@ -286,29 +365,133 @@ export async function provisionReplacementVehicle(
     params.tenantId
   );
 
-  // 3. Ground the broken vehicle if linked
+  let domainAction = 'GENERAL_FLEET_SWAP';
+  let reassignedBookingsCount = 0;
+  let reassignedTripsCount = 0;
+  let leaseExchangeCreated = false;
+  let replacementStatus = 'RENTED';
+
+  // 3. Ground the broken vehicle if linked and execute domain-specific adapters
   if (ticket?.vehicle_id) {
+    // Fetch grounded vehicle metadata
+    const groundedVehicle = await prisma.vehicle.findFirst({
+      where: { id: ticket.vehicle_id, tenantId: params.tenantId },
+      select: { id: true, licensePlate: true, vehicleUsage: true, vehicleGroup: true },
+    });
+
+    // P0 Safety: Ground the broken vehicle
     await prisma.vehicle
       .update({
         where: { id: ticket.vehicle_id },
-        data: { status: 'MAINTENANCE' },
+        data: { status: 'MAINTENANCE', isActive: false },
       })
       .catch(() => {});
 
-    // Update active booking to point to the replacement vehicle, preserving billing
-    await prisma.booking
-      .updateMany({
-        where: { vehicleId: ticket.vehicle_id, status: { in: ['ACTIVE', 'CONFIRMED'] } },
-        data: { vehicleId: replacementVehicle.id },
-      })
-      .catch(() => {});
+    // --- Domain Adapter 1: Rent-a-car (RAC) ---
+    const activeBookings = await prisma.booking.findMany({
+      where: {
+        vehicleId: ticket.vehicle_id,
+        tenantId: params.tenantId,
+        status: { in: ['ACTIVE', 'CONFIRMED'] },
+      },
+      select: { id: true },
+    }).catch(() => []);
+
+    if (activeBookings.length > 0 || groundedVehicle?.vehicleUsage === 'RENTAL') {
+      const bookingUpdate = await prisma.booking
+        .updateMany({
+          where: {
+            vehicleId: ticket.vehicle_id,
+            tenantId: params.tenantId,
+            status: { in: ['ACTIVE', 'CONFIRMED'] },
+          },
+          data: { vehicleId: replacementVehicle.id },
+        })
+        .catch(() => ({ count: 0 }));
+
+      reassignedBookingsCount = bookingUpdate.count;
+      domainAction = 'RENTAL_BOOKING_REASSIGNED';
+      replacementStatus = 'RENTED';
+    }
+
+    // --- Domain Adapter 2: Staff Transport / Bus Operations ---
+    // Do NOT modify past trips or the master schedule; reassign only upcoming scheduled trips
+    const upcomingTrips = await prisma.tripSchedule.findMany({
+      where: {
+        vehicleId: ticket.vehicle_id,
+        tenantId: params.tenantId,
+        departureTime: { gte: now },
+        status: { in: ['SCHEDULED'] },
+      },
+      select: { id: true },
+    }).catch(() => []);
+
+    if (
+      upcomingTrips.length > 0 ||
+      ['STAFF', 'SCHOOL_BUS', 'STAFF_TRANSPORT'].includes(groundedVehicle?.vehicleUsage || '') ||
+      groundedVehicle?.vehicleGroup === 'BUS'
+    ) {
+      const tripUpdate = await prisma.tripSchedule
+        .updateMany({
+          where: {
+            vehicleId: ticket.vehicle_id,
+            tenantId: params.tenantId,
+            departureTime: { gte: now },
+            status: { in: ['SCHEDULED'] },
+          },
+          data: { vehicleId: replacementVehicle.id },
+        })
+        .catch(() => ({ count: 0 }));
+
+      reassignedTripsCount = tripUpdate.count;
+      if (domainAction === 'GENERAL_FLEET_SWAP') {
+        domainAction = 'STAFF_TRANSPORT_TRIPS_REASSIGNED';
+        replacementStatus = 'RESERVED';
+      }
+    }
+
+    // --- Domain Adapter 3: Commercial Leasing ---
+    const activeLease = await prisma.leaseContractVehicle.findFirst({
+      where: {
+        vehicleId: ticket.vehicle_id,
+        tenantId: params.tenantId,
+        status: 'ACTIVE',
+      },
+      select: { id: true, contractId: true },
+    }).catch(() => null);
+
+    if (activeLease || groundedVehicle?.vehicleUsage === 'LEASING') {
+      if (activeLease?.contractId) {
+        await prisma.leaseVehicleExchange
+          .create({
+            data: {
+              tenantId: params.tenantId,
+              contractId: activeLease.contractId,
+              outgoingVehicleId: ticket.vehicle_id,
+              incomingVehicleId: replacementVehicle.id,
+              exchangeDate: now,
+              reason: 'Service Ticket Breakdown Replacement',
+              approvedBy: params.actorEmail || 'Fleet Dispatcher',
+              notes: `Temporary custody substitution via ticket ${params.ticketId}`,
+            },
+          })
+          .then(() => {
+            leaseExchangeCreated = true;
+          })
+          .catch(() => {});
+      }
+      if (domainAction === 'GENERAL_FLEET_SWAP') {
+        domainAction = 'LEASE_SUBSTITUTE_RECORDED';
+        replacementStatus = 'RENTED';
+      }
+    }
   }
 
-  // 4. Mark Replacement Vehicle as Active
+  // 4. Mark Replacement Vehicle as Active/Reserved
   await prisma.vehicle
     .update({
       where: { id: replacementVehicle.id },
-      data: { status: 'RENTED' },
+      data: { status: replacementStatus, isActive: true },
     })
     .catch(() => {});
 
@@ -319,13 +502,28 @@ export async function provisionReplacementVehicle(
     provisionedAt: now.toISOString(),
     provisionedBy: params.actorEmail || 'Dispatcher',
     contractMaintained: true,
+    domainAction,
+    domainDetails: {
+      reassignedBookingsCount,
+      reassignedTripsCount,
+      leaseExchangeCreated,
+    },
   };
+
+  let domainSummary = 'Active lease contract billing continuity maintained.';
+  if (domainAction === 'STAFF_TRANSPORT_TRIPS_REASSIGNED') {
+    domainSummary = `Reassigned ${reassignedTripsCount} upcoming staff/bus trip(s).`;
+  } else if (domainAction === 'RENTAL_BOOKING_REASSIGNED') {
+    domainSummary = `Reassigned ${reassignedBookingsCount} active rental booking(s).`;
+  } else if (domainAction === 'LEASE_SUBSTITUTE_RECORDED') {
+    domainSummary = `Recorded temporary lease custody exchange for contracted asset.`;
+  }
 
   const historyEntry = {
     status: 'In Progress',
     date: now.toISOString(),
     actor: params.actorEmail || 'Fleet Dispatcher',
-    note: `Replacement Vehicle Provisioned: Swapped to ${replacementVehicle.licensePlate || replacementVehicle.id}. Active lease contract billing continuity maintained.`,
+    note: `Replacement Vehicle Provisioned: Swapped to ${replacementVehicle.licensePlate || replacementVehicle.id}. ${domainSummary}`,
   };
 
   await prisma.$executeRawUnsafe(
@@ -342,7 +540,10 @@ export async function provisionReplacementVehicle(
 
   return {
     ok: true,
-    message: `Replacement vehicle ${replacementVehicle.licensePlate || ''} provisioned. Contract billing maintained.`,
+    message: `Replacement vehicle ${replacementVehicle.licensePlate || ''} provisioned. ${domainSummary}`,
     replacementPlate: replacementVehicle.licensePlate,
+    domainAction,
+    reassignedTripsCount,
+    reassignedBookingsCount,
   };
 }

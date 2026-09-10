@@ -34,6 +34,7 @@ import { prisma } from '@/lib/prisma';
 import { getTenantContextOrNull } from '@/lib/tenant-session';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { nextReadableId } from '@/lib/service-tickets/schema';
 const ItemSchema = z.object({
   ok: z.boolean(),
   note: z.string().max(500).optional(),
@@ -183,9 +184,90 @@ export async function POST(req: NextRequest) {
         `;
       }
 
+      // Centralized Landing Hub: If inspection has defects, auto-provision service ticket in OPERATIONS_TRIAGE
+      let serviceTicketId: string | null = null;
+      let serviceTicketReadableId: string | null = null;
+      if (body.dvir.defects && body.dvir.defects.length > 0) {
+        try {
+          const hasCritical = body.dvir.defects.some((d) => d.severity === 'CRITICAL');
+          const priority = hasCritical ? 'Critical' : 'Medium';
+          serviceTicketReadableId = await nextReadableId(ctx.tenantId, 'MAINTENANCE', 'MNT');
+
+          const vehicle = await tx.vehicle.findFirst({
+            where: { id: trip.vehicleId, tenantId: ctx.tenantId },
+            select: { licensePlate: true, make: true, model: true },
+          }).catch(() => null);
+
+          // P0 Safety Rule: Auto-ground vehicle if inspection has CRITICAL defect (e.g. brakes, steering, tires)
+          if (hasCritical && trip.vehicleId) {
+            await tx.vehicle.update({
+              where: { id: trip.vehicleId },
+              data: {
+                status: 'GROUNDED',
+                isActive: false,
+              },
+            }).catch((err) => {
+              console.warn('[dvir] Failed to auto-ground vehicle:', err);
+            });
+          }
+
+          const defectSummaries = body.dvir.defects.map(d => `${d.category} (${d.severity}): ${d.description}`).join('; ');
+          const title = `[DVIR Defect${hasCritical ? ' - CRITICAL GROUNDED' : ''}] ${vehicle?.licensePlate || 'Vehicle'} - ${body.dvir.defects[0]?.category || 'Inspection Defect'}`;
+
+          const historyEntry = {
+            status: 'Pending',
+            date: new Date().toISOString(),
+            actor: `Driver Inspection (${ctx.userId})`,
+            note: hasCritical
+              ? `CRITICAL SAFETY ALERT: Vehicle auto-grounded (status=GROUNDED, isActive=false). Blocked from dispatch until workshop signoff. Defect: ${defectSummaries}`
+              : `Auto-ingested from Driver DVIR (${body.dvir.type} - Status: DEFECTS). Defect: ${defectSummaries}`,
+          };
+
+          const customFields = {
+            source: 'DVIR',
+            assignedDepartment: 'OPERATIONS_TRIAGE',
+            dvirId: body.dvir.id,
+            tripId: body.tripId,
+            dvirType: body.dvir.type,
+            defects: body.dvir.defects,
+            hasCriticalDefect: hasCritical,
+            isGrounded: hasCritical,
+            groundedReason: hasCritical ? `Critical DVIR Safety Defect: ${defectSummaries}` : null,
+            odometer: body.dvir.odometerEnd ?? body.dvir.odometerStart ?? null,
+          };
+
+          const [insertedTicket] = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+            `INSERT INTO service_tickets (
+               tenant_id, ticket_type, readable_id, requestor_id, requestor_name,
+               vehicle_id, related_driver_id, title, description, priority, status,
+               history, custom_fields
+             ) VALUES (
+               $1, 'MAINTENANCE', $2, $3, $4, $5, $6, $7, $8, $9, 'Pending',
+               $10::jsonb, $11::jsonb
+             ) RETURNING id::text`,
+            ctx.tenantId,
+            serviceTicketReadableId,
+            ctx.userId,
+            `Driver (${ctx.userId})`,
+            trip.vehicleId,
+            ctx.userId,
+            title,
+            `Pre-Trip Defect Reported: ${defectSummaries}. ${body.dvir.notes ? `Driver Notes: ${body.dvir.notes}` : ''}`.trim(),
+            priority,
+            JSON.stringify([historyEntry]),
+            JSON.stringify(customFields),
+          );
+          serviceTicketId = insertedTicket?.id ?? null;
+        } catch (mirrorErr) {
+          console.warn('[driver-app/dvir] Failed to mirror defect to service_tickets:', mirrorErr);
+        }
+      }
+
       return NextResponse.json({
         ok: true,
         dvirId: body.dvir.id,
+        serviceTicketId,
+        serviceTicketReadableId,
         status: body.dvir.defects.some((d) => d.severity === 'CRITICAL') ? 'BLOCKED' : 'PASS',
         photos: body.photos.length,
       });

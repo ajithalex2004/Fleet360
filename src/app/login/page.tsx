@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { clearClientSession, setClientSession, setClientSessionSnapshot } from '@/lib/client-session';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 const SSO_MESSAGES: Record<string, string> = {
   'unknown':                  'No SSO configured for that email domain.',
@@ -23,6 +24,7 @@ const SSO_MESSAGES: Record<string, string> = {
 
 export default function LoginPage() {
   const router = useRouter();
+  const { setLanguage, tLabel, isRTL } = useLanguage();
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading]   = useState(false);
@@ -43,6 +45,7 @@ export default function LoginPage() {
     productName: string | null; tagline: string | null;
     logoUrl: string | null; primaryColor: string | null;
     tenantName?: string;
+    defaultLanguage?: string | null;
   }
   const [branding, setBranding] = useState<PublicBranding | null>(null);
 
@@ -52,6 +55,15 @@ export default function LoginPage() {
       document.documentElement.style.setProperty('--brand-primary', branding.primaryColor);
     }
   }, [branding]);
+
+  // Enforce English always unless tenant branding explicitly specifies Arabic
+  useEffect(() => {
+    if (branding?.defaultLanguage === 'ar') {
+      setLanguage('ar');
+    } else {
+      setLanguage('en');
+    }
+  }, [branding?.defaultLanguage, setLanguage]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -70,13 +82,29 @@ export default function LoginPage() {
     }
 
     const tenantCode = params.get('tenant');
-    if (tenantCode) {
-      fetch(`/api/branding?tenant=${encodeURIComponent(tenantCode)}`)
+    const domainParam = params.get('domain');
+    const query = tenantCode ? `tenant=${encodeURIComponent(tenantCode)}` : domainParam ? `domain=${encodeURIComponent(domainParam)}` : null;
+
+    if (query) {
+      fetch(`/api/branding?${query}`)
         .then(r => r.ok ? r.json() : null)
-        .then(d => { if (d?.branding) setBranding(d.branding); })
-        .catch(() => {});
+        .then(d => {
+          if (d?.branding) {
+            setBranding(d.branding);
+            if (d.branding.defaultLanguage === 'ar') {
+              setLanguage('ar');
+            } else {
+              setLanguage('en');
+            }
+          } else {
+            setLanguage('en');
+          }
+        })
+        .catch(() => { setLanguage('en'); });
+    } else {
+      setLanguage('en');
     }
-  }, []);
+  }, [setLanguage]);
 
   const submit = useCallback(async (overrides?: { mfaCode?: string; recoveryCode?: string }) => {
     setError(null);
@@ -165,7 +193,7 @@ export default function LoginPage() {
   }, [mfaCode, useRecovery, submit]);
 
   return (
-    <div className="min-h-screen bg-[#0c1a3e] flex items-center justify-center p-4">
+    <div dir={isRTL ? 'rtl' : 'ltr'} className="min-h-screen bg-[#0c1a3e] flex items-center justify-center p-4">
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center space-y-2">
           {branding?.logoUrl ? (
@@ -181,17 +209,17 @@ export default function LoginPage() {
             <img src="/logo-fleet360.png" alt="FLEET360" className="mx-auto h-16 max-w-[200px] object-contain" />
           )}
           <p className="text-slate-400 text-sm">
-            {branding?.tagline ?? 'Fleet Management Platform'}
+            {branding?.tagline ? branding.tagline : tLabel('Fleet Management Platform')}
           </p>
         </div>
 
         <div className="bg-slate-900 border border-white/10 rounded-2xl p-8 shadow-2xl space-y-6">
           <div>
-            <h1 className="text-xl font-bold text-white">{mfaStep ? 'Two-factor required' : 'Sign in'}</h1>
+            <h1 className="text-xl font-bold text-white">{mfaStep ? tLabel('Two-factor required') : tLabel('Sign in')}</h1>
             <p className="text-slate-400 text-sm mt-1">
               {mfaStep
-                ? (useRecovery ? 'Enter one of your recovery codes.' : 'Enter the 6-digit code from your authenticator app.')
-                : 'Welcome back — enter your credentials below.'}
+                ? (useRecovery ? tLabel('Enter one of your recovery codes.') : tLabel('Enter the 6-digit code from your authenticator app.'))
+                : tLabel('Welcome back — enter your credentials below.')}
             </p>
           </div>
 
@@ -208,24 +236,24 @@ export default function LoginPage() {
                 window.location.href = `/api/auth/sso/initiate?email=${encodeURIComponent(ssoEmail.trim())}`;
               }} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Work email</label>
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">{tLabel('Work email')}</label>
                 <input type="email" value={ssoEmail} onChange={e => setSsoEmail(e.target.value)} required autoFocus
                   placeholder="you@yourcompany.com"
                   className="w-full bg-slate-800 border border-white/10 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
               </div>
               <button type="submit"
                 className="w-full py-2.5 bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-lg text-sm">
-                Continue with SSO
+                {tLabel('Continue with SSO')}
               </button>
               <div className="text-center">
                 <button type="button" onClick={() => { setSsoMode(false); setError(null); }}
-                  className="text-xs text-slate-400 hover:text-white">&larr; Sign in with password instead</button>
+                  className="text-xs text-slate-400 hover:text-white">&larr; {tLabel('Sign in with password instead')}</button>
               </div>
             </form>
           ) : !mfaStep ? (
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Email address</label>
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">{tLabel('Email address')}</label>
                 <input
                   type="email"
                   value={email}
@@ -238,7 +266,7 @@ export default function LoginPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Password</label>
+                <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">{tLabel('Password')}</label>
                 <div className="relative">
                   <input
                     type={showPw ? 'text' : 'password'}
@@ -251,27 +279,27 @@ export default function LoginPage() {
                   />
                   <button type="button" onClick={() => setShowPw(v => !v)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs" tabIndex={-1}>
-                    {showPw ? 'Hide' : 'Show'}
+                    {showPw ? tLabel('Hide') : tLabel('Show')}
                   </button>
                 </div>
               </div>
 
               <button type="submit" disabled={loading}
                 className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold rounded-lg text-sm">
-                {loading ? 'Signing in…' : 'Sign in'}
+                {loading ? tLabel('Signing in…') : tLabel('Sign in')}
               </button>
 
               <div className="flex items-center justify-between text-xs">
                 <button type="button" onClick={() => { setSsoMode(true); setError(null); }}
-                  className="text-violet-300 hover:text-violet-200 font-medium">Sign in with SSO →</button>
-                <a href="/forgot-password" className="text-slate-400 hover:text-white">Forgot your password?</a>
+                  className="text-violet-300 hover:text-violet-200 font-medium">{tLabel('Sign in with SSO →')}</button>
+                <a href="/forgot-password" className="text-slate-400 hover:text-white">{tLabel('Forgot your password?')}</a>
               </div>
             </form>
           ) : (
             <form onSubmit={handleMfa} className="space-y-4">
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">
-                  {useRecovery ? 'Recovery code' : 'Authenticator code'}
+                  {useRecovery ? tLabel('Recovery code') : tLabel('Authenticator code')}
                 </label>
                 <input
                   value={mfaCode}
@@ -287,19 +315,19 @@ export default function LoginPage() {
 
               <button type="submit" disabled={loading}
                 className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold rounded-lg text-sm">
-                {loading ? 'Verifying…' : 'Verify and continue'}
+                {loading ? tLabel('Verifying…') : tLabel('Verify and continue')}
               </button>
 
               <div className="flex items-center justify-between text-xs">
                 <button type="button"
                   onClick={() => { setUseRecovery(v => !v); setMfaCode(''); setError(null); }}
                   className="text-slate-400 hover:text-white">
-                  {useRecovery ? 'Use authenticator instead' : 'Use a recovery code'}
+                  {useRecovery ? tLabel('Use authenticator instead') : tLabel('Use a recovery code')}
                 </button>
                 <button type="button"
                   onClick={() => { setMfaStep(false); setMfaCode(''); setUseRecovery(false); setError(null); }}
                   className="text-slate-400 hover:text-white">
-                  &larr; Back
+                  &larr; {tLabel('Back')}
                 </button>
               </div>
             </form>
@@ -312,20 +340,20 @@ export default function LoginPage() {
                   <div className="w-full border-t border-white/10" />
                 </div>
                 <div className="relative flex justify-center">
-                  <span className="bg-slate-900 px-3 text-xs text-slate-500">New to Fleet360?</span>
+                  <span className="bg-slate-900 px-3 text-xs text-slate-500">{tLabel('New to Fleet360?')}</span>
                 </div>
               </div>
 
               <button
                 onClick={() => { window.location.href = '/onboarding'; }}
                 className="w-full py-2.5 border border-white/10 hover:border-white/20 text-slate-300 hover:text-white text-sm font-medium rounded-lg">
-                Create your organisation
+                {tLabel('Create your organisation')}
               </button>
             </>
           )}
         </div>
 
-        <p className="text-center text-xs text-slate-600">Fleet360 · Multi-Tenant Platform</p>
+        <p className="text-center text-xs text-slate-600">Fleet360 · {tLabel('Multi-Tenant Platform')}</p>
       </div>
     </div>
   );

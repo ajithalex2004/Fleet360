@@ -31,6 +31,66 @@ export const TICKET_TYPES_ORDER: TicketType[] = [
   'COMPLAINT',
 ];
 
+/** Canonical departments for the Operations team forwarding workflow. */
+export type TicketDepartment =
+  | 'OPERATIONS_TRIAGE'
+  | 'WORKSHOP_MAINTENANCE'
+  | 'RECOVERY_DISPATCH'
+  | 'SAFETY_COMPLIANCE'
+  | 'CUSTOMER_SERVICE'
+  | 'FACILITIES_CLEANING';
+
+export const TICKET_DEPARTMENTS: Array<{
+  key: TicketDepartment;
+  label: string;
+  shortLabel: string;
+  description: string;
+  tone: 'slate' | 'amber' | 'rose' | 'emerald' | 'blue' | 'violet';
+}> = [
+  {
+    key: 'OPERATIONS_TRIAGE',
+    label: 'Operations Triage',
+    shortLabel: 'Triage',
+    description: 'Initial landing hopper for newly ingested field & support tickets',
+    tone: 'slate',
+  },
+  {
+    key: 'WORKSHOP_MAINTENANCE',
+    label: 'Workshop & Maintenance',
+    shortLabel: 'Workshop',
+    description: 'Vehicle maintenance, job cards, inspections, and repairs',
+    tone: 'amber',
+  },
+  {
+    key: 'RECOVERY_DISPATCH',
+    label: 'Recovery & Roadside Assistance',
+    shortLabel: 'Recovery',
+    description: 'Breakdown flatbed towing, mobile mechanics, and vehicle swaps',
+    tone: 'rose',
+  },
+  {
+    key: 'SAFETY_COMPLIANCE',
+    label: 'Safety, Risk & Compliance',
+    shortLabel: 'Compliance',
+    description: 'Traffic accidents, police reports, RTA/DOT mulkiya, insurance claims',
+    tone: 'violet',
+  },
+  {
+    key: 'CUSTOMER_SERVICE',
+    label: 'Customer Relations & Accounts',
+    shortLabel: 'Customer Care',
+    description: 'Passenger feedback, client inquiries, contract SLAs, dispute billing',
+    tone: 'blue',
+  },
+  {
+    key: 'FACILITIES_CLEANING',
+    label: 'Depot & Facilities Cleaning',
+    shortLabel: 'Cleaning',
+    description: 'Cabin washing, sanitization, detailing, and depot turnaround',
+    tone: 'emerald',
+  },
+];
+
 /** Status workflow — common across types. Approval-gated types start in
  *  'Awaiting Approval' instead of 'Pending'; once approved they enter the
  *  normal flow. The user's spec keeps the core workflow consistent — per-
@@ -156,6 +216,12 @@ export interface ServiceTicket {
    *  created on Acknowledge (preserves existing /maintenance/requests
    *  cross-module behaviour). */
   maintenanceRequestId?: string;
+
+  /** Assigned department after triage forwarding. Defaults to 'OPERATIONS_TRIAGE'. */
+  assignedDepartment?: TicketDepartment;
+
+  /** Ingestion source: DRIVER_APP, WHATSAPP, DVIR, WEB, TELEMATICS */
+  source?: 'DRIVER_APP' | 'WHATSAPP' | 'DVIR' | 'WEB' | 'TELEMATICS';
 
   history?: TicketHistoryEntry[];
   attachments?: TicketAttachment[];

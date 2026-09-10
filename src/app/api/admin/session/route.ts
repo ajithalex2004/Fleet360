@@ -110,6 +110,7 @@ export async function GET(req: NextRequest) {
             name: userTenant.tenant.name,
             code: userTenant.tenant.code,
             plan: userTenant.tenant.plan,
+            defaultLanguage: userTenant.tenant.defaultLanguage ?? 'en',
             enabledModules: userTenant.tenant.modules.map(m => m.module),
           },
           permissions: [...new Set(permStrings)],

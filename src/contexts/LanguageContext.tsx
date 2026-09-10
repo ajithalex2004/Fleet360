@@ -103,7 +103,7 @@ const translations: Record<string, Record<Language, string>> = {
 
 /* ── Arabic translations for every nav label (value-keyed) ──────────────── */
 // Used by tLabel() so layouts translate labels without restructuring NAV_GROUPS
-const arabicLabels: Record<string, string> = {
+export const arabicLabels: Record<string, string> = {
   // ── Group headers ─────────────────────────────────────────
   'Overview':               'نظرة عامة',
   'Sales Pipeline':         'خط المبيعات',
@@ -928,6 +928,32 @@ const arabicLabels: Record<string, string> = {
   'Add Deduction':          'إضافة خصم',
   'Process Refund':         'معالجة الاسترداد',
   'Forfeit Deposit':        'مصادرة الوديعة',
+
+  // Authentication & Login Page
+  'Signing in…':            'جارٍ تسجيل الدخول…',
+  'Two-factor required':    'المصادقة الثنائية مطلوبة',
+  'Welcome back — enter your credentials below.': 'مرحباً بعودتك — أدخل بيانات اعتمادك أدناه.',
+  'Enter the 6-digit code from your authenticator app.': 'أدخل الرمز المكون من 6 أرقام من تطبيق المصادقة.',
+  'Enter one of your recovery codes.': 'أدخل أحد رموز الاسترداد الخاصة بك.',
+  'Work email':             'بريد العمل الإلكتروني',
+  'Email address':          'عنوان البريد الإلكتروني',
+  'Password':               'كلمة المرور',
+  'Show':                   'إظهار',
+  'Hide':                   'إخفاء',
+  'Continue with SSO':      'المتابعة باستخدام SSO',
+  'Sign in with SSO →':     'تسجيل الدخول باستخدام SSO ←',
+  'Sign in with password instead': 'تسجيل الدخول بكلمة المرور بدلاً من ذلك',
+  'Forgot your password?':  'هل نسيت كلمة المرور؟',
+  'Recovery code':          'رمز الاسترداد',
+  'Authenticator code':     'رمز المصادقة',
+  'Verify and continue':    'تحقق ومتابعة',
+  'Verifying…':             'جارٍ التحقق…',
+  'Use authenticator instead': 'استخدام تطبيق المصادقة بدلاً من ذلك',
+  'Use a recovery code':    'استخدام رمز الاسترداد',
+  'New to Fleet360?':       'جديد في Fleet360؟',
+  'Create your organisation': 'إنشاء مؤسستك',
+  'Fleet Management Platform': 'منصة إدارة الأساطيل',
+  'Multi-Tenant Platform':  'منصة متعددة المستأجرين',
 };
 
 // Normalized lowercase map for case-insensitive lookup
@@ -937,23 +963,23 @@ for (const [k, v] of Object.entries(arabicLabels)) {
 }
 
 const LanguageContext = createContext<LanguageContextValue>({
-  language: 'ar',
-  isRTL: true,
+  language: 'en',
+  isRTL: false,
   setLanguage: () => {},
   t: (key) => key,
   tLabel: (english) => english,
 });
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  // Default to 'ar' for Arabic-First platform experience
-  const [language, setLanguageState] = useState<Language>('ar');
+  // Default to 'en' (English always unless tenant specifies Arabic)
+  const [language, setLanguageState] = useState<Language>('en');
 
   useEffect(() => {
     const saved = localStorage.getItem('xlai_language') as Language | null;
     if (saved === 'ar' || saved === 'en') {
       setLanguageState(saved);
     } else {
-      setLanguageState('ar');
+      setLanguageState('en');
     }
   }, []);
 

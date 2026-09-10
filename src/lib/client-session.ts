@@ -21,6 +21,7 @@ interface ClientSessionSnapshot {
     name: string;
     code?: string | null;
     plan?: string | null;
+    defaultLanguage?: string | null;
     enabledModules: string[];
   };
   permissions?: string[];

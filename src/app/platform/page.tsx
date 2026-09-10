@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import ThemeToggle from '@/components/ThemeToggle';
 import PlatformSessionSlot from './PlatformSessionSlot';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { usePermissions } from '@/contexts/PermissionContext';
 import { 
   Car, 
   Bot, 
@@ -468,9 +469,20 @@ const CATEGORIES = [
 ];
 
 export default function PlatformPage() {
-  const { tLabel } = useLanguage();
+  const { setLanguage, tLabel, isRTL } = useLanguage();
+  const { tenant, isAuthenticated, isLoading } = usePermissions();
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Enforce English always unless tenant defaultLanguage is explicitly 'ar'
+  useEffect(() => {
+    if (isLoading) return;
+    if (isAuthenticated && tenant?.defaultLanguage === 'ar') {
+      setLanguage('ar');
+    } else {
+      setLanguage('en');
+    }
+  }, [isAuthenticated, tenant?.defaultLanguage, isLoading, setLanguage]);
 
   const openPalette = () => {
     if (typeof window !== 'undefined') {
@@ -501,7 +513,7 @@ export default function PlatformPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-main)] transition-colors duration-150 flex flex-col">
+    <div dir={isRTL ? 'rtl' : 'ltr'} className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-main)] transition-colors duration-150 flex flex-col">
       {/* Top Enterprise Bar */}
       <nav className="border-b border-[var(--border-subtle)] bg-[var(--bg-surface)]/80 backdrop-blur-md sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between gap-4">

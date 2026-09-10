@@ -52,8 +52,7 @@ export async function POST(request: NextRequest) {
 
             const req = await tx.maintenanceRequest.create({
                 data: {
-                    // TODO: read tenantId from request headers via getTenantContext()
-                    tenantId: '',
+                    tenantId,
                     vehicleId: body.vehicleId || body.vehicle_id,
                     driverId: body.driverId || body.driver_id,
                     description: body.description,

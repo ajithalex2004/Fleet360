@@ -58,6 +58,9 @@ interface Row {
 
 function rowToApi(r: Row, matrix?: SlaMatrix) {
   const priority = r.priority as TicketPriority;
+  const customFields = (r.custom_fields && typeof r.custom_fields === 'object') ? r.custom_fields as Record<string, unknown> : {};
+  const assignedDepartment = (customFields.assignedDepartment as any) || 'OPERATIONS_TRIAGE';
+  const source = (customFields.source as any) || 'WEB';
   return {
     id: r.id,
     tenantId: r.tenant_id,
@@ -74,10 +77,12 @@ function rowToApi(r: Row, matrix?: SlaMatrix) {
     dueDate: r.due_date,
     assignedTo: r.assigned_to,
     maintenanceRequestId: r.maintenance_request_id,
+    assignedDepartment,
+    source,
     history: Array.isArray(r.history) ? r.history : [],
     attachments: Array.isArray(r.attachments) ? r.attachments : [],
     comments: Array.isArray(r.comments) ? r.comments : [],
-    customFields: (r.custom_fields && typeof r.custom_fields === 'object') ? r.custom_fields as Record<string, unknown> : {},
+    customFields,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     slaTargetHours: matrix ? pickSlaHours(matrix, priority) : undefined,
@@ -98,13 +103,14 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     const sp = req.nextUrl.searchParams;
-      const type   = sp.get('type');         // TicketType or null = all
-      const status = sp.get('status');
-      const search = sp.get('search')?.trim() ?? '';
-      const from   = sp.get('from');
-      const to     = sp.get('to');
-      const limit  = Math.min(parseInt(sp.get('limit') ?? '500', 10), 1000);
-      const offset = Math.max(parseInt(sp.get('offset') ?? '0', 10), 0);
+      const type       = sp.get('type');         // TicketType or null = all
+      const status     = sp.get('status');
+      const department = sp.get('department');   // TicketDepartment or null = all
+      const search     = sp.get('search')?.trim() ?? '';
+      const from       = sp.get('from');
+      const to         = sp.get('to');
+      const limit      = Math.min(parseInt(sp.get('limit') ?? '500', 10), 1000);
+      const offset     = Math.max(parseInt(sp.get('offset') ?? '0', 10), 0);
 
       const conditions = ['tenant_id = $1', 'deleted_at IS NULL'];
       const params: unknown[] = [tenantId];
@@ -112,6 +118,16 @@ export async function GET(req: NextRequest) {
 
       if (type   && TICKET_TYPES_ORDER.includes(type as TicketType)) { conditions.push(`ticket_type = $${p++}`); params.push(type); }
       if (status)                                                     { conditions.push(`status = $${p++}`);     params.push(status); }
+      if (department) {
+        if (department === 'OPERATIONS_TRIAGE') {
+          conditions.push(`(custom_fields->>'assignedDepartment' = $${p} OR custom_fields->>'assignedDepartment' IS NULL)`);
+          params.push(department);
+          p++;
+        } else {
+          conditions.push(`custom_fields->>'assignedDepartment' = $${p++}`);
+          params.push(department);
+        }
+      }
       if (search) {
         conditions.push(`(LOWER(title) LIKE $${p} OR LOWER(description) LIKE $${p} OR LOWER(readable_id) LIKE $${p})`);
         params.push(`%${search.toLowerCase()}%`); p++;
@@ -204,9 +220,18 @@ export async function POST(req: NextRequest) {
       }
 
       // Validate per-type required fields against the resolved schema.
-      const customFields = (body.customFields && typeof body.customFields === 'object')
-        ? body.customFields
+      const customFields: Record<string, unknown> = (body.customFields && typeof body.customFields === 'object')
+        ? { ...body.customFields }
         : {};
+      if (!customFields.assignedDepartment) {
+        customFields.assignedDepartment = 'OPERATIONS_TRIAGE';
+      }
+      if (!customFields.source) {
+        customFields.source = 'WEB';
+      }
+      if (!customFields.trackingToken) {
+        customFields.trackingToken = crypto.randomUUID().replace(/-/g, '');
+      }
       const resolvedFormFields = cfg.rules.formFields.fields ?? [];
       for (const f of resolvedFormFields) {
         if (!f.required) continue;

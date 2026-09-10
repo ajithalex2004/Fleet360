@@ -30,6 +30,7 @@ TOOL USAGE RULES:
 - For "bookings / rentals / reservations" → call showBookings
 - For "KPI / overview / summary / dashboard" → call showKPIDashboard
 - For creating a booking → call createBooking
+- For "contracts / agreements / SLA penalties / clauses / termination notice / terms" → call showContractClauses
 
 GREETING: When the user first connects, immediately call showKPIDashboard to show the full operations overview.`;
 
@@ -219,6 +220,32 @@ export async function POST(req: NextRequest) {
               destination: {
                 type: 'string',
                 description: 'The destination location if provided',
+              },
+            },
+          },
+        },
+      },
+      // ── 8. Contract Clauses & SLA Obligations ───────────────────────────
+      {
+        type: 'function',
+        function: {
+          name: 'showContractClauses',
+          description: 'Search indexed corporate contracts and transport agreements for SLA delay penalties, termination notice periods, payment terms, or clause wording.',
+          parameters: {
+            type: 'object',
+            properties: {
+              query: {
+                type: 'string',
+                description: 'Search keywords, e.g. "penalty", "termination", "SLA", "DP World", "late arrival"',
+              },
+              obligationType: {
+                type: 'string',
+                enum: ['PAYMENT', 'PENALTY', 'TERMINATION', 'RENEWAL', 'INDEMNITY', 'GENERAL'],
+                description: 'Filter by specific obligation type',
+              },
+              title: {
+                type: 'string',
+                description: 'Contextual title shown on card, e.g. "DP World Contract SLA & Penalties"',
               },
             },
           },

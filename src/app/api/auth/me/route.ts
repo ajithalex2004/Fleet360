@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
   // because each has a .catch() fallback below, the failure is SILENT: the
   // user simply loads with no nav permissions, no modules and a blank tenant
   // name, rather than seeing an error.
-  const [navPermissions, enabledModules, tenantName, branding] = await withTenantRls(
+  const [navPermissions, enabledModules, tenantInfo, branding] = await withTenantRls(
     prisma,
     tenantId,
     async (tx) => Promise.all([
@@ -72,11 +72,14 @@ export async function GET(request: NextRequest) {
         ).then(rows => rows.map(r => r.module))
         .catch(() => [] as string[]),
 
-    // 3. Tenant display name
-    tx.$queryRawUnsafe<{ name: string }[]>(
-      `SELECT name FROM tenants WHERE id = $1 LIMIT 1`,
+    // 3. Tenant display name & default language
+    tx.$queryRawUnsafe<{ name: string; default_language: string | null }[]>(
+      `SELECT name, default_language FROM tenants WHERE id = $1 LIMIT 1`,
       tenantId,
-    ).then(rows => rows[0]?.name ?? '').catch(() => ''),
+    ).then(rows => ({
+      tenantName: rows[0]?.name ?? '',
+      defaultLanguage: rows[0]?.default_language ?? 'en',
+    })).catch(() => ({ tenantName: '', defaultLanguage: 'en' })),
 
     // 4. White-label branding (best-effort). Uses its own client rather than
     //    tx, so it is not covered by this scope — see note in the PR.
@@ -88,7 +91,8 @@ export async function GET(request: NextRequest) {
     {
       userId,
       tenantId,
-      tenantName,
+      tenantName: tenantInfo.tenantName,
+      defaultLanguage: tenantInfo.defaultLanguage,
       plan,
       role,
       isSuperAdmin,

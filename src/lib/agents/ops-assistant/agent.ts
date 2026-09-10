@@ -108,6 +108,7 @@ async function runOpsAssistantStats(event: AgentEvent): Promise<AgentRunResult> 
         'generateRevenueReport',
         'generateMaintenanceCostReport',
         'scheduleReport',
+        'showContractClauses',
       ],
       agentStatus:     'ALWAYS_ON',
       endpoint:        'POST /api/operations/simple-chat',

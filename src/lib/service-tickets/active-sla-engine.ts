@@ -287,8 +287,11 @@ export async function runSlaEscalationSweep(
       tier3Count++;
     }
 
-    // Auto-Escalate if unacknowledged past Tier 1 limit
-    if (evalResult.shouldAutoEscalateToTier2 && row.status === 'Pending') {
+    const customFields = (row.custom_fields && typeof row.custom_fields === 'object') ? row.custom_fields : {};
+
+    // Auto-Escalate if unacknowledged past Tier 1 limit (with idempotency guard)
+    const alreadyEscalatedToTier2 = Boolean(customFields.tier2EscalatedAt);
+    if (evalResult.shouldAutoEscalateToTier2 && row.status === 'Pending' && !alreadyEscalatedToTier2) {
       const historyEntry = {
         status: 'Escalated',
         date: now.toISOString(),
@@ -296,15 +299,23 @@ export async function runSlaEscalationSweep(
         note: evalResult.escalationReason || 'Auto-escalated to High priority due to unacknowledged SLA threshold',
       };
 
+      const updatedCustomFields = {
+        ...customFields,
+        tier2EscalatedAt: now.toISOString(),
+        tier2IdempotencyKey: `${row.id}_TIER_2_${now.toISOString().slice(0, 13)}`, // Hourly idempotency bucket
+      };
+
       await prisma.$executeRawUnsafe(
         `UPDATE service_tickets
          SET status = 'Escalated',
              priority = 'High',
              history = history || $2::jsonb,
+             custom_fields = custom_fields || $3::jsonb,
              updated_at = NOW()
-         WHERE id = $1::uuid AND tenant_id = $3`,
+         WHERE id = $1::uuid AND tenant_id = $4`,
         row.id,
         JSON.stringify([historyEntry]),
+        JSON.stringify(updatedCustomFields),
         tenantId
       );
 
@@ -319,15 +330,38 @@ export async function runSlaEscalationSweep(
       });
     }
 
-    // Capture Director Paging Alerts for Tier 3 breaches
+    // Capture Director Paging Alerts for Tier 3 breaches with 2-hour deduplication cooldown
     if (evalResult.shouldTriggerTier3DirectorAlert) {
-      directorAlerts.push({
-        id: row.id,
-        readableId: row.readable_id,
-        ticketType: row.ticket_type,
-        elapsedMinutes: evalResult.elapsedWorkingMinutes,
-        targetMinutes: evalResult.resolveDeadlineMinutes,
-      });
+      const lastAlertAt = customFields.tier3DirectorAlertAt ? new Date(String(customFields.tier3DirectorAlertAt)).getTime() : 0;
+      const ALERT_COOLDOWN_MS = 2 * 60 * 60 * 1000; // 2 hours
+      const isCooldownActive = now.getTime() - lastAlertAt < ALERT_COOLDOWN_MS;
+
+      if (!isCooldownActive) {
+        const nextCount = (Number(customFields.tier3AlertCount) || 0) + 1;
+        await prisma.$executeRawUnsafe(
+          `UPDATE service_tickets
+           SET custom_fields = custom_fields || jsonb_build_object(
+             'tier3DirectorAlertAt', $2::text,
+             'tier3AlertCount', $3::int,
+             'tier3IdempotencyKey', $4::text
+           ),
+           updated_at = NOW()
+           WHERE id = $1::uuid AND tenant_id = $5`,
+          row.id,
+          now.toISOString(),
+          nextCount,
+          `${row.id}_TIER_3_${nextCount}`,
+          tenantId
+        ).catch(() => {});
+
+        directorAlerts.push({
+          id: row.id,
+          readableId: row.readable_id,
+          ticketType: row.ticket_type,
+          elapsedMinutes: evalResult.elapsedWorkingMinutes,
+          targetMinutes: evalResult.resolveDeadlineMinutes,
+        });
+      }
     }
   }
 

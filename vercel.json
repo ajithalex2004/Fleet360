@@ -1,7 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
-    { "path": "/api/jobs/run?job=dunning-sweep", "schedule": "0 2 * * *" }
+    { "path": "/api/jobs/run?job=dunning-sweep", "schedule": "0 2 * * *" },
+    { "path": "/api/service-tickets/sla/sweep?tenantId=all", "schedule": "*/5 * * * *" }
   ]
 }
 

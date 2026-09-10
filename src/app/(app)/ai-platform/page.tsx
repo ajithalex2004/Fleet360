@@ -474,20 +474,56 @@ export default function AIPlatformDashboardPage() {
             </Link>
 
             <Link
-              href="/operations/dispatch"
+              href="/bus-ops/demand-forecast"
+              className="group rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5 hover:border-violet-500/40 hover:bg-[var(--bg-surface)]/70 transition-all"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="rounded-lg bg-violet-500/20 p-2 text-violet-400">
+                    <TrendingUp className="h-4 w-4" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-[var(--text-main)]">Staff Transport Demand AI</h3>
+                </div>
+                <ArrowUpRight className="h-4 w-4 text-[var(--text-faint)] group-hover:text-violet-400 transition-colors" />
+              </div>
+              <p className="text-xs text-[var(--text-muted)]">
+                Shift & passenger volume forecasting, capacity risk triage (OVER/UNDER), and rightsizing mitigations.
+              </p>
+            </Link>
+
+            <Link
+              href="/admin/enterprise-bridge"
+              className="group rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5 hover:border-indigo-500/40 hover:bg-[var(--bg-surface)]/70 transition-all"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="rounded-lg bg-indigo-500/20 p-2 text-indigo-400">
+                    <Layers className="h-4 w-4" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-[var(--text-main)]">Enterprise Bridge Agent</h3>
+                </div>
+                <ArrowUpRight className="h-4 w-4 text-[var(--text-faint)] group-hover:text-indigo-400 transition-colors" />
+              </div>
+              <p className="text-xs text-[var(--text-muted)]">
+                Multi-system ERP sync: SAP S/4HANA OData, Oracle NetSuite, MS Dynamics, Odoo, and OpenAPI.
+              </p>
+            </Link>
+
+            <Link
+              href="/fleet/document-intelligence"
               className="group rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5 hover:border-cyan-500/40 hover:bg-[var(--bg-surface)]/70 transition-all"
             >
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2.5">
                   <div className="rounded-lg bg-cyan-500/20 p-2 text-cyan-400">
-                    <MapPin className="h-4 w-4" />
+                    <FileCheck className="h-4 w-4" />
                   </div>
-                  <h3 className="text-sm font-semibold text-[var(--text-main)]">15-Factor Dispatch & Routing</h3>
+                  <h3 className="text-sm font-semibold text-[var(--text-main)]">Document Intelligence</h3>
                 </div>
                 <ArrowUpRight className="h-4 w-4 text-[var(--text-faint)] group-hover:text-cyan-400 transition-colors" />
               </div>
               <p className="text-xs text-[var(--text-muted)]">
-                Adaptive spatial shortlisting, canonical location indexing, and automated shift consolidation.
+                Multimodal AI extracting Mulkiya, Insurance, Licenses, Invoices, PODs & auto-populating records.
               </p>
             </Link>
           </div>

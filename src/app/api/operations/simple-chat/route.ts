@@ -57,7 +57,8 @@ TOOL USAGE RULES:
 - For "utilization report / fleet utilization / asset uptime / idle days" → call generateUtilizationReport
 - For "revenue report / financial report / LOB breakdown / income analytics" → call generateRevenueReport
 - For "maintenance cost report / repair spend / workshop TCO / parts costs" → call generateMaintenanceCostReport
-- For "schedule report / automated report / email report weekly / recurring BI export" → call scheduleReport`;
+- For "schedule report / automated report / email report weekly / recurring BI export" → call scheduleReport
+- For "contract / agreement / clause / SLA penalty / termination notice / terms / obligations" → call showContractClauses`;
 
 const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
   {
@@ -267,6 +268,21 @@ const TOOLS: OpenAI.Chat.ChatCompletionTool[] = [
           reportType: { type: 'string', description: 'Type of report (e.g., Fleet Utilization, Revenue BI, Maintenance Costs)' },
           frequency:  { type: 'string', enum: ['daily', 'weekly', 'monthly'] },
           title:      { type: 'string', description: 'Custom title' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'showContractClauses',
+      description: 'Search indexed corporate contracts and transport agreements for SLA penalties, termination notice periods, payment terms, or clause wording.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Search keywords, e.g. "penalty", "termination", "SLA", "DP World", "late arrival"' },
+          obligationType: { type: 'string', enum: ['PAYMENT', 'PENALTY', 'TERMINATION', 'RENEWAL', 'INDEMNITY', 'GENERAL'], description: 'Filter by specific obligation type' },
+          title: { type: 'string', description: 'Contextual title shown on card, e.g. "DP World Contract SLA & Penalties"' },
         },
       },
     },

@@ -100,8 +100,74 @@ export async function GET(req: NextRequest) {
 /**
  * POST /api/service-tickets/sla/sweep
  * Executes the active SLA sweep, auto-escalates unacknowledged tickets, and returns sweep report.
+ * Supports:
+ *  1. Automated Cron Call: Authorization: Bearer <CRON_SECRET> or x-cron-secret header (?tenantId=all or ?tenantId=xyz)
+ *  2. Manual UI Call: User session cookie / x-tenant-id via requireAuthorizedTenant
  */
 export async function POST(req: NextRequest) {
+  const authHeader = req.headers.get('authorization') || '';
+  const cronHeader = req.headers.get('x-cron-secret') || '';
+  const configuredSecret = process.env.CRON_SECRET || process.env.SLA_SWEEP_SECRET || 'fleet360-sla-sweep-internal-secret';
+
+  const isCronAuth =
+    authHeader === `Bearer ${configuredSecret}` ||
+    cronHeader === configuredSecret ||
+    (req.nextUrl.searchParams.get('secret') === configuredSecret && Boolean(configuredSecret));
+
+  if (isCronAuth) {
+    try {
+      const requestedTenant = req.nextUrl.searchParams.get('tenantId');
+
+      if (requestedTenant && requestedTenant !== 'all') {
+        const sweepResult = await withTenantRls(prisma, requestedTenant, async () => {
+          return runSlaEscalationSweep(requestedTenant);
+        });
+        return NextResponse.json({
+          ok: true,
+          mode: 'cron',
+          timestamp: new Date().toISOString(),
+          tenantId: requestedTenant,
+          sweepResult,
+        });
+      }
+
+      // Sweep across all active tenants with open tickets
+      const distinctTenants = await prisma.$queryRawUnsafe<Array<{ tenant_id: string }>>(
+        `SELECT DISTINCT tenant_id
+         FROM service_tickets
+         WHERE deleted_at IS NULL
+           AND status NOT IN ('Resolved', 'Completed', 'Closed', 'Rejected')`
+      ).catch(() => []);
+
+      const sweepResults: Record<string, any> = {};
+      for (const row of distinctTenants) {
+        if (!row.tenant_id) continue;
+        try {
+          sweepResults[row.tenant_id] = await withTenantRls(prisma, row.tenant_id, async () => {
+            return runSlaEscalationSweep(row.tenant_id);
+          });
+        } catch (sweepErr) {
+          sweepResults[row.tenant_id] = { error: String(sweepErr) };
+        }
+      }
+
+      return NextResponse.json({
+        ok: true,
+        mode: 'cron-all-tenants',
+        timestamp: new Date().toISOString(),
+        sweptTenantsCount: Object.keys(sweepResults).length,
+        sweepResults,
+      });
+    } catch (err) {
+      console.error('CRON POST /api/service-tickets/sla/sweep error:', err);
+      return NextResponse.json(
+        { error: 'Failed to execute SLA escalation cron sweep', details: String(err) },
+        { status: 500 }
+      );
+    }
+  }
+
+  // Fallback to interactive user tenant auth
   const authz = requireAuthorizedTenant(req);
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -113,6 +179,7 @@ export async function POST(req: NextRequest) {
       const sweepResult = await runSlaEscalationSweep(tenantId);
       return NextResponse.json({
         ok: true,
+        mode: 'user-session',
         timestamp: new Date().toISOString(),
         sweepResult,
       });

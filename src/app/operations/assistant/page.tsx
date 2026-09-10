@@ -16,6 +16,7 @@ import ServiceSchoolBusKPICard from '@/components/ops-assistant/tiles/ServiceSch
 import ServiceLogisticsKPICard from '@/components/ops-assistant/tiles/ServiceLogisticsKPICard';
 import ServiceLeasingKPICard from '@/components/ops-assistant/tiles/ServiceLeasingKPICard';
 import ServiceChauffeurKPICard from '@/components/ops-assistant/tiles/ServiceChauffeurKPICard';
+import ContractClausesCard from '@/components/ops-assistant/ContractClausesCard';
 
 // ── TheSys / Crayon component renderer ───────────────────────────────────────
 // The TheSys model returns <content thesys="true"> JSON component trees.
@@ -231,7 +232,8 @@ type ToolName =
   | 'showRACKPI'      | 'showStaffBusKPI' | 'showSchoolBusKPI'
   | 'showLogisticsKPI'| 'showLeasingKPI'  | 'showChauffeurKPI'
   | 'generateUtilizationReport' | 'generateRevenueReport'
-  | 'generateMaintenanceCostReport' | 'scheduleReport';
+  | 'generateMaintenanceCostReport' | 'scheduleReport'
+  | 'showContractClauses';
 
 interface ToolCall { name: ToolName; args: Record<string, unknown> }
 
@@ -263,6 +265,7 @@ function ToolComponent({ call }: { call: ToolCall }) {
     case 'generateRevenueReport':        return <ReportRevenueCard     {...(call.args as any)} />;
     case 'generateMaintenanceCostReport':return <ReportMaintenanceCard {...(call.args as any)} />;
     case 'scheduleReport':               return <ReportScheduleCard    {...(call.args as any)} />;
+    case 'showContractClauses':          return <ContractClausesCard   {...(call.args as any)} />;
     default:                             return null;
   }
 }
