@@ -21,52 +21,71 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  try {
-    const bodyRaw = await req.json();
-  const body = stripTenantOwnershipFields(bodyRaw);
-    const { agreementType, openingBranchId, closingBranchId, startDate, lesseeId } = body;
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+      const bodyRaw = await req.json().catch(() => ({}));
+      const body = stripTenantOwnershipFields(bodyRaw);
+      const { agreementType, openingBranchId, closingBranchId, startDate, lesseeId } = body;
 
-    const quotation = await prisma.leaseQuotation.findFirst({
-      where: { id: params.id, tenantId, deletedAt: null },
-      include: { vehicles: true, lineItems: true },
-    });
-    if (!quotation) return NextResponse.json({ error: 'Quotation not found' }, { status: 404 });
+      const quotation = await tx.leaseQuotation.findFirst({
+        where: { id: params.id, tenantId, deletedAt: null },
+        include: { vehicles: true, lineItems: true },
+      });
+      if (!quotation) return NextResponse.json({ error: 'Quotation not found' }, { status: 404 });
 
-    const ALLOWED_CONVERT_STATUSES = [
-      'CUSTOMER_APPROVED',
-      'PENDING_CREDIT_APPROVAL',
-      'CREDIT_APPROVED',
-      'PO_PREPARATION',
-      'PO_PREPARED',
-      'DELIVERY_IN_PROGRESS',
-      'DELIVERED'
-    ];
+      const ALLOWED_CONVERT_STATUSES = [
+        'CUSTOMER_APPROVED',
+        'PENDING_CREDIT_APPROVAL',
+        'CREDIT_APPROVED',
+        'PO_PREPARATION',
+        'PO_PREPARED',
+        'DELIVERY_IN_PROGRESS',
+        'DELIVERED'
+      ];
 
-    if (!ALLOWED_CONVERT_STATUSES.includes(quotation.status ?? '')) {
-      return NextResponse.json(
-        { error: `Quotation must be in one of the following statuses to convert: ${ALLOWED_CONVERT_STATUSES.join(', ')}` },
-        { status: 400 }
-      );
-    }
+      if (!ALLOWED_CONVERT_STATUSES.includes(quotation.status ?? '')) {
+        return NextResponse.json(
+          { error: `Quotation must be in one of the following statuses to convert: ${ALLOWED_CONVERT_STATUSES.join(', ')}` },
+          { status: 400 }
+        );
+      }
 
-    const start = startDate ? new Date(startDate) : new Date();
-    const durationMonths = quotation.durationMonths ?? 24;
-    const end = new Date(start);
-    end.setMonth(end.getMonth() + durationMonths);
+      // Expiry check
+      if (quotation.validUntil && new Date(quotation.validUntil) < new Date()) {
+        return NextResponse.json({ error: 'Quotation has expired' }, { status: 400 });
+      }
 
-    const contractNumber = `CNT-${Date.now().toString().slice(-6)}`;
-    const monthlyRate = Number(quotation.totalMonthlyRate ?? 0);
-    const totalContractValue = monthlyRate * durationMonths;
+      // Customer consistency
+      if (lesseeId && quotation.lesseeId && lesseeId !== quotation.lesseeId) {
+        return NextResponse.json({ error: 'Specified lessee does not match quotation customer' }, { status: 400 });
+      }
 
-    // Everything below used to run as 4 separate withTenantRls calls (no
-    // transaction) — a failure partway through left an orphaned,
-    // half-created contract with no cleanup. One transaction now.
-    const { contract, payments } = await withTenantRls(prisma, tenantId, async (tx) => {
+      // Duplicate conversion guard
+      const existingContract = await tx.leaseContract2.findFirst({
+        where: { quotationId: quotation.id, tenantId, deletedAt: null },
+        select: { id: true, contractNumber: true },
+      });
+      if (existingContract) {
+        return NextResponse.json(
+          { error: `Quotation has already been converted to contract ${existingContract.contractNumber || existingContract.id}` },
+          { status: 409 }
+        );
+      }
+
+      const start = startDate ? new Date(startDate) : new Date();
+      const durationMonths = quotation.durationMonths ?? 24;
+      const end = new Date(start);
+      end.setMonth(end.getMonth() + durationMonths);
+
+      const contractNumber = `CNT-${Date.now().toString().slice(-6)}`;
+      const monthlyRate = Number(quotation.totalMonthlyRate ?? 0);
+      const totalContractValue = monthlyRate * durationMonths;
+
       const contract = await tx.leaseContract2.create({
         data: {
           contractNumber,
           agreementType: agreementType ?? 'INDIVIDUAL',
-          status: 'ACTIVE',
+          status: 'DRAFT',
           lesseeId: lesseeId ?? quotation.lesseeId ?? '',
           quotationId: quotation.id,
           openingBranchId: openingBranchId ?? null,
@@ -136,12 +155,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         data: { status: 'DELIVERED', updatedAt: new Date() },
       });
 
-      return { contract, payments };
-    });
-
-    return NextResponse.json({ contract, paymentsCreated: payments.length });
-    } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
+      return NextResponse.json({ contract, paymentsCreated: payments.length }, { status: 201 });
+    } catch (e: any) {
+      console.error('POST /api/leasing/quotations/[id]/convert error:', e?.message);
+      return NextResponse.json({ error: e?.message || 'Internal server error' }, { status: e?.status || 500 });
+    }
+  });
 }

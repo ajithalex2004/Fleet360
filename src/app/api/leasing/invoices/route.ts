@@ -54,48 +54,105 @@ export const POST = withAudit(
     }
     const { tenantId } = authz;
     try {
-      const body = await req.json();
-      const { lines = [], ...invoiceData } = body;
-      const lessee = await prisma.lessee.findFirst({
-        where: { id: invoiceData.lesseeId, tenantId },
-        select: { id: true },
-      });
-      if (!lessee) {
-        return NextResponse.json({ error: 'Lessee not found in this tenant' }, { status: 404 });
+      const raw = await req.json().catch(() => ({}));
+      const body = stripTenantOwnershipFields(
+        (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>,
+      );
+      const { lines = [], ...invoiceData } = body as Record<string, any>;
+
+      if (!invoiceData.lesseeId) {
+        return NextResponse.json({ error: 'lesseeId is required' }, { status: 400 });
       }
-      // Compute each line's totalAmount from quantity*unitAmount when the
-      // caller doesn't supply one — the manual "New Invoice" UI form never
-      // sent totalAmount at all (only quantity/unitAmount), so subTotal was
-      // silently computing to 0 on every invoice created through it. Callers
-      // that do pass an explicit totalAmount (e.g. a pre-computed one-off
-      // charge) keep taking precedence.
-      const linesWithTotals = lines.map((l: any) => {
-        const quantity = Number(l.quantity ?? 1);
-        const unitAmount = Number(l.unitAmount ?? 0);
+
+      const roundMoney = (val: number): number => {
+        return Math.round((val + Number.EPSILON) * 100) / 100;
+      };
+
+      // Validated monetary computation with 2-decimal rounding
+      const linesWithTotals = (Array.isArray(lines) ? lines : []).map((l: any) => {
+        const quantity = Math.max(1, Number(l.quantity ?? 1));
+        const unitAmount = roundMoney(Number(l.unitAmount ?? 0));
         const totalAmount = l.totalAmount != null && l.totalAmount !== ''
-          ? Number(l.totalAmount)
-          : quantity * unitAmount;
-        return { ...l, quantity, unitAmount, totalAmount };
+          ? roundMoney(Number(l.totalAmount))
+          : roundMoney(quantity * unitAmount);
+        return {
+          ...l,
+          quantity,
+          unitAmount,
+          totalAmount,
+          currency: l.currency || invoiceData.currency || 'AED',
+        };
       });
-      const subTotal = linesWithTotals.reduce((s: number, l: any) => s + l.totalAmount, 0);
-      const vatPct   = parseFloat(invoiceData.vatPct ?? '5');
-      const vatAmount = subTotal * (vatPct / 100);
-      const totalAmount = subTotal + vatAmount;
-      // <input type="date"> sends a bare "YYYY-MM-DD" string, which Prisma's
-      // strict DateTime parser rejects ("premature end of input") — the
-      // manual invoice form 500'd on every submission because of this.
-      // Native Date objects are accepted regardless of string format.
+
+      const subTotal = roundMoney(linesWithTotals.reduce((s: number, l: any) => s + l.totalAmount, 0));
+      const rawVat = invoiceData.vatPct !== undefined && invoiceData.vatPct !== null && invoiceData.vatPct !== ''
+        ? Number(invoiceData.vatPct)
+        : 5;
+      if (isNaN(rawVat) || rawVat < 0 || rawVat > 100) {
+        return NextResponse.json({ error: 'vatPct must be between 0 and 100' }, { status: 400 });
+      }
+      const vatPct = rawVat;
+      const vatAmount = roundMoney(subTotal * (vatPct / 100));
+      const totalAmount = roundMoney(subTotal + vatAmount);
+
       const issueDate = invoiceData.issueDate ? new Date(invoiceData.issueDate) : new Date();
       const dueDate = invoiceData.dueDate ? new Date(invoiceData.dueDate) : issueDate;
+
       const invoice = await withTenantRls(prisma, tenantId, async (tx) => {
-        // G13: lock before count() — shared 'invoice' series with the other
-        // three invoice-number generators (mileage overage, traffic-fines
-        // sweep-bill, fuel sweep-bill) so none of the four can collide.
+        const lessee = await tx.lessee.findFirst({
+          where: { id: invoiceData.lesseeId, tenantId, deletedAt: null },
+          select: { id: true },
+        });
+        if (!lessee) {
+          throw Object.assign(new Error('Lessee not found in this tenant'), { status: 404 });
+        }
+
+        // Validate contract consistency and state if contractId is provided
+        const contractId = invoiceData.contractId || linesWithTotals.find((l: any) => l.contractId)?.contractId;
+        if (contractId) {
+          const contract = await tx.leaseContract2.findFirst({
+            where: { id: contractId, tenantId, deletedAt: null },
+            select: { id: true, lesseeId: true, status: true },
+          });
+          if (!contract) {
+            throw Object.assign(new Error('Contract not found in this tenant'), { status: 404 });
+          }
+          if (contract.lesseeId !== invoiceData.lesseeId) {
+            throw Object.assign(new Error('Invoice lessee does not match contract customer'), { status: 400 });
+          }
+          const cStatus = (contract.status || '').toUpperCase();
+          if (!['ACTIVE', 'EXTENDED'].includes(cStatus)) {
+            throw Object.assign(
+              new Error(`Cannot invoice contract in ${contract.status} status. Contract must be ACTIVE or EXTENDED`),
+              { status: 400 }
+            );
+          }
+
+          // Duplicate-billing protection by period
+          if (invoiceData.billingPeriod) {
+            const existingBilling = await tx.leaseInvoice.findFirst({
+              where: {
+                tenantId,
+                billingPeriod: String(invoiceData.billingPeriod),
+                status: { notIn: ['CANCELLED'] },
+                lines: { some: { contractId } },
+              },
+              select: { id: true, invoiceNo: true },
+            });
+            if (existingBilling) {
+              throw Object.assign(
+                new Error(`Invoice ${existingBilling.invoiceNo || existingBilling.id} already exists for contract in billing period ${invoiceData.billingPeriod}`),
+                { status: 409 }
+              );
+            }
+          }
+        }
+
+        // G13: serial lock for invoice numbers
         await lockSerialSeries(tx, tenantId, 'invoice');
-        // Per-tenant invoice number (not global — tenant A and tenant B
-        // can each have INV-000001).
         const count = await tx.leaseInvoice.count({ where: { tenantId } });
         const invoiceNo = `INV-${String(count + 1).padStart(6, '0')}`;
+
         return tx.leaseInvoice.create({
           data: {
             ...invoiceData,
@@ -104,21 +161,27 @@ export const POST = withAudit(
             issueDate,
             dueDate,
             subTotal,
+            vatPct,
             vatAmount,
             totalAmount,
-            // LeaseInvoiceLine.tenantId is required — omitting it throws
-            // "Argument tenant is missing" (same bug class as the
-            // quotation-vehicles and contract-vehicles nested creates
-            // fixed earlier; this one was still live).
-            lines: { create: linesWithTotals.map((l: any) => ({ ...l, tenantId })) },
+            status: invoiceData.status || 'DRAFT',
+            lines: {
+              create: linesWithTotals.map((l: any) => ({
+                ...l,
+                tenantId,
+                contractId: l.contractId || invoiceData.contractId || null,
+              })),
+            },
           },
           include: { lines: true, lessee: { select: { name: true } } },
         });
       });
+
       return NextResponse.json(invoice, { status: 201 });
-      } catch (e) {
+    } catch (e: any) {
       console.error('POST /api/leasing/invoices error:', e);
-      return NextResponse.json({ error: 'Failed' }, { status: 500 });
+      const status = e?.status || 500;
+      return NextResponse.json({ error: e?.message || 'Failed' }, { status });
     }
   },
   {

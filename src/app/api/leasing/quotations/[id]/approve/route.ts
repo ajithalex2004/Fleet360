@@ -28,72 +28,81 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   }
   const { tenantId } = authz;
   try {
-    const bodyRaw = await req.json();
-  const body = stripTenantOwnershipFields(bodyRaw);
+    const bodyRaw = await req.json().catch(() => ({}));
+    const body = stripTenantOwnershipFields(bodyRaw);
     const { action, approverName, comments, targetStatus: requestedTarget, recipientEmail: customRecipient } = body;
     // action: 'APPROVE' | 'REJECT'
 
-    const quotation = await prisma.leaseQuotation.findFirst({
-      where: { id: params.id, tenantId, deletedAt: null },
-      include: { lessee: true }
-    });
-    if (!quotation) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-
-    // Find the pending approval step for this quotation — scoped by tenant.
-    const pendingStep = await prisma.leaseApprovalStep.findFirst({
-      where: {
-        entityId: params.id,
-        entityType: 'QUOTATION',
-        status: 'PENDING',
-        tenantId,
-      },
-      orderBy: { stepOrder: 'asc' },
-    });
-
-    if (pendingStep) {
-      await withTenantRls(prisma, tenantId, async (tx) =>
-        tx.leaseApprovalStep.update({
-        where: { id: pendingStep.id },
-        data: {
-          status: action === 'APPROVE' ? 'APPROVED' : 'REJECTED',
-          approverName: approverName ?? pendingStep.approverName,
-          actionAt: new Date(),
-          comments: comments ?? null,
-        },
-      }),
-      );
-    }
-
-    // Determine next status
-    let nextStatus = quotation.status ?? 'NEW';
-    if (action === 'APPROVE') {
-      if (requestedTarget) {
-        nextStatus = requestedTarget;
-      } else {
-        const statusMap: Record<string, string> = {
-          NEW:                     'PENDING_APPROVAL',
-          PENDING_APPROVAL:        'DRAFT_APPROVED',
-          DRAFT_APPROVED:          'SENT_TO_CUSTOMER',
-          SENT_TO_CUSTOMER:        'CUSTOMER_APPROVED',
-          CUSTOMER_APPROVED:       'PENDING_CREDIT_APPROVAL',
-          PENDING_CREDIT_APPROVAL: 'CREDIT_APPROVED',
-          CREDIT_APPROVED:         'PO_PREPARATION',
-          PO_PREPARATION:          'PO_PREPARED',
-          PO_PREPARED:             'DELIVERY_IN_PROGRESS',
-          DELIVERY_IN_PROGRESS:    'DELIVERED',
-        };
-        nextStatus = statusMap[nextStatus] ?? nextStatus;
+    const { updated, quotation, nextStatus } = await withTenantRls(prisma, tenantId, async (tx) => {
+      const quotation = await tx.leaseQuotation.findFirst({
+        where: { id: params.id, tenantId, deletedAt: null },
+        include: { lessee: true, vehicles: true, lineItems: true },
+      });
+      if (!quotation) {
+        throw Object.assign(new Error('Quotation not found'), { status: 404 });
       }
-    } else {
-      nextStatus = 'REJECTED';
-    }
 
-    const updated = await withTenantRls(prisma, tenantId, async (tx) =>
-      tx.leaseQuotation.update({
-      where: { id: params.id },
-      data: { status: nextStatus, updatedAt: new Date() },
-    }),
-    );
+      // Find the pending approval step for this quotation — scoped by tenant.
+      const pendingStep = await tx.leaseApprovalStep.findFirst({
+        where: {
+          entityId: params.id,
+          entityType: 'QUOTATION',
+          status: 'PENDING',
+          tenantId,
+        },
+        orderBy: { stepOrder: 'asc' },
+      });
+
+      if (pendingStep) {
+        await tx.leaseApprovalStep.update({
+          where: { id: pendingStep.id },
+          data: {
+            status: action === 'APPROVE' ? 'APPROVED' : 'REJECTED',
+            approverName: approverName ?? pendingStep.approverName,
+            actionAt: new Date(),
+            comments: comments ?? null,
+          },
+        });
+      }
+
+      // Determine next status
+      let nextStatus = quotation.status ?? 'NEW';
+      if (action === 'APPROVE') {
+        if (requestedTarget) {
+          nextStatus = requestedTarget;
+        } else {
+          const statusMap: Record<string, string> = {
+            NEW:                     'PENDING_APPROVAL',
+            PENDING_APPROVAL:        'DRAFT_APPROVED',
+            DRAFT_APPROVED:          'SENT_TO_CUSTOMER',
+            SENT_TO_CUSTOMER:        'CUSTOMER_APPROVED',
+            CUSTOMER_APPROVED:       'PENDING_CREDIT_APPROVAL',
+            PENDING_CREDIT_APPROVAL: 'CREDIT_APPROVED',
+            CREDIT_APPROVED:         'PO_PREPARATION',
+            PO_PREPARATION:          'PO_PREPARED',
+            PO_PREPARED:             'DELIVERY_IN_PROGRESS',
+            DELIVERY_IN_PROGRESS:    'DELIVERED',
+          };
+          nextStatus = statusMap[nextStatus] ?? nextStatus;
+        }
+      } else {
+        nextStatus = 'REJECTED';
+      }
+
+      const updated = await tx.leaseQuotation.update({
+        where: { id: params.id },
+        data: { status: nextStatus, updatedAt: new Date() },
+      });
+
+      if (nextStatus === 'SENT_TO_CUSTOMER' && quotation.inquiryId) {
+        await tx.leaseInquiry.updateMany({
+          where: { id: quotation.inquiryId, tenantId },
+          data: { status: 'QUOTATION_SENT' },
+        }).catch((err) => console.error('Failed to sync Inquiry status:', err));
+      }
+
+      return { updated, quotation, nextStatus };
+    });
 
     // ── Side Effects & Notifications ──
     const lesseeName    = quotation.lessee?.name ?? 'Customer';
@@ -112,10 +121,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     }
 
     if (nextStatus === 'SENT_TO_CUSTOMER') {
-      const fullQuotation = await prisma.leaseQuotation.findUnique({
-        where: { id: params.id },
-        include: { vehicles: true, lineItems: true, lessee: true }
-      });
+      const fullQuotation = quotation;
 
       if (fullQuotation) {
         const fqLesseeName  = fullQuotation.lessee?.name ?? 'Customer';
@@ -134,7 +140,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           totalMonthlyRate: Number(fullQuotation.totalMonthlyRate || 0),
           totalContractValue: Number(fullQuotation.totalContractValue || 0),
           securityDeposit: Number(fullQuotation.securityDeposit || 0),
-          vehicles: fullQuotation.vehicles.map(v => ({
+          vehicles: (fullQuotation.vehicles || []).map((v: any) => ({
             vehicleType: v.vehicleType,
             make: v.make || '',
             model: v.model || '',
@@ -154,17 +160,6 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           subject: `Lease Quotation from Fleet360 - ${fqQuotationNo}`,
           htmlBody: html
         });
-      }
-
-      // Update inquiry status (also tenant-scoped — refuse to touch inquiries
-      // that don't belong to the caller's tenant).
-      if (quotation.inquiryId) {
-        await withTenantRls(prisma, tenantId, async (tx) =>
-          tx.leaseInquiry.updateMany({
-          where: { id: quotation.inquiryId, tenantId },
-          data: { status: 'QUOTATION_SENT' },
-        }),
-        ).catch(err => console.error('Failed to sync Inquiry status:', err));
       }
     }
 

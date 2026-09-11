@@ -103,22 +103,67 @@ export const POST = withAudit(async (request: NextRequest) => {
         throw Object.assign(new Error('Lessee not found in tenant'), { status: 404 });
       }
 
+      let quotationRecord: any = null;
+      if (body.quotationId) {
+        quotationRecord = await tx.leaseQuotation.findFirst({
+          where: { id: String(body.quotationId), tenantId, deletedAt: null },
+        });
+        if (!quotationRecord) {
+          throw Object.assign(new Error('Quotation not found in tenant'), { status: 404 });
+        }
+
+        // Customer consistency
+        if (quotationRecord.lesseeId && quotationRecord.lesseeId !== lesseeId) {
+          throw Object.assign(new Error('Contract lessee does not match quotation customer'), { status: 400 });
+        }
+
+        // Expiry check
+        if (quotationRecord.validUntil && new Date(quotationRecord.validUntil) < new Date()) {
+          throw Object.assign(new Error('Quotation has expired'), { status: 400 });
+        }
+
+        // Eligibility check
+        const qStatus = (quotationRecord.status || '').toUpperCase();
+        if (['REJECTED', 'CANCELLED', 'EXPIRED'].includes(qStatus)) {
+          throw Object.assign(new Error(`Quotation is in ineligible status: ${quotationRecord.status}`), { status: 400 });
+        }
+
+        // Duplicate conversion guard
+        const existingConversion = await tx.leaseContract2.findFirst({
+          where: { quotationId: quotationRecord.id, tenantId, deletedAt: null },
+          select: { id: true, contractNumber: true },
+        });
+        if (existingConversion) {
+          throw Object.assign(
+            new Error(`Quotation has already been converted to contract ${existingConversion.contractNumber || existingConversion.id}`),
+            { status: 409 }
+          );
+        }
+      }
+
       const contract = await tx.leaseContract2.create({
         data: {
           tenantId,
           contractNumber,
           agreementType: (body.agreementType as string) ?? 'INDIVIDUAL',
-          leaseType: (body.leaseType as string) ?? 'LONG_TERM',
+          leaseType: (body.leaseType as string) ?? (quotationRecord?.leaseType ?? 'LONG_TERM'),
           startDate: body.startDate ? new Date(String(body.startDate)) : new Date(),
           endDate: body.endDate
             ? new Date(String(body.endDate))
             : new Date(Date.now() + 365 * 24 * 3600 * 1000),
-          monthlyRate: body.monthlyRate != null ? Number(body.monthlyRate) : 0,
+          monthlyRate: body.monthlyRate != null ? Number(body.monthlyRate) : (quotationRecord?.totalMonthlyRate != null ? Number(quotationRecord.totalMonthlyRate) : 0),
           lesseeId,
           status: 'DRAFT',
-          quotationId: (body.quotationId as string) ?? null,
+          quotationId: quotationRecord?.id ?? null,
         },
       });
+
+      if (quotationRecord) {
+        await tx.leaseQuotation.update({
+          where: { id: quotationRecord.id },
+          data: { status: 'CONVERTED', updatedAt: new Date() },
+        });
+      }
 
       return { contract, lesseeContact: { email: lessee.email, name: lessee.name } };
     });
