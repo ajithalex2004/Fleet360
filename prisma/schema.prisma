@@ -763,7 +763,7 @@ model Vehicle {
   seatingCapacity Int?    @map("seating_capacity")
 
   // -- Operational ----------------------------------------------------------
-  status          String? // AVAILABLE|RENTED|MAINTENANCE|RESERVED|INACTIVE|SOLD
+  status          String? // AVAILABLE|RENTED|MAINTENANCE|RESERVED|INACTIVE|SOLD|PENDING_INSPECTION
   isActive        Boolean? @default(true) @map("is_active")
   currentMileage  BigInt?  @map("current_mileage")
   odometerReading BigInt?  @map("odometer_reading")
@@ -3375,7 +3375,12 @@ model LeaseContract2 {
   driverIncluded       Boolean?                   @default(false) @map("driver_included")
   openingBranchId      String?                    @map("opening_branch_id")
   closingBranchId      String?                    @map("closing_branch_id")
-  // Status: DRAFT|PENDING_APPROVAL|APPROVED|ACTIVE|EXTENDED|SUSPENDED|TERMINATED|CLOSED
+  // Status: DRAFT|PENDING_APPROVAL|APPROVED|ACTIVE|EXTENDED|SUSPENDED|TERMINATED|CLOSED|COMPLETED
+  // COMPLETED is written only by contract closure for a normal end-of-term
+  // return with no executed early termination. An executed early
+  // termination leaves this at TERMINATED permanently — closure records
+  // "and now settled/returned" in lease_contract_closures instead of
+  // overwriting this column with a second, competing terminal value.
   status               String?                    @default("DRAFT")
   approvedBy           String?                    @map("approved_by")
   approvedAt           DateTime?                  @map("approved_at") @db.Timestamptz(6)
@@ -3402,6 +3407,9 @@ model LeaseContract2 {
   preBillingStatements LeasePreBillingStatement[]
   dunningActivities    LeaseDunningActivity[]
   alerts               LeaseAlert[]
+  returns              LeaseVehicleReturn[]
+  allocationOccurrences LeaseAllocationOccurrence[]
+  closure              LeaseContractClosure?
 
   @@index([tenantId], map: "idx_lease_contracts_v2_tenant_id")
   @@map("lease_contracts_v2")
@@ -3574,19 +3582,148 @@ model LeaseVehicleReturn {
   updatedAt      DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
   tenantId       String    @map("tenant_id")
-  // Free-text contract reference (e.g. "LC-001") rather than a hard FK —
-  // matches the existing return-intake form, which takes the contract
-  // number as plain text rather than a contract picker.
+  // Free-text contract reference kept for back-compat with pre-existing rows
+  // and the old return-intake form. New rows also carry a real contractId.
   contractNumber String    @map("contract_number")
+  contractId              String?   @map("contract_id")
+  allocationOccurrenceId  String?   @map("allocation_occurrence_id")
+  vehicleId               String?   @map("vehicle_id")
+  // FK-by-convention to leasing_handovers.id (raw-SQL table, not a Prisma
+  // model) — the single inspection authority this record links to.
+  handoverId              String?   @map("handover_id")
+
   returnDate     DateTime  @map("return_date") @db.Timestamptz(6)
   mileage        Int
+  deliveryMileage Int?     @map("delivery_mileage")
   condition      String    @default("Good") // Excellent|Good|Fair|Poor
   damages        String?
+  damageItems    Json?     @map("damage_items")
   finalCost      Decimal   @default(0) @map("final_cost") @db.Decimal
   inspector      String
 
+  // Phase 1 (physical link, same tx as handover COMPLETE) vs Phase 2
+  // (billing/clearance, separate tx, resumable via the orphaned-handover
+  // sweep) — see src/lib/leasing/return-workflow.ts.
+  linkedAt             DateTime? @map("linked_at") @db.Timestamptz(6)
+  processingStatus     String?   @default("PENDING") @map("processing_status") // PENDING|PROCESSING|PROCESSED|FAILED
+  processingAttempts   Int?      @default(0) @map("processing_attempts")
+  lastProcessingError  String?   @map("last_processing_error")
+
+  mileageAssessment    String?   @map("mileage_assessment") // OK|REVIEW_REQUIRED
+  mileageReadingId     String?   @map("mileage_reading_id")
+  mileageOverageId     String?   @map("mileage_overage_id")
+  overageInvoiceId     String?   @map("overage_invoice_id")
+
+  chargeApprovalStatus String?   @default("PENDING") @map("charge_approval_status") // PENDING|APPROVED|WAIVED
+  estimatedDamageCost  Decimal?  @map("estimated_damage_cost") @db.Decimal
+  approvedDamageCost   Decimal?  @map("approved_damage_cost") @db.Decimal
+  damageInvoiceId      String?   @map("damage_invoice_id")
+  chargeApprovedBy     String?   @map("charge_approved_by")
+
+  depositId             String?  @map("deposit_id")
+  depositReconciliation String?  @default("PENDING") @map("deposit_reconciliation") // PENDING|RECONCILED|UNRECONCILED|NOT_REQUIRED
+  depositConfirmedBy    String?  @map("deposit_confirmed_by")
+
+  // Cached/display convenience only — always recomputed from
+  // evaluateContractSettlementLiabilities, never trusted at closure time.
+  financialSettlementStatus String? @default("OPEN") @map("financial_settlement_status") // OPEN|AWAITING_PAYMENT|CLEARED
+
+  vehicleClearanceStatus String? @default("PENDING") @map("vehicle_clearance_status") // PENDING|CLEARED|HOLD
+  clearedBy              String? @map("cleared_by")
+  clearedAt              DateTime? @map("cleared_at") @db.Timestamptz(6)
+
+  cancelledAt  DateTime? @map("cancelled_at") @db.Timestamptz(6)
+  cancelledBy  String?   @map("cancelled_by")
+
+  // true only for rows backfilled from the pre-existing thin table —
+  // settlement/clearance fields are left NULL for these, never defaulted
+  // to a terminal value. See the migration's backfill comments.
+  legacyImport Boolean  @default(false) @map("legacy_import")
+
+  contract     LeaseContract2?          @relation(fields: [contractId], references: [id])
+  adjustments  LeaseReturnAdjustment[]
+
   @@index([tenantId], map: "idx_lease_vehicle_returns_tenant_id")
+  @@index([contractId], map: "idx_lease_vehicle_returns_contract_id")
+  @@index([allocationOccurrenceId], map: "idx_lease_vehicle_returns_occurrence_id")
   @@map("lease_vehicle_returns")
+  @@schema("public")
+}
+
+// One row per allocation period of a vehicle on a contract-vehicle slot —
+// gives repeated exchange cycles of the same vehicle a stable identity that
+// handovers/returns bind to, instead of inferring history from a mutated
+// LeaseContractVehicle.vehicleId column. Two partial unique indexes are
+// added via raw migration SQL (Prisma can't express a WHERE clause on
+// @@unique, same workaround as TransportEnrollment elsewhere in this
+// schema): one ACTIVE row per contractVehicleId (per-slot), and separately
+// one ACTIVE row per vehicleId across ALL contracts (cross-contract
+// double-booking guard) — declared here only as plain @@index, not
+// @@unique, to avoid introspection drift.
+model LeaseAllocationOccurrence {
+  id                String    @id @default(uuid())
+  createdAt         DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId          String    @map("tenant_id")
+  contractId        String    @map("contract_id")
+  contractVehicleId String    @map("contract_vehicle_id")
+  vehicleId         String    @map("vehicle_id")
+  sequenceNo        Int       @map("sequence_no")
+  startedAt         DateTime? @map("started_at") @db.Timestamptz(6)
+  endedAt           DateTime? @map("ended_at") @db.Timestamptz(6)
+  endReason         String?   @map("end_reason") // RETURN|EXCHANGE|TRANSFER
+  status            String    @default("ACTIVE") // ACTIVE|ENDED|RECONCILIATION_REQUIRED
+  contract          LeaseContract2 @relation(fields: [contractId], references: [id])
+
+  @@index([tenantId], map: "idx_lease_allocation_occurrences_tenant_id")
+  @@index([contractVehicleId], map: "idx_lease_allocation_occurrences_contract_vehicle_id")
+  @@index([vehicleId], map: "idx_lease_allocation_occurrences_vehicle_id")
+  @@map("lease_allocation_occurrences")
+  @@schema("public")
+}
+
+// Append-only correction trail against a LeaseVehicleReturn — a correction
+// after financial posting never spawns a second return row for the same
+// occurrence; it appends history here instead.
+model LeaseReturnAdjustment {
+  id                     String    @id @default(uuid())
+  createdAt              DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId               String    @map("tenant_id")
+  returnId               String    @map("return_id")
+  adjustmentType         String    @map("adjustment_type") // CHARGE_CORRECTION|DEPOSIT_REVERSAL|INVOICE_VOID|OTHER
+  amountDelta            Decimal?  @map("amount_delta") @db.Decimal
+  reason                 String?
+  reversesApplicationId  String?   @map("reverses_application_id")
+  createdBy              String?   @map("created_by")
+  return                 LeaseVehicleReturn @relation(fields: [returnId], references: [id])
+
+  @@index([tenantId], map: "idx_lease_return_adjustments_tenant_id")
+  @@index([returnId], map: "idx_lease_return_adjustments_return_id")
+  @@map("lease_return_adjustments")
+  @@schema("public")
+}
+
+// One row per contract, written only by the explicit closure action — keeps
+// "why/when this contract closed" as its own auditable record distinct from
+// the per-allocation LeaseVehicleReturn rows. status stays PENDING_REFUND
+// until executeRefund finalizes any owed refund, then flips to FINAL.
+model LeaseContractClosure {
+  id                    String    @id @default(uuid())
+  createdAt             DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId              String    @map("tenant_id")
+  contractId            String    @unique @map("contract_id")
+  closureReason         String    @map("closure_reason") // COMPLETED|EARLY_TERMINATED
+  earlyTerminationId    String?   @map("early_termination_id")
+  depositId             String?   @map("deposit_id")
+  refundRequestedAmount Decimal?  @map("refund_requested_amount") @db.Decimal
+  status                String    @default("FINAL") @map("status") // PENDING_REFUND|FINAL
+  closedAt              DateTime  @default(now()) @map("closed_at") @db.Timestamptz(6)
+  closedBy              String?   @map("closed_by")
+  contract              LeaseContract2 @relation(fields: [contractId], references: [id])
+
+  @@index([tenantId], map: "idx_lease_contract_closures_tenant_id")
+  @@map("lease_contract_closures")
   @@schema("public")
 }
 
@@ -3963,7 +4100,7 @@ model LeaseInvoiceLine {
   contractId  String?      @map("contract_id")
   vehicleRef  String?      @map("vehicle_ref")
   description String
-  lineType    String       @map("line_type") // RENT|FUEL|FINE|OVERAGE|MAINTENANCE|INSURANCE|DEPOSIT|OTHER
+  lineType    String       @map("line_type") // RENT|FUEL|FINE|OVERAGE|MAINTENANCE|INSURANCE|DEPOSIT|DAMAGE|OTHER
   quantity    Int?         @default(1)
   unitAmount  Decimal      @map("unit_amount") @db.Decimal
   totalAmount Decimal      @map("total_amount") @db.Decimal

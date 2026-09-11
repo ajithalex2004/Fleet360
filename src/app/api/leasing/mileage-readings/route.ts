@@ -25,9 +25,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
-import { lockSerialSeries } from '@/lib/leasing/serial-lock';
-
-const DEFAULT_OVERAGE_RATE_AED_PER_KM = 0.50;
+import { computeAndInvoiceMileageOverage } from '@/lib/leasing/mileage-overage';
 
 export async function GET(req: NextRequest) {
 
@@ -90,128 +88,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(reading, { status: 201 });
     }
 
-    if (!contract.mileageCap) {
-      return NextResponse.json(reading, { status: 201 });
-    }
-
-    // Find the delivery reading to compute usage since contract start.
-    const delivery = await prisma.leaseMileageReading.findFirst({
-      where: { tenantId, contractId: body.contractId, readingType: 'DELIVERY' },
-      orderBy: { readingDate: 'asc' },
-    });
-    if (!delivery) {
-      return NextResponse.json(reading, { status: 201 });
-    }
-
-    // For RETURN: full contract period.
-    // For MONTHLY: one month allowance.
-    const monthsCovered =
-      body.readingType === 'RETURN'
-        ? Math.ceil(
-            (new Date(contract.endDate).getTime() - new Date(contract.startDate).getTime()) /
-              (30.44 * 86400000),
-          )
-        : 1;
-
-    const allowedKm = contract.mileageCap * monthsCovered;
-    const actualKm = body.mileage - delivery.mileage;
-
-    if (actualKm <= allowedKm) {
-      // Within cap — nothing to bill.
-      return NextResponse.json(reading, { status: 201 });
-    }
-
-    const overageKm = actualKm - allowedKm;
-    const ratePerKm = contract.mileageOverageRate
-      ? Number(contract.mileageOverageRate)
-      : DEFAULT_OVERAGE_RATE_AED_PER_KM;
-    const overageAmount = overageKm * ratePerKm;
-    const currency = contract.currency ?? 'AED';
-
     // Atomic: create overage + invoice + invoice line in one transaction.
     //
-    // This used to be a bare `prisma.$transaction(...)` instead of
-    // `withTenantRls`, which never sets the `app.tenant_id` GUC that every
-    // tenant-scoped table's RLS policy (USING/WITH CHECK) checks. With
-    // FORCE ROW LEVEL SECURITY on lease_mileage_overages/lease_invoices/
-    // lease_invoice_lines, an unset app.tenant_id makes current_setting(...)
-    // return NULL, which satisfies neither USING nor WITH CHECK for a
-    // non-null tenant_id row — so every insert in this block would be
-    // rejected by Postgres. withTenantRls sets that GUC before handing back
-    // the same tx-shaped client, so the rest of the block is unchanged.
-    const result = await withTenantRls(prisma, tenantId, async (tx) => {
-      // G13: lock before count() so two concurrent overage invoices for the
-      // same tenant can't compute the same INV-<n> (shared 'invoice' series
-      // with the other three invoice-number generators).
-      await lockSerialSeries(tx, tenantId, 'invoice');
-      const overage = await tx.leaseMileageOverage.create({
-        data: {
-          tenantId,
-          contractId: body.contractId,
-          vehicleId: body.vehicleId ?? null,
-          periodFrom: contract.startDate,
-          periodTo: new Date(body.readingDate),
-          allowedKm,
-          actualKm,
-          overageKm,
-          ratePerKm,
-          overageAmount,
-          currency,
-          status: 'PENDING',
-        },
-      });
+    // withTenantRls (not a bare `prisma.$transaction`) sets the
+    // `app.tenant_id` GUC every tenant-scoped table's RLS policy checks —
+    // with FORCE ROW LEVEL SECURITY on lease_mileage_overages/
+    // lease_invoices/lease_invoice_lines, an unset app.tenant_id would
+    // reject every insert in this block.
+    const result = await withTenantRls(prisma, tenantId, (tx) =>
+      computeAndInvoiceMileageOverage(tx, {
+        tenantId,
+        contract,
+        readingType: body.readingType as 'RETURN' | 'MONTHLY',
+        mileage: body.mileage,
+        readingDate: body.readingDate,
+        vehicleId: body.vehicleId,
+      }),
+    );
 
-      // Auto-invoice the overage — scoped to this tenant.
-      const count = await tx.leaseInvoice.count({ where: { tenantId } });
-      const invoiceNo = `INV-${String(count + 1).padStart(6, '0')}`;
-      const subTotal = overageAmount;
-      const vatPct = 5;
-      const vatAmount = subTotal * (vatPct / 100);
-      const totalAmount = subTotal + vatAmount;
-      const issueDate = new Date();
-      const dueDate = new Date(issueDate.getTime() + 30 * 86400000); // 30-day terms
-
-      const invoice = await tx.leaseInvoice.create({
-        data: {
-          tenantId,
-          invoiceNo,
-          lesseeId: contract.lesseeId,
-          billingPeriod: `Mileage overage — ${overage.periodFrom.toISOString().slice(0, 10)} → ${overage.periodTo.toISOString().slice(0, 10)}`,
-          issueDate,
-          dueDate,
-          subTotal,
-          vatPct,
-          vatAmount,
-          totalAmount,
-          currency,
-          status: 'DRAFT',
-          notes: `Auto-generated for mileage overage of ${overageKm} km @ ${ratePerKm} ${currency}/km on contract ${contract.contractNumber ?? contract.id}.`,
-          lines: {
-            create: [
-              {
-                tenantId,
-                contractId: contract.id,
-                vehicleRef: body.vehicleId ?? null,
-                description: `Mileage overage: ${overageKm} km × ${ratePerKm} ${currency}/km`,
-                lineType: 'OVERAGE',
-                quantity: overageKm,
-                unitAmount: ratePerKm,
-                totalAmount: overageAmount,
-                currency,
-              },
-            ],
-          },
-        },
-      });
-
-      // Link the overage to its invoice and mark invoiced.
-      const linkedOverage = await tx.leaseMileageOverage.update({
-        where: { id: overage.id },
-        data: { invoiced: true, invoiceRef: invoice.invoiceNo, status: 'INVOICED' },
-      });
-
-      return { overage: linkedOverage, invoice, totalAmount };
-    });
+    if (!result.overage || !result.invoice) {
+      // No mileageCap, no DELIVERY reading on file, or within cap — nothing to bill.
+      return NextResponse.json(reading, { status: 201 });
+    }
 
     // Fire-and-forget audit
     void logAudit({
@@ -219,9 +117,9 @@ export async function POST(req: NextRequest) {
       userId: req.headers.get('x-user-id') ?? undefined,
       userRole: req.headers.get('x-user-role') ?? undefined,
       entityType: 'LeaseMileageOverage',
-      entityId: result.overage.id,
+      entityId: result.overage.id as string,
       action: 'CREATE',
-      details: `Mileage overage on contract ${contract.contractNumber ?? contract.id}: ${overageKm} km × ${ratePerKm} ${currency}/km = ${overageAmount.toFixed(2)} ${currency}. Invoice ${result.invoice.invoiceNo} issued.`,
+      details: `Mileage overage on contract ${contract.contractNumber ?? contract.id}: ${result.overage.overageKm} km × ${result.overage.ratePerKm} ${result.overage.currency}/km = ${Number(result.overage.overageAmount).toFixed(2)} ${result.overage.currency}. Invoice ${result.invoice.invoiceNo} issued.`,
     });
 
     return NextResponse.json(

@@ -11,6 +11,8 @@ const store = {
   vehicles: new Map<string, any>(),
   receipts: new Map<string, any>(),
   paymentIntents: new Map<string, any>(),
+  allocationOccurrences: new Map<string, any>(),
+  returns: new Map<string, any>(),
 };
 
 function resetStore() {
@@ -22,6 +24,8 @@ function resetStore() {
   store.vehicles.clear();
   store.receipts.clear();
   store.paymentIntents.clear();
+  store.allocationOccurrences.clear();
+  store.returns.clear();
 
   // Seed sample lessees
   store.lessees.set('lessee-alpha-1', {
@@ -276,6 +280,64 @@ vi.mock('@/lib/prisma', () => {
               };
               store.contractVehicles.set(id, created);
               return created;
+            }),
+          },
+          leaseAllocationOccurrence: {
+            findFirst: vi.fn().mockImplementation(async ({ where }) => {
+              for (const o of store.allocationOccurrences.values()) {
+                if (o.tenantId !== where.tenantId) continue;
+                if (where.contractVehicleId && o.contractVehicleId !== where.contractVehicleId) continue;
+                if (where.vehicleId && o.vehicleId !== where.vehicleId) continue;
+                if (where.status && o.status !== where.status) continue;
+                return o;
+              }
+              return null;
+            }),
+            findMany: vi.fn().mockImplementation(async ({ where }) => {
+              return Array.from(store.allocationOccurrences.values()).filter(
+                (o) => o.tenantId === where.tenantId && (where.contractId ? o.contractId === where.contractId : true)
+              );
+            }),
+            create: vi.fn().mockImplementation(async ({ data }) => {
+              const id = `occ-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+              const created = { id, ...data, createdAt: new Date() };
+              store.allocationOccurrences.set(id, created);
+              return created;
+            }),
+            update: vi.fn().mockImplementation(async ({ where, data }) => {
+              const o = store.allocationOccurrences.get(where.id);
+              if (o) Object.assign(o, data);
+              return o;
+            }),
+            aggregate: vi.fn().mockResolvedValue({ _max: { sequenceNo: 0 } }),
+          },
+          leaseVehicleReturn: {
+            findFirst: vi.fn().mockImplementation(async ({ where }) => {
+              for (const r of store.returns.values()) {
+                if (r.tenantId !== where.tenantId) continue;
+                if (where.id && r.id !== where.id) continue;
+                if (where.handoverId && r.handoverId !== where.handoverId) continue;
+                if (where.overageInvoiceId && r.overageInvoiceId !== where.overageInvoiceId) continue;
+                if (where.damageInvoiceId && r.damageInvoiceId !== where.damageInvoiceId) continue;
+                return r;
+              }
+              return null;
+            }),
+            findMany: vi.fn().mockImplementation(async ({ where }) => {
+              return Array.from(store.returns.values()).filter(
+                (r) => r.tenantId === where.tenantId && (where.contractId ? r.contractId === where.contractId : true)
+              );
+            }),
+            create: vi.fn().mockImplementation(async ({ data }) => {
+              const id = `ret-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+              const created = { id, ...data, createdAt: new Date() };
+              store.returns.set(id, created);
+              return created;
+            }),
+            update: vi.fn().mockImplementation(async ({ where, data }) => {
+              const r = store.returns.get(where.id);
+              if (r) Object.assign(r, data);
+              return r;
             }),
           },
           leaseInvoice: {

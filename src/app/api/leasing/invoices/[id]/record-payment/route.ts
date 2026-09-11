@@ -27,6 +27,7 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { createPaymentIntent, confirmPaymentIntent } from '@/lib/leasing/payment-intents-store';
+import { recomputeSettlementStatus } from '@/lib/leasing/return-workflow';
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -171,6 +172,22 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           paymentRef: referenceCode,
         },
       });
+
+      // A payment against this invoice can be the last piece of ANY of a
+      // return's liabilities (damage, overage, or an unrelated contract
+      // invoice) — recompute the full liability picture via the shared
+      // evaluator rather than declaring this one return cleared just
+      // because the ONE invoice this request happened to pay reached zero.
+      const linkedReturn = await tx.leaseVehicleReturn.findFirst({
+        where: {
+          tenantId,
+          OR: [{ overageInvoiceId: invoice.id }, { damageInvoiceId: invoice.id }],
+        },
+        select: { id: true },
+      });
+      if (linkedReturn) {
+        await recomputeSettlementStatus(tx, tenantId, linkedReturn.id);
+      }
 
       return NextResponse.json({
         ok: true,

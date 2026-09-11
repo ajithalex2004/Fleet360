@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { linkReturnFromHandover, attemptProcessReturn } from '@/lib/leasing/return-workflow';
 
 type HandoverRow = {
   id: string;
@@ -53,6 +54,8 @@ type HandoverRow = {
   witnessed_by: string | null;
   status: string;
   branch_id: string | null;
+  no_damage_confirmed: boolean | null;
+  occurrence_id: string | null;
 };
 
 type CountRow = { status: string; cnt: bigint };
@@ -95,6 +98,8 @@ function mapHandover(r: HandoverRow) {
     witnessedBy: r.witnessed_by,
     status: r.status,
     branchId: r.branch_id,
+    noDamageConfirmed: r.no_damage_confirmed,
+    occurrenceId: r.occurrence_id,
   };
 }
 
@@ -213,6 +218,7 @@ export async function POST(req: NextRequest) {
           parkingCard = false, serviceBook = false,
           accessories = [], checklistItems = [],
           damageNotes, notes, signedBy, witnessedBy, branchId,
+          noDamageConfirmed,
         } = body;
 
         if (!lesseeName?.trim()) {
@@ -238,6 +244,25 @@ export async function POST(req: NextRequest) {
           }
         }
 
+        // Resolve the ACTIVE allocation occurrence for this contract+vehicle
+        // (if both are known) so the return workflow can bind to a stable
+        // identity across repeated exchange cycles instead of inferring it
+        // later from a mutated LeaseContractVehicle row.
+        let occurrenceId: string | null = null;
+        if (contractId && vehicleId) {
+          const contractVehicle = await tx.leaseContractVehicle.findFirst({
+            where: { tenantId, contractId, vehicleId },
+            select: { id: true },
+          });
+          if (contractVehicle) {
+            const occ = await tx.leaseAllocationOccurrence.findFirst({
+              where: { tenantId, contractVehicleId: contractVehicle.id, vehicleId, status: 'ACTIVE' },
+              select: { id: true },
+            });
+            occurrenceId = occ?.id ?? null;
+          }
+        }
+
         const yyyymm = new Date().toISOString().slice(0, 7).replace('-', '');
         const [seqRow] = await tx.$queryRawUnsafe<SeqRow[]>(
           `SELECT COUNT(*) + 1 AS seq FROM leasing_handovers WHERE tenant_id = $1 AND handover_no LIKE $2`,
@@ -254,8 +279,8 @@ export async function POST(req: NextRequest) {
               condition_score, body_condition, interior_condition, tyres_condition,
               keys_count, spare_key, salik_tag, parking_card, service_book,
               accessories, checklist_items, damage_notes, notes,
-              signed_by, witnessed_by, branch_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)
+              signed_by, witnessed_by, branch_id, occurrence_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)
            RETURNING id, handover_no`,
           tenantId,
           handoverNo,
@@ -285,7 +310,8 @@ export async function POST(req: NextRequest) {
           notes         || null,
           signedBy      || null,
           witnessedBy   || null,
-          branchId      || null
+          branchId      || null,
+          occurrenceId  || null
         );
 
         return NextResponse.json({ id: row.id, handoverNo: row.handover_no }, { status: 201 });
@@ -305,7 +331,12 @@ export async function PATCH(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  // Captured from inside the transaction below, read only after it commits
+  // — Phase 2 (attemptProcessReturn) must run in its OWN, separate
+  // transaction, never nested inside Phase 1's still-open one.
+  let linkedReturnId: string | null = null;
+
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
     try {
         const id = req.nextUrl.searchParams.get('id');
         if (!id) {
@@ -314,7 +345,7 @@ export async function PATCH(req: NextRequest) {
 
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-        const { action, signedBy, witnessedBy, damageNotes, notes, status: newStatus } = body;
+        const { action, signedBy, witnessedBy, damageNotes, notes, status: newStatus, noDamageConfirmed } = body;
 
         const [current] = await tx.$queryRawUnsafe<HandoverRow[]>(
           `SELECT * FROM leasing_handovers WHERE id = $1 AND tenant_id = $2`,
@@ -344,13 +375,19 @@ export async function PATCH(req: NextRequest) {
           await tx.$executeRawUnsafe(
             `UPDATE leasing_handovers
                SET status='COMPLETED', signed_by=$1, signed_at=$2, witnessed_by=$3,
-                   damage_notes=$4, notes=$5, updated_at=$6
+                   damage_notes=$4, notes=$5, updated_at=$6, no_damage_confirmed=$9
              WHERE id=$7 AND tenant_id=$8`,
             signedBy.trim(), now, witnessedBy || null,
             damageNotes || current.damage_notes,
             notes       || current.notes,
-            now, id, tenantId
+            now, id, tenantId,
+            typeof noDamageConfirmed === 'boolean' ? noDamageConfirmed : null,
           );
+
+          if (current.handover_type === 'RETURN') {
+            const linked = await linkReturnFromHandover(tx, tenantId, id);
+            linkedReturnId = linked?.id ?? null;
+          }
         } else if (action === 'DISPUTE') {
           await tx.$executeRawUnsafe(
             `UPDATE leasing_handovers SET status='DISPUTED', damage_notes=$1, updated_at=$2 WHERE id=$3 AND tenant_id=$4`,
@@ -374,5 +411,16 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: 'Failed to update handover' }, { status: 500 });
       }
   });
+
+  // Phase 1 (physical link) has committed by now. Attempt Phase 2
+  // (billing/clearance) best-effort in its own transaction — a failure
+  // here is captured on the return row itself (processingStatus: FAILED)
+  // for the orphaned-handover sweep to retry, not surfaced as a failure
+  // of this request (the handover genuinely did complete).
+  if (linkedReturnId) {
+    await attemptProcessReturn(tenantId, linkedReturnId);
+  }
+
+  return response;
 }
 

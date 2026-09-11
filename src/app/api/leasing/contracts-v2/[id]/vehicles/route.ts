@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
+import { withContractAndVehicleLock } from '@/lib/leasing/contract-lock';
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -120,21 +121,6 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
           return NextResponse.json({ error: `Vehicle is not available for allocation (status: ${realVehicle.status})` }, { status: 400 });
         }
 
-        // Check for conflicting active contract allocation (double-booking protection)
-        const activeAllocation = await (tx as any).leaseContractVehicle.findFirst({
-          where: {
-            tenantId,
-            vehicleId: realVehicle.id,
-            status: 'ACTIVE',
-            contract: {
-              status: { in: ['ACTIVE', 'APPROVED', 'DRAFT'] },
-              deletedAt: null,
-            },
-          },
-        });
-        if (activeAllocation) {
-          return NextResponse.json({ error: 'Vehicle is already allocated to another active lease contract' }, { status: 409 });
-        }
       }
 
       // Rate validation and inheritance
@@ -159,46 +145,85 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         return NextResponse.json({ error: 'License plate is required' }, { status: 400 });
       }
 
-      const vehicle = await (tx as any).leaseContractVehicle.create({
-        data: {
-          contractId: params.id,
-          vehicleId: realVehicle?.id ?? (vehicleId ? String(vehicleId) : null),
-          vehicleType: String(vehicleTypeVal),
-          make: realVehicle?.make ?? (make ? String(make) : null),
-          model: realVehicle?.model ?? (model ? String(model) : null),
-          year: realVehicle?.year != null ? Number(realVehicle.year) : (year != null ? Number(year) : null),
-          licensePlate: String(plateVal),
-          vin: realVehicle?.vin ?? (vin ? String(vin) : null),
-          driverId: driverId ? String(driverId) : (driver ? String(driver) : null),
-          monthlyRate: finalMonthlyRate,
-          mileageStart: mileageStart != null ? Number(mileageStart) : (realVehicle?.currentMileage != null ? Number(realVehicle.currentMileage) : null),
-          status: status ? String(status) : 'ACTIVE',
-          tenantId,
+      const result = await withContractAndVehicleLock(
+        tx,
+        tenantId,
+        { contractId: params.id, vehicleIds: [realVehicle?.id] },
+        async () => {
+          // Double-booking protection, re-checked under the vehicle lock —
+          // the plain findFirst alone is a TOCTOU race; the lock plus the
+          // partial-unique lease_allocation_occurrences index (one ACTIVE
+          // occurrence per vehicle) close it at both the app and DB layer.
+          if (realVehicle) {
+            const activeAllocation = await tx.leaseContractVehicle.findFirst({
+              where: {
+                tenantId,
+                vehicleId: realVehicle.id,
+                status: 'ACTIVE',
+                contract: { status: { in: ['ACTIVE', 'APPROVED', 'DRAFT'] }, deletedAt: null },
+              },
+            });
+            if (activeAllocation) {
+              return NextResponse.json({ error: 'Vehicle is already allocated to another active lease contract' }, { status: 409 });
+            }
+          }
+
+          const vehicle = await (tx as any).leaseContractVehicle.create({
+            data: {
+              contractId: params.id,
+              vehicleId: realVehicle?.id ?? (vehicleId ? String(vehicleId) : null),
+              vehicleType: String(vehicleTypeVal),
+              make: realVehicle?.make ?? (make ? String(make) : null),
+              model: realVehicle?.model ?? (model ? String(model) : null),
+              year: realVehicle?.year != null ? Number(realVehicle.year) : (year != null ? Number(year) : null),
+              licensePlate: String(plateVal),
+              vin: realVehicle?.vin ?? (vin ? String(vin) : null),
+              driverId: driverId ? String(driverId) : (driver ? String(driver) : null),
+              monthlyRate: finalMonthlyRate,
+              mileageStart: mileageStart != null ? Number(mileageStart) : (realVehicle?.currentMileage != null ? Number(realVehicle.currentMileage) : null),
+              status: status ? String(status) : 'ACTIVE',
+              tenantId,
+            },
+          });
+
+          if (realVehicle) {
+            await tx.vehicle.update({
+              where: { id: realVehicle.id },
+              data: {
+                status: 'RESERVED',
+                lifecycleStage: 'ALLOCATED',
+              },
+            });
+
+            await tx.leaseAllocationOccurrence.create({
+              data: {
+                tenantId,
+                contractId: params.id,
+                contractVehicleId: vehicle.id,
+                vehicleId: realVehicle.id,
+                sequenceNo: 1,
+                startedAt: new Date(),
+                status: 'ACTIVE',
+              },
+            });
+          }
+
+          return NextResponse.json({
+            id: vehicle.id,
+            vehicleId: vehicle.vehicleId ?? null,
+            type: vehicle.vehicleType ?? vehicle.type ?? vehicleTypeVal,
+            make: vehicle.make ?? make ?? '',
+            model: vehicle.model ?? model ?? '',
+            year: vehicle.year ?? year ?? null,
+            licensePlate: vehicle.licensePlate ?? plateVal,
+            driver: vehicle.driverId ?? driver ?? '',
+            monthlyRate: vehicle.monthlyRate != null ? Number(vehicle.monthlyRate) : finalMonthlyRate,
+            status: vehicle.status ?? 'ACTIVE',
+          }, { status: 201 });
         },
-      });
+      );
 
-      if (realVehicle) {
-        await tx.vehicle.update({
-          where: { id: realVehicle.id },
-          data: {
-            status: 'RESERVED',
-            lifecycleStage: 'ALLOCATED',
-          },
-        });
-      }
-
-      return NextResponse.json({
-        id: vehicle.id,
-        vehicleId: vehicle.vehicleId ?? null,
-        type: vehicle.vehicleType ?? vehicle.type ?? vehicleTypeVal,
-        make: vehicle.make ?? make ?? '',
-        model: vehicle.model ?? model ?? '',
-        year: vehicle.year ?? year ?? null,
-        licensePlate: vehicle.licensePlate ?? plateVal,
-        driver: vehicle.driverId ?? driver ?? '',
-        monthlyRate: vehicle.monthlyRate != null ? Number(vehicle.monthlyRate) : finalMonthlyRate,
-        status: vehicle.status ?? 'ACTIVE',
-      }, { status: 201 });
+      return result;
     } catch (e: any) {
       console.error('POST /api/leasing/contracts-v2/[id]/vehicles error:', e?.message);
       return NextResponse.json({ error: e?.message ?? 'Failed to add vehicle' }, { status: 500 });
