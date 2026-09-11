@@ -60,15 +60,19 @@ export async function POST(request: NextRequest) {
 
     // Strip relational/extra fields that aren't on the LeaseQuotation model
     const {
-      vehicles, lineItems, lessee, inquiry,
+      vehicles, lineItems, items, deposit, lessee, inquiry,
       approvalSteps, contracts, lesseeId, monthlyRate, termMonths, ...quotationData
     } = body;
 
     const baseMonthlyRate = quotationData.baseMonthlyRate ?? (monthlyRate != null ? Number(monthlyRate) : null);
     const totalMonthlyRate = quotationData.totalMonthlyRate ?? (monthlyRate != null ? Number(monthlyRate) : null);
+    const securityDeposit = quotationData.securityDeposit ?? (deposit != null ? Number(deposit) : null);
     const durationMonths = quotationData.durationMonths != null
       ? Number(quotationData.durationMonths)
       : (termMonths != null ? Number(termMonths) : null);
+    const resolvedLineItems = (Array.isArray(lineItems) && lineItems.length > 0)
+      ? lineItems
+      : (Array.isArray(items) && items.length > 0 ? items : null);
 
     // No UI today submits itemized lineItems directly — it collects one
     // aggregate cost per category instead (accessoriesCost, servicesCost,
@@ -117,6 +121,7 @@ export async function POST(request: NextRequest) {
         ...quotationData,
         baseMonthlyRate,
         totalMonthlyRate,
+        ...(securityDeposit != null ? { securityDeposit } : {}),
         ...(durationMonths != null ? { durationMonths } : {}),
         tenantId,
         quotationNumber,
@@ -135,13 +140,13 @@ export async function POST(request: NextRequest) {
             })),
           },
         } : {}),
-        ...(Array.isArray(lineItems) && lineItems.length > 0 ? {
+        ...(Array.isArray(resolvedLineItems) && resolvedLineItems.length > 0 ? {
           lineItems: {
-            create: lineItems.map((li: any) => ({
+            create: resolvedLineItems.map((li: any) => ({
               itemType:      li.itemType ?? 'OTHER',
-              description:   li.description || li.itemType || 'Item',
+              description:   li.description || li.vehicleType || li.itemType || 'Item',
               quantity:      Number(li.quantity) || 1,
-              unitRate:      li.unitRate      != null ? Number(li.unitRate)      : null,
+              unitRate:      li.unitRate      != null ? Number(li.unitRate)      : (li.monthlyAmount != null ? Number(li.monthlyAmount) : null),
               monthlyAmount: li.monthlyAmount != null ? Number(li.monthlyAmount) : null,
               totalAmount:   li.totalAmount   != null ? Number(li.totalAmount)   : null,
               currency:      li.currency ?? quotationData.currency ?? 'AED',

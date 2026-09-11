@@ -58,7 +58,7 @@ export const POST = withAudit(
       const body = stripTenantOwnershipFields(
         (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>,
       );
-      const { lines = [], ...invoiceData } = body as Record<string, any>;
+      const { lines = [], contractId: topContractId, vatRate, ...invoiceData } = body as Record<string, any>;
 
       if (!invoiceData.lesseeId) {
         return NextResponse.json({ error: 'lesseeId is required' }, { status: 400 });
@@ -67,6 +67,8 @@ export const POST = withAudit(
       const roundMoney = (val: number): number => {
         return Math.round((val + Number.EPSILON) * 100) / 100;
       };
+
+      const contractId = topContractId || (Array.isArray(lines) && lines[0]?.contractId);
 
       // Validated monetary computation with 2-decimal rounding
       const linesWithTotals = (Array.isArray(lines) ? lines : []).map((l: any) => {
@@ -87,7 +89,7 @@ export const POST = withAudit(
       const subTotal = roundMoney(linesWithTotals.reduce((s: number, l: any) => s + l.totalAmount, 0));
       const rawVat = invoiceData.vatPct !== undefined && invoiceData.vatPct !== null && invoiceData.vatPct !== ''
         ? Number(invoiceData.vatPct)
-        : 5;
+        : (vatRate !== undefined && vatRate !== null && vatRate !== '' ? Number(vatRate) : 5);
       if (isNaN(rawVat) || rawVat < 0 || rawVat > 100) {
         return NextResponse.json({ error: 'vatPct must be between 0 and 100' }, { status: 400 });
       }
@@ -108,7 +110,6 @@ export const POST = withAudit(
         }
 
         // Validate contract consistency and state if contractId is provided
-        const contractId = invoiceData.contractId || linesWithTotals.find((l: any) => l.contractId)?.contractId;
         if (contractId) {
           const contract = await tx.leaseContract2.findFirst({
             where: { id: contractId, tenantId, deletedAt: null },
@@ -164,12 +165,12 @@ export const POST = withAudit(
             vatPct,
             vatAmount,
             totalAmount,
-            status: invoiceData.status || 'DRAFT',
+            status: invoiceData.status || 'ISSUED',
             lines: {
               create: linesWithTotals.map((l: any) => ({
                 ...l,
                 tenantId,
-                contractId: l.contractId || invoiceData.contractId || null,
+                contractId: l.contractId || contractId || null,
               })),
             },
           },

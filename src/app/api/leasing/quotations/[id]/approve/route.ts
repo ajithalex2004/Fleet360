@@ -184,8 +184,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     }
 
     return NextResponse.json(updated);
-  } catch (e) {
+  } catch (e: any) {
     console.error(e);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    const status = e?.status || 500;
+    return NextResponse.json({ error: e?.message || 'Internal server error' }, { status });
   }
 }
