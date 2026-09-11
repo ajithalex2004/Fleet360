@@ -52,8 +52,11 @@ export async function getInvoiceOutstandingBalance(
  * it repeatedly — including right after a reversal — is safe and can never
  * double-count: there is nothing here for a second call to double-apply.
  *
- * DRAFT/CANCELLED invoices are left untouched (not yet, or no longer, in
- * the payment lifecycle at all).
+ * CANCELLED (voided) invoices are left untouched — nothing should flip a
+ * voided invoice back to paid. DRAFT invoices ARE recomputed: both the
+ * mileage-overage and damage-charge auto-invoices are created as DRAFT,
+ * and a deposit application against one is a legitimate way for it to
+ * reach PAID without ever going through a separate "send" step.
  */
 export async function applyInvoicePayment(
   tx: TxClient,
@@ -67,14 +70,24 @@ export async function applyInvoicePayment(
   if (!invoice) {
     throw new Error(`Invoice not found: ${invoiceId}`);
   }
-  if (invoice.status === 'DRAFT' || invoice.status === 'CANCELLED') {
+  if (invoice.status === 'CANCELLED') {
     return { status: invoice.status, outstandingBalance: Number(invoice.totalAmount) };
   }
 
   const outstandingBalance = await getInvoiceOutstandingBalance(tx, tenantId, invoiceId);
   const totalAmount = Number(invoice.totalAmount);
+  // Full balance still outstanding: a still-untouched DRAFT stays DRAFT
+  // (no spurious transition just from recomputing); anything else with a
+  // full balance again (e.g. a reversal that undid an earlier payment)
+  // becomes SENT — issued, nothing currently paid.
   const nextStatus =
-    outstandingBalance <= 0.005 ? 'PAID' : outstandingBalance < totalAmount ? 'PARTIALLY_PAID' : 'SENT';
+    outstandingBalance <= 0.005
+      ? 'PAID'
+      : outstandingBalance < totalAmount
+        ? 'PARTIALLY_PAID'
+        : invoice.status === 'DRAFT'
+          ? 'DRAFT'
+          : 'SENT';
 
   if (nextStatus !== invoice.status) {
     await tx.leaseInvoice.update({

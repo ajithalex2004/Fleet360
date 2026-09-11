@@ -29,7 +29,7 @@ async function readHandoverRow(tx: TxClient, tenantId: string, handoverId: strin
   const rows = await tx.$queryRawUnsafe<HandoverRow[]>(
     `SELECT id, handover_type, status, contract_id, vehicle_id, vehicle_no, handover_date,
             odometer_reading, condition_score, no_damage_confirmed, damage_notes, signed_by, occurrence_id
-       FROM leasing_handovers WHERE id = $1 AND tenant_id = $2`,
+       FROM leasing_handovers WHERE id = $1::uuid AND tenant_id = $2`,
     handoverId,
     tenantId,
   );

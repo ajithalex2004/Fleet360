@@ -114,7 +114,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
                 await tx.$executeRawUnsafe(
                   `INSERT INTO leasing_handovers
                      (tenant_id, handover_no, contract_id, vehicle_id, vehicle_no, lessee_name, handover_type, handover_date, status, occurrence_id)
-                   VALUES ($1,$2,$3,$4,$5,$6,'RETURN',$7,'SCHEDULED',$8)`,
+                   VALUES ($1,$2,$3,$4,$5,$6,'RETURN',$7::timestamptz,'SCHEDULED',$8)`,
                   tenantId, handoverNo, params.id, outgoingVehicleId, outgoingVehicleId, 'Exchange outgoing vehicle',
                   new Date().toISOString(), occurrence?.id ?? null,
                 );

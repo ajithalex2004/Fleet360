@@ -159,7 +159,7 @@ export async function GET(req: NextRequest) {
 
         const today = new Date().toISOString().slice(0, 10);
         const [completedToday] = await tx.$queryRawUnsafe<[{ cnt: bigint }]>(
-          `SELECT COUNT(*) AS cnt FROM leasing_handovers WHERE tenant_id = $1 AND status = 'COMPLETED' AND DATE(updated_at) = $2`,
+          `SELECT COUNT(*) AS cnt FROM leasing_handovers WHERE tenant_id = $1 AND status = 'COMPLETED' AND DATE(updated_at) = $2::date`,
           tenantId, today
         ).catch(() => [{ cnt: BigInt(0) }]);
 
@@ -280,7 +280,7 @@ export async function POST(req: NextRequest) {
               keys_count, spare_key, salik_tag, parking_card, service_book,
               accessories, checklist_items, damage_notes, notes,
               signed_by, witnessed_by, branch_id, occurrence_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::timestamptz,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23::jsonb,$24::jsonb,$25,$26,$27,$28,$29,$30)
            RETURNING id, handover_no`,
           tenantId,
           handoverNo,
@@ -348,7 +348,7 @@ export async function PATCH(req: NextRequest) {
         const { action, signedBy, witnessedBy, damageNotes, notes, status: newStatus, noDamageConfirmed } = body;
 
         const [current] = await tx.$queryRawUnsafe<HandoverRow[]>(
-          `SELECT * FROM leasing_handovers WHERE id = $1 AND tenant_id = $2`,
+          `SELECT * FROM leasing_handovers WHERE id = $1::uuid AND tenant_id = $2`,
           id, tenantId
         );
         if (!current) {
@@ -362,7 +362,7 @@ export async function PATCH(req: NextRequest) {
             return NextResponse.json({ error: 'Only SCHEDULED handovers can be started' }, { status: 400 });
           }
           await tx.$executeRawUnsafe(
-            `UPDATE leasing_handovers SET status='IN_PROGRESS', updated_at=$1 WHERE id=$2 AND tenant_id=$3`,
+            `UPDATE leasing_handovers SET status='IN_PROGRESS', updated_at=$1::timestamptz WHERE id=$2::uuid AND tenant_id=$3`,
             now, id, tenantId
           );
         } else if (action === 'COMPLETE') {
@@ -374,9 +374,9 @@ export async function PATCH(req: NextRequest) {
           }
           await tx.$executeRawUnsafe(
             `UPDATE leasing_handovers
-               SET status='COMPLETED', signed_by=$1, signed_at=$2, witnessed_by=$3,
-                   damage_notes=$4, notes=$5, updated_at=$6, no_damage_confirmed=$9
-             WHERE id=$7 AND tenant_id=$8`,
+               SET status='COMPLETED', signed_by=$1, signed_at=$2::timestamptz, witnessed_by=$3,
+                   damage_notes=$4, notes=$5, updated_at=$6::timestamptz, no_damage_confirmed=$9
+             WHERE id=$7::uuid AND tenant_id=$8`,
             signedBy.trim(), now, witnessedBy || null,
             damageNotes || current.damage_notes,
             notes       || current.notes,
@@ -390,12 +390,12 @@ export async function PATCH(req: NextRequest) {
           }
         } else if (action === 'DISPUTE') {
           await tx.$executeRawUnsafe(
-            `UPDATE leasing_handovers SET status='DISPUTED', damage_notes=$1, updated_at=$2 WHERE id=$3 AND tenant_id=$4`,
+            `UPDATE leasing_handovers SET status='DISPUTED', damage_notes=$1, updated_at=$2::timestamptz WHERE id=$3::uuid AND tenant_id=$4`,
             damageNotes || current.damage_notes, now, id, tenantId
           );
         } else if (newStatus) {
           await tx.$executeRawUnsafe(
-            `UPDATE leasing_handovers SET status=$1, updated_at=$2 WHERE id=$3 AND tenant_id=$4`,
+            `UPDATE leasing_handovers SET status=$1, updated_at=$2::timestamptz WHERE id=$3::uuid AND tenant_id=$4`,
             newStatus, now, id, tenantId
           );
         } else {
@@ -403,7 +403,7 @@ export async function PATCH(req: NextRequest) {
         }
 
         const [updated] = await tx.$queryRawUnsafe<HandoverRow[]>(
-          `SELECT * FROM leasing_handovers WHERE id = $1 AND tenant_id = $2`, id, tenantId
+          `SELECT * FROM leasing_handovers WHERE id = $1::uuid AND tenant_id = $2`, id, tenantId
         );
         return NextResponse.json(mapHandover(updated));
       } catch (err) {

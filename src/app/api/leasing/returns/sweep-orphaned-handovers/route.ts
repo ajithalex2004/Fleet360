@@ -55,8 +55,8 @@ export async function POST(req: NextRequest) {
     const perTenant = await runSweep<PerTenantResult>(
       async ({ tx, tenantId }) => {
         const unlinked = await tx.$queryRawUnsafe<Array<{ id: string }>>(
-          `SELECT h.id FROM leasing_handovers h
-             LEFT JOIN lease_vehicle_returns r ON r.handover_id = h.id AND r.tenant_id = h.tenant_id
+          `SELECT h.id::text AS id FROM leasing_handovers h
+             LEFT JOIN lease_vehicle_returns r ON r.handover_id = h.id::text AND r.tenant_id = h.tenant_id
             WHERE h.tenant_id = $1 AND h.handover_type = 'RETURN' AND h.status = 'COMPLETED' AND r.id IS NULL`,
           tenantId,
         );
