@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
 
     // Strip relational/extra fields that aren't on the LeaseQuotation model
     const {
-      vehicles, lineItems, items, deposit, totalAmount, lessee, inquiry,
+      vehicles, lineItems, items, deposit, totalAmount, mileageAllowance, excessMileageRate, lessee, inquiry,
       approvalSteps, contracts, lesseeId, monthlyRate, termMonths, ...quotationData
     } = body;
 
@@ -68,6 +68,7 @@ export async function POST(request: NextRequest) {
     const totalMonthlyRate = quotationData.totalMonthlyRate ?? (monthlyRate != null ? Number(monthlyRate) : null);
     const totalContractValue = quotationData.totalContractValue ?? (totalAmount != null ? Number(totalAmount) : null);
     const securityDeposit = quotationData.securityDeposit ?? (deposit != null ? Number(deposit) : null);
+    const mileageCap = quotationData.mileageCap ?? (mileageAllowance != null ? Number(mileageAllowance) : null);
     const durationMonths = quotationData.durationMonths != null
       ? Number(quotationData.durationMonths)
       : (termMonths != null ? Number(termMonths) : null);
@@ -124,6 +125,7 @@ export async function POST(request: NextRequest) {
         totalMonthlyRate,
         ...(totalContractValue != null ? { totalContractValue } : {}),
         ...(securityDeposit != null ? { securityDeposit } : {}),
+        ...(mileageCap != null ? { mileageCap } : {}),
         ...(durationMonths != null ? { durationMonths } : {}),
         tenantId,
         quotationNumber,

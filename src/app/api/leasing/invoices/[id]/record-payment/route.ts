@@ -184,6 +184,12 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         totalPaid: newTotalPaid,
         outstandingBalance: newOutstanding,
         status: isFullyPaid ? 'PAID' : 'PARTIALLY_PAID',
+        invoice: {
+          id: invoice.id,
+          status: isFullyPaid ? 'PAID' : 'PARTIALLY_PAID',
+          outstandingBalance: newOutstanding,
+          totalPaid: newTotalPaid,
+        },
       }, { status: 200 });
     } catch (e: any) {
       console.error('[leasing/invoices/record-payment]', e);
