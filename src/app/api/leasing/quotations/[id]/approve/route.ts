@@ -30,7 +30,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   try {
     const bodyRaw = await req.json().catch(() => ({}));
     const body = stripTenantOwnershipFields(bodyRaw);
-    const { action, approverName, comments, targetStatus: requestedTarget, recipientEmail: customRecipient } = body;
+    const { action = 'APPROVE', approverName, comments, targetStatus: requestedTarget, recipientEmail: customRecipient } = body;
     // action: 'APPROVE' | 'REJECT'
 
     const { updated, quotation, nextStatus } = await withTenantRls(prisma, tenantId, async (tx) => {
@@ -72,6 +72,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           nextStatus = requestedTarget;
         } else {
           const statusMap: Record<string, string> = {
+            DRAFT:                   'APPROVED',
             NEW:                     'PENDING_APPROVAL',
             PENDING_APPROVAL:        'DRAFT_APPROVED',
             DRAFT_APPROVED:          'SENT_TO_CUSTOMER',

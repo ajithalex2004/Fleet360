@@ -169,6 +169,7 @@ export const POST = withAudit(
             lines: {
               create: linesWithTotals.map((l: any) => ({
                 ...l,
+                lineType: l.lineType || 'RENTAL',
                 tenantId,
                 contractId: l.contractId || contractId || null,
               })),
