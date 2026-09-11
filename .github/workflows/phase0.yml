@@ -294,11 +294,10 @@ jobs:
           DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
         run: node scripts/check-rls-enforcement.mjs
 
-      - name: Confirm pending migrations are applied
-        env:
-          DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
-        run: npx prisma migrate status
-
+      # No separate `prisma migrate status` step here (rls-isolation-ts
+      # doesn't have one either) — schema.prisma's directUrl needs
+      # DIRECT_URL, which isn't set in this job, and a real drift would
+      # surface as a Prisma Client error in the suite run below anyway.
       # Both suites seed their own randomly-generated (crypto.randomUUID())
       # tenants/lessees/vehicles per run and clean up only what they
       # created, so concurrent runs against the same shared database don't
