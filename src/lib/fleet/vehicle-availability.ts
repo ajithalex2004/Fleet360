@@ -17,6 +17,11 @@ export const VEHICLE_UNASSIGNABLE_STATUSES = new Set([
   'INACTIVE',
   'SOLD',
   'DECOMMISSIONED',
+  // A vehicle returned but not yet clearance-assessed by the leasing
+  // return workflow (src/lib/leasing/return-workflow.ts) — missing
+  // evidence, not a confirmed problem, but must not be assignable until
+  // clearance actually resolves it to AVAILABLE or MAINTENANCE.
+  'PENDING_INSPECTION',
 ]);
 
 export type VehicleAssignability = {

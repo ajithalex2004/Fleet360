@@ -5,6 +5,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { addDeduction, forfeitDeposit, recordRefundDetails, executeRefund, cancelRefundRequest, SecurityDepositError } from '@/lib/finance/security-deposit';
 function toStr(v: unknown) {
   if (v instanceof Buffer) return v.toString('hex');
   if (typeof v === 'string') return v;
@@ -34,6 +35,14 @@ function row(r: Record<string, unknown>) {
     refund_date:      r.refund_date,
     refund_method:    r.refund_method,
     refund_reference: r.refund_reference,
+    reserved_amount:  Number(r.reserved_amount ?? 0),
+    refunded_amount:  Number(r.refunded_amount ?? 0),
+    refund_status:    r.refund_status,
+    refund_requested_amount: r.refund_requested_amount != null ? Number(r.refund_requested_amount) : null,
+    refund_requested_by:     r.refund_requested_by,
+    refund_requested_at:     r.refund_requested_at,
+    refund_recorded_by:      r.refund_recorded_by,
+    refund_recorded_at:      r.refund_recorded_at,
     held_days:        Number(r.held_days ?? 0),
     forfeiture_reason: r.forfeiture_reason,
     notes:            r.notes,
@@ -160,34 +169,62 @@ export async function PATCH(req: NextRequest) {
   const b = stripTenantOwnershipFields(bRaw);
       const { id, action } = b;
       if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+      const actor = req.headers.get('x-user-id') ?? 'staff';
 
       // ── Add Deduction ─────────────────────────────────────────────────────────
       if (action === 'add_deduction') {
-        const deduction = {
-          id:          crypto.randomUUID(),
-          description: b.description,
-          amount:      Number(b.amount),
-          date:        b.date ?? new Date().toISOString().split('T')[0],
-          category:    b.category ?? 'DAMAGE',
-        };
-        const rows = await tx.$queryRawUnsafe(`
-          UPDATE finance_security_deposits
-          SET
-            deductions     = deductions || $2::jsonb,
-            total_deducted = total_deducted + $3,
-            status         = CASE
-              WHEN (collected_amount - total_deducted - $3) <= 0 THEN 'FORFEITED'
-              ELSE 'PARTIALLY_REFUNDED'
-            END,
-            updated_at     = NOW()
-          WHERE id = $1::uuid
-          RETURNING *
-        `, id, JSON.stringify([deduction]), Number(b.amount)) as Record<string, unknown>[];
-        if (!rows.length) return NextResponse.json({ error: 'not found' }, { status: 404 });
-        return NextResponse.json(row(rows[0]));
+        try {
+          const updated = await addDeduction(tx, tenantId, id, {
+            description: b.description,
+            amount: Number(b.amount),
+            category: b.category,
+            date: b.date,
+          });
+          return NextResponse.json(row(updated));
+        } catch (e) {
+          if (e instanceof SecurityDepositError) return NextResponse.json({ error: e.message }, { status: 400 });
+          throw e;
+        }
       }
 
-      // ── Process Refund ────────────────────────────────────────────────────────
+      // ── Record refund details (requested → recorded) ────────────────────────────
+      if (action === 'record_refund_details') {
+        try {
+          const updated = await recordRefundDetails(tx, tenantId, id, {
+            method: b.method ?? b.refund_method ?? 'BANK_TRANSFER',
+            reference: b.reference ?? b.refund_reference,
+            recordedBy: actor,
+          });
+          return NextResponse.json(row(updated));
+        } catch (e) {
+          if (e instanceof SecurityDepositError) return NextResponse.json({ error: e.message }, { status: 400 });
+          throw e;
+        }
+      }
+
+      // ── Execute refund (recorded → executed, idempotent) ────────────────────────
+      if (action === 'execute_refund') {
+        try {
+          const updated = await executeRefund(tx, tenantId, id, actor);
+          return NextResponse.json(row(updated));
+        } catch (e) {
+          if (e instanceof SecurityDepositError) return NextResponse.json({ error: e.message }, { status: 400 });
+          throw e;
+        }
+      }
+
+      // ── Cancel a refund request (pre-execution only) ─────────────────────────────
+      if (action === 'cancel_refund_request') {
+        try {
+          const updated = await cancelRefundRequest(tx, tenantId, id, { reason: b.reason, cancelledBy: actor });
+          return NextResponse.json(row(updated));
+        } catch (e) {
+          if (e instanceof SecurityDepositError) return NextResponse.json({ error: e.message }, { status: 400 });
+          throw e;
+        }
+      }
+
+      // ── Process Refund (legacy single-step — manual/non-workflow refunds) ───────
       if (action === 'refund') {
         const current = await tx.$queryRawUnsafe(
           `SELECT * FROM finance_security_deposits WHERE id = $1::uuid`, id
@@ -217,13 +254,8 @@ export async function PATCH(req: NextRequest) {
 
       // ── Forfeit ───────────────────────────────────────────────────────────────
       if (action === 'forfeit') {
-        const rows = await tx.$queryRawUnsafe(`
-          UPDATE finance_security_deposits
-          SET status = 'FORFEITED', forfeiture_reason = $2, updated_at = NOW()
-          WHERE id = $1::uuid
-          RETURNING *
-        `, id, b.forfeiture_reason ?? 'Contract default') as Record<string, unknown>[];
-        return NextResponse.json(row(rows[0]));
+        const updated = await forfeitDeposit(tx, tenantId, id, { reason: b.forfeiture_reason });
+        return NextResponse.json(row(updated));
       }
 
       // ── Generic field update ──────────────────────────────────────────────────
