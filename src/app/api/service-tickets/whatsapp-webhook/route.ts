@@ -12,7 +12,8 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withTenantRls } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
+import { stripTenantOwnershipFields } from '@/lib/tenant-context';
 import {
   parseInboundMessage,
   createTicketFromParsedIntent,
@@ -59,7 +60,8 @@ export async function POST(req: NextRequest) {
 
     // 1. Parse Meta Cloud API or Twilio payload
     if (contentType.includes('application/json')) {
-      const payload = await req.json();
+      const rawPayload = await req.json();
+      const payload = stripTenantOwnershipFields(rawPayload) as Record<string, any>;
 
       // Meta WhatsApp Cloud API Format
       if (payload.object === 'whatsapp_business_account' && Array.isArray(payload.entry)) {
@@ -106,9 +108,11 @@ export async function POST(req: NextRequest) {
     // 2. Resolve Tenant Context
     let tenantId = req.nextUrl.searchParams.get('tenantId') || req.headers.get('x-tenant-id');
     if (!tenantId) {
-      // Query default active tenant
-      const defaultTenant = await prisma.$queryRawUnsafe<Array<{ tenant_id: string }>>(
-        `SELECT DISTINCT tenant_id FROM service_tickets WHERE deleted_at IS NULL LIMIT 1`
+      // Query default active tenant under withPlatformAdmin
+      const defaultTenant = await withPlatformAdmin(prisma, (tx) =>
+        tx.$queryRawUnsafe<Array<{ tenant_id: string }>>(
+          `SELECT DISTINCT tenant_id FROM service_tickets WHERE deleted_at IS NULL LIMIT 1`
+        )
       ).catch(() => []);
       tenantId = defaultTenant[0]?.tenant_id || 'default-tenant';
     }

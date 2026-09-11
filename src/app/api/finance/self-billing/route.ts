@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { generateSelfBilledTaxInvoice } from '@/lib/finance/self-billing';
 
 export const dynamic = 'force-dynamic';
@@ -8,8 +9,12 @@ export const dynamic = 'force-dynamic';
  * Generates an Article 59(9) Self-Billed Tax Invoice for a transporter / owner-driver
  */
 export async function POST(req: NextRequest) {
+  const auth = await requireAuthorizedTenant(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
-    const body = await req.json();
+    const rawBody = await req.json();
+    const body = stripTenantOwnershipFields(rawBody);
 
     const supplier = body.supplier || {
       supplierName: 'Al Baraka Commercial Transporters LLC',
@@ -67,7 +72,10 @@ export async function POST(req: NextRequest) {
  * GET /api/finance/self-billing
  * Lists demo or recently issued self-billing records
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = await requireAuthorizedTenant(req);
+  if (auth instanceof NextResponse) return auth;
+
   const sample = generateSelfBilledTaxInvoice({
     selfBillNumber: `SB-${new Date().getFullYear()}-00912`,
     supplier: {

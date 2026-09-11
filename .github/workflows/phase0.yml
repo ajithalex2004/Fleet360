@@ -30,7 +30,7 @@ name: Phase 0 — Cross-tenant isolation tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'hardening/**']
   pull_request:
 
 concurrency:

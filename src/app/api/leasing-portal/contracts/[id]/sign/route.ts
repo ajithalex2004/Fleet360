@@ -22,6 +22,7 @@ import { requireLeasingPortal } from '@/lib/leasing-portal/auth';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { createSignature } from '@/lib/leasing/esignature-store';
+import { stripTenantOwnershipFields } from '@/lib/tenant-context';
 
 const TERMINAL_STATUSES = new Set(['TERMINATED', 'CLOSED']);
 const ACTIVATABLE_STATUSES = new Set(['DRAFT', 'PENDING_APPROVAL', 'APPROVED']);
@@ -50,7 +51,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       return NextResponse.json({ error: `Contract is ${contract.status.toLowerCase()} and can no longer be signed` }, { status: 409 });
     }
 
-    const body = await req.json().catch(() => ({})) as { signerName?: string };
+    const rawBody = await req.json().catch(() => ({}));
+    const body = stripTenantOwnershipFields(rawBody) as { signerName?: string };
     const signerName = String(body.signerName ?? '').trim();
     if (!signerName) {
       return NextResponse.json({ error: 'signerName is required' }, { status: 400 });

@@ -16,6 +16,7 @@
  */
 
 import type { NextRequest } from 'next/server';
+import { verifySession } from '@/lib/tenant-session';
 
 // ── Job definition ────────────────────────────────────────────────────────────
 
@@ -50,6 +51,8 @@ export interface JobDef {
   handler: JobHandler;
   /** Estimated max duration in seconds (for Vercel maxDuration). */
   maxDurationSec?: number;
+  /** Specific operator roles authorized to run this job (SUPER_ADMIN always permitted). */
+  allowedRoles?: string[];
 }
 
 // ── Job imports ───────────────────────────────────────────────────────────────
@@ -80,93 +83,105 @@ export const JOB_REGISTRY: JobDef[] = [
     description:    'Auto-close bus/school trips still IN_PROGRESS 4h past scheduled arrival',
     handler:        runAutoCloseTrips,
     maxDurationSec: 60,
+    allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN', 'OPERATIONS', 'DISPATCHER', 'FLEET_MANAGER'],
   },
   {
     name:           'alert-trip-overdue',
     description:    'Raise TRIP_OVERDUE alerts for trips past scheduled arrival + tolerance',
     handler:        runAlertTripOverdue,
     maxDurationSec: 60,
+    allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN', 'OPERATIONS', 'DISPATCHER', 'FLEET_MANAGER'],
   },
   {
     name:           'dunning-sweep',
     description:    'Daily AR dunning sweep — classify overdue lease invoices and send reminders',
     handler:        runDunningSweep,
     maxDurationSec: 120,
+    allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN', 'FINANCE'],
   },
   {
     name:           'fuel-sweep-bill',
     description:    'Monthly fuel-log billing sweep — consolidate pending fuel logs into lease invoices',
     handler:        runFuelSweepBill,
     maxDurationSec: 120,
+    allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN', 'FINANCE'],
   },
   {
     name:           'traffic-fines-sweep-bill',
     description:    'Monthly traffic-fines sweep — generate lease invoices for unpaid fines',
     handler:        runTrafficFinesSweepBill,
     maxDurationSec: 120,
+    allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN', 'FINANCE'],
   },
   {
     name:           'document-expiry-sweep',
     description:    'Daily sweep for expiring lease documents — send alerts',
     handler:        runDocumentExpirySweep,
     maxDurationSec: 60,
+    allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN', 'FLEET_MANAGER', 'OPERATIONS'],
   },
   {
     name:           'insurance-expiry-sweep',
     description:    'Daily sweep for expiring vehicle insurance policies',
     handler:        runInsuranceExpirySweep,
     maxDurationSec: 60,
+    allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN', 'FLEET_MANAGER', 'OPERATIONS'],
   },
   {
     name:           'fleet-documents-sweep',
     description:    'Daily fleet document-expiry sweep — auto-grounds/restores vehicles and notifies staff',
     handler:        runFleetDocumentsSweep,
-    // Iterates every active tenant (164 at last count) serially against the
-    // pooled Neon endpoint — measured elsewhere in this codebase at
-    // ~700ms/tenant of transaction overhead alone, before per-vehicle work.
     maxDurationSec: 600,
+    allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN', 'FLEET_MANAGER', 'OPERATIONS'],
   },
   {
     name:           'mileage-sweep-stale',
     description:    'Weekly sweep to mark stale mileage readings',
     handler:        runMileageSweepStale,
     maxDurationSec: 60,
+    allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN', 'FLEET_MANAGER', 'OPERATIONS'],
   },
   {
     name:           'inquiries-sweep-followups',
     description:    'Daily leasing inquiry follow-up sweep',
     handler:        runInquiriesSweepFollowups,
     maxDurationSec: 60,
+    allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN', 'SALES', 'OPERATIONS'],
   },
   {
     name:           'bookings-sweep-penalties',
     description:    'Daily rental booking late-return penalty sweep',
     handler:        runBookingsSweepPenalties,
     maxDurationSec: 60,
+    allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN', 'OPERATIONS', 'FLEET_MANAGER'],
   },
   {
     name:           'attendance-sweep-no-show',
     description:    'Daily school-bus attendance no-show sweep',
     handler:        runAttendanceSweepNoShow,
     maxDurationSec: 60,
+    allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN', 'OPERATIONS', 'DISPATCHER'],
   },
   {
     name:           'push-scheduler',
     description:    'Run push notification scheduler',
     handler:        runPushScheduler,
     maxDurationSec: 60,
+    allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN'],
   },
   {
     name:           'outbox-publisher',
     description:    'Domain event outbox publisher — polls event_outbox and fans out to consumers',
     handler:        runOutboxPublisher,
     maxDurationSec: 60,
+    allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN'],
   },
   {
     name:           'bus-ops-generate-schedule-templates',
     description:    'Nightly TripSchedule generation from active BusOpsScheduleTemplates (rolling 7-day window; override via ?days=N)',
     handler:        runBusOpsGenerateScheduleTemplates,
     maxDurationSec: 300,
+    allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN', 'OPERATIONS', 'DISPATCHER'],
   },
 ];
 
@@ -176,20 +191,122 @@ export const JOB_MAP = new Map<string, JobDef>(
 
 // ── Auth helper ───────────────────────────────────────────────────────────────
 
-/**
- * Returns true when the request is authorised to run a job.
- * Accepted: valid CRON_SECRET Bearer header OR an authenticated operator
- * session (x-tenant-id set by middleware).
- */
-export function isJobAuthorized(request: NextRequest): boolean {
-  // Logged-in operator — middleware already validated the session.
-  if (request.headers.get('x-tenant-id')) return true;
+export interface JobAuthResult {
+  authorized: boolean;
+  isCron: boolean;
+  tenantId: string | null;
+  userId: string;
+  error?: string;
+  status?: number;
+}
 
-  const expected = process.env.CRON_SECRET;
-  if (!expected) {
-    // Require the secret in production; allow unauthenticated in dev.
-    return process.env.NODE_ENV !== 'production';
+/**
+ * Validates authorization for background sweep / cron jobs.
+ *
+ * Rules:
+ *  1. Valid CRON_SECRET Bearer header -> Authorized system scheduler (isCron=true, system:cron).
+ *  2. Authenticated operator session -> Must have a cryptographically verified session
+ *     (xl-session cookie verified via verifySession). Unauthenticated client headers
+ *     (x-user-id, x-tenant-id, x-user-role) are NEVER trusted and strictly rejected with 401.
+ *  3. Operator role must be authorized for the specific job requested (e.g. DISPATCHER cannot run billing).
+ *  4. Operators cannot forge or cross into other tenants: tenantId is strictly bound to session tenant.
+ */
+export async function verifyJobAuthorization(
+  request: NextRequest,
+  jobName?: string | null
+): Promise<JobAuthResult> {
+  const cronSecret = process.env.CRON_SECRET;
+  const authHeader = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+
+  // 1. System Scheduler Auth via CRON_SECRET
+  if (cronSecret && authHeader === cronSecret) {
+    const requestedTenant = request.headers.get('x-tenant-id') || request.nextUrl.searchParams.get('tenantId');
+    return {
+      authorized: true,
+      isCron: true,
+      tenantId: requestedTenant ? requestedTenant.trim() : null,
+      userId: 'system:cron',
+    };
   }
-  const got = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
-  return got === expected;
+
+  // Allow dev bypass only if explicitly outside production and secret not configured
+  if (!cronSecret && process.env.NODE_ENV !== 'production' && !request.cookies.get('xl-session')) {
+    return {
+      authorized: true,
+      isCron: true,
+      tenantId: null,
+      userId: 'dev:unauthenticated',
+    };
+  }
+
+  // 2. Operator Session Auth — Cryptographic verification of session cookie
+  const sessionToken = request.cookies.get('xl-session')?.value;
+  const session = sessionToken ? await verifySession(sessionToken) : null;
+
+  // Unauthenticated requests carrying arbitrary forged headers are strictly rejected
+  if (!session) {
+    return {
+      authorized: false,
+      isCron: false,
+      tenantId: null,
+      userId: 'anonymous',
+      error: 'Unauthorized: Valid operator session required',
+      status: 401,
+    };
+  }
+
+  const sessionTenant = session.tenantId;
+  const userId = session.userId;
+  const role = session.role ?? 'OPERATOR';
+
+  // 3. Job-Specific Role Gate
+  const jobDef = jobName ? JOB_MAP.get(jobName) : null;
+  const allowedRoles = jobDef?.allowedRoles ?? [
+    'SUPER_ADMIN',
+    'TENANT_ADMIN',
+    'FLEET_MANAGER',
+    'OPERATIONS',
+    'DISPATCHER',
+    'FINANCE',
+  ];
+
+  if (role !== 'SUPER_ADMIN' && !allowedRoles.includes(role)) {
+    return {
+      authorized: false,
+      isCron: false,
+      tenantId: sessionTenant,
+      userId,
+      error: `Forbidden: role '${role}' is not authorized to execute job '${jobName || 'unknown'}'`,
+      status: 403,
+    };
+  }
+
+  // 4. Forbid cross-tenant header spoofing for non-super-admins
+  const requestedTenant =
+    request.headers.get('x-requested-tenant-id') || request.nextUrl.searchParams.get('tenantId');
+  if (requestedTenant && requestedTenant !== sessionTenant && role !== 'SUPER_ADMIN') {
+    return {
+      authorized: false,
+      isCron: false,
+      tenantId: sessionTenant,
+      userId,
+      error: 'Forbidden: cross-tenant execution not permitted',
+      status: 403,
+    };
+  }
+
+  return {
+    authorized: true,
+    isCron: false,
+    tenantId: requestedTenant && role === 'SUPER_ADMIN' ? requestedTenant : sessionTenant,
+    userId,
+  };
+}
+
+export async function isJobAuthorized(
+  request: NextRequest,
+  jobName?: string | null
+): Promise<boolean> {
+  const res = await verifyJobAuthorization(request, jobName);
+  return res.authorized;
 }

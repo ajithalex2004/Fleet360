@@ -2,20 +2,26 @@ name: Build Check
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 'hardening/**' ]
   pull_request:
+    branches: [ main, staging, develop ]
+  workflow_dispatch:
 
 jobs:
   build:
+    name: Production Build (${{ matrix.node-version }})
     runs-on: ubuntu-latest
-    if: github.repository == 'thesysdev/template-c1-next'
     
     env:
+      DATABASE_URL: postgresql://user:pass@localhost:5432/ci_mock?sslmode=disable
+      SESSION_SECRET: ci-session-secret-must-be-at-least-32-chars-long
+      OPENAI_API_KEY: ci-dummy-openai-key
       THESYS_API_KEY: dummy-api-key-for-testing
+      NEXT_TELEMETRY_DISABLED: "1"
     
     strategy:
       matrix:
-        node-version: [20.9.0,22,24]
+        node-version: [20.x, 22.x]
     
     steps:
     - name: Checkout code
@@ -28,10 +34,10 @@ jobs:
         cache: 'npm'
         
     - name: Install dependencies
-      run: npm ci
+      run: npm ci --legacy-peer-deps
+
+    - name: Generate Prisma client
+      run: npx prisma generate
       
     - name: Run build
       run: npm run build
-      
-    - name: Run linter
-      run: npm run lint

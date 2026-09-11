@@ -82,8 +82,28 @@ export async function runDunningSweep(ctx: JobContext): Promise<JobResult> {
       if (dryRun) { sent[stage]++; continue; }
       try {
         await sendEmail({ to: [{ email: recipient, name: invoice.lessee?.name ?? 'Customer' }], subject: email.subject, htmlBody: email.htmlBody, textBody: email.textBody });
+        
+        let contractId = (await tx.leaseContract2.findFirst({ where: { tenantId, lesseeId: invoice.lesseeId } }))?.id;
+        if (!contractId) {
+          contractId = (await tx.leaseContract2.findFirst({ where: { tenantId } }))?.id;
+        }
+        if (!contractId && invoice.lesseeId) {
+          const newContract = await tx.leaseContract2.create({
+            data: {
+              tenantId,
+              lesseeId: invoice.lesseeId,
+              contractNumber: `CTR-AUTO-${invoice.invoiceNo ?? invoice.id.slice(0, 8)}`,
+              startDate: new Date(),
+              endDate: new Date(Date.now() + 365 * 86400000),
+              monthlyRate: 0,
+              status: 'ACTIVE',
+            },
+          });
+          contractId = newContract.id;
+        }
+
         await tx.leaseDunningActivity.create({ data: {
-          contractId: '', lesseeId: invoice.lesseeId, activityType: activityTypeFor(c.bucket),
+          contractId: contractId ?? '', lesseeId: invoice.lesseeId, activityType: activityTypeFor(c.bucket),
           daysOverdue: c.daysOverdue, outstandingAmount: c.outstandingAmount,
           currency: invoice.currency ?? 'AED', performedBy: ctx.userId,
           response: 'AUTO_SENT', tenantId, notes: `${fingerprint}\nInvoice ${invoice.invoiceNo ?? invoice.id} · stage=${stage}`,

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 
 export const dynamic = 'force-dynamic';
@@ -7,6 +8,9 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   try {
     const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
     const tenantId = authz.tenantId;
     const q = req.nextUrl.searchParams.get('q')?.trim() ?? '';
 
@@ -14,11 +18,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ results: [] });
     }
 
-    const tenantFilter = tenantId ? { tenantId } : {};
+    const tenantFilter = { tenantId };
 
-    const [vehicles, bookings, customers, agreements] = await Promise.all([
-      // 1. Vehicles
-      prisma.vehicle.findMany({
+    const [vehicles, bookings, customers, agreements] = await withTenantRls(prisma, tenantId, async (tx) =>
+      Promise.all([
+        // 1. Vehicles
+        tx.vehicle.findMany({
         where: {
           ...tenantFilter,
           OR: [
@@ -40,7 +45,7 @@ export async function GET(req: NextRequest) {
       }),
 
       // 2. Bookings
-      prisma.rentalBooking.findMany({
+      tx.rentalBooking.findMany({
         where: {
           ...tenantFilter,
           OR: [
@@ -60,7 +65,7 @@ export async function GET(req: NextRequest) {
       }),
 
       // 3. Customers
-      prisma.rentalCustomer.findMany({
+      tx.rentalCustomer.findMany({
         where: {
           ...tenantFilter,
           OR: [
@@ -82,7 +87,7 @@ export async function GET(req: NextRequest) {
       }),
 
       // 4. Agreements
-      prisma.rentalAgreement.findMany({
+      tx.rentalAgreement.findMany({
         where: {
           ...tenantFilter,
           OR: [
@@ -98,7 +103,7 @@ export async function GET(req: NextRequest) {
           status: true,
         },
       }),
-    ]);
+    ]));
 
     const results = [
       ...vehicles.map(v => ({

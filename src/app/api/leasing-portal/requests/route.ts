@@ -17,13 +17,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireLeasingPortal } from '@/lib/leasing-portal/auth';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
+import { stripTenantOwnershipFields } from '@/lib/tenant-context';
 
 export async function POST(req: NextRequest) {
   const ctx = await requireLeasingPortal(req);
   if (ctx instanceof NextResponse) return ctx;
 
   try {
-    const body = await req.json().catch(() => ({})) as {
+    const rawBody = await req.json().catch(() => ({}));
+    const body = stripTenantOwnershipFields(rawBody) as {
       contractId?: string;
       type?: 'RENEWAL' | 'TERMINATION';
       notes?: string;

@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { ensureAgentSchema } from '@/lib/agents/schema';
 import { autoPopulateFleet360Record } from '@/lib/agents/document-intelligence/auto-populator';
 import { DocumentExtractionResult } from '@/lib/agents/types';
@@ -28,8 +28,8 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async () => {
     try {
-      const body = await req.json();
-      const { extractionId, extractionData, action = 'APPLY' } = body as {
+      const rawBody = await req.json();
+      const body = stripTenantOwnershipFields(rawBody) as {
         extractionId?: string;
         extractionData?: DocumentExtractionResult;
         action?: 'APPLY' | 'REJECT';

@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import {
   RecurringScheduleConfig,
   generateRecurringTripDates,
@@ -8,8 +9,12 @@ import {
 } from '@/lib/recurring-schedule-engine';
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuthorizedTenant(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
-    const body = await req.json();
+    const rawBody = await req.json();
+    const body = stripTenantOwnershipFields(rawBody);
     const config: RecurringScheduleConfig = body?.config || {
       scheduleType: 'RECURRING',
       frequency: 'WEEKLY',

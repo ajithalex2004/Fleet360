@@ -510,9 +510,10 @@ describe('withSystemJob: iterate every active tenant', () => {
         seenTenants.push(tenantId);
         return { vehicles: myVehicles, drivers: myDrivers };
       },
+      { tenantIds: [tenantA, tenantB] },
     );
 
-    // Should have iterated at least our two test tenants.
+    // Should have iterated our test tenants.
     expect(results.length).toBeGreaterThanOrEqual(2);
     expect(seenTenants).toContain(tenantA);
     expect(seenTenants).toContain(tenantB);
@@ -535,6 +536,7 @@ describe('withSystemJob: iterate every active tenant', () => {
         const bVehicles = await tx.vehicle.count({ where: { tenantId: tenantB } });
         return { tenantId, aVehicles, bVehicles };
       },
+      { tenantIds: [tenantA, tenantB] },
     );
 
     // When iterating tenantA's callback, the tx should only see A's vehicles.

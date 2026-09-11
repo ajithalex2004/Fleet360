@@ -61,8 +61,14 @@ export async function POST(request: NextRequest) {
     // Strip relational/extra fields that aren't on the LeaseQuotation model
     const {
       vehicles, lineItems, lessee, inquiry,
-      approvalSteps, contracts, ...quotationData
+      approvalSteps, contracts, lesseeId, monthlyRate, termMonths, ...quotationData
     } = body;
+
+    const baseMonthlyRate = quotationData.baseMonthlyRate ?? (monthlyRate != null ? Number(monthlyRate) : null);
+    const totalMonthlyRate = quotationData.totalMonthlyRate ?? (monthlyRate != null ? Number(monthlyRate) : null);
+    const durationMonths = quotationData.durationMonths != null
+      ? Number(quotationData.durationMonths)
+      : (termMonths != null ? Number(termMonths) : null);
 
     // No UI today submits itemized lineItems directly — it collects one
     // aggregate cost per category instead (accessoriesCost, servicesCost,
@@ -88,9 +94,19 @@ export async function POST(request: NextRequest) {
     if (quotationData.driverIncluded && Number(quotationData.driverCost) > 0) {
       autoLineItems.push({ itemType: 'DRIVER', description: 'Driver services', amount: Number(quotationData.driverCost) });
     }
-    const durationMonths = Number(quotationData.durationMonths) || null;
 
     const quotation = await withTenantRls(prisma, tenantId, async (tx) => {
+      if (lesseeId) {
+        const lesseeRecord = await tx.lessee.findFirst({
+          where: { id: lesseeId, tenantId },
+        });
+        if (!lesseeRecord) {
+          const err: any = new Error(`Customer '${lesseeId}' not found in current tenant`);
+          err.statusCode = 400;
+          throw err;
+        }
+      }
+
       // G13: serialize quotation-number generation per tenant so two
       // concurrent creates can't compute the same count()+1.
       await lockSerialSeries(tx, tenantId, 'quotation');
@@ -99,9 +115,13 @@ export async function POST(request: NextRequest) {
       return tx.leaseQuotation.create({
       data: {
         ...quotationData,
+        baseMonthlyRate,
+        totalMonthlyRate,
+        ...(durationMonths != null ? { durationMonths } : {}),
         tenantId,
         quotationNumber,
         status: quotationData.status ?? 'NEW',
+        ...(lesseeId ? { lessee: { connect: { id: lesseeId } } } : {}),
         ...(Array.isArray(vehicles) && vehicles.length > 0 ? {
           vehicles: {
             create: vehicles.map((v: any) => ({
@@ -159,11 +179,12 @@ export async function POST(request: NextRequest) {
       vehicles:  Array.isArray(quotation.vehicles)  ? quotation.vehicles  : [],
       lineItems: Array.isArray(quotation.lineItems) ? quotation.lineItems : [],
     }, { status: 201 });
-    } catch (e) {
+    } catch (e: any) {
     console.error('POST /api/leasing/quotations error:', e?.message);
+    const status = e?.statusCode ?? (e?.message?.includes('not found in current tenant') ? 400 : 500);
     return NextResponse.json(
       { error: e?.message ?? 'Failed to create quotation' },
-      { status: 500 }
+      { status }
     );
   }
 }

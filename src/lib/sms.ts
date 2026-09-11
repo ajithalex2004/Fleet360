@@ -15,7 +15,7 @@
 export interface SmsSendResult {
   sent: boolean;
   sid?: string;
-  reason?: 'not_configured' | 'no_phone' | 'twilio_error' | 'network_error';
+  reason?: 'not_configured' | 'no_phone' | 'twilio_error' | 'network_error' | 'quarantined_in_staging';
   error?: string;
 }
 
@@ -36,6 +36,15 @@ export function _setFetchForTests(impl: typeof fetch): void { fetchImpl = impl; 
 export function _resetFetchForTests(): void { fetchImpl = (...args) => fetch(...args); }
 
 export async function sendSms(opts: { to: string; body: string }): Promise<SmsSendResult> {
+  if (
+    process.env.DISABLE_OUTBOUND_NOTIFICATIONS === 'true' ||
+    process.env.MOCK_NOTIFICATIONS === 'true' ||
+    process.env.TWILIO_AUTH_TOKEN === 'DISABLED_IN_STAGING' ||
+    process.env.TWILIO_ACCOUNT_SID === 'DISABLED_IN_STAGING'
+  ) {
+    return { sent: false, reason: 'quarantined_in_staging' };
+  }
+
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
   const from = process.env.TWILIO_SMS_NUMBER || process.env.TWILIO_FROM_NUMBER;

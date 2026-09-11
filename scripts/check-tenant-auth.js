@@ -24,28 +24,15 @@ const EXEMPT_PATTERNS = [
   /^src\/app\/api\/auth\//,
   /^src\/app\/api\/health/,
   /^src\/app\/api\/cron\//,
-
-  // ── Individually exempt: these CANNOT use requireAuthorizedTenant ──────────
-  // Both are authenticated, just not by a per-request tenant context. Do not
-  // "fix" them by adding requireAuthorizedTenant() — doing so has already
-  // broken production once each.
-
-  // Session bootstrap. This is the endpoint the client calls to *establish* a
-  // tenant session, so requiring an already-authorized tenant is a deadlock:
-  // it returned 401 to every session-restore attempt, which made ModuleGuard
-  // render its "Session required" wall across the whole app (fixed in
-  // ca8a8523). It authenticates itself — a signed `xl-session` cookie via
-  // verifySession(), cross-checked against any userId/tenantId supplied, then
-  // an active UserTenant row lookup before anything is returned.
-  /^src\/app\/api\/admin\/session\/route\.ts$/,
-
-  // Cron-triggered scheduler that lives outside api/cron/. Gated by the
-  // PUSH_CRON_SECRET shared secret, and deliberately accepts a null tenantId
-  // so runTripReminders() can iterate every active tenant via withSystemJob.
-  // requireAuthorizedTenant() would force a single-tenant context and silently
-  // break the all-tenant sweep (reverted in 54ef02b8).
-  /^src\/app\/api\/push\/run-scheduler\/route\.ts$/,
 ];
+
+const { RULE_EXEMPTIONS } = require('./tenant-route-exemptions');
+
+function ruleExemptionFor(relativePath, method) {
+  return RULE_EXEMPTIONS.find(
+    e => e.file === relativePath && e.method === method && e.type === 'missing_auth',
+  );
+}
 
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
 
@@ -93,7 +80,7 @@ function analyzeRouteFile(filePath) {
   const relativePath = path.relative(process.cwd(), filePath).replace(/\\/g, '/');
 
   if (isExempt(relativePath)) {
-    return { exempt: true, violations: [] };
+    return { exempt: true, violations: [], exemptedViolations: [] };
   }
 
   // Check for requireAuthorizedTenant import
@@ -110,20 +97,14 @@ function analyzeRouteFile(filePath) {
 
   if (exportedHandlers.length === 0) {
     // No handlers found - might be dynamic route or re-export
-    return { exempt: false, violations: [], warnings: ['No HTTP method handlers found'] };
+    return { exempt: false, violations: [], exemptedViolations: [], warnings: ['No HTTP method handlers found'] };
   }
 
   const violations = [];
-
-  if (!hasImport) {
-    violations.push({
-      type: 'missing_import',
-      message: 'Missing requireAuthorizedTenant import',
-      handlers: exportedHandlers,
-    });
-  }
+  const exemptedViolations = [];
 
   // Check each handler for requireAuthorizedTenant call
+  let unexemptedCount = 0;
   for (const method of exportedHandlers) {
     // Extract the handler function body
     const handlerRegex = new RegExp(`export\\s+async\\s+function\\s+${method}\\s*\\([^)]*\\)\\s*\\{([^]*?)\\n\\}(?:\\s*(?:export|$))`, 'm');
@@ -134,20 +115,38 @@ function analyzeRouteFile(filePath) {
       const hasAuthzCall = /requireAuthorizedTenant\s*\(/.test(handlerBody);
 
       if (!hasAuthzCall) {
-        // Check if it manually checks headers (anti-pattern)
-        const hasManualCheck = /req\.headers\.get\s*\(\s*['"]x-tenant-id['"]\s*\)/.test(handlerBody);
+        const exemption = ruleExemptionFor(relativePath, method);
+        if (exemption) {
+          exemption._matched = true;
+          exemptedViolations.push({
+            method,
+            reason: exemption.reason,
+          });
+        } else {
+          unexemptedCount++;
+          // Check if it manually checks headers (anti-pattern)
+          const hasManualCheck = /req\.headers\.get\s*\(\s*['"]x-tenant-id['"]\s*\)/.test(handlerBody);
 
-        violations.push({
-          type: 'missing_call',
-          method,
-          message: `${method} handler missing requireAuthorizedTenant() call`,
-          hasManualCheck,
-        });
+          violations.push({
+            type: 'missing_call',
+            method,
+            message: `${method} handler missing requireAuthorizedTenant() call`,
+            hasManualCheck,
+          });
+        }
       }
     }
   }
 
-  return { exempt: false, violations };
+  if (!hasImport && unexemptedCount > 0) {
+    violations.unshift({
+      type: 'missing_import',
+      message: 'Missing requireAuthorizedTenant import',
+      handlers: exportedHandlers,
+    });
+  }
+
+  return { exempt: false, violations, exemptedViolations };
 }
 
 function formatViolations(filePath, analysis) {
@@ -199,6 +198,8 @@ function main() {
     violationDetails: [],
   };
 
+  const exemptedFiles = [];
+
   for (const file of files) {
     const analysis = analyzeRouteFile(file);
 
@@ -206,6 +207,9 @@ function main() {
       results.exempt++;
     } else if (analysis.violations.length === 0) {
       results.compliant++;
+      if (analysis.exemptedViolations && analysis.exemptedViolations.length > 0) {
+        exemptedFiles.push({ file, exemptedViolations: analysis.exemptedViolations });
+      }
     } else {
       results.violations++;
       const formatted = formatViolations(file, analysis);
@@ -224,6 +228,18 @@ function main() {
   console.log(`✅ Compliant:      ${results.compliant}`);
   console.log(`❌ Violations:     ${results.violations}`);
   console.log('━'.repeat(60));
+
+  if (exemptedFiles.length > 0) {
+    console.log('\n🔕 RULE EXEMPTIONS APPLIED:\n');
+    for (const item of exemptedFiles) {
+      const rel = path.relative(process.cwd(), item.file).replace(/\\/g, '/');
+      console.log(`\n🔕 ${rel}`);
+      for (const ev of item.exemptedViolations) {
+        console.log(`   ${ev.method} handler missing requireAuthorizedTenant() call`);
+        console.log(`   └─ ${ev.reason}`);
+      }
+    }
+  }
 
   if (results.violations > 0) {
     console.log('\nVIOLATIONS:\n');
@@ -253,10 +269,23 @@ With requireAuthorizedTenant():
     console.log('Run with --fix to see the fix pattern.\n');
 
     process.exit(1);
-  } else {
-    console.log('\n✅ All API routes properly enforce tenant authorization!\n');
-    process.exit(0);
   }
+
+  // Stale exemption detection
+  if (!stagedOnly) {
+    const stale = RULE_EXEMPTIONS.filter(e => e.type === 'missing_auth' && !e._matched && !isExempt(e.file));
+    if (stale.length > 0) {
+      console.log('\n❌ STALE RULE EXEMPTIONS — these no longer match any violation:\n');
+      for (const e of stale) {
+        console.log(`   ${e.file} [${e.method} / ${e.type}]`);
+      }
+      console.log('\nRemove them from RULE_EXEMPTIONS in scripts/tenant-route-exemptions.js.\n');
+      process.exit(1);
+    }
+  }
+
+  console.log('\n✅ All API routes properly enforce tenant authorization!\n');
+  process.exit(0);
 }
 
 main();

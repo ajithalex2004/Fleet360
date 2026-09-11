@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { 
   reconcileTollCrossings, 
   TollCrossingEvent, 
@@ -12,8 +13,12 @@ export const dynamic = 'force-dynamic';
  * Executes spatial-temporal reconciliation between toll crossings and active trips/shifts
  */
 export async function POST(req: NextRequest) {
+  const auth = await requireAuthorizedTenant(req);
+  if (auth instanceof NextResponse) return auth;
+
   try {
-    const body = await req.json();
+    const rawBody = await req.json();
+    const body = stripTenantOwnershipFields(rawBody);
 
     const tollCrossings: TollCrossingEvent[] = Array.isArray(body.tollCrossings) && body.tollCrossings.length > 0
       ? body.tollCrossings

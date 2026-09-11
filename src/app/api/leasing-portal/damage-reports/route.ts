@@ -11,6 +11,7 @@ import { requireLeasingPortal } from '@/lib/leasing-portal/auth';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { createDamageReport, listDamageReportsForLessee } from '@/lib/leasing/damage-reports-store';
+import { stripTenantOwnershipFields } from '@/lib/tenant-context';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +28,8 @@ export async function POST(req: NextRequest) {
   if (ctx instanceof NextResponse) return ctx;
 
   try {
-    const body = await req.json().catch(() => ({})) as {
+    const rawBody = await req.json().catch(() => ({}));
+    const body = stripTenantOwnershipFields(rawBody) as {
       contractId?: string;
       vehicleRef?: string;
       severity?: 'MINOR' | 'MODERATE' | 'SEVERE';

@@ -15,8 +15,9 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import {
   createPortalUser,
   findPortalUserByEmail,
@@ -33,15 +34,18 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   const { tenantId } = authz;
 
   try {
-    const lessee = await prisma.lessee.findFirst({
-      where: { id: params.id, tenantId },
-      select: { id: true, name: true, email: true },
-    });
+    const lessee = await withTenantRls(prisma, tenantId, (tx) =>
+      tx.lessee.findFirst({
+        where: { id: params.id, tenantId },
+        select: { id: true, name: true, email: true },
+      })
+    );
     if (!lessee) {
       return NextResponse.json({ error: 'Lessee not found' }, { status: 404 });
     }
 
-    const body = await req.json().catch(() => ({})) as { email?: string; fullName?: string };
+    const bodyRaw = await req.json().catch(() => ({}));
+    const body = stripTenantOwnershipFields(bodyRaw) as { email?: string; fullName?: string };
     const email = (body.email ?? lessee.email ?? '').trim().toLowerCase();
     if (!email) {
       return NextResponse.json(

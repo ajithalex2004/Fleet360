@@ -6,6 +6,7 @@ on:
       - main
       - develop
       - 'feat/**'
+      - 'hardening/**'
   pull_request:
     branches:
       - main

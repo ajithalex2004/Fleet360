@@ -320,6 +320,61 @@ describe('withSystemJob', () => {
     expect(findManyCall).toBeUndefined();
   });
 
+  it('iterates explicitly supplied tenantIds without querying active tenants', async () => {
+    const { prisma, calls } = makeMockPrisma();
+    const seen: string[] = [];
+    const results = await withSystemJob(
+      prisma as never,
+      async ({ tenantId }) => {
+        seen.push(tenantId);
+        return tenantId;
+      },
+      { tenantIds: ['target-1', 'target-2'] },
+    );
+
+    expect(seen).toEqual(['target-1', 'target-2']);
+    expect(results).toHaveLength(2);
+    // Should NOT call tenant.findMany
+    const findManyCall = calls.find(c => c.method === 'tenant.findMany');
+    expect(findManyCall).toBeUndefined();
+  });
+
+  it('iterates ZERO tenants when tenantIds is empty array [] (does not fall back to all tenants)', async () => {
+    const { prisma, calls } = makeMockPrisma();
+    const seen: string[] = [];
+    const results = await withSystemJob(
+      prisma as never,
+      async ({ tenantId }) => {
+        seen.push(tenantId);
+        return tenantId;
+      },
+      { tenantIds: [] },
+    );
+
+    expect(seen).toEqual([]);
+    expect(results).toEqual([]);
+    // Critical: should NOT fall back to tenant.findMany
+    const findManyCall = calls.find(c => c.method === 'tenant.findMany');
+    expect(findManyCall).toBeUndefined();
+  });
+
+  it('iterates all active tenants when tenantIds is omitted (undefined)', async () => {
+    const { prisma, calls } = makeMockPrisma();
+    const seen: string[] = [];
+    const results = await withSystemJob(
+      prisma as never,
+      async ({ tenantId }) => {
+        seen.push(tenantId);
+        return tenantId;
+      },
+    );
+
+    expect(seen).toEqual(['tenant-a', 'tenant-b']);
+    expect(results).toHaveLength(2);
+    const findManyCall = calls.find(c => c.method === 'tenant.findMany');
+    expect(findManyCall).toBeDefined();
+  });
+
   it('propagates callback errors and stops iterating further tenants', async () => {
     const { prisma } = makeMockPrisma();
     const seen: string[] = [];

@@ -16,7 +16,7 @@ import { captureException } from './sentry';
 export interface WhatsAppSendResult {
   sent: boolean;
   sid?: string;
-  reason?: 'not_configured' | 'no_phone' | 'twilio_error' | 'network_error';
+  reason?: 'not_configured' | 'no_phone' | 'twilio_error' | 'network_error' | 'quarantined_in_staging';
   error?: string;
 }
 
@@ -61,6 +61,15 @@ function formatWhatsAppTo(raw: string | null | undefined): string | null {
 
 /** Low-level send. Public so other modules (e.g. dunning) can reuse. */
 export async function sendWhatsApp(opts: { to: string; body: string }): Promise<WhatsAppSendResult> {
+  if (
+    process.env.DISABLE_OUTBOUND_NOTIFICATIONS === 'true' ||
+    process.env.MOCK_NOTIFICATIONS === 'true' ||
+    process.env.TWILIO_AUTH_TOKEN === 'DISABLED_IN_STAGING' ||
+    process.env.TWILIO_ACCOUNT_SID === 'DISABLED_IN_STAGING'
+  ) {
+    return { sent: false, reason: 'quarantined_in_staging' };
+  }
+
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
   const from = process.env.TWILIO_WHATSAPP_NUMBER;

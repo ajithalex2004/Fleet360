@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { generatePeppolUaeInvoiceXml, PeppolInvoiceData } from '@/lib/finance/peppol-e-invoice';
 
 export const dynamic = 'force-dynamic';
@@ -9,16 +11,22 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireAuthorizedTenant(req);
+    if (auth instanceof NextResponse) return auth;
+    const { tenantId } = auth;
+
     const { id } = await params;
 
-    // 1. Try finding in database (LeaseInvoice)
-    const invoice = await prisma.leaseInvoice.findUnique({
-      where: { id },
-      include: {
-        lessee: true,
-        lines: true,
-      },
-    });
+    // 1. Try finding in database (LeaseInvoice) scoped to tenant
+    const invoice = await withTenantRls(prisma, tenantId, (tx) =>
+      tx.leaseInvoice.findFirst({
+        where: { id, tenantId },
+        include: {
+          lessee: true,
+          lines: true,
+        },
+      })
+    );
 
     let invoiceData: PeppolInvoiceData;
 

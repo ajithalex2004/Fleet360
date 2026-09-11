@@ -16,6 +16,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { getPaymentProvider } from '@/lib/leasing/payment-provider';
 import { createPaymentIntent, listPaymentIntentsForInvoice } from '@/lib/leasing/payment-intents-store';
+import { stripTenantOwnershipFields } from '@/lib/tenant-context';
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -46,7 +47,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       return NextResponse.json({ ok: true, intent: alreadyPending, alreadyExisted: true });
     }
 
-    const body = await req.json().catch(() => ({})) as { method?: 'BANK_TRANSFER' | 'CHEQUE' | 'CARD' };
+    const rawBody = await req.json().catch(() => ({}));
+    const body = stripTenantOwnershipFields(rawBody) as { method?: 'BANK_TRANSFER' | 'CHEQUE' | 'CARD' };
     const method = body.method ?? 'BANK_TRANSFER';
 
     const provider = getPaymentProvider();

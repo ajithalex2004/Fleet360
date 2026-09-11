@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { ensureAgentSchema } from '@/lib/agents/schema';
 
 export const runtime = 'nodejs';
@@ -24,8 +24,8 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async () => {
     try {
-      const body = await req.json();
-      const { vehicleId, forecastId, slotDate, startTime, endTime, serviceThreshold } = body as {
+      const rawBody = await req.json();
+      const body = stripTenantOwnershipFields(rawBody) as {
         vehicleId: string;
         forecastId?: string;
         slotDate: string;

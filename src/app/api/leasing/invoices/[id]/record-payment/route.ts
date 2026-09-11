@@ -23,8 +23,9 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { createPaymentIntent, confirmPaymentIntent } from '@/lib/leasing/payment-intents-store';
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -36,9 +37,11 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   const { tenantId } = authz;
 
   try {
-    const invoice = await prisma.leaseInvoice.findFirst({
-      where: { id: params.id, tenantId },
-    });
+    const invoice = await withTenantRls(prisma, tenantId, (tx) =>
+      tx.leaseInvoice.findFirst({
+        where: { id: params.id, tenantId },
+      })
+    );
     if (!invoice) {
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
     }
@@ -46,7 +49,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       return NextResponse.json({ error: 'Invoice is already marked paid' }, { status: 409 });
     }
 
-    const body = await req.json().catch(() => ({})) as {
+    const bodyRaw = await req.json().catch(() => ({}));
+    const body = stripTenantOwnershipFields(bodyRaw) as {
       intentId?: string;
       amount?: number;
       method?: string;
