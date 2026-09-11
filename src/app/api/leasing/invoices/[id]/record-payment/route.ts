@@ -36,66 +36,164 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   }
   const { tenantId } = authz;
 
-  try {
-    const invoice = await withTenantRls(prisma, tenantId, (tx) =>
-      tx.leaseInvoice.findFirst({
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+      // Concurrency lock for payments in this tenant
+      const { lockSerialSeries } = await import('@/lib/leasing/serial-lock');
+      await lockSerialSeries(tx, tenantId, 'payment');
+
+      const invoice = await tx.leaseInvoice.findFirst({
         where: { id: params.id, tenantId },
-      })
-    );
-    if (!invoice) {
-      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
-    }
-    if (invoice.status === 'PAID') {
-      return NextResponse.json({ error: 'Invoice is already marked paid' }, { status: 409 });
-    }
-
-    const bodyRaw = await req.json().catch(() => ({}));
-    const body = stripTenantOwnershipFields(bodyRaw) as {
-      intentId?: string;
-      amount?: number;
-      method?: string;
-      bankRef?: string;
-      notes?: string;
-    };
-    const confirmedBy = req.headers.get('x-user-id') ?? 'staff';
-
-    let intentId = body.intentId;
-    if (!intentId) {
-      const amount = Number(body.amount ?? invoice.totalAmount);
-      if (!(amount > 0)) {
-        return NextResponse.json({ error: 'amount must be positive' }, { status: 400 });
-      }
-      const intent = await createPaymentIntent({
-        tenantId,
-        invoiceId: invoice.id,
-        lesseeId: invoice.lesseeId,
-        amount,
-        currency: invoice.currency ?? 'AED',
-        provider: 'stub',
-        providerRef: null,
-        method: body.method ?? 'BANK_TRANSFER',
-        initiatedBy: 'STAFF',
-        initiatedByUser: confirmedBy,
-        referenceCode: body.bankRef ?? `MANUAL-${Date.now().toString().slice(-6)}`,
-        notes: body.notes ?? null,
+        include: { lines: true },
       });
-      intentId = intent.id;
-    }
+      if (!invoice) {
+        return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
+      }
+      if (invoice.status === 'PAID') {
+        return NextResponse.json({ error: 'Invoice is already marked paid' }, { status: 409 });
+      }
+      if (invoice.status === 'CANCELLED') {
+        return NextResponse.json({ error: 'Cannot record payment on cancelled invoice' }, { status: 400 });
+      }
 
-    const result = await confirmPaymentIntent({
-      tenantId,
-      intentId,
-      confirmedBy,
-      paymentMethod: body.method,
-      bankRef: body.bankRef,
-    });
-    if (!result) {
-      return NextResponse.json({ error: 'Payment intent not found or already confirmed' }, { status: 404 });
-    }
+      const bodyRaw = await req.json().catch(() => ({}));
+      const body = stripTenantOwnershipFields(bodyRaw) as {
+        intentId?: string;
+        amount?: number;
+        method?: string;
+        bankRef?: string;
+        notes?: string;
+      };
+      const confirmedBy = req.headers.get('x-user-id') ?? 'staff';
 
-    return NextResponse.json({ ok: true, intent: result.intent, receiptId: result.receiptId || null });
-  } catch (e) {
-    console.error('[leasing/invoices/record-payment]', e);
-    return NextResponse.json({ error: 'Failed to record payment' }, { status: 500 });
-  }
+      // Outstanding balance calculation
+      const paidRows = await tx.$queryRawUnsafe<Array<{ total_paid: string | null }>>(
+        `SELECT COALESCE(SUM(amount), 0)::text AS total_paid
+         FROM lease_payment_intents
+         WHERE tenant_id = $1 AND invoice_id = $2 AND status = 'RECEIVED'`,
+        tenantId,
+        invoice.id,
+      );
+      const currentPaid = Number(paidRows[0]?.total_paid || 0);
+      const invoiceTotal = Number(invoice.totalAmount);
+      const outstandingBalance = Math.round((invoiceTotal - currentPaid + Number.EPSILON) * 100) / 100;
+
+      // Payment amount validation
+      const amount = body.amount != null ? Number(body.amount) : outstandingBalance;
+      if (isNaN(amount) || amount <= 0) {
+        return NextResponse.json({ error: 'Payment amount must be a positive number' }, { status: 400 });
+      }
+
+      // Overpayment policy: reject payment exceeding outstanding balance
+      if (amount > outstandingBalance + 0.005) {
+        return NextResponse.json({
+          error: `Payment amount (${amount}) exceeds outstanding balance (${outstandingBalance})`,
+          outstandingBalance,
+        }, { status: 400 });
+      }
+
+      // Duplicate payment submission guard by bankRef
+      const bankRef = body.bankRef ? String(body.bankRef).trim() : null;
+      if (bankRef) {
+        const dupRows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+          `SELECT id::text FROM lease_payment_intents
+           WHERE tenant_id = $1 AND invoice_id = $2 AND (reference_code = $3 OR provider_ref = $3) AND status = 'RECEIVED'
+           LIMIT 1`,
+          tenantId,
+          invoice.id,
+          bankRef,
+        );
+        if (dupRows.length > 0) {
+          return NextResponse.json({
+            error: `Payment with reference '${bankRef}' has already been recorded for this invoice`,
+          }, { status: 409 });
+        }
+      }
+
+      const referenceCode = bankRef || `MANUAL-${Date.now().toString().slice(-6)}`;
+
+      // Create LeaseReceipt if tied to a contract
+      const contractLine = invoice.lines.find((l) => l.contractId);
+      const contractId = contractLine?.contractId;
+
+      let receiptId: string | null = null;
+      if (contractId) {
+        const receipt = await tx.leaseReceipt.create({
+          data: {
+            receiptNumber: `RCP-${Date.now().toString().slice(-6)}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`,
+            contractId,
+            paymentType: 'MONTHLY',
+            amount,
+            currency: invoice.currency ?? 'AED',
+            receivedDate: new Date(),
+            paymentMethod: body.method ?? 'BANK_TRANSFER',
+            bankRef: bankRef ?? referenceCode,
+            receivedBy: confirmedBy,
+            notes: body.notes ?? `Payment recorded against invoice ${invoice.invoiceNo}`,
+            tenantId,
+          },
+        });
+        receiptId = receipt.id;
+      }
+
+      // Record payment intent atomically
+      const intentRows = await tx.$queryRawUnsafe<any[]>(
+        `INSERT INTO lease_payment_intents
+           (tenant_id, invoice_id, lessee_id, amount, currency, provider, provider_ref,
+            method, status, initiated_by, initiated_by_user, reference_code, notes,
+            confirmed_at, confirmed_by, receipt_id)
+         VALUES ($1, $2, $3, $4, $5, 'manual', $6, $7, 'RECEIVED', 'STAFF', $8, $9, $10, NOW(), $8, $11)
+         RETURNING id::text, status, amount::text, currency, reference_code`,
+        tenantId,
+        invoice.id,
+        invoice.lesseeId,
+        amount,
+        invoice.currency ?? 'AED',
+        bankRef,
+        body.method ?? 'BANK_TRANSFER',
+        confirmedBy,
+        referenceCode,
+        body.notes ?? null,
+        receiptId,
+      );
+      const intent = intentRows[0];
+
+      // Update invoice status based on remaining balance
+      const newTotalPaid = Math.round((currentPaid + amount + Number.EPSILON) * 100) / 100;
+      const newOutstanding = Math.max(0, Math.round((invoiceTotal - newTotalPaid + Number.EPSILON) * 100) / 100);
+      const isFullyPaid = newOutstanding <= 0.005;
+
+      await tx.leaseInvoice.update({
+        where: { id: invoice.id },
+        data: {
+          status: isFullyPaid ? 'PAID' : 'PARTIALLY_PAID',
+          paidAt: isFullyPaid ? new Date() : invoice.paidAt,
+          paymentRef: referenceCode,
+        },
+      });
+
+      return NextResponse.json({
+        ok: true,
+        intent: {
+          id: intent?.id,
+          status: intent?.status ?? 'RECEIVED',
+          referenceCode: intent?.reference_code ?? referenceCode,
+        },
+        receiptId,
+        amountPaid: amount,
+        totalPaid: newTotalPaid,
+        outstandingBalance: newOutstanding,
+        status: isFullyPaid ? 'PAID' : 'PARTIALLY_PAID',
+        invoice: {
+          id: invoice.id,
+          status: isFullyPaid ? 'PAID' : 'PARTIALLY_PAID',
+          outstandingBalance: newOutstanding,
+          totalPaid: newTotalPaid,
+        },
+      }, { status: 200 });
+    } catch (e: any) {
+      console.error('[leasing/invoices/record-payment]', e);
+      return NextResponse.json({ error: e?.message || 'Failed to record payment' }, { status: 500 });
+    }
+  });
 }
