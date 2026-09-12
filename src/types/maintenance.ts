@@ -907,8 +907,10 @@ export interface EmailLog {
     cc?: string[];
     subject: string;
     sentAt: string; // ISO Date
-    status: 'SENT' | 'FAILED' | 'PENDING' | 'MOCK_SENT';
+    status: 'SENT' | 'FAILED' | 'PENDING' | 'MOCK_SENT' | 'UNCERTAIN';
     errorMessage?: string;
+    /** DEFINITE_FAILURE | UNCERTAIN — set when status is FAILED/UNCERTAIN, classified by SMTP transport phase. */
+    errorClass?: string;
     retryCount: number;
 }
 

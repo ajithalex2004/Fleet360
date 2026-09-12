@@ -3,6 +3,26 @@ import nodemailer from 'nodemailer';
 import { prisma } from '@/lib/prisma';
 
 /**
+ * Classifies a nodemailer send failure by which SMTP command was in
+ * flight, not by error-code string alone — the same code (e.g. a
+ * timeout) means something different depending on whether the message
+ * body had already started transmitting.
+ *
+ * DEFINITE_FAILURE: the failure occurred at or before RCPT — nothing was
+ * ever sent, safe to retry.
+ * UNCERTAIN: failure during/after DATA, or no identifiable command — the
+ * receiving server may already have accepted the message. Conservative
+ * default for anything unrecognized.
+ */
+export function classifyEmailError(err: unknown): 'DEFINITE_FAILURE' | 'UNCERTAIN' {
+  const command = (err as { command?: string } | undefined)?.command;
+  if (command === 'CONN' || command === 'AUTH' || command === 'MAIL' || command === 'RCPT') {
+    return 'DEFINITE_FAILURE';
+  }
+  return 'UNCERTAIN';
+}
+
+/**
  * Functional Email Service
  * Priorities:
  * 1. Database Configuration (Admin > Integrations)
@@ -71,6 +91,10 @@ export async function sendEmail(params: SendEmailParams): Promise<EmailLog> {
         console.log(`[EMAIL SERVICE] Using ENVIRONMENT configuration for: ${recipients}`);
     }
 
+    let status: EmailLog['status'] = transport ? 'SENT' : 'MOCK_SENT';
+    let errorMessage: string | undefined;
+    let errorClass: string | undefined;
+
     if (transport) {
         try {
             await transport.sendMail({
@@ -83,10 +107,19 @@ export async function sendEmail(params: SendEmailParams): Promise<EmailLog> {
             });
             console.log(`[EMAIL SERVICE] REAL EMAIL SENT to: ${recipients}`);
         } catch (error) {
-            console.error(`[EMAIL SERVICE] FAILED to send real email:`, error);
+            // A failed real send must never be reported as SENT — callers
+            // (notably the dunning consumer) rely on this to distinguish a
+            // real failure from success.
+            errorClass = classifyEmailError(error);
+            status = errorClass === 'DEFINITE_FAILURE' ? 'FAILED' : 'UNCERTAIN';
+            errorMessage = error instanceof Error ? error.message : String(error);
+            console.error(`[EMAIL SERVICE] FAILED to send real email (${errorClass}):`, error);
         }
     } else {
-        // Mock fallback
+        // Mock fallback — for other callers' local development only. A
+        // mock/absent transport must never look like a real SENT to a
+        // caller (e.g. dunning) that treats this as confirmation a real
+        // customer was notified.
         await new Promise(resolve => setTimeout(resolve, 500));
         console.log(`[EMAIL SERVICE] MOCK EMAIL SENT to: ${recipients}`);
     }
@@ -99,7 +132,9 @@ export async function sendEmail(params: SendEmailParams): Promise<EmailLog> {
         cc: params.cc?.map(r => r.email),
         subject: params.subject,
         sentAt: new Date().toISOString(),
-        status: transport ? 'SENT' : 'MOCK_SENT',
+        status,
+        errorMessage,
+        errorClass,
         retryCount: 0
     };
 }

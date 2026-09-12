@@ -329,6 +329,89 @@ jobs:
             echo "through the actual route handlers."
           } >> "$GITHUB_STEP_SUMMARY"
 
+  dunning-collections-integration:
+    name: Dunning & collections dispatch (Postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      PHASE0_EXPECTED_ROLE: fleet360_app
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      # Deliberately not an `if:` — a conditional step that does not run
+      # reports success, which is the failure mode this whole workflow
+      # exists to remove. See rls-isolation-ts above for the same pattern.
+      - name: Require the database secret
+        env:
+          PHASE0_DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+        run: |
+          if [ -z "$PHASE0_DATABASE_URL" ]; then
+            echo "::error title=PHASE0_DATABASE_URL is not configured::The dunning & collections integration suite cannot run without it. Failing rather than reporting green for a suite that never executed."
+            exit 1
+          fi
+          echo "secret present (${#PHASE0_DATABASE_URL} chars)"
+
+      # Proves the connection can actually enforce RLS BEFORE the suite
+      # runs — same preflight rls-isolation-ts and leasing-return-workflow-
+      # integration use, run again here because each job gets a fresh
+      # runner/connection.
+      - name: Assert the role enforces RLS
+        env:
+          DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+        run: node scripts/check-rls-enforcement.mjs
+
+      # No production dispatch here or anywhere else in CI: the suite only
+      # ever sets DUNNING_DISPATCH_ENABLED=true on its own synthetic tenants
+      # inside the test process, and mocks the outermost sendEmail() call —
+      # no real SMTP transport is contacted. Proves the attempt-token claim
+      # protocol (the five decisive tests from the design plan), the sweep's
+      # stage transitions, RLS on the five new tables, and append-only
+      # enforcement on lease_dunning_stage_transitions against real Postgres.
+      - name: Dunning & collections integration suite
+        env:
+          DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+        run: npx vitest run tests/integration/dunning-collections-postgres.test.ts
+
+      - name: Record the evidence
+        if: always()
+        env:
+          SECRET_PRESENT: ${{ secrets.PHASE0_DATABASE_URL != '' }}
+        run: |
+          {
+            echo "### Dunning & collections dispatch — PostgreSQL integration"
+            echo ""
+            echo "| check | value |"
+            echo "|---|---|"
+            echo "| expected role | \`$PHASE0_EXPECTED_ROLE\` |"
+            echo "| secret configured | $SECRET_PRESENT |"
+            echo "| enforcement asserted before the suite | yes |"
+            echo "| DUNNING_DISPATCH_ENABLED in this job | never set at the job level — only toggled transiently inside the test process for synthetic tenants |"
+            echo ""
+            echo "Covers the five decisive tests from the design plan (gate-off"
+            echo "then deferred-recovery send; missing-transport then recovery;"
+            echo "concurrent due-enqueue race; the send-attempt cap; reconciliation"
+            echo "racing a late outcome write) plus a pre-dispatch-recheck race"
+            echo "(suppressed after queuing, before the consumer runs), the legal-"
+            echo "referral 130-day first-contact ladder, reopening/cycle-increment,"
+            echo "cross-tenant RLS isolation on the five new tables, and append-only"
+            echo "enforcement on lease_dunning_stage_transitions."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # Companion job: verifies the dispatch migration + Phase 0 SQL
   # scripts compile cleanly. Doesn't apply them — that's a separate
   # one-time apply step done manually against staging. Catches syntax

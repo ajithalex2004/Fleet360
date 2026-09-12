@@ -59,6 +59,7 @@ export interface JobDef {
 
 import { runAutoCloseTrips }         from '@/lib/jobs/auto-close-trips';
 import { runDunningSweep }           from '@/lib/jobs/dunning-sweep';
+import { runDunningReconciliation }  from '@/lib/jobs/dunning-reconciliation';
 import { runFleetDocumentsSweep }    from '@/lib/jobs/fleet-documents-sweep';
 import { runOutboxPublisher }        from '@/lib/jobs/outbox-publisher';
 import { runBusOpsGenerateScheduleTemplates } from '@/lib/jobs/bus-ops-generate-schedule-templates';
@@ -94,8 +95,15 @@ export const JOB_REGISTRY: JobDef[] = [
   },
   {
     name:           'dunning-sweep',
-    description:    'Daily AR dunning sweep — classify overdue lease invoices and send reminders',
+    description:    'Daily AR dunning sweep — classify overdue lease invoices into collection stages and queue dispatch notices',
     handler:        runDunningSweep,
+    maxDurationSec: 120,
+    allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN', 'FINANCE'],
+  },
+  {
+    name:           'dunning-reconciliation',
+    description:    'Dunning dispatch reconciliation — recovers stale claims, enqueues due retries, and resumes paused/failed notices',
+    handler:        runDunningReconciliation,
     maxDurationSec: 120,
     allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN', 'FINANCE'],
   },

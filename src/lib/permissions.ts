@@ -119,6 +119,10 @@ export const ALL_PERMISSIONS: readonly AppPermission[] = [
   { module: 'leasing', action: 'create',  resource: 'documents',     label: 'Upload Documents' },
   { module: 'leasing', action: 'delete',  resource: 'documents',     label: 'Delete Documents' },
   { module: 'leasing', action: 'export',  resource: '*',             label: 'Export Leasing Data' },
+  { module: 'leasing', action: 'create',  resource: 'dunning_suppressions', label: 'Create Dunning Suppressions' },
+  { module: 'leasing', action: 'delete',  resource: 'dunning_suppressions', label: 'Lift Dunning Suppressions' },
+  { module: 'leasing', action: 'approve', resource: 'legal_referral',       label: 'Approve Dunning Legal Referral' },
+  { module: 'leasing', action: 'approve', resource: 'dunning_delivery',     label: 'Resolve Uncertain Dunning Delivery' },
 
   // ── RENTAL (was 'rac' pre-migration) ───────────────────────────────────
   { module: 'rental', action: 'view',    resource: '*',          label: 'View RAC Module' },
@@ -336,6 +340,12 @@ export const SYSTEM_ROLES: {
       { module: 'reports', action: 'export', resource: '*' },
       { module: 'leasing', action: 'view', resource: 'receivables' },
       { module: 'leasing', action: 'export', resource: '*' },
+      // Dunning & collections is a finance-owned workflow — Finance Manager
+      // needs these even though the rest of the leasing module stays view-only.
+      { module: 'leasing', action: 'create', resource: 'dunning_suppressions' },
+      { module: 'leasing', action: 'delete', resource: 'dunning_suppressions' },
+      { module: 'leasing', action: 'approve', resource: 'legal_referral' },
+      { module: 'leasing', action: 'approve', resource: 'dunning_delivery' },
     ],
   },
   {
