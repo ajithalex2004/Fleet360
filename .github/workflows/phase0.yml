@@ -382,10 +382,16 @@ jobs:
       # protocol (the five decisive tests from the design plan), the sweep's
       # stage transitions, RLS on the five new tables, and append-only
       # enforcement on lease_dunning_stage_transitions against real Postgres.
+      # --testTimeout=120000: the default (30s) isn't enough for the
+      # heaviest tests here under GitHub Actions' network latency to Neon —
+      # test 4 and the reopening test each make several sequential
+      # real-Postgres round trips (multiple transactions per
+      # deliverNextDunningEvent/runDunningSweep call). Confirmed locally at
+      # ~134-180s total for all 11 tests; 120s per test leaves real margin.
       - name: Dunning & collections integration suite
         env:
           DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
-        run: npx vitest run tests/integration/dunning-collections-postgres.test.ts
+        run: npx vitest run tests/integration/dunning-collections-postgres.test.ts --testTimeout=120000
 
       - name: Record the evidence
         if: always()
