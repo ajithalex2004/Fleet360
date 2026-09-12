@@ -78,3 +78,50 @@ describe('proxyToGoBackend — fail-closed JWT signing', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('proxyToGoBackend — routes with a working Next.js fallback are not proxied while no Go backend is reachable', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let fetchSpy: any;
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(new Response('{}', { status: 200 }));
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+  });
+
+  it.each([
+    ['GET', '/api/logistics/tracking'],
+    ['GET', '/api/logistics/shipments'],
+    ['POST', '/api/logistics/shipments'],
+    ['GET', '/api/logistics/shipments/abc-123'],
+    ['GET', '/api/logistics/rfqs'],
+    ['GET', '/api/logistics/rfqs/abc-123/bids'],
+    ['GET', '/api/logistics/carriers'],
+    ['GET', '/api/logistics/carriers/nearest'],
+    ['GET', '/api/logistics/carriers/abc-123'],
+  ])('%s %s falls through to the Next.js route, not the shim', async (method, path) => {
+    const result = await proxyToGoBackend(
+      new NextRequest(`http://localhost:3000${path}`, {
+        method,
+        headers: { 'x-user-id': 'user-1', 'x-tenant-id': 'tenant-1' },
+      }),
+    );
+
+    expect(result.proxied).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('the four unfallbacked paths (no Next.js implementation) are still proxied', async () => {
+    for (const path of ['/api/logistics/analytics', '/api/logistics/driver-stats', '/api/logistics/rates/quote', '/api/logistics/sla']) {
+      const result = await proxyToGoBackend(
+        new NextRequest(`http://localhost:3000${path}`, {
+          method: 'GET',
+          headers: { 'x-user-id': 'user-1', 'x-tenant-id': 'tenant-1' },
+        }),
+      );
+      expect(result.proxied).toBe(true);
+    }
+  });
+});
