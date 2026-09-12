@@ -74,9 +74,21 @@ export async function proxyToGoBackend(request: NextRequest, headersOverride?: H
           });
           headers.set('Authorization', `Bearer ${token}`);
         } catch (err) {
-          // JWT_SECRET unset/too-short — let Go reject so the misconfig stays
-          // visible, rather than silently proxying an unauthenticated call.
-          console.warn('[api-shim] backend JWT sign failed:', err instanceof Error ? err.message : err);
+          // JWT_SECRET unset/too-short (or any other signing failure) is a
+          // deployment misconfiguration, not a per-request auth failure.
+          // Previously this only logged and fell through to fetch(upstream)
+          // below, forwarding an authenticated operator's request to Go with
+          // NO Authorization header at all — relying entirely on Go to
+          // reject it. Fail closed here instead: never forward a request
+          // that was supposed to carry proof of identity but doesn't.
+          console.error('[api-shim] backend JWT sign failed — refusing to forward unauthenticated:', err instanceof Error ? err.message : err);
+          return {
+            proxied: true,
+            response: NextResponse.json(
+              { error: 'Backend authentication unavailable' },
+              { status: 503 },
+            ),
+          };
         }
       }
     }
