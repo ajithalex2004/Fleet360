@@ -231,7 +231,17 @@ describe.skipIf(!hasDb)('Dunning & Collections — PostgreSQL Integration', () =
       await tx.$executeRawUnsafe(`DELETE FROM event_outbox WHERE tenant_id IN ($1::uuid, $2::uuid)`, tenantA, tenantB).catch(() => {});
       await tx.leaseDunningDispatchAttempt.deleteMany({ where: { tenantId: { in: [tenantA, tenantB] } } }).catch(() => {});
       await tx.leaseDunningNotice.deleteMany({ where: { tenantId: { in: [tenantA, tenantB] } } }).catch(() => {});
-      await tx.leaseDunningStageTransition.deleteMany({ where: { tenantId: { in: [tenantA, tenantB] } } }).catch(() => {});
+      // Deliberately NOT deleting lease_dunning_stage_transitions rows: the
+      // runtime role (fleet360_app, what PHASE0_DATABASE_URL connects as in
+      // CI) has no DELETE grant on this table — append-only is enforced at
+      // the DB level, exactly as intended (see the append-only test above).
+      // A .catch(() => {}) here would silently swallow the resulting 42501
+      // permission-denied error, but Postgres still aborts the whole
+      // transaction on it, cascading failures into every deleteMany after
+      // this one — including the final tenant cleanup this file verifies
+      // against. Leaving these rows behind is the correct outcome, not a
+      // leak: they're permanent audit-trail rows for synthetic tenant IDs,
+      // isolated by RLS, harmless to every other test.
       await tx.leaseDunningSuppression.deleteMany({ where: { tenantId: { in: [tenantA, tenantB] } } }).catch(() => {});
       await tx.leaseDunningLegalApproval.deleteMany({ where: { tenantId: { in: [tenantA, tenantB] } } }).catch(() => {});
       await tx.leaseAlert.deleteMany({ where: { tenantId: { in: [tenantA, tenantB] } } }).catch(() => {});
