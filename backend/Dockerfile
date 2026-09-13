@@ -17,7 +17,7 @@
 # Production must never override CMD to `seed` — the runSeed guard refuses to
 # run with GO_ENV=production.
 
-FROM golang:1.21-alpine AS build
+FROM golang:1.25-alpine AS build
 WORKDIR /src
 
 # Dependency layer first — go.mod/go.sum only — so a code-only change doesn't
