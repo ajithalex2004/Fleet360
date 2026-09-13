@@ -72,6 +72,7 @@ async function initEventConsumers(): Promise<void> {
     { FleetMaintenanceConsumer },
     { AnalyticsMaintenanceConsumer },
     { FinanceEstimationConsumer },
+    { DunningNoticeConsumer },
   ] = await Promise.all([
     import('@/events/consumers/finance-trip.consumer'),
     import('@/events/consumers/finance-fuel.consumer'),
@@ -86,6 +87,7 @@ async function initEventConsumers(): Promise<void> {
     import('@/events/consumers/fleet-maintenance.consumer'),
     import('@/events/consumers/analytics-maintenance.consumer'),
     import('@/events/consumers/finance-estimation.consumer'),
+    import('@/events/consumers/dunning-notice.consumer'),
   ]);
 
   const consumers = [
@@ -116,6 +118,8 @@ async function initEventConsumers(): Promise<void> {
     // Analytics — one instance per event type tracked
     new AnalyticsMaintenanceConsumer('maintenance.work_order_completed', 'analytics-work-order-completed'),
     new AnalyticsMaintenanceConsumer('maintenance.completed',            'analytics-maintenance-closed'),
+    // Dunning & Collections — attempt-token claim protocol dispatcher.
+    new DunningNoticeConsumer(),
   ];
 
   for (const consumer of consumers) {

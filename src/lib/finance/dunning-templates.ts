@@ -10,7 +10,7 @@
  * 'Rental', 'School Bus contract', etc.).
  */
 
-export type DunningStage = 'reminder_30' | 'notice_60' | 'final_90';
+export type DunningStage = 'reminder_30' | 'notice_60' | 'final_90' | 'legal_referral';
 
 export interface DunningTemplateInput {
   stage: DunningStage;
@@ -181,6 +181,19 @@ const HEADLINES = {
     days_ar: 'يوم',
     outstanding_ar: 'المبلغ المستحق',
   },
+  legal_referral: {
+    color: '#450a0a', // near-black red
+    subject_en: 'NOTICE OF LEGAL REFERRAL',
+    subject_ar: 'إشعار إحالة قانونية',
+    title_en: 'Your account has been referred for legal recovery',
+    title_ar: 'تمت إحالة حسابكم للاسترداد القانوني',
+    invoice_ar: 'الفاتورة',
+    contract_ar: 'العقد',
+    due_ar: 'تاريخ الاستحقاق',
+    daysOverdue_ar: 'الأيام المتأخرة',
+    days_ar: 'يوم',
+    outstanding_ar: 'المبلغ المستحق',
+  },
 } as const;
 
 const BODIES = {
@@ -250,12 +263,42 @@ const BODIES = {
         يرجى التواصل مع فريق المالية فوراً لتسوية هذا الأمر.
       </p>`,
   },
+  legal_referral: {
+    en: (i: DunningTemplateInput, product: string) => `
+      <p style="margin:0 0 12px 0;font-size:14px;line-height:1.5;color:#450a0a">
+        <strong>Your account has been referred to our legal recovery process.</strong> Despite prior
+        notices, your ${product} invoice <strong>${escapeHtml(i.invoiceNo)}</strong> remains unpaid
+        <strong>${i.daysOverdue} days</strong> after its due date.
+      </p>
+      <p style="margin:0 0 12px 0;font-size:14px;line-height:1.5">
+        Formal legal recovery proceedings may now commence, which may result in additional legal costs
+        being added to the outstanding balance.
+      </p>
+      <p style="margin:0 0 12px 0;font-size:14px;line-height:1.5">
+        To halt this process, settle the outstanding balance immediately or contact our finance team
+        without delay.
+      </p>`,
+    ar: (i: DunningTemplateInput, product: string) => `
+      <p style="margin:0 0 12px 0;font-size:14px;line-height:1.5;color:#450a0a">
+        <strong>تمت إحالة حسابكم إلى إجراءات الاسترداد القانوني.</strong> على الرغم من الإشعارات
+        السابقة، لا تزال الفاتورة رقم <strong>${escapeHtml(i.invoiceNo)}</strong> غير مسددة بعد
+        <strong>${i.daysOverdue} يوماً</strong> من تاريخ الاستحقاق.
+      </p>
+      <p style="margin:0 0 12px 0;font-size:14px;line-height:1.5">
+        قد تبدأ الآن إجراءات الاسترداد القانونية الرسمية، والتي قد تؤدي إلى إضافة تكاليف قانونية
+        إضافية إلى الرصيد المستحق.
+      </p>
+      <p style="margin:0 0 12px 0;font-size:14px;line-height:1.5">
+        لوقف هذا الإجراء، يرجى تسوية الرصيد المستحق فوراً أو التواصل مع فريق المالية دون تأخير.
+      </p>`,
+  },
 } as const;
 
 const CTA = {
   reminder_30: { en: 'View Invoice', ar: 'عرض الفاتورة' },
   notice_60: { en: 'Pay Now', ar: 'ادفع الآن' },
   final_90: { en: 'Settle Immediately', ar: 'سدد فوراً' },
+  legal_referral: { en: 'Settle to Halt Legal Action', ar: 'سدد لوقف الإجراء القانوني' },
 } as const;
 
 /* ── helpers ─────────────────────────────────────────────────────────────── */

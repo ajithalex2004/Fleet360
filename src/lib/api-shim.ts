@@ -8,12 +8,19 @@ interface ProxyResult {
 
 const GO_BACKEND_URL = process.env.GO_BACKEND_URL ?? 'http://localhost:8080';
 
+// 2026-09-12: no Go backend is currently deployed/reachable anywhere in
+// this account (GO_BACKEND_URL is unset in production, defaulting to an
+// unreachable localhost:8080 — see docs/LOGISTICS_GO_MIGRATION_STATUS.md).
+// analytics/driver-stats/rates/quote/sla have NO Next.js fallback (deleted
+// when ported) and stay listed here — they're already broken either way,
+// and re-adding them costs nothing. tracking DOES have a working Next.js
+// fallback and was removed below so it stops 502ing for real users; add it
+// back once a live Go backend is actually reachable.
 const MIGRATED_EXACT_PATHS = new Set([
   '/api/logistics/analytics',
   '/api/logistics/driver-stats',
   '/api/logistics/rates/quote',
   '/api/logistics/sla',
-  '/api/logistics/tracking',
 ]);
 
 // ── Bus-ops shim: intentionally empty ────────────────────────────────────
@@ -31,14 +38,14 @@ const MIGRATED_EXACT_PATHS = new Set([
 
 const MIGRATED_PREFIXES = [
   // Only list paths the Go backend ACTUALLY implements under /api/v1/logistics.
-  // Go serves rfqs, carriers and shipments (plus their leaf routes). The
-  // following were NOT ported to Go — they have working Next.js routes, and
-  // proxying them returns a Go 404 that breaks the screen, so they must stay on
-  // Next.js: control-tower, settlements, rates/contracts, master-data.
+  // rfqs/shipments/carriers removed 2026-09-12 — no Go backend is reachable
+  // (see the note on MIGRATED_EXACT_PATHS above) and, unlike
+  // analytics/driver-stats/rates/quote/sla, these three DO still have a
+  // working Next.js implementation, so leaving them proxied was actively
+  // breaking a fallback that already worked. Their per-path shouldProxy()
+  // logic below was removed along with them. Re-add both once a live Go
+  // backend is reachable again.
   // Do not add a path here without a matching Go handler in backend/.
-  '/api/logistics/rfqs',
-  '/api/logistics/shipments',
-  '/api/logistics/carriers',
   '/api/logistics/planner',
   '/api/carrier-portal/app',
   '/api/driver-app',
@@ -74,9 +81,21 @@ export async function proxyToGoBackend(request: NextRequest, headersOverride?: H
           });
           headers.set('Authorization', `Bearer ${token}`);
         } catch (err) {
-          // JWT_SECRET unset/too-short — let Go reject so the misconfig stays
-          // visible, rather than silently proxying an unauthenticated call.
-          console.warn('[api-shim] backend JWT sign failed:', err instanceof Error ? err.message : err);
+          // JWT_SECRET unset/too-short (or any other signing failure) is a
+          // deployment misconfiguration, not a per-request auth failure.
+          // Previously this only logged and fell through to fetch(upstream)
+          // below, forwarding an authenticated operator's request to Go with
+          // NO Authorization header at all — relying entirely on Go to
+          // reject it. Fail closed here instead: never forward a request
+          // that was supposed to carry proof of identity but doesn't.
+          console.error('[api-shim] backend JWT sign failed — refusing to forward unauthenticated:', err instanceof Error ? err.message : err);
+          return {
+            proxied: true,
+            response: NextResponse.json(
+              { error: 'Backend authentication unavailable' },
+              { status: 503 },
+            ),
+          };
         }
       }
     }
@@ -110,55 +129,12 @@ export async function proxyToGoBackend(request: NextRequest, headersOverride?: H
 
 function shouldProxy(request: NextRequest): boolean {
   const { pathname } = request.nextUrl;
-  const method = request.method.toUpperCase();
 
   if (MIGRATED_EXACT_PATHS.has(pathname)) {
     return true;
   }
 
-  // ── shipments — Go implements list/create + GET-by-id + POST tracking only.
-  if (pathname === '/api/logistics/shipments') {
-    return method === 'GET' || method === 'POST';
-  }
-  if (/^\/api\/logistics\/shipments\/[^/]+$/.test(pathname)) {
-    return method === 'GET';
-  }
-  if (/^\/api\/logistics\/shipments\/[^/]+\/tracking$/.test(pathname)) {
-    return method === 'POST';
-  }
-
-  // ── rfqs — Go implements the list/create + the bids sub-route ONLY. award,
-  // invites and the whole broadcast/* tree are Next-only; proxying them returns
-  // a Go 404 (which silently breaks the marketplace award + Driver Broadcast).
-  if (pathname === '/api/logistics/rfqs') {
-    return method === 'GET' || method === 'POST';
-  }
-  if (/^\/api\/logistics\/rfqs\/[^/]+\/bids$/.test(pathname)) {
-    return true;
-  }
-  if (pathname.startsWith('/api/logistics/rfqs/')) {
-    return false;
-  }
-
-  // ── carriers — Go implements list/create + GET-by-id ONLY. carriers/nearest
-  // (otherwise wrongly captured by Go's /carriers/:id) and carriers/:id/app-device
-  // (Go 404) are Next-only.
-  if (pathname === '/api/logistics/carriers') {
-    return method === 'GET' || method === 'POST';
-  }
-  if (pathname === '/api/logistics/carriers/nearest') {
-    return false;
-  }
-  if (/^\/api\/logistics\/carriers\/[^/]+$/.test(pathname)) {
-    return method === 'GET';
-  }
-  if (pathname.startsWith('/api/logistics/carriers/')) {
-    return false;
-  }
-
-  return MIGRATED_PREFIXES
-    .filter(prefix => !['/api/logistics/shipments', '/api/logistics/rfqs', '/api/logistics/carriers'].includes(prefix))
-    .some(prefix => pathname === prefix || pathname.startsWith(`${prefix}/`));
+  return MIGRATED_PREFIXES.some(prefix => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
 function hasRequestBody(method: string): boolean {

@@ -1220,6 +1220,7 @@ model Lessee {
   // updated. No FK gap remains.
   leaseContracts2   LeaseContract2[]
 
+  @@unique([tenantId, id], map: "uq_lessees_tenant_id")
   @@index([tenantId], map: "idx_lessees_tenant_id")
   @@map("lessees")
   @@schema("public")
@@ -3411,6 +3412,7 @@ model LeaseContract2 {
   allocationOccurrences LeaseAllocationOccurrence[]
   closure              LeaseContractClosure?
 
+  @@unique([tenantId, id], map: "uq_lease_contracts_v2_tenant_id_id")
   @@index([tenantId], map: "idx_lease_contracts_v2_tenant_id")
   @@map("lease_contracts_v2")
   @@schema("public")
@@ -4016,7 +4018,11 @@ model LeaseDunningActivity {
   createdAt         DateTime?      @default(now()) @map("created_at") @db.Timestamptz(6)
   // Tenant scope — added by Layer 2.5 leasing migration 20260627000001.
   tenantId          String         @map("tenant_id")
-  contractId        String         @map("contract_id")
+  // Nullable — was required, which is the direct cause of the old
+  // synthetic-contract-fabrication workaround in dunning-sweep.ts. A
+  // dunning activity with no resolvable real contract now just has a
+  // null contractId instead of a fabricated LeaseContract2 row.
+  contractId        String?        @map("contract_id")
   lesseeId          String         @map("lessee_id")
   activityType      String         @map("activity_type") // EMAIL|CALL|LETTER|LEGAL|SMS
   daysOverdue       Int            @map("days_overdue")
@@ -4027,10 +4033,154 @@ model LeaseDunningActivity {
   nextActionDate    DateTime?      @map("next_action_date") @db.Timestamptz(6)
   nextActionType    String?        @map("next_action_type")
   notes             String?
-  contract          LeaseContract2 @relation(fields: [contractId], references: [id])
+  contract          LeaseContract2? @relation(fields: [contractId], references: [id])
 
   @@index([tenantId], map: "idx_lease_dunning_activities_tenant_id")
   @@map("lease_dunning_activities")
+  @@schema("public")
+}
+
+// ============================================================
+// Dunning & Collections — safe automated dispatch workflow.
+// See the design plan (dunning revision 7) for the full state machine.
+// Cross-tenant reference integrity on invoiceId/contractId/lesseeId below
+// is enforced via composite foreign keys added in raw migration SQL
+// (tenant_id, x_id) -> target(tenant_id, id) — not modeled as Prisma
+// @relation fields, matching this schema's existing convention of adding
+// constraints beyond what a plain @relation can express (see the partial
+// unique indexes elsewhere in this file for the same pattern).
+// ============================================================
+
+model LeaseDunningNotice {
+  id                       String    @id @default(uuid())
+  createdAt                DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId                 String    @map("tenant_id")
+  invoiceId                String    @map("invoice_id")
+  contractId               String?   @map("contract_id")
+  lesseeId                 String    @map("lessee_id")
+  collectionCycle          Int       @default(1) @map("collection_cycle")
+  collectionStage          String    @map("collection_stage") // REMINDER|OVERDUE|FINAL_NOTICE|LEGAL_REFERRAL
+  occurrenceSeq             Int      @default(1) @map("occurrence_seq")
+  policyVersion            String    @default("v1") @map("policy_version")
+  outstandingAmountAtQueue Decimal   @map("outstanding_amount_at_queue") @db.Decimal
+  currency                 String    @default("AED")
+  queuedAt                 DateTime  @map("queued_at") @db.Timestamptz(6)
+  // PENDING|SUBMITTING|SUBMITTED|FAILED|FAILED_EXHAUSTED|DELIVERY_UNKNOWN|SUPPRESSED
+  dispatchStatus           String    @default("PENDING") @map("dispatch_status")
+  currentAttemptToken      String?   @map("current_attempt_token")
+  sendAttemptCount         Int       @default(0) @map("send_attempt_count")
+  maxSendAttempts          Int       @default(3) @map("max_send_attempts")
+  nextAttemptAt            DateTime? @map("next_attempt_at") @db.Timestamptz(6)
+  suppressedReason         String?   @map("suppressed_reason")
+  approvedBy               String?   @map("approved_by")
+  approvedAt               DateTime? @map("approved_at") @db.Timestamptz(6)
+
+  attempts LeaseDunningDispatchAttempt[]
+
+  @@unique([tenantId, invoiceId, collectionCycle, collectionStage, occurrenceSeq], map: "uq_lease_dunning_notices_key")
+  @@unique([tenantId, id], map: "uq_lease_dunning_notices_tenant_id_id")
+  @@index([tenantId], map: "idx_lease_dunning_notices_tenant_id")
+  @@index([invoiceId], map: "idx_lease_dunning_notices_invoice_id")
+  @@map("lease_dunning_notices")
+  @@schema("public")
+}
+
+// One retained record per scheduled dispatch occurrence, updated through a
+// defined lifecycle (reserved -> optionally enqueued -> optionally claimed
+// & prepared -> outcome) — deliberately not append-only; a genuinely new
+// decision after a terminal outcome is always a NEW attempt row via
+// reserve-and-queue, never a second write to an old one.
+model LeaseDunningDispatchAttempt {
+  id                  String    @id @default(uuid())
+  createdAt           DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+  tenantId            String    @map("tenant_id")
+  noticeId            String    @map("notice_id")
+  attemptToken        String    @map("attempt_token")
+  attemptSeq          Int       @map("attempt_seq")
+  reservedAt          DateTime  @default(now()) @map("reserved_at") @db.Timestamptz(6)
+  enqueuedAt          DateTime? @map("enqueued_at") @db.Timestamptz(6)
+  preparedAmount      Decimal?  @map("prepared_amount") @db.Decimal
+  preparedCurrency    String?   @map("prepared_currency")
+  preparedRecipients  Json?     @map("prepared_recipients")
+  claimedAt           DateTime? @map("claimed_at") @db.Timestamptz(6)
+  // PENDING|DEFERRED|SUBMITTED|FAILED|UNCERTAIN|SUPPRESSED|DELIVERY_UNKNOWN
+  outcome             String    @default("PENDING") @map("outcome")
+  outcomeAt           DateTime? @map("outcome_at") @db.Timestamptz(6)
+  errorClass          String?   @map("error_class") // DEFINITE_FAILURE|UNCERTAIN
+  errorMessage        String?   @map("error_message")
+  providerResponseRef String?   @map("provider_response_ref")
+  resolvedBy          String?   @map("resolved_by")
+  resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(6)
+  resolution          String?   @map("resolution") // CONFIRMED_SUBMITTED|CONFIRMED_NOT_SUBMITTED|UNRESOLVED
+
+  notice LeaseDunningNotice @relation(fields: [noticeId], references: [id])
+
+  @@unique([tenantId, attemptToken], map: "uq_lease_dunning_dispatch_attempts_token")
+  @@index([tenantId], map: "idx_lease_dunning_dispatch_attempts_tenant_id")
+  @@index([noticeId], map: "idx_lease_dunning_dispatch_attempts_notice_id")
+  @@map("lease_dunning_dispatch_attempts")
+  @@schema("public")
+}
+
+// Append-only — enforced at the DB level (migration REVOKEs UPDATE/DELETE
+// from the runtime role on this table), not just by application convention.
+model LeaseDunningStageTransition {
+  id              String    @id @default(uuid())
+  createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId        String    @map("tenant_id")
+  invoiceId       String    @map("invoice_id")
+  collectionCycle Int       @map("collection_cycle")
+  previousStage   String?   @map("previous_stage")
+  newStage        String    @map("new_stage") // REMINDER|OVERDUE|FINAL_NOTICE|LEGAL_REFERRAL|SETTLED|FROZEN_DISPUTE|FROZEN_SUPPRESSED
+  reason          String?
+  policyVersion   String    @default("v1") @map("policy_version")
+  transitionedAt  DateTime  @default(now()) @map("transitioned_at") @db.Timestamptz(6)
+  transitionedBy  String?   @map("transitioned_by")
+
+  @@index([tenantId], map: "idx_lease_dunning_stage_transitions_tenant_id")
+  @@index([invoiceId], map: "idx_lease_dunning_stage_transitions_invoice_id")
+  @@map("lease_dunning_stage_transitions")
+  @@schema("public")
+}
+
+model LeaseDunningSuppression {
+  id         String    @id @default(uuid())
+  createdAt  DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId   String    @map("tenant_id")
+  scope      String    // CUSTOMER|INVOICE|CONTRACT
+  lesseeId   String?   @map("lessee_id")
+  invoiceId  String?   @map("invoice_id")
+  contractId String?   @map("contract_id")
+  reason     String?
+  active     Boolean   @default(true)
+  expiresAt  DateTime? @map("expires_at") @db.Timestamptz(6)
+  createdBy  String?   @map("created_by")
+  liftedBy   String?   @map("lifted_by")
+  liftedAt   DateTime? @map("lifted_at") @db.Timestamptz(6)
+
+  @@index([tenantId], map: "idx_lease_dunning_suppressions_tenant_id")
+  @@index([invoiceId], map: "idx_lease_dunning_suppressions_invoice_id")
+  @@index([lesseeId], map: "idx_lease_dunning_suppressions_lessee_id")
+  @@map("lease_dunning_suppressions")
+  @@schema("public")
+}
+
+model LeaseDunningLegalApproval {
+  id              String    @id @default(uuid())
+  createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenantId        String    @map("tenant_id")
+  invoiceId       String    @map("invoice_id")
+  collectionCycle Int       @map("collection_cycle")
+  requestedAt     DateTime  @default(now()) @map("requested_at") @db.Timestamptz(6)
+  approvedBy      String?   @map("approved_by")
+  approvedAt      DateTime? @map("approved_at") @db.Timestamptz(6)
+  notes           String?
+
+  @@unique([tenantId, invoiceId, collectionCycle], map: "uq_lease_dunning_legal_approvals_key")
+  @@index([tenantId], map: "idx_lease_dunning_legal_approvals_tenant_id")
+  @@map("lease_dunning_legal_approvals")
   @@schema("public")
 }
 
@@ -4079,7 +4229,7 @@ model LeaseInvoice {
   vatAmount     Decimal?           @map("vat_amount") @db.Decimal
   totalAmount   Decimal            @map("total_amount") @db.Decimal
   currency      String?            @default("AED")
-  status        String?            @default("DRAFT") // DRAFT|SENT|PAID|OVERDUE|CANCELLED
+  status        String?            @default("DRAFT") // DRAFT|SENT|PAID|OVERDUE|CANCELLED|PARTIALLY_PAID|DISPUTED
   sentAt        DateTime?          @map("sent_at") @db.Timestamptz(6)
   paidAt        DateTime?          @map("paid_at") @db.Timestamptz(6)
   paymentRef    String?            @map("payment_ref")
@@ -4087,6 +4237,15 @@ model LeaseInvoice {
   lessee        Lessee             @relation(fields: [lesseeId], references: [id])
   lines         LeaseInvoiceLine[]
 
+  // Dunning collection state — added for the dunning/collections workflow.
+  // currentDunningStage: REMINDER|OVERDUE|FINAL_NOTICE|LEGAL_REFERRAL|SETTLED|FROZEN_DISPUTE|FROZEN_SUPPRESSED
+  // A real, persisted terminal value (never null once first set) so the
+  // reopen check has one consistent representation to compare against.
+  currentDunningStage   String?   @map("current_dunning_stage")
+  dunningStageUpdatedAt DateTime? @map("dunning_stage_updated_at") @db.Timestamptz(6)
+  dunningCollectionCycle Int      @default(1) @map("dunning_collection_cycle")
+
+  @@unique([tenantId, id], map: "uq_lease_invoices_tenant_id")
   @@index([tenantId], map: "idx_lease_invoices_tenant_id")
   @@map("lease_invoices")
   @@schema("public")

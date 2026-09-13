@@ -43,6 +43,7 @@ import { QUOTATION_APPROVED }       from '@/events/contracts/quotation.events';
 import { ALERT_CONDITION_DETECTED } from '@/events/contracts/alert.events';
 import { SHIPMENT_CLOSED }          from '@/events/contracts/shipment.events';
 import { RENTAL_INVOICE_GENERATED } from '@/events/contracts/rental-invoice.events';
+import { DUNNING_NOTICE_QUEUED_EVENT } from '@/lib/finance/dunning-dispatch';
 
 export {
   TRIP_COMPLETED,
@@ -79,6 +80,7 @@ export {
   SHIPMENT_CLOSED,
   RENTAL_INVOICE_GENERATED,
   ALERT_CONDITION_DETECTED,
+  DUNNING_NOTICE_QUEUED_EVENT,
 };
 
 // ── Registry ──────────────────────────────────────────────────────────────────
@@ -323,6 +325,13 @@ export const FLEET360_EVENTS: EventRegistryEntry[] = [
     aggregateType: 'Any',
     version:       '1',
     description:   'A cross-module alert condition tripped — routed by AlertEngineConsumer to Alert rows using AlertRule',
+  },
+  {
+    type:          DUNNING_NOTICE_QUEUED_EVENT,
+    sourceModule:  'finance',
+    aggregateType: 'LeaseDunningNotice',
+    version:       '1',
+    description:   'A dunning notice occurrence has been reserved and is due for dispatch — routed by DunningNoticeConsumer through the attempt-token claim protocol',
   },
 ];
 
