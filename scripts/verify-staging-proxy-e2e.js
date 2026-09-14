@@ -22,11 +22,11 @@ const SESSION_SECRET = process.env.SESSION_SECRET || '';
 // Tested Revision Pair Metadata
 const REVISION_METADATA = {
   frontendServiceId: '40e64e58-f468-4ebe-9412-99cd5af910aa',
-  frontendDeploymentId: '352acf63-f41a-48fc-9ea4-83c2bf8c6937',
-  frontendCommitSha: '7bf3cc7a',
+  frontendDeploymentId: '5e983ead-34ba-4a19-95b2-55c8ea6c8355',
+  frontendCommitSha: 'aaece016',
   backendServiceId: '6b454bef-fec5-4840-acc5-edd8473c8f03',
-  backendDeploymentId: 'd20abf16-ac27-471e-b33f-0978c626d55d',
-  backendCommitSha: '7bf3cc7a',
+  backendDeploymentId: '00e605f7-3c3b-471b-b023-e7910071aa87',
+  backendCommitSha: 'aaece016',
   compatibilityProof: 'Next.js api-shim.ts routes /api/logistics/* and /api/files/* via internal private mesh http://fleet360-backend.railway.internal:8080 with signed JWT bearer tokens',
 };
 
