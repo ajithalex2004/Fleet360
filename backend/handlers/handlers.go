@@ -16,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // requireTenant pulls the tenant id from the authenticated request context
@@ -42,7 +43,9 @@ func GetVehicles(c *gin.Context) {
 		return
 	}
 	var vehicles []models.Vehicle
-	if err := database.DB.Scopes(auth.WithTenant(c)).Find(&vehicles).Error; err != nil {
+	if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+		return tx.Scopes(auth.WithTenant(c)).Find(&vehicles).Error
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -400,7 +403,9 @@ func GetDrivers(c *gin.Context) {
 		return
 	}
 	var drivers []models.Driver
-	if err := database.DB.Scopes(auth.WithTenant(c)).Find(&drivers).Error; err != nil {
+	if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+		return tx.Scopes(auth.WithTenant(c)).Find(&drivers).Error
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

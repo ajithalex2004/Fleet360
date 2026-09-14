@@ -68,24 +68,25 @@ func GetLogisticsShipments(c *gin.Context) {
 		}
 	}
 
-	q := database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentOrder{})
-
-	if s := strings.TrimSpace(c.Query("status")); s != "" {
-		q = q.Where("status IN ?", splitCSV(s))
-	}
-	if m := strings.TrimSpace(c.Query("mode")); m != "" {
-		q = q.Where("booking_mode = ?", strings.ToUpper(m))
-	}
-
-	// Total before pagination so the client can render "showing 50 of 1280".
 	var total int64
-	if err := q.Count(&total).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
 	var shipments []models.LogisticsShipmentOrder
-	if err := q.Order("created_at DESC").Limit(limit).Offset(offset).Find(&shipments).Error; err != nil {
+	if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+		q := tx.Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentOrder{})
+
+		if s := strings.TrimSpace(c.Query("status")); s != "" {
+			q = q.Where("status IN ?", splitCSV(s))
+		}
+		if m := strings.TrimSpace(c.Query("mode")); m != "" {
+			q = q.Where("booking_mode = ?", strings.ToUpper(m))
+		}
+
+		// Total before pagination so the client can render "showing 50 of 1280".
+		if err := q.Count(&total).Error; err != nil {
+			return err
+		}
+
+		return q.Order("created_at DESC").Limit(limit).Offset(offset).Find(&shipments).Error
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -109,7 +110,9 @@ func GetLogisticsShipment(c *gin.Context) {
 	id := c.Param("id")
 
 	var shipment models.LogisticsShipmentOrder
-	err := database.DB.Scopes(auth.WithTenant(c)).Where("id = ?", id).First(&shipment).Error
+	err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+		return tx.Scopes(auth.WithTenant(c)).Where("id = ?", id).First(&shipment).Error
+	})
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, gin.H{"error": "shipment not found"})
@@ -164,7 +167,9 @@ func CreateLogisticsShipment(c *gin.Context) {
 		input.Currency = "AED"
 	}
 
-	if err := database.DB.Create(&input).Error; err != nil {
+	if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+		return tx.Create(&input).Error
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

@@ -131,40 +131,38 @@ func GetLogisticsAnalytics(c *gin.Context) {
 	// base. auth.WithTenant injects WHERE tenant_id = ?; the embedded Model on
 	// LogisticsShipmentOrder injects deleted_at IS NULL. Build a fresh query
 	// each time (chaining mutates the shared *gorm.DB).
-	shipments := func() *gorm.DB {
-		return database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentOrder{})
-	}
-
 	fail := func(err error) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 	}
 
-	// ── Core shipment counts ─────────────────────────────────────────────────
 	var total, completed, cancelled, pending, active int64
-	if err := shipments().Count(&total).Error; err != nil {
-		fail(err)
-		return
-	}
-	if err := shipments().Where("status IN ?", completedShipmentStatuses).Count(&completed).Error; err != nil {
-		fail(err)
-		return
-	}
-	if err := shipments().Where("status = ?", "CANCELLED").Count(&cancelled).Error; err != nil {
-		fail(err)
-		return
-	}
-	if err := shipments().Where("status = ?", "PENDING").Count(&pending).Error; err != nil {
-		fail(err)
-		return
-	}
-	if err := shipments().Where("status IN ?", activeShipmentStatuses).Count(&active).Error; err != nil {
-		fail(err)
-		return
-	}
-
-	// ── Vehicle stats (this tenant's LOGISTICS fleet) ────────────────────────
 	var totalVeh, availVeh, maintVeh int64
+	var onTimeCount, deadlineCount int64
+	var resp logisticsAnalyticsResponse
+
 	if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+		shipments := func() *gorm.DB {
+			return tx.Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentOrder{})
+		}
+
+		// ── Core shipment counts ─────────────────────────────────────────────────
+		if err := shipments().Count(&total).Error; err != nil {
+			return err
+		}
+		if err := shipments().Where("status IN ?", completedShipmentStatuses).Count(&completed).Error; err != nil {
+			return err
+		}
+		if err := shipments().Where("status = ?", "CANCELLED").Count(&cancelled).Error; err != nil {
+			return err
+		}
+		if err := shipments().Where("status = ?", "PENDING").Count(&pending).Error; err != nil {
+			return err
+		}
+		if err := shipments().Where("status IN ?", activeShipmentStatuses).Count(&active).Error; err != nil {
+			return err
+		}
+
+		// ── Vehicle stats (this tenant's LOGISTICS fleet) ────────────────────────
 		v := func() *gorm.DB {
 			return tx.Scopes(auth.WithTenant(c)).Model(&models.Vehicle{}).
 				Where("vehicle_usage = ?", "LOGISTICS")
@@ -175,102 +173,96 @@ func GetLogisticsAnalytics(c *gin.Context) {
 		if err := v().Where("status = ?", "AVAILABLE").Count(&availVeh).Error; err != nil {
 			return err
 		}
-		return v().Where("status = ?", "MAINTENANCE").Count(&maintVeh).Error
-	}); err != nil {
-		fail(err)
-		return
-	}
-
-	// ── On-time rate: completed shipments delivered by their delivery window ──
-	var onTimeCount, deadlineCount int64
-	if err := shipments().Where("status IN ?", completedShipmentStatuses).
-		Where("delivery_window_to IS NOT NULL").Count(&deadlineCount).Error; err != nil {
-		fail(err)
-		return
-	}
-	if err := shipments().Where("status IN ?", completedShipmentStatuses).
-		Where("delivery_window_to IS NOT NULL").
-		Where("updated_at <= delivery_window_to").Count(&onTimeCount).Error; err != nil {
-		fail(err)
-		return
-	}
-
-	resp := logisticsAnalyticsResponse{
-		TotalTrips:          total,
-		CompletedTrips:      completed,
-		CancelledTrips:      cancelled,
-		PendingTrips:        pending,
-		ActiveTrips:         active,
-		CompletionRate:      roundPct(completed, total),
-		CancellationRate:    roundPct(cancelled, total),
-		TotalVehicles:       totalVeh,
-		AvailableVehicles:   availVeh,
-		MaintenanceVehicles: maintVeh,
-		FleetUtilization:    roundPct(totalVeh-availVeh, totalVeh),
-		// Initialise to empty slices so the JSON body carries [] not null.
-		DailyCompleted:     make([]analyticsDailyPoint, 0),
-		StatusDistribution: make([]analyticsStatusCount, 0),
-		TripsByDow:         make([]analyticsDowPoint, 0),
-		ShipmentTypes:      make([]analyticsTypeCount, 0),
-	}
-	if deadlineCount > 0 {
-		r := roundPct(onTimeCount, deadlineCount)
-		resp.OnTimeRate = &r
-	}
-
-	// ── Completed trips per day (last 14 days) ───────────────────────────────
-	// updated_at::date is the completion day; TO_CHAR yields a stable
-	// 'YYYY-MM-DD' string the chart parses directly.
-	if err := shipments().
-		Select("TO_CHAR(updated_at::date, 'YYYY-MM-DD') AS day, COUNT(*) AS trips").
-		Where("status IN ?", completedShipmentStatuses).
-		Where("updated_at >= NOW() - INTERVAL '14 days'").
-		Group("updated_at::date").
-		Order("updated_at::date ASC").
-		Scan(&resp.DailyCompleted).Error; err != nil {
-		fail(err)
-		return
-	}
-
-	// ── Status distribution ──────────────────────────────────────────────────
-	if err := shipments().
-		Select("status, COUNT(*) AS count").
-		Group("status").
-		Order("count DESC").
-		Scan(&resp.StatusDistribution).Error; err != nil {
-		fail(err)
-		return
-	}
-
-	// ── Trips by day of week (by pickup window start) ────────────────────────
-	var dowRows []struct {
-		Dow   int   `gorm:"column:dow"`
-		Trips int64 `gorm:"column:trips"`
-	}
-	if err := shipments().
-		Select("EXTRACT(DOW FROM pickup_window_from)::int AS dow, COUNT(*) AS trips").
-		Where("pickup_window_from IS NOT NULL").
-		Group("EXTRACT(DOW FROM pickup_window_from)").
-		Order("dow ASC").
-		Scan(&dowRows).Error; err != nil {
-		fail(err)
-		return
-	}
-	for _, r := range dowRows {
-		label := ""
-		if r.Dow >= 0 && r.Dow < len(dowLabels) {
-			label = dowLabels[r.Dow]
+		if err := v().Where("status = ?", "MAINTENANCE").Count(&maintVeh).Error; err != nil {
+			return err
 		}
-		resp.TripsByDow = append(resp.TripsByDow, analyticsDowPoint{Dow: r.Dow, Label: label, Trips: r.Trips})
-	}
 
-	// ── Shipment type breakdown (real shipment_type column) ──────────────────
-	if err := shipments().
-		Select("COALESCE(shipment_type, 'UNSPECIFIED') AS type, COUNT(*) AS count").
-		Group("COALESCE(shipment_type, 'UNSPECIFIED')").
-		Order("count DESC").
-		Limit(8).
-		Scan(&resp.ShipmentTypes).Error; err != nil {
+		// ── On-time rate: completed shipments delivered by their delivery window ──
+		if err := shipments().Where("status IN ?", completedShipmentStatuses).
+			Where("delivery_window_to IS NOT NULL").Count(&deadlineCount).Error; err != nil {
+			return err
+		}
+		if err := shipments().Where("status IN ?", completedShipmentStatuses).
+			Where("delivery_window_to IS NOT NULL").
+			Where("updated_at <= delivery_window_to").Count(&onTimeCount).Error; err != nil {
+			return err
+		}
+
+		resp = logisticsAnalyticsResponse{
+			TotalTrips:          total,
+			CompletedTrips:      completed,
+			CancelledTrips:      cancelled,
+			PendingTrips:        pending,
+			ActiveTrips:         active,
+			CompletionRate:      roundPct(completed, total),
+			CancellationRate:    roundPct(cancelled, total),
+			TotalVehicles:       totalVeh,
+			AvailableVehicles:   availVeh,
+			MaintenanceVehicles: maintVeh,
+			FleetUtilization:    roundPct(totalVeh-availVeh, totalVeh),
+			DailyCompleted:     make([]analyticsDailyPoint, 0),
+			StatusDistribution: make([]analyticsStatusCount, 0),
+			TripsByDow:         make([]analyticsDowPoint, 0),
+			ShipmentTypes:      make([]analyticsTypeCount, 0),
+		}
+		if deadlineCount > 0 {
+			r := roundPct(onTimeCount, deadlineCount)
+			resp.OnTimeRate = &r
+		}
+
+		// ── Completed trips per day (last 14 days) ───────────────────────────────
+		if err := shipments().
+			Select("TO_CHAR(updated_at::date, 'YYYY-MM-DD') AS day, COUNT(*) AS trips").
+			Where("status IN ?", completedShipmentStatuses).
+			Where("updated_at >= NOW() - INTERVAL '14 days'").
+			Group("updated_at::date").
+			Order("updated_at::date ASC").
+			Scan(&resp.DailyCompleted).Error; err != nil {
+			return err
+		}
+
+		// ── Status distribution ──────────────────────────────────────────────────
+		if err := shipments().
+			Select("status, COUNT(*) AS count").
+			Group("status").
+			Order("count DESC").
+			Scan(&resp.StatusDistribution).Error; err != nil {
+			return err
+		}
+
+		// ── Trips by day of week (by pickup window start) ────────────────────────
+		var dowRows []struct {
+			Dow   int   `gorm:"column:dow"`
+			Trips int64 `gorm:"column:trips"`
+		}
+		if err := shipments().
+			Select("EXTRACT(DOW FROM pickup_window_from)::int AS dow, COUNT(*) AS trips").
+			Where("pickup_window_from IS NOT NULL").
+			Group("EXTRACT(DOW FROM pickup_window_from)").
+			Order("dow ASC").
+			Scan(&dowRows).Error; err != nil {
+			return err
+		}
+		for _, r := range dowRows {
+			label := ""
+			if r.Dow >= 0 && r.Dow < len(dowLabels) {
+				label = dowLabels[r.Dow]
+			}
+			resp.TripsByDow = append(resp.TripsByDow, analyticsDowPoint{Dow: r.Dow, Label: label, Trips: r.Trips})
+		}
+
+		// ── Shipment type breakdown (real shipment_type column) ──────────────────
+		if err := shipments().
+			Select("COALESCE(shipment_type, 'UNSPECIFIED') AS type, COUNT(*) AS count").
+			Group("COALESCE(shipment_type, 'UNSPECIFIED')").
+			Order("count DESC").
+			Limit(8).
+			Scan(&resp.ShipmentTypes).Error; err != nil {
+			return err
+		}
+
+		return nil
+	}); err != nil {
 		fail(err)
 		return
 	}

@@ -209,30 +209,31 @@ func GetLogisticsDriverStats(c *gin.Context) {
 	}
 
 	// ── 2. Gather trips from both link sources, deduped by shipment ──────────
-	// Source A: shipments whose denormalised assigned_driver_id is the driver.
 	var rowsA []driverTrip
-	if err := database.DB.Model(&models.LogisticsShipmentOrder{}).
-		Scopes(auth.WithTenant(c)).
-		Select("assigned_driver_id AS driver_id, id AS shipment_id, status, created_at, pickup_window_from AS pickup_from, delivery_window_to AS delivery_to, updated_at").
-		Where("assigned_driver_id IN ?", driverIDs).
-		Where("created_at >= ?", since).
-		Scan(&rowsA).Error; err != nil {
-		fail(err)
-		return
-	}
-
-	// Source B: shipments reached through an assignment row for the driver.
-	// This join spans two tenant-scoped tables, so bind the tenant explicitly on
-	// the driving table (a bare WithTenant scope would make tenant_id ambiguous)
-	// and re-assert the shipment soft-delete predicate the join bypasses.
 	var rowsB []driverTrip
-	if err := database.DB.Table("logistics_assignments AS la").
-		Select("la.driver_id AS driver_id, lso.id AS shipment_id, lso.status, lso.created_at, lso.pickup_window_from AS pickup_from, lso.delivery_window_to AS delivery_to, lso.updated_at").
-		Joins("JOIN logistics_shipment_orders lso ON lso.id = la.shipment_order_id AND lso.deleted_at IS NULL").
-		Where("la.tenant_id = ?", tid).
-		Where("la.driver_id IN ?", driverIDs).
-		Where("lso.created_at >= ?", since).
-		Scan(&rowsB).Error; err != nil {
+	if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+		// Source A: shipments whose denormalised assigned_driver_id is the driver.
+		if err := tx.Model(&models.LogisticsShipmentOrder{}).
+			Scopes(auth.WithTenant(c)).
+			Select("assigned_driver_id AS driver_id, id AS shipment_id, status, created_at, pickup_window_from AS pickup_from, delivery_window_to AS delivery_to, updated_at").
+			Where("assigned_driver_id IN ?", driverIDs).
+			Where("created_at >= ?", since).
+			Scan(&rowsA).Error; err != nil {
+			return err
+		}
+
+		// Source B: shipments reached through an assignment row for the driver.
+		// This join spans two tenant-scoped tables, so bind the tenant explicitly on
+		// the driving table (a bare WithTenant scope would make tenant_id ambiguous)
+		// and re-assert the shipment soft-delete predicate the join bypasses.
+		return tx.Table("logistics_assignments AS la").
+			Select("la.driver_id AS driver_id, lso.id AS shipment_id, lso.status, lso.created_at, lso.pickup_window_from AS pickup_from, lso.delivery_window_to AS delivery_to, lso.updated_at").
+			Joins("JOIN logistics_shipment_orders lso ON lso.id = la.shipment_order_id AND lso.deleted_at IS NULL").
+			Where("la.tenant_id = ?", tid).
+			Where("la.driver_id IN ?", driverIDs).
+			Where("lso.created_at >= ?", since).
+			Scan(&rowsB).Error
+	}); err != nil {
 		fail(err)
 		return
 	}
