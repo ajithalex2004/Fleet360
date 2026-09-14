@@ -17,7 +17,7 @@ const crypto = require('crypto');
 
 const STAGING_URL = 'postgresql://neondb_owner:npg_7ndWFKRYEOt6@ep-calm-heart-a15voo2a.ap-southeast-1.aws.neon.tech/neondb_staging?sslmode=require';
 const STAGING_APP_ORIGIN = process.env.STAGING_APP_ORIGIN || 'https://fleet360-app-staging.up.railway.app';
-const SESSION_SECRET = process.env.SESSION_SECRET || '7cd4273ddb831e6c7ca75804ce275ae94cae187154bef44bf5a0242bbf5c4e9b';
+const SESSION_SECRET = process.env.SESSION_SECRET || '';
 
 // Tested Revision Pair Metadata
 const REVISION_METADATA = {
