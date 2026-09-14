@@ -80,6 +80,22 @@ func TestDerivedKey_DatePartitioned(t *testing.T) {
 	}
 }
 
+func TestDerivedKey_KeyPrefixIsolation(t *testing.T) {
+	ts := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
+
+	t.Setenv("S3_KEY_PREFIX", "staging")
+	stagingKey := DerivedKey("doc.pdf", ts)
+	if !strings.HasPrefix(stagingKey, "staging/uploads/2026/09/14/") {
+		t.Errorf("expected staging prefix, got %q", stagingKey)
+	}
+
+	t.Setenv("S3_KEY_PREFIX", "production")
+	prodKey := DerivedKey("doc.pdf", ts)
+	if !strings.HasPrefix(prodKey, "production/uploads/2026/09/14/") {
+		t.Errorf("expected production prefix, got %q", prodKey)
+	}
+}
+
 func TestInit_FailsOnMissingEnv(t *testing.T) {
 	// All four required vars empty — Init must refuse loudly.
 	t.Setenv("S3_ENDPOINT", "")
@@ -113,8 +129,79 @@ func TestPresignedGetURL_FailsBeforeInit(t *testing.T) {
 	pkgClient = nil
 	defer func() { pkgClient = prev }()
 
-	_, err := PresignedGetURL(context.Background(), "any", 0)
+	t.Setenv("S3_KEY_PREFIX", "")
+	_, err := PresignedGetURL(context.Background(), "uploads/2026/01/01/1-file.pdf", 0)
 	if err == nil || !strings.Contains(err.Error(), "not initialised") {
 		t.Errorf("PresignedGetURL without Init should fail loudly, got: %v", err)
+	}
+}
+
+func TestValidateKey_PathTraversal(t *testing.T) {
+	t.Setenv("S3_KEY_PREFIX", "")
+	for _, bad := range []string{
+		"../uploads/file.pdf",
+		"uploads/../../secret.env",
+		"/uploads/file.pdf",
+		"\\uploads\\file.pdf",
+		"uploads//double-slash.pdf",
+	} {
+		if err := ValidateKey(bad, ""); err == nil {
+			t.Errorf("expected error for path traversal %q, got nil", bad)
+		}
+	}
+}
+
+func TestValidateKey_EnvironmentPrefixEnforcement(t *testing.T) {
+	t.Setenv("S3_KEY_PREFIX", "staging")
+
+	// Valid staging key
+	if err := ValidateKey("staging/uploads/2026/09/14/1-doc.pdf", ""); err != nil {
+		t.Errorf("valid staging key failed: %v", err)
+	}
+
+	// Cross-environment key: production key on staging
+	if err := ValidateKey("production/uploads/2026/09/14/1-doc.pdf", ""); err == nil {
+		t.Errorf("expected rejection for cross-environment production key on staging, got nil")
+	}
+
+	// Legacy un-prefixed key on staging
+	if err := ValidateKey("uploads/2026/09/14/1-doc.pdf", ""); err == nil {
+		t.Errorf("expected rejection for unprefixed key when S3_KEY_PREFIX=staging, got nil")
+	}
+}
+
+func TestValidateKey_TenantBoundaryEnforcement(t *testing.T) {
+	t.Setenv("S3_KEY_PREFIX", "staging")
+
+	tenantA := "tenant-alpha"
+	tenantB := "tenant-bravo"
+
+	keyA := "staging/uploads/tenant-alpha/2026/09/14/1-invoice.pdf"
+
+	// Tenant A accessing Tenant A key -> OK
+	if err := ValidateKey(keyA, tenantA); err != nil {
+		t.Errorf("tenant A accessing tenant A key failed: %v", err)
+	}
+
+	// Tenant B attempting to access Tenant A key -> REJECTED
+	if err := ValidateKey(keyA, tenantB); err == nil {
+		t.Errorf("expected cross-tenant rejection for tenant B accessing tenant A key, got nil")
+	}
+
+	// Legacy unpartitioned key -> allowed for backwards compatibility
+	legacyKey := "staging/uploads/2026/09/14/1-legacy.pdf"
+	if err := ValidateKey(legacyKey, tenantB); err != nil {
+		t.Errorf("legacy unpartitioned key should be permitted: %v", err)
+	}
+}
+
+func TestDerivedKeyScoped(t *testing.T) {
+	ts := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
+	t.Setenv("S3_KEY_PREFIX", "staging")
+
+	key := DerivedKeyScoped("tenant-123", "contract.pdf", ts)
+	expectedPrefix := "staging/uploads/tenant-123/2026/09/14/"
+	if !strings.HasPrefix(key, expectedPrefix) {
+		t.Errorf("expected key to start with %q, got %q", expectedPrefix, key)
 	}
 }

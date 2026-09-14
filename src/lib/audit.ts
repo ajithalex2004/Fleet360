@@ -35,9 +35,10 @@ export interface AuditPayload {
   logoutTime?:  Date | string;
 }
 
-export async function logAudit(payload: AuditPayload): Promise<void> {
+export async function logAudit(payload: AuditPayload, client?: { $executeRawUnsafe: (...args: any[]) => Promise<any> }): Promise<void> {
   try {
-    await prisma.$executeRawUnsafe(
+    const db = client ?? prisma;
+    await db.$executeRawUnsafe(
       `INSERT INTO audit_logs
          (tenant_id, tenant_name, branch_id, branch_name,
           entity_type, entity_id, entity_name,

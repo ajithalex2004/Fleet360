@@ -101,6 +101,54 @@ func Init(ctx context.Context) error {
 	return nil
 }
 
+var (
+	// ErrInvalidKeyPath indicates the key contains path traversal (..) or invalid separators.
+	ErrInvalidKeyPath = errors.New("objectstore: invalid key path: path traversal or invalid format")
+	// ErrCrossEnvironmentKey indicates the key does not start with the configured environment prefix.
+	ErrCrossEnvironmentKey = errors.New("objectstore: key does not belong to the active environment prefix")
+	// ErrCrossTenantKey indicates the key attempts to access objects belonging to another tenant.
+	ErrCrossTenantKey = errors.New("objectstore: key does not belong to the active tenant")
+)
+
+// GetKeyPrefix returns the active environment key prefix from S3_KEY_PREFIX (e.g. "staging" or "production").
+func GetKeyPrefix() string {
+	return strings.Trim(strings.TrimSpace(os.Getenv("S3_KEY_PREFIX")), "/")
+}
+
+// ValidateKey validates that key does not contain path traversal, conforms to the active
+// environment's S3_KEY_PREFIX, and does not violate tenant isolation if tenantID is provided.
+func ValidateKey(key string, tenantID string) error {
+	cleanKey := strings.TrimSpace(key)
+	if cleanKey == "" {
+		return errors.New("objectstore: key cannot be empty")
+	}
+	if strings.Contains(cleanKey, "..") || strings.Contains(cleanKey, "//") || strings.HasPrefix(cleanKey, "/") || strings.HasPrefix(cleanKey, "\\") {
+		return ErrInvalidKeyPath
+	}
+
+	envPrefix := GetKeyPrefix()
+	expectedBase := "uploads/"
+	if envPrefix != "" {
+		expectedBase = envPrefix + "/uploads/"
+	}
+
+	if !strings.HasPrefix(cleanKey, expectedBase) {
+		return fmt.Errorf("%w: key %q must start with %q", ErrCrossEnvironmentKey, cleanKey, expectedBase)
+	}
+
+	// If tenantID is given, enforce that any tenant-scoped key matches the caller's tenantID
+	afterBase := strings.TrimPrefix(cleanKey, expectedBase)
+	parts := strings.Split(afterBase, "/")
+	if tenantID != "" && len(parts) >= 2 {
+		isYear := len(parts[0]) == 4 && parts[0][0] >= '0' && parts[0][0] <= '9'
+		if !isYear && parts[0] != tenantID {
+			return fmt.Errorf("%w: key tenant %q does not match authenticated tenant %q", ErrCrossTenantKey, parts[0], tenantID)
+		}
+	}
+
+	return nil
+}
+
 // Put streams an upload into the bucket under the given key. Caller is
 // responsible for choosing a collision-safe key — see DerivedKey for the
 // helper handlers should use.
@@ -111,6 +159,9 @@ func Init(ctx context.Context) error {
 func Put(ctx context.Context, key string, body io.Reader, size int64, contentType string) error {
 	if pkgClient == nil {
 		return errors.New("objectstore: not initialised — call Init first")
+	}
+	if err := ValidateKey(key, ""); err != nil {
+		return err
 	}
 	_, err := pkgClient.mc.PutObject(ctx, pkgClient.bucket, key, body, size, minio.PutObjectOptions{
 		ContentType: contentType,
@@ -125,13 +176,18 @@ func Put(ctx context.Context, key string, body io.Reader, size int64, contentTyp
 // to the object at the given key. No auth header is needed; the URL itself
 // carries the signature. Clients should NOT store these URLs long-term —
 // store the key, request a fresh URL on demand.
-//
-// Forwards ttl to the underlying SDK directly, so callers can request a
-// shorter expiry for one-off display while the default (PresignedGetTTL)
-// covers the common case.
 func PresignedGetURL(ctx context.Context, key string, ttl time.Duration) (string, error) {
+	return PresignedGetURLScoped(ctx, key, "", ttl)
+}
+
+// PresignedGetURLScoped validates key against both the environment prefix and tenantID
+// before returning a presigned GET URL.
+func PresignedGetURLScoped(ctx context.Context, key string, tenantID string, ttl time.Duration) (string, error) {
 	if pkgClient == nil {
 		return "", errors.New("objectstore: not initialised — call Init first")
+	}
+	if err := ValidateKey(key, tenantID); err != nil {
+		return "", err
 	}
 	if ttl <= 0 {
 		ttl = PresignedGetTTL
@@ -144,17 +200,45 @@ func PresignedGetURL(ctx context.Context, key string, ttl time.Duration) (string
 	return u.String(), nil
 }
 
-// DerivedKey returns a collision-safe object key for an uploaded file.
-//
-// Shape: uploads/YYYY/MM/DD/<unixNanos>-<sanitisedOriginalName>
-//
-// Date-partitioned because S3 / MinIO list operations get expensive once a
-// single prefix carries millions of objects — date partitioning keeps any
-// one prefix bounded by daily upload volume. The unixNanos prefix prevents
-// collisions when two uploads arrive in the same millisecond. The original
-// name is preserved (sanitised) so an operator browsing the bucket can
-// identify files at a glance.
+// GetObject retrieves an object stream from the bucket, verifying key scope and tenant boundary.
+func GetObject(ctx context.Context, key string, tenantID string) (io.ReadCloser, error) {
+	if pkgClient == nil {
+		return nil, errors.New("objectstore: not initialised — call Init first")
+	}
+	if err := ValidateKey(key, tenantID); err != nil {
+		return nil, err
+	}
+	obj, err := pkgClient.mc.GetObject(ctx, pkgClient.bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("objectstore: get %q: %w", key, err)
+	}
+	return obj, nil
+}
+
+// DeleteObject deletes an object from the bucket, verifying key scope and tenant boundary.
+func DeleteObject(ctx context.Context, key string, tenantID string) error {
+	if pkgClient == nil {
+		return errors.New("objectstore: not initialised — call Init first")
+	}
+	if err := ValidateKey(key, tenantID); err != nil {
+		return err
+	}
+	if err := pkgClient.mc.RemoveObject(ctx, pkgClient.bucket, key, minio.RemoveObjectOptions{}); err != nil {
+		return fmt.Errorf("objectstore: remove %q: %w", key, err)
+	}
+	return nil
+}
+
+// DerivedKey returns a collision-safe object key for an uploaded file without tenant partition.
 func DerivedKey(originalName string, ts time.Time) string {
+	return DerivedKeyScoped("", originalName, ts)
+}
+
+// DerivedKeyScoped returns a collision-safe object key for an uploaded file, partitioned
+// by active environment prefix, tenant ID (if provided), and date.
+//
+// Shape: [<prefix>/]uploads/[<tenantId>/]YYYY/MM/DD/<unixNanos>-<sanitisedOriginalName>
+func DerivedKeyScoped(tenantID string, originalName string, ts time.Time) string {
 	clean := strings.Map(func(r rune) rune {
 		switch {
 		case r >= 'a' && r <= 'z',
@@ -170,7 +254,24 @@ func DerivedKey(originalName string, ts time.Time) string {
 	if clean == "" {
 		clean = "file"
 	}
-	return fmt.Sprintf("uploads/%04d/%02d/%02d/%d-%s",
+
+	prefix := GetKeyPrefix()
+	tenantPart := ""
+	if strings.TrimSpace(tenantID) != "" {
+		tenantPart = strings.Trim(strings.TrimSpace(tenantID), "/") + "/"
+	}
+
+	if prefix != "" {
+		return fmt.Sprintf("%s/uploads/%s%04d/%02d/%02d/%d-%s",
+			prefix,
+			tenantPart,
+			ts.Year(), ts.Month(), ts.Day(),
+			ts.UnixNano(), clean,
+		)
+	}
+
+	return fmt.Sprintf("uploads/%s%04d/%02d/%02d/%d-%s",
+		tenantPart,
 		ts.Year(), ts.Month(), ts.Day(),
 		ts.UnixNano(), clean,
 	)

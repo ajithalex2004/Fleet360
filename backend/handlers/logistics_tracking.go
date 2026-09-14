@@ -62,6 +62,7 @@ import (
 	"fleet360-backend/models"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // trackingActiveStatuses is the in-transit set the legacy route scanned, verbatim.
@@ -223,11 +224,13 @@ func GetLogisticsTracking(c *gin.Context) {
 			Name      *string `gorm:"column:name"`
 		}
 		var rows []drvRow
-		if err := database.DB.Table("drivers").Scopes(auth.WithTenant(c)).
-			Select("id, first_name, last_name, name").
-			Where("id IN ?", ids).
-			Where("deleted_at IS NULL").
-			Scan(&rows).Error; err != nil {
+		if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+			return tx.Table("drivers").Scopes(auth.WithTenant(c)).
+				Select("id, first_name, last_name, name").
+				Where("id IN ?", ids).
+				Where("deleted_at IS NULL").
+				Scan(&rows).Error
+		}); err != nil {
 			fail(err)
 			return
 		}
@@ -251,11 +254,13 @@ func GetLogisticsTracking(c *gin.Context) {
 			Plate *string `gorm:"column:plate"`
 		}
 		var rows []vehRow
-		if err := database.DB.Table("vehicles").Scopes(auth.WithTenant(c)).
-			Select("id, COALESCE(plate_number, license_plate) AS plate").
-			Where("id IN ?", ids).
-			Where("deleted_at IS NULL").
-			Scan(&rows).Error; err != nil {
+		if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+			return tx.Table("vehicles").Scopes(auth.WithTenant(c)).
+				Select("id, COALESCE(plate_number, license_plate) AS plate").
+				Where("id IN ?", ids).
+				Where("deleted_at IS NULL").
+				Scan(&rows).Error
+		}); err != nil {
 			fail(err)
 			return
 		}

@@ -205,11 +205,16 @@ func GetLogisticsPlannerInputs(c *gin.Context) {
 			PayloadCapacityKg *float64 `gorm:"column:payload_capacity_kg"`
 		}
 		var rows []vrow
-		database.DB.Scopes(auth.WithTenant(c)).Table("vehicles").
-			Select("id, license_plate, payload_capacity_kg").
-			Where("deleted_at IS NULL AND (vehicle_usage = 'LOGISTICS' OR vehicle_usage IS NULL) AND payload_capacity_kg IS NOT NULL AND depot_latitude IS NOT NULL").
-			Order("license_plate NULLS LAST").
-			Limit(200).Find(&rows)
+		if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+			return tx.Scopes(auth.WithTenant(c)).Table("vehicles").
+				Select("id, license_plate, payload_capacity_kg").
+				Where("deleted_at IS NULL AND (vehicle_usage = 'LOGISTICS' OR vehicle_usage IS NULL) AND payload_capacity_kg IS NOT NULL AND depot_latitude IS NOT NULL").
+				Order("license_plate NULLS LAST").
+				Limit(200).Find(&rows).Error
+		}); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 		out := make([]plannerInputVehicle, 0, len(rows))
 		for _, r := range rows {
 			out = append(out, plannerInputVehicle{
@@ -402,10 +407,12 @@ func runOptimization(c *gin.Context, tid string, req optimizeRequest) (optimizeR
 // freshly-geocoded coordinates already applied.
 func loadAndGeocode(c *gin.Context, tid string, vehicleIDs, shipmentIDs []string) (loadedData, error) {
 	var vehicles []plannerVehicleRow
-	if err := database.DB.Scopes(auth.WithTenant(c)).Table("vehicles").
-		Select("id, license_plate, payload_capacity_kg, payload_capacity_cbm, depot_latitude, depot_longitude, cost_per_km").
-		Where("id IN ? AND deleted_at IS NULL", vehicleIDs).
-		Find(&vehicles).Error; err != nil {
+	if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+		return tx.Scopes(auth.WithTenant(c)).Table("vehicles").
+			Select("id, license_plate, payload_capacity_kg, payload_capacity_cbm, depot_latitude, depot_longitude, cost_per_km").
+			Where("id IN ? AND deleted_at IS NULL", vehicleIDs).
+			Find(&vehicles).Error
+	}); err != nil {
 		return loadedData{}, err
 	}
 

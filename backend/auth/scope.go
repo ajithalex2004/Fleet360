@@ -46,3 +46,20 @@ func WithTenant(c *gin.Context) func(*gorm.DB) *gorm.DB {
 		return db.Where("tenant_id = ?", tid)
 	}
 }
+
+// AsTenant executes fn inside a transaction where PostgreSQL session setting
+// `app.tenant_id` is set to the request's tenant via set_config(..., true).
+// This guarantees full compatibility with PostgreSQL Row-Level Security (RLS)
+// policies on tables that have RLS enabled (such as vehicles and drivers).
+func AsTenant(c *gin.Context, db *gorm.DB, fn func(tx *gorm.DB) error) error {
+	tid := TenantID(c)
+	if tid == "" {
+		return gorm.ErrInvalidData
+	}
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec(`SELECT set_config('app.tenant_id', ?, true)`, tid).Error; err != nil {
+			return err
+		}
+		return fn(tx)
+	})
+}

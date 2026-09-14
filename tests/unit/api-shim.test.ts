@@ -79,16 +79,27 @@ describe('proxyToGoBackend — fail-closed JWT signing', () => {
   });
 });
 
-describe('proxyToGoBackend — routes with a working Next.js fallback are not proxied while no Go backend is reachable', () => {
+describe('proxyToGoBackend — routes with a confirmed, live Go handler are proxied', () => {
+  // 2026-09-14: fleet360-backend is now deployed and reachable (see
+  // docs/LOGISTICS_GO_MIGRATION_STATUS.md). Every path below was verified
+  // against backend/main.go's route registration to have a real, matching
+  // Go handler before being re-added to the shim's allowlist — re-enabling
+  // proxying for a path with no backend handler would 404 real users, so
+  // this list must never grow without that same check.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let fetchSpy: any;
 
   beforeEach(() => {
-    fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(new Response('{}', { status: 200 }));
+    process.env.JWT_SECRET = 'a-valid-secret-that-is-long-enough';
+    fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+    );
   });
 
   afterEach(() => {
     fetchSpy.mockRestore();
+    if (originalJwtSecret === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = originalJwtSecret;
   });
 
   it.each([
@@ -99,9 +110,23 @@ describe('proxyToGoBackend — routes with a working Next.js fallback are not pr
     ['GET', '/api/logistics/rfqs'],
     ['GET', '/api/logistics/rfqs/abc-123/bids'],
     ['GET', '/api/logistics/carriers'],
-    ['GET', '/api/logistics/carriers/nearest'],
     ['GET', '/api/logistics/carriers/abc-123'],
-  ])('%s %s falls through to the Next.js route, not the shim', async (method, path) => {
+    ['GET', '/api/logistics/planner/plans'],
+    ['GET', '/api/logistics/stops'],
+    ['GET', '/api/logistics/route-legs'],
+    ['GET', '/api/logistics/assignments'],
+    ['GET', '/api/logistics/tracking-events'],
+    ['GET', '/api/logistics/pod-events'],
+    ['GET', '/api/logistics/telematics-events'],
+    ['GET', '/api/logistics/exceptions'],
+    ['GET', '/api/logistics/bids'],
+    ['GET', '/api/logistics/carrier-scorecards'],
+    ['GET', '/api/logistics/freight-charges'],
+    ['GET', '/api/logistics/analytics'],
+    ['GET', '/api/logistics/driver-stats'],
+    ['GET', '/api/logistics/rates/quote'],
+    ['GET', '/api/logistics/sla'],
+  ])('%s %s is proxied to the Go backend', async (method, path) => {
     const result = await proxyToGoBackend(
       new NextRequest(`http://localhost:3000${path}`, {
         method,
@@ -109,19 +134,20 @@ describe('proxyToGoBackend — routes with a working Next.js fallback are not pr
       }),
     );
 
-    expect(result.proxied).toBe(false);
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(result.proxied).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(result.response?.headers.get('x-backend')).toBe('go');
   });
 
-  it('the four unfallbacked paths (no Next.js implementation) are still proxied', async () => {
-    for (const path of ['/api/logistics/analytics', '/api/logistics/driver-stats', '/api/logistics/rates/quote', '/api/logistics/sla']) {
-      const result = await proxyToGoBackend(
-        new NextRequest(`http://localhost:3000${path}`, {
-          method: 'GET',
-          headers: { 'x-user-id': 'user-1', 'x-tenant-id': 'tenant-1' },
-        }),
-      );
-      expect(result.proxied).toBe(true);
-    }
+  it('a path with no Go handler at all is left unproxied (falls through to Next.js)', async () => {
+    const result = await proxyToGoBackend(
+      new NextRequest('http://localhost:3000/api/logistics/rate-contracts', {
+        method: 'GET',
+        headers: { 'x-user-id': 'user-1', 'x-tenant-id': 'tenant-1' },
+      }),
+    );
+
+    expect(result.proxied).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

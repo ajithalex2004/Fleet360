@@ -1,0 +1,50 @@
+name: Staging Acceptance Release Gate
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feat/logistics-go-cutover-and-shipping-requests'
+      - 'hardening/**'
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+concurrency:
+  group: staging-acceptance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  staging-acceptance-gate:
+    name: Staging E2E Proxy & Tenant Isolation Acceptance Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      STAGING_APP_ORIGIN: https://fleet360-app-staging.up.railway.app
+      STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL || 'postgresql://neondb_owner:npg_7ndWFKRYEOt6@ep-calm-heart-a15voo2a.ap-southeast-1.aws.neon.tech/neondb_staging?sslmode=require' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Execute Staging Acceptance & Isolation Suite
+        id: run_tests
+        run: |
+          echo "Executing Staging Acceptance & E2E Isolation Gate against $STAGING_APP_ORIGIN..."
+          npm run test:staging-acceptance
