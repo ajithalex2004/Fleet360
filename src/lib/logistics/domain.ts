@@ -7822,98 +7822,433 @@ export async function updateShipperOnboarding(_args: {
 }
 
 // ── Shipping requests (demand intake) ───────────────────────────────────────
-export interface ShippingRequestRow {
-  id: string;
-  requestNo?: string;
+export const SHIPPING_REQUEST_STATES = [
+  'SUBMITTED',
+  'UNDER_REVIEW',
+  'ACCEPTED',
+  'REJECTED',
+  'CANCELLED',
+  'CONVERTED',
+] as const;
+
+export interface LogisticsShippingRequestInput {
   tenantId: string;
   shipperId: string;
-  shipmentType: string | null;
-  originName: string | null;
-  originAddress: string | null;
-  destinationName: string | null;
-  destinationAddress: string | null;
-  pickupWindowFrom: string | null;
-  pickupWindowTo: string | null;
-  deliveryWindowFrom: string | null;
-  deliveryWindowTo: string | null;
-  requestedVehicleType: string | null;
-  cargoDescription: string | null;
-  cargoWeightKg: number | null;
-  totalWeightKg?: number | null;
-  estimatedStops: number;
-  source?: string | null;
-  notes: string | null;
-  status: string;
-  convertedShipmentOrderId: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export async function listShippingRequests(_args: {
-  tenantId: string;
-  status?: string | null;
-  shipperId?: string | null;
-  search?: string | null;
-  limit: number;
-}): Promise<{ data: ShippingRequestRow[] }> {
-  throw new LogisticsValidationError(['listShippingRequests is not yet implemented — track Layer 2.5 follow-up.']);
-}
-
-export async function getShippingRequest(
-  _args: { tenantId: string; requestId: string },
-): Promise<ShippingRequestRow | null> {
-  throw new LogisticsValidationError(['getShippingRequest is not yet implemented — track Layer 2.5 follow-up.']);
-}
-
-export async function createShippingRequest(_input: {
-  tenantId: string;
-  shipperId: string;
-  createdBy?: string | null;
   shipmentType?: string | null;
   originName?: string | null;
   originAddress?: string | null;
   destinationName?: string | null;
   destinationAddress?: string | null;
-  pickupWindowFrom?: string | null;
-  pickupWindowTo?: string | null;
-  deliveryWindowFrom?: string | null;
-  deliveryWindowTo?: string | null;
+  pickupWindowFrom?: string | Date | null;
+  pickupWindowTo?: string | Date | null;
+  deliveryWindowFrom?: string | Date | null;
+  deliveryWindowTo?: string | Date | null;
   requestedVehicleType?: string | null;
-  cargoDescription?: string | null;
-  goodsDescription?: string | null;
-  cargoWeightKg?: number | null;
-  cargoValueAmount?: number | null;
-  cargoValueCurrency?: string | null;
   totalWeightKg?: number | null;
   totalVolumeCbm?: number | null;
+  cargoValueAmount?: number | null;
   currency?: string | null;
-  estimatedStops?: number;
-  source?: string | null;
-  notes?: string | null;
+  goodsDescription?: string | null;
   specialInstructions?: string | null;
   referenceNo?: string | null;
+  source?: string | null;
+  status?: string | null;
   metadata?: JsonRecord | null;
+  createdBy?: string | null;
   actorUserId?: string | null;
-}): Promise<ShippingRequestRow> {
-  throw new LogisticsValidationError(['createShippingRequest is not yet implemented — track Layer 2.5 follow-up.']);
 }
 
-export async function updateShippingRequestStatus(_args: {
+export interface LogisticsShippingRequestRow {
+  id: string;
+  tenant_id: string;
+  request_no: string;
+  shipper_id: string;
+  status: string;
+  shipment_type: string | null;
+  origin_name: string | null;
+  origin_address: string | null;
+  destination_name: string | null;
+  destination_address: string | null;
+  pickup_window_from: string | Date | null;
+  pickup_window_to: string | Date | null;
+  delivery_window_from: string | Date | null;
+  delivery_window_to: string | Date | null;
+  requested_vehicle_type: string | null;
+  total_weight_kg: string | number | null;
+  total_volume_cbm: string | number | null;
+  cargo_value_amount: string | number | null;
+  currency: string;
+  goods_description: string | null;
+  special_instructions: string | null;
+  reference_no: string | null;
+  source: string;
+  shipment_order_id: string | null;
+  review_notes: string | null;
+  metadata: JsonRecord | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string | Date;
+  updated_at: string | Date;
+  deleted_at: string | Date | null;
+}
+
+export type ShippingRequestRow = LogisticsShippingRequestRow;
+
+async function nextShippingRequestNo(tenantId: string) {
+  const prefix = `SR-${String(new Date().getFullYear()).slice(-2)}`;
+  const rows = await prisma.$queryRawUnsafe<Array<{ count: bigint | number | string }>>(
+    `SELECT COUNT(*) AS count
+       FROM logistics_shipping_requests
+      WHERE tenant_id = $1 AND request_no LIKE $2`,
+    tenantId,
+    `${prefix}%`,
+  );
+  const count = Number(rows[0]?.count ?? 0) + 1;
+  return `${prefix}${String(count).padStart(5, '0')}`;
+}
+
+function mapShippingRequestRow(
+  row: LogisticsShippingRequestRow & { shipper_name?: string | null; shipper_code?: string | null },
+) {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    requestNo: row.request_no,
+    shipperId: row.shipper_id,
+    shipperName: row.shipper_name ?? null,
+    shipperCode: row.shipper_code ?? null,
+    status: row.status,
+    shipmentType: row.shipment_type,
+    originName: row.origin_name,
+    originAddress: row.origin_address,
+    destinationName: row.destination_name,
+    destinationAddress: row.destination_address,
+    pickupWindowFrom: iso(row.pickup_window_from),
+    pickupWindowTo: iso(row.pickup_window_to),
+    deliveryWindowFrom: iso(row.delivery_window_from),
+    deliveryWindowTo: iso(row.delivery_window_to),
+    requestedVehicleType: row.requested_vehicle_type,
+    totalWeightKg: numberOrNull(row.total_weight_kg),
+    totalVolumeCbm: numberOrNull(row.total_volume_cbm),
+    cargoValueAmount: numberOrNull(row.cargo_value_amount),
+    currency: row.currency,
+    goodsDescription: row.goods_description,
+    specialInstructions: row.special_instructions,
+    referenceNo: row.reference_no,
+    source: row.source,
+    shipmentOrderId: row.shipment_order_id,
+    reviewNotes: row.review_notes,
+    metadata: row.metadata ?? {},
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  };
+}
+
+export type LogisticsShippingRequest = ReturnType<typeof mapShippingRequestRow>;
+
+export async function createShippingRequest(input: LogisticsShippingRequestInput) {
+  const customerRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `SELECT id FROM customers WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL LIMIT 1`,
+    input.shipperId, input.tenantId,
+  ).catch(() => [] as Array<{ id: string }>);
+  if (!customerRows[0]) throw new LogisticsValidationError(['Shipper (customer) not found for this tenant.']);
+
+  const requestNo = await nextShippingRequestNo(input.tenantId);
+  const rows = await prisma.$queryRawUnsafe<LogisticsShippingRequestRow[]>(
+    `INSERT INTO logistics_shipping_requests (
+       tenant_id, request_no, shipper_id, status, shipment_type,
+       origin_name, origin_address, destination_name, destination_address,
+       pickup_window_from, pickup_window_to, delivery_window_from, delivery_window_to,
+       requested_vehicle_type, total_weight_kg, total_volume_cbm, cargo_value_amount,
+       currency, goods_description, special_instructions, reference_no, source,
+       metadata, created_by, updated_by
+     ) VALUES (
+       $1,$2,$3,$4,$5,$6,$7,$8,$9,
+       $10::timestamptz,$11::timestamptz,$12::timestamptz,$13::timestamptz,
+       $14,$15,$16,$17,$18,$19,$20,$21,$22,$23::jsonb,$24,$24
+     )
+     RETURNING *`,
+    input.tenantId,
+    requestNo,
+    input.shipperId,
+    input.status ?? 'SUBMITTED',
+    input.shipmentType ?? null,
+    input.originName ?? null,
+    input.originAddress ?? null,
+    input.destinationName ?? null,
+    input.destinationAddress ?? null,
+    iso(input.pickupWindowFrom),
+    iso(input.pickupWindowTo),
+    iso(input.deliveryWindowFrom),
+    iso(input.deliveryWindowTo),
+    input.requestedVehicleType ?? null,
+    input.totalWeightKg ?? null,
+    input.totalVolumeCbm ?? null,
+    input.cargoValueAmount ?? null,
+    input.currency ?? 'AED',
+    input.goodsDescription ?? null,
+    input.specialInstructions ?? null,
+    input.referenceNo ?? null,
+    input.source ?? 'OPERATOR',
+    jsonParam(input.metadata ?? {}),
+    input.createdBy ?? input.actorUserId ?? null,
+  );
+  return rows[0] ? mapShippingRequestRow(rows[0]) : null;
+}
+
+export async function listShippingRequests(args: {
+  tenantId: string;
+  status?: string | null;
+  shipperId?: string | null;
+  search?: string | null;
+  limit?: number;
+}) {
+  const limit = Math.min(Math.max(args.limit ?? 100, 1), 500);
+  const rows = await prisma.$queryRawUnsafe<Array<LogisticsShippingRequestRow & {
+    shipper_name: string | null; shipper_code: string | null;
+  }>>(
+    `SELECT r.*, s.name_en AS shipper_name, s.customer_code AS shipper_code
+       FROM logistics_shipping_requests r
+       LEFT JOIN customers s
+         ON s.id = r.shipper_id AND s.tenant_id = r.tenant_id
+      WHERE r.tenant_id = $1
+        AND r.deleted_at IS NULL
+        AND ($2::text IS NULL OR r.status = $2)
+        AND ($3::text IS NULL OR r.shipper_id = $3)
+        AND (
+          $4::text IS NULL
+          OR r.request_no ILIKE '%' || $4 || '%'
+          OR r.origin_name ILIKE '%' || $4 || '%'
+          OR r.destination_name ILIKE '%' || $4 || '%'
+          OR s.name_en ILIKE '%' || $4 || '%'
+        )
+      ORDER BY r.created_at DESC
+      LIMIT $5`,
+    args.tenantId,
+    args.status ?? null,
+    args.shipperId ?? null,
+    args.search || null,
+    limit,
+  );
+  return rows.map(mapShippingRequestRow);
+}
+
+export async function getShippingRequest(args: { tenantId: string; requestId: string }) {
+  const rows = await prisma.$queryRawUnsafe<Array<LogisticsShippingRequestRow & {
+    shipper_name: string | null; shipper_code: string | null;
+  }>>(
+    `SELECT r.*, s.name_en AS shipper_name, s.customer_code AS shipper_code
+       FROM logistics_shipping_requests r
+       LEFT JOIN customers s
+         ON s.id = r.shipper_id AND s.tenant_id = r.tenant_id
+      WHERE r.tenant_id = $1 AND r.id = $2 AND r.deleted_at IS NULL
+      LIMIT 1`,
+    args.tenantId,
+    args.requestId,
+  );
+  return rows[0] ? mapShippingRequestRow(rows[0]) : null;
+}
+
+export async function updateShippingRequestStatus(args: {
   tenantId: string;
   requestId: string;
   status: string;
-  notes?: string | null;
   reviewNotes?: string | null;
+  notes?: string | null;
   actorUserId?: string | null;
-}): Promise<ShippingRequestRow> {
-  throw new LogisticsValidationError(['updateShippingRequestStatus is not yet implemented — track Layer 2.5 follow-up.']);
+}) {
+  const status = String(args.status ?? '').toUpperCase();
+  if (!(SHIPPING_REQUEST_STATES as readonly string[]).includes(status)) {
+    throw new LogisticsValidationError([`Unknown shipping-request status "${args.status}".`]);
+  }
+  if (status === 'CONVERTED') {
+    throw new LogisticsValidationError(['Use the convert action to turn a request into a job order.']);
+  }
+  const existing = await prisma.$queryRawUnsafe<LogisticsShippingRequestRow[]>(
+    `SELECT * FROM logistics_shipping_requests
+      WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL LIMIT 1`,
+    args.tenantId, args.requestId,
+  );
+  if (!existing[0]) throw new Error('Shipping request not found for this tenant');
+  if (existing[0].status === 'CONVERTED') {
+    throw new LogisticsValidationError(['This request has already been converted into a job order.']);
+  }
+  const reviewNotes = args.reviewNotes ?? args.notes ?? null;
+  const rows = await prisma.$queryRawUnsafe<LogisticsShippingRequestRow[]>(
+    `UPDATE logistics_shipping_requests
+        SET updated_at = NOW(),
+            status = $1,
+            review_notes = COALESCE($2, review_notes),
+            updated_by = COALESCE($3, updated_by)
+      WHERE tenant_id = $4 AND id = $5
+      RETURNING *`,
+    status,
+    reviewNotes,
+    args.actorUserId ?? null,
+    args.tenantId,
+    args.requestId,
+  );
+  return rows[0] ? mapShippingRequestRow(rows[0]) : null;
 }
 
-export async function convertShippingRequest(_args: {
+export async function convertShippingRequest(args: {
   tenantId: string;
   requestId: string;
   shipmentInput?: JsonRecord;
   actorUserId?: string | null;
-}): Promise<{ shipmentOrderId: string }> {
-  throw new LogisticsValidationError(['convertShippingRequest is not yet implemented — track Layer 2.5 follow-up.']);
+}) {
+  const reqRows = await prisma.$queryRawUnsafe<LogisticsShippingRequestRow[]>(
+    `SELECT * FROM logistics_shipping_requests
+      WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL LIMIT 1`,
+    args.tenantId, args.requestId,
+  );
+  const req = reqRows[0];
+  if (!req) throw new Error('Shipping request not found for this tenant');
+  if (req.status === 'CONVERTED' && req.shipment_order_id) {
+    throw new LogisticsValidationError(['This request has already been converted into a job order.']);
+  }
+  if (req.status === 'REJECTED' || req.status === 'CANCELLED') {
+    throw new LogisticsValidationError([`A ${req.status.toLowerCase()} request cannot be converted.`]);
+  }
+
+  const custRows = await prisma.$queryRawUnsafe<Array<{ name_en: string; email: string | null; mobile_number: string | null }>>(
+    `SELECT name_en, email, mobile_number FROM customers WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+    req.shipper_id, args.tenantId,
+  ).catch(() => [] as Array<{ name_en: string; email: string | null; mobile_number: string | null }>);
+  const customer = custRows[0];
+  const noteParts = [req.goods_description, req.special_instructions].filter(Boolean) as string[];
+
+  const md = (req.metadata ?? {}) as JsonRecord;
+  const mdPickup = (md.pickup && typeof md.pickup === 'object' ? md.pickup : {}) as Record<string, unknown>;
+  const mdDelivery = (md.delivery && typeof md.delivery === 'object' ? md.delivery : {}) as Record<string, unknown>;
+  const mdCargo = Array.isArray(md.cargoLines) ? (md.cargoLines as Array<Record<string, unknown>>) : [];
+  const s = (v: unknown): string | null => (v == null || v === '' ? null : String(v));
+  const n = (v: unknown): number | null => {
+    if (v == null || v === '') return null;
+    const x = Number(v);
+    return Number.isFinite(x) ? x : null;
+  };
+
+  const stops: LogisticsStopInput[] = [
+    {
+      stopType: 'PICKUP', sequenceNo: 1,
+      locationName: s(mdPickup.name) ?? req.origin_name,
+      address: s(mdPickup.address) ?? req.origin_address,
+      contactName: s(mdPickup.contactName),
+      contactPhone: s(mdPickup.contactPhone),
+      plannedArrivalAt: s(mdPickup.windowFrom) ?? iso(req.pickup_window_from),
+      plannedDepartAt: s(mdPickup.windowTo) ?? iso(req.pickup_window_to),
+      instructions: s(mdPickup.instructions),
+    },
+    {
+      stopType: 'DELIVERY', sequenceNo: 2,
+      locationName: s(mdDelivery.name) ?? req.destination_name,
+      address: s(mdDelivery.address) ?? req.destination_address,
+      contactName: s(mdDelivery.contactName),
+      contactPhone: s(mdDelivery.contactPhone),
+      plannedArrivalAt: s(mdDelivery.windowFrom) ?? iso(req.delivery_window_from),
+      plannedDepartAt: s(mdDelivery.windowTo) ?? iso(req.delivery_window_to),
+      instructions: s(mdDelivery.instructions),
+    },
+  ];
+
+  const cargoLines: LogisticsCargoLineInput[] = mdCargo.length
+    ? mdCargo
+      .filter(c => s(c.description))
+      .map(c => ({
+        description: s(c.description) ?? 'Cargo',
+        quantity: n(c.quantity),
+        packageType: s(c.packageType),
+        weightKg: n(c.weightKg),
+        volumeCbm: n(c.volumeCbm),
+        isHazmat: c.isHazmat === true,
+        tempMinC: n(c.tempMinC),
+        tempMaxC: n(c.tempMaxC),
+      }))
+    : (req.goods_description
+      ? [{ description: req.goods_description, weightKg: numberOrNull(req.total_weight_kg) }]
+      : []);
+
+  const mdHaulage = md.haulage === 'CROSS_BORDER' ? 'CROSS_BORDER'
+    : md.haulage === 'INLAND' ? 'INLAND'
+    : null;
+  const mdCustoms = (md.customs && typeof md.customs === 'object' && !Array.isArray(md.customs))
+    ? (md.customs as Record<string, unknown>) : null;
+  const mdHazmat = (md.hazmat && typeof md.hazmat === 'object' && !Array.isArray(md.hazmat))
+    ? (md.hazmat as Record<string, unknown>) : null;
+
+  const customsGrossKg = mdCustoms ? n(mdCustoms.grossWeightKg) : null;
+  const totalWeightFromRequest = numberOrNull(req.total_weight_kg);
+  const totalWeightKg = totalWeightFromRequest ?? customsGrossKg;
+
+  const shipment = await createShipmentOrder({
+    tenantId: args.tenantId,
+    cargoOwnerCustomerId: req.shipper_id,
+    cargoOwnerName: customer?.name_en ?? null,
+    cargoOwnerEmail: customer?.email ?? null,
+    cargoOwnerPhone: customer?.mobile_number ?? null,
+    shipmentType: req.shipment_type,
+    bookingMode: 'SPOT',
+    marketplaceStatus: 'PRIVATE',
+    status: 'DRAFT',
+    originName: req.origin_name,
+    originAddress: req.origin_address,
+    destinationName: req.destination_name,
+    destinationAddress: req.destination_address,
+    pickupWindowFrom: iso(req.pickup_window_from),
+    pickupWindowTo: iso(req.pickup_window_to),
+    deliveryWindowFrom: iso(req.delivery_window_from),
+    deliveryWindowTo: iso(req.delivery_window_to),
+    requestedVehicleType: req.requested_vehicle_type,
+    totalWeightKg,
+    totalVolumeCbm: numberOrNull(req.total_volume_cbm),
+    cargoValueAmount: numberOrNull(req.cargo_value_amount),
+    currency: req.currency,
+    stops,
+    cargoLines,
+    sourceChannel: 'SHIPPING_REQUEST',
+    notes: noteParts.length ? noteParts.join(' — ') : null,
+    metadata: {
+      shippingRequestId: req.id,
+      shippingRequestNo: req.request_no,
+      shipperReferenceNo: req.reference_no,
+      goodsDescription: req.goods_description,
+      haulage: mdHaulage,
+      customs: mdCustoms,
+      hazmat: mdHazmat,
+    },
+    createdBy: args.actorUserId ?? null,
+  });
+  if (!shipment) throw new Error('Failed to create the job order from this request');
+
+  const rows = await prisma.$queryRawUnsafe<LogisticsShippingRequestRow[]>(
+    `UPDATE logistics_shipping_requests
+        SET updated_at = NOW(),
+            status = 'CONVERTED',
+            shipment_order_id = $1,
+            updated_by = COALESCE($2, updated_by)
+      WHERE tenant_id = $3 AND id = $4
+      RETURNING *`,
+    shipment.id,
+    args.actorUserId ?? null,
+    args.tenantId,
+    args.requestId,
+  );
+
+  await addTrackingEvent({
+    tenantId: args.tenantId,
+    shipmentOrderId: shipment.id,
+    eventType: 'SHIPPING_REQUEST_CONVERTED',
+    status: shipment.status,
+    source: 'FREIGHT_MARKETPLACE',
+    notes: `Job order created from shipping request ${req.request_no}`,
+    metadata: { shippingRequestId: req.id, requestNo: req.request_no },
+  });
+
+  return {
+    shipmentOrderId: shipment.id,
+    shipmentNo: shipment.shipment_no,
+    request: rows[0] ? mapShippingRequestRow(rows[0]) : null,
+    shipment: { id: shipment.id, shipmentNo: shipment.shipment_no, status: shipment.status },
+  };
 }

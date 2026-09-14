@@ -21,6 +21,7 @@ const MIGRATED_EXACT_PATHS = new Set([
   '/api/logistics/driver-stats',
   '/api/logistics/rates/quote',
   '/api/logistics/sla',
+  '/api/logistics/tracking',
 ]);
 
 // ── Bus-ops shim: intentionally empty ────────────────────────────────────
@@ -38,15 +39,23 @@ const MIGRATED_EXACT_PATHS = new Set([
 
 const MIGRATED_PREFIXES = [
   // Only list paths the Go backend ACTUALLY implements under /api/v1/logistics.
-  // rfqs/shipments/carriers removed 2026-09-12 — no Go backend is reachable
-  // (see the note on MIGRATED_EXACT_PATHS above) and, unlike
-  // analytics/driver-stats/rates/quote/sla, these three DO still have a
-  // working Next.js implementation, so leaving them proxied was actively
-  // breaking a fallback that already worked. Their per-path shouldProxy()
-  // logic below was removed along with them. Re-add both once a live Go
-  // backend is reachable again.
-  // Do not add a path here without a matching Go handler in backend/.
+  // The following were NOT ported to Go — they have working Next.js routes, and
+  // proxying them returns a Go 404 that breaks the screen, so they must stay on
+  // Next.js: control-tower, settlements, rates/contracts, master-data.
+  '/api/logistics/rfqs',
+  '/api/logistics/shipments',
+  '/api/logistics/carriers',
   '/api/logistics/planner',
+  '/api/logistics/stops',
+  '/api/logistics/route-legs',
+  '/api/logistics/assignments',
+  '/api/logistics/tracking-events',
+  '/api/logistics/pod-events',
+  '/api/logistics/telematics-events',
+  '/api/logistics/exceptions',
+  '/api/logistics/bids',
+  '/api/logistics/carrier-scorecards',
+  '/api/logistics/freight-charges',
   '/api/carrier-portal/app',
   '/api/driver-app',
 ];
@@ -107,12 +116,15 @@ export async function proxyToGoBackend(request: NextRequest, headersOverride?: H
       redirect: 'manual',
     });
 
+    const resHeaders = new Headers(response.headers);
+    resHeaders.set('x-backend', 'go');
+
     return {
       proxied: true,
       response: new NextResponse(response.body, {
         status: response.status,
         statusText: response.statusText,
-        headers: response.headers,
+        headers: resHeaders,
       }),
     };
   } catch (err) {

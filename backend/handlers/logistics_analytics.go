@@ -134,10 +134,6 @@ func GetLogisticsAnalytics(c *gin.Context) {
 	shipments := func() *gorm.DB {
 		return database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentOrder{})
 	}
-	vehicles := func() *gorm.DB {
-		return database.DB.Scopes(auth.WithTenant(c)).Model(&models.Vehicle{}).
-			Where("vehicle_usage = ?", "LOGISTICS")
-	}
 
 	fail := func(err error) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -168,15 +164,19 @@ func GetLogisticsAnalytics(c *gin.Context) {
 
 	// ── Vehicle stats (this tenant's LOGISTICS fleet) ────────────────────────
 	var totalVeh, availVeh, maintVeh int64
-	if err := vehicles().Count(&totalVeh).Error; err != nil {
-		fail(err)
-		return
-	}
-	if err := vehicles().Where("status = ?", "AVAILABLE").Count(&availVeh).Error; err != nil {
-		fail(err)
-		return
-	}
-	if err := vehicles().Where("status = ?", "MAINTENANCE").Count(&maintVeh).Error; err != nil {
+	if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+		v := func() *gorm.DB {
+			return tx.Scopes(auth.WithTenant(c)).Model(&models.Vehicle{}).
+				Where("vehicle_usage = ?", "LOGISTICS")
+		}
+		if err := v().Count(&totalVeh).Error; err != nil {
+			return err
+		}
+		if err := v().Where("status = ?", "AVAILABLE").Count(&availVeh).Error; err != nil {
+			return err
+		}
+		return v().Where("status = ?", "MAINTENANCE").Count(&maintVeh).Error
+	}); err != nil {
 		fail(err)
 		return
 	}

@@ -94,23 +94,23 @@ func GetLogisticsStats(c *gin.Context) {
 	shipments := func() *gorm.DB {
 		return database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentOrder{})
 	}
-	vehicles := func() *gorm.DB {
-		return database.DB.Scopes(auth.WithTenant(c)).Model(&models.Vehicle{}).
-			Where("vehicle_usage = ?", "LOGISTICS")
-	}
 
 	resp := logisticsStatsResponse{RecentTrips: make([]logisticsStatsRecentTrip, 0, 10)}
 
 	// ── Vehicles (this tenant's LOGISTICS fleet) ─────────────────────────────
-	if err := vehicles().Count(&resp.TotalVehicles).Error; err != nil {
-		fail(err)
-		return
-	}
-	if err := vehicles().Where("status = ?", "AVAILABLE").Count(&resp.AvailableVehicles).Error; err != nil {
-		fail(err)
-		return
-	}
-	if err := vehicles().Where("status = ?", "MAINTENANCE").Count(&resp.InMaintenance).Error; err != nil {
+	if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+		v := func() *gorm.DB {
+			return tx.Scopes(auth.WithTenant(c)).Model(&models.Vehicle{}).
+				Where("vehicle_usage = ?", "LOGISTICS")
+		}
+		if err := v().Count(&resp.TotalVehicles).Error; err != nil {
+			return err
+		}
+		if err := v().Where("status = ?", "AVAILABLE").Count(&resp.AvailableVehicles).Error; err != nil {
+			return err
+		}
+		return v().Where("status = ?", "MAINTENANCE").Count(&resp.InMaintenance).Error
+	}); err != nil {
 		fail(err)
 		return
 	}
@@ -131,8 +131,10 @@ func GetLogisticsStats(c *gin.Context) {
 	}
 
 	// ── Drivers (all of the tenant's drivers — see header note) ──────────────
-	if err := database.DB.Scopes(auth.WithTenant(c)).Model(&models.Driver{}).
-		Count(&resp.Drivers).Error; err != nil {
+	if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+		return tx.Scopes(auth.WithTenant(c)).Model(&models.Driver{}).
+			Count(&resp.Drivers).Error
+	}); err != nil {
 		fail(err)
 		return
 	}

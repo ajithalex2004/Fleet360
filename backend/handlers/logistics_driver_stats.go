@@ -76,6 +76,7 @@ import (
 	"fleet360-backend/models"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // driverIdentity is the slice of the drivers table the scorecard needs. phone is
@@ -176,16 +177,18 @@ func GetLogisticsDriverStats(c *gin.Context) {
 
 	// ── 1. Resolve the target drivers (tenant-scoped, not soft-deleted) ──────
 	var drivers []driverIdentity
-	q := database.DB.Table("drivers").
-		Scopes(auth.WithTenant(c)).
-		Select("id, first_name, last_name, contact_number AS phone, license_number").
-		Where("deleted_at IS NULL")
-	if driverID != "" {
-		q = q.Where("id = ?", driverID).Limit(1)
-	} else {
-		q = q.Order("first_name ASC").Limit(200)
-	}
-	if err := q.Scan(&drivers).Error; err != nil {
+	if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+		q := tx.Table("drivers").
+			Scopes(auth.WithTenant(c)).
+			Select("id, first_name, last_name, contact_number AS phone, license_number").
+			Where("deleted_at IS NULL")
+		if driverID != "" {
+			q = q.Where("id = ?", driverID).Limit(1)
+		} else {
+			q = q.Order("first_name ASC").Limit(200)
+		}
+		return q.Scan(&drivers).Error
+	}); err != nil {
 		fail(err)
 		return
 	}
