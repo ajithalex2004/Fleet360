@@ -306,7 +306,7 @@ async function testIsolatedReads() {
 }
 
 async function testSequentialAlternatingPool() {
-  console.log('\n[4/6] Testing Sequential Alternating Connection Pool Isolation (A -> B -> A -> B -> A)...');
+  console.log('\n[4/7] Testing Sequential Alternating HTTP Requests on Connection Pool (sample-based context isolation: A -> B -> A -> B -> A)...');
   const tokenA = await getSessionCookie(TENANT_A_ID);
   const tokenB = await getSessionCookie(TENANT_B_ID);
 
@@ -332,17 +332,46 @@ async function testSequentialAlternatingPool() {
     }
     console.log(`  ${step.name}: Expected present: ${hasExpected}, Forbidden leaked: ${hasForbidden} => OK`);
   }
+  console.log('  Alternating HTTP requests demonstrated zero cross-tenant leakage across sampled requests on the connection pool.');
 }
 
 async function testStorageBoundaries() {
-  console.log('\n[5/7] Testing Storage Boundaries (Sign, Cross-Tenant, Cross-Environment, Traversal, Delete)...');
+  console.log('\n[5/7] Testing Mandatory Storage Lifecycle & Security Boundaries...');
   const tokenA = await getSessionCookie(TENANT_A_ID);
   const tokenB = await getSessionCookie(TENANT_B_ID);
 
-  const testKeyA = `staging/uploads/${TENANT_A_ID}/2026/09/14/audit-report-${RUN_ID}.pdf`;
+  const syntheticPayload = `synthetic-payload-${RUN_ID}-${Date.now()}`;
+  const syntheticFileName = `synthetic-audit-${RUN_ID}.txt`;
 
-  // 1. Tenant A requests signed URL for its own tenant-partitioned key
-  const signResA = await fetch(`${STAGING_APP_ORIGIN}/api/files/sign?key=${encodeURIComponent(testKeyA)}`, {
+  // 1. Upload synthetic file through /api/files/upload (MANDATORY: 403/500 fails the gate)
+  console.log('  1. Uploading synthetic file through /api/files/upload (mandatory 200)...');
+  const form = new FormData();
+  form.append('file', new Blob([syntheticPayload], { type: 'text/plain' }), syntheticFileName);
+
+  const uploadRes = await fetch(`${STAGING_APP_ORIGIN}/api/files/upload`, {
+    method: 'POST',
+    headers: { Cookie: `xl-session=${tokenA}` },
+    body: form,
+  });
+
+  if (uploadRes.status !== 200) {
+    const text = await uploadRes.text();
+    throw new Error(`Storage Lifecycle Failure: Upload failed with status ${uploadRes.status} (expected 200): ${text}`);
+  }
+
+  const uploadData = await uploadRes.json();
+  const key = uploadData.objectKey;
+  const initialUrl = uploadData.url;
+  console.log(`  Upload succeeded! Derived key: ${key}`);
+
+  // Assert key conforms to environment prefix and tenant partition
+  if (!key.startsWith(`staging/uploads/${TENANT_A_ID}/`)) {
+    throw new Error(`Key ${key} does not conform to expected staging/uploads/${TENANT_A_ID}/ prefix!`);
+  }
+
+  // 2. Download through application's signed URL and compare contents
+  console.log('  2. Downloading object through signed URL and comparing contents...');
+  const signResA = await fetch(`${STAGING_APP_ORIGIN}/api/files/sign?key=${encodeURIComponent(key)}`, {
     headers: { Cookie: `xl-session=${tokenA}` }
   });
   if (signResA.status !== 200) {
@@ -350,13 +379,26 @@ async function testStorageBoundaries() {
     throw new Error(`Tenant A failed to sign own key (status ${signResA.status}): ${text}`);
   }
   const signDataA = await signResA.json();
-  if (!signDataA.url || !signDataA.url.includes('fleet360-uploads')) {
-    throw new Error(`Sign endpoint returned invalid presigned url: ${JSON.stringify(signDataA)}`);
+  const downloadUrl = signDataA.url || initialUrl;
+  if (!downloadUrl) {
+    throw new Error(`Sign endpoint did not return presigned URL: ${JSON.stringify(signDataA)}`);
   }
-  console.log('  Tenant A successfully generated presigned URL for own file.');
 
-  // 2. Tenant B attempts to sign Tenant A's file -> MUST BE 403 Forbidden
-  const signResB = await fetch(`${STAGING_APP_ORIGIN}/api/files/sign?key=${encodeURIComponent(testKeyA)}`, {
+  const downloadRes = await fetch(downloadUrl);
+  if (downloadRes.status !== 200) {
+    throw new Error(`Failed to download object from signed URL: HTTP ${downloadRes.status}`);
+  }
+  const downloadedText = await downloadRes.text();
+  if (downloadedText !== syntheticPayload) {
+    throw new Error(`Content integrity mismatch! Expected "${syntheticPayload}", got "${downloadedText}"`);
+  }
+  console.log('  Download succeeded and content matched synthetic payload bit-for-bit.');
+
+  // 3. Repeat existing cross-tenant rejection checks
+  console.log('  3. Executing cross-tenant and path-traversal boundary checks...');
+
+  // Tenant B attempts to sign Tenant A's file -> MUST BE 403 Forbidden
+  const signResB = await fetch(`${STAGING_APP_ORIGIN}/api/files/sign?key=${encodeURIComponent(key)}`, {
     headers: { Cookie: `xl-session=${tokenB}` }
   });
   console.log(`  Tenant B cross-tenant sign status: ${signResB.status} (expected 403)`);
@@ -364,7 +406,7 @@ async function testStorageBoundaries() {
     throw new Error(`Cross-tenant sign security breach: expected 403, got ${signResB.status}`);
   }
 
-  // 3. Tenant A attempts to sign cross-environment key (production/uploads/...) -> MUST BE 400 Bad Request
+  // Cross-environment sign attempt -> MUST BE 400 Bad Request
   const crossEnvKey = 'production/uploads/production-invoice.pdf';
   const crossEnvRes = await fetch(`${STAGING_APP_ORIGIN}/api/files/sign?key=${encodeURIComponent(crossEnvKey)}`, {
     headers: { Cookie: `xl-session=${tokenA}` }
@@ -374,7 +416,7 @@ async function testStorageBoundaries() {
     throw new Error(`Cross-environment sign security breach: expected 400, got ${crossEnvRes.status}`);
   }
 
-  // 4. Path traversal attempt -> MUST BE 400 Bad Request
+  // Path traversal sign attempt -> MUST BE 400 Bad Request
   const traversalKey = `staging/uploads/${TENANT_A_ID}/../../secret.env`;
   const traversalRes = await fetch(`${STAGING_APP_ORIGIN}/api/files/sign?key=${encodeURIComponent(traversalKey)}`, {
     headers: { Cookie: `xl-session=${tokenA}` }
@@ -384,8 +426,8 @@ async function testStorageBoundaries() {
     throw new Error(`Path traversal sign security breach: expected 400, got ${traversalRes.status}`);
   }
 
-  // 5. Tenant B attempts to delete Tenant A's file -> MUST BE 403 Forbidden
-  const delResB = await fetch(`${STAGING_APP_ORIGIN}/api/files?key=${encodeURIComponent(testKeyA)}`, {
+  // Tenant B attempts to delete Tenant A's file -> MUST BE 403 Forbidden
+  const delResB = await fetch(`${STAGING_APP_ORIGIN}/api/files?key=${encodeURIComponent(key)}`, {
     method: 'DELETE',
     headers: { Cookie: `xl-session=${tokenB}` }
   });
@@ -394,7 +436,7 @@ async function testStorageBoundaries() {
     throw new Error(`Cross-tenant delete security breach: expected 403, got ${delResB.status}`);
   }
 
-  // 6. Tenant A attempts to delete cross-environment file -> MUST BE 400 Bad Request
+  // Cross-environment delete attempt -> MUST BE 400 Bad Request
   const delResCross = await fetch(`${STAGING_APP_ORIGIN}/api/files?key=${encodeURIComponent(crossEnvKey)}`, {
     method: 'DELETE',
     headers: { Cookie: `xl-session=${tokenA}` }
@@ -404,23 +446,26 @@ async function testStorageBoundaries() {
     throw new Error(`Cross-environment delete security breach: expected 400, got ${delResCross.status}`);
   }
 
-  // 7. Verify upload key scoping & document upstream R2 write token restriction
-  const form = new FormData();
-  form.append('file', new Blob([`test-content-${RUN_ID}`], { type: 'text/plain' }), `audit-${RUN_ID}.txt`);
-  const uploadRes = await fetch(`${STAGING_APP_ORIGIN}/api/files/upload`, {
-    method: 'POST',
-    headers: { Cookie: `xl-session=${tokenA}` },
-    body: form,
+  // 4. Delete object through the application
+  console.log('  4. Deleting object through the application (DELETE /api/files)...');
+  const delResA = await fetch(`${STAGING_APP_ORIGIN}/api/files?key=${encodeURIComponent(key)}`, {
+    method: 'DELETE',
+    headers: { Cookie: `xl-session=${tokenA}` }
   });
-  if (uploadRes.status === 200) {
-    const uploadData = await uploadRes.json();
-    console.log(`  Upload succeeded with key: ${uploadData.objectKey}`);
-  } else {
-    const text = await uploadRes.text();
-    console.log(`  Upload probed: returned ${uploadRes.status} confirming key derivation (staging/uploads/${TENANT_A_ID}/...) and upstream R2 token write-restriction`);
+  console.log(`  Tenant A delete own file status: ${delResA.status} (expected 204 or 200)`);
+  if (delResA.status !== 204 && delResA.status !== 200) {
+    const text = await delResA.text();
+    throw new Error(`Tenant A delete failed with status ${delResA.status}: ${text}`);
   }
 
-  console.log('  Storage presigning, cross-tenant isolation, and environment boundary enforcement verified.');
+  // 5. Confirm object is no longer retrievable
+  console.log('  5. Confirming object is no longer retrievable...');
+  const postDelFetch = await fetch(downloadUrl);
+  if (postDelFetch.status === 200) {
+    throw new Error(`Storage Lifecycle Failure: Object ${key} is still retrievable after deletion!`);
+  }
+  console.log(`  Post-delete retrieval status: ${postDelFetch.status} (not retrievable => OK)`);
+  console.log('  Mandatory storage lifecycle (Upload -> Store -> Sign -> Download -> Delete -> Non-retrievable) verified.');
 }
 
 async function testFailClosedUnauthenticated() {
@@ -429,6 +474,30 @@ async function testFailClosedUnauthenticated() {
   console.log(`  Unauthenticated request status: ${res.status} (expected 401)`);
   if (res.status !== 401) {
     throw new Error(`Expected HTTP 401 for unauthenticated request, got ${res.status}`);
+  }
+}
+
+async function verifyCandidateBinding() {
+  const expectedSha = process.env.EXPECTED_CANDIDATE_SHA || '';
+  if (!expectedSha) {
+    console.log('  [Candidate Binding] No EXPECTED_CANDIDATE_SHA set; skipping SHA validation.');
+    return;
+  }
+  console.log(`\nVerifying Deployed Cluster against Release Candidate SHA (${expectedSha})...`);
+  const healthRes = await fetch(`${STAGING_APP_ORIGIN}/api/health`);
+  if (healthRes.status !== 200) {
+    throw new Error(`Failed to query /api/health for candidate validation (status ${healthRes.status})`);
+  }
+  const health = await healthRes.json();
+  const deployedFrontendSha = health.release || '';
+  console.log(`  Frontend deployed release: ${deployedFrontendSha}`);
+
+  if (deployedFrontendSha && deployedFrontendSha !== 'unknown') {
+    const match = expectedSha.startsWith(deployedFrontendSha) || deployedFrontendSha.startsWith(expectedSha);
+    if (!match) {
+      throw new Error(`Release Candidate Mismatch: deployed frontend SHA (${deployedFrontendSha}) does not match expected candidate (${expectedSha})`);
+    }
+    console.log(`  Frontend candidate binding verified: matches ${expectedSha.slice(0, 8)}`);
   }
 }
 
@@ -441,9 +510,13 @@ async function main() {
   console.log('  Frontend Deployment:', REVISION_METADATA.frontendDeploymentId);
   console.log('  Backend Commit SHA: ', REVISION_METADATA.backendCommitSha);
   console.log('  Backend Deployment: ', REVISION_METADATA.backendDeploymentId);
+  if (process.env.EXPECTED_CANDIDATE_SHA) {
+    console.log('  Expected Candidate: ', process.env.EXPECTED_CANDIDATE_SHA);
+  }
   console.log('======================================================');
 
   try {
+    await verifyCandidateBinding();
     await seedStagingRecords();
     await testOrdinaryLogin();
     await testIsolatedReads();

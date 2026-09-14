@@ -45,6 +45,8 @@ jobs:
 
       - name: Execute Staging Acceptance & Isolation Suite
         id: run_tests
+        env:
+          EXPECTED_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          echo "Executing Staging Acceptance & E2E Isolation Gate against $STAGING_APP_ORIGIN..."
+          echo "Executing Staging Acceptance & E2E Isolation Gate against $STAGING_APP_ORIGIN for candidate $EXPECTED_CANDIDATE_SHA..."
           npm run test:staging-acceptance
