@@ -1,9 +1,12 @@
 import { prisma } from '@/lib/prisma';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { logAudit } from '@/lib/audit';
+import { runWithRlsScope } from '@/lib/rls-scope';
 import { upsertFinanceInvoice } from '@/lib/finance/module-ledger';
 import { createDraftJournalEntry } from '@/lib/finance/journal-service';
 import { createHash, randomBytes } from 'crypto';
 
+export type DbClient = PrismaClient | Prisma.TransactionClient;
 type JsonRecord = Record<string, unknown>;
 
 export type LogisticsShipmentStatus =
@@ -1045,7 +1048,9 @@ async function logLogisticsAudit(args: {
   before?: unknown;
   after?: unknown;
   metadata?: JsonRecord | null;
+  client?: DbClient;
 }) {
+  const db = args.client ?? prisma;
   await Promise.allSettled([
     logAudit({
       tenantId: args.tenantId,
@@ -1056,8 +1061,8 @@ async function logLogisticsAudit(args: {
       userRole: args.actorRole ?? undefined,
       action: args.action,
       details: args.summary ?? undefined,
-    }),
-    prisma.$executeRawUnsafe(
+    }, db),
+    db.$executeRawUnsafe(
       `INSERT INTO logistics_change_history
          (tenant_id, entity_type, entity_id, action, actor_user_id,
           before_json, after_json, summary, metadata)
@@ -1324,22 +1329,60 @@ function normalizeBookingStatus(status?: string | null): LogisticsShipmentStatus
   }
 }
 
+export async function nextDocumentSequence(args: {
+  tenantId: string;
+  docType: 'SHIPPING_REQUEST' | 'SHIPMENT';
+  yearKey: string;
+  prefix: string;
+  tableName: 'logistics_shipping_requests' | 'logistics_shipment_orders';
+  columnName: 'request_no' | 'shipment_no';
+  client?: DbClient;
+}): Promise<number> {
+  const client = args.client ?? prisma;
+  const rows = await client.$queryRawUnsafe<Array<{ current_val: bigint | number | string }>>(
+    `INSERT INTO logistics_document_sequences (tenant_id, doc_type, year_key, current_val, updated_at)
+     VALUES (
+       $1,
+       $2,
+       $3,
+       COALESCE(
+         (SELECT MAX(NULLIF(regexp_replace(${args.columnName}, '^' || $4, ''), '')::integer)
+            FROM ${args.tableName}
+           WHERE tenant_id = $1 AND ${args.columnName} LIKE $5),
+         0
+       ) + 1,
+       NOW()
+     )
+     ON CONFLICT (tenant_id, doc_type, year_key)
+     DO UPDATE SET current_val = logistics_document_sequences.current_val + 1, updated_at = NOW()
+     RETURNING current_val`,
+    args.tenantId,
+    args.docType,
+    args.yearKey,
+    args.prefix,
+    `${args.prefix}%`,
+  );
+  return Number(rows[0]?.current_val ?? 1);
+}
+
 function defaultShipmentNoPrefix(date = new Date()) {
   const yy = String(date.getFullYear()).slice(-2);
   return `SHP-LOG-${yy}`;
 }
 
-export async function nextShipmentNo(tenantId: string) {
-  const prefix = defaultShipmentNoPrefix();
-  const rows = await prisma.$queryRawUnsafe<Array<{ max_num: bigint | number | string }>>(
-    `SELECT COALESCE(MAX(NULLIF(regexp_replace(shipment_no, '^SHP-LOG-\\d{2}', ''), '')::integer), 0) AS max_num
-       FROM logistics_shipment_orders
-      WHERE tenant_id = $1 AND shipment_no LIKE $2`,
+export async function nextShipmentNo(tenantId: string, client?: DbClient) {
+  const yy = String(new Date().getFullYear()).slice(-2);
+  const prefix = `SHP-LOG-${yy}`;
+  const seq = await nextDocumentSequence({
     tenantId,
-    `${prefix}%`,
-  );
-  const count = Number(rows[0]?.max_num ?? 0) + 1;
-  return `${prefix}${String(count).padStart(5, '0')}`;
+    docType: 'SHIPMENT',
+    yearKey: yy,
+    prefix,
+    tableName: 'logistics_shipment_orders',
+    columnName: 'shipment_no',
+    client,
+  });
+  return `${prefix}${String(seq).padStart(5, '0')}`;
 }
 
 export function shipmentToBookingView(row: LogisticsShipmentRow): LegacyBookingView {
@@ -1555,8 +1598,9 @@ export async function backfillLegacyLogisticsBookings(args: {
   };
 }
 
-export async function fetchShipmentById(id: string, tenantId?: string | null) {
-  const rows = await prisma.$queryRawUnsafe<LogisticsShipmentRow[]>(
+export async function fetchShipmentById(id: string, tenantId?: string | null, client?: DbClient) {
+  const db = client ?? prisma;
+  const rows = await db.$queryRawUnsafe<LogisticsShipmentRow[]>(
     `SELECT * FROM logistics_shipment_orders
       WHERE id = $1
         AND deleted_at IS NULL
@@ -1687,12 +1731,13 @@ export async function listShipmentOrders(args: {
   }));
 }
 
-export async function createShipmentOrder(input: LogisticsShipmentCreateInput) {
+export async function createShipmentOrder(input: LogisticsShipmentCreateInput, client?: DbClient) {
+  const db = client ?? prisma;
   await assertShipmentMasterDataGovernance(input);
   const validation = assertShipmentTimelineValid(input);
-  const shipmentNo = input.shipmentNo || await nextShipmentNo(input.tenantId);
+  const shipmentNo = input.shipmentNo || await nextShipmentNo(input.tenantId, db);
 
-  const rows = await prisma.$queryRawUnsafe<LogisticsShipmentRow[]>(
+  const rows = await db.$queryRawUnsafe<LogisticsShipmentRow[]>(
     `INSERT INTO logistics_shipment_orders (
        tenant_id, shipment_no, legacy_booking_id,
        cargo_owner_customer_id, cargo_owner_name, cargo_owner_email, cargo_owner_phone,
@@ -1764,6 +1809,7 @@ export async function createShipmentOrder(input: LogisticsShipmentCreateInput) {
     cargoLines: input.cargoLines,
     stops: input.stops,
     freightCharges: input.freightCharges,
+    client: db,
   });
 
   await addTrackingEvent({
@@ -1774,6 +1820,7 @@ export async function createShipmentOrder(input: LogisticsShipmentCreateInput) {
     source: 'DOMAIN_ADAPTER',
     notes: shipment.legacy_booking_id ? 'Created from legacy logistics booking' : 'Created from shipment-native API',
     metadata: { validationWarnings: validation.warnings },
+    client: db,
   });
 
   await logLogisticsAudit({
@@ -1793,9 +1840,10 @@ export async function createShipmentOrder(input: LogisticsShipmentCreateInput) {
       deliveryWindowTo: iso(shipment.delivery_window_to),
       validationWarnings: validation.warnings,
     },
+    client: db,
   });
 
-  return fetchShipmentById(shipment.id, input.tenantId);
+  return fetchShipmentById(shipment.id, input.tenantId, db);
 }
 
 export async function updateShipmentOrder(input: LogisticsShipmentUpdateInput) {
@@ -1993,9 +2041,11 @@ export async function replaceShipmentDetails(args: {
   cargoLines?: LogisticsCargoLineInput[];
   stops?: LogisticsStopInput[];
   freightCharges?: LogisticsFreightChargeInput[];
+  client?: DbClient;
 }) {
+  const db = args.client ?? prisma;
   if (args.stops) {
-    const shipmentRows = await prisma.$queryRawUnsafe<Array<{
+    const shipmentRows = await db.$queryRawUnsafe<Array<{
       pickup_window_from: Date | null;
       pickup_window_to: Date | null;
       delivery_window_from: Date | null;
@@ -2026,13 +2076,13 @@ export async function replaceShipmentDetails(args: {
   }
 
   if (args.cargoLines) {
-    await prisma.$executeRawUnsafe(
+    await db.$executeRawUnsafe(
       `DELETE FROM logistics_cargo_lines WHERE tenant_id = $1 AND shipment_order_id = $2`,
       args.tenantId,
       args.shipmentOrderId,
     );
     for (const line of args.cargoLines) {
-      await prisma.$executeRawUnsafe(
+      await db.$executeRawUnsafe(
         `INSERT INTO logistics_cargo_lines
            (tenant_id, shipment_order_id, description, commodity_code, quantity, package_type,
             weight_kg, volume_cbm, is_hazmat, temp_min_c, temp_max_c, cargo_value_amount, metadata)
@@ -2055,13 +2105,13 @@ export async function replaceShipmentDetails(args: {
   }
 
   if (args.stops) {
-    await prisma.$executeRawUnsafe(
+    await db.$executeRawUnsafe(
       `DELETE FROM logistics_shipment_stops WHERE tenant_id = $1 AND shipment_order_id = $2`,
       args.tenantId,
       args.shipmentOrderId,
     );
     for (const [index, stop] of args.stops.entries()) {
-      await prisma.$executeRawUnsafe(
+      await db.$executeRawUnsafe(
         `INSERT INTO logistics_shipment_stops
            (tenant_id, shipment_order_id, sequence_no, stop_type, location_name, address,
             contact_name, contact_phone, latitude, longitude, planned_arrival_at, planned_depart_at,
@@ -2086,7 +2136,7 @@ export async function replaceShipmentDetails(args: {
   }
 
   if (args.freightCharges) {
-    await prisma.$executeRawUnsafe(
+    await db.$executeRawUnsafe(
       `DELETE FROM logistics_freight_charges WHERE tenant_id = $1 AND shipment_order_id = $2`,
       args.tenantId,
       args.shipmentOrderId,
@@ -2097,7 +2147,7 @@ export async function replaceShipmentDetails(args: {
       const amount = charge.amount ?? quantity * unitRate;
       const taxAmount = charge.taxAmount ?? 0;
       const totalAmount = charge.totalAmount ?? amount + taxAmount;
-      await prisma.$executeRawUnsafe(
+      await db.$executeRawUnsafe(
         `INSERT INTO logistics_freight_charges
            (tenant_id, shipment_order_id, charge_side, charge_type, description, quantity,
             unit_rate, amount, tax_amount, total_amount, currency, metadata)
@@ -2222,8 +2272,10 @@ export async function addTrackingEvent(args: {
   occurredAt?: string | Date | null;
   notes?: string | null;
   metadata?: JsonRecord | null;
+  client?: DbClient;
 }) {
-  const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+  const db = args.client ?? prisma;
+  const rows = await db.$queryRawUnsafe<Array<{ id: string }>>(
     `INSERT INTO logistics_tracking_events
        (tenant_id, shipment_order_id, assignment_id, event_type, status,
         latitude, longitude, source, occurred_at, notes, metadata)
@@ -2256,6 +2308,7 @@ export async function addTrackingEvent(args: {
       occurredAt: iso(args.occurredAt) ?? new Date().toISOString(),
     },
     metadata: { source: args.source ?? 'SYSTEM' },
+    client: db,
   });
 }
 
@@ -7894,17 +7947,19 @@ export interface LogisticsShippingRequestRow {
 
 export type ShippingRequestRow = LogisticsShippingRequestRow;
 
-async function nextShippingRequestNo(tenantId: string) {
-  const prefix = `SR-${String(new Date().getFullYear()).slice(-2)}`;
-  const rows = await prisma.$queryRawUnsafe<Array<{ max_num: bigint | number | string }>>(
-    `SELECT COALESCE(MAX(NULLIF(regexp_replace(request_no, '^SR-\\d{2}', ''), '')::integer), 0) AS max_num
-       FROM logistics_shipping_requests
-      WHERE tenant_id = $1 AND request_no LIKE $2`,
+export async function nextShippingRequestNo(tenantId: string, client?: DbClient) {
+  const yy = String(new Date().getFullYear()).slice(-2);
+  const prefix = `SR-${yy}`;
+  const seq = await nextDocumentSequence({
     tenantId,
-    `${prefix}%`,
-  );
-  const count = Number(rows[0]?.max_num ?? 0) + 1;
-  return `${prefix}${String(count).padStart(5, '0')}`;
+    docType: 'SHIPPING_REQUEST',
+    yearKey: yy,
+    prefix,
+    tableName: 'logistics_shipping_requests',
+    columnName: 'request_no',
+    client,
+  });
+  return `${prefix}${String(seq).padStart(5, '0')}`;
 }
 
 function mapShippingRequestRow(
@@ -7946,15 +8001,16 @@ function mapShippingRequestRow(
 
 export type LogisticsShippingRequest = ReturnType<typeof mapShippingRequestRow>;
 
-export async function createShippingRequest(input: LogisticsShippingRequestInput) {
-  const customerRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+export async function createShippingRequest(input: LogisticsShippingRequestInput, client?: DbClient) {
+  const db = client ?? prisma;
+  const customerRows = await db.$queryRawUnsafe<Array<{ id: string }>>(
     `SELECT id FROM customers WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL LIMIT 1`,
     input.shipperId, input.tenantId,
   ).catch(() => [] as Array<{ id: string }>);
   if (!customerRows[0]) throw new LogisticsValidationError(['Shipper (customer) not found for this tenant.']);
 
-  const requestNo = await nextShippingRequestNo(input.tenantId);
-  const rows = await prisma.$queryRawUnsafe<LogisticsShippingRequestRow[]>(
+  const requestNo = await nextShippingRequestNo(input.tenantId, db);
+  const rows = await db.$queryRawUnsafe<LogisticsShippingRequestRow[]>(
     `INSERT INTO logistics_shipping_requests (
        tenant_id, request_no, shipper_id, status, shipment_type,
        origin_name, origin_address, destination_name, destination_address,
@@ -8098,20 +8154,25 @@ export async function convertShippingRequest(args: {
   actorUserId?: string | null;
 }) {
   return await prisma.$transaction(async tx => {
-    // 1. Lock the shipping request row FOR UPDATE to serialize concurrent conversions
-    const reqRows = await tx.$queryRawUnsafe<LogisticsShippingRequestRow[]>(
-      `SELECT * FROM logistics_shipping_requests
-        WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
-        FOR UPDATE`,
-      args.tenantId, args.requestId,
-    );
+    return await runWithRlsScope({ tenantId: args.tenantId, mode: 'tenant', tx }, async () => {
+      await tx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', $1, true)`, args.tenantId);
+
+      // 1. Lock the shipping request row FOR UPDATE to serialize concurrent conversions
+      const reqRows = await tx.$queryRawUnsafe<LogisticsShippingRequestRow[]>(
+        `SELECT * FROM logistics_shipping_requests
+          WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
+          FOR UPDATE`,
+        args.tenantId, args.requestId,
+      );
     const req = reqRows[0];
     if (!req) throw new Error('Shipping request not found for this tenant');
     if (req.status === 'CONVERTED' || req.shipment_order_id) {
       throw new LogisticsValidationError(['This request has already been converted into a job order.']);
     }
-    if (req.status === 'REJECTED' || req.status === 'CANCELLED') {
-      throw new LogisticsValidationError([`A ${req.status.toLowerCase()} request cannot be converted.`]);
+    if (req.status !== 'ACCEPTED') {
+      throw new LogisticsValidationError([
+        `Only ACCEPTED shipping requests can be converted into a job order. Current status: "${req.status}".`,
+      ]);
     }
 
     const custRows = await tx.$queryRawUnsafe<Array<{ name_en: string; email: string | null; mobile_number: string | null }>>(
@@ -8184,6 +8245,13 @@ export async function convertShippingRequest(args: {
     const totalWeightFromRequest = numberOrNull(req.total_weight_kg);
     const totalWeightKg = totalWeightFromRequest ?? customsGrossKg;
 
+    const finalCargoLines: LogisticsCargoLineInput[] = Array.isArray(args.shipmentInput?.cargoLines)
+      ? (args.shipmentInput!.cargoLines as LogisticsCargoLineInput[])
+      : cargoLines;
+    const finalStops: LogisticsStopInput[] = Array.isArray(args.shipmentInput?.stops)
+      ? (args.shipmentInput!.stops as LogisticsStopInput[])
+      : stops;
+
     const shipment = await createShipmentOrder({
       tenantId: args.tenantId,
       cargoOwnerCustomerId: req.shipper_id,
@@ -8207,8 +8275,8 @@ export async function convertShippingRequest(args: {
       totalVolumeCbm: numberOrNull(req.total_volume_cbm),
       cargoValueAmount: numberOrNull(req.cargo_value_amount),
       currency: req.currency,
-      stops,
-      cargoLines,
+      stops: finalStops,
+      cargoLines: finalCargoLines,
       sourceChannel: 'SHIPPING_REQUEST',
       notes: noteParts.length ? noteParts.join(' — ') : null,
       metadata: {
@@ -8221,17 +8289,17 @@ export async function convertShippingRequest(args: {
         hazmat: mdHazmat,
       },
       createdBy: args.actorUserId ?? null,
-    });
+    }, tx);
     if (!shipment) throw new Error('Failed to create the job order from this request');
 
-    // 2. Atomic conditional update: guarantee status was not already CONVERTED
+    // 2. Atomic conditional update: guarantee status was ACCEPTED
     const rows = await tx.$queryRawUnsafe<LogisticsShippingRequestRow[]>(
       `UPDATE logistics_shipping_requests
           SET updated_at = NOW(),
               status = 'CONVERTED',
               shipment_order_id = $1,
               updated_by = COALESCE($2, updated_by)
-        WHERE tenant_id = $3 AND id = $4 AND status != 'CONVERTED'
+        WHERE tenant_id = $3 AND id = $4 AND status = 'ACCEPTED'
         RETURNING *`,
       shipment.id,
       args.actorUserId ?? null,
@@ -8251,13 +8319,15 @@ export async function convertShippingRequest(args: {
       source: 'FREIGHT_MARKETPLACE',
       notes: `Job order created from shipping request ${req.request_no}`,
       metadata: { shippingRequestId: req.id, requestNo: req.request_no },
+      client: tx,
     });
 
-    return {
-      shipmentOrderId: shipment.id,
-      shipmentNo: shipment.shipment_no,
-      request: rows[0] ? mapShippingRequestRow(rows[0]) : null,
-      shipment: { id: shipment.id, shipmentNo: shipment.shipment_no, status: shipment.status },
-    };
+      return {
+        shipmentOrderId: shipment.id,
+        shipmentNo: shipment.shipment_no,
+        request: rows[0] ? mapShippingRequestRow(rows[0]) : null,
+        shipment: { id: shipment.id, shipmentNo: shipment.shipment_no, status: shipment.status },
+      };
+    });
   }, { maxWait: 10_000, timeout: 15_000 });
 }
