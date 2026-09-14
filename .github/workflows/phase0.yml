@@ -102,10 +102,21 @@ jobs:
       # Exercises the real auth.WithTenant(c) GORM scope against a live
       # database as a non-BYPASSRLS role. TestMain fails the run if the role
       # holds BYPASSRLS, or if zero cross-tenant assertions execute.
+      #
+      # PHASE0_SMOKE_SUFFIX implements the "use a dedicated branch or
+      # schema so concurrent PRs don't trample each other" note at the top
+      # of this file: without it, every PR's run shares the exact same
+      # phase0_smoke_a/phase0_smoke_b tenant rows in this one live
+      # database, so two runs racing ensureTestTenants collide on
+      # tenants_code_key, or one run's cleanup deletes rows a concurrent
+      # run is still using. run_id-run_attempt is unique per run,
+      # including reruns, so concurrent runs get their own never-shared
+      # tenant pair instead.
       - name: Integration tests (live DB, fleet360_app)
         working-directory: backend
         env:
           DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+          PHASE0_SMOKE_SUFFIX: ${{ github.run_id }}-${{ github.run_attempt }}
         run: go test ./phasegate/... -count=1 -timeout 180s -v -run Integration
 
       # Re-assert the preflight facts in the job summary so the evidence is

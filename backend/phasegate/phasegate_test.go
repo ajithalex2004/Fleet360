@@ -118,6 +118,9 @@ func TestMain(m *testing.M) {
 		}
 	}
 
+	StopRecheckLoop()
+	teardownSmokeTenants()
+
 	os.Exit(code)
 }
 
@@ -129,12 +132,7 @@ func TestMain(m *testing.M) {
 // would otherwise leak into the next test.
 func resetGateForTest(t *testing.T) {
 	t.Helper()
-	mu.Lock()
-	if smokeCancel != nil {
-		smokeCancel()
-		smokeCancel = nil
-	}
-	mu.Unlock()
+	StopRecheckLoop()
 	state.Store(StatusUnverified)
 	lastRunAt.Store(time.Time{})
 	lastError.Store("")
@@ -600,10 +598,6 @@ func TestIntegration_TestTenantIsolation_RejectsBuggyQuery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("insert: %v", err)
 	}
-	insertedID, err := uuid.Parse(insertedIDStr)
-	if err != nil {
-		t.Fatalf("parse inserted id: %v", err)
-	}
 	t.Cleanup(func() {
 		_ = asTenant(context.Background(), db, pair.A.String(), func(tx *gorm.DB) error {
 			return tx.Exec(`DELETE FROM vehicles WHERE id = ?`, insertedIDStr).Error
@@ -616,7 +610,7 @@ func TestIntegration_TestTenantIsolation_RejectsBuggyQuery(t *testing.T) {
 	// Executed under tenant A context: tenant A querying its own row sees it.
 	var buggyCount int64
 	err = asTenant(ctx, db, pair.A.String(), func(tx *gorm.DB) error {
-		return tx.Raw(`SELECT COUNT(*) FROM vehicles WHERE id = ?`, insertedID).Scan(&buggyCount).Error
+		return tx.Raw(`SELECT COUNT(*) FROM vehicles WHERE id = ?`, insertedIDStr).Scan(&buggyCount).Error
 	})
 	if err != nil {
 		t.Fatalf("buggy query: %v", err)
@@ -631,7 +625,7 @@ func TestIntegration_TestTenantIsolation_RejectsBuggyQuery(t *testing.T) {
 	err = asTenant(ctx, db, pair.B.String(), func(tx *gorm.DB) error {
 		return tx.Raw(`
 			SELECT COUNT(*) FROM vehicles WHERE id = ? AND tenant_id = ?
-		`, insertedID, pair.B).Scan(&correctCount).Error
+		`, insertedIDStr, pair.B).Scan(&correctCount).Error
 	})
 	if err != nil {
 		t.Fatalf("correct query: %v", err)
@@ -728,6 +722,7 @@ func TestIntegration_RunStartupCheck_NoRequireSmoke_DoesNotExitOnFailure(t *test
 		t.Error("gate should be VERIFIED after RunStartupCheck succeeds")
 	}
 
+	cancelRecheckLoop(t)
 	t.Cleanup(cleanupSmokeTenants)
 }
 
@@ -879,17 +874,11 @@ func waitFor(t *testing.T, deadline time.Duration, msg string, pred func() bool)
 // their own loop to avoid double-loop leaks.
 func cancelRecheckLoop(t *testing.T) {
 	t.Helper()
-	mu.Lock()
-	if smokeCancel != nil {
-		smokeCancel()
-		smokeCancel = nil
-	}
-	mu.Unlock()
+	StopRecheckLoop()
 }
 
-// cleanupSmokeTenants deletes the two phase0_smoke_* tenant rows
-// (and their FK-dependent rows in vehicles/drivers/garages) in the
-// correct order. Idempotent. Always uses the BASE database.DB so it
+// cleanupSmokeTenants deletes the FK-dependent rows in vehicles/drivers/garages
+// for the test tenants. Idempotent. Always uses the BASE database.DB so it
 // runs even if the test's request-scoped ctx has been cancelled.
 //
 // Register with t.Cleanup(cleanupSmokeTenants) at the start of any
@@ -899,12 +888,13 @@ func cleanupSmokeTenants() {
 	if database.DB == nil {
 		return
 	}
-	codes := []string{"phase0_smoke_a", "phase0_smoke_b"}
+	codeA, codeB := smokeTenantCodes()
+	codes := []string{codeA, codeB}
 	for _, code := range codes {
 		var tenantID string
 		_ = database.DB.Raw(`SELECT id FROM tenants WHERE code = ?`, code).Scan(&tenantID).Error
 		if tenantID != "" {
-			_ = asTenant(context.Background(), database.DB, tenantID, func(tx *gorm.DB) error {
+			_ = asTenant(context.Background(), database.DB, "*", func(tx *gorm.DB) error {
 				_ = tx.Exec(`DELETE FROM vehicles WHERE tenant_id = ?`, tenantID).Error
 				_ = tx.Exec(`DELETE FROM drivers WHERE tenant_id = ?`, tenantID).Error
 				_ = tx.Exec(`DELETE FROM garages WHERE tenant_id = ?`, tenantID).Error
@@ -912,10 +902,19 @@ func cleanupSmokeTenants() {
 			})
 		}
 	}
-	for _, code := range codes {
-		if err := database.DB.Exec(`DELETE FROM tenants WHERE code = ?`, code).Error; err != nil {
-			fmt.Printf("cleanupSmokeTenants: delete tenant %s failed: %v\n", code, err)
-		}
+}
+
+// teardownSmokeTenants deletes the fixture rows and then deletes the tenant rows.
+// Called at the end of TestMain so tenant rows are preserved throughout the run
+// and never torn down from under concurrent tests or loops.
+func teardownSmokeTenants() {
+	if database.DB == nil {
+		return
+	}
+	cleanupSmokeTenants()
+	codeA, codeB := smokeTenantCodes()
+	for _, code := range []string{codeA, codeB} {
+		_ = database.DB.Exec(`DELETE FROM tenants WHERE code = ?`, code).Error
 	}
 }
 
@@ -1197,9 +1196,27 @@ func TestIntegration_RecheckLoop_AgainstRealDB_StaysVerified(t *testing.T) {
 	// Start the loop with the REAL runSmokeTest (not a mock).
 	// If isolation holds in the live Neon DB across multiple recheck
 	// cycles, the gate stays VERIFIED.
+	//
+	// wg + cancel (in that defer order, so cancel fires first) makes the
+	// test actually wait for the goroutine to exit before returning.
+	// Without this, cancel() only stops the NEXT tick from starting —
+	// recheckLoopWith blocks on an in-flight check() with no way to abort
+	// it early (runSmokeTest has its own independent 30s timeout context,
+	// unrelated to this one), so a tick already running when the test
+	// function returns keeps inserting/deleting rows against the shared
+	// phase0_smoke_* tenants into the NEXT test, which was the actual
+	// cause of the intermittent cross-tenant-isolation CI failures this
+	// closes: the leaked goroutine and the next test's own
+	// ensureTestTenants/cleanupSmokeTenants race the same tenant rows.
 	ctx, cancel := context.WithCancel(context.Background())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	defer wg.Wait()
 	defer cancel()
-	go recheckLoopWith(ctx, runSmokeTest)
+	go func() {
+		defer wg.Done()
+		recheckLoopWith(ctx, runSmokeTest)
+	}()
 
 	// Wait for at least 3 recheck cycles to complete.
 	deadline := time.Now().Add(5 * time.Second)
