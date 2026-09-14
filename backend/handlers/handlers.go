@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"fleet360-backend/auth"
 	"fleet360-backend/database"
@@ -996,6 +997,11 @@ func DeleteAlertConfig(c *gin.Context) {
 // This contract decouples URL lifetime from row lifetime, which is the
 // enterprise pattern AWS, Samsara, Geotab et al. use.
 func UploadFile(c *gin.Context) {
+	tid := requireTenant(c)
+	if tid == "" {
+		return
+	}
+
 	file, err := c.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "No file is received"})
@@ -1018,14 +1024,14 @@ func UploadFile(c *gin.Context) {
 		contentType = "application/octet-stream"
 	}
 
-	key := objectstore.DerivedKey(file.Filename, time.Now().UTC())
+	key := objectstore.DerivedKeyScoped(tid, file.Filename, time.Now().UTC())
 
 	if err := objectstore.Put(c.Request.Context(), key, src, file.Size, contentType); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("Object store write failed: %v", err)})
 		return
 	}
 
-	signedURL, err := objectstore.PresignedGetURL(c.Request.Context(), key, objectstore.PresignedGetTTL)
+	signedURL, err := objectstore.PresignedGetURLScoped(c.Request.Context(), key, tid, objectstore.PresignedGetTTL)
 	if err != nil {
 		// Upload succeeded but signing failed. Surface the key so the
 		// caller can retry signing via /api/files/sign rather than
@@ -1049,25 +1055,29 @@ func UploadFile(c *gin.Context) {
 // Frontend stores the stable `objectKey` returned by UploadFile in the
 // database and calls this endpoint when it needs a usable URL.
 //
-//   GET /api/files/sign?key=uploads/2026/06/23/172000000-invoice.pdf
-//
-// 400 if `key` is missing or has the wrong shape (must start with
-// "uploads/" to prevent callers requesting URLs for arbitrary keys outside
-// our naming scheme — defence-in-depth against future bucket layouts that
-// hold non-public objects under different prefixes).
+// Validates environment prefix and verifies tenant boundaries.
 func GetSignedURL(c *gin.Context) {
+	tid := requireTenant(c)
+	if tid == "" {
+		return
+	}
+
 	key := strings.TrimSpace(c.Query("key"))
 	if key == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "key query parameter required"})
 		return
 	}
-	if !strings.HasPrefix(key, "uploads/") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "key must reference an uploaded asset"})
-		return
-	}
 
-	signedURL, err := objectstore.PresignedGetURL(c.Request.Context(), key, objectstore.PresignedGetTTL)
+	signedURL, err := objectstore.PresignedGetURLScoped(c.Request.Context(), key, tid, objectstore.PresignedGetTTL)
 	if err != nil {
+		if errors.Is(err, objectstore.ErrCrossEnvironmentKey) || errors.Is(err, objectstore.ErrInvalidKeyPath) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if errors.Is(err, objectstore.ErrCrossTenantKey) {
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("sign failed: %v", err)})
 		return
 	}
@@ -1075,6 +1085,36 @@ func GetSignedURL(c *gin.Context) {
 		"url":       signedURL,
 		"objectKey": key,
 	})
+}
+
+// DeleteFile deletes an uploaded object from the object store.
+// Validates environment prefix and enforces tenant ownership.
+func DeleteFile(c *gin.Context) {
+	tid := requireTenant(c)
+	if tid == "" {
+		return
+	}
+
+	key := strings.TrimSpace(c.Query("key"))
+	if key == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "key query parameter required"})
+		return
+	}
+
+	err := objectstore.DeleteObject(c.Request.Context(), key, tid)
+	if err != nil {
+		if errors.Is(err, objectstore.ErrCrossEnvironmentKey) || errors.Is(err, objectstore.ErrInvalidKeyPath) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if errors.Is(err, objectstore.ErrCrossTenantKey) {
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": fmt.Sprintf("delete failed: %v", err)})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 // CreateAlert

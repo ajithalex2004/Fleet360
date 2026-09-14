@@ -334,8 +334,95 @@ async function testSequentialAlternatingPool() {
   }
 }
 
+async function testStorageBoundaries() {
+  console.log('\n[5/7] Testing Storage Boundaries (Upload, Sign, Cross-Tenant, Cross-Environment, Delete)...');
+  const tokenA = await getSessionCookie(TENANT_A_ID);
+  const tokenB = await getSessionCookie(TENANT_B_ID);
+
+  // 1. Tenant A uploads file
+  const form = new FormData();
+  form.append('file', new Blob([`test-content-${RUN_ID}`], { type: 'text/plain' }), `audit-${RUN_ID}.txt`);
+
+  const uploadRes = await fetch(`${STAGING_APP_ORIGIN}/api/files/upload`, {
+    method: 'POST',
+    headers: { Cookie: `xl-session=${tokenA}` },
+    body: form,
+  });
+
+  if (uploadRes.status !== 200) {
+    const text = await uploadRes.text();
+    throw new Error(`Tenant A file upload failed with status ${uploadRes.status}: ${text}`);
+  }
+
+  const uploadData = await uploadRes.json();
+  const key = uploadData.objectKey;
+  console.log(`  Uploaded test file, key: ${key}`);
+
+  // Verify key has staging prefix and tenant scoping
+  if (!key.startsWith('staging/uploads/')) {
+    throw new Error(`Key ${key} does not start with expected staging/uploads/ prefix!`);
+  }
+  if (!key.includes(TENANT_A_ID)) {
+    throw new Error(`Key ${key} does not include tenant ID ${TENANT_A_ID}!`);
+  }
+
+  // 2. Tenant A requests signed URL
+  const signResA = await fetch(`${STAGING_APP_ORIGIN}/api/files/sign?key=${encodeURIComponent(key)}`, {
+    headers: { Cookie: `xl-session=${tokenA}` }
+  });
+  if (signResA.status !== 200) {
+    const text = await signResA.text();
+    throw new Error(`Tenant A failed to sign own key (status ${signResA.status}): ${text}`);
+  }
+  const signDataA = await signResA.json();
+  if (!signDataA.url) {
+    throw new Error('Sign endpoint did not return presigned url');
+  }
+  console.log('  Tenant A successfully generated presigned URL for own file.');
+
+  // 3. Tenant B attempts to sign Tenant A's file -> MUST BE 403 Forbidden
+  const signResB = await fetch(`${STAGING_APP_ORIGIN}/api/files/sign?key=${encodeURIComponent(key)}`, {
+    headers: { Cookie: `xl-session=${tokenB}` }
+  });
+  console.log(`  Tenant B cross-tenant sign status: ${signResB.status} (expected 403)`);
+  if (signResB.status !== 403) {
+    throw new Error(`Cross-tenant sign security breach: expected 403, got ${signResB.status}`);
+  }
+
+  // 4. Tenant A attempts to sign cross-environment key (production/uploads/...) -> MUST BE 400 Bad Request
+  const crossEnvKey = 'production/uploads/fake-invoice.pdf';
+  const crossEnvRes = await fetch(`${STAGING_APP_ORIGIN}/api/files/sign?key=${encodeURIComponent(crossEnvKey)}`, {
+    headers: { Cookie: `xl-session=${tokenA}` }
+  });
+  console.log(`  Cross-environment sign status: ${crossEnvRes.status} (expected 400)`);
+  if (crossEnvRes.status !== 400) {
+    throw new Error(`Cross-environment sign security breach: expected 400, got ${crossEnvRes.status}`);
+  }
+
+  // 5. Tenant B attempts to delete Tenant A's file -> MUST BE 403 Forbidden
+  const delResB = await fetch(`${STAGING_APP_ORIGIN}/api/files?key=${encodeURIComponent(key)}`, {
+    method: 'DELETE',
+    headers: { Cookie: `xl-session=${tokenB}` }
+  });
+  console.log(`  Tenant B cross-tenant delete status: ${delResB.status} (expected 403)`);
+  if (delResB.status !== 403) {
+    throw new Error(`Cross-tenant delete security breach: expected 403, got ${delResB.status}`);
+  }
+
+  // 6. Tenant A deletes its own file -> MUST BE 204 No Content
+  const delResA = await fetch(`${STAGING_APP_ORIGIN}/api/files?key=${encodeURIComponent(key)}`, {
+    method: 'DELETE',
+    headers: { Cookie: `xl-session=${tokenA}` }
+  });
+  console.log(`  Tenant A delete own file status: ${delResA.status} (expected 204)`);
+  if (delResA.status !== 204 && delResA.status !== 200) {
+    throw new Error(`Tenant A delete failed: expected 204, got ${delResA.status}`);
+  }
+  console.log('  Storage lifecycle, namespace prefix, and tenant boundary enforcement verified.');
+}
+
 async function testFailClosedUnauthenticated() {
-  console.log('\n[5/6] Testing Fail-Closed Security for Unauthenticated Requests...');
+  console.log('\n[6/7] Testing Fail-Closed Security for Unauthenticated Requests...');
   const res = await fetch(`${STAGING_APP_ORIGIN}/api/logistics/driver-stats`);
   console.log(`  Unauthenticated request status: ${res.status} (expected 401)`);
   if (res.status !== 401) {
@@ -359,8 +446,9 @@ async function main() {
     await testOrdinaryLogin();
     await testIsolatedReads();
     await testSequentialAlternatingPool();
+    await testStorageBoundaries();
     await testFailClosedUnauthenticated();
-    console.log('\n[6/6] VERIFICATION COMPLETE: ALL SCOPED STAGING E2E ACCEPTANCE CHECKS PASSED.');
+    console.log('\n[7/7] VERIFICATION COMPLETE: ALL SCOPED STAGING E2E ACCEPTANCE CHECKS PASSED.');
   } finally {
     await cleanupStagingRecords();
   }

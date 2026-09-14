@@ -254,6 +254,7 @@ func registerV1Routes(r *gin.Engine) {
 	{
 		files.POST("/upload", handlers.UploadFile)
 		files.GET("/sign", handlers.GetSignedURL)
+		files.DELETE("", handlers.DeleteFile)
 	}
 
 	// Logistics — the freight/shipment domain migrated out of the Next.js

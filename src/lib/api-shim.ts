@@ -58,6 +58,7 @@ const MIGRATED_PREFIXES = [
   '/api/logistics/freight-charges',
   '/api/carrier-portal/app',
   '/api/driver-app',
+  '/api/files',
 ];
 
 export async function proxyToGoBackend(request: NextRequest, headersOverride?: Headers): Promise<ProxyResult> {
