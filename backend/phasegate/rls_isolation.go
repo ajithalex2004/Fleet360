@@ -77,23 +77,22 @@ type RlsIsolationReport struct {
 }
 
 // asTenant runs fn inside one transaction with app.tenant_id set to tenant.
-// Passing an empty string leaves the GUC unset, which is what vector 6 needs.
+// Passing an empty string explicitly sets the GUC to empty, clearing any
+// prior pooled setting, which is what vector 6 needs.
 func asTenant(ctx context.Context, db *gorm.DB, tenant string, fn func(tx *gorm.DB) error) error {
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if tenant != "" {
-			if err := tx.Exec(`SELECT set_config('app.tenant_id', ?, true)`, tenant).Error; err != nil {
-				return fmt.Errorf("set_config: %w", err)
-			}
-			// Confirm it took. A pooler that failed to pin the transaction, or
-			// Prisma Accelerate, would silently drop this and every assertion
-			// below would then be measuring the wrong thing.
-			var got string
-			if err := tx.Raw(`SELECT current_setting('app.tenant_id', true)`).Scan(&got).Error; err != nil {
-				return fmt.Errorf("read back app.tenant_id: %w", err)
-			}
-			if got != tenant {
-				return fmt.Errorf("app.tenant_id read back as %q, expected %q — the connection is not holding transaction-local settings", got, tenant)
-			}
+		if err := tx.Exec(`SELECT set_config('app.tenant_id', ?, true)`, tenant).Error; err != nil {
+			return fmt.Errorf("set_config: %w", err)
+		}
+		// Confirm it took. A pooler that failed to pin the transaction, or
+		// Prisma Accelerate, would silently drop this and every assertion
+		// below would then be measuring the wrong thing.
+		var got string
+		if err := tx.Raw(`SELECT current_setting('app.tenant_id', true)`).Scan(&got).Error; err != nil {
+			return fmt.Errorf("read back app.tenant_id: %w", err)
+		}
+		if got != tenant {
+			return fmt.Errorf("app.tenant_id read back as %q, expected %q — the connection is not holding transaction-local settings", got, tenant)
 		}
 		return fn(tx)
 	})
