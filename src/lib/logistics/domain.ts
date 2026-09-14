@@ -1331,14 +1331,14 @@ function defaultShipmentNoPrefix(date = new Date()) {
 
 export async function nextShipmentNo(tenantId: string) {
   const prefix = defaultShipmentNoPrefix();
-  const rows = await prisma.$queryRawUnsafe<Array<{ count: bigint | number | string }>>(
-    `SELECT COUNT(*) AS count
+  const rows = await prisma.$queryRawUnsafe<Array<{ max_num: bigint | number | string }>>(
+    `SELECT COALESCE(MAX(NULLIF(regexp_replace(shipment_no, '^SHP-LOG-\\d{2}', ''), '')::integer), 0) AS max_num
        FROM logistics_shipment_orders
       WHERE tenant_id = $1 AND shipment_no LIKE $2`,
     tenantId,
     `${prefix}%`,
   );
-  const count = Number(rows[0]?.count ?? 0) + 1;
+  const count = Number(rows[0]?.max_num ?? 0) + 1;
   return `${prefix}${String(count).padStart(5, '0')}`;
 }
 
@@ -7896,14 +7896,14 @@ export type ShippingRequestRow = LogisticsShippingRequestRow;
 
 async function nextShippingRequestNo(tenantId: string) {
   const prefix = `SR-${String(new Date().getFullYear()).slice(-2)}`;
-  const rows = await prisma.$queryRawUnsafe<Array<{ count: bigint | number | string }>>(
-    `SELECT COUNT(*) AS count
+  const rows = await prisma.$queryRawUnsafe<Array<{ max_num: bigint | number | string }>>(
+    `SELECT COALESCE(MAX(NULLIF(regexp_replace(request_no, '^SR-\\d{2}', ''), '')::integer), 0) AS max_num
        FROM logistics_shipping_requests
       WHERE tenant_id = $1 AND request_no LIKE $2`,
     tenantId,
     `${prefix}%`,
   );
-  const count = Number(rows[0]?.count ?? 0) + 1;
+  const count = Number(rows[0]?.max_num ?? 0) + 1;
   return `${prefix}${String(count).padStart(5, '0')}`;
 }
 
@@ -8097,158 +8097,167 @@ export async function convertShippingRequest(args: {
   shipmentInput?: JsonRecord;
   actorUserId?: string | null;
 }) {
-  const reqRows = await prisma.$queryRawUnsafe<LogisticsShippingRequestRow[]>(
-    `SELECT * FROM logistics_shipping_requests
-      WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL LIMIT 1`,
-    args.tenantId, args.requestId,
-  );
-  const req = reqRows[0];
-  if (!req) throw new Error('Shipping request not found for this tenant');
-  if (req.status === 'CONVERTED' && req.shipment_order_id) {
-    throw new LogisticsValidationError(['This request has already been converted into a job order.']);
-  }
-  if (req.status === 'REJECTED' || req.status === 'CANCELLED') {
-    throw new LogisticsValidationError([`A ${req.status.toLowerCase()} request cannot be converted.`]);
-  }
+  return await prisma.$transaction(async tx => {
+    // 1. Lock the shipping request row FOR UPDATE to serialize concurrent conversions
+    const reqRows = await tx.$queryRawUnsafe<LogisticsShippingRequestRow[]>(
+      `SELECT * FROM logistics_shipping_requests
+        WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL
+        FOR UPDATE`,
+      args.tenantId, args.requestId,
+    );
+    const req = reqRows[0];
+    if (!req) throw new Error('Shipping request not found for this tenant');
+    if (req.status === 'CONVERTED' || req.shipment_order_id) {
+      throw new LogisticsValidationError(['This request has already been converted into a job order.']);
+    }
+    if (req.status === 'REJECTED' || req.status === 'CANCELLED') {
+      throw new LogisticsValidationError([`A ${req.status.toLowerCase()} request cannot be converted.`]);
+    }
 
-  const custRows = await prisma.$queryRawUnsafe<Array<{ name_en: string; email: string | null; mobile_number: string | null }>>(
-    `SELECT name_en, email, mobile_number FROM customers WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
-    req.shipper_id, args.tenantId,
-  ).catch(() => [] as Array<{ name_en: string; email: string | null; mobile_number: string | null }>);
-  const customer = custRows[0];
-  const noteParts = [req.goods_description, req.special_instructions].filter(Boolean) as string[];
+    const custRows = await tx.$queryRawUnsafe<Array<{ name_en: string; email: string | null; mobile_number: string | null }>>(
+      `SELECT name_en, email, mobile_number FROM customers WHERE id = $1 AND tenant_id = $2 LIMIT 1`,
+      req.shipper_id, args.tenantId,
+    ).catch(() => [] as Array<{ name_en: string; email: string | null; mobile_number: string | null }>);
+    const customer = custRows[0];
+    const noteParts = [req.goods_description, req.special_instructions].filter(Boolean) as string[];
 
-  const md = (req.metadata ?? {}) as JsonRecord;
-  const mdPickup = (md.pickup && typeof md.pickup === 'object' ? md.pickup : {}) as Record<string, unknown>;
-  const mdDelivery = (md.delivery && typeof md.delivery === 'object' ? md.delivery : {}) as Record<string, unknown>;
-  const mdCargo = Array.isArray(md.cargoLines) ? (md.cargoLines as Array<Record<string, unknown>>) : [];
-  const s = (v: unknown): string | null => (v == null || v === '' ? null : String(v));
-  const n = (v: unknown): number | null => {
-    if (v == null || v === '') return null;
-    const x = Number(v);
-    return Number.isFinite(x) ? x : null;
-  };
+    const md = (req.metadata ?? {}) as JsonRecord;
+    const mdPickup = (md.pickup && typeof md.pickup === 'object' ? md.pickup : {}) as Record<string, unknown>;
+    const mdDelivery = (md.delivery && typeof md.delivery === 'object' ? md.delivery : {}) as Record<string, unknown>;
+    const mdCargo = Array.isArray(md.cargoLines) ? (md.cargoLines as Array<Record<string, unknown>>) : [];
+    const s = (v: unknown): string | null => (v == null || v === '' ? null : String(v));
+    const n = (v: unknown): number | null => {
+      if (v == null || v === '') return null;
+      const x = Number(v);
+      return Number.isFinite(x) ? x : null;
+    };
 
-  const stops: LogisticsStopInput[] = [
-    {
-      stopType: 'PICKUP', sequenceNo: 1,
-      locationName: s(mdPickup.name) ?? req.origin_name,
-      address: s(mdPickup.address) ?? req.origin_address,
-      contactName: s(mdPickup.contactName),
-      contactPhone: s(mdPickup.contactPhone),
-      plannedArrivalAt: s(mdPickup.windowFrom) ?? iso(req.pickup_window_from),
-      plannedDepartAt: s(mdPickup.windowTo) ?? iso(req.pickup_window_to),
-      instructions: s(mdPickup.instructions),
-    },
-    {
-      stopType: 'DELIVERY', sequenceNo: 2,
-      locationName: s(mdDelivery.name) ?? req.destination_name,
-      address: s(mdDelivery.address) ?? req.destination_address,
-      contactName: s(mdDelivery.contactName),
-      contactPhone: s(mdDelivery.contactPhone),
-      plannedArrivalAt: s(mdDelivery.windowFrom) ?? iso(req.delivery_window_from),
-      plannedDepartAt: s(mdDelivery.windowTo) ?? iso(req.delivery_window_to),
-      instructions: s(mdDelivery.instructions),
-    },
-  ];
+    const stops: LogisticsStopInput[] = [
+      {
+        stopType: 'PICKUP', sequenceNo: 1,
+        locationName: s(mdPickup.name) ?? req.origin_name,
+        address: s(mdPickup.address) ?? req.origin_address,
+        contactName: s(mdPickup.contactName),
+        contactPhone: s(mdPickup.contactPhone),
+        plannedArrivalAt: s(mdPickup.windowFrom) ?? iso(req.pickup_window_from),
+        plannedDepartAt: s(mdPickup.windowTo) ?? iso(req.pickup_window_to),
+        instructions: s(mdPickup.instructions),
+      },
+      {
+        stopType: 'DELIVERY', sequenceNo: 2,
+        locationName: s(mdDelivery.name) ?? req.destination_name,
+        address: s(mdDelivery.address) ?? req.destination_address,
+        contactName: s(mdDelivery.contactName),
+        contactPhone: s(mdDelivery.contactPhone),
+        plannedArrivalAt: s(mdDelivery.windowFrom) ?? iso(req.delivery_window_from),
+        plannedDepartAt: s(mdDelivery.windowTo) ?? iso(req.delivery_window_to),
+        instructions: s(mdDelivery.instructions),
+      },
+    ];
 
-  const cargoLines: LogisticsCargoLineInput[] = mdCargo.length
-    ? mdCargo
-      .filter(c => s(c.description))
-      .map(c => ({
-        description: s(c.description) ?? 'Cargo',
-        quantity: n(c.quantity),
-        packageType: s(c.packageType),
-        weightKg: n(c.weightKg),
-        volumeCbm: n(c.volumeCbm),
-        isHazmat: c.isHazmat === true,
-        tempMinC: n(c.tempMinC),
-        tempMaxC: n(c.tempMaxC),
-      }))
-    : (req.goods_description
-      ? [{ description: req.goods_description, weightKg: numberOrNull(req.total_weight_kg) }]
-      : []);
+    const cargoLines: LogisticsCargoLineInput[] = mdCargo.length
+      ? mdCargo
+        .filter(c => s(c.description))
+        .map(c => ({
+          description: s(c.description) ?? 'Cargo',
+          quantity: n(c.quantity),
+          packageType: s(c.packageType),
+          weightKg: n(c.weightKg),
+          volumeCbm: n(c.volumeCbm),
+          isHazmat: c.isHazmat === true,
+          tempMinC: n(c.tempMinC),
+          tempMaxC: n(c.tempMaxC),
+        }))
+      : (req.goods_description
+        ? [{ description: req.goods_description, weightKg: numberOrNull(req.total_weight_kg) }]
+        : []);
 
-  const mdHaulage = md.haulage === 'CROSS_BORDER' ? 'CROSS_BORDER'
-    : md.haulage === 'INLAND' ? 'INLAND'
-    : null;
-  const mdCustoms = (md.customs && typeof md.customs === 'object' && !Array.isArray(md.customs))
-    ? (md.customs as Record<string, unknown>) : null;
-  const mdHazmat = (md.hazmat && typeof md.hazmat === 'object' && !Array.isArray(md.hazmat))
-    ? (md.hazmat as Record<string, unknown>) : null;
+    const mdHaulage = md.haulage === 'CROSS_BORDER' ? 'CROSS_BORDER'
+      : md.haulage === 'INLAND' ? 'INLAND'
+      : null;
+    const mdCustoms = (md.customs && typeof md.customs === 'object' && !Array.isArray(md.customs))
+      ? (md.customs as Record<string, unknown>) : null;
+    const mdHazmat = (md.hazmat && typeof md.hazmat === 'object' && !Array.isArray(md.hazmat))
+      ? (md.hazmat as Record<string, unknown>) : null;
 
-  const customsGrossKg = mdCustoms ? n(mdCustoms.grossWeightKg) : null;
-  const totalWeightFromRequest = numberOrNull(req.total_weight_kg);
-  const totalWeightKg = totalWeightFromRequest ?? customsGrossKg;
+    const customsGrossKg = mdCustoms ? n(mdCustoms.grossWeightKg) : null;
+    const totalWeightFromRequest = numberOrNull(req.total_weight_kg);
+    const totalWeightKg = totalWeightFromRequest ?? customsGrossKg;
 
-  const shipment = await createShipmentOrder({
-    tenantId: args.tenantId,
-    cargoOwnerCustomerId: req.shipper_id,
-    cargoOwnerName: customer?.name_en ?? null,
-    cargoOwnerEmail: customer?.email ?? null,
-    cargoOwnerPhone: customer?.mobile_number ?? null,
-    shipmentType: req.shipment_type,
-    bookingMode: 'SPOT',
-    marketplaceStatus: 'PRIVATE',
-    status: 'DRAFT',
-    originName: req.origin_name,
-    originAddress: req.origin_address,
-    destinationName: req.destination_name,
-    destinationAddress: req.destination_address,
-    pickupWindowFrom: iso(req.pickup_window_from),
-    pickupWindowTo: iso(req.pickup_window_to),
-    deliveryWindowFrom: iso(req.delivery_window_from),
-    deliveryWindowTo: iso(req.delivery_window_to),
-    requestedVehicleType: req.requested_vehicle_type,
-    totalWeightKg,
-    totalVolumeCbm: numberOrNull(req.total_volume_cbm),
-    cargoValueAmount: numberOrNull(req.cargo_value_amount),
-    currency: req.currency,
-    stops,
-    cargoLines,
-    sourceChannel: 'SHIPPING_REQUEST',
-    notes: noteParts.length ? noteParts.join(' — ') : null,
-    metadata: {
-      shippingRequestId: req.id,
-      shippingRequestNo: req.request_no,
-      shipperReferenceNo: req.reference_no,
-      goodsDescription: req.goods_description,
-      haulage: mdHaulage,
-      customs: mdCustoms,
-      hazmat: mdHazmat,
-    },
-    createdBy: args.actorUserId ?? null,
+    const shipment = await createShipmentOrder({
+      tenantId: args.tenantId,
+      cargoOwnerCustomerId: req.shipper_id,
+      cargoOwnerName: customer?.name_en ?? null,
+      cargoOwnerEmail: customer?.email ?? null,
+      cargoOwnerPhone: customer?.mobile_number ?? null,
+      shipmentType: req.shipment_type,
+      bookingMode: 'SPOT',
+      marketplaceStatus: 'PRIVATE',
+      status: 'DRAFT',
+      originName: req.origin_name,
+      originAddress: req.origin_address,
+      destinationName: req.destination_name,
+      destinationAddress: req.destination_address,
+      pickupWindowFrom: iso(req.pickup_window_from),
+      pickupWindowTo: iso(req.pickup_window_to),
+      deliveryWindowFrom: iso(req.delivery_window_from),
+      deliveryWindowTo: iso(req.delivery_window_to),
+      requestedVehicleType: req.requested_vehicle_type,
+      totalWeightKg,
+      totalVolumeCbm: numberOrNull(req.total_volume_cbm),
+      cargoValueAmount: numberOrNull(req.cargo_value_amount),
+      currency: req.currency,
+      stops,
+      cargoLines,
+      sourceChannel: 'SHIPPING_REQUEST',
+      notes: noteParts.length ? noteParts.join(' — ') : null,
+      metadata: {
+        shippingRequestId: req.id,
+        shippingRequestNo: req.request_no,
+        shipperReferenceNo: req.reference_no,
+        goodsDescription: req.goods_description,
+        haulage: mdHaulage,
+        customs: mdCustoms,
+        hazmat: mdHazmat,
+      },
+      createdBy: args.actorUserId ?? null,
+    });
+    if (!shipment) throw new Error('Failed to create the job order from this request');
+
+    // 2. Atomic conditional update: guarantee status was not already CONVERTED
+    const rows = await tx.$queryRawUnsafe<LogisticsShippingRequestRow[]>(
+      `UPDATE logistics_shipping_requests
+          SET updated_at = NOW(),
+              status = 'CONVERTED',
+              shipment_order_id = $1,
+              updated_by = COALESCE($2, updated_by)
+        WHERE tenant_id = $3 AND id = $4 AND status != 'CONVERTED'
+        RETURNING *`,
+      shipment.id,
+      args.actorUserId ?? null,
+      args.tenantId,
+      args.requestId,
+    );
+
+    if (!rows[0]) {
+      throw new LogisticsValidationError(['This request has already been converted into a job order.']);
+    }
+
+    await addTrackingEvent({
+      tenantId: args.tenantId,
+      shipmentOrderId: shipment.id,
+      eventType: 'SHIPPING_REQUEST_CONVERTED',
+      status: shipment.status,
+      source: 'FREIGHT_MARKETPLACE',
+      notes: `Job order created from shipping request ${req.request_no}`,
+      metadata: { shippingRequestId: req.id, requestNo: req.request_no },
+    });
+
+    return {
+      shipmentOrderId: shipment.id,
+      shipmentNo: shipment.shipment_no,
+      request: rows[0] ? mapShippingRequestRow(rows[0]) : null,
+      shipment: { id: shipment.id, shipmentNo: shipment.shipment_no, status: shipment.status },
+    };
   });
-  if (!shipment) throw new Error('Failed to create the job order from this request');
-
-  const rows = await prisma.$queryRawUnsafe<LogisticsShippingRequestRow[]>(
-    `UPDATE logistics_shipping_requests
-        SET updated_at = NOW(),
-            status = 'CONVERTED',
-            shipment_order_id = $1,
-            updated_by = COALESCE($2, updated_by)
-      WHERE tenant_id = $3 AND id = $4
-      RETURNING *`,
-    shipment.id,
-    args.actorUserId ?? null,
-    args.tenantId,
-    args.requestId,
-  );
-
-  await addTrackingEvent({
-    tenantId: args.tenantId,
-    shipmentOrderId: shipment.id,
-    eventType: 'SHIPPING_REQUEST_CONVERTED',
-    status: shipment.status,
-    source: 'FREIGHT_MARKETPLACE',
-    notes: `Job order created from shipping request ${req.request_no}`,
-    metadata: { shippingRequestId: req.id, requestNo: req.request_no },
-  });
-
-  return {
-    shipmentOrderId: shipment.id,
-    shipmentNo: shipment.shipment_no,
-    request: rows[0] ? mapShippingRequestRow(rows[0]) : null,
-    shipment: { id: shipment.id, shipmentNo: shipment.shipment_no, status: shipment.status },
-  };
 }

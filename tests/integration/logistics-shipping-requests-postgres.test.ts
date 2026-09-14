@@ -139,6 +139,53 @@ describe.skipIf(!hasDb)('Logistics shipping requests (Postgres)', () => {
     ).rejects.toBeInstanceOf(LogisticsValidationError);
   });
 
+  it('guarantees atomic conversion and blocks concurrent duplicate conversions', async () => {
+    const req = await createShippingRequest({
+      tenantId,
+      shipperId,
+      originName: 'Jebel Ali Free Zone',
+      destinationName: 'Abu Dhabi Industrial City',
+      goodsDescription: 'High-value equipment',
+      totalWeightKg: 4500,
+      source: 'OPERATOR',
+    });
+    expect(req).not.toBeNull();
+    await updateShippingRequestStatus({
+      tenantId,
+      requestId: req!.id,
+      status: 'ACCEPTED',
+      reviewNotes: 'Approved for conversion',
+    });
+
+    // Fire 2 concurrent conversion attempts simultaneously
+    const results = await Promise.allSettled([
+      convertShippingRequest({ tenantId, requestId: req!.id, actorUserId: 'user-a' }),
+      convertShippingRequest({ tenantId, requestId: req!.id, actorUserId: 'user-b' }),
+    ]);
+
+    const fulfilled = results.filter(r => r.status === 'fulfilled');
+    const rejected = results.filter(r => r.status === 'rejected');
+
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+
+    const rejectedReason = (rejected[0] as PromiseRejectedResult).reason;
+    expect(rejectedReason).toBeInstanceOf(LogisticsValidationError);
+    expect(rejectedReason.issues).toContain('This request has already been converted into a job order.');
+
+    // Confirm database has exactly one shipment associated with this request
+    const freshReq = await getShippingRequest({ tenantId, requestId: req!.id });
+    expect(freshReq?.status).toBe('CONVERTED');
+    expect(freshReq?.shipmentOrderId).toBeTruthy();
+
+    const shipmentRows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id FROM logistics_shipment_orders WHERE tenant_id = $1 AND id = $2`,
+      tenantId,
+      freshReq!.shipmentOrderId,
+    );
+    expect(shipmentRows).toHaveLength(1);
+  });
+
   it('refuses to convert a rejected request', async () => {
     const req = await createShippingRequest({ tenantId, shipperId, source: 'OPERATOR' });
     await updateShippingRequestStatus({ tenantId, requestId: req!.id, status: 'REJECTED', reviewNotes: 'No capacity' });
@@ -159,3 +206,4 @@ describe.skipIf(!hasDb)('Logistics shipping requests (Postgres)', () => {
     }
   });
 });
+
