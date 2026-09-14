@@ -69,6 +69,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -99,6 +100,15 @@ var (
 	lastError   atomic.Value // string
 	mu          sync.RWMutex
 	smokeCancel context.CancelFunc
+	// smokeWG tracks the currently-running recheck-loop goroutine (at most
+	// one at a time — startRecheckLoopWith always cancels any previous one
+	// first). Cancelling smokeCancel only stops the NEXT tick from
+	// starting; recheckLoopWith blocks on an in-flight check() with no way
+	// to abort it early. StopRecheckLoop waits on this so a caller that
+	// needs the loop fully stopped (a test about to run its own DB
+	// assertions against the same shared tenant rows the check function
+	// touches) doesn't race an in-flight iteration.
+	smokeWG sync.WaitGroup
 )
 
 func init() {
@@ -217,10 +227,42 @@ func startRecheckLoopWith(check func() error) {
 	if smokeCancel != nil {
 		smokeCancel()
 	}
+	mu.Unlock()
+
+	// Wait for any previous goroutine to actually exit before starting a
+	// new one — otherwise two loop iterations (old, still finishing its
+	// in-flight check(), and new) could run concurrently against the same
+	// tenant rows. Must happen with mu released: recheckLoopWith takes mu
+	// itself (to record the tick's result) before it loops back around to
+	// observe ctx.Done(), so waiting while holding mu here would deadlock
+	// against the very goroutine this is waiting for.
+	smokeWG.Wait()
+
+	mu.Lock()
 	recheckCtx, cancel := context.WithCancel(context.Background())
 	smokeCancel = cancel
+	smokeWG.Add(1)
 	mu.Unlock()
-	go recheckLoopWith(recheckCtx, check)
+	go func() {
+		defer smokeWG.Done()
+		recheckLoopWith(recheckCtx, check)
+	}()
+}
+
+// StopRecheckLoop cancels the active recheck-loop goroutine (if any) and
+// blocks until it has actually exited, including finishing any
+// in-flight check() call. Cancelling alone (the old resetGateForTest/
+// cancelRecheckLoop behavior) only stops the NEXT tick from starting —
+// callers that need the loop genuinely stopped before touching the same
+// tenant rows the check function uses must call this instead.
+func StopRecheckLoop() {
+	mu.Lock()
+	if smokeCancel != nil {
+		smokeCancel()
+		smokeCancel = nil
+	}
+	mu.Unlock()
+	smokeWG.Wait()
 }
 
 // recheckLoop re-runs the smoke test periodically. If it ever flips
@@ -291,13 +333,41 @@ type tenantPair struct {
 	A, B uuid.UUID
 }
 
+// smokeTenantCodes returns the two tenant `code` values this run should
+// use. In production (and by default everywhere else) these are the
+// stable "phase0_smoke_a"/"phase0_smoke_b" pair the type's own doc
+// comment describes: created once, reused forever across restarts.
+//
+// PHASE0_SMOKE_SUFFIX overrides this to give each CI run its own,
+// never-shared pair instead. Concurrent CI runs for different PRs share
+// one live database (see .github/workflows/phase0.yml's own "Use a
+// dedicated branch or schema so concurrent PRs don't trample each
+// other" comment, which this actually implements) — under the fixed
+// codes, two runs racing ensureTestTenants both see no existing row and
+// both INSERT, so the loser gets "duplicate key value violates unique
+// constraint tenants_code_key", and pre-existing rows created by a
+// prior run's already-torn-down tenant can also leave the next run's
+// cleanup blocked on a foreign key it doesn't own. A suffix unique to
+// the run (set by CI to github.run_id-github.run_attempt) makes that
+// structurally impossible: every run gets rows only it ever touches, so
+// child-then-parent delete order in cleanupSmokeTenants always succeeds.
+// Unset (the production default), behavior is byte-for-byte unchanged.
+func smokeTenantCodes() (string, string) {
+	suffix := strings.TrimSpace(os.Getenv("PHASE0_SMOKE_SUFFIX"))
+	if suffix == "" {
+		return "phase0_smoke_a", "phase0_smoke_b"
+	}
+	return "phase0_smoke_a_" + suffix, "phase0_smoke_b_" + suffix
+}
+
 // ensureTestTenants creates (or finds) two stable test tenants with
 // a known marker in `code`. They are real rows in the tenants table,
 // just named so an operator can identify and delete them if needed.
 func ensureTestTenants(ctx context.Context, db *gorm.DB) (tenantPair, error) {
 	var pair tenantPair
 
-	for _, suffix := range []string{"phase0_smoke_a", "phase0_smoke_b"} {
+	codeA, codeB := smokeTenantCodes()
+	for _, suffix := range []string{codeA, codeB} {
 		var idStr string
 		err := db.WithContext(ctx).Raw(`
 			SELECT id FROM tenants WHERE code = ?
@@ -305,7 +375,7 @@ func ensureTestTenants(ctx context.Context, db *gorm.DB) (tenantPair, error) {
 		if err == nil && idStr != "" {
 			parsed, perr := uuid.Parse(idStr)
 			if perr == nil {
-				if suffix == "phase0_smoke_a" {
+				if suffix == codeA {
 					pair.A = parsed
 				} else {
 					pair.B = parsed
@@ -316,6 +386,7 @@ func ensureTestTenants(ctx context.Context, db *gorm.DB) (tenantPair, error) {
 		err = db.WithContext(ctx).Raw(`
 			INSERT INTO tenants (id, name, code, plan, is_active)
 			VALUES (gen_random_uuid()::text, ?, ?, 'STANDARD', true)
+			ON CONFLICT (code) DO UPDATE SET is_active = EXCLUDED.is_active
 			RETURNING id
 		`, "Phase0 Smoke Test "+suffix, suffix).Scan(&idStr).Error
 		if err != nil {
@@ -325,7 +396,7 @@ func ensureTestTenants(ctx context.Context, db *gorm.DB) (tenantPair, error) {
 		if perr != nil {
 			return pair, fmt.Errorf("phasegate: parse %s id %q: %w", suffix, idStr, perr)
 		}
-		if suffix == "phase0_smoke_a" {
+		if suffix == codeA {
 			pair.A = parsed
 		} else {
 			pair.B = parsed
