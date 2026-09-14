@@ -170,6 +170,16 @@ func DerivedKey(originalName string, ts time.Time) string {
 	if clean == "" {
 		clean = "file"
 	}
+
+	prefix := strings.Trim(strings.TrimSpace(os.Getenv("S3_KEY_PREFIX")), "/")
+	if prefix != "" {
+		return fmt.Sprintf("%s/uploads/%04d/%02d/%02d/%d-%s",
+			prefix,
+			ts.Year(), ts.Month(), ts.Day(),
+			ts.UnixNano(), clean,
+		)
+	}
+
 	return fmt.Sprintf("uploads/%04d/%02d/%02d/%d-%s",
 		ts.Year(), ts.Month(), ts.Day(),
 		ts.UnixNano(), clean,

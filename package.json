@@ -37,6 +37,7 @@
         "test:isolation:unit": "vitest run tests/unit/tenant-rls-helpers.test.ts",
         "test:isolation:integration": "vitest run tests/integration/tenant-isolation-rls.test.ts",
         "test:isolation": "npm run test:isolation:unit && npm run test:isolation:integration && npm run test:isolation:tenant001",
+        "test:staging-acceptance": "node scripts/verify-staging-proxy-e2e.js",
         "test:all": "vitest run tests/unit && vitest run tests/integration && playwright test",
         "cap:sync:ios": "npm run build:driver && npx cap sync ios",
         "cap:sync:android": "npm run build:driver && npx cap sync android",

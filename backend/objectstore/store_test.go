@@ -80,6 +80,22 @@ func TestDerivedKey_DatePartitioned(t *testing.T) {
 	}
 }
 
+func TestDerivedKey_KeyPrefixIsolation(t *testing.T) {
+	ts := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
+
+	t.Setenv("S3_KEY_PREFIX", "staging")
+	stagingKey := DerivedKey("doc.pdf", ts)
+	if !strings.HasPrefix(stagingKey, "staging/uploads/2026/09/14/") {
+		t.Errorf("expected staging prefix, got %q", stagingKey)
+	}
+
+	t.Setenv("S3_KEY_PREFIX", "production")
+	prodKey := DerivedKey("doc.pdf", ts)
+	if !strings.HasPrefix(prodKey, "production/uploads/2026/09/14/") {
+		t.Errorf("expected production prefix, got %q", prodKey)
+	}
+}
+
 func TestInit_FailsOnMissingEnv(t *testing.T) {
 	// All four required vars empty — Init must refuse loudly.
 	t.Setenv("S3_ENDPOINT", "")
