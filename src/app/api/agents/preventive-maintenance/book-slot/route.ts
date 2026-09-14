@@ -34,14 +34,14 @@ export async function POST(req: NextRequest) {
         serviceThreshold: string;
       };
 
-      if (!vehicleId || !slotDate) {
+      if (!body.vehicleId || !body.slotDate) {
         return NextResponse.json({ error: 'vehicleId and slotDate are required' }, { status: 400 });
       }
 
       const id = crypto.randomUUID();
       const now = new Date().toISOString();
-      const startDateTime = new Date(`${slotDate}T${startTime || '13:00'}:00.000Z`).toISOString();
-      const endDateTime = new Date(`${slotDate}T${endTime || '16:30'}:00.000Z`).toISOString();
+      const startDateTime = new Date(`${body.slotDate}T${body.startTime || '13:00'}:00.000Z`).toISOString();
+      const endDateTime = new Date(`${body.slotDate}T${body.endTime || '16:30'}:00.000Z`).toISOString();
 
       // Determine sequence
       const seqResult = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
@@ -51,8 +51,8 @@ export async function POST(req: NextRequest) {
       const woNumber = 'FWO-PM-' + String(seq).padStart(5, '0');
 
       const description =
-        `[Auto-Scheduled PM] ${serviceThreshold || 'Routine Milestone Service'}\n` +
-        `Booked into Lowest-Impact Slot: ${slotDate} (${startTime} - ${endTime}).\n` +
+        `[Auto-Scheduled PM] ${body.serviceThreshold || 'Routine Milestone Service'}\n` +
+        `Booked into Lowest-Impact Slot: ${body.slotDate} (${body.startTime} - ${body.endTime}).\n` +
         `Zero/Minimal passenger disruption window scheduled by Preventive Maintenance Agent.`;
 
       // Insert into fleet_work_orders
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
       `,
         id,
         woNumber,
-        vehicleId,
+        body.vehicleId,
         description,
         startDateTime,
         endDateTime,
@@ -76,23 +76,23 @@ export async function POST(req: NextRequest) {
       );
 
       // Update forecast status if forecastId passed
-      if (forecastId) {
+      if (body.forecastId) {
         await prisma.$executeRawUnsafe(`
           UPDATE preventive_maintenance_forecasts
           SET status = 'SCHEDULED', updated_at = NOW()
           WHERE id = $1::uuid AND tenant_id = $2
-        `, forecastId, tenantId).catch(() => {});
+        `, body.forecastId, tenantId).catch(() => {});
       }
 
       return NextResponse.json({
         success: true,
-        message: `Work Order ${woNumber} booked for ${slotDate} (${startTime} - ${endTime}).`,
+        message: `Work Order ${woNumber} booked for ${body.slotDate} (${body.startTime} - ${body.endTime}).`,
         workOrderId: id,
         woNumber,
         scheduledSlot: {
-          slotDate,
-          startTime,
-          endTime,
+          slotDate: body.slotDate,
+          startTime: body.startTime,
+          endTime: body.endTime,
         },
       });
     } catch (err: any) {
