@@ -8259,5 +8259,5 @@ export async function convertShippingRequest(args: {
       request: rows[0] ? mapShippingRequestRow(rows[0]) : null,
       shipment: { id: shipment.id, shipmentNo: shipment.shipment_no, status: shipment.status },
     };
-  });
+  }, { maxWait: 10_000, timeout: 15_000 });
 }
