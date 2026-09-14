@@ -17,6 +17,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { withTenantRls, type TxClient } from '@/lib/rls';
 import {
   AgentDefinition,
   AgentEvent,
@@ -62,11 +63,11 @@ interface PMPlanDbRow {
 /**
  * Fetch fleet vehicles for PM analysis
  */
-async function fetchVehiclesForPM(tenantId: string, vehicleId?: string): Promise<VehicleDbRow[]> {
+async function fetchVehiclesForPM(tx: TxClient, tenantId: string, vehicleId?: string): Promise<VehicleDbRow[]> {
   const filter = vehicleId ? `AND v.id = $2` : '';
   const params = vehicleId ? [tenantId, vehicleId] : [tenantId];
 
-  return prisma.$queryRawUnsafe<VehicleDbRow[]>(
+  return tx.$queryRawUnsafe<VehicleDbRow[]>(
     `SELECT
        v.id::text,
        v.vehicle_code,
@@ -88,11 +89,11 @@ async function fetchVehiclesForPM(tenantId: string, vehicleId?: string): Promise
 /**
  * Fetch 14-day telematics burn rates (daily km & daily engine hours)
  */
-async function fetchTelematicsBurnRates(tenantId: string): Promise<Map<string, TelemetryStatsRow>> {
+async function fetchTelematicsBurnRates(tx: TxClient): Promise<Map<string, TelemetryStatsRow>> {
   const map = new Map<string, TelemetryStatsRow>();
 
   try {
-    const rows = await prisma.$queryRawUnsafe<any[]>(`
+    const rows = await tx.$queryRawUnsafe<any[]>(`
       SELECT
         vehicle_id::text,
         MAX((payload->'sensors'->>'engineHours')::float8) AS engine_hours,
@@ -127,11 +128,11 @@ async function fetchTelematicsBurnRates(tenantId: string): Promise<Map<string, T
 /**
  * Fetch last service history from work orders
  */
-async function fetchLastServiceRecords(tenantId: string): Promise<Map<string, LastServiceDbRow>> {
+async function fetchLastServiceRecords(tx: TxClient): Promise<Map<string, LastServiceDbRow>> {
   const map = new Map<string, LastServiceDbRow>();
 
   try {
-    const rows = await prisma.$queryRawUnsafe<any[]>(`
+    const rows = await tx.$queryRawUnsafe<any[]>(`
       SELECT DISTINCT ON (vehicle_id)
         vehicle_id::text,
         created_at::text AS last_service_date,
@@ -158,11 +159,11 @@ async function fetchLastServiceRecords(tenantId: string): Promise<Map<string, La
 /**
  * Fetch assigned PM plans from pm_schedule_items & maintenance_plans
  */
-async function fetchActivePMPlans(tenantId: string): Promise<Map<string, PMPlanDbRow>> {
+async function fetchActivePMPlans(tx: TxClient, tenantId: string): Promise<Map<string, PMPlanDbRow>> {
   const map = new Map<string, PMPlanDbRow>();
 
   try {
-    const rows = await prisma.$queryRawUnsafe<any[]>(`
+    const rows = await tx.$queryRawUnsafe<any[]>(`
       SELECT
         s.vehicle_id::text,
         s.plan_id::text,
@@ -199,11 +200,12 @@ async function fetchActivePMPlans(tenantId: string): Promise<Map<string, PMPlanD
  * Fetch upcoming trip schedules for target vehicle to assess operational disruption
  */
 async function fetchUpcomingTripsForVehicle(
+  tx: TxClient,
   tenantId: string,
   vehicleId: string
 ): Promise<TripScheduleWindow[]> {
   try {
-    const rows = await prisma.$queryRawUnsafe<any[]>(`
+    const rows = await tx.$queryRawUnsafe<any[]>(`
       SELECT
         id::text AS trip_id,
         trip_number,
@@ -235,12 +237,13 @@ async function fetchUpcomingTripsForVehicle(
  * Upsert forecast record into `preventive_maintenance_forecasts`
  */
 async function upsertPMForecast(
+  tx: TxClient,
   tenantId: string,
   forecast: PreventiveMaintenanceForecast,
   runId: string
 ): Promise<void> {
   try {
-    await prisma.$executeRawUnsafe(`
+    await tx.$executeRawUnsafe(`
       INSERT INTO preventive_maintenance_forecasts (
         tenant_id, vehicle_id, vehicle_code, license_plate, make, model,
         current_odometer_km, current_engine_hours, daily_avg_km, daily_avg_engine_hours,
@@ -312,11 +315,21 @@ export async function run(event: AgentEvent): Promise<AgentRunResult> {
   const runId = crypto.randomUUID();
   const tenantId = event.tenant_id || 'default';
 
+  return withTenantRls(prisma, tenantId, (tx) => runForTenant(tx, tenantId, event, started, runId));
+}
+
+async function runForTenant(
+  tx: TxClient,
+  tenantId: string,
+  event: AgentEvent,
+  started: number,
+  runId: string,
+): Promise<AgentRunResult> {
   // 1. Fetch Fleet Data
-  const vehicles = await fetchVehiclesForPM(tenantId, event.entity_id);
-  const telematicsMap = await fetchTelematicsBurnRates(tenantId);
-  const lastServiceMap = await fetchLastServiceRecords(tenantId);
-  const pmPlanMap = await fetchActivePMPlans(tenantId);
+  const vehicles = await fetchVehiclesForPM(tx, tenantId, event.entity_id);
+  const telematicsMap = await fetchTelematicsBurnRates(tx);
+  const lastServiceMap = await fetchLastServiceRecords(tx);
+  const pmPlanMap = await fetchActivePMPlans(tx, tenantId);
 
   const forecasts: PreventiveMaintenanceForecast[] = [];
   let actionsCreated = 0;
@@ -351,7 +364,7 @@ export async function run(event: AgentEvent): Promise<AgentRunResult> {
     const burnDown = calculateVehicleBurnDown(vehicleInput);
 
     // Fetch operational schedule commitments for lowest-impact slot
-    const upcomingTrips = await fetchUpcomingTripsForVehicle(tenantId, v.id);
+    const upcomingTrips = await fetchUpcomingTripsForVehicle(tx, tenantId, v.id);
 
     // Recommends slot where operational impact is lowest
     const recommendedSlot = recommendLowestImpactSlot({
@@ -386,13 +399,13 @@ export async function run(event: AgentEvent): Promise<AgentRunResult> {
     };
 
     // Persist forecast to database
-    await upsertPMForecast(tenantId, forecast, runId);
+    await upsertPMForecast(tx, tenantId, forecast, runId);
     forecasts.push(forecast);
 
     // Stage in agent_approvals if DUE_SOON (<= 7 days)
     if (forecast.urgencyLevel === 'DUE_SOON' || forecast.urgencyLevel === 'OVERDUE') {
       try {
-        await prisma.$executeRawUnsafe(`
+        await tx.$executeRawUnsafe(`
           INSERT INTO agent_approvals (
             tenant_id, agent_id, entity_type, entity_id, action_type,
             title, description, financial_impact_aed, proposed_payload,
