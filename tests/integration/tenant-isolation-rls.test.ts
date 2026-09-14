@@ -368,7 +368,24 @@ describe('RLS: the killer test — no tenant context = no rows', () => {
     // If a future PR adds a route handler that calls prisma.vehicle
     // without withTenantRls(), it will silently return zero rows. The
     // route will look broken (empty list), but it won't leak.
+    //
+    // TEMP DIAGNOSTIC (investigating an intermittent CI-only failure of
+    // this exact assertion): log the GUC value and backend PID this
+    // specific query actually saw, immediately before and via the same
+    // logical call path as the real assertion.
+    const [diag] = await basePrisma.$queryRawUnsafe<Array<{ pid: number; guc: string | null }>>(
+      `SELECT pg_backend_pid() AS pid, current_setting('app.tenant_id', true) AS guc`,
+    );
+    // eslint-disable-next-line no-console
+    console.log('[DIAG killer-test/vehicle]', JSON.stringify(diag));
     const visible = await basePrisma.vehicle.findMany();
+    if (visible.length > 0) {
+      const [diag2] = await basePrisma.$queryRawUnsafe<Array<{ pid: number; guc: string | null }>>(
+        `SELECT pg_backend_pid() AS pid, current_setting('app.tenant_id', true) AS guc`,
+      );
+      // eslint-disable-next-line no-console
+      console.log('[DIAG killer-test/vehicle AFTER-LEAK]', JSON.stringify(diag2), 'rowTenantIds=', JSON.stringify([...new Set((visible as Array<{ tenantId: string }>).map(v => v.tenantId))]));
+    }
     expect(visible).toEqual([]);
   });
 });
@@ -589,7 +606,21 @@ describe('RLS applies to every tenant-scoped table', () => {
     it(`${model}: tenant A finds 0 rows with no context`, async () => {
       // The "killer test" applied to each table — proves RLS is wired
       // and the policy fires for every model that has a tenant_id column.
+      //
+      // TEMP DIAGNOSTIC — see the standalone killer test above for context.
+      const [diag] = await basePrisma.$queryRawUnsafe<Array<{ pid: number; guc: string | null }>>(
+        `SELECT pg_backend_pid() AS pid, current_setting('app.tenant_id', true) AS guc`,
+      );
+      // eslint-disable-next-line no-console
+      console.log(`[DIAG parameterized/${model}]`, JSON.stringify(diag));
       const result = await (basePrisma as unknown as Record<string, { findMany: () => Promise<unknown[]> }>)[model].findMany();
+      if ((result as unknown[]).length > 0) {
+        const [diag2] = await basePrisma.$queryRawUnsafe<Array<{ pid: number; guc: string | null }>>(
+          `SELECT pg_backend_pid() AS pid, current_setting('app.tenant_id', true) AS guc`,
+        );
+        // eslint-disable-next-line no-console
+        console.log(`[DIAG parameterized/${model} AFTER-LEAK]`, JSON.stringify(diag2), 'count=', (result as unknown[]).length);
+      }
       expect(result).toEqual([]);
     });
 

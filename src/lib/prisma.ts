@@ -362,6 +362,13 @@ const prismaClientSingleton = () => {
     if (params.model && !activeRlsScope()) {
       const tenantId = await requestTenantId();
       if (tenantId) {
+        // TEMP DIAGNOSTIC (investigating an intermittent CI-only RLS test
+        // failure): this branch should never fire in a Vitest process —
+        // requestTenantId() reads next/headers(), which should throw
+        // outside a real Next.js request and be caught as null. If this
+        // ever logs during the isolation suite, that's the leak source.
+        // eslint-disable-next-line no-console
+        console.log('[DIAG $use auto-wrap]', JSON.stringify({ model: params.model, action: params.action, tenantId }));
         return withRequestRls(async (tx) => {
           const delegate = (tx as unknown as Record<string, Record<string, (args: unknown) => Promise<unknown>>>)[params.model!];
           return delegate[params.action](params.args);
