@@ -36,7 +36,11 @@ import (
 // Healthz returns 200 unconditionally as long as the HTTP server is
 // running. NO external dependency checks — that's what /readyz is for.
 func Healthz(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"status": "alive"})
+	version := os.Getenv("RAILWAY_GIT_COMMIT_SHA")
+	if version == "" {
+		version = os.Getenv("GIT_COMMIT_SHA")
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "alive", "version": version})
 }
 
 // Readyz returns 200 only when the binary is fully ready to serve
@@ -79,11 +83,16 @@ func Readyz(c *gin.Context) {
 		overall = "not_ready"
 	}
 
+	version := os.Getenv("RAILWAY_GIT_COMMIT_SHA")
+	if version == "" {
+		version = os.Getenv("GIT_COMMIT_SHA")
+	}
+
 	c.JSON(status, gin.H{
 		"status":   overall,
 		"checks":   checks,
 		"uptime":   "", // could be filled in from a process-start timestamp
-		"version":  "", // could be filled in from -ldflags '-X main.version=...'
+		"version":  version,
 	})
 }
 

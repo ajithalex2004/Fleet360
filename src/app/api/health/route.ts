@@ -19,6 +19,7 @@ export const dynamic = 'force-dynamic'; // never cache
 const RELEASE =
   process.env.GIT_COMMIT_SHA ??
   process.env.VERCEL_GIT_COMMIT_SHA ??
+  process.env.RAILWAY_GIT_COMMIT_SHA ??
   'unknown';
 
 export async function GET() {
