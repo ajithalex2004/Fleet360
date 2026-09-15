@@ -236,29 +236,30 @@ caller existed.
 
 ## 6. Live Status & Operational Readiness Update (2026-09-15)
 
-* **Current Status**: **Production-deployed, Go ready, dual canary test tenants active & verified.**
+* **Current Status**: **Production-deployed, Go ready, commercial pilot tenant active & verified.**
 * **Railway Deployments**:
-  - `fleet360-backend` (Production): Deployment `b27a8cd9` (commit `b74ddd81`), status `SUCCESS`, reporting `status: "ready"`, DB reachable, Phase 0 phasegate `VERIFIED`.
-  - `fleet360-app` (Production): Deployment `33f283f5` (commit `b74ddd81`), status `SUCCESS`, reporting `/api/readyz` healthy.
-* **Canary Routing & Multi-Tenant Isolation Status**:
+  - `fleet360-backend` (Production): Deployment `cc2cb80f` (commit `c5210d48`), status `SUCCESS`, reporting `status: "ready"`, DB reachable, Phase 0 phasegate `VERIFIED`.
+  - `fleet360-app` (Production): Deployment `7b0ab015` (commit `c5210d48`), status `SUCCESS`, reporting `/api/readyz` healthy.
+* **Canary Routing & Commercial Pilot Status**:
   - `LOGISTICS_GO_PROXY_ENABLED`: `true`
-  - `LOGISTICS_GO_CANARY_TENANT_IDS`: `b6bb9dff-db22-4e16-a354-2c2b1b8ea98d,bde4707c-011e-4181-8039-47d63356f036`
-  - **Canary Tenant 1 Verification** (`b6bb9dff...`): `/api/logistics/shipments` returns `HTTP 200` with `x-backend: go` (proxied to Go).
-  - **Canary Tenant 2 Verification** (`bde4707c...`): `/api/logistics/shipments` returns `HTTP 200` with `x-backend: go` (proxied to Go).
-  - **Commercial Tenant Protection**: Commercial tenants (e.g. `718a372a-6059-4bf9-8581-2292f7cc8c3b`) return `HTTP 200` with `x-backend: none` (strictly preserved on legacy Next.js route handlers with 0 dropped requests or regressions).
+  - `LOGISTICS_GO_CANARY_TENANT_IDS`: `b6bb9dff-db22-4e16-a354-2c2b1b8ea98d,bde4707c-011e-4181-8039-47d63356f036,35ad69c6-0451-4210-8ec3-01472c902e15`
+  - **Canary Test Tenant 1** (`b6bb9dff...`): `/api/logistics/shipments` returns `HTTP 200` with `x-backend: go`.
+  - **Canary Test Tenant 2** (`bde4707c...`): `/api/logistics/shipments` returns `HTTP 200` with `x-backend: go`.
+  - **Commercial Pilot Tenant** (`35ad69c6-0451-4210-8ec3-01472c902e15` - XL AI Smart Mobility): `/api/logistics/shipments` returns `HTTP 200` with `x-backend: go` (proxied directly to the Go cluster).
+  - **Control Non-Canary Protection**: Unlisted control tenants (e.g. `fc057fdc-aaa2-435d-9375-1926814bcd0c`) return `HTTP 200` with `x-backend: none` (strictly preserved on legacy Next.js route handlers with zero dropped requests).
 * **Production Writes & Atomic Sequence Counters**:
-  - Tenant 1: Initialized and created shipping requests `SR-2600001` through `SR-2600004`.
-  - Tenant 2: Initialized counters for year `26` and created shipping request `SR-2600001` (`HTTP 201 Created`), proving cross-tenant sequence isolation with zero collisions.
+  - Commercial Pilot Tenant (`35ad69c6...`): Initialized sequence counters for year `26` and created shipping request `SR-2600001` (`HTTP 201 Created`), proving atomic sequence generation with zero collisions against test canaries.
 * **Storage Architecture & Production Verification**:
   - Shared Cloudflare R2 bucket `fleet360-uploads` utilizes logical prefix isolation (`staging/` vs `production/`), formally documented as an explicitly accepted risk in `docs/SECURITY_ACCEPTED_RISKS.md`.
-  - End-to-end production storage lifecycle verified for both canary tenants under their respective tenant prefixes (`production/uploads/<tenant-id>/...`):
-    1. Upload generated key in expected prefix (`HTTP 200`).
+  - Commercial pilot storage lifecycle verified under `production/uploads/35ad69c6-0451-4210-8ec3-01472c902e15/`:
+    1. Upload generated key in expected commercial prefix (`HTTP 200`).
     2. Presigned GET URL generated via Go backend endpoint `GET /api/files/sign?key=...` (`HTTP 200`).
     3. Content downloaded from presigned URL verified bit-for-bit against payload (`true`).
     4. Object deleted via `DELETE /api/files?key=...` (`HTTP 204 No Content`).
     5. Post-deletion retrieval attempt returned `HTTP 404`, confirming non-retrievability.
 * **Operational Rollback Rehearsal**:
   - Rollback rehearsed and validated in staging: flipping `LOGISTICS_GO_PROXY_ENABLED=false` immediately reverts 100% of canary traffic back to Next.js route handlers with zero dropped requests.
+
 
 
 
