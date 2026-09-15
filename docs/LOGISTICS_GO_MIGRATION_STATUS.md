@@ -236,27 +236,29 @@ caller existed.
 
 ## 6. Live Status & Operational Readiness Update (2026-09-15)
 
-* **Current Status**: **Production-deployed, Go ready, single canary test tenant active & verified.**
+* **Current Status**: **Production-deployed, Go ready, dual canary test tenants active & verified.**
 * **Railway Deployments**:
-  - `fleet360-backend` (Production): Deployment `fb4081e0` (commit `84ea55ca`), status `SUCCESS`, reporting `status: "ready"`, DB reachable, Phase 0 phasegate `VERIFIED`.
-  - `fleet360-app` (Production): Deployment `468c3a84` (commit `84ea55ca`), status `SUCCESS`, reporting `/api/readyz` healthy.
-* **Canary Routing & Tenant Isolation Status**:
+  - `fleet360-backend` (Production): Deployment `b27a8cd9` (commit `b74ddd81`), status `SUCCESS`, reporting `status: "ready"`, DB reachable, Phase 0 phasegate `VERIFIED`.
+  - `fleet360-app` (Production): Deployment `33f283f5` (commit `b74ddd81`), status `SUCCESS`, reporting `/api/readyz` healthy.
+* **Canary Routing & Multi-Tenant Isolation Status**:
   - `LOGISTICS_GO_PROXY_ENABLED`: `true`
-  - `LOGISTICS_GO_CANARY_TENANT_IDS`: `b6bb9dff-db22-4e16-a354-2c2b1b8ea98d` (Dedicated internal test tenant).
-  - **Canary Tenant Verification**: Requests to `/api/logistics/shipments` return `HTTP 200` with `x-backend: go` (proxied directly to the Go backend cluster).
-  - **Commercial Tenant Isolation**: Commercial tenants (e.g. `718a372a-6059-4bf9-8581-2292f7cc8c3b`) return `HTTP 200` with `x-backend: none` (strictly preserved on legacy Next.js route handlers with 0 dropped requests or regressions).
+  - `LOGISTICS_GO_CANARY_TENANT_IDS`: `b6bb9dff-db22-4e16-a354-2c2b1b8ea98d,bde4707c-011e-4181-8039-47d63356f036`
+  - **Canary Tenant 1 Verification** (`b6bb9dff...`): `/api/logistics/shipments` returns `HTTP 200` with `x-backend: go` (proxied to Go).
+  - **Canary Tenant 2 Verification** (`bde4707c...`): `/api/logistics/shipments` returns `HTTP 200` with `x-backend: go` (proxied to Go).
+  - **Commercial Tenant Protection**: Commercial tenants (e.g. `718a372a-6059-4bf9-8581-2292f7cc8c3b`) return `HTTP 200` with `x-backend: none` (strictly preserved on legacy Next.js route handlers with 0 dropped requests or regressions).
 * **Production Writes & Atomic Sequence Counters**:
-  - Initial counters seeded in `logistics_document_sequences` for year `26` at `0`.
-  - Canary tenant shipping request write execution succeeded (`HTTP 201 Created`), atomically generating sequence numbers `SR-2600001` through `SR-2600003` with zero sequence collisions.
+  - Tenant 1: Initialized and created shipping requests `SR-2600001` through `SR-2600004`.
+  - Tenant 2: Initialized counters for year `26` and created shipping request `SR-2600001` (`HTTP 201 Created`), proving cross-tenant sequence isolation with zero collisions.
 * **Storage Architecture & Production Verification**:
   - Shared Cloudflare R2 bucket `fleet360-uploads` utilizes logical prefix isolation (`staging/` vs `production/`), formally documented as an explicitly accepted risk in `docs/SECURITY_ACCEPTED_RISKS.md`.
-  - End-to-end production storage lifecycle verified with canary tenant:
-    1. Upload generated key in expected prefix: `production/uploads/b6bb9dff.../2026/09/15/...-prod-canary-test.txt`.
+  - End-to-end production storage lifecycle verified for both canary tenants under their respective tenant prefixes (`production/uploads/<tenant-id>/...`):
+    1. Upload generated key in expected prefix (`HTTP 200`).
     2. Presigned GET URL generated via Go backend endpoint `GET /api/files/sign?key=...` (`HTTP 200`).
     3. Content downloaded from presigned URL verified bit-for-bit against payload (`true`).
     4. Object deleted via `DELETE /api/files?key=...` (`HTTP 204 No Content`).
     5. Post-deletion retrieval attempt returned `HTTP 404`, confirming non-retrievability.
 * **Operational Rollback Rehearsal**:
   - Rollback rehearsed and validated in staging: flipping `LOGISTICS_GO_PROXY_ENABLED=false` immediately reverts 100% of canary traffic back to Next.js route handlers with zero dropped requests.
+
 
 
