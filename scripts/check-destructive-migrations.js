@@ -52,6 +52,19 @@ const ALLOWLIST = {
     'preconditions at run time and raises rather than dropping if either has changed. ' +
     'Adding a tenant column to the shadow instead would have left two protected tables ' +
     'and no way to tell which one was real.',
+  '20260915230000_fresh_replay_auth_security_tables_and_rls':
+    'Drops 5 columns (tenant_invitations.revoked_at/accepted_user_id/metadata/updated_at, ' +
+    'audit_logs.changes) that only exist on a fresh replay in the first place because an ' +
+    'earlier, incompatible-shape migration for the same table name ran first there ' +
+    '(20260625130000/20260901000000 vs. this repository\'s later, canonical definition of ' +
+    'the same two tables — see the migration\'s own top-of-file comment for the full ' +
+    'shape-conflict history). None of these 5 columns exist on production (confirmed via ' +
+    'pg_dump against a live copy before writing this); the drops bring a fresh replay\'s ' +
+    'schema into line with what every real environment already has, on tables that are ' +
+    'empty at the point this runs during initial deployment. Not a data-loss risk on any ' +
+    'real environment: this migration is additive there (every DROP COLUMN target is ' +
+    'guarded to only run against the wrong-shape table a fresh replay produces, and is a ' +
+    'no-op wherever the column was never there to begin with).',
 };
 
 // Statements that can destroy data. DROP INDEX and DROP POLICY are deliberately
