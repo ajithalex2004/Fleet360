@@ -124,3 +124,4 @@ classes.dex
 
 # Local scratch scripts
 test_claude.py
+/.audit-reports/

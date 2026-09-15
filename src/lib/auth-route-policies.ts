@@ -39,6 +39,7 @@ export const PUBLIC_EXACT: readonly string[] = [
   '/api/platform/plans',
   '/api/admin/session',
   '/api/health',
+  '/api/readyz',
   // Own secret-header auth (x-deployment-health-secret), not session-based -
   // must bypass the session check here or that auth can never be reached.
   '/api/health/db-role',
@@ -52,6 +53,8 @@ export const PUBLIC_PREFIXES: readonly string[] = [
   '/platform/',
   '/onboarding/',
   '/track/',
+  '/track-ticket/',
+  '/track-ticket',
   // Document signing is a public, capability-token flow. The token is
   // validated by the signing API; recipients do not need operator sessions.
   '/sign/',

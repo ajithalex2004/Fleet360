@@ -42,6 +42,16 @@ const RULE_EXEMPTIONS = [
     owner: 'Platform Security & Infrastructure',
     test: 'tests/setup/super-admin.test.ts',
   },
+  {
+    file: 'src/app/api/readyz/route.ts',
+    method: 'GET',
+    type: 'missing_auth',
+    reason: 'Operational readiness probe proxying backend /readyz status and revision information. Operates without tenant context and accesses zero database tables.',
+    authMechanism: 'Public readiness probe (cluster/monitoring probe, zero credentials, zero tenant data)',
+    dataScope: 'Operational health and commit version metadata only',
+    owner: 'Platform Security & Infrastructure',
+    test: 'tests/unit/api-shim.test.ts',
+  },
 
   // ── Tenant Self-Service Onboarding & Domain Verification ───────────────────
   {

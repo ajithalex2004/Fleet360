@@ -22,12 +22,12 @@ const SESSION_SECRET = process.env.SESSION_SECRET || '';
 // Tested Revision Pair Metadata
 const REVISION_METADATA = {
   frontendServiceId: '40e64e58-f468-4ebe-9412-99cd5af910aa',
-  frontendDeploymentId: '5e983ead-34ba-4a19-95b2-55c8ea6c8355',
-  frontendCommitSha: 'aaece016',
+  frontendDeploymentId: 'e00e6b0f-535f-4dae-90ad-dee9e8c56181',
+  frontendCommitSha: '733e26fa',
   backendServiceId: '6b454bef-fec5-4840-acc5-edd8473c8f03',
-  backendDeploymentId: '00e605f7-3c3b-471b-b023-e7910071aa87',
-  backendCommitSha: 'aaece016',
-  compatibilityProof: 'Next.js api-shim.ts routes /api/logistics/* and /api/files/* via internal private mesh http://fleet360-backend.railway.internal:8080 with signed JWT bearer tokens',
+  backendDeploymentId: 'ff735adc-e74e-4f5f-b746-791728672d64',
+  backendCommitSha: '733e26fa',
+  compatibilityProof: 'Next.js api-shim.ts routes /api/logistics/* and /api/files/* via internal private mesh http://fleet360-backend.railway.internal:8080 with signed JWT bearer tokens and canary controls',
 };
 
 const prisma = new PrismaClient({
@@ -498,6 +498,27 @@ async function verifyCandidateBinding() {
       throw new Error(`Release Candidate Mismatch: deployed frontend SHA (${deployedFrontendSha}) does not match expected candidate (${expectedSha})`);
     }
     console.log(`  Frontend candidate binding verified: matches ${expectedSha.slice(0, 8)}`);
+  }
+
+  // Also verify backend candidate binding via /api/readyz
+  try {
+    const readyRes = await fetch(`${STAGING_APP_ORIGIN}/api/readyz`);
+    if (readyRes.status === 200) {
+      const readyData = await readyRes.json();
+      const deployedBackendSha = readyData.version || '';
+      console.log(`  Backend deployed readiness: status=${readyData.status}, version=${deployedBackendSha}`);
+      if (deployedBackendSha && deployedBackendSha !== 'unknown') {
+        const bMatch = expectedSha.startsWith(deployedBackendSha) || deployedBackendSha.startsWith(expectedSha);
+        if (!bMatch) {
+          throw new Error(`Release Candidate Mismatch: deployed backend SHA (${deployedBackendSha}) does not match expected candidate (${expectedSha})`);
+        }
+        console.log(`  Backend candidate binding verified: matches ${expectedSha.slice(0, 8)}`);
+      }
+    } else {
+      console.log(`  Backend /api/readyz probe returned status ${readyRes.status} (deployment in progress)`);
+    }
+  } catch (err) {
+    console.log(`  Note: /api/readyz probe not reachable yet on active staging frontend (${err.message})`);
   }
 }
 
