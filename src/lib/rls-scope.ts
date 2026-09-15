@@ -31,3 +31,32 @@ export function activeRlsScope(): RlsScope | undefined {
 export function runWithRlsScope<T>(scope: RlsScope, fn: () => Promise<T>): Promise<T> {
   return storage.run(scope, fn);
 }
+
+/**
+ * Run `fn` with no active RLS scope, even when called from inside one.
+ *
+ * For fire-and-forget work (audit logging, best-effort side writes) that
+ * must never inherit the caller's transaction: `activeRlsScope()` still
+ * returns the caller's scope for any code that starts executing
+ * synchronously before the caller's own transaction callback returns —
+ * AsyncLocalStorage propagates a request's context into everything spawned
+ * during it, whether or not the caller awaits it. An unawaited call issued
+ * that way picks up `scope.tx`, a transaction client whose underlying
+ * transaction can commit before the unawaited write's own statement
+ * reaches the connection — "Transaction already closed" (P2028), racy
+ * because it depends on how much work the caller does after the
+ * fire-and-forget call before returning.
+ *
+ * `AsyncLocalStorage.exit()` is Node's built-in escape hatch for exactly
+ * this: run `fn` as if no `storage.run()` were ever entered, regardless of
+ * nesting depth. Anything `fn` does — including opening its own transaction
+ * via withTenantRls/withPlatformAdmin — gets a connection whose lifetime is
+ * entirely its own.
+ */
+export function runOutsideRlsScope<T>(fn: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    storage.exit(() => {
+      fn().then(resolve, reject);
+    });
+  });
+}
