@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { logAudit } from '@/lib/audit';
+import { logAuditInTx } from '@/lib/audit';
 import { runWithRlsScope } from '@/lib/rls-scope';
 import { upsertFinanceInvoice } from '@/lib/finance/module-ledger';
 import { createDraftJournalEntry } from '@/lib/finance/journal-service';
@@ -1052,7 +1052,7 @@ async function logLogisticsAudit(args: {
 }) {
   const db = args.client ?? prisma;
   await Promise.allSettled([
-    logAudit({
+    logAuditInTx({
       tenantId: args.tenantId,
       entityType: args.entityType,
       entityId: args.entityId ?? undefined,
