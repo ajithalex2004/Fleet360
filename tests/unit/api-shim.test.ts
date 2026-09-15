@@ -151,3 +151,125 @@ describe('proxyToGoBackend — routes with a confirmed, live Go handler are prox
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
+
+describe('proxyToGoBackend — kill switch & canary tenant controls', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let fetchSpy: any;
+
+  beforeEach(() => {
+    process.env.JWT_SECRET = 'a-valid-secret-that-is-long-enough';
+    delete process.env.LOGISTICS_GO_PROXY_ENABLED;
+    delete process.env.LOGISTICS_GO_CANARY_TENANT_IDS;
+    fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }),
+    );
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+    delete process.env.LOGISTICS_GO_PROXY_ENABLED;
+    delete process.env.LOGISTICS_GO_CANARY_TENANT_IDS;
+    if (originalJwtSecret === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = originalJwtSecret;
+  });
+
+  it('immediately disables all Go proxying when LOGISTICS_GO_PROXY_ENABLED is false (kill switch)', async () => {
+    process.env.LOGISTICS_GO_PROXY_ENABLED = 'false';
+
+    const result = await proxyToGoBackend(
+      new NextRequest('http://localhost:3000/api/logistics/shipments', {
+        method: 'GET',
+        headers: { 'x-user-id': 'user-1', 'x-tenant-id': 'tenant-1' },
+      }),
+    );
+
+    expect(result.proxied).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('proxies only tenants listed in LOGISTICS_GO_CANARY_TENANT_IDS when canary allowlist is active', async () => {
+    process.env.LOGISTICS_GO_CANARY_TENANT_IDS = 'canary-tenant-1, canary-tenant-2';
+
+    // 1. Allowed canary tenant
+    const canaryResult = await proxyToGoBackend(
+      new NextRequest('http://localhost:3000/api/logistics/shipments', {
+        method: 'GET',
+        headers: { 'x-user-id': 'user-1', 'x-tenant-id': 'canary-tenant-1' },
+      }),
+    );
+    expect(canaryResult.proxied).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(canaryResult.response?.headers.get('x-backend')).toBe('go');
+
+    fetchSpy.mockClear();
+
+    // 2. Non-canary tenant falls through to Next.js
+    const nonCanaryResult = await proxyToGoBackend(
+      new NextRequest('http://localhost:3000/api/logistics/shipments', {
+        method: 'GET',
+        headers: { 'x-user-id': 'user-2', 'x-tenant-id': 'general-prod-tenant' },
+      }),
+    );
+    expect(nonCanaryResult.proxied).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('falls through to Next.js when request has no tenant ID and canary allowlist is active', async () => {
+    process.env.LOGISTICS_GO_CANARY_TENANT_IDS = 'canary-tenant-1';
+
+    const result = await proxyToGoBackend(
+      new NextRequest('http://localhost:3000/api/logistics/shipments', {
+        method: 'GET',
+      }),
+    );
+    expect(result.proxied).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('respects headersOverride when checking canary tenant', async () => {
+    process.env.LOGISTICS_GO_CANARY_TENANT_IDS = 'canary-override-tenant';
+
+    const overrideHeaders = new Headers();
+    overrideHeaders.set('x-tenant-id', 'canary-override-tenant');
+    overrideHeaders.set('x-user-id', 'user-1');
+
+    const result = await proxyToGoBackend(
+      new NextRequest('http://localhost:3000/api/logistics/shipments', { method: 'GET' }),
+      overrideHeaders,
+    );
+    expect(result.proxied).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('proxies all tenants when LOGISTICS_GO_CANARY_TENANT_IDS is unset or empty', async () => {
+    process.env.LOGISTICS_GO_CANARY_TENANT_IDS = '';
+
+    const result = await proxyToGoBackend(
+      new NextRequest('http://localhost:3000/api/logistics/shipments', {
+        method: 'GET',
+        headers: { 'x-user-id': 'user-1', 'x-tenant-id': 'any-tenant' },
+      }),
+    );
+    expect(result.proxied).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed with 502 (proxied: true) on network failure and never falls back to Next.js (no duplicate writes)', async () => {
+    fetchSpy.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+
+    const result = await proxyToGoBackend(
+      new NextRequest('http://localhost:3000/api/logistics/shipments', {
+        method: 'POST',
+        headers: { 'x-user-id': 'user-1', 'x-tenant-id': 'tenant-1' },
+        body: JSON.stringify({ action: 'CREATE' }),
+      }),
+    );
+
+    // proxied: true prevents falling through to Next.js route handler
+    expect(result.proxied).toBe(true);
+    expect(result.response?.status).toBe(502);
+    const body = await result.response?.json();
+    expect(body.error).toBe('Backend unavailable');
+  });
+});
+

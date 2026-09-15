@@ -60,12 +60,35 @@ export async function GET() {
   const missing = Object.entries(integrations).filter(([, v]) => !v).map(([k]) => k);
   const status  = missing.length > 0 ? 'degraded' : 'ok';
 
+  // Optional Go backend readiness probe
+  let backendInfo: { status: string; version?: string; error?: string } | undefined;
+  const goBackendUrl = process.env.GO_BACKEND_URL;
+  if (goBackendUrl) {
+    try {
+      const bRes = await fetch(new URL('/readyz', goBackendUrl), {
+        cache: 'no-store',
+        signal: AbortSignal.timeout(2000),
+      });
+      const bData = await bRes.json();
+      backendInfo = {
+        status: bData.status ?? (bRes.ok ? 'ready' : 'not_ready'),
+        version: bData.version,
+      };
+    } catch (bErr) {
+      backendInfo = {
+        status: 'unreachable',
+        error: bErr instanceof Error ? bErr.message : String(bErr),
+      };
+    }
+  }
+
   return NextResponse.json({
     status,
     db: { status: dbStatus, latencyMs: dbLatencyMs },
     integrations,
     missingConfig: missing,
     release: RELEASE,
+    backend: backendInfo,
     timestamp: new Date().toISOString(),
   });
 }

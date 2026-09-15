@@ -62,10 +62,33 @@ const MIGRATED_PREFIXES = [
 ];
 
 export async function proxyToGoBackend(request: NextRequest, headersOverride?: Headers): Promise<ProxyResult> {
-  const { pathname, search } = request.nextUrl;
+  // 1. Kill switch: immediate toggle to fall through to existing Next.js handlers.
+  if (process.env.LOGISTICS_GO_PROXY_ENABLED === 'false') {
+    return { proxied: false };
+  }
+
+  // 2. Route allowlist check: only migrated paths are candidates for Go proxying.
   if (!shouldProxy(request)) return { proxied: false };
 
   const source = headersOverride ?? request.headers;
+
+  // 3. Canary tenant check: gradual server-side activation by tenant ID.
+  const canaryTenantsRaw = process.env.LOGISTICS_GO_CANARY_TENANT_IDS?.trim();
+  if (canaryTenantsRaw) {
+    const allowedTenantIds = new Set(
+      canaryTenantsRaw
+        .split(',')
+        .map(t => t.trim().toLowerCase())
+        .filter(Boolean)
+    );
+    const tenantId = source.get('x-tenant-id')?.trim().toLowerCase();
+    if (!tenantId || !allowedTenantIds.has(tenantId)) {
+      // Non-canary tenant or unauthenticated tenant-scoped request falls through to Next.js
+      return { proxied: false };
+    }
+  }
+
+  const { pathname, search } = request.nextUrl;
 
   try {
     const upstream = new URL(pathname.replace(/^\/api/, '/api/v1') + search, GO_BACKEND_URL);
