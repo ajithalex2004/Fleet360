@@ -231,3 +231,32 @@ caller existed.
   be running.
 - Intended callers for the 14 finance/execution routes above — that
   requires product/owner knowledge, not repository inspection.
+
+---
+
+## 6. Live Status & Operational Readiness Update (2026-09-15)
+
+* **Current Status**: **Production-deployed, Go ready, single canary test tenant active & verified.**
+* **Railway Deployments**:
+  - `fleet360-backend` (Production): Deployment `fb4081e0` (commit `84ea55ca`), status `SUCCESS`, reporting `status: "ready"`, DB reachable, Phase 0 phasegate `VERIFIED`.
+  - `fleet360-app` (Production): Deployment `468c3a84` (commit `84ea55ca`), status `SUCCESS`, reporting `/api/readyz` healthy.
+* **Canary Routing & Tenant Isolation Status**:
+  - `LOGISTICS_GO_PROXY_ENABLED`: `true`
+  - `LOGISTICS_GO_CANARY_TENANT_IDS`: `b6bb9dff-db22-4e16-a354-2c2b1b8ea98d` (Dedicated internal test tenant).
+  - **Canary Tenant Verification**: Requests to `/api/logistics/shipments` return `HTTP 200` with `x-backend: go` (proxied directly to the Go backend cluster).
+  - **Commercial Tenant Isolation**: Commercial tenants (e.g. `718a372a-6059-4bf9-8581-2292f7cc8c3b`) return `HTTP 200` with `x-backend: none` (strictly preserved on legacy Next.js route handlers with 0 dropped requests or regressions).
+* **Production Writes & Atomic Sequence Counters**:
+  - Initial counters seeded in `logistics_document_sequences` for year `26` at `0`.
+  - Canary tenant shipping request write execution succeeded (`HTTP 201 Created`), atomically generating sequence numbers `SR-2600001` through `SR-2600003` with zero sequence collisions.
+* **Storage Architecture & Production Verification**:
+  - Shared Cloudflare R2 bucket `fleet360-uploads` utilizes logical prefix isolation (`staging/` vs `production/`), formally documented as an explicitly accepted risk in `docs/SECURITY_ACCEPTED_RISKS.md`.
+  - End-to-end production storage lifecycle verified with canary tenant:
+    1. Upload generated key in expected prefix: `production/uploads/b6bb9dff.../2026/09/15/...-prod-canary-test.txt`.
+    2. Presigned GET URL generated via Go backend endpoint `GET /api/files/sign?key=...` (`HTTP 200`).
+    3. Content downloaded from presigned URL verified bit-for-bit against payload (`true`).
+    4. Object deleted via `DELETE /api/files?key=...` (`HTTP 204 No Content`).
+    5. Post-deletion retrieval attempt returned `HTTP 404`, confirming non-retrievability.
+* **Operational Rollback Rehearsal**:
+  - Rollback rehearsed and validated in staging: flipping `LOGISTICS_GO_PROXY_ENABLED=false` immediately reverts 100% of canary traffic back to Next.js route handlers with zero dropped requests.
+
+
