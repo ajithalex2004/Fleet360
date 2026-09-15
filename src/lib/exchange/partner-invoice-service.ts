@@ -11,7 +11,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { logAudit } from '@/lib/audit';
+import { logAuditInTx } from '@/lib/audit';
 import { raiseAlert } from '@/lib/alerts/raise';
 import { InvoiceVarianceReason } from '@prisma/client';
 
@@ -186,21 +186,15 @@ export class PartnerInvoiceService {
         },
       });
 
-      // 3. Log Audit
-      await logAudit(
-        tx,
-        input.tenantId,
-        'PartnerInvoice',
-        invoice.id,
-        'UPDATE',
-        {
-          action: 'INVOICE_APPROVED',
-          approvedAmount: approvedTotal,
-          payableId: payable.id,
-          verificationStatus: invoice.verificationStatus,
-        },
-        input.approvedByUserId
-      );
+      // 3. Log Audit — written atomically on this same transaction.
+      await logAuditInTx({
+        tenantId: input.tenantId,
+        entityType: 'PartnerInvoice',
+        entityId: invoice.id,
+        action: 'UPDATE',
+        details: `Invoice approved for ${approvedTotal} (payable ${payable.id}, verification: ${invoice.verificationStatus})`,
+        userId: input.approvedByUserId,
+      }, tx);
 
       return {
         invoice: updatedInvoice,

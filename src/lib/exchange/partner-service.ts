@@ -105,15 +105,16 @@ export class PartnerService {
     });
 
     if (actorUserId) {
-      await logAudit(
-        prisma,
-        'PLATFORM',
-        'TransportPartner',
-        partner.id,
-        'CREATE',
-        { legalName: partner.legalName, partnerCode: partner.partnerCode },
-        actorUserId
-      );
+      // Platform-level: a TransportPartner is onboarded once, not owned by a
+      // single tenant, so no tenantId here — matches the 'PLATFORM' literal
+      // this call used to pass, which was never a real tenant id.
+      await logAudit({
+        entityType: 'TransportPartner',
+        entityId: partner.id,
+        action: 'CREATE',
+        details: `Created transport partner ${partner.legalName} (${partner.partnerCode})`,
+        userId: actorUserId,
+      });
     }
 
     return partner;

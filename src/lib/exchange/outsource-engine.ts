@@ -16,7 +16,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { logAudit } from '@/lib/audit';
+import { logAudit, logAuditInTx } from '@/lib/audit';
 import { raiseAlert } from '@/lib/alerts/raise';
 import { randomBytes, createHash } from 'crypto';
 import {
@@ -173,15 +173,14 @@ export class OutsourceEngine {
       },
     });
 
-    await logAudit(
-      prisma,
-      input.tenantId,
-      'OutsourceRequest',
-      request.id,
-      'CREATE',
-      { requestNumber, pricingMethod: request.pricingMethod, invitedCount: allowedPartnerIds?.length || 0 },
-      input.createdByUserId
-    );
+    await logAudit({
+      tenantId: input.tenantId,
+      entityType: 'OutsourceRequest',
+      entityId: request.id,
+      action: 'CREATE',
+      details: `Created outsource request ${requestNumber} (${request.pricingMethod}, ${allowedPartnerIds?.length || 0} partner(s) invited)`,
+      userId: input.createdByUserId,
+    });
 
     return request;
   }
@@ -311,19 +310,14 @@ export class OutsourceEngine {
       },
     });
 
-    await logAudit(
-      prisma,
-      invite.request.tenantId,
-      'OutsourceRequestPartner',
-      invite.id,
-      'UPDATE',
-      {
-        action: 'PARTNER_DECLINED_RFQ',
-        partnerId: input.partnerId,
-        declineReason: input.declineReason,
-      },
-      input.actorUserId || invite.partner.legalName
-    );
+    await logAudit({
+      tenantId: invite.request.tenantId,
+      entityType: 'OutsourceRequestPartner',
+      entityId: invite.id,
+      action: 'UPDATE',
+      details: `Partner ${input.partnerId} declined RFQ${input.declineReason ? `: ${input.declineReason}` : ''}`,
+      userId: input.actorUserId || invite.partner.legalName,
+    });
 
     return updated;
   }
@@ -342,15 +336,14 @@ export class OutsourceEngine {
       data: { closesAt: new Date(newDeadline) },
     });
 
-    await logAudit(
-      prisma,
+    await logAudit({
       tenantId,
-      'OutsourceRequest',
-      requestId,
-      'UPDATE',
-      { action: 'DEADLINE_EXTENDED', newDeadline: new Date(newDeadline).toISOString() },
-      userId
-    );
+      entityType: 'OutsourceRequest',
+      entityId: requestId,
+      action: 'UPDATE',
+      details: `Deadline extended to ${new Date(newDeadline).toISOString()}`,
+      userId,
+    });
 
     return updated;
   }
@@ -467,20 +460,16 @@ export class OutsourceEngine {
         data: { status: OutsourceRequestStatus.AWARDED },
       });
 
-      // 7. Log Audit
-      await logAudit(
-        tx,
-        input.tenantId,
-        'OutsourceAward',
-        award.id,
-        'CREATE',
-        {
-          partnerId: quote.partnerId,
-          totalAwarded: Number(quote.totalAmount),
-          requestNumber: request.requestNumber,
-        },
-        input.awardedByUserId
-      );
+      // 7. Log Audit — written atomically on this same transaction, not
+      // fire-and-forget, so it can never observe a partial award.
+      await logAuditInTx({
+        tenantId: input.tenantId,
+        entityType: 'OutsourceAward',
+        entityId: award.id,
+        action: 'CREATE',
+        details: `Awarded request ${request.requestNumber} to partner ${quote.partnerId} for ${Number(quote.totalAmount)}`,
+        userId: input.awardedByUserId,
+      }, tx);
 
       return award;
     });
@@ -924,15 +913,14 @@ export class OutsourceEngine {
       data: { status: PartnerQuoteStatus.WITHDRAWN },
     });
 
-    await logAudit(
-      prisma,
-      quote.request.tenantId,
-      'PartnerQuote',
-      quote.id,
-      'UPDATE',
-      { action: 'QUOTE_WITHDRAWN', partnerId },
-      actorUserId || partnerId
-    );
+    await logAudit({
+      tenantId: quote.request.tenantId,
+      entityType: 'PartnerQuote',
+      entityId: quote.id,
+      action: 'UPDATE',
+      details: `Quote withdrawn by partner ${partnerId}`,
+      userId: actorUserId || partnerId,
+    });
 
     return updated;
   }
@@ -963,15 +951,14 @@ export class OutsourceEngine {
       });
     }
 
-    await logAudit(
-      prisma,
+    await logAudit({
       tenantId,
-      'OutsourceAward',
-      award.id,
-      'UPDATE',
-      { action: 'AWARD_CANCELLED', reason },
-      actorUserId
-    );
+      entityType: 'OutsourceAward',
+      entityId: award.id,
+      action: 'UPDATE',
+      details: `Award cancelled${reason ? `: ${reason}` : ''}`,
+      userId: actorUserId,
+    });
 
     return updated;
   }

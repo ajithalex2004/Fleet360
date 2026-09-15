@@ -71,15 +71,14 @@ export class ExceptionService {
       actor: input.raisedBy,
     });
 
-    await logAudit(
-      prisma,
-      input.tenantId,
-      'OutsourceException',
-      exception.id,
-      'CREATE',
-      { type: input.type, severity: input.severity || 'HIGH', awardId: input.awardId },
-      input.raisedBy
-    );
+    await logAudit({
+      tenantId: input.tenantId,
+      entityType: 'OutsourceException',
+      entityId: exception.id,
+      action: 'CREATE',
+      details: `Raised ${input.type} exception (severity ${input.severity || 'HIGH'})${input.awardId ? ` for award ${input.awardId}` : ''}`,
+      userId: input.raisedBy,
+    });
 
     return exception;
   }
@@ -97,15 +96,14 @@ export class ExceptionService {
       data: { status: OutsourceExceptionStatus.ACKNOWLEDGED },
     });
 
-    await logAudit(
-      prisma,
+    await logAudit({
       tenantId,
-      'OutsourceException',
-      exceptionId,
-      'UPDATE',
-      { action: 'ACKNOWLEDGED' },
-      actor
-    );
+      entityType: 'OutsourceException',
+      entityId: exceptionId,
+      action: 'UPDATE',
+      details: 'Exception acknowledged',
+      userId: actor,
+    });
 
     return updated;
   }
@@ -144,19 +142,14 @@ export class ExceptionService {
       },
     });
 
-    await logAudit(
-      prisma,
-      input.tenantId,
-      'OutsourceException',
-      exception.id,
-      'UPDATE',
-      {
-        action: 'RESOLVED',
-        resolutionNotes: input.resolutionNotes,
-        replacedResource: !!input.replacementResource,
-      },
-      input.resolvedBy
-    );
+    await logAudit({
+      tenantId: input.tenantId,
+      entityType: 'OutsourceException',
+      entityId: exception.id,
+      action: 'UPDATE',
+      details: `Exception resolved${input.replacementResource ? ' with resource replacement' : ''}. Notes: ${input.resolutionNotes}`,
+      userId: input.resolvedBy,
+    });
 
     return {
       exception: updated,
