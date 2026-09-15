@@ -429,6 +429,86 @@ jobs:
             echo "enforcement on lease_dunning_stage_transitions."
           } >> "$GITHUB_STEP_SUMMARY"
 
+  audit-log-race-integration:
+    name: Audit log transaction race (Postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      PHASE0_EXPECTED_ROLE: fleet360_app
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      # Deliberately not an `if:` — a conditional step that does not run
+      # reports success, which is the failure mode this whole workflow
+      # exists to remove. See rls-isolation-ts above for the same pattern.
+      - name: Require the database secret
+        env:
+          PHASE0_DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+        run: |
+          if [ -z "$PHASE0_DATABASE_URL" ]; then
+            echo "::error title=PHASE0_DATABASE_URL is not configured::The audit-log transaction-race suite cannot run without it. Failing rather than reporting green for a suite that never executed."
+            exit 1
+          fi
+          echo "secret present (${#PHASE0_DATABASE_URL} chars)"
+
+      # Proves the connection can actually enforce RLS BEFORE the suite
+      # runs — same preflight the other integration jobs use. This suite in
+      # particular depends on it: the cross-tenant-isolation test is a
+      # false pass under a bypassing role (caught locally while writing it —
+      # first run was against neondb_owner and tenant A could read tenant
+      # B's row).
+      - name: Assert the role enforces RLS
+        env:
+          DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+        run: node scripts/check-rls-enforcement.mjs
+
+      # #72: logAudit's fire-and-forget callers used to race their own
+      # caller's transaction closing (P2028, "Transaction already closed").
+      # This suite reproduces the tightest version of that race against a
+      # real database with active RLS, plus cross-tenant isolation and the
+      # logAuditInTx same-transaction-atomicity counterpart.
+      - name: Audit log transaction race suite
+        env:
+          DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+        run: npx vitest run tests/integration/audit-log-race.test.ts
+
+      - name: Record the evidence
+        if: always()
+        env:
+          SECRET_PRESENT: ${{ secrets.PHASE0_DATABASE_URL != '' }}
+        run: |
+          {
+            echo "### Audit log transaction race — PostgreSQL integration"
+            echo ""
+            echo "| check | value |"
+            echo "|---|---|"
+            echo "| expected role | \`$PHASE0_EXPECTED_ROLE\` |"
+            echo "| secret configured | $SECRET_PRESENT |"
+            echo "| enforcement asserted before the suite | yes |"
+            echo ""
+            echo "Covers: the tightest version of #72's original race (fire-and-"
+            echo "forget logAudit call inside a transaction callback that commits"
+            echo "on the next tick), independence from the caller's rollback,"
+            echo "cross-tenant RLS isolation on audit_logs, the no-tenantId case"
+            echo "(caught, not thrown — see #83), and logAuditInTx's opposite,"
+            echo "shares-the-caller's-transaction behavior in both directions."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # Companion job: verifies the dispatch migration + Phase 0 SQL
   # scripts compile cleanly. Doesn't apply them — that's a separate
   # one-time apply step done manually against staging. Catches syntax
