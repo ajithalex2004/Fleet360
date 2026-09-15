@@ -107,15 +107,12 @@ d('logAudit — fire-and-forget transaction race (#72)', () => {
     expect(row).not.toBeNull();
   });
 
-  it('a no-tenantId call is caught, not thrown, even though it cannot currently write (separate pre-existing bug — see the issue filed alongside #72)', async () => {
+  it('a no-tenantId call writes a real row with tenant_id NULL (#83)', async () => {
     // AuditPayload.tenantId is typed optional, and this function correctly
-    // routes a missing one to withPlatformAdmin so the RLS check would
-    // pass — but audit_logs.tenant_id is NOT NULL on the live database, a
-    // pre-existing mismatch this fix didn't introduce and doesn't touch.
-    // Every no-tenantId call (e.g. withAudit() outside a request with an
-    // x-tenant-id header) has always failed here, silently, exactly like
-    // this. What #72 actually guarantees is unchanged: the caller never
-    // sees it throw.
+    // routes a missing one to withPlatformAdmin. audit_logs.tenant_id was
+    // NOT NULL on the live database until #83's fix — every no-tenantId
+    // call (e.g. withAudit() outside a request with an x-tenant-id header)
+    // used to fail here, silently. Now it persists.
     const entityId = crypto.randomUUID();
     entityIds.push(entityId);
 
@@ -129,7 +126,25 @@ d('logAudit — fire-and-forget transaction race (#72)', () => {
     ).resolves.toBeUndefined();
 
     const row = await findRow(entityId);
-    expect(row).toBeNull();
+    expect(row).not.toBeNull();
+    expect(row!.tenant_id).toBeNull();
+  });
+
+  it('a platform-level (NULL-tenant) audit row is not visible to an ordinary tenant session', async () => {
+    const entityId = crypto.randomUUID();
+    entityIds.push(entityId);
+
+    await logAudit({
+      entityType: 'TestRace',
+      entityId,
+      action: 'LOGIN',
+      details: 'platform-level, no tenantId',
+    });
+
+    const seenByTenant = await withTenantRls(prisma, tenantA, (tx) =>
+      tx.$queryRawUnsafe<unknown[]>(`SELECT 1 FROM audit_logs WHERE entity_id = $1`, entityId),
+    );
+    expect(seenByTenant).toHaveLength(0);
   });
 
   it('cross-tenant isolation: tenant A cannot read tenant B\'s audit row', async () => {
