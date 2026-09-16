@@ -13,6 +13,7 @@
         "check:migrations": "node scripts/check-destructive-migrations.js",
         "db:push": "node scripts/guard-prisma-url.js && npx prisma db push",
         "db:migrate-dev": "node scripts/guard-prisma-url.js && npx prisma migrate dev",
+        "db:migrate:fresh": "node scripts/fresh-install-migrate.cjs",
         "build": "next build",
         "start": "next start",
         "lint": "next lint",

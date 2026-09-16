@@ -29,6 +29,15 @@ recreating a genuinely untracked table/column with its exact live shape
 re-running a migration's own logic with the ordering/existence guard it was
 missing.
 
+## Automated
+
+`npm run db:migrate:fresh` (scripts/fresh-install-migrate.cjs) runs the exact
+sequence below automatically — it parses this file's own code block at
+runtime, so it can't drift out of sync with it, and stops with the real
+error if it ever hits something not documented here. Prefer it over running
+the steps by hand; the manual sequence below is kept for reference and for
+diagnosing a stop the script doesn't recognize.
+
 ## Full resolve chain
 
 Run `npx prisma migrate deploy`, resolve the migration it stops at, and
