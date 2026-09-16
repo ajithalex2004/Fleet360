@@ -13,6 +13,7 @@
 
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
+import { requireSsoEncryptionSecret } from '@/lib/session-secret';
 
 // ── Secret encryption ────────────────────────────────────────────────────────
 
@@ -21,11 +22,7 @@ import { prisma } from '@/lib/prisma';
  * Production deployments should set SSO_ENCRYPTION_KEY explicitly.
  */
 function getKey(): Buffer {
-  const raw =
-    process.env.SSO_ENCRYPTION_KEY ??
-    process.env.SESSION_SECRET ??
-    'xl-mobility-dev-secret-change-in-production';
-  return crypto.createHash('sha256').update(raw).digest();
+  return crypto.createHash('sha256').update(requireSsoEncryptionSecret()).digest();
 }
 
 /** Returns base64(iv | authTag | ciphertext). */

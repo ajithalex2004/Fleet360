@@ -8,19 +8,11 @@
  */
 
 import type { NextRequest } from 'next/server';
-import { NextResponse } from 'next/server';
 import { isSessionRevoked } from '@/lib/session-blocklist';
-
-const DEFAULT_SECRET = 'xl-mobility-dev-secret-change-in-production';
+import { requireSessionSecret } from '@/lib/session-secret';
 
 function getSecret(): string {
-  return (
-    process.env.SESSION_SECRET ||
-    process.env.AUTH_SECRET ||
-    process.env.JWT_SECRET ||
-    process.env.NEXTAUTH_SECRET ||
-    DEFAULT_SECRET
-  );
+  return requireSessionSecret();
 }
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -121,20 +113,15 @@ async function hmacVerify(data: string, hexSig: string): Promise<boolean> {
     const sigBytes = bytesFromHex(hexSig);
     if (sigBytes.length !== 32) return false;
 
-    // 1. Verify with primary active secret
+    // Verify with the configured secret only. There is no fallback to a
+    // default/dev secret — a token that doesn't validate against the real
+    // configured secret is invalid, full stop. (Previously this also
+    // accepted tokens signed with a hard-coded default secret even when
+    // a real SESSION_SECRET was configured, which let anyone who knew
+    // that default string forge a valid session for any tenant/role.)
     const primaryKey = await getKey();
     const valid = await globalThis.crypto.subtle.verify('HMAC', primaryKey, sigBytes, enc.encode(data));
-    if (valid) return true;
-
-    // 2. Fallback: if current secret differs from default dev secret, verify with default
-    const activeSecret = getSecret();
-    if (activeSecret !== DEFAULT_SECRET) {
-      const fallbackKey = await getKey(DEFAULT_SECRET);
-      const fallbackValid = await globalThis.crypto.subtle.verify('HMAC', fallbackKey, sigBytes, enc.encode(data));
-      if (fallbackValid) return true;
-    }
-
-    return false;
+    return valid;
   } catch {
     return false;
   }

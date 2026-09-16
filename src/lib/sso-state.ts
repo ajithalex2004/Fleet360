@@ -8,9 +8,7 @@
  */
 
 import crypto from 'crypto';
-
-const SECRET =
-  process.env.SESSION_SECRET ?? 'xl-mobility-dev-secret-change-in-production';
+import { requireSessionSecret } from '@/lib/session-secret';
 
 const TTL_MS = 10 * 60 * 1000;
 
@@ -25,7 +23,7 @@ export interface SsoStatePayload {
 }
 
 function hmac(data: string): string {
-  return crypto.createHmac('sha256', SECRET).update(data).digest('hex');
+  return crypto.createHmac('sha256', requireSessionSecret()).update(data).digest('hex');
 }
 
 function b64url(input: string | Buffer): string {
