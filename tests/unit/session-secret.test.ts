@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import crypto from 'crypto';
 import {
   validateSecret,
@@ -14,6 +14,10 @@ const VALID_SESSION_SECRET = 'a-super-secret-session-key-that-is-at-least-32-cha
 const VALID_SSO_KEY = 'a-dedicated-sso-encryption-key-that-is-at-least-32-chars-long-9876!';
 const ROTATED_SSO_KEY = 'a-new-rotated-sso-encryption-key-that-is-also-32-chars-long-54321!';
 
+function setNodeEnv(val: string) {
+  (process.env as Record<string, string | undefined>).NODE_ENV = val;
+}
+
 describe('1. Secret Configuration & Validation (session-secret.ts)', () => {
   const envBackup = { ...process.env };
 
@@ -24,7 +28,7 @@ describe('1. Secret Configuration & Validation (session-secret.ts)', () => {
     delete process.env.NEXTAUTH_SECRET;
     delete process.env.SSO_ENCRYPTION_KEY;
     delete process.env.SSO_PREVIOUS_ENCRYPTION_KEY;
-    process.env.NODE_ENV = 'test';
+    setNodeEnv('test');
   });
 
   afterEach(() => {
@@ -79,7 +83,7 @@ describe('2. Dedicated SSO Encryption Key & Key Separation', () => {
   beforeEach(() => {
     process.env.SESSION_SECRET = VALID_SESSION_SECRET;
     delete process.env.SSO_ENCRYPTION_KEY;
-    process.env.NODE_ENV = 'test';
+    setNodeEnv('test');
   });
 
   afterEach(() => {
@@ -95,13 +99,13 @@ describe('2. Dedicated SSO Encryption Key & Key Separation', () => {
   });
 
   it('strictly requires dedicated SSO_ENCRYPTION_KEY in production (no fallback allowed)', () => {
-    process.env.NODE_ENV = 'production';
+    setNodeEnv('production');
     delete process.env.SSO_ENCRYPTION_KEY;
     expect(() => requireSsoEncryptionSecret()).toThrow(/SSO_ENCRYPTION_KEY is mandatory in production/);
   });
 
   it('allows controlled fallback to SESSION_SECRET with warning in non-production', () => {
-    process.env.NODE_ENV = 'development';
+    setNodeEnv('development');
     delete process.env.SSO_ENCRYPTION_KEY;
     expect(requireSsoEncryptionSecret()).toBe(VALID_SESSION_SECRET);
   });

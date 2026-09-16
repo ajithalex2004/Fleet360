@@ -112,19 +112,20 @@ func Readyz(c *gin.Context) {
 // NOT intended for load-balanced traffic — register on a separate
 // route group or restrict via IP allowlist in production.
 //
-// Optional access gate: set PHASEGATE_DEBUG_TOKEN and callers must send it
-// back via the X-Debug-Token header. If the env var is unset (the default
-// in every environment as of 2026-09-15) this endpoint stays open exactly
-// as before — set PHASEGATE_DEBUG_TOKEN in Railway to actually lock it
-// down. A mismatch returns 404, not 401/403, so an unauthenticated caller
-// can't use the response to confirm the endpoint even exists.
+// Mandatory access gate: PHASEGATE_DEBUG_TOKEN must be set to a non-empty
+// value in the environment, and callers must send it back via the X-Debug-Token
+// header. If the env var is unset, empty, or mismatched, this endpoint returns
+// 404 Not Found, so an unauthenticated caller cannot even confirm the endpoint exists.
 func DebugPhasegate(c *gin.Context) {
-	if token := os.Getenv("PHASEGATE_DEBUG_TOKEN"); token != "" {
-		supplied := c.GetHeader("X-Debug-Token")
-		if subtle.ConstantTimeCompare([]byte(supplied), []byte(token)) != 1 {
-			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
-			return
-		}
+	token := os.Getenv("PHASEGATE_DEBUG_TOKEN")
+	if token == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	supplied := c.GetHeader("X-Debug-Token")
+	if subtle.ConstantTimeCompare([]byte(supplied), []byte(token)) != 1 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
 	}
 	status, lastCheck, lastErr := phasegate.Snapshot()
 	c.JSON(http.StatusOK, gin.H{

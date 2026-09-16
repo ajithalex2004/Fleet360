@@ -64,6 +64,8 @@ export default defineConfig({
     alias: {
       // Map @/ imports to ./src/ — matches tsconfig paths
       '@': path.resolve(__dirname, './src'),
+      // Stub next/server in unit tests so Next.js route handlers can be imported directly
+      'next/server': path.resolve(__dirname, './tests/stubs/next-server.ts'),
       // The real `server-only` package throws unconditionally outside
       // Next.js's webpack server/client bundling — swap in a no-op so
       // tests that transitively import a server-only-marked module
