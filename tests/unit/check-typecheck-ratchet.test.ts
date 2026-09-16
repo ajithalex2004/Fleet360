@@ -11,6 +11,21 @@ describe('Typecheck Ratchet diagnostic fingerprinting & safety', () => {
     expect(normalizeMessage(raw)).toBe("Type 'string' is not assignable to type 'number'.");
   });
 
+  it('normalizes platform-dependent anonymous structural types and missing property lists consistently', () => {
+    const winMsg = "Property 'passengers' does not exist on type '{ tenantId: string; id: string; createdAt: Date | null; updatedAt: Date | null; deletedAt: Date | null; status: string | null; templateId: string | null; notes: string | null; ... 14 more ...; }'.";
+    const linMsg = "Property 'passengers' does not exist on type '{ tenantId: string; status: string | null; id: string; createdAt: Date | null; updatedAt: Date | null; deletedAt: Date | null; notes: string | null; vehicleId: string | null; ... 14 more ...; }'.";
+
+    expect(normalizeMessage(winMsg)).toBe("Property 'passengers' does not exist on type '{...}'.");
+    expect(normalizeMessage(linMsg)).toBe("Property 'passengers' does not exist on type '{...}'.");
+    expect(normalizeMessage(winMsg)).toBe(normalizeMessage(linMsg));
+
+    const winReg = "Type '{...}' is missing the following properties from type 'Record<AgentId, () => Promise<AgentDefinition>>': \"quotation-copilot\", \"rental-copilot\", \"damage-classifier\", \"doc-classifier\", and 2 more.";
+    const linReg = "Type '{...}' is missing the following properties from type 'Record<AgentId, () => Promise<AgentDefinition>>': \"chat-widget\", \"quotation-copilot\", \"rental-copilot\", \"damage-classifier\", and 2 more.";
+    expect(normalizeMessage(winReg)).toBe("Type '{...}' is missing properties from type 'Record<AgentId, () => Promise<AgentDefinition>>'");
+    expect(normalizeMessage(linReg)).toBe("Type '{...}' is missing properties from type 'Record<AgentId, () => Promise<AgentDefinition>>'");
+    expect(normalizeMessage(winReg)).toBe(normalizeMessage(linReg));
+  });
+
   it('parses diagnostics and generates stable fingerprints without line numbers', () => {
     const tscOutput = [
       "src/app/page.tsx(42,15): error TS2322: Type 'string' is not assignable to type 'number'.",

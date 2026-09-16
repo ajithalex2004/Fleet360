@@ -35,7 +35,18 @@ const DIAGNOSTIC_LINE_RE = /^(.+?)\((\d+,\d+)\): error (TS\d+): (.*)$/;
 const GLOBAL_ERROR_RE = /^error (TS\d+): (.*)$/;
 
 export function normalizeMessage(msg) {
-  return msg.trim().replace(/\s+/g, ' ');
+  let s = msg.trim().replace(/\s+/g, ' ');
+
+  // Truncated missing properties list is non-deterministic across OS engines/iteration order
+  // e.g. "is missing the following properties from type 'Foo': "a", "b", and 2 more."
+  s = s.replace(/is missing the following properties from type (.+?):.*$/, 'is missing properties from type $1');
+
+  // Collapse anonymous structural type literals {...} into {...} to avoid platform-dependent property ordering
+  while (/\{[^{}]*\}/.test(s)) {
+    s = s.replace(/\{[^{}]*\}/g, '{...}');
+  }
+
+  return s;
 }
 
 export function runTsc(customRoot = root) {
@@ -211,7 +222,9 @@ export function writeBaseline(fileDiagnostics, baselinePath = BASELINE_PATH) {
     files: sortedFiles,
   };
 
+  console.log(`Writing baseline to ${baselinePath} (${totalErrors} errors, ${sortedKeys.length} files)...`);
   writeFileSync(baselinePath, JSON.stringify(payload, null, 2) + '\n', 'utf8');
+  console.log(`Successfully wrote ${baselinePath}`);
   return payload;
 }
 
