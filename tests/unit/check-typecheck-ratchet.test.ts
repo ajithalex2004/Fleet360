@@ -50,16 +50,26 @@ describe('Typecheck Ratchet diagnostic fingerprinting & safety', () => {
     expect(normB).toContain('id: number');
   });
 
-  it('normalizes platform-dependent property ordering deterministically', () => {
-    const winMsg = "Property 'passengers' does not exist on type '{ tenantId: string; id: string; status: string | null; notes: string | null; ... 14 more ...; }'.";
-    const linMsg = "Property 'passengers' does not exist on type '{ status: string | null; tenantId: string; notes: string | null; id: string; ... 14 more ...; }'.";
+  it('normalizes platform-dependent property ordering deterministically for concrete types', () => {
+    const orderA = "Type '{ id: string; name: string; age: number; }' is not assignable to type 'Foo'.";
+    const orderB = "Type '{ name: string; age: number; id: string; }' is not assignable to type 'Foo'.";
+
+    const normA = normalizeMessage(orderA);
+    const normB = normalizeMessage(orderB);
+
+    expect(normA).toBe(normB);
+    expect(normA).toBe("Type '{ age: number; id: string; name: string; }' is not assignable to type 'Foo'.");
+  });
+
+  it('normalizes truncated structural types with ellipsis to ensure cross-platform reproducibility', () => {
+    const winMsg = "Property 'passengers' does not exist on type '{ tenantId: string; id: string; createdAt: Date | null; updatedAt: Date | null; deletedAt: Date | null; status: string | null; templateId: string | null; notes: string | null; ... 14 more ...; }'.";
+    const linMsg = "Property 'passengers' does not exist on type '{ tenantId: string; status: string | null; id: string; createdAt: Date | null; updatedAt: Date | null; deletedAt: Date | null; notes: string | null; vehicleId: string | null; ... 14 more ...; }'.";
 
     const normWin = normalizeMessage(winMsg);
     const normLin = normalizeMessage(linMsg);
 
     expect(normWin).toBe(normLin);
-    expect(normWin).toContain('... 14 more ...;');
-    expect(normWin).toBe("Property 'passengers' does not exist on type '{ id: string; notes: string | null; status: string | null; tenantId: string; ... 14 more ...; }'.");
+    expect(normWin).toBe("Property 'passengers' does not exist on type '{...}'.");
   });
 
   it('normalizes missing properties lists across platform iteration orders', () => {

@@ -75,19 +75,15 @@ export function sortTypeProperties(content) {
   }
   if (current.trim()) parts.push(current.trim());
 
-  if (content.trim() === '...') {
+  // Truncated property lists (e.g. "... 14 more ...") contain non-deterministic subsets of fields
+  // across V8 engines and operating system property iteration orders.
+  // Normalize truncated structural types to '{...}' to ensure cross-platform reproducibility,
+  // while preserving full structural type fidelity for non-truncated types.
+  if (content.trim() === '...' || parts.some(p => p.startsWith('...'))) {
     return '...';
   }
 
-  // Sort properties alphabetically; place '... N more ...' at the end
-  parts.sort((a, b) => {
-    const aMore = a.startsWith('...');
-    const bMore = b.startsWith('...');
-    if (aMore && !bMore) return 1;
-    if (!aMore && bMore) return -1;
-    return a.localeCompare(b);
-  });
-
+  parts.sort((a, b) => a.localeCompare(b));
   return parts.length > 0 ? parts.join('; ') + ';' : '';
 }
 
