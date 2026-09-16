@@ -81,7 +81,7 @@ describe('2. Fail-Closed Subprocess Isolation Tests', () => {
         SYSTEMROOT: process.env.SYSTEMROOT || '',
       },
       cwd: process.cwd(),
-    });
+    } as any);
 
     expect(res.status).toBe(1);
     expect(res.stderr).toContain('STAGING_DATABASE_URL environment variable is required');
@@ -97,7 +97,7 @@ describe('2. Fail-Closed Subprocess Isolation Tests', () => {
         STAGING_DATABASE_URL: '',
       },
       cwd: process.cwd(),
-    });
+    } as any);
 
     expect(res.status).toBe(1);
     expect(res.stderr).toContain('STAGING_DATABASE_URL environment variable is required');
