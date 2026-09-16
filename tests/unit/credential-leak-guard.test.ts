@@ -119,6 +119,7 @@ describe('2. Fail-Closed Subprocess Isolation Tests', () => {
     const spawnOptions: SpawnSyncOptionsWithStringEncoding = {
       encoding: 'utf8',
       env: {
+        NODE_ENV: 'test',
         PATH: process.env.PATH || '',
         SYSTEMROOT: process.env.SYSTEMROOT || '',
         // Point STAGING_APP_ORIGIN to an unreachable endpoint; if any network call occurred it would timeout/fail
@@ -142,6 +143,7 @@ describe('2. Fail-Closed Subprocess Isolation Tests', () => {
     const spawnOptions: SpawnSyncOptionsWithStringEncoding = {
       encoding: 'utf8',
       env: {
+        NODE_ENV: 'test',
         PATH: process.env.PATH || '',
         SYSTEMROOT: process.env.SYSTEMROOT || '',
         STAGING_URL: 'http://127.0.0.1:59999',
