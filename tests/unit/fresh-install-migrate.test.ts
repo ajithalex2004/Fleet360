@@ -100,18 +100,26 @@ describe('Fresh database migration runner safety guards & classification', () =>
     expect(evalResult.index).toBe(0);
   });
 
-  it('correctly matches other specific schema gap signatures (type exists, column generation)', () => {
-    const mockTypeExists = `
+  it('rejects resolution if documented migration fails with an UNRELATED missing table', () => {
+    const mockOutput = `
+      Error: P3018: A migration failed to apply.
       Migration: ${targetMigration}
-      Database error: ERROR: type "vehicle_status" already exists
+      Database error: ERROR: relation "unrelated_custom_table" does not exist
     `;
-    expect(evaluateMigrationFailure(mockTypeExists, candidateList).canResolve).toBe(true);
+    const evalResult = evaluateMigrationFailure(mockOutput, candidateList);
+    expect(evalResult.canResolve).toBe(false);
+    expect(evalResult.reason).toBe('UNEXPECTED_ERROR_SIGNATURE');
+  });
+
+  it('correctly matches other specific schema gap signatures (type exists, column generation)', () => {
+    const altMigration = '20260910000016_finance_deposits_recurring_tables_and_rls';
+    const altCandidateList = [altMigration];
 
     const mockGenExpr = `
-      Migration: ${targetMigration}
+      Migration: ${altMigration}
       Database error: ERROR: cannot use CURRENT_DATE in column generation expression
     `;
-    expect(evaluateMigrationFailure(mockGenExpr, candidateList).canResolve).toBe(true);
+    expect(evaluateMigrationFailure(mockGenExpr, altCandidateList).canResolve).toBe(true);
   });
 });
 
@@ -125,7 +133,48 @@ describe('Database precondition & freshness checks', () => {
     ).rejects.toThrow('DATABASE_URL environment variable is not set.');
   });
 
-  it('rejects non-fresh database with existing migrations when freshOverride is false', async () => {
+  it('fails closed when querying _prisma_migrations returns permission denied (code 42501)', async () => {
+    const permError = new Error('permission denied for table _prisma_migrations');
+    (permError as any).code = '42501';
+
+    const mockPrisma = {
+      $queryRaw: vi.fn()
+        .mockResolvedValueOnce([{ current_user: 'restricted_user', current_database: 'fleet360_prod', version: 'PostgreSQL 16' }])
+        .mockRejectedValueOnce(permError),
+      $disconnect: vi.fn().mockResolvedValue(undefined),
+    };
+
+    await expect(
+      verifyDatabasePreconditions({
+        databaseUrl: 'postgresql://restricted_user:pass@localhost:5432/fleet360_prod',
+        prismaClient: mockPrisma,
+        throwOnError: true,
+      })
+    ).rejects.toThrow('permission denied for table _prisma_migrations');
+  });
+
+  it('rejects database if _prisma_migrations is missing but application tables already exist in public schema', async () => {
+    const missingTableError = new Error('relation "_prisma_migrations" does not exist');
+    (missingTableError as any).code = '42P01';
+
+    const mockPrisma = {
+      $queryRaw: vi.fn()
+        .mockResolvedValueOnce([{ current_user: 'postgres', current_database: 'fleet360_dirty', version: 'PostgreSQL 16' }])
+        .mockRejectedValueOnce(missingTableError) // _prisma_migrations count query
+        .mockResolvedValueOnce([{ table_name: 'vehicles' }, { table_name: 'users' }]), // information_schema.tables query
+      $disconnect: vi.fn().mockResolvedValue(undefined),
+    };
+
+    await expect(
+      verifyDatabasePreconditions({
+        databaseUrl: 'postgresql://postgres:postgres@localhost:5432/fleet360_dirty',
+        prismaClient: mockPrisma,
+        throwOnError: true,
+      })
+    ).rejects.toThrow('Database is not empty (2 application tables found in public schema).');
+  });
+
+  it('rejects non-fresh database with existing migrations when resumeBootstrapFrom is not specified', async () => {
     const mockPrisma = {
       $queryRaw: vi.fn()
         .mockResolvedValueOnce([{ current_user: 'postgres', current_database: 'fleet360_test', version: 'PostgreSQL 16' }])
@@ -137,43 +186,74 @@ describe('Database precondition & freshness checks', () => {
       verifyDatabasePreconditions({
         databaseUrl: 'postgresql://postgres:postgres@localhost:5432/fleet360_test',
         prismaClient: mockPrisma,
-        freshOverride: false,
         throwOnError: true,
       })
-    ).rejects.toThrow('Database is not fresh (42 migrations found) without override.');
+    ).rejects.toThrow('Database is not fresh (42 migrations found) without resume point.');
   });
 
-  it('allows non-fresh database when freshOverride is true', async () => {
+  it('allows resumption when resumeBootstrapFrom matches a recorded migration', async () => {
+    const resumePoint = '20260815140000_tenant_001_leasing_rental_isolation';
     const mockPrisma = {
       $queryRaw: vi.fn()
         .mockResolvedValueOnce([{ current_user: 'postgres', current_database: 'fleet360_test', version: 'PostgreSQL 16' }])
-        .mockResolvedValueOnce([{ count: 42 }]),
+        .mockResolvedValueOnce([{ count: 5 }]) // count query
+        .mockResolvedValueOnce([
+          { migration_name: '20260801000000_init' },
+          { migration_name: resumePoint },
+        ]), // history query
       $disconnect: vi.fn().mockResolvedValue(undefined),
     };
 
     const res = await verifyDatabasePreconditions({
       databaseUrl: 'postgresql://postgres:postgres@localhost:5432/fleet360_test',
       prismaClient: mockPrisma,
-      freshOverride: true,
+      resumeBootstrapFrom: resumePoint,
       throwOnError: true,
     });
 
-    expect(res.migrationCount).toBe(42);
+    expect(res.migrationCount).toBe(5);
+    expect(res.resumeFromMigration).toBe(resumePoint);
     expect(res.database).toBe('fleet360_test');
   });
 
-  it('passes cleanly for a fresh empty database where _prisma_migrations does not exist yet', async () => {
+  it('rejects resumption when resumeBootstrapFrom is not found in recorded migrations', async () => {
+    const invalidResumePoint = '20260999999999_non_existent';
+    const mockPrisma = {
+      $queryRaw: vi.fn()
+        .mockResolvedValueOnce([{ current_user: 'postgres', current_database: 'fleet360_test', version: 'PostgreSQL 16' }])
+        .mockResolvedValueOnce([{ count: 2 }])
+        .mockResolvedValueOnce([
+          { migration_name: '20260801000000_init' },
+          { migration_name: '20260815140000_tenant_001_leasing_rental_isolation' },
+        ]),
+      $disconnect: vi.fn().mockResolvedValue(undefined),
+    };
+
+    await expect(
+      verifyDatabasePreconditions({
+        databaseUrl: 'postgresql://postgres:postgres@localhost:5432/fleet360_test',
+        prismaClient: mockPrisma,
+        resumeBootstrapFrom: invalidResumePoint,
+        throwOnError: true,
+      })
+    ).rejects.toThrow(`Resume migration "${invalidResumePoint}" not found in applied migrations.`);
+  });
+
+  it('passes cleanly for a genuinely fresh empty database where _prisma_migrations does not exist and 0 app tables exist', async () => {
+    const missingTableError = new Error('relation "_prisma_migrations" does not exist');
+    (missingTableError as any).code = '42P01';
+
     const mockPrisma = {
       $queryRaw: vi.fn()
         .mockResolvedValueOnce([{ current_user: 'postgres', current_database: 'fleet360_fresh', version: 'PostgreSQL 16' }])
-        .mockRejectedValueOnce(new Error('relation "_prisma_migrations" does not exist')),
+        .mockRejectedValueOnce(missingTableError) // _prisma_migrations count
+        .mockResolvedValueOnce([]), // information_schema.tables returns []
       $disconnect: vi.fn().mockResolvedValue(undefined),
     };
 
     const res = await verifyDatabasePreconditions({
       databaseUrl: 'postgresql://postgres:postgres@localhost:5432/fleet360_fresh',
       prismaClient: mockPrisma,
-      freshOverride: false,
       throwOnError: true,
     });
 

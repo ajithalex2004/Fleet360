@@ -34,6 +34,63 @@ const TSC_BIN = join(root, 'node_modules', 'typescript', 'bin', 'tsc');
 const DIAGNOSTIC_LINE_RE = /^(.+?)\((\d+,\d+)\): error (TS\d+): (.*)$/;
 const GLOBAL_ERROR_RE = /^error (TS\d+): (.*)$/;
 
+export function sortTypeProperties(content) {
+  const parts = [];
+  let paren = 0, bracket = 0, brace = 0, angle = 0;
+  let inSingle = false, inDouble = false;
+  let current = '';
+
+  for (let i = 0; i < content.length; i++) {
+    const ch = content[i];
+
+    if (ch === "'" && !inDouble) {
+      inSingle = !inSingle;
+      current += ch;
+      continue;
+    }
+    if (ch === '"' && !inSingle) {
+      inDouble = !inDouble;
+      current += ch;
+      continue;
+    }
+    if (inSingle || inDouble) {
+      current += ch;
+      continue;
+    }
+
+    if (ch === '(') paren++;
+    else if (ch === ')' && paren > 0) paren--;
+    else if (ch === '[') bracket++;
+    else if (ch === ']' && bracket > 0) bracket--;
+    else if (ch === '{') brace++;
+    else if (ch === '}' && brace > 0) brace--;
+    else if (ch === '<') angle++;
+    else if (ch === '>' && content[i - 1] !== '=' && angle > 0) angle--;
+    else if ((ch === ';' || ch === ',') && paren === 0 && bracket === 0 && brace === 0 && angle === 0) {
+      if (current.trim()) parts.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim()) parts.push(current.trim());
+
+  if (content.trim() === '...') {
+    return '...';
+  }
+
+  // Sort properties alphabetically; place '... N more ...' at the end
+  parts.sort((a, b) => {
+    const aMore = a.startsWith('...');
+    const bMore = b.startsWith('...');
+    if (aMore && !bMore) return 1;
+    if (!aMore && bMore) return -1;
+    return a.localeCompare(b);
+  });
+
+  return parts.length > 0 ? parts.join('; ') + ';' : '';
+}
+
 export function normalizeMessage(msg) {
   let s = msg.trim().replace(/\s+/g, ' ');
 
@@ -41,19 +98,47 @@ export function normalizeMessage(msg) {
   // e.g. "is missing the following properties from type 'Foo': "a", "b", and 2 more."
   s = s.replace(/is missing the following properties from type (.+?):.*$/, 'is missing properties from type $1');
 
-  // Collapse anonymous structural type literals {...} into {...} to avoid platform-dependent property ordering
-  while (/\{[^{}]*\}/.test(s)) {
-    s = s.replace(/\{[^{}]*\}/g, '{...}');
+  // Terminating bracket-aware normalization for structural type literals:
+  // Replaces innermost `{...}` with tokens to guarantee termination and sort properties deterministically
+  const tokens = [];
+  let maxPasses = 20;
+  while (/\{[^{}]*\}/.test(s) && maxPasses-- > 0) {
+    s = s.replace(/\{([^{}]*)\}/g, (_, inner) => {
+      const sorted = sortTypeProperties(inner);
+      const token = `__TYPE_TOKEN_${tokens.length}__`;
+      tokens.push(sorted ? (sorted === '...' ? '{...}' : `{ ${sorted} }`) : '{}');
+      return token;
+    });
+  }
+
+  // Restore tokens in reverse (outside-in)
+  for (let i = tokens.length - 1; i >= 0; i--) {
+    s = s.replaceAll(`__TYPE_TOKEN_${i}__`, tokens[i]);
   }
 
   return s;
+}
+
+export function isCompilerCrash(result) {
+  if (!result) return true;
+  if (result.signal) return true;
+  if (typeof result.exitCode === 'number' && result.exitCode > 128) return true;
+  if (result.exitCode !== 0 && result.exitCode !== 1 && result.exitCode !== 2) return true;
+  if (result.error && (result.error.code === 'ENOBUFS' || result.error.code === 'ETIMEDOUT')) return true;
+
+  const out = result.output || '';
+  if (/JavaScript heap out of memory/i.test(out)) return true;
+  if (/FATAL ERROR:/i.test(out)) return true;
+  if (/Internal compiler error/i.test(out)) return true;
+
+  return false;
 }
 
 export function runTsc(customRoot = root) {
   const bin = join(customRoot, 'node_modules', 'typescript', 'bin', 'tsc');
   if (!existsSync(bin)) {
     console.error(`✗ Error: TypeScript binary not found at ${bin}`);
-    return { exitCode: 1, output: `TypeScript binary not found at ${bin}` };
+    return { exitCode: 1, signal: null, output: `TypeScript binary not found at ${bin}`, error: new Error('Binary not found') };
   }
 
   try {
@@ -62,10 +147,15 @@ export function runTsc(customRoot = root) {
       encoding: 'utf8',
       maxBuffer: 64 * 1024 * 1024,
     });
-    return { exitCode: 0, output: out };
+    return { exitCode: 0, signal: null, output: out, error: null };
   } catch (err) {
     const combined = `${err.stdout || ''}\n${err.stderr || ''}`.trim();
-    return { exitCode: err.status ?? 1, output: combined };
+    return {
+      exitCode: err.status ?? (err.signal ? 128 : 1),
+      signal: err.signal ?? null,
+      output: combined,
+      error: err,
+    };
   }
 }
 
@@ -233,17 +323,34 @@ export function runRatchetGate(options = {}) {
   const baselinePath = options.baselinePath || BASELINE_PATH;
 
   console.log('Running `tsc --noEmit`… (analyzing project diagnostics)');
-  const { exitCode, output } = runTsc();
-  const { fileDiagnostics, globalErrors } = parseDiagnostics(output);
+  const tscResult = options.tscResult || runTsc();
+  const { exitCode, signal, output } = tscResult;
 
-  // Crash guard: if tsc exited non-zero but produced no diagnostics, it crashed or aborted
-  if (exitCode !== 0 && fileDiagnostics.size === 0 && globalErrors.length === 0) {
+  // Crash guard 1: abnormal exit, OOM, SIGKILL/SIGSEGV, or compiler crash
+  // Fails closed immediately, even if partial diagnostics were emitted before crash
+  if (isCompilerCrash(tscResult)) {
     console.error(
-      `\n✗ typecheck ratchet FAILED — TypeScript compiler exited with code ${exitCode} without recognizable diagnostics (compiler crash, OOM, or unparseable exit):\n`
+      `\n✗ typecheck ratchet FAILED — TypeScript compiler crashed or exited abnormally (code: ${exitCode}, signal: ${signal || 'none'}):\n`
     );
     console.error(output || '(no output produced)');
     if (options.throwOnError) {
-      throw new Error(`TypeScript compiler crashed or failed to execute (exit code ${exitCode})`);
+      throw new Error(
+        `TypeScript compiler crashed or terminated abnormally (code: ${exitCode}, signal: ${signal || 'none'})`
+      );
+    }
+    exit(1);
+  }
+
+  const { fileDiagnostics, globalErrors } = parseDiagnostics(output);
+
+  // Crash guard 2: non-zero exit code without recognizable diagnostics
+  if (exitCode !== 0 && fileDiagnostics.size === 0 && globalErrors.length === 0) {
+    console.error(
+      `\n✗ typecheck ratchet FAILED — TypeScript compiler exited with code ${exitCode} without recognizable diagnostics:\n`
+    );
+    console.error(output || '(no output produced)');
+    if (options.throwOnError) {
+      throw new Error(`TypeScript compiler exited with code ${exitCode} without recognizable diagnostics`);
     }
     exit(1);
   }

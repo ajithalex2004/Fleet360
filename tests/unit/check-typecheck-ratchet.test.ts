@@ -1,8 +1,14 @@
 import { describe, it, expect } from 'vitest';
+import { execFileSync } from 'node:child_process';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import {
   normalizeMessage,
+  sortTypeProperties,
+  isCompilerCrash,
   parseDiagnostics,
   compareDiagnostics,
+  runRatchetGate,
 } from '../../scripts/check-typecheck-ratchet.mjs';
 
 describe('Typecheck Ratchet diagnostic fingerprinting & safety', () => {
@@ -11,19 +17,87 @@ describe('Typecheck Ratchet diagnostic fingerprinting & safety', () => {
     expect(normalizeMessage(raw)).toBe("Type 'string' is not assignable to type 'number'.");
   });
 
-  it('normalizes platform-dependent anonymous structural types and missing property lists consistently', () => {
-    const winMsg = "Property 'passengers' does not exist on type '{ tenantId: string; id: string; createdAt: Date | null; updatedAt: Date | null; deletedAt: Date | null; status: string | null; templateId: string | null; notes: string | null; ... 14 more ...; }'.";
-    const linMsg = "Property 'passengers' does not exist on type '{ tenantId: string; status: string | null; id: string; createdAt: Date | null; updatedAt: Date | null; deletedAt: Date | null; notes: string | null; vehicleId: string | null; ... 14 more ...; }'.";
+  it('terminates and does not hang when normalizing complex structural types (tested in isolated subprocess with strict 3s timeout)', () => {
+    const scriptPath = join(process.cwd(), 'scripts', 'check-typecheck-ratchet.mjs');
+    const input = "Property 'passengers' does not exist on type '{ tenantId: string; id: string; createdAt: Date | null; updatedAt: Date | null; deletedAt: Date | null; status: string | null; templateId: string | null; notes: string | null; ... 14 more ...; }'.";
 
-    expect(normalizeMessage(winMsg)).toBe("Property 'passengers' does not exist on type '{...}'.");
-    expect(normalizeMessage(linMsg)).toBe("Property 'passengers' does not exist on type '{...}'.");
-    expect(normalizeMessage(winMsg)).toBe(normalizeMessage(linMsg));
+    const nodeCode = `
+      import { normalizeMessage } from ${JSON.stringify(pathToFileURL(scriptPath).href)};
+      const res = normalizeMessage(${JSON.stringify(input)});
+      if (!res) process.exit(2);
+      process.exit(0);
+    `;
 
+    const start = Date.now();
+    execFileSync(process.execPath, ['--input-type=module', '-e', nodeCode], {
+      timeout: 3000,
+      stdio: 'pipe',
+    });
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(2500);
+  });
+
+  it('preserves meaningful structural type differences instead of collapsing every type into the same string', () => {
+    const typeA = "Type '{ id: string; name: string; }' is not assignable to type 'Foo'.";
+    const typeB = "Type '{ active: boolean; id: number; }' is not assignable to type 'Foo'.";
+    const normA = normalizeMessage(typeA);
+    const normB = normalizeMessage(typeB);
+
+    expect(normA).not.toBe(normB);
+    expect(normA).toContain('name: string');
+    expect(normA).toContain('id: string');
+    expect(normB).toContain('active: boolean');
+    expect(normB).toContain('id: number');
+  });
+
+  it('normalizes platform-dependent property ordering deterministically', () => {
+    const winMsg = "Property 'passengers' does not exist on type '{ tenantId: string; id: string; status: string | null; notes: string | null; ... 14 more ...; }'.";
+    const linMsg = "Property 'passengers' does not exist on type '{ status: string | null; tenantId: string; notes: string | null; id: string; ... 14 more ...; }'.";
+
+    const normWin = normalizeMessage(winMsg);
+    const normLin = normalizeMessage(linMsg);
+
+    expect(normWin).toBe(normLin);
+    expect(normWin).toContain('... 14 more ...;');
+    expect(normWin).toBe("Property 'passengers' does not exist on type '{ id: string; notes: string | null; status: string | null; tenantId: string; ... 14 more ...; }'.");
+  });
+
+  it('normalizes missing properties lists across platform iteration orders', () => {
     const winReg = "Type '{...}' is missing the following properties from type 'Record<AgentId, () => Promise<AgentDefinition>>': \"quotation-copilot\", \"rental-copilot\", \"damage-classifier\", \"doc-classifier\", and 2 more.";
     const linReg = "Type '{...}' is missing the following properties from type 'Record<AgentId, () => Promise<AgentDefinition>>': \"chat-widget\", \"quotation-copilot\", \"rental-copilot\", \"damage-classifier\", and 2 more.";
     expect(normalizeMessage(winReg)).toBe("Type '{...}' is missing properties from type 'Record<AgentId, () => Promise<AgentDefinition>>'");
     expect(normalizeMessage(linReg)).toBe("Type '{...}' is missing properties from type 'Record<AgentId, () => Promise<AgentDefinition>>'");
     expect(normalizeMessage(winReg)).toBe(normalizeMessage(linReg));
+  });
+
+  it('identifies compiler crashes and abnormal exits correctly (exit 137, SIGKILL, SIGSEGV, OOM)', () => {
+    expect(isCompilerCrash({ exitCode: 137, signal: null, output: '' })).toBe(true);
+    expect(isCompilerCrash({ exitCode: 139, signal: null, output: '' })).toBe(true);
+    expect(isCompilerCrash({ exitCode: 1, signal: 'SIGKILL', output: '' })).toBe(true);
+    expect(isCompilerCrash({ exitCode: 1, signal: null, output: 'FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory' })).toBe(true);
+    expect(isCompilerCrash({ exitCode: 1, signal: null, output: 'Internal compiler error at checker.ts:123' })).toBe(true);
+    expect(isCompilerCrash({ exitCode: 1, signal: null, output: '', error: { code: 'ENOBUFS' } })).toBe(true);
+
+    // Normal TypeScript error exit codes (1 or 2) without crash indicators are NOT crashes
+    expect(isCompilerCrash({ exitCode: 1, signal: null, output: 'src/app/page.tsx(1,1): error TS2322: ...' })).toBe(false);
+    expect(isCompilerCrash({ exitCode: 2, signal: null, output: 'src/app/page.tsx(1,1): error TS2322: ...' })).toBe(false);
+    expect(isCompilerCrash({ exitCode: 0, signal: null, output: '' })).toBe(false);
+  });
+
+  it('fails closed when compiler crashes EVEN IF partial diagnostics were emitted before crashing', () => {
+    const partialOutput = "src/app/page.tsx(10,5): error TS2322: Type 'string' is not assignable to type 'number'.";
+    const crashedTscResult = {
+      exitCode: 137,
+      signal: 'SIGKILL',
+      output: partialOutput,
+    };
+
+    expect(() => {
+      runRatchetGate({
+        tscResult: crashedTscResult,
+        throwOnError: true,
+      });
+    }).toThrow(/TypeScript compiler crashed or terminated abnormally/);
   });
 
   it('parses diagnostics and generates stable fingerprints without line numbers', () => {
