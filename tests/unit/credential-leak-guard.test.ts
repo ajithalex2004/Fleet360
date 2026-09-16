@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { execSync, spawnSync } from 'child_process';
-import path from 'path';
-import { scanContent, inspectUrlTarget } from '@/../scripts/check-no-hardcoded-credentials.mjs';
+import { scanContent, inspectUrlTarget } from '../../scripts/check-no-hardcoded-credentials.mjs';
 
 describe('1. Static Credential Leak Guard (check-no-hardcoded-credentials.mjs)', () => {
   it('passes cleanly across all tracked files in repository', () => {
