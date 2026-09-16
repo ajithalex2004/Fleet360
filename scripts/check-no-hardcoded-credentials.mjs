@@ -3,114 +3,232 @@
  * scripts/check-no-hardcoded-credentials.mjs
  *
  * Contractual Static Analysis Guard:
- * Asserts that no hardcoded database credentials, Neon passwords (npg_*),
- * or production/staging connection strings with real credentials exist
- * in the repository code, tests, scripts, documentation, or workflows.
+ * Recursively asserts that no hardcoded database credentials, Neon tokens (npg_*),
+ * or remote database connection strings with embedded non-placeholder passwords
+ * exist anywhere in the tracked repository source, tests, scripts, or docs.
  *
- * Exit code 0 = Clean (no hard-coded credentials detected)
- * Exit code 1 = Hard-coded credential detected (CI blocking failure)
+ * Design Principles:
+ * - Structural detection: No actual secret values or passwords are stored in scanner rules.
+ * - Provider-agnostic: Rejects password-bearing PostgreSQL URLs on ANY remote host.
+ * - Strict placeholders: Only exact, approved dummy placeholders on local/example domains are permitted.
+ * - Safe reporting: Reports only file path, line number, and rule name (NEVER echoes lines or snippets).
+ * - Full repository coverage: Scans all tracked text files (via git ls-files when available) or full directory tree.
+ *
+ * Exit code 0 = Clean (no hardcoded credentials detected)
+ * Exit code 1 = Hardcoded credential detected (CI blocking failure)
  */
 
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 
-const SCAN_DIRS = ['src', 'scripts', 'tests', 'docs', '.github', 'prisma'];
-const SCAN_FILES = ['package.json', 'README.md', 'DEPLOYMENT_CHECKLIST.md'];
+// Exact approved placeholder passwords
+const APPROVED_PLACEHOLDER_PASSWORDS = new Set([
+  'password',
+  'pass',
+  'postgres',
+  'root',
+  'unset',
+  'test',
+  'dummy',
+  '',
+]);
 
-// Patterns indicating compromised or live credential patterns
-const FORBIDDEN_PATTERNS = [
-  {
-    name: 'Neon password token (npg_*)',
-    regex: /\bnpg_[A-Za-z0-9_]{8,}\b/,
-  },
-  {
-    name: 'Retired fleet360_app credential hash',
-    regex: /\b87f855bb8b0d868fc1b4d4f1038b283ae2895405ac563ec1\b/,
-  },
-  {
-    name: 'Live remote database connection URL with embedded password',
-    // Matches postgresql://user:pass@remote-host where host is not localhost/127.0.0.1 and pass is not a placeholder
-    regex: /postgres(?:ql)?:\/\/(?!unset:unset)(?!user:pass)(?!user:password)[A-Za-z0-9_]+:[^@\s/:]+@[A-Za-z0-9.-]+\.(?:neon\.tech|railway\.app|aws\.com|azure\.com)/,
-  },
-];
-
-const IGNORE_EXTENSIONS = new Set([
-  '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.woff', '.woff2', '.ttf', '.eot',
-  '.lock', '.map',
+// Approved placeholder hostnames
+const APPROVED_PLACEHOLDER_HOSTS = new Set([
+  'localhost',
+  '127.0.0.1',
+  '::1',
+  '[::1]',
+  'example.com',
+  'host',
+  'host:5432',
+  'host-pooler.region.aws.neon.tech',
+  'host.region.aws.neon.tech',
+  'ep-demo-pooler.ap-southeast-1.aws.neon.tech',
+  'ep-demo.ap-southeast-1.aws.neon.tech',
 ]);
 
 const IGNORE_DIRS = new Set([
-  'node_modules', '.next', '.git', 'dist', 'coverage', '.system_generated'
+  '.git',
+  '.claude',
+  '.audit-reports',
+  'node_modules',
+  '.next',
+  'dist',
+  'build',
+  'coverage',
+  '.system_generated',
+  'scratch',
+  'playwright-report',
+  'test-results',
 ]);
 
-function redactSnippet(str) {
-  return str.replace(/postgres(?:ql)?:\/\/[^@\s]+@/g, 'postgresql://[REDACTED]@')
-            .replace(/npg_[A-Za-z0-9_]+/g, 'npg_[REDACTED]');
-}
+const IGNORE_EXTENSIONS = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp',
+  '.woff', '.woff2', '.ttf', '.eot', '.otf',
+  '.pdf', '.docx', '.xlsx', '.zip', '.tar', '.gz',
+  '.lock', '.map', '.exe',
+]);
 
-function scanFile(filePath, violations) {
-  const ext = path.extname(filePath);
-  if (IGNORE_EXTENSIONS.has(ext)) return;
+// Regex to capture PostgreSQL connection URLs: postgres[ql]://[authority]
+const PG_URL_REGEX = /postgres(?:ql)?:\/\/([^/\s"';]+)/gi;
 
-  let content;
-  try {
-    content = fs.readFileSync(filePath, 'utf8');
-  } catch {
-    return;
+export function inspectUrlTarget(urlAuthority) {
+  // urlAuthority is: user:pass@hostname:port or just hostname:port
+  const atIndex = urlAuthority.indexOf('@');
+  if (atIndex === -1) {
+    // No user credentials embedded
+    return null;
   }
 
+  const userInfo = urlAuthority.slice(0, atIndex);
+  const hostPart = urlAuthority.slice(atIndex + 1).split('/')[0].toLowerCase();
+  const hostWithoutPort = hostPart.split(':')[0];
+
+  const colonIndex = userInfo.indexOf(':');
+  if (colonIndex === -1) {
+    // Only username, no password embedded
+    return null;
+  }
+
+  let rawPassword = userInfo.slice(colonIndex + 1);
+  try {
+    rawPassword = decodeURIComponent(rawPassword);
+  } catch {
+    // Keep raw if decoding fails
+  }
+
+  // Check if password matches an approved exact placeholder
+  const isApprovedPassword = APPROVED_PLACEHOLDER_PASSWORDS.has(rawPassword);
+  // Check if host matches an approved placeholder host
+  const isApprovedHost = APPROVED_PLACEHOLDER_HOSTS.has(hostPart) || APPROVED_PLACEHOLDER_HOSTS.has(hostWithoutPort);
+
+  if (isApprovedPassword && isApprovedHost) {
+    return null; // Valid placeholder combination
+  }
+
+  return {
+    isViolation: true,
+    rule: 'Hardcoded PostgreSQL connection credentials detected',
+  };
+}
+
+export function scanContent(content, relativePath) {
+  const violations = [];
   const lines = content.split(/\r?\n/);
+
   lines.forEach((line, idx) => {
-    for (const rule of FORBIDDEN_PATTERNS) {
-      if (rule.regex.test(line)) {
+    const lineNum = idx + 1;
+
+    // Rule 1: Standalone Neon token pattern (npg_*)
+    // Matches npg_ followed by alphanumeric characters (min 8 chars)
+    const npgMatches = line.match(/\bnpg_[A-Za-z0-9_]{6,}\b/g);
+    if (npgMatches) {
+      violations.push({
+        file: relativePath,
+        line: lineNum,
+        rule: 'Unredacted Neon credential token detected (npg_*)',
+      });
+    }
+
+    // Rule 2: PostgreSQL Connection URL analysis (provider-agnostic)
+    let match;
+    PG_URL_REGEX.lastIndex = 0;
+    while ((match = PG_URL_REGEX.exec(line)) !== null) {
+      const authority = match[1];
+      const check = inspectUrlTarget(authority);
+      if (check?.isViolation) {
         violations.push({
-          file: path.relative(process.cwd(), filePath).replace(/\\/g, '/'),
-          line: idx + 1,
-          rule: rule.name,
-          preview: redactSnippet(line.trim()),
+          file: relativePath,
+          line: lineNum,
+          rule: check.rule,
         });
       }
     }
   });
+
+  return violations;
 }
 
-function scanDir(dirPath, violations) {
-  if (!fs.existsSync(dirPath)) return;
-  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-
-  for (const entry of entries) {
-    if (IGNORE_DIRS.has(entry.name)) continue;
-    const fullPath = path.join(dirPath, entry.name);
-    if (entry.isDirectory()) {
-      scanDir(fullPath, violations);
-    } else if (entry.isFile()) {
-      scanFile(fullPath, violations);
+export function getTrackedFiles(rootDir) {
+  try {
+    const stdout = execSync('git ls-files', { cwd: rootDir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    return stdout
+      .split('\n')
+      .map(s => s.trim())
+      .filter(Boolean)
+      .filter(relPath => {
+        const ext = path.extname(relPath).toLowerCase();
+        if (IGNORE_EXTENSIONS.has(ext)) return false;
+        const parts = relPath.split('/');
+        return !parts.some(p => IGNORE_DIRS.has(p));
+      });
+  } catch {
+    // Fallback if git is not available: directory walk
+    const files = [];
+    function walk(currentDir) {
+      let entries;
+      try {
+        entries = fs.readdirSync(currentDir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const entry of entries) {
+        if (IGNORE_DIRS.has(entry.name)) continue;
+        const fullPath = path.join(currentDir, entry.name);
+        if (entry.isDirectory()) {
+          walk(fullPath);
+        } else if (entry.isFile()) {
+          const ext = path.extname(entry.name).toLowerCase();
+          if (IGNORE_EXTENSIONS.has(ext)) continue;
+          files.push(path.relative(rootDir, fullPath).replace(/\\/g, '/'));
+        }
+      }
     }
+    walk(rootDir);
+    return files;
   }
 }
 
-const violations = [];
+export function scanRepository(rootDir) {
+  const trackedFiles = getTrackedFiles(rootDir);
+  const violations = [];
 
-for (const dir of SCAN_DIRS) {
-  scanDir(path.resolve(dir), violations);
-}
+  for (const relPath of trackedFiles) {
+    if (relPath.endsWith('scripts/check-no-hardcoded-credentials.mjs')) continue;
 
-for (const file of SCAN_FILES) {
-  const filePath = path.resolve(file);
-  if (fs.existsSync(filePath)) {
-    scanFile(filePath, violations);
+    const fullPath = path.join(rootDir, relPath);
+    let content;
+    try {
+      content = fs.readFileSync(fullPath, 'utf8');
+    } catch {
+      continue;
+    }
+
+    const fileViolations = scanContent(content, relPath);
+    violations.push(...fileViolations);
   }
+
+  return violations;
 }
 
-if (violations.length > 0) {
-  console.error('\n❌ CRITICAL SECURITY ERROR: Hard-coded database credentials detected in repository!\n');
-  violations.forEach(v => {
-    console.error(`  - ${v.file}:${v.line} [${v.rule}]`);
-    console.error(`    Snippet: ${v.preview}`);
-  });
-  console.error('\nAll credentials must be supplied via environment variables. See docs/KNOWN_GAPS.md.\n');
-  process.exit(1);
-} else {
-  console.log('✅ Credential check passed: No hard-coded database credentials or tokens found.');
-  process.exit(0);
+// CLI Execution
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(import.meta.filename || '')) {
+  const rootDir = process.cwd();
+  const violations = scanRepository(rootDir);
+
+  if (violations.length > 0) {
+    console.error('\n❌ CRITICAL SECURITY ERROR: Hardcoded credentials or tokens detected in repository!\n');
+    violations.forEach(v => {
+      // Intentionally emit ONLY file, line, and rule name.
+      // NEVER emit line content or snippets to prevent second-order secret leakage in CI logs.
+      console.error(`  - ${v.file}:${v.line} [${v.rule}]`);
+    });
+    console.error('\nAll credentials must be supplied via environment variables. See docs/KNOWN_GAPS.md.\n');
+    process.exit(1);
+  } else {
+    console.log('✅ Credential check passed: No hardcoded database credentials or tokens found.');
+    process.exit(0);
+  }
 }

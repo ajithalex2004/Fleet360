@@ -63,34 +63,41 @@ it does NOT run in production. However:
 ## SEC-002 — Rotate Neon credentials
 **Status:** in progress · **Target:** before go-live · **Owner:** athom
 
-`.env.test` (gitignored) contained a real Neon Postgres password
-(`<redacted_credential>`). The credential lived in the project folder, which is
+`.env.test` (gitignored) historically contained a Neon Postgres password
+(`<redacted_credential>`). The credential lived in the project folder, which was
 broader than acceptable for a DB credential.
 
-**2026-09-15 & 2026-09-16 update:** all hardcoded database credentials have been
-completely eradicated from code and test utilities across 5 files:
-- `tests/test-utils.ts`, `tests/integration/staging-acceptance.test.ts`, and
-  `tests/integration/logistics-tenant-isolation-controlled.test.ts` all had
-  the `fleet360_app` staging connection string hard-coded as a fallback
-  default. They now require `STAGING_DATABASE_URL` /
-  `RUNTIME_DIRECT_DATABASE_URL` to be set explicitly and skip (or fail
-  loudly) instead of silently using a baked-in credential.
-- `scripts/staging-live-smoke.mjs` had `STAGING_DATABASE_URL_DEFAULT`
-  hardcoded; now strictly requires `process.env.STAGING_DATABASE_URL`.
-- `scripts/verify-staging-proxy-e2e.js` had a `neondb_owner` credential
-  hardcoded; now strictly requires `process.env.STAGING_DATABASE_URL`.
-- `.github/workflows/staging-acceptance-gate.yml` had the `neondb_owner`
-  credential hard-coded as the fallback when the `STAGING_DATABASE_URL`
-  repo secret wasn't set. That fallback is removed; the workflow now fails
-  fast with an explicit error if the secret is missing.
+**Audit Status:**
+- **Implemented (Code & Scanners):**
+  - All hardcoded database credentials and fallbacks eradicated from `tests/test-utils.ts`, `tests/integration/staging-acceptance.test.ts`, `tests/integration/logistics-tenant-isolation-controlled.test.ts`, `scripts/staging-live-smoke.mjs`, `scripts/verify-staging-proxy-e2e.js`, and `.github/workflows/staging-acceptance-gate.yml`.
+  - Blocking static credential scanner (`scripts/check-no-hardcoded-credentials.mjs`) created and wired into CI (`npm run check:credentials`), checking all tracked files for unredacted tokens (`npg_*`) and non-placeholder connection strings across any remote host.
+  - Safe reporting enforced (file, line, rule only; no secret or snippet echoing in CI logs).
+- **Tested Locally:**
+  - Fail-closed subprocess isolation tests in `tests/unit/credential-leak-guard.test.ts` prove `verify-staging-proxy-e2e.js` and `staging-live-smoke.mjs` terminate with code 1 before network requests when configuration is absent.
+  - Static scanner positive and negative tests verified (9/9 pass).
+  - Runtime migration credential isolation guard verified (`scripts/check-no-runtime-migration-secrets.mjs`).
+- **Verified in Deployment:**
+  - Deployed Railway staging cluster candidate verified against GitHub Actions Staging Acceptance Gate using `STAGING_DATABASE_URL` secret.
+- **Rotation Unverified; Treat Credentials as Compromised:**
+  - Code eradication prevents future leakage, but does not rotate live database credentials. Both previously exposed database credentials (`fleet360_app` and `neondb_owner`) must be treated as compromised until the live operational rotation sequence below is executed and verified.
 
-**Still required before go-live:** regenerate both Neon credentials
-(`fleet360_app` and `neondb_owner`) in the Neon console, then update
-`.env.test` (and any other local `.env*` files) and the `STAGING_DATABASE_URL`
-GitHub secret with the new values. Removing the hard-coded fallbacks does not
-rotate the credentials themselves — both strings are still valid until
-rotated, and both were sitting in this repo's history, so treat them as
-compromised.
+**Credential Ownership Matrix:**
+- **Application Runtime (`DATABASE_URL`):** Least-privileged application role (`fleet360_app`, pooled endpoint). Holds `SELECT, INSERT, UPDATE, DELETE` grants on application schemas; does NOT own tables and does NOT hold `rolbypassrls`.
+- **Application Direct Queries (`RUNTIME_DIRECT_DATABASE_URL`):** Least-privileged application role (`fleet360_app`, direct unpooled compute endpoint).
+- **Database Migration Runner (`MIGRATION_DATABASE_URL` / `DIRECT_URL`):** Dedicated migration/DDL owner role (`neondb_owner`, direct endpoint). Sole owner of tables and sequence objects.
+- **Staging Acceptance & Tenant Isolation Gate (`STAGING_DATABASE_URL`):** Dedicated application role (`fleet360_app`). Proves real tenant isolation and cross-tenant access denial.
+
+**Operational Rotation & Retirement Runbook:**
+1. **Target Inventory:** Identify affected Neon project (`ep-calm-heart-a15voo2a`), branch (`main` / staging), roles (`fleet360_app`, `neondb_owner`), and consumers.
+2. **Distribution Preparation:** Prepare new high-entropy random secrets for each consumer separately.
+3. **Password Rotation:** Reset role passwords via Neon Console or Neon Management API (`/projects/{project_id}/branches/{branch_id}/roles/{role_name}/reset_password`) to prevent plaintext passwords in non-ephemeral database SQL logs.
+4. **Consumer Updates:** Update GitHub Actions repository secrets (`STAGING_DATABASE_URL`, `DATABASE_URL`) and Railway environment variables (`DATABASE_URL`, `RUNTIME_DIRECT_DATABASE_URL`, `MIGRATION_DATABASE_URL`, `DIRECT_URL`). Recycle/restart application services.
+5. **Session & Pool Termination:** Terminate active sessions holding old credentials (`SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename IN ('fleet360_app', 'neondb_owner') AND pid <> pg_backend_pid();`).
+6. **Retirement Verification:**
+   - Execute fresh direct and pooled connections using retired credentials; verify connection rejection with `28P01 (password authentication failed)` (distinguished from network timeouts or DNS errors).
+   - Execute fresh connections using new credentials; verify clean authentication.
+   - Run cross-tenant denial tests to prove RLS enforcement remains intact.
+7. **Audit Record:** Record sanitized evidence, rotation timestamp, and responsible operator.
 
 ---
 

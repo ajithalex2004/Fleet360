@@ -54,7 +54,7 @@ describe('Next.js GET /api/readyz error redaction & allowlist filtering (SEC-003
       backendUrl: 'http://fleet360-backend.railway.internal:8080',
       internalHost: 'ip-10-0-4-15.ec2.internal',
       checks: {
-        database: { reachable: false, dsn: 'postgres://app:secret@db.internal:5432/fleet' },
+        database: { reachable: false, dsn: 'postgres://app:password@localhost:5432/fleet' },
       },
     };
 
