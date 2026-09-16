@@ -80,6 +80,18 @@ describe('Typecheck Ratchet diagnostic fingerprinting & safety', () => {
     expect(normalizeMessage(winReg)).toBe(normalizeMessage(linReg));
   });
 
+  it('normalizes string literal union types across platform compiler iteration orders', () => {
+    const u1 = 'Property reason does not exist on type { action?: "REJECT" | "APPLY" | undefined; }';
+    const u2 = 'Property reason does not exist on type { action?: "APPLY" | "REJECT" | undefined; }';
+    expect(normalizeMessage(u1)).toBe(normalizeMessage(u2));
+    expect(normalizeMessage(u1)).toBe('Property reason does not exist on type { action?: "APPLY" | "REJECT" | undefined; }');
+
+    const p1 = 'Type "INVOICE" | "WORK_ORDER" | "DRIVER" | "NONE" | "VEHICLE" | "PARTNER" is not assignable';
+    const p2 = 'Type "NONE" | "DRIVER" | "VEHICLE" | "INVOICE" | "WORK_ORDER" | "PARTNER" is not assignable';
+    expect(normalizeMessage(p1)).toBe(normalizeMessage(p2));
+    expect(normalizeMessage(p1)).toBe('Type "DRIVER" | "INVOICE" | "NONE" | "PARTNER" | "VEHICLE" | "WORK_ORDER" is not assignable');
+  });
+
   it('identifies compiler crashes and abnormal exits correctly (exit 137, SIGKILL, SIGSEGV, OOM)', () => {
     expect(isCompilerCrash({ exitCode: 137, signal: null, output: '' })).toBe(true);
     expect(isCompilerCrash({ exitCode: 139, signal: null, output: '' })).toBe(true);

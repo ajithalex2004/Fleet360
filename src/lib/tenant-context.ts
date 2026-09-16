@@ -282,7 +282,7 @@ export function requireAuthorizedTenant(
  * Strip tenant ownership fields from untrusted request bodies.
  * Tenant ownership must come from context, never from normal business input.
  */
-export function stripTenantOwnershipFields<T extends Record<string, unknown>>(
+export function stripTenantOwnershipFields<T extends object>(
   body: T,
 ): Omit<T, 'tenantId' | 'tenant_id'> {
   const { tenantId: _a, tenant_id: _b, ...rest } = body as T & {

@@ -112,6 +112,18 @@ export function normalizeMessage(msg) {
     s = s.replaceAll(`__TYPE_TOKEN_${i}__`, tokens[i]);
   }
 
+  // Sort string literal union members: "A" | "B" or 'A' | 'B' to eliminate non-deterministic union ordering
+  s = s.replace(/"[^"]+"(?:\s*\|\s*"[^"]+")+/g, (match) => {
+    const parts = match.split('|').map(p => p.trim());
+    parts.sort((a, b) => a.localeCompare(b));
+    return parts.join(' | ');
+  });
+  s = s.replace(/'[^']+'(?:\s*\|\s*'[^']+)+/g, (match) => {
+    const parts = match.split('|').map(p => p.trim());
+    parts.sort((a, b) => a.localeCompare(b));
+    return parts.join(' | ');
+  });
+
   return s;
 }
 
