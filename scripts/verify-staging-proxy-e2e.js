@@ -482,48 +482,78 @@ async function testFailClosedUnauthenticated() {
 }
 
 async function verifyCandidateBinding() {
-  const expectedSha = process.env.EXPECTED_CANDIDATE_SHA || '';
+  const expectedSha = (process.env.EXPECTED_CANDIDATE_SHA || '').trim().toLowerCase();
   if (!expectedSha) {
     console.log('  [Candidate Binding] No EXPECTED_CANDIDATE_SHA set; skipping SHA validation.');
     return;
   }
   console.log(`\nVerifying Deployed Cluster against Release Candidate SHA (${expectedSha})...`);
+
+  // 1. Verify frontend deployed release
   const healthRes = await fetch(`${STAGING_APP_ORIGIN}/api/health`);
   if (healthRes.status !== 200) {
     throw new Error(`Failed to query /api/health for candidate validation (status ${healthRes.status})`);
   }
   const health = await healthRes.json();
-  const deployedFrontendSha = health.release || '';
+  const deployedFrontendSha = (health.release || '').trim().toLowerCase();
   console.log(`  Frontend deployed release: ${deployedFrontendSha}`);
 
-  if (deployedFrontendSha && deployedFrontendSha !== 'unknown') {
-    const match = expectedSha.startsWith(deployedFrontendSha) || deployedFrontendSha.startsWith(expectedSha);
-    if (!match) {
-      throw new Error(`Release Candidate Mismatch: deployed frontend SHA (${deployedFrontendSha}) does not match expected candidate (${expectedSha})`);
-    }
-    console.log(`  Frontend candidate binding verified: matches ${expectedSha.slice(0, 8)}`);
+  if (!deployedFrontendSha || deployedFrontendSha === 'unknown') {
+    throw new Error('Fatal: Frontend deployment reported missing or unknown revision SHA');
   }
 
-  // Also verify backend candidate binding via /api/readyz
-  try {
-    const readyRes = await fetch(`${STAGING_APP_ORIGIN}/api/readyz`);
-    if (readyRes.status === 200) {
-      const readyData = await readyRes.json();
-      const deployedBackendSha = readyData.version || '';
-      console.log(`  Backend deployed readiness: status=${readyData.status}, version=${deployedBackendSha}`);
-      if (deployedBackendSha && deployedBackendSha !== 'unknown') {
-        const bMatch = expectedSha.startsWith(deployedBackendSha) || deployedBackendSha.startsWith(expectedSha);
-        if (!bMatch) {
-          throw new Error(`Release Candidate Mismatch: deployed backend SHA (${deployedBackendSha}) does not match expected candidate (${expectedSha})`);
-        }
-        console.log(`  Backend candidate binding verified: matches ${expectedSha.slice(0, 8)}`);
-      }
-    } else {
-      console.log(`  Backend /api/readyz probe returned status ${readyRes.status} (deployment in progress)`);
-    }
-  } catch (err) {
-    console.log(`  Note: /api/readyz probe not reachable yet on active staging frontend (${err.message})`);
+  const frontendMatches = (expectedSha.length >= 7 && deployedFrontendSha.startsWith(expectedSha)) ||
+                          (deployedFrontendSha.length >= 7 && expectedSha.startsWith(deployedFrontendSha));
+  if (!frontendMatches) {
+    throw new Error(
+      `Fatal: Release Candidate Mismatch on frontend: deployed SHA (${deployedFrontendSha}) does not match expected candidate (${expectedSha})`
+    );
   }
+  console.log(`  Frontend candidate binding verified: matches ${expectedSha.slice(0, 8)}`);
+
+  // 2. Verify backend deployed release via /api/readyz with bounded retries
+  const MAX_RETRIES = 5;
+  const RETRY_DELAY_MS = 2000;
+  let lastError = null;
+  let deployedBackendSha = '';
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const readyRes = await fetch(`${STAGING_APP_ORIGIN}/api/readyz`);
+      if (readyRes.status === 200) {
+        const readyData = await readyRes.json();
+        deployedBackendSha = (readyData.version || '').trim().toLowerCase();
+        console.log(`  Backend deployed readiness (attempt ${attempt}/${MAX_RETRIES}): status=${readyData.status}, version=${deployedBackendSha}`);
+
+        if (!deployedBackendSha || deployedBackendSha === 'unknown') {
+          throw new Error('Backend reported missing or unknown version SHA in readiness probe');
+        }
+
+        const backendMatches = (expectedSha.length >= 7 && deployedBackendSha.startsWith(expectedSha)) ||
+                               (deployedBackendSha.length >= 7 && expectedSha.startsWith(deployedBackendSha));
+        if (!backendMatches) {
+          throw new Error(
+            `Release Candidate Mismatch on backend: deployed SHA (${deployedBackendSha}) does not match expected candidate (${expectedSha})`
+          );
+        }
+
+        console.log(`  Backend candidate binding verified: matches ${expectedSha.slice(0, 8)}`);
+        return; // Successfully established both frontend and backend candidate binding
+      } else {
+        lastError = new Error(`Backend readiness probe returned HTTP ${readyRes.status}`);
+      }
+    } catch (err) {
+      lastError = err;
+    }
+
+    if (attempt < MAX_RETRIES) {
+      console.log(`  Backend binding attempt ${attempt}/${MAX_RETRIES} pending (${lastError.message}); retrying in ${RETRY_DELAY_MS}ms...`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+    }
+  }
+
+  // If retries are exhausted without successful verification, fail closed
+  throw new Error(`Fatal: Failed to establish backend candidate binding after ${MAX_RETRIES} attempts: ${lastError?.message}`);
 }
 
 async function main() {

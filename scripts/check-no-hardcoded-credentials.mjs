@@ -10,9 +10,11 @@
  * Design Principles:
  * - Structural detection: No actual secret values or passwords are stored in scanner rules.
  * - Provider-agnostic: Rejects password-bearing PostgreSQL URLs on ANY remote host.
+ * - Complete URI parsing: Inspects userinfo passwords, query-string passwords (?password=...), and IPv6 literals ([::1]).
  * - Strict placeholders: Only exact, approved dummy placeholders on local/example domains are permitted.
  * - Safe reporting: Reports only file path, line number, and rule name (NEVER echoes lines or snippets).
- * - Full repository coverage: Scans all tracked text files (via git ls-files when available) or full directory tree.
+ * - Full repository coverage: Scans all tracked text files via NUL-separated `git ls-files -z` (including scanner itself).
+ * - Fail on incomplete scans: Throws an error immediately if any tracked file fails to read.
  *
  * Exit code 0 = Clean (no hardcoded credentials detected)
  * Exit code 1 = Hardcoded credential detected (CI blocking failure)
@@ -23,7 +25,7 @@ import path from 'path';
 import { execSync } from 'child_process';
 
 // Exact approved placeholder passwords
-const APPROVED_PLACEHOLDER_PASSWORDS = new Set([
+export const APPROVED_PLACEHOLDER_PASSWORDS = new Set([
   'password',
   'pass',
   'postgres',
@@ -34,8 +36,8 @@ const APPROVED_PLACEHOLDER_PASSWORDS = new Set([
   '',
 ]);
 
-// Approved placeholder hostnames
-const APPROVED_PLACEHOLDER_HOSTS = new Set([
+// Approved placeholder hostnames (case-insensitive)
+export const APPROVED_PLACEHOLDER_HOSTS = new Set([
   'localhost',
   '127.0.0.1',
   '::1',
@@ -71,46 +73,74 @@ const IGNORE_EXTENSIONS = new Set([
   '.lock', '.map', '.exe',
 ]);
 
-// Regex to capture PostgreSQL connection URLs: postgres[ql]://[authority]
-const PG_URL_REGEX = /postgres(?:ql)?:\/\/([^/\s"';]+)/gi;
+// Regex to capture full PostgreSQL connection URI candidates
+const PG_URI_REGEX = /postgres(?:ql)?:\/\/[^\s"'`<>]+/gi;
 
-export function inspectUrlTarget(urlAuthority) {
-  // urlAuthority is: user:pass@hostname:port or just hostname:port
-  const atIndex = urlAuthority.indexOf('@');
-  if (atIndex === -1) {
-    // No user credentials embedded
-    return null;
+export function inspectPostgresUri(uriCandidate) {
+  let url;
+  let rawPassword = '';
+  let queryPassword = '';
+  let host = '';
+
+  try {
+    url = new URL(uriCandidate);
+    rawPassword = url.password;
+    queryPassword = url.searchParams.get('password') ||
+                    url.searchParams.get('pwd') ||
+                    url.searchParams.get('pass') || '';
+    host = url.hostname.toLowerCase();
+  } catch {
+    // Fallback manual parser for partial or template URLs
+    const withoutScheme = uriCandidate.replace(/^postgres(?:ql)?:\/\//i, '');
+    const [authorityAndPath, queryPart] = withoutScheme.split('?');
+    const authority = authorityAndPath.split('/')[0];
+
+    const atIndex = authority.lastIndexOf('@');
+    if (atIndex !== -1) {
+      const userInfo = authority.slice(0, atIndex);
+      host = authority.slice(atIndex + 1).toLowerCase();
+      const colonIndex = userInfo.indexOf(':');
+      if (colonIndex !== -1) {
+        rawPassword = userInfo.slice(colonIndex + 1);
+      }
+    } else {
+      host = authority.toLowerCase();
+    }
+
+    if (queryPart) {
+      const params = new URLSearchParams(queryPart);
+      queryPassword = params.get('password') || params.get('pwd') || params.get('pass') || '';
+    }
   }
 
-  const userInfo = urlAuthority.slice(0, atIndex);
-  const hostPart = urlAuthority.slice(atIndex + 1).split('/')[0].toLowerCase();
-  const hostWithoutPort = hostPart.split(':')[0];
+  // Normalize host: strip brackets from IPv6 literals and port if present
+  let normalizedHost = host.replace(/^\[|\]$/g, '').split(':')[0];
 
-  const colonIndex = userInfo.indexOf(':');
-  if (colonIndex === -1) {
-    // Only username, no password embedded
-    return null;
-  }
-
-  let rawPassword = userInfo.slice(colonIndex + 1);
+  // Decode passwords if URL-encoded
   try {
     rawPassword = decodeURIComponent(rawPassword);
-  } catch {
-    // Keep raw if decoding fails
+  } catch {}
+  try {
+    queryPassword = decodeURIComponent(queryPassword);
+  } catch {}
+
+  const hasPassword = Boolean(rawPassword || queryPassword);
+  if (!hasPassword) {
+    return null; // No embedded credentials
   }
 
-  // Check if password matches an approved exact placeholder
-  const isApprovedPassword = APPROVED_PLACEHOLDER_PASSWORDS.has(rawPassword);
-  // Check if host matches an approved placeholder host
-  const isApprovedHost = APPROVED_PLACEHOLDER_HOSTS.has(hostPart) || APPROVED_PLACEHOLDER_HOSTS.has(hostWithoutPort);
+  const effectivePassword = rawPassword || queryPassword;
+  const isApprovedPassword = APPROVED_PLACEHOLDER_PASSWORDS.has(effectivePassword);
+  const isApprovedHost = APPROVED_PLACEHOLDER_HOSTS.has(host) ||
+                         APPROVED_PLACEHOLDER_HOSTS.has(normalizedHost);
 
   if (isApprovedPassword && isApprovedHost) {
-    return null; // Valid placeholder combination
+    return null; // Valid reviewed placeholder combination
   }
 
   return {
     isViolation: true,
-    rule: 'Hardcoded PostgreSQL connection credentials detected',
+    rule: 'Hardcoded PostgreSQL connection credentials detected in URI',
   };
 }
 
@@ -122,7 +152,6 @@ export function scanContent(content, relativePath) {
     const lineNum = idx + 1;
 
     // Rule 1: Standalone Neon token pattern (npg_*)
-    // Matches npg_ followed by alphanumeric characters (min 8 chars)
     const npgMatches = line.match(/\bnpg_[A-Za-z0-9_]{6,}\b/g);
     if (npgMatches) {
       violations.push({
@@ -132,12 +161,12 @@ export function scanContent(content, relativePath) {
       });
     }
 
-    // Rule 2: PostgreSQL Connection URL analysis (provider-agnostic)
+    // Rule 2: Complete PostgreSQL connection URI analysis
     let match;
-    PG_URL_REGEX.lastIndex = 0;
-    while ((match = PG_URL_REGEX.exec(line)) !== null) {
-      const authority = match[1];
-      const check = inspectUrlTarget(authority);
+    PG_URI_REGEX.lastIndex = 0;
+    while ((match = PG_URI_REGEX.exec(line)) !== null) {
+      const candidateUri = match[0];
+      const check = inspectPostgresUri(candidateUri);
       if (check?.isViolation) {
         violations.push({
           file: relativePath,
@@ -153,9 +182,15 @@ export function scanContent(content, relativePath) {
 
 export function getTrackedFiles(rootDir) {
   try {
-    const stdout = execSync('git ls-files', { cwd: rootDir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    // NUL-separated git ls-files ensures robust filename handling across all platforms
+    const stdout = execSync('git ls-files -z', {
+      cwd: rootDir,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      maxBuffer: 64 * 1024 * 1024,
+    });
     return stdout
-      .split('\n')
+      .split('\0')
       .map(s => s.trim())
       .filter(Boolean)
       .filter(relPath => {
@@ -168,12 +203,7 @@ export function getTrackedFiles(rootDir) {
     // Fallback if git is not available: directory walk
     const files = [];
     function walk(currentDir) {
-      let entries;
-      try {
-        entries = fs.readdirSync(currentDir, { withFileTypes: true });
-      } catch {
-        return;
-      }
+      const entries = fs.readdirSync(currentDir, { withFileTypes: true });
       for (const entry of entries) {
         if (IGNORE_DIRS.has(entry.name)) continue;
         const fullPath = path.join(currentDir, entry.name);
@@ -196,14 +226,13 @@ export function scanRepository(rootDir) {
   const violations = [];
 
   for (const relPath of trackedFiles) {
-    if (relPath.endsWith('scripts/check-no-hardcoded-credentials.mjs')) continue;
-
     const fullPath = path.join(rootDir, relPath);
     let content;
     try {
       content = fs.readFileSync(fullPath, 'utf8');
-    } catch {
-      continue;
+    } catch (err) {
+      // Fail on incomplete scans: do NOT silently swallow file read failures
+      throw new Error(`Incomplete scan failure: unable to read tracked file "${relPath}": ${err.message}`);
     }
 
     const fileViolations = scanContent(content, relPath);
@@ -216,7 +245,13 @@ export function scanRepository(rootDir) {
 // CLI Execution
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(import.meta.filename || '')) {
   const rootDir = process.cwd();
-  const violations = scanRepository(rootDir);
+  let violations;
+  try {
+    violations = scanRepository(rootDir);
+  } catch (err) {
+    console.error(`\n❌ CRITICAL SCANNER ERROR: ${err.message}\n`);
+    process.exit(1);
+  }
 
   if (violations.length > 0) {
     console.error('\n❌ CRITICAL SECURITY ERROR: Hardcoded credentials or tokens detected in repository!\n');
