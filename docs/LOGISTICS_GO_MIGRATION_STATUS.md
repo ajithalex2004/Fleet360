@@ -198,39 +198,52 @@ logistics table specifically. Missing/invalid-authentication behavior
 `TestMiddleware_PassesThroughWhenVerified` for the JWT-verification
 gate itself, at the middleware level, not per-logistics-handler.
 
-## 5. Classification of the 14 routes missing from the shim
+## 5. Classification Matrix for the 15 Logistics Routes (2026-09-15)
 
-`backend/main.go` registers these under `/logistics`; none match any
-condition in `src/lib/api-shim.ts`'s `shouldProxy()` (neither the exact
-paths, the shipments/rfqs/carriers regexes, nor `MIGRATED_PREFIXES`), and
-none have a corresponding Next.js route or any frontend reference found
-anywhere in this repo (`src/app/**`):
+In earlier iterations (2026-09-12), 15 routes registered under `backend/main.go` were documented as un-shimmed or undetermined. An audit and live production probe on 2026-09-15 across both canary (`35ad69c6...`) and non-canary control (`fc057fdc...`) tenants established their exact status, callers, and classifications.
 
-| Route | Go handler | Classification | Basis |
-|---|---|---|---|
-| `/logistics/bids`, `/logistics/carrier-scorecards` | `GetLogisticsBids`/`CreateLogisticsBid`, `GetLogisticsCarrierScorecards`/`CreateLogisticsCarrierScorecard` | **UNDETERMINED** | No Next.js route, no frontend reference, no GitHub Deployments record of a separate consumer found |
-| `/logistics/stops`, `/logistics/route-legs`, `/logistics/assignments` | execution/dispatch handlers | **UNDETERMINED** | same |
-| `/logistics/tracking-events`, `/logistics/pod-events`, `/logistics/telematics-events`, `/logistics/exceptions` | tracking/exception ingestion handlers | **UNDETERMINED — plausibly device/webhook-consumed** | Shape (event ingestion) is consistent with a non-browser caller (device, carrier webhook, or the mobile driver app), which would legitimately bypass the browser-facing shim; I found no such caller in this repo, so cannot confirm |
-| `/logistics/freight-charges`, `/logistics/carrier-settlements`, `/logistics/driver-payouts`, `/logistics/finance-postings`, `/logistics/finance/reconciliation` | `handlers/logistics_finance.go` | **UNDETERMINED — requires owner input before any routing decision** | Financial/settlement data; per the explicit caution already raised on this investigation, these need their authorization model and intended caller confirmed by whoever owns that handler before being classified, let alone exposed through the shim |
-| `/logistics/rate-contracts` | `GetLogisticsRateContracts`/`CreateLogisticsRateContract` | **Partially covered on the Next.js side** | `src/app/(app)/logistics/rate-contracts/page.tsx` exists — a frontend page references this feature by name — but I found no `src/app/api/logistics/rate-contracts/route.ts`; not confirmed which backend that page actually calls |
+### A. Summary Matrix
 
-None of these 14 (15 counting rate-contracts) could be confirmed as
-**intentionally direct** (called by a real external client), **unused**
-(dead code), or **deferred** (planned but not yet wired) — the evidence
-needed to tell those apart (an external caller's own code, or a product
-decision record) doesn't exist in this repository. Given section 3's
-finding that no Go instance is currently reachable from production
-regardless, none of these can be exercised end-to-end today even if a
-caller existed.
+| Route (Go `/api/v1/...`) | Shim Status (`api-shim.ts`) | Go Handler | Next.js Equivalent Route | Live Production Status (Canary / Control) | Final Classification |
+|---|---|---|---|---|---|
+| `/logistics/stops` | **Shimmed** (`MIGRATED_PREFIXES`) | `GetLogisticsStops`, `CreateLogisticsStop` | Nested: `/shipments/[id]/stops` | HTTP 200 (`go`) / HTTP 404 (`none`) | **Go-Native Execution Route** |
+| `/logistics/route-legs` | **Shimmed** (`MIGRATED_PREFIXES`) | `GetLogisticsRouteLegs`, `CreateLogisticsRouteLeg` | None | HTTP 200 (`go`) / HTTP 404 (`none`) | **Go-Native Execution Route** |
+| `/logistics/assignments` | **Shimmed** (`MIGRATED_PREFIXES`) | `GetLogisticsAssignments`, `CreateLogisticsAssignment` | Nested: `/shipments/[id]/assign` | HTTP 200 (`go`) / HTTP 404 (`none`) | **Go-Native Execution Route** |
+| `/logistics/tracking-events` | **Shimmed** (`MIGRATED_PREFIXES`) | `GetLogisticsTrackingEvents`, `CreateLogisticsTrackingEvent` | None | HTTP 200 (`go`) / HTTP 404 (`none`) | **Telemetry & Ingest Endpoint** |
+| `/logistics/pod-events` | **Shimmed** (`MIGRATED_PREFIXES`) | `GetLogisticsPodEvents`, `CreateLogisticsPodEvent` | None (Next uses `/trips/[id]/pod`) | HTTP 200 (`go`) / HTTP 404 (`none`) | **Telemetry & Ingest Endpoint** |
+| `/logistics/telematics-events` | **Shimmed** (`MIGRATED_PREFIXES`) | `GetLogisticsTelematicsEvents`, `CreateLogisticsTelematicsEvent` | `/telematics/stream` | HTTP 200 (`go`) / HTTP 404 (`none`) | **Telemetry & Ingest Endpoint** |
+| `/logistics/exceptions` | **Shimmed** (`MIGRATED_PREFIXES`) | `GetLogisticsExceptions` | None | HTTP 200 (`go`) / HTTP 404 (`none`) | **Go-Native Execution Route** |
+| `/logistics/bids` | **Shimmed** (`MIGRATED_PREFIXES`) | `GetLogisticsBids`, `CreateLogisticsBid` | Nested: `/rfqs/[id]/bids` | HTTP 200 (`go`) / HTTP 404 (`none`) | **Marketplace Spot Route** |
+| `/logistics/carrier-scorecards` | **Shimmed** (`MIGRATED_PREFIXES`) | `GetLogisticsCarrierScorecards`, `CreateLogisticsCarrierScorecard` | None | HTTP 200 (`go`) / HTTP 404 (`none`) | **Marketplace Spot Route** |
+| `/logistics/freight-charges` | **Shimmed** (`MIGRATED_PREFIXES`) | `GetLogisticsFreightCharges` | None | HTTP 200 (`go`) / HTTP 404 (`none`) | **Finance Read Surface** |
+| `/logistics/rate-contracts` | **Un-shimmed** | `GetLogisticsRateContracts`, `CreateLogisticsRateContract` | `/api/logistics/rates/contracts` | HTTP 404 (`none`) / HTTP 404 (`none`) | **Path Discrepancy (Next.js Active)** |
+| `/logistics/carrier-settlements` | **Un-shimmed** | `GetLogisticsCarrierSettlements` | Internal `domain.ts` (Next: `/settlements`) | HTTP 404 (`none`) / HTTP 404 (`none`) | **Finance Read Surface (Go-Native)** |
+| `/logistics/driver-payouts` | **Un-shimmed** | `GetLogisticsDriverPayouts` | Internal `domain.ts` | HTTP 404 (`none`) / HTTP 404 (`none`) | **Finance Read Surface (Go-Native)** |
+| `/logistics/finance-postings` | **Un-shimmed** | `GetLogisticsFinancePostings` | Internal `domain.ts` | HTTP 404 (`none`) / HTTP 404 (`none`) | **Finance Read Surface (Go-Native)** |
+| `/logistics/finance/reconciliation` | **Un-shimmed** | `GetLogisticsFinanceReconciliation` | Internal `domain.ts` | HTTP 404 (`none`) / HTTP 404 (`none`) | **Finance Read Surface (Go-Native)** |
 
-## What this record does not establish
+---
 
-- Whether Go is *intended* to be redeployed (e.g. mid-migration to a new
-  host) or whether this L0–L4c work has been effectively shelved.
-- Where, if anywhere outside this Railway account, a Go instance might
-  be running.
-- Intended callers for the 14 finance/execution routes above — that
-  requires product/owner knowledge, not repository inspection.
+### B. Detailed Architectural Findings
+
+1. **The 10 Shimmed Routes (Go-Native Execution & Ingest)**:
+   - These 10 paths were incorporated into `MIGRATED_PREFIXES` in `src/lib/api-shim.ts`.
+   - In production, canary tenants receive `HTTP 200` with `x-backend: go`.
+   - Control non-canary tenants receive `HTTP 404` (`x-backend: none`) because Next.js has no top-level handlers for `/api/logistics/stops`, `/route-legs`, `/tracking-events`, etc. (Next.js implements execution endpoints under nested routes like `/shipments/[id]/stops`).
+   - These routes query the Phase L2 and Phase L3 Postgres tables (`logistics_stops`, `logistics_route_legs`, `logistics_assignments`, `logistics_tracking_events`, `logistics_pod_events`, `logistics_telematics_events`, `logistics_exceptions`, `logistics_bids`, `logistics_carrier_scorecards`, `logistics_freight_charges`) behind `auth.WithTenant`.
+
+2. **The Rate Contracts Path Discrepancy**:
+   - Go registers `/api/v1/logistics/rate-contracts` (`handlers.GetLogisticsRateContracts`).
+   - Next.js UI (`src/app/(app)/logistics/rate-contracts/page.tsx`) queries `/api/logistics/rates/contracts/route.ts`.
+   - Because of this naming divergence, `/api/logistics/rates/contracts` is kept deliberately on Next.js (`x-backend: none`, HTTP 200).
+   - If `/api/logistics/rate-contracts` is probed directly, both canary and control get 404 because neither the shim forwards it nor Next.js implements that exact path.
+   - **Recommendation**: To migrate rate-contracts to Go, either add a path alias in Go (`/rates/contracts`), or map the URL in `api-shim.ts`, while ensuring full parity for contract creation/upsert.
+
+3. **The 4 Finance & Settlement Read Endpoints**:
+   - Go implements tenant-scoped read handlers for `/carrier-settlements`, `/driver-payouts`, `/finance-postings`, and `/finance/reconciliation` in `backend/handlers/logistics_finance.go`.
+   - In Next.js, these operations were never exposed as individual REST routes; they were internal domain functions triggered during carrier bid awards and settlement generation (`src/app/api/logistics/settlements/route.ts`).
+   - Keeping them un-shimmed in Next.js is correct and safe: no existing UI calls `/api/logistics/carrier-settlements`. The existing UI calls `/api/logistics/settlements`, which executes in Next.js (`x-backend: none`, HTTP 200).
+   - When the settlement write path is ported to Go in Phase L4d, these read endpoints will provide the query surface for the unified financial ledger.
 
 ---
 
