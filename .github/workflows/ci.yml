@@ -131,16 +131,8 @@ jobs:
       # gaining a type error while the pre-existing KNOWN-TS-001 backlog in
       # scripts/typecheck-baseline.json is paid down incrementally. See
       # scripts/check-typecheck-ratchet.mjs for the full explanation.
-      #
-      # TODO: scripts/typecheck-baseline.json was seeded from a snapshot
-      # already in this repo (tsc-errors.txt), not a fresh `tsc --noEmit`
-      # run — that run didn't finish in the environment that created this
-      # baseline. Run `node scripts/check-typecheck-ratchet.mjs
-      # --update-baseline` once, review the diff, commit it, then remove
-      # this step's `continue-on-error: true` so it actually blocks.
       - name: Typecheck ratchet (blocks new errors only)
         run: node scripts/check-typecheck-ratchet.mjs
-        continue-on-error: true
 
       - name: Security & Session Key Hardening Gate (Blocking)
         run: npx vitest run tests/unit/session-secret.test.ts

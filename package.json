@@ -18,6 +18,7 @@
         "start": "next start",
         "lint": "next lint",
         "typecheck": "tsc --noEmit",
+        "typecheck:ratchet": "node scripts/check-typecheck-ratchet.mjs",
         "typecheck:finance": "tsc -p tsconfig.finance.json --noEmit",
         "setup-hooks": "git config core.hooksPath scripts/githooks",
         "dev:clean": "node scripts/clean-next-dev.mjs && npm run dev",
