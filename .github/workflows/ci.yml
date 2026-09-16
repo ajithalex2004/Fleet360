@@ -134,8 +134,14 @@ jobs:
       - name: Typecheck ratchet (blocks new errors only)
         run: node scripts/check-typecheck-ratchet.mjs
 
+      - name: Credential Leak Guard (Blocking)
+        run: npm run check:credentials
+
+      - name: Runtime Migration Secret Isolation Guard (Blocking)
+        run: node scripts/check-no-runtime-migration-secrets.mjs
+
       - name: Security & Session Key Hardening Gate (Blocking)
-        run: npx vitest run tests/unit/session-secret.test.ts
+        run: npx vitest run tests/unit/session-secret.test.ts tests/unit/credential-leak-guard.test.ts
 
       - name: Unit tests
         run: npm run test:unit

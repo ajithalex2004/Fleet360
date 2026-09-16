@@ -64,7 +64,7 @@ it does NOT run in production. However:
 **Status:** in progress · **Target:** before go-live · **Owner:** athom
 
 `.env.test` (gitignored) contained a real Neon Postgres password
-(`npg_7ndW...`). The credential lived in the project folder, which is
+(`<redacted_credential>`). The credential lived in the project folder, which is
 broader than acceptable for a DB credential.
 
 **2026-09-15 & 2026-09-16 update:** all hardcoded database credentials have been

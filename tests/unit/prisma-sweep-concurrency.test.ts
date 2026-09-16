@@ -50,7 +50,7 @@ import {
   runSweep,
 } from '@/lib/prisma-sweep';
 
-const DIRECT = 'postgresql://u:p@ep-demo.ap-southeast-1.aws.neon.tech/neondb';
+const DIRECT = 'postgresql://user:pass@ep-demo.ap-southeast-1.aws.neon.tech/neondb';
 
 describe('sweep concurrency cap', () => {
   const originalEnv = { ...process.env };
