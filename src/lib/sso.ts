@@ -15,33 +15,75 @@ import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { requireSsoEncryptionSecret } from '@/lib/session-secret';
 
-// ── Secret encryption ────────────────────────────────────────────────────────
+// ── Secret encryption & lifecycle ───────────────────────────────────────────
 
 /**
  * Derive a 32-byte AES key from the configured secret.
- * Production deployments should set SSO_ENCRYPTION_KEY explicitly.
+ * Production deployments require SSO_ENCRYPTION_KEY explicitly.
  */
-function getKey(): Buffer {
-  return crypto.createHash('sha256').update(requireSsoEncryptionSecret()).digest();
+function getKey(customSecret?: string): Buffer {
+  const s = customSecret ?? requireSsoEncryptionSecret();
+  return crypto.createHash('sha256').update(s).digest();
 }
 
-/** Returns base64(iv | authTag | ciphertext). */
-export function encryptSecret(plaintext: string): string {
+/**
+ * Encrypts plaintext with the active key, producing versioned ciphertext: 'v1:<base64>'
+ * Payload structure inside base64: IV (12 bytes) | AuthTag (16 bytes) | Ciphertext
+ */
+export function encryptSecret(plaintext: string, customKey?: string): string {
   const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', getKey(), iv);
+  const cipher = crypto.createCipheriv('aes-256-gcm', getKey(customKey), iv);
   const ct = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();
-  return Buffer.concat([iv, tag, ct]).toString('base64');
+  const raw = Buffer.concat([iv, tag, ct]).toString('base64');
+  return `v1:${raw}`;
 }
 
-export function decryptSecret(stored: string): string {
-  const buf = Buffer.from(stored, 'base64');
+/**
+ * Decrypts ciphertext (supporting versioned 'v1:' and legacy unversioned 'v0').
+ * Falls back to SSO_PREVIOUS_ENCRYPTION_KEY or options.previousKey if active key fails.
+ */
+export function decryptSecret(stored: string, options?: { activeKey?: string; previousKey?: string }): string {
+  if (!stored) throw new Error('Cannot decrypt empty ciphertext');
+
+  const rawBase64 = stored.startsWith('v1:') ? stored.slice(3) : stored;
+  const buf = Buffer.from(rawBase64, 'base64');
+  if (buf.length < 28) {
+    throw new Error('Malformed ciphertext payload (insufficient length for IV + AuthTag).');
+  }
+
   const iv  = buf.subarray(0, 12);
   const tag = buf.subarray(12, 28);
   const ct  = buf.subarray(28);
-  const decipher = crypto.createDecipheriv('aes-256-gcm', getKey(), iv);
-  decipher.setAuthTag(tag);
-  return Buffer.concat([decipher.update(ct), decipher.final()]).toString('utf8');
+
+  // 1. Try active key
+  try {
+    const decipher = crypto.createDecipheriv('aes-256-gcm', getKey(options?.activeKey), iv);
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(ct), decipher.final()]).toString('utf8');
+  } catch {
+    // 2. If active key fails, check for an authorized previous key during controlled rotation
+    const previousSecret = options?.previousKey || process.env.SSO_PREVIOUS_ENCRYPTION_KEY;
+    if (previousSecret) {
+      try {
+        const fallbackDecipher = crypto.createDecipheriv('aes-256-gcm', getKey(previousSecret), iv);
+        fallbackDecipher.setAuthTag(tag);
+        return Buffer.concat([fallbackDecipher.update(ct), fallbackDecipher.final()]).toString('utf8');
+      } catch {
+        // Fall through to throw standard decryption error
+      }
+    }
+    throw new Error('Failed to decrypt SSO client secret: key mismatch or corrupted ciphertext.');
+  }
+}
+
+/**
+ * Migration helper: Re-encrypts existing stored ciphertext under the active key.
+ * Safely migrates legacy v0 unversioned or previous-key ciphertext to active v1 ciphertext.
+ */
+export function reencryptSecret(stored: string, activeKey?: string, previousKey?: string): string {
+  const plaintext = decryptSecret(stored, { activeKey, previousKey });
+  return encryptSecret(plaintext, activeKey);
 }
 
 // ── Config lookup ────────────────────────────────────────────────────────────

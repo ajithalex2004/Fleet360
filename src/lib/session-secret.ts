@@ -41,36 +41,41 @@ export function validateSecret(name: string, rawValue: string | undefined | null
     );
   }
 
-  const trimmed = rawValue.trim();
-  if (!trimmed) {
+  if (rawValue.trim().length === 0) {
     throw new Error(
       `${name} cannot be empty or whitespace only. Set a cryptographically random secret of at least ${MIN_SECRET_LENGTH} characters.`
     );
   }
 
-  if (trimmed.length < MIN_SECRET_LENGTH) {
+  if (rawValue !== rawValue.trim()) {
     throw new Error(
-      `${name} must be at least ${MIN_SECRET_LENGTH} characters (got ${trimmed.length}).`
+      `${name} contains leading or trailing whitespace. Remove surrounding whitespace from configuration rather than relying on silent trimming.`
     );
   }
 
-  const lower = trimmed.toLowerCase();
+  if (rawValue.length < MIN_SECRET_LENGTH) {
+    throw new Error(
+      `${name} must be at least ${MIN_SECRET_LENGTH} characters (got ${rawValue.length}).`
+    );
+  }
+
+  const lower = rawValue.toLowerCase();
   for (const banned of BANNED_SUBSTRINGS) {
     if (lower.includes(banned)) {
       throw new Error(
-        `${name} contains forbidden insecure placeholder pattern "${banned}". Generate a fresh high-entropy random secret.`
+        `${name} contains a forbidden insecure placeholder pattern. Generate a fresh high-entropy random secret.`
       );
     }
   }
 
-  const distinctChars = new Set(trimmed).size;
+  const distinctChars = new Set(rawValue).size;
   if (distinctChars < 6) {
     throw new Error(
       `${name} has insufficient entropy (only ${distinctChars} distinct characters). Generate a cryptographically random secret.`
     );
   }
 
-  return trimmed;
+  return rawValue;
 }
 
 /**
@@ -92,8 +97,9 @@ export function requireSessionSecret(): string {
  * Returns the key used to encrypt SSO client secrets at rest.
  *
  * Dedicated key (SSO_ENCRYPTION_KEY) is validated with the same strict criteria.
- * If unset, falls back to SESSION_SECRET with an operational warning in production,
- * documenting that rotating SESSION_SECRET will decouple existing encrypted SSO credentials unless re-encrypted.
+ * In production (NODE_ENV === 'production'), a dedicated SSO_ENCRYPTION_KEY is strictly
+ * mandatory — falling back to SESSION_SECRET is prohibited to prevent key-lifecycle coupling.
+ * In non-production environments, falls back to SESSION_SECRET with an operational warning.
  */
 export function requireSsoEncryptionSecret(): string {
   const dedicated = process.env.SSO_ENCRYPTION_KEY;
@@ -101,7 +107,14 @@ export function requireSsoEncryptionSecret(): string {
     return validateSecret('SSO_ENCRYPTION_KEY', dedicated);
   }
 
-  if (process.env.NODE_ENV === 'production' && !warnedSsoCoupling) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'SSO_ENCRYPTION_KEY is mandatory in production for at-rest credential encryption separation. ' +
+        'Falling back to SESSION_SECRET is prohibited.'
+    );
+  }
+
+  if (!warnedSsoCoupling) {
     console.warn(
       '[security] SSO_ENCRYPTION_KEY is unset; falling back to SESSION_SECRET for at-rest encryption. ' +
         'Warning: rotating SESSION_SECRET will decouple existing encrypted SSO credentials unless re-encrypted.'
