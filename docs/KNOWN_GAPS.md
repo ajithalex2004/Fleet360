@@ -61,15 +61,169 @@ it does NOT run in production. However:
 ---
 
 ## SEC-002 — Rotate Neon credentials
-**Status:** acknowledged · **Target:** before go-live · **Owner:** athom
+**Status:** in progress · **Target:** before go-live · **Owner:** athom
 
 `.env.test` (gitignored) contains a real Neon Postgres password
 (`npg_7ndWFKRYEOt6`). The credential has lived in the OneDrive-synced project
 folder for 4+ months, which is not the same threat model as plain text on the
 network but is broader than acceptable for a production DB credential.
 
-Before STS go-live, regenerate the Neon database credentials and update
-`.env.test` (and any other `.env*` files) with the new value.
+**2026-09-15 update:** the same class of exposure was also committed to
+source (not just the gitignored `.env.test`), in three places, and has been
+removed:
+- `tests/test-utils.ts`, `tests/integration/staging-acceptance.test.ts`, and
+  `tests/integration/logistics-tenant-isolation-controlled.test.ts` all had
+  the `fleet360_app` staging connection string hard-coded as a fallback
+  default. They now require `STAGING_DATABASE_URL` /
+  `RUNTIME_DIRECT_DATABASE_URL` to be set explicitly and skip (or fail
+  loudly) instead of silently using a baked-in credential.
+- `.github/workflows/staging-acceptance-gate.yml` had a *second*, more
+  privileged credential (`neondb_owner`) hard-coded as the fallback when the
+  `STAGING_DATABASE_URL` repo secret wasn't set. That fallback is removed;
+  the workflow now fails fast with a clear error if the secret is missing.
+
+**Still required before go-live:** regenerate both Neon credentials
+(`fleet360_app` and `neondb_owner`) in the Neon console, then update
+`.env.test` (and any other local `.env*` files) and the `STAGING_DATABASE_URL`
+GitHub secret with the new values. Removing the hard-coded fallbacks does not
+rotate the credentials themselves — both strings are still valid until
+rotated, and both were sitting in this repo's history, so treat them as
+compromised.
+
+---
+
+## SEC-003 — Health/readiness endpoints leaked internals; operator debug route was open
+**Status:** in progress · **Target:** before go-live · **Owner:** athom
+
+**2026-09-15:** `/api/health` (Next.js) and `/readyz` (Go) returned raw
+error text to any unauthenticated caller — including, in some failure
+modes, the internal Go backend hostname (`*.railway.internal`) and raw
+Postgres driver errors. Fixed:
+- `src/app/api/health/route.ts`: db/backend errors are now logged
+  server-side (`console.error`) only; the JSON response returns a generic
+  status string. Also removed a dead, unused `requireAuthorizedTenant`
+  import that made the file look gated when it isn't.
+- `backend/handlers/health.go` (`/readyz`): same treatment — DB and
+  phasegate errors are now logged via `zap` instead of echoed in the
+  response. `pingDB` no longer relies solely on the inbound request's
+  context for its timeout (it may carry none); it now has an explicit
+  2s `context.WithTimeout`.
+- `/debug/phasegate`'s own comment said it should be "operator-only" and
+  "restrict[ed] via IP allowlist in production," but no restriction was
+  actually implemented anywhere. Added an opt-in gate: if
+  `PHASEGATE_DEBUG_TOKEN` is set, the endpoint requires a matching
+  `X-Debug-Token` header (constant-time compare) and 404s otherwise.
+
+**Still required before go-live:** `PHASEGATE_DEBUG_TOKEN` is unset by
+default, so `/debug/phasegate` is still open until someone sets it as a
+Railway env var (and shares the token with on-call only). An IP
+allowlist at the Railway/proxy level, if preferred over a shared token,
+is an infra decision outside what this fix could make.
+
+---
+
+## SEC-004 — Development-secret authentication bypass (P0.1)
+**Status:** ✅ Closed based on supplied production evidence · **Target:** v1.0 · **Owner:** core / sec
+
+The legacy codebase historically permitted session signature verification using a fallback
+hardcoded development secret (`xl-mobility-dev-secret-change-in-production`). An attacker
+could forge valid administrative sessions (`role: 'SUPER_ADMIN'`) for any tenant.
+
+**Remediation & Hardening Implemented (Commit `f5c6a033`):**
+- Centralized fail-closed validation in [`src/lib/session-secret.ts`](../src/lib/session-secret.ts).
+  Removed all fallback secrets from `tenant-session.ts`, `sso-state.ts`, and `sso.ts`.
+- Rejects leading/trailing whitespace without silent `.trim()` mutation.
+- Enforces minimum 32 chars and entropy checks; bans known dummy placeholders.
+- Dedicated 25-vector regression suite in `tests/unit/session-secret.test.ts` wired as a blocking
+  step in `.github/workflows/ci.yml`.
+
+**Production Closure Evidence (Verified 2026-09-16 on Railway Production):**
+- **Running Deployments:** `fleet360-app` (`13624d58`), `fleet360-backend` (`c3a7f807`) running commit `f5c6a033`.
+- **Target Endpoint:** `https://fleet360-app-production.up.railway.app/api/logistics/shipments`.
+- **Paired Probe 1 (Old Dev Secret):** Well-formed, unexpired (+24h) `SUPER_ADMIN` session cookie signed
+  with `xl-mobility-dev-secret-change-in-production` $\to$ **`HTTP 401 Unauthorized {"error":"Unauthorized","message":"Valid session required"}`**.
+- **Paired Probe 2 (Legitimate Secret):** Well-formed session cookie signed with production secret $\to$ **`HTTP 200 OK`** (live shipments returned).
+
+---
+
+## SEC-005 — SSO Client Secret Encryption Migration & Key Retirement Lifecycle
+**Status:** open · **Target:** v1.1 / post-cutover · **Owner:** sec / ops
+
+SSO client secrets stored in `tenant_sso_configs` are protected via AES-256-GCM.
+Hardening in commit `f5c6a033` introduced versioned ciphertext (`v1:<base64-payload>`),
+legacy `v0` transparent backward compatibility, and dual-key rotation via
+`SSO_PREVIOUS_ENCRYPTION_KEY` with a `reencryptSecret()` batch helper.
+
+**Current Inventory & Baseline (Verified 2026-09-16):**
+- Staging `tenant_sso_configs` row count: `0`
+- Production `tenant_sso_configs` row count: `0`
+- Dedicated 64-hex-char `SSO_ENCRYPTION_KEY` provisioned and enforced in production.
+
+**Remaining Tracked Lifecycle Tasks:**
+1. Maintain record count audit once enterprise SSO tenants are onboarded.
+2. Execute batch `reencryptSecret()` migration for any restored `v0` legacy ciphertexts.
+3. Validate successful decrypt reads after retiring `SSO_PREVIOUS_ENCRYPTION_KEY`.
+4. Perform and document formal backup recovery drill with key rotation.
+
+---
+
+## DEP-001 — Dependency vulnerability triage (npm audit)
+**Status:** open · **Target:** before go-live · **Owner:** athom
+
+**2026-09-15 assessment** (`npm audit --omit=dev`): 35 findings (2
+critical, 5 high, 27 moderate, 1 low).
+
+Safe, non-breaking fixes available via plain `npm audit fix` (no
+`--force`, no parent major bump):
+- **fast-xml-parser** (critical — DoS via entity expansion, transitive
+  via `@aws-sdk/xml-builder`)
+- **form-data** (critical — unsafe boundary RNG / CRLF injection)
+- **lodash**, **lodash-es** (high — prototype pollution / code
+  injection via `_.template`)
+- **nanoid** (high — can loop indefinitely on size 0 / negative size)
+
+Fixes that require `--force` and a breaking parent bump (need real
+regression testing before applying, not something to run unattended):
+- **nodemailer** (high, multiple SMTP/CRLF injection advisories) →
+  would bump to `nodemailer@10.0.10`
+- **postcss** (high, source-map path traversal / XSS), transitive via
+  `next` → would bump to `next@16.3.5` (Next.js 15 → 16 major)
+- **prismjs** (moderate, DOM clobbering), transitive via
+  `react-syntax-highlighter` → `@crayonai/react-ui` → would bump
+  `@crayonai/react-ui` to `0.7.0`
+
+**Blocked locally:** `npm audit fix` and even a plain `npm install`
+currently fail on this machine with `ENOTEMPTY` renaming
+`node_modules/ajv` — there's a stray `node_modules/.ajv-hWqV46Qm`
+backup directory (dated 2026-08-20, predates today's session) left over
+from some earlier interrupted install, and it's blocking npm's normal
+package-swap rename for *any* dependency change. Fix: delete
+`node_modules/.ajv-hWqV46Qm` (safe — node_modules is disposable/
+gitignored) and re-run `npm install`, then `npm audit fix` for the four
+safe items above. Not something this session could do: it needs delete
+access inside this folder, which was intentionally not granted this
+session.
+
+---
+
+## RUNTIME-001 — Edge Runtime `process.version` warning (Upstash)
+**Status:** accepted · **Target:** n/a (upstream) · **Owner:** athom
+
+`src/middleware.ts` runs in the Edge runtime (default for Next.js
+middleware) and imports `getRateLimiter` (`src/lib/rate-limit-scope.ts`),
+which pulls in `@upstash/ratelimit` / `@upstash/redis`. Those packages
+reference `process.version` internally, which Next.js flags at build
+time as a Node.js API used in Edge-bound code.
+
+**2026-09-15:** confirmed this repo is already on the latest available
+versions (`@upstash/ratelimit@2.1.0`, `@upstash/redis@1.38.4` vs.
+`^2.0.8` / `^1.38.2` pinned) — this is a known, current upstream
+limitation in how those SDKs are bundled for the Edge runtime, not a
+version-lag issue and not something fixable from Fleet360's own source.
+It's a build-time warning, not a runtime failure; Vercel's Edge runtime
+tolerates the reference in practice. No code change made. Revisit only
+if Upstash ships a fix upstream, or if this ever surfaces as an actual
+runtime error rather than a build warning.
 
 ---
 
