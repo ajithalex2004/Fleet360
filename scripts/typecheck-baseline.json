@@ -4835,11 +4835,11 @@
       }
     },
     "src/app/api/logistics/rfqs/[id]/broadcast/route.ts": {
-      "total": 8,
+      "total": 9,
       "codes": {
         "TS2307": 1,
         "TS2345": 1,
-        "TS2322": 6
+        "TS2322": 7
       }
     },
     "src/app/api/logistics/rfqs/[id]/invites/route.ts": {
@@ -5266,12 +5266,12 @@
       }
     },
     "src/app/api/push/subscribe/route.ts": {
-      "total": 16,
+      "total": 17,
       "codes": {
         "TS2307": 1,
         "TS2345": 1,
         "TS2339": 12,
-        "TS2322": 2
+        "TS2322": 3
       }
     },
     "src/app/api/push/test/route.ts": {
