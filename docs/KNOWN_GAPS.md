@@ -63,24 +63,26 @@ it does NOT run in production. However:
 ## SEC-002 — Rotate Neon credentials
 **Status:** in progress · **Target:** before go-live · **Owner:** athom
 
-`.env.test` (gitignored) contains a real Neon Postgres password
-(`npg_7ndWFKRYEOt6`). The credential has lived in the OneDrive-synced project
-folder for 4+ months, which is not the same threat model as plain text on the
-network but is broader than acceptable for a production DB credential.
+`.env.test` (gitignored) contained a real Neon Postgres password
+(`npg_7ndW...`). The credential lived in the project folder, which is
+broader than acceptable for a DB credential.
 
-**2026-09-15 update:** the same class of exposure was also committed to
-source (not just the gitignored `.env.test`), in three places, and has been
-removed:
+**2026-09-15 & 2026-09-16 update:** all hardcoded database credentials have been
+completely eradicated from code and test utilities across 5 files:
 - `tests/test-utils.ts`, `tests/integration/staging-acceptance.test.ts`, and
   `tests/integration/logistics-tenant-isolation-controlled.test.ts` all had
   the `fleet360_app` staging connection string hard-coded as a fallback
   default. They now require `STAGING_DATABASE_URL` /
   `RUNTIME_DIRECT_DATABASE_URL` to be set explicitly and skip (or fail
   loudly) instead of silently using a baked-in credential.
-- `.github/workflows/staging-acceptance-gate.yml` had a *second*, more
-  privileged credential (`neondb_owner`) hard-coded as the fallback when the
-  `STAGING_DATABASE_URL` repo secret wasn't set. That fallback is removed;
-  the workflow now fails fast with a clear error if the secret is missing.
+- `scripts/staging-live-smoke.mjs` had `STAGING_DATABASE_URL_DEFAULT`
+  hardcoded; now strictly requires `process.env.STAGING_DATABASE_URL`.
+- `scripts/verify-staging-proxy-e2e.js` had a `neondb_owner` credential
+  hardcoded; now strictly requires `process.env.STAGING_DATABASE_URL`.
+- `.github/workflows/staging-acceptance-gate.yml` had the `neondb_owner`
+  credential hard-coded as the fallback when the `STAGING_DATABASE_URL`
+  repo secret wasn't set. That fallback is removed; the workflow now fails
+  fast with an explicit error if the secret is missing.
 
 **Still required before go-live:** regenerate both Neon credentials
 (`fleet360_app` and `neondb_owner`) in the Neon console, then update

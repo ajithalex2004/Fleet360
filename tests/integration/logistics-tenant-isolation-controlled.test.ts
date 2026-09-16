@@ -18,9 +18,15 @@ import { withTenantRls } from '@/lib/rls';
 const hasDb = Boolean(process.env.DATABASE_URL);
 const runId = Date.now().toString();
 
-const appDbUrl =
-  process.env.RUNTIME_DIRECT_DATABASE_URL ||
-  'postgresql://fleet360_app:87f855bb8b0d868fc1b4d4f1038b283ae2895405ac563ec1@ep-calm-heart-a15voo2a-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
+if (hasDb && !process.env.RUNTIME_DIRECT_DATABASE_URL) {
+  throw new Error(
+    'DATABASE_URL is set but RUNTIME_DIRECT_DATABASE_URL is not — this suite ' +
+      'requires it explicitly and has no built-in default connection string.'
+  );
+}
+// Placeholder is only ever used when hasDb is false, in which case
+// describe.skipIf below skips every test and this URL is never connected to.
+const appDbUrl = process.env.RUNTIME_DIRECT_DATABASE_URL || 'postgresql://unset:unset@localhost:5432/unset';
 
 const appPrisma = new PrismaClient({ datasources: { db: { url: appDbUrl } } });
 

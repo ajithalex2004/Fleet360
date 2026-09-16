@@ -25,11 +25,18 @@ jobs:
 
     env:
       STAGING_APP_ORIGIN: https://fleet360-app-staging.up.railway.app
-      STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL || 'postgresql://neondb_owner:npg_7ndWFKRYEOt6@ep-calm-heart-a15voo2a.ap-southeast-1.aws.neon.tech/neondb_staging?sslmode=require' }}
+      STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Require STAGING_DATABASE_URL secret
+        run: |
+          if [ -z "$STAGING_DATABASE_URL" ]; then
+            echo "::error::STAGING_DATABASE_URL secret is not set. This gate has no built-in default connection string — configure the repo/environment secret before this workflow can run."
+            exit 1
+          fi
 
       - name: Setup Node.js 20
         uses: actions/setup-node@v4

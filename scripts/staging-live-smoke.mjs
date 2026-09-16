@@ -27,8 +27,11 @@ dotenv.config();
 
 const STAGING_URL = process.env.STAGING_URL || 'https://fleet360-app-staging.up.railway.app';
 const STAGING_SESSION_SECRET = process.env.STAGING_SESSION_SECRET || process.env.SESSION_SECRET || '';
-const STAGING_DATABASE_URL_DEFAULT = 'postgresql://fleet360_app:87f855bb8b0d868fc1b4d4f1038b283ae2895405ac563ec1@ep-calm-heart-a15voo2a-pooler.ap-southeast-1.aws.neon.tech/neondb_staging?sslmode=require&channel_binding=require';
-const DATABASE_URL = process.env.STAGING_DATABASE_URL || STAGING_DATABASE_URL_DEFAULT;
+const DATABASE_URL = process.env.STAGING_DATABASE_URL;
+if (!DATABASE_URL) {
+  console.error('STAGING_DATABASE_URL environment variable is required. There is no built-in default connection string.');
+  process.exit(1);
+}
 
 function toBase64Url(str) {
   return Buffer.from(str, 'utf8').toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');

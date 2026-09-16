@@ -15,7 +15,11 @@
 const { PrismaClient } = require('@prisma/client');
 const crypto = require('crypto');
 
-const STAGING_URL = 'postgresql://neondb_owner:npg_7ndWFKRYEOt6@ep-calm-heart-a15voo2a.ap-southeast-1.aws.neon.tech/neondb_staging?sslmode=require';
+const STAGING_URL = process.env.STAGING_DATABASE_URL;
+if (!STAGING_URL) {
+  console.error('STAGING_DATABASE_URL environment variable is required. There is no built-in default connection string.');
+  process.exit(1);
+}
 const STAGING_APP_ORIGIN = process.env.STAGING_APP_ORIGIN || 'https://fleet360-app-staging.up.railway.app';
 const SESSION_SECRET = process.env.SESSION_SECRET || '';
 

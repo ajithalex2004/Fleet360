@@ -19,9 +19,14 @@ dotenv.config({ path: '.env.test' });
 dotenv.config({ path: '.env' });
 
 if (process.env.USE_STAGING_DB === 'true' || process.env.STAGING_DATABASE_URL) {
-  process.env.DATABASE_URL =
-    process.env.STAGING_DATABASE_URL ||
-    'postgresql://fleet360_app:87f855bb8b0d868fc1b4d4f1038b283ae2895405ac563ec1@ep-calm-heart-a15voo2a-pooler.ap-southeast-1.aws.neon.tech/neondb_staging?sslmode=require&channel_binding=require';
+  if (!process.env.STAGING_DATABASE_URL) {
+    throw new Error(
+      'USE_STAGING_DB is set but STAGING_DATABASE_URL is not. Set it in your ' +
+        'environment (e.g. .env.test, which is gitignored) — there is no ' +
+        'built-in staging connection string.'
+    );
+  }
+  process.env.DATABASE_URL = process.env.STAGING_DATABASE_URL;
   process.env.DIRECT_URL = process.env.DATABASE_URL;
 }
 

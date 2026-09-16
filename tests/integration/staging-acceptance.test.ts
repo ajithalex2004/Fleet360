@@ -11,18 +11,22 @@ import { POST as quotationsPOST, GET as quotationsGET } from '@/app/api/leasing/
 import { POST as costsPOST, GET as costsGET } from '@/app/api/service-tickets/[id]/costs/route';
 import { withTenantRls } from '@/lib/rls';
 
-const stagingRuntimeUrl =
-  'postgresql://fleet360_app:87f855bb8b0d868fc1b4d4f1038b283ae2895405ac563ec1@ep-calm-heart-a15voo2a-pooler.ap-southeast-1.aws.neon.tech/neondb_staging?sslmode=require&channel_binding=require';
+// Requires an explicit, real staging connection string — there is no
+// built-in default. When it isn't set, this suite is skipped rather than
+// silently running (or not running) against a hard-coded credential.
+const stagingRuntimeUrl = process.env.STAGING_DATABASE_URL;
 
-// Ensure the application uses the staging runtime database
-process.env.DATABASE_URL = stagingRuntimeUrl;
-process.env.DIRECT_URL = stagingRuntimeUrl;
+if (stagingRuntimeUrl) {
+  // Ensure the application uses the staging runtime database
+  process.env.DATABASE_URL = stagingRuntimeUrl;
+  process.env.DIRECT_URL = stagingRuntimeUrl;
+}
 
 const prisma = new PrismaClient({
-  datasources: { db: { url: stagingRuntimeUrl } },
+  datasources: { db: { url: stagingRuntimeUrl || 'postgresql://unset:unset@localhost:5432/unset' } },
 });
 
-describe('Staging Acceptance Verification Suite (neondb_staging / fleet360_app)', () => {
+describe.skipIf(!stagingRuntimeUrl)('Staging Acceptance Verification Suite (neondb_staging / fleet360_app)', () => {
   const tenantAlpha = 'tenant-staging-alpha';
   const tenantBeta = 'tenant-staging-beta';
   const lesseeAlpha = '11111111-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
