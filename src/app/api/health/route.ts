@@ -13,7 +13,6 @@
 import { NextResponse } from 'next/server';
 import { ensureDbConnected, prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const dynamic = 'force-dynamic'; // never cache
 
 const RELEASE =
@@ -26,13 +25,14 @@ export async function GET() {
   const t0 = Date.now();
 
   let dbStatus: 'connected' | 'error' = 'connected';
-  let dbError: string | undefined;
   try {
     await ensureDbConnected({ force: true, retries: 2, timeoutMs: 2_500 });
     await prisma.$queryRaw`SELECT 1`;
   } catch (err) {
     dbStatus = 'error';
-    dbError = err instanceof Error ? err.message : String(err);
+    // Log the real error server-side only — never expose internals (DSNs, hostnames,
+    // stack traces) to an unauthenticated caller of this endpoint.
+    console.error('[api/health] database check failed:', err);
   }
   const dbLatencyMs = Date.now() - t0;
 
@@ -40,7 +40,7 @@ export async function GET() {
     return NextResponse.json(
       {
         status: 'unhealthy',
-        db: { status: 'error', latencyMs: dbLatencyMs, error: dbError },
+        db: { status: 'error', latencyMs: dbLatencyMs, error: 'database unreachable' },
         release: RELEASE,
         timestamp: new Date().toISOString(),
       },
@@ -75,10 +75,11 @@ export async function GET() {
         version: bData.version,
       };
     } catch (bErr) {
-      backendInfo = {
-        status: 'unreachable',
-        error: bErr instanceof Error ? bErr.message : String(bErr),
-      };
+      // Log server-side only — the raw error can contain the internal Go backend
+      // hostname (e.g. Railway's *.railway.internal address), which shouldn't be
+      // exposed to an unauthenticated caller.
+      console.error('[api/health] backend readiness check failed:', bErr);
+      backendInfo = { status: 'unreachable' };
     }
   }
 
