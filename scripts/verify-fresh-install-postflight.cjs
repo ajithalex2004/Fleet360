@@ -631,8 +631,8 @@ async function verifyDeterministicDualTenantRls(options = {}) {
 
       // 2b. rental_rate_quotes
       await tx.$executeRawUnsafe(
-        `INSERT INTO rental_rate_quotes (id, tenant_id, vehicle_category, pickup_date, dropoff_date, total_days, base_rental_charge)
-         VALUES ($1, $2, 'SEDAN', NOW(), NOW() + INTERVAL '1 day', 1, 100.00)`,
+        `INSERT INTO rental_rate_quotes (id, tenant_id, vehicle_category, pickup_date, dropoff_date, total_days, base_rental_charge, total_amount)
+         VALUES ($1, $2, 'SEDAN', NOW(), NOW() + INTERVAL '1 day', 1, 100.00, 105.00)`,
         quoteIdA,
         TENANT_A
       );
@@ -647,7 +647,7 @@ async function verifyDeterministicDualTenantRls(options = {}) {
       // 2d. finance.finance_payments
       await tx.$executeRawUnsafe(
         `INSERT INTO finance.finance_payments (id, tenant_id, invoice_id, amount)
-         VALUES (gen_random_uuid(), $1, gen_random_uuid(), 500.00)`,
+         VALUES (gen_random_uuid(), $1, NULL, 500.00)`,
         TENANT_A
       );
 
@@ -664,8 +664,8 @@ async function verifyDeterministicDualTenantRls(options = {}) {
 
       // 3b. rental_rate_quotes
       await tx.$executeRawUnsafe(
-        `INSERT INTO rental_rate_quotes (id, tenant_id, vehicle_category, pickup_date, dropoff_date, total_days, base_rental_charge)
-         VALUES ($1, $2, 'SUV', NOW(), NOW() + INTERVAL '2 days', 2, 250.00)`,
+        `INSERT INTO rental_rate_quotes (id, tenant_id, vehicle_category, pickup_date, dropoff_date, total_days, base_rental_charge, total_amount)
+         VALUES ($1, $2, 'SUV', NOW(), NOW() + INTERVAL '2 days', 2, 250.00, 262.50)`,
         quoteIdB,
         TENANT_B
       );
@@ -680,7 +680,7 @@ async function verifyDeterministicDualTenantRls(options = {}) {
       // 3d. finance.finance_payments
       await tx.$executeRawUnsafe(
         `INSERT INTO finance.finance_payments (id, tenant_id, invoice_id, amount)
-         VALUES (gen_random_uuid(), $1, gen_random_uuid(), 750.00)`,
+         VALUES (gen_random_uuid(), $1, NULL, 750.00)`,
         TENANT_B
       );
 
