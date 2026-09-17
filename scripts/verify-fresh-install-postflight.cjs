@@ -100,12 +100,16 @@ const POSTFLIGHT_MANIFEST = [
   {
     step: 6,
     migration: '20260904000000_add_tenant_id_to_lease_rental_children',
-    name: 'rental_payment_transactions has tenant_id',
+    name: 'rental_payments and lease_contract_vehicles have tenant_id',
     check: async (prisma) => {
-      const [col] = await prisma.$queryRaw`
-        SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'rental_payment_transactions' AND column_name = 'tenant_id'
+      const [col1] = await prisma.$queryRaw`
+        SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'rental_payments' AND column_name = 'tenant_id'
       `;
-      if (!col) throw new Error('Column "tenant_id" is missing in "rental_payment_transactions"');
+      if (!col1) throw new Error('Column "tenant_id" is missing in "rental_payments"');
+      const [col2] = await prisma.$queryRaw`
+        SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'lease_contract_vehicles' AND column_name = 'tenant_id'
+      `;
+      if (!col2) throw new Error('Column "tenant_id" is missing in "lease_contract_vehicles"');
     },
   },
   {
@@ -248,12 +252,12 @@ const POSTFLIGHT_MANIFEST = [
   {
     step: 18,
     migration: '20260911120000_lease_return_settlement_workflow',
-    name: 'lease_return_settlements table exists',
+    name: 'lease_allocation_occurrences table exists with RLS',
     check: async (prisma) => {
       const [table] = await prisma.$queryRaw`
-        SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'lease_return_settlements'
+        SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'lease_allocation_occurrences'
       `;
-      if (!table) throw new Error('Table "lease_return_settlements" is missing');
+      if (!table) throw new Error('Table "lease_allocation_occurrences" is missing');
     },
   },
   {
