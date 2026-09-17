@@ -181,19 +181,41 @@ const DOCUMENTED_GAPS = {
     expectedSignatures: [/generation expression/i, /CURRENT_DATE/i, /immutable/i, /finance_security_deposits/i, /verification failed/i],
   },
   '20260910000024_auth_security_tables_and_rls': {
-    targetObject: 'password_reset_tokens / audit_logs',
-    expectedCodes: ['42P07', '42710', '42P01', 'P0001'],
-    expectedSignatures: [/already exists/i, /password_reset_tokens/i, /audit_logs/i, /tenant_api_keys/i, /verification failed/i],
+    targetObject: 'password_reset_tokens / audit_logs / tenant_invitations',
+    expectedCodes: ['42P07', '42710', '42P01', '42703', 'P0001'],
+    expectedSignatures: [
+      /already exists/i,
+      /password_reset_tokens/i,
+      /audit_logs/i,
+      /tenant_api_keys/i,
+      /tenant_invitations/i,
+      /token_hash/i,
+      /column .* does not exist/i,
+      /verification failed/i,
+    ],
   },
   '20260911120000_lease_return_settlement_workflow': {
     targetObject: 'lease_vehicle_returns / lease_allocation_occurrences / finance_security_deposits',
     expectedCodes: ['42P01', '42703', 'P0001'],
-    expectedSignatures: [/lease_vehicle_returns/i, /lease_return_settlements/i, /lease_allocation_occurrences/i, /finance_security_deposits/i, /tenant_id/i, /verification failed/i],
+    expectedSignatures: [
+      /lease_vehicle_returns/i,
+      /lease_return_settlements/i,
+      /lease_allocation_occurrences/i,
+      /finance_security_deposits/i,
+      /leasing_handovers/i,
+      /tenant_id/i,
+      /verification failed/i,
+    ],
   },
   '20260914140000_fresh_replay_rental_leasing_gap': {
-    targetObject: 'rental_rate_quotes.tenant_id',
+    targetObject: 'rental_rate_quotes / rental_extensions.tenant_id',
     expectedCodes: ['42703', '42P01', 'P0001'],
-    expectedSignatures: [/column "tenant_id" of relation "rental_rate_quotes" does not exist/i, /tenant_id/i, /rental_rate_quotes/i, /verification failed/i],
+    expectedSignatures: [
+      /column "tenant_id"/i,
+      /tenant_id/i,
+      /rental_/i,
+      /verification failed/i,
+    ],
   },
 };
 

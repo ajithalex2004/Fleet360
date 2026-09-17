@@ -314,6 +314,24 @@ describe('Fresh database migration runner safety guards & classification', () =>
     expect(evalResult.migrationName).toBe(financeMigration);
     expect(evalResult.errorCode).toBe('42703');
   });
+
+  it('correctly matches auth_security_tables_and_rls when Postgres reports missing token_hash column on tenant_invitations', () => {
+    const authMigration = '20260910000024_auth_security_tables_and_rls';
+    const mockOutput = `
+      Applying migration \`${authMigration}\`
+      Error: P3018
+      Migration name: ${authMigration}
+      Database error code: 42703
+      Database error:
+      ERROR: column "token_hash" does not exist
+      DbError { severity: "ERROR", parsed_severity: Some(Error), code: SqlState(E42703), message: "column \\"token_hash\\" does not exist", detail: None, hint: None, position: None, where_: None, schema: None, table: None, column: None, datatype: None, constraint: None, file: Some("indexcmds.c"), line: Some(1907), routine: Some("ComputeIndexAttrs") }
+    `;
+    const evalResult = evaluateMigrationFailure(mockOutput, [authMigration]);
+    expect(evalResult.canResolve).toBe(true);
+    expect(evalResult.reason).toBe('MATCHED_EXPECTED_GAP');
+    expect(evalResult.migrationName).toBe(authMigration);
+    expect(evalResult.errorCode).toBe('42703');
+  });
 });
 
 describe('Database target resolution & preconditions', () => {
