@@ -91,103 +91,113 @@ async function getSessionCookie(tenantId) {
 async function seedStagingRecords() {
   console.log('[1/6] Seeding controlled tenant records into neondb_staging...');
 
-  // Seed Tenants
-  await prisma.$executeRawUnsafe(`
-    INSERT INTO tenants (id, name, code, plan, is_active, created_at, updated_at)
-    VALUES
-      ('${TENANT_A_ID}', 'Acceptance Tenant A', 'ACC-A-${RUN_ID}', 'ENTERPRISE', true, NOW(), NOW()),
-      ('${TENANT_B_ID}', 'Acceptance Tenant B', 'ACC-B-${RUN_ID}', 'ENTERPRISE', true, NOW(), NOW())
-    ON CONFLICT (id) DO NOTHING;
-  `);
+  // This seeds records across two distinct tenants in one session, which
+  // RLS's tenant_isolation policy (USING/WITH CHECK tenant_id = current
+  // app.tenant_id, or '*' for the platform-admin escape) cannot satisfy for
+  // a single ordinary tenant context. SET LOCAL scopes the platform-admin
+  // bypass to this one transaction only; it never leaks into the isolation
+  // assertions later in the suite, which run their own real tenant sessions.
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`SET LOCAL app.tenant_id = '*'`);
 
-  // Seed User for Ordinary Login via Prisma model
-  await prisma.user.create({
-    data: {
-      id: LOGIN_USER_ID,
-      email: LOGIN_EMAIL.toLowerCase(),
-      username: `accuser_${RUN_ID}`,
-      firstName: 'Acceptance',
-      lastName: 'User',
-      isActive: true,
-      updatedAt: new Date(),
-    },
+    // Seed Tenants
+    await tx.$executeRawUnsafe(`
+      INSERT INTO tenants (id, name, code, plan, is_active, created_at, updated_at)
+      VALUES
+        ('${TENANT_A_ID}', 'Acceptance Tenant A', 'ACC-A-${RUN_ID}', 'ENTERPRISE', true, NOW(), NOW()),
+        ('${TENANT_B_ID}', 'Acceptance Tenant B', 'ACC-B-${RUN_ID}', 'ENTERPRISE', true, NOW(), NOW())
+      ON CONFLICT (id) DO NOTHING;
+    `);
+
+    // Seed User for Ordinary Login via Prisma model
+    await tx.user.create({
+      data: {
+        id: LOGIN_USER_ID,
+        email: LOGIN_EMAIL.toLowerCase(),
+        username: `accuser_${RUN_ID}`,
+        firstName: 'Acceptance',
+        lastName: 'User',
+        isActive: true,
+        updatedAt: new Date(),
+      },
+    });
+
+    const passwordHash = hashPassword(LOGIN_PASSWORD);
+    await tx.$executeRawUnsafe(
+      `UPDATE "User" SET password_hash = $1 WHERE id = $2`,
+      passwordHash,
+      LOGIN_USER_ID,
+    );
+
+    // Link User to Tenant A via UserTenant model
+    const roleAId = crypto.randomUUID();
+    await tx.role.create({
+      data: {
+        id: roleAId,
+        tenantId: TENANT_A_ID,
+        name: 'Tenant Admin A',
+        code: 'TENANT_ADMIN',
+      },
+    });
+
+    await tx.userTenant.create({
+      data: {
+        id: crypto.randomUUID(),
+        userId: LOGIN_USER_ID,
+        tenantId: TENANT_A_ID,
+        roleId: roleAId,
+        isActive: true,
+      },
+    });
+
+    // Link User to Tenant B via UserTenant model
+    const roleBId = crypto.randomUUID();
+    await tx.role.create({
+      data: {
+        id: roleBId,
+        tenantId: TENANT_B_ID,
+        name: 'Tenant Admin B',
+        code: 'TENANT_ADMIN',
+      },
+    });
+
+    await tx.userTenant.create({
+      data: {
+        id: crypto.randomUUID(),
+        userId: LOGIN_USER_ID,
+        tenantId: TENANT_B_ID,
+        roleId: roleBId,
+        isActive: true,
+      },
+    });
+
+    // Seed Vehicles
+    await tx.$executeRawUnsafe(`
+      INSERT INTO vehicles (id, tenant_id, make, model, year, license_plate, vin, status, updated_at)
+      VALUES
+        ('${VEHICLE_A_ID}', '${TENANT_A_ID}', 'Volvo', 'FH16', 2026, 'VOLVO-ACC-${RUN_ID}', 'VIN-A-${RUN_ID}', 'AVAILABLE', NOW()),
+        ('${VEHICLE_B_ID}', '${TENANT_B_ID}', 'Scania', 'R500', 2026, 'SCANIA-ACC-${RUN_ID}', 'VIN-B-${RUN_ID}', 'AVAILABLE', NOW())
+      ON CONFLICT (id) DO NOTHING;
+    `);
+
+    // Seed Drivers
+    await tx.$executeRawUnsafe(`
+      INSERT INTO drivers (id, tenant_id, name, first_name, last_name, license_number, status, updated_at)
+      VALUES
+        ('${DRIVER_A_ID}', '${TENANT_A_ID}', 'Alice Alpha', 'Alice', 'Alpha', 'LIC-A-${RUN_ID}', 'ACTIVE', NOW()),
+        ('${DRIVER_B_ID}', '${TENANT_B_ID}', 'Bob Bravo', 'Bob', 'Bravo', 'LIC-B-${RUN_ID}', 'ACTIVE', NOW())
+      ON CONFLICT (id) DO NOTHING;
+    `);
+
+    // Seed Shipments
+    await tx.$executeRawUnsafe(`
+      INSERT INTO logistics_shipment_orders (id, tenant_id, shipment_no, status, assigned_driver_id, assigned_vehicle_id, updated_at)
+      VALUES
+        ('${SHIPMENT_A_ID}', '${TENANT_A_ID}', 'SHP-STAGE-A-${RUN_ID}', 'ASSIGNED', '${DRIVER_A_ID}', '${VEHICLE_A_ID}', NOW()),
+        ('${SHIPMENT_B_ID}', '${TENANT_B_ID}', 'SHP-STAGE-B-${RUN_ID}', 'ASSIGNED', '${DRIVER_B_ID}', '${VEHICLE_B_ID}', NOW())
+      ON CONFLICT (id) DO NOTHING;
+    `);
   });
-
-  const passwordHash = hashPassword(LOGIN_PASSWORD);
-  await prisma.$executeRawUnsafe(
-    `UPDATE "User" SET password_hash = $1 WHERE id = $2`,
-    passwordHash,
-    LOGIN_USER_ID,
-  );
-
-  // Link User to Tenant A via UserTenant model
-  const roleAId = crypto.randomUUID();
-  await prisma.role.create({
-    data: {
-      id: roleAId,
-      tenantId: TENANT_A_ID,
-      name: 'Tenant Admin A',
-      code: 'TENANT_ADMIN',
-    },
-  });
-
-  await prisma.userTenant.create({
-    data: {
-      id: crypto.randomUUID(),
-      userId: LOGIN_USER_ID,
-      tenantId: TENANT_A_ID,
-      roleId: roleAId,
-      isActive: true,
-    },
-  });
-
-  // Link User to Tenant B via UserTenant model
-  const roleBId = crypto.randomUUID();
-  await prisma.role.create({
-    data: {
-      id: roleBId,
-      tenantId: TENANT_B_ID,
-      name: 'Tenant Admin B',
-      code: 'TENANT_ADMIN',
-    },
-  });
-
-  await prisma.userTenant.create({
-    data: {
-      id: crypto.randomUUID(),
-      userId: LOGIN_USER_ID,
-      tenantId: TENANT_B_ID,
-      roleId: roleBId,
-      isActive: true,
-    },
-  });
-
-  // Seed Vehicles
-  await prisma.$executeRawUnsafe(`
-    INSERT INTO vehicles (id, tenant_id, make, model, year, license_plate, vin, status, updated_at)
-    VALUES
-      ('${VEHICLE_A_ID}', '${TENANT_A_ID}', 'Volvo', 'FH16', 2026, 'VOLVO-ACC-${RUN_ID}', 'VIN-A-${RUN_ID}', 'AVAILABLE', NOW()),
-      ('${VEHICLE_B_ID}', '${TENANT_B_ID}', 'Scania', 'R500', 2026, 'SCANIA-ACC-${RUN_ID}', 'VIN-B-${RUN_ID}', 'AVAILABLE', NOW())
-    ON CONFLICT (id) DO NOTHING;
-  `);
-
-  // Seed Drivers
-  await prisma.$executeRawUnsafe(`
-    INSERT INTO drivers (id, tenant_id, name, first_name, last_name, license_number, status, updated_at)
-    VALUES
-      ('${DRIVER_A_ID}', '${TENANT_A_ID}', 'Alice Alpha', 'Alice', 'Alpha', 'LIC-A-${RUN_ID}', 'ACTIVE', NOW()),
-      ('${DRIVER_B_ID}', '${TENANT_B_ID}', 'Bob Bravo', 'Bob', 'Bravo', 'LIC-B-${RUN_ID}', 'ACTIVE', NOW())
-    ON CONFLICT (id) DO NOTHING;
-  `);
-
-  // Seed Shipments
-  await prisma.$executeRawUnsafe(`
-    INSERT INTO logistics_shipment_orders (id, tenant_id, shipment_no, status, assigned_driver_id, assigned_vehicle_id, updated_at)
-    VALUES
-      ('${SHIPMENT_A_ID}', '${TENANT_A_ID}', 'SHP-STAGE-A-${RUN_ID}', 'ASSIGNED', '${DRIVER_A_ID}', '${VEHICLE_A_ID}', NOW()),
-      ('${SHIPMENT_B_ID}', '${TENANT_B_ID}', 'SHP-STAGE-B-${RUN_ID}', 'ASSIGNED', '${DRIVER_B_ID}', '${VEHICLE_B_ID}', NOW())
-    ON CONFLICT (id) DO NOTHING;
-  `);
 
   console.log(`Seeded successfully:`);
   console.log(`  Tenant A: ${TENANT_A_ID} | Driver: Alice (${DRIVER_A_ID}) | Vehicle: Volvo (${VEHICLE_A_ID})`);
@@ -197,13 +207,20 @@ async function seedStagingRecords() {
 
 async function cleanupStagingRecords() {
   console.log('\nCleaning up test records from neondb_staging...');
-  await prisma.$executeRawUnsafe(`DELETE FROM logistics_shipment_orders WHERE id IN ('${SHIPMENT_A_ID}', '${SHIPMENT_B_ID}')`);
-  await prisma.$executeRawUnsafe(`DELETE FROM drivers WHERE id IN ('${DRIVER_A_ID}', '${DRIVER_B_ID}')`);
-  await prisma.$executeRawUnsafe(`DELETE FROM vehicles WHERE id IN ('${VEHICLE_A_ID}', '${VEHICLE_B_ID}')`);
-  await prisma.$executeRawUnsafe(`DELETE FROM user_tenants WHERE user_id = '${LOGIN_USER_ID}'`);
-  await prisma.$executeRawUnsafe(`DELETE FROM roles WHERE tenant_id IN ('${TENANT_A_ID}', '${TENANT_B_ID}')`);
-  await prisma.$executeRawUnsafe(`DELETE FROM "User" WHERE id = '${LOGIN_USER_ID}'`);
-  await prisma.$executeRawUnsafe(`DELETE FROM tenants WHERE id IN ('${TENANT_A_ID}', '${TENANT_B_ID}')`);
+  // Same platform-admin bypass as seedStagingRecords: without it, RLS's
+  // USING clause silently filters every row out of the DELETE (no error,
+  // just zero rows affected), leaving stale cross-tenant records behind on
+  // every run instead of actually cleaning them up.
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`SET LOCAL app.tenant_id = '*'`);
+    await tx.$executeRawUnsafe(`DELETE FROM logistics_shipment_orders WHERE id IN ('${SHIPMENT_A_ID}', '${SHIPMENT_B_ID}')`);
+    await tx.$executeRawUnsafe(`DELETE FROM drivers WHERE id IN ('${DRIVER_A_ID}', '${DRIVER_B_ID}')`);
+    await tx.$executeRawUnsafe(`DELETE FROM vehicles WHERE id IN ('${VEHICLE_A_ID}', '${VEHICLE_B_ID}')`);
+    await tx.$executeRawUnsafe(`DELETE FROM user_tenants WHERE user_id = '${LOGIN_USER_ID}'`);
+    await tx.$executeRawUnsafe(`DELETE FROM roles WHERE tenant_id IN ('${TENANT_A_ID}', '${TENANT_B_ID}')`);
+    await tx.$executeRawUnsafe(`DELETE FROM "User" WHERE id = '${LOGIN_USER_ID}'`);
+    await tx.$executeRawUnsafe(`DELETE FROM tenants WHERE id IN ('${TENANT_A_ID}', '${TENANT_B_ID}')`);
+  });
   await prisma.$disconnect();
   console.log('Cleanup complete.');
 }

@@ -53,7 +53,15 @@ jobs:
       - name: Execute Staging Acceptance & Isolation Suite
         id: run_tests
         env:
-          EXPECTED_CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          # Only enforced on push (main/develop/hardening branches), where
+          # Railway is expected to have already deployed this exact commit.
+          # On pull_request there is no deployed candidate for the PR head
+          # SHA yet — Railway doesn't deploy PR branches — so this check
+          # would fail unconditionally regardless of the PR's content.
+          # Leaving it unset here makes verifyCandidateBinding() skip the
+          # SHA check (see scripts/verify-staging-proxy-e2e.js) while still
+          # running the rest of the acceptance/isolation suite.
+          EXPECTED_CANDIDATE_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
         run: |
-          echo "Executing Staging Acceptance & E2E Isolation Gate against $STAGING_APP_ORIGIN for candidate $EXPECTED_CANDIDATE_SHA..."
+          echo "Executing Staging Acceptance & E2E Isolation Gate against $STAGING_APP_ORIGIN${EXPECTED_CANDIDATE_SHA:+ for candidate $EXPECTED_CANDIDATE_SHA}..."
           npm run test:staging-acceptance

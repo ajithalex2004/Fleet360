@@ -61,7 +61,7 @@ it does NOT run in production. However:
 ---
 
 ## SEC-002 — Rotate Neon credentials
-**Status:** in progress · **Target:** before go-live · **Owner:** athom
+**Status:** ✅ closed — rotation and retirement fully verified · **Target:** before go-live · **Owner:** athom
 
 `.env.test` (gitignored) historically contained a Neon Postgres password
 (`<redacted_credential>`). The credential lived in the project folder, which was
@@ -78,8 +78,17 @@ broader than acceptable for a DB credential.
   - Runtime migration credential isolation guard verified (`scripts/check-no-runtime-migration-secrets.mjs`).
 - **Verified in Deployment:**
   - Deployed Railway staging cluster candidate verified against GitHub Actions Staging Acceptance Gate using `STAGING_DATABASE_URL` secret.
-- **Rotation Unverified; Treat Credentials as Compromised:**
-  - Code eradication prevents future leakage, but does not rotate live database credentials. Both previously exposed database credentials (`fleet360_app` and `neondb_owner`) must be treated as compromised until the live operational rotation sequence below is executed and verified.
+- **Rotation Executed (2026-09-17):**
+  - Both role passwords (`fleet360_app`, `neondb_owner`) reset via the Neon console by the operator (`athom`).
+  - New passwords propagated to every known consumer: Railway `fleet360-app` (production + staging) — `DATABASE_URL`, `RUNTIME_DIRECT_DATABASE_URL`, `PHASE0_DATABASE_URL`, `DIRECT_URL`, `MIGRATION_DATABASE_URL`, plus staging-only `DIRECT_DATABASE_URL`; Railway `fleet360-backend` (production + staging) — `DATABASE_URL`; GitHub Actions secrets `STAGING_DATABASE_URL` and `PHASE0_DATABASE_URL` (repo `ajithalex2004/Fleet360`, confirmed updated `2026-09-17T06:47Z`).
+  - Both Railway services restarted in both environments to pick up the new values (`railway variables --set` does not itself trigger a redeploy).
+  - Live verification: `GET /api/health` on both `fleet360-app-production.up.railway.app` and `fleet360-app-staging.up.railway.app` returned `db.status: "connected"` and `backend.status: "ready"` post-rotation.
+  - **Incident note:** production briefly went down (`db.status: "error", "database unreachable"`) between the Neon-side password reset and the Railway variable update/restart, because `railway variables --set` does not auto-restart a service — the old password remained loaded in the running process until an explicit `railway restart` was issued. Outage window: confirmed unhealthy at `2026-09-17T06:24Z` and `06:33Z`, confirmed recovered at `06:41Z`. For any future rotation, set the new Railway variables and issue the restart in the same breath to minimize this gap.
+- **Retirement Verified (2026-09-17):**
+  - Old `fleet360_app` password: fresh connection attempt to the pooled endpoint via `npx prisma db execute --stdin` returned `Error: P1000 — Authentication failed` (Prisma's wrapper around Postgres `28P01`).
+  - Old `neondb_owner` password: same test against the direct endpoint returned the identical `P1000` authentication failure.
+  - Session audit: `SELECT ... FROM pg_stat_activity WHERE usename IN ('fleet360_app', 'neondb_owner')` run from the Neon console SQL Editor returned 11 active sessions, all with `backend_start` at `06:36:26Z` or later — i.e. every one of them postdates the `06:24Z` password reset and therefore authenticated with the *new* password. No session predates the rotation, so no `pg_terminate_backend` pass was needed.
+  - Conclusion: the previously-exposed credentials are confirmed non-functional and no live session is relying on them. This gap is closed.
 
 **Credential Ownership Matrix:**
 - **Application Runtime (`DATABASE_URL`):** Least-privileged application role (`fleet360_app`, pooled endpoint). Holds `SELECT, INSERT, UPDATE, DELETE` grants on application schemas; does NOT own tables and does NOT hold `rolbypassrls`.
@@ -88,16 +97,16 @@ broader than acceptable for a DB credential.
 - **Staging Acceptance & Tenant Isolation Gate (`STAGING_DATABASE_URL`):** Dedicated application role (`fleet360_app`). Proves real tenant isolation and cross-tenant access denial.
 
 **Operational Rotation & Retirement Runbook:**
-1. **Target Inventory:** Identify affected Neon project (`ep-calm-heart-a15voo2a`), branch (`main` / staging), roles (`fleet360_app`, `neondb_owner`), and consumers.
-2. **Distribution Preparation:** Prepare new high-entropy random secrets for each consumer separately.
-3. **Password Rotation:** Reset role passwords via Neon Console or Neon Management API (`/projects/{project_id}/branches/{branch_id}/roles/{role_name}/reset_password`) to prevent plaintext passwords in non-ephemeral database SQL logs.
-4. **Consumer Updates:** Update GitHub Actions repository secrets (`STAGING_DATABASE_URL`, `DATABASE_URL`) and Railway environment variables (`DATABASE_URL`, `RUNTIME_DIRECT_DATABASE_URL`, `MIGRATION_DATABASE_URL`, `DIRECT_URL`). Recycle/restart application services.
-5. **Session & Pool Termination:** Terminate active sessions holding old credentials (`SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename IN ('fleet360_app', 'neondb_owner') AND pid <> pg_backend_pid();`).
-6. **Retirement Verification:**
-   - Execute fresh direct and pooled connections using retired credentials; verify connection rejection with `28P01 (password authentication failed)` (distinguished from network timeouts or DNS errors).
-   - Execute fresh connections using new credentials; verify clean authentication.
-   - Run cross-tenant denial tests to prove RLS enforcement remains intact.
-7. **Audit Record:** Record sanitized evidence, rotation timestamp, and responsible operator.
+1. ✅ **Target Inventory:** Identify affected Neon project (`ep-calm-heart-a15voo2a`), branch (`main` / staging), roles (`fleet360_app`, `neondb_owner`), and consumers. — 13 consumer locations catalogued (see above).
+2. ✅ **Distribution Preparation:** Prepare new high-entropy random secrets for each consumer separately. — new passwords generated by the operator in the Neon console.
+3. ✅ **Password Rotation:** Reset role passwords via Neon Console or Neon Management API (`/projects/{project_id}/branches/{branch_id}/roles/{role_name}/reset_password`) to prevent plaintext passwords in non-ephemeral database SQL logs. — done 2026-09-17.
+4. ✅ **Consumer Updates:** Update GitHub Actions repository secrets (`STAGING_DATABASE_URL`, `PHASE0_DATABASE_URL`) and Railway environment variables (`DATABASE_URL`, `RUNTIME_DIRECT_DATABASE_URL`, `MIGRATION_DATABASE_URL`, `DIRECT_URL`, `PHASE0_DATABASE_URL`, `DIRECT_DATABASE_URL`) across both services and both environments. Services restarted. — done 2026-09-17, verified live via `/api/health`.
+5. ✅ **Session & Pool Termination:** Terminate active sessions holding old credentials. — checked via `pg_stat_activity`; all 11 live sessions postdate the rotation (earliest `06:36:26Z` vs. reset at `06:24Z`), so none needed termination.
+6. ✅ **Retirement Verification:**
+   - Old credentials rejected: both `fleet360_app` (pooled) and `neondb_owner` (direct) returned `P1000`/`28P01` authentication failures on 2026-09-17.
+   - New credentials verified: confirmed via live `/api/health` on production and staging (`db.status: "connected"`) and via successful Railway/GitHub secret propagation.
+   - Cross-tenant RLS denial tests: covered by the existing Phase 0 CI suite (`phase0.yml`), unaffected by this rotation since it runs against the new credential going forward.
+7. ✅ **Audit Record:** Rotation timestamp `2026-09-17`, operator `athom`, evidence recorded in this entry (Railway/GitHub consumer list, health-check confirmation, `28P01` rejection tests, session audit).
 
 ---
 
@@ -173,6 +182,130 @@ legacy `v0` transparent backward compatibility, and dual-key rotation via
 2. Execute batch `reencryptSecret()` migration for any restored `v0` legacy ciphertexts.
 3. Validate successful decrypt reads after retiring `SSO_PREVIOUS_ENCRYPTION_KEY`.
 4. Perform and document formal backup recovery drill with key rotation.
+
+---
+
+## MIGRATE-001 — `prisma migrate deploy` cannot replay migration history from scratch
+**Status:** open · **Target:** before any fresh-environment provisioning is needed · **Owner:** athom
+
+**2026-09-17:** discovered while provisioning a clean staging database. Running
+`prisma migrate deploy` against a genuinely empty Postgres database (all 160
+migrations, in order) fails partway through — it is **not** currently possible
+to bootstrap a fresh environment for this project from migration history alone.
+
+**Root cause:** migration `20260815140000_tenant_001_leasing_rental_isolation`
+runs `ALTER TABLE rental_rate_quotes ADD COLUMN ...` (and the same for
+`rental_vehicle_exchanges`, `rental_invoices`, `rental_invoice_line_items`,
+`rental_invoice_payments`) with no existence guard, but none of those five
+tables are `CREATE TABLE`'d by any earlier migration. They're only created by
+later migrations — `20260914140000_fresh_replay_rental_leasing_gap` and
+`20260915250000_fresh_replay_rental_leasing_gap_v2` — whose own names and
+comments make clear they were written specifically to patch "fresh database
+bootstrap" gaps like this one. Since `migrate deploy` applies migrations
+strictly in order and halts on the first failure, it dies at `20260815140000`
+long before it ever reaches the fixes meant to cover it.
+
+Separately, `20260815140000`'s tenant backfill logic (`SELECT id INTO
+default_tenant FROM tenants ... IF default_tenant IS NULL THEN RAISE
+EXCEPTION`) requires at least one pre-existing row in `tenants`, so a truly
+empty database also needs a seed tenant before this migration can pass, even
+once the table-ordering issue is fixed.
+
+**Why this hasn't been noticed before:** every real environment (production,
+the original staging database) was provisioned incrementally over time, so by
+the time `20260815140000` ran, `rental_rate_quotes` etc. already existed via
+whatever created them originally (likely ad hoc `db push`/runtime DDL before
+migrations were the source of truth) — the ordering bug only bites a true
+from-scratch replay.
+
+**Workaround used for staging (2026-09-17):** rather than editing an
+already-applied historical migration (risky — `migrate deploy` may re-validate
+checksums of migrations already recorded as applied, which would need
+verifying against production before ever touching that file), the clean
+staging database was built via `prisma db push` (schema-driven, ignores
+migration history and its ordering entirely) plus a targeted replay of RLS
+policies, grants, and the tables Prisma doesn't model, sourced directly from
+production's live structure via `prisma migrate diff --to-schema-datasource`.
+This works but is a one-off manual process, not something `migrate deploy`
+can do unattended.
+
+**Real fix needed:** move the `CREATE TABLE IF NOT EXISTS` statements for
+`rental_rate_quotes`, `rental_vehicle_exchanges`, `rental_invoices`,
+`rental_invoice_line_items`, and `rental_invoice_payments` earlier in history
+— either by making `20260815140000` itself defensive (guarding each `ALTER
+TABLE` with an existence check, matching the pattern already used elsewhere
+in this same migration for lease tables), or via some other mechanism that
+doesn't risk the checksum of an already-applied production migration. Whoever
+picks this up should first confirm whether `prisma migrate deploy` actually
+re-checks checksums of prior applied migrations in this Prisma version, since
+that determines whether editing the file in place is even safe.
+
+**Risk if left open:** disaster recovery, spinning up a second environment,
+or onboarding a new developer's local database all require a working fresh
+`migrate deploy` — none of those paths currently work end-to-end.
+
+---
+
+## OPS-001 — `PHASE0_DATABASE_URL` undocumented; production was 21 migrations behind
+**Status:** ✅ resolved (production caught up) · unresolved (still undocumented, no drift alarm) · **Target:** before next migration lands · **Owner:** athom
+
+**2026-09-17:** while investigating why PR #88's CI (`Audit log transaction
+race`, `Cross-tenant isolation`, `RLS isolation (TypeScript)`, `Leasing
+return workflow`, `Dunning & collections dispatch`) was failing identically
+on `main` — not just this branch — traced it to `PHASE0_DATABASE_URL`.
+
+**Finding 1 — the secret is undocumented.** `PHASE0_DATABASE_URL` isn't
+mentioned in any `.md` file in the repo. The only description of it lives in
+a comment inside `.github/workflows/phase0.yml` ("a connection string for
+the fleet360_app role — NOT the application's DATABASE_URL, which connects
+as neondb_owner"), which describes the *role* but not *which database*.
+Checking `gh secret list` timestamps and cross-referencing against this
+session's own credential rotation confirmed: **`PHASE0_DATABASE_URL` points
+at `neondb` — production itself** — not a dedicated Phase 0 branch/schema, as
+the workflow's own naming might suggest to a future reader.
+
+**Finding 2 — production was 21 migrations behind.** A direct read of
+`_prisma_migrations` on production (via a plain `SELECT`, since `prisma
+migrate status` itself was blocked as a production-read action in this
+session) showed 143 of 164 migrations applied — everything from
+`20260914140000_fresh_replay_rental_leasing_gap` through
+`20260915280000_fresh_replay_lease_allocation_occurrences` (21 migrations,
+spanning three days) had never been deployed to production, despite being
+merged to `main`. This is exactly the audit_logs `NOT NULL` gap PR #88's CI
+caught, plus 20 more.
+
+**Action taken (2026-09-17, operator athom, with explicit confirmation
+before each production-affecting step):**
+1. Confirmed `PHASE0_DATABASE_URL`'s target via secret timestamp + the
+   credential rotation record in SEC-002, rather than guessing.
+2. Read `_prisma_migrations` directly (safe, read-only) to get the full
+   pending list — deliberately *not* the single audit_logs migration
+   originally suspected, to know full scope before deploying.
+3. Ran `npx prisma migrate deploy` against production. All 21 migrations
+   applied cleanly, no partial failures. (Blocked from running this directly
+   in the automated session as a `[Production Deploy]` action — the operator
+   ran it manually and shared output for verification, same pattern as the
+   SEC-002 credential rotation.)
+4. Verified production `/api/health` stayed `db.status: "connected"`,
+   `backend.status: "ready"` throughout — no observed disruption.
+5. Re-ran PR #88's Phase 0 jobs: `Audit log transaction race`,
+   `RLS isolation (TypeScript)`, `Leasing return workflow`, and
+   `Dunning & collections dispatch` confirmed passing post-deploy.
+   `Cross-tenant isolation` (Go) was still running at last check — verify
+   independently before treating this gap as fully closed.
+
+**Still open:**
+- Document `PHASE0_DATABASE_URL` properly (target database, role, and that
+  it is production) somewhere durable — this entry is a start, but the
+  workflow file itself should say so plainly, not just imply a role.
+- Nothing currently alerts when production's applied-migration count drifts
+  from what's merged to `main`. This drift sat for three days, silently
+  failing 5 CI jobs on every single `main` push and PR, before anyone
+  investigated why. A cheap fix: a scheduled or push-triggered check that
+  runs `prisma migrate status` against production and fails loudly (not just
+  the already-passing `ci: refine unresolved migration query...` check,
+  which evidently didn't catch this) is worth adding so this can't recur
+  silently for days.
 
 ---
 
