@@ -150,6 +150,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/fleet360_fresh_ci?schema=public
       DIRECT_URL: postgresql://postgres:postgres@localhost:5432/fleet360_fresh_ci?schema=public
+      BOOTSTRAP_RUNTIME_DATABASE_URL: postgresql://fleet360_app:test@localhost:5432/fleet360_fresh_ci?schema=public
       CONFIRM_FRESH_INSTALL: "1"
 
     steps:
@@ -173,6 +174,10 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -yqq postgresql-client
 
+      - name: Run unit test suite for bootstrap runner and postflight
+        run: |
+          npx vitest run tests/unit/fresh-install-migrate.test.ts tests/unit/verify-fresh-install-postflight.test.ts
+
       # Pre-provision runtime role (fleet360_app) required by 20260915210000_fresh_replay_grant_app_role_schema_access
       - name: Pre-provision runtime role (fleet360_app)
         run: |
@@ -185,6 +190,22 @@ jobs:
             END
             \$\$;
           "
+
+      - name: Concurrency test (competing background runner with advisory lock)
+        run: |
+          # Spawn background psql session holding advisory lock 8839210
+          PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d fleet360_fresh_ci -c "SELECT pg_advisory_lock(8839210); SELECT pg_sleep(5);" &
+          BG_PID=$!
+          sleep 1
+
+          # Assert that fresh-install-migrate aborts immediately when advisory lock is held
+          if node scripts/fresh-install-migrate.cjs --fresh-install; then
+            echo "::error::fresh-install-migrate succeeded despite competing advisory lock holder!"
+            kill $BG_PID || true
+            exit 1
+          fi
+          echo "✓ Confirmed: fresh-install-migrate aborted cleanly when advisory lock was held."
+          wait $BG_PID || true
 
       - name: Run fresh database bootstrap runner
         run: |
@@ -213,6 +234,22 @@ jobs:
         run: |
           node scripts/verify-fresh-install-postflight.cjs
 
+      - name: Interrupted bootstrap resumption validation
+        run: |
+          # 1. Running without resume flag against non-fresh DB must fail
+          if node scripts/fresh-install-migrate.cjs --fresh-install; then
+            echo "::error::fresh-install-migrate succeeded on populated DB without resume flag!"
+            exit 1
+          fi
+          echo "✓ Confirmed: fresh-install-migrate rejected non-fresh DB without --resume-bootstrap-from."
+
+          # 2. Running with invalid resume migration must fail
+          if node scripts/fresh-install-migrate.cjs --fresh-install --resume-bootstrap-from=invalid_migration_name; then
+            echo "::error::fresh-install-migrate succeeded with invalid resume point!"
+            exit 1
+          fi
+          echo "✓ Confirmed: fresh-install-migrate rejected invalid resume point."
+
       - name: Test rejection of unexpected migration failure
         run: |
           node -e '
@@ -228,8 +265,47 @@ jobs:
             console.log("PASS: Unexpected migration failure was rejected.");
           '
 
-      - name: Upgrade compatibility test on existing representative schema
+      - name: Synthetic representative data upgrade test
         run: |
-          # Verify that running a subsequent migrate deploy against the fully migrated DB is a clean no-op
+          # Insert representative test data into tenants and rental_rate_quotes
+          PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d fleet360_fresh_ci -c "
+            INSERT INTO tenants (id, name, code)
+            VALUES ('synthetic_tenant_1', 'Synthetic Test Tenant', 'SYNTH_001')
+            ON CONFLICT (id) DO NOTHING;
+
+            INSERT INTO rental_rate_quotes (
+              id, tenant_id, vehicle_category, pickup_date, dropoff_date,
+              total_days, base_rental_charge, total_amount
+            )
+            VALUES (
+              'quote_synth_1', 'synthetic_tenant_1', 'SEDAN', NOW(), NOW() + INTERVAL '3 days',
+              3, 150.00, 157.50
+            )
+            ON CONFLICT (id) DO NOTHING;
+          "
+
+          # Verify that running a subsequent migrate deploy against populated DB is a clean no-op without data loss
           npx prisma migrate deploy
+
+          # Verify synthetic records remain intact
+          PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d fleet360_fresh_ci -c "
+            DO \$\$
+            DECLARE
+              tenant_cnt INT;
+              quote_cnt INT;
+            BEGIN
+              SELECT count(*) INTO tenant_cnt FROM tenants WHERE id = 'synthetic_tenant_1';
+              SELECT count(*) INTO quote_cnt FROM rental_rate_quotes WHERE id = 'quote_synth_1';
+
+              IF tenant_cnt != 1 THEN
+                RAISE EXCEPTION 'Synthetic tenant record missing or lost during migration deploy (count=%)', tenant_cnt;
+              END IF;
+
+              IF quote_cnt != 1 THEN
+                RAISE EXCEPTION 'Synthetic rental quote record missing or lost during migration deploy (count=%)', quote_cnt;
+              END IF;
+            END
+            \$\$;
+          "
+          echo "✓ Confirmed: Synthetic data preserved across subsequent migrate deploy."
 

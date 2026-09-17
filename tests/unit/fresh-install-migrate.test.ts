@@ -5,6 +5,8 @@ import {
   shouldHaltOnForbiddenError,
   hasExpectedGapSignature,
   verifyDatabasePreconditions,
+  buildEffectiveMigrationState,
+  validateResumptionState,
   resolveMigrationTarget,
   FORBIDDEN_ERROR_PATTERNS,
   EXPECTED_GAP_SIGNATURES,
@@ -202,7 +204,7 @@ describe('Fresh database migration runner safety guards & classification', () =>
     expect(evalResult.errorCode).toBe('3F000');
   });
 
-  it('correctly handles Prisma Rust schema-engine backtrace without misclassifying "with" as migration name', () => {
+  it('correctly handles Prisma Rust schema-engine backtrace and rejects bare 25P02 aborted transaction code', () => {
     const mockOutput = `
       Applying migration \`20260815150000_backfill_rls_with_check\`
       Applying migration \`20260816000000_route_consolidation_phase2_schema\`
@@ -221,9 +223,27 @@ describe('Fresh database migration runner safety guards & classification', () =>
     const evalResult = evaluateMigrationFailure(mockOutput, [
       '20260816000000_route_consolidation_phase2_schema',
     ]);
+    expect(evalResult.canResolve).toBe(false);
+    expect(evalResult.reason).toBe('ABORTED_TRANSACTION_CODE_ONLY');
+    expect(evalResult.migrationName).toBe('20260816000000_route_consolidation_phase2_schema');
+  });
+
+  it('allows resolution when Prisma Rust backtrace includes the authentic causal PostgreSQL code and signature', () => {
+    const mockOutput = `
+      Applying migration \`20260816000000_route_consolidation_phase2_schema\`
+      Error: P3018
+      Database error code: 42P01
+      Database error:
+      ERROR: relation "bus_routes" does not exist
+         0: schema_core::commands::apply_migrations::Applying migration
+                 with migration_name="20260816000000_route_consolidation_phase2_schema"
+    `;
+    const evalResult = evaluateMigrationFailure(mockOutput, [
+      '20260816000000_route_consolidation_phase2_schema',
+    ]);
     expect(evalResult.canResolve).toBe(true);
     expect(evalResult.reason).toBe('MATCHED_EXPECTED_GAP');
-    expect(evalResult.migrationName).toBe('20260816000000_route_consolidation_phase2_schema');
+    expect(evalResult.errorCode).toBe('42P01');
   });
 
   it('correctly matches fleet_routing_foundation when Postgres reports public-qualified table name', () => {
@@ -332,6 +352,55 @@ describe('Fresh database migration runner safety guards & classification', () =>
     expect(evalResult.migrationName).toBe(authMigration);
     expect(evalResult.errorCode).toBe('42703');
   });
+  it('rejects resolution when failure message looks expected but PostgreSQL error code is missing', () => {
+    const mockOutput = `
+      Applying migration \`20260815140000_tenant_001_leasing_rental_isolation\`
+      Error: P3018: A migration failed to apply.
+      Migration name: 20260815140000_tenant_001_leasing_rental_isolation
+      Database error: ERROR: relation "rental_rate_quotes" does not exist
+    `;
+    const evalResult = evaluateMigrationFailure(mockOutput, [
+      '20260815140000_tenant_001_leasing_rental_isolation',
+    ]);
+    expect(evalResult.canResolve).toBe(false);
+    expect(evalResult.reason).toBe('MISSING_ERROR_CODE');
+  });
+
+  it('rejects resolution when output contains conflicting/ambiguous migration names', () => {
+    const mockOutput = `
+      Applying migration \`20260815140000_tenant_001_leasing_rental_isolation\`
+      with migration_name="20260815140000_tenant_001_leasing_rental_isolation"
+      with migration_name="20260816000000_route_consolidation_phase2_schema"
+      Database error code: 42P01
+      Database error: ERROR: relation "rental_rate_quotes" does not exist
+    `;
+    const evalResult = evaluateMigrationFailure(mockOutput, [
+      '20260815140000_tenant_001_leasing_rental_isolation',
+    ]);
+    expect(evalResult.canResolve).toBe(false);
+    expect(evalResult.reason).toBe('AMBIGUOUS_MIGRATION_NAMES');
+    expect(evalResult.conflictingNames).toEqual(
+      expect.arrayContaining([
+        '20260815140000_tenant_001_leasing_rental_isolation',
+        '20260816000000_route_consolidation_phase2_schema',
+      ])
+    );
+  });
+
+  it('rejects auth_security_tables_and_rls when Postgres reports an unrelated table already exists', () => {
+    const authMigration = '20260910000024_auth_security_tables_and_rls';
+    const mockOutput = `
+      Applying migration \`${authMigration}\`
+      Error: P3018
+      Migration name: ${authMigration}
+      Database error code: 42P07
+      Database error:
+      ERROR: relation "unrelated_legacy_table" already exists
+    `;
+    const evalResult = evaluateMigrationFailure(mockOutput, [authMigration]);
+    expect(evalResult.canResolve).toBe(false);
+    expect(evalResult.reason).toBe('UNEXPECTED_ERROR_SIGNATURE');
+  });
 });
 
 describe('Database target resolution & preconditions', () => {
@@ -372,7 +441,7 @@ describe('Database target resolution & preconditions', () => {
     ).rejects.toThrow('permission denied for table _prisma_migrations');
   });
 
-  it('rejects database if tables exist in non-public managed schemas (e.g. finance or fleet)', async () => {
+  it('rejects database if objects exist in non-public managed schemas (e.g. finance or fleet)', async () => {
     const missingTableError = new Error('relation "_prisma_migrations" does not exist');
     (missingTableError as any).code = '42P01';
 
@@ -381,7 +450,11 @@ describe('Database target resolution & preconditions', () => {
         .mockResolvedValueOnce([{ current_user: 'postgres', current_database: 'fleet360_dirty', version: 'PostgreSQL 16' }])
         .mockResolvedValueOnce([{ acquired: true }]) // advisory lock
         .mockRejectedValueOnce(missingTableError) // _prisma_migrations
-        .mockResolvedValueOnce([{ table_schema: 'finance', table_name: 'invoices' }]), // tables in finance!
+        .mockResolvedValueOnce([{ table_schema: 'finance', table_name: 'invoices', table_type: 'BASE TABLE' }]) // tables
+        .mockResolvedValueOnce([]) // matviews
+        .mockResolvedValueOnce([]) // sequences
+        .mockResolvedValueOnce([]) // routines
+        .mockResolvedValueOnce([]), // types
       $disconnect: vi.fn().mockResolvedValue(undefined),
     };
 
@@ -392,7 +465,7 @@ describe('Database target resolution & preconditions', () => {
         freshInstallIntent: true,
         throwOnError: true,
       })
-    ).rejects.toThrow('Database is not empty (1 application tables found in managed schemas).');
+    ).rejects.toThrow('Database is not empty (1 application objects found in managed schemas).');
   });
 
   it('rejects non-fresh database with existing migrations when resumeBootstrapFrom is not specified', async () => {
@@ -400,7 +473,7 @@ describe('Database target resolution & preconditions', () => {
       $queryRaw: vi.fn()
         .mockResolvedValueOnce([{ current_user: 'postgres', current_database: 'fleet360_test', version: 'PostgreSQL 16' }])
         .mockResolvedValueOnce([{ acquired: true }]) // advisory lock
-        .mockResolvedValueOnce([{ migration_name: '20260801000000_init', finished_at: new Date() }]),
+        .mockResolvedValueOnce([{ migration_name: '20251207091545_init', finished_at: new Date() }]),
       $disconnect: vi.fn().mockResolvedValue(undefined),
     };
 
@@ -414,17 +487,21 @@ describe('Database target resolution & preconditions', () => {
     ).rejects.toThrow('Database is not fresh (1 migrations found) without resume point.');
   });
 
-  it('allows resumption when resumeBootstrapFrom matches a recorded migration', async () => {
-    const resumePoint = '20260815140000_tenant_001_leasing_rental_isolation';
+  it('allows resumption when resumeBootstrapFrom matches a verified recorded migration prefix', async () => {
+    const resumePoint = '20251207132928_add_data_masters';
     const mockPrisma = {
       $queryRaw: vi.fn()
         .mockResolvedValueOnce([{ current_user: 'postgres', current_database: 'fleet360_test', version: 'PostgreSQL 16' }])
         .mockResolvedValueOnce([{ acquired: true }]) // advisory lock
         .mockResolvedValueOnce([
-          { migration_name: '20260801000000_init', finished_at: new Date() },
+          { migration_name: '20251207091545_init', finished_at: new Date() },
           { migration_name: resumePoint, finished_at: new Date() },
         ])
-        .mockResolvedValueOnce([]), // application tables
+        .mockResolvedValueOnce([]) // tables
+        .mockResolvedValueOnce([]) // matviews
+        .mockResolvedValueOnce([]) // sequences
+        .mockResolvedValueOnce([]) // routines
+        .mockResolvedValueOnce([]), // types
       $disconnect: vi.fn().mockResolvedValue(undefined),
     };
 
@@ -440,7 +517,7 @@ describe('Database target resolution & preconditions', () => {
     expect(res.database).toBe('fleet360_test');
   });
 
-  it('passes cleanly for a genuinely fresh empty database where _prisma_migrations does not exist and 0 app tables exist', async () => {
+  it('passes cleanly for a genuinely fresh empty database where _prisma_migrations does not exist and 0 app objects exist', async () => {
     const missingTableError = new Error('relation "_prisma_migrations" does not exist');
     (missingTableError as any).code = '42P01';
 
@@ -449,7 +526,11 @@ describe('Database target resolution & preconditions', () => {
         .mockResolvedValueOnce([{ current_user: 'postgres', current_database: 'fleet360_fresh', version: 'PostgreSQL 16' }])
         .mockResolvedValueOnce([{ acquired: true }]) // advisory lock
         .mockRejectedValueOnce(missingTableError) // _prisma_migrations
-        .mockResolvedValueOnce([]), // 0 application tables
+        .mockResolvedValueOnce([]) // tables
+        .mockResolvedValueOnce([]) // matviews
+        .mockResolvedValueOnce([]) // sequences
+        .mockResolvedValueOnce([]) // routines
+        .mockResolvedValueOnce([]), // types
       $disconnect: vi.fn().mockResolvedValue(undefined),
     };
 
@@ -464,3 +545,42 @@ describe('Database target resolution & preconditions', () => {
     expect(res.database).toBe('fleet360_fresh');
   });
 });
+
+describe('Resumption state machine & effective migration history', () => {
+  it('correctly builds effective migration state accounting for resolved retries', () => {
+    const attempts = [
+      { migration_name: 'mig_01', started_at: new Date('2026-01-01T00:00:00Z'), finished_at: new Date('2026-01-01T00:00:01Z'), rolled_back_at: null, checksum: 'chk1' },
+      { migration_name: 'mig_02', started_at: new Date('2026-01-01T00:00:02Z'), finished_at: null, rolled_back_at: null, checksum: 'chk2' }, // failed first
+      { migration_name: 'mig_02', started_at: new Date('2026-01-01T00:00:03Z'), finished_at: new Date('2026-01-01T00:00:04Z'), rolled_back_at: null, checksum: 'chk2' }, // resolved!
+      { migration_name: 'mig_03', started_at: new Date('2026-01-01T00:00:05Z'), finished_at: null, rolled_back_at: null, checksum: 'chk3' }, // currently unresolved
+    ];
+
+    const state = buildEffectiveMigrationState(attempts);
+    expect(state.completedMigrations.map(m => m.migrationName)).toEqual(['mig_01', 'mig_02']);
+    expect(state.unresolvedMigrations.map(m => m.migrationName)).toEqual(['mig_03']);
+  });
+
+  it('rejects resumption when resume point is not the immediate failed migration', () => {
+    const attempts = [
+      { migration_name: '20251207091545_init', started_at: new Date(), finished_at: new Date(), rolled_back_at: null },
+      { migration_name: '20251207132928_add_data_masters', started_at: new Date(), finished_at: null, rolled_back_at: null }, // failed!
+    ];
+
+    // Trying to resume from '20251207091545_init' while '20251207132928_add_data_masters' is unresolved
+    expect(() => validateResumptionState(attempts, '20251207091545_init')).toThrow(
+      'Invalid resume point "20251207091545_init". Database has an active unresolved migration attempt for "20251207132928_add_data_masters"'
+    );
+  });
+
+  it('rejects resumption when multiple unresolved migrations exist (ambiguous state)', () => {
+    const attempts = [
+      { migration_name: '20251207091545_init', started_at: new Date('2026-01-01T00:00:00Z'), finished_at: null, rolled_back_at: null },
+      { migration_name: '20251207132928_add_data_masters', started_at: new Date('2026-01-01T00:00:01Z'), finished_at: null, rolled_back_at: null },
+    ];
+
+    expect(() => validateResumptionState(attempts, '20251207132928_add_data_masters')).toThrow(
+      'Ambiguous database state: found 2 unresolved migration attempts'
+    );
+  });
+});
+

@@ -75,13 +75,12 @@ const DOCUMENTED_GAPS = {
   },
   '20260816000000_route_consolidation_phase2_schema': {
     targetObject: 'bus_routes / route_passengers',
-    expectedCodes: ['42P01', '25P02'],
+    expectedCodes: ['42P01'],
     expectedSignatures: [
       /relation "(?:public\.)?bus_routes" does not exist/i,
       /relation "(?:public\.)?route_passengers" does not exist/i,
       /bus_routes/i,
       /route_passengers/i,
-      /current transaction is aborted/i,
     ],
   },
   '20260818100000_fleet_routing_foundation': {
@@ -181,17 +180,15 @@ const DOCUMENTED_GAPS = {
     expectedSignatures: [/generation expression/i, /CURRENT_DATE/i, /immutable/i, /finance_security_deposits/i, /verification failed/i],
   },
   '20260910000024_auth_security_tables_and_rls': {
-    targetObject: 'password_reset_tokens / audit_logs / tenant_invitations',
+    targetObject: 'password_reset_tokens / audit_logs / tenant_invitations / tenant_api_keys',
     expectedCodes: ['42P07', '42710', '42P01', '42703', 'P0001'],
     expectedSignatures: [
-      /already exists/i,
+      /(?:relation|table|type)\s+"?(?:password_reset_tokens|audit_logs|tenant_api_keys|tenant_invitations)"?\s+already exists/i,
       /password_reset_tokens/i,
       /audit_logs/i,
       /tenant_api_keys/i,
       /tenant_invitations/i,
       /token_hash/i,
-      /column .* does not exist/i,
-      /verification failed/i,
     ],
   },
   '20260911120000_lease_return_settlement_workflow': {
@@ -271,9 +268,14 @@ function hasExpectedGapSignature(output) {
  * PostgreSQL error code, and underlying database error message.
  */
 function extractFailureDetails(output) {
-  // 1. Extract failing migration name
-  let failingMigration = null;
+  // Extract the failure block (excluding earlier stdout)
+  let errorBlock = output;
+  const errIdx = output.search(/(?:Error:\s*P3018|Error:\s*ERROR|Database error|DbError|A migration failed to apply)/i);
+  if (errIdx !== -1) {
+    errorBlock = output.slice(errIdx);
+  }
 
+  // 1. Extract failing migration name(s)
   // Patterns for failing migration:
   // - with migration_name="<name>" (Prisma Rust schema-engine backtrace)
   // - Migration name: <name>
@@ -290,29 +292,43 @@ function extractFailureDetails(output) {
     /A migration failed to apply.*`([0-9a-zA-Z_]+)`/i,
   ];
 
+  const foundNames = new Set();
   for (const p of namePatterns) {
-    const m = p.exec(output);
-    if (m && m[1] && m[1].trim() !== 'with') {
-      failingMigration = m[1].trim();
-      break;
+    const globalP = new RegExp(p.source, p.flags.includes('g') ? p.flags : p.flags + 'g');
+    let m;
+    while ((m = globalP.exec(output)) !== null) {
+      if (m[1] && m[1].trim() !== 'with') {
+        foundNames.add(m[1].trim());
+      }
     }
   }
 
-  if (!failingMigration) {
-    // Only match backticked migration names or 14-digit timestamp migration names
-    const applyingMatches = [...output.matchAll(/(?:Applying migration\s+`([0-9a-zA-Z_]+)`|Applying migration\s+(\d{14}_[0-9a-zA-Z_]+))/gi)];
-    if (applyingMatches.length > 0) {
-      const lastMatch = applyingMatches[applyingMatches.length - 1];
-      const capturedName = (lastMatch[1] || lastMatch[2] || '').trim();
-      if (capturedName && capturedName !== 'with') {
-        failingMigration = capturedName;
-      }
+  const applyingMatches = [...output.matchAll(/(?:Applying migration\s+`([0-9a-zA-Z_]+)`|Applying migration\s+(\d{14}_[0-9a-zA-Z_]+))/gi)];
+  if (applyingMatches.length > 0) {
+    const lastMatch = applyingMatches[applyingMatches.length - 1];
+    const capturedName = (lastMatch[1] || lastMatch[2] || '').trim();
+    if (capturedName && capturedName !== 'with') {
+      foundNames.add(capturedName);
     }
+  }
+
+  const distinctNames = Array.from(foundNames);
+  let failingMigration = null;
+  let isAmbiguous = false;
+
+  if (distinctNames.length === 1) {
+    failingMigration = distinctNames[0];
+  } else if (distinctNames.length > 1) {
+    isAmbiguous = true;
   }
 
   // 2. Extract PostgreSQL error code
   let errorCode = null;
   const codeMatch =
+    /Database error code:\s*([0-9A-Z]{5})/i.exec(errorBlock) ||
+    /code:\s*"([0-9A-Z]{5})"/i.exec(errorBlock) ||
+    /PostgreSQL error code:\s*([0-9A-Z]{5})/i.exec(errorBlock) ||
+    /code:\s*SqlState\(E?([0-9A-Z]{5})\)/i.exec(errorBlock) ||
     /Database error code:\s*([0-9A-Z]{5})/i.exec(output) ||
     /code:\s*"([0-9A-Z]{5})"/i.exec(output) ||
     /PostgreSQL error code:\s*([0-9A-Z]{5})/i.exec(output) ||
@@ -326,6 +342,10 @@ function extractFailureDetails(output) {
   // 3. Extract database error message line/block
   let databaseErrorMessage = '';
   const msgMatch =
+    /Database error:\s*\n?\s*(?:ERROR:\s*)?([^\n]+)/i.exec(errorBlock) ||
+    /Error:\s*ERROR:\s*([^\n]+)/i.exec(errorBlock) ||
+    /DbError\s*\{[^}]*message:\s*"([^"]+)"/i.exec(errorBlock) ||
+    /ERROR:\s*([^\n]+)/i.exec(errorBlock) ||
     /Database error:\s*\n?\s*(?:ERROR:\s*)?([^\n]+)/i.exec(output) ||
     /Error:\s*ERROR:\s*([^\n]+)/i.exec(output) ||
     /DbError\s*\{[^}]*message:\s*"([^"]+)"/i.exec(output) ||
@@ -334,18 +354,13 @@ function extractFailureDetails(output) {
     databaseErrorMessage = msgMatch[1].trim();
   }
 
-  // Extract the failure block (excluding earlier stdout)
-  let errorBlock = output;
-  const errIdx = output.search(/(?:Error:\s*P3018|Error:\s*ERROR|Database error|DbError|A migration failed to apply)/i);
-  if (errIdx !== -1) {
-    errorBlock = output.slice(errIdx);
-  }
-
   return {
     failingMigration,
     errorCode,
     databaseErrorMessage,
     errorBlock,
+    isAmbiguous,
+    distinctNames,
   };
 }
 
@@ -362,12 +377,42 @@ function evaluateMigrationFailure(output, remainingOrMigration) {
     };
   }
 
-  const { failingMigration, errorCode, databaseErrorMessage, errorBlock } = extractFailureDetails(output);
+  const { failingMigration, errorCode, databaseErrorMessage, errorBlock, isAmbiguous, distinctNames } = extractFailureDetails(output);
+
+  if (isAmbiguous) {
+    return {
+      canResolve: false,
+      reason: 'AMBIGUOUS_MIGRATION_NAMES',
+      conflictingNames: distinctNames,
+      details: `Failure output contains conflicting migration names: ${distinctNames.join(', ')}`,
+    };
+  }
 
   if (!failingMigration) {
     return {
       canResolve: false,
       reason: 'CANNOT_DETERMINE_FAILED_MIGRATION',
+    };
+  }
+
+  // 1. Mandatory error code assertion
+  if (!errorCode) {
+    return {
+      canResolve: false,
+      reason: 'MISSING_ERROR_CODE',
+      migrationName: failingMigration,
+      details: 'Failure report did not contain a valid PostgreSQL error code (required for resolution).',
+    };
+  }
+
+  // 2. Reject 25P02
+  if (errorCode === '25P02') {
+    return {
+      canResolve: false,
+      reason: 'ABORTED_TRANSACTION_CODE_ONLY',
+      migrationName: failingMigration,
+      actualCode: '25P02',
+      details: 'Error 25P02 (current transaction is aborted) is a secondary symptom; resolution requires the original root PostgreSQL error code.',
     };
   }
 
@@ -406,18 +451,18 @@ function evaluateMigrationFailure(output, remainingOrMigration) {
     };
   }
 
-  // If expectedCodes are specified and errorCode was captured, enforce code match
-  if (gapMeta.expectedCodes && errorCode && !gapMeta.expectedCodes.includes(errorCode)) {
+  // 3. Strict code match
+  if (!gapMeta.expectedCodes || !gapMeta.expectedCodes.includes(errorCode)) {
     return {
       canResolve: false,
       reason: 'UNEXPECTED_ERROR_CODE',
       migrationName: failingMigration,
       actualCode: errorCode,
-      expectedCodes: gapMeta.expectedCodes,
+      expectedCodes: gapMeta.expectedCodes || [],
     };
   }
 
-  // Enforce target object match strictly against the extracted database error message and error block
+  // 4. Enforce target object match strictly against the extracted database error message and error block
   // (NEVER against the migration name itself, to prevent /operations/ matching 20260910000008_fleet_operations_null_escape)
   const sanitizedErrorBlock = errorBlock
     .split('\n')
@@ -477,6 +522,148 @@ function loadKnownResolveChain(docPath = DOC_PATH) {
 }
 
 /**
+ * Builds an effective migration state from _prisma_migrations attempt history.
+ * Accounts for retried, resolved, rolled back, and unresolved attempts.
+ */
+function buildEffectiveMigrationState(recordedMigrations) {
+  const sorted = [...(recordedMigrations || [])].sort((a, b) => {
+    const tA = a.started_at ? new Date(a.started_at).getTime() : 0;
+    const tB = b.started_at ? new Date(b.started_at).getTime() : 0;
+    return tA - tB;
+  });
+
+  const migrationMap = new Map();
+
+  for (const record of sorted) {
+    const name = record.migration_name;
+    if (!migrationMap.has(name)) {
+      migrationMap.set(name, {
+        migrationName: name,
+        attempts: [],
+        isCompleted: false,
+        isRolledBack: false,
+        isUnresolved: false,
+        effectiveChecksum: null,
+      });
+    }
+    const entry = migrationMap.get(name);
+    entry.attempts.push(record);
+
+    if (record.finished_at !== null) {
+      entry.isCompleted = true;
+      entry.isUnresolved = false;
+      entry.effectiveChecksum = record.checksum || entry.effectiveChecksum;
+    } else if (record.rolled_back_at !== null) {
+      if (!entry.isCompleted) {
+        entry.isRolledBack = true;
+      }
+    } else {
+      if (!entry.isCompleted) {
+        entry.isUnresolved = true;
+      }
+    }
+  }
+
+  const uniqueMigrations = Array.from(migrationMap.values());
+  const completedMigrations = uniqueMigrations.filter(m => m.isCompleted);
+  const unresolvedMigrations = uniqueMigrations.filter(m => m.isUnresolved);
+
+  return {
+    uniqueMigrations,
+    completedMigrations,
+    unresolvedMigrations,
+  };
+}
+
+/**
+ * Validates resumption state against migrations on disk and Prisma attempt history.
+ */
+function validateResumptionState(recordedMigrations, resumeFromMigration, migrationsDir = path.join(__dirname, '../prisma/migrations')) {
+  if (!fs.existsSync(migrationsDir)) {
+    throw new Error(`Migrations directory not found at ${migrationsDir}`);
+  }
+
+  const diskEntries = fs.readdirSync(migrationsDir, { withFileTypes: true })
+    .filter(d => d.isDirectory() && fs.existsSync(path.join(migrationsDir, d.name, 'migration.sql')))
+    .map(d => d.name)
+    .sort();
+
+  if (!diskEntries.includes(resumeFromMigration)) {
+    throw new Error(`Resume migration "${resumeFromMigration}" does not exist on disk.`);
+  }
+
+  const { completedMigrations, unresolvedMigrations } = buildEffectiveMigrationState(recordedMigrations);
+
+  // 1. Verify ordered prefix on disk for all completed migrations
+  if (completedMigrations.length > diskEntries.length) {
+    throw new Error(
+      `Database has ${completedMigrations.length} completed migrations, but only ${diskEntries.length} exist on disk.`
+    );
+  }
+
+  const crypto = require('crypto');
+
+  for (let i = 0; i < completedMigrations.length; i++) {
+    const completedName = completedMigrations[i].migrationName;
+    const diskName = diskEntries[i];
+    if (completedName !== diskName) {
+      throw new Error(
+        `Migration sequence divergence at index ${i}: database has completed "${completedName}", but disk has "${diskName}".`
+      );
+    }
+
+    // 2. Verify SHA256 checksum (handling CRLF/LF line-endings)
+    const recordedChecksum = completedMigrations[i].effectiveChecksum;
+    if (recordedChecksum) {
+      const sqlPath = path.join(migrationsDir, diskName, 'migration.sql');
+      const fileBytes = fs.readFileSync(sqlPath);
+      const rawHash = crypto.createHash('sha256').update(fileBytes).digest('hex');
+      const normalizedHash = crypto.createHash('sha256').update(
+        Buffer.from(fileBytes.toString('utf8').replace(/\r\n/g, '\n'), 'utf8')
+      ).digest('hex');
+
+      if (recordedChecksum !== rawHash && recordedChecksum !== normalizedHash) {
+        throw new Error(
+          `Checksum mismatch for migration "${diskName}": database recorded "${recordedChecksum}", ` +
+          `computed from disk raw="${rawHash}", normalized="${normalizedHash}".`
+        );
+      }
+    }
+  }
+
+  // 3. Define resume point semantics consistently:
+  // Case A: Interrupted at active unapplied migration -> resumeFromMigration MUST match the single active unapplied migration
+  // Case B: Interrupted after completion -> resumeFromMigration MUST match the last completed migration
+  if (unresolvedMigrations.length > 1) {
+    throw new Error(
+      `Ambiguous database state: found ${unresolvedMigrations.length} unresolved migration attempts ` +
+      `(${unresolvedMigrations.map(m => m.migrationName).join(', ')}). Manual operator intervention required.`
+    );
+  }
+
+  if (unresolvedMigrations.length === 1) {
+    const activeName = unresolvedMigrations[0].migrationName;
+    if (resumeFromMigration !== activeName) {
+      throw new Error(
+        `Invalid resume point "${resumeFromMigration}". Database has an active unresolved migration attempt ` +
+        `for "${activeName}". The resume point must be the immediate failed migration: "${activeName}".`
+      );
+    }
+  } else {
+    // No active unapplied migration: must resume after the last completed migration
+    const lastCompleted = completedMigrations.length > 0 ? completedMigrations[completedMigrations.length - 1].migrationName : null;
+    if (resumeFromMigration !== lastCompleted) {
+      throw new Error(
+        `Invalid resume point "${resumeFromMigration}". Database has no active failed attempts; ` +
+        `the resume point must match the last completed migration: "${lastCompleted || 'none'}".`
+      );
+    }
+  }
+
+  return true;
+}
+
+/**
  * Checks database preconditions, freshness, and advisory locking.
  */
 async function verifyDatabasePreconditions(options = {}) {
@@ -515,7 +702,7 @@ async function verifyDatabasePreconditions(options = {}) {
     const [ident] = await prisma.$queryRaw`SELECT current_user, current_database(), version()`;
     console.log(`✓ Connected to PostgreSQL as user "${ident.current_user}" on database "${ident.current_database}".`);
 
-    // Acquire PostgreSQL advisory lock to prevent concurrent runs
+    // Acquire PostgreSQL advisory lock using non-blocking pg_try_advisory_lock
     try {
       const [lockResult] = await prisma.$queryRaw`SELECT pg_try_advisory_lock(${ADVISORY_LOCK_ID}) AS acquired`;
       if (lockResult && !lockResult.acquired) {
@@ -535,7 +722,7 @@ async function verifyDatabasePreconditions(options = {}) {
 
     try {
       const records = await prisma.$queryRaw`
-        SELECT migration_name, started_at, finished_at, rolled_back_at, applied_steps_count
+        SELECT migration_name, checksum, started_at, finished_at, rolled_back_at, applied_steps_count
         FROM "_prisma_migrations"
         ORDER BY started_at ASC
       `;
@@ -561,24 +748,59 @@ async function verifyDatabasePreconditions(options = {}) {
       console.log('  Database status: Fresh empty database (_prisma_migrations table does not exist yet).');
     }
 
-    // Inspect all 7 managed schemas
+    // Inspect all 7 managed schemas for existing database objects across:
+    // tables, views, foreign tables, matviews, sequences, functions, and user types
     const appTables = await prisma.$queryRaw`
-      SELECT table_schema, table_name
+      SELECT table_schema, table_name, table_type
       FROM information_schema.tables
       WHERE table_schema = ANY(${MANAGED_SCHEMAS})
         AND table_name != '_prisma_migrations'
-        AND table_type = 'BASE TABLE'
     `;
-    const appTableCount = appTables ? appTables.length : 0;
+    const appMatviews = await prisma.$queryRaw`
+      SELECT schemaname AS table_schema, matviewname AS table_name, 'MATERIALIZED VIEW' AS table_type
+      FROM pg_matviews
+      WHERE schemaname = ANY(${MANAGED_SCHEMAS})
+    `;
+    const appSequences = await prisma.$queryRaw`
+      SELECT sequence_schema AS table_schema, sequence_name AS table_name, 'SEQUENCE' AS table_type
+      FROM information_schema.sequences
+      WHERE sequence_schema = ANY(${MANAGED_SCHEMAS})
+    `;
+    const appRoutines = await prisma.$queryRaw`
+      SELECT routine_schema AS table_schema, routine_name AS table_name, 'FUNCTION' AS table_type
+      FROM information_schema.routines
+      WHERE routine_schema = ANY(${MANAGED_SCHEMAS})
+    `;
+    const appTypes = await prisma.$queryRaw`
+      SELECT n.nspname AS table_schema, t.typname AS table_name, 'TYPE' AS table_type
+      FROM pg_type t
+      JOIN pg_namespace n ON n.oid = t.typnamespace
+      WHERE n.nspname = ANY(${MANAGED_SCHEMAS})
+        AND t.typtype = 'e'
+    `;
 
-    if ((!migrationsTableExists || migrationCount === 0) && appTableCount > 0) {
+    const totalAppObjects = [
+      ...(appTables || []),
+      ...(appMatviews || []),
+      ...(appSequences || []),
+      ...(appRoutines || []),
+      ...(appTypes || []),
+    ];
+    const appObjectCount = totalAppObjects.length;
+
+    if ((!migrationsTableExists || migrationCount === 0) && appObjectCount > 0) {
+      const sampleObjects = totalAppObjects
+        .slice(0, 5)
+        .map(o => `${o.table_schema}.${o.table_name} (${o.table_type})`)
+        .join(', ');
       const msg =
-        `✗ Error: Database is not empty. Found ${appTableCount} application table(s) across managed schemas ` +
+        `✗ Error: Database is not empty. Found ${appObjectCount} application object(s) across managed schemas ` +
         `(${MANAGED_SCHEMAS.join(', ')}), but _prisma_migrations is ${migrationsTableExists ? 'empty' : 'missing'}.\n` +
+        `  Sample objects: ${sampleObjects}\n` +
         '  This indicates an unmanaged or manually initialized database. Halting execution.';
       console.error(msg);
       if (options.throwOnError) {
-        throw new Error(`Database is not empty (${appTableCount} application tables found in managed schemas).`);
+        throw new Error(`Database is not empty (${appObjectCount} application objects found in managed schemas).`);
       }
       process.exit(1);
     }
@@ -596,18 +818,8 @@ async function verifyDatabasePreconditions(options = {}) {
         process.exit(1);
       }
 
-      const recordedNames = recordedMigrations.filter(r => r.finished_at !== null).map(r => r.migration_name);
-      if (!recordedNames.includes(resumeFromMigration)) {
-        const msg =
-          `✗ Error: Resume point "${resumeFromMigration}" not found among ${recordedNames.length} applied migration(s).\n` +
-          '  Aborting resumption to avoid corrupted schema replay state.';
-        console.error(msg);
-        if (options.throwOnError) {
-          throw new Error(`Resume migration "${resumeFromMigration}" not found in applied migrations.`);
-        }
-        process.exit(1);
-      }
-
+      // Rigorous resumption state validation (prefix, checksums, immediate failure point)
+      validateResumptionState(recordedMigrations, resumeFromMigration, options.migrationsDir);
       console.log(`✓ Resuming bootstrap after verified migration: "${resumeFromMigration}".`);
     }
 
@@ -716,24 +928,39 @@ async function main() {
         return;
       }
 
-      // Query _prisma_migrations for active failed migration record and diagnostic logs
+      // Corroborate failure against _prisma_migrations (fail-closed if unreadable or absent)
       let activeRecord = null;
       try {
-        const [rec] = await prisma.$queryRaw`
-          SELECT migration_name, logs FROM "_prisma_migrations"
+        const unresolvedRecords = await prisma.$queryRaw`
+          SELECT migration_name, logs, started_at, finished_at, rolled_back_at, checksum
+          FROM "_prisma_migrations"
           WHERE finished_at IS NULL AND rolled_back_at IS NULL
-          ORDER BY started_at DESC LIMIT 1
+          ORDER BY started_at ASC
         `;
-        if (rec) {
-          activeRecord = rec;
+        if (!unresolvedRecords || unresolvedRecords.length === 0) {
+          console.error(
+            '\n✗ FATAL: Database failure corroboration failed. No active unapplied record found in _prisma_migrations ' +
+            'to corroborate CLI failure output. Halting immediately (fail-closed).'
+          );
+          await releaseAdvisoryLock(prisma);
+          process.exit(1);
         }
+        if (unresolvedRecords.length > 1) {
+          console.error(
+            `\n✗ FATAL: Database failure corroboration failed. Found ${unresolvedRecords.length} unresolved migration attempts ` +
+            `in _prisma_migrations (${unresolvedRecords.map(r => r.migration_name).join(', ')}). Halting on state ambiguity.`
+          );
+          await releaseAdvisoryLock(prisma);
+          process.exit(1);
+        }
+        activeRecord = unresolvedRecords[0];
       } catch (err) {
-        // Table might not exist yet or query failed
+        console.error('\n✗ FATAL: Failed to query _prisma_migrations for failure corroboration (fail-closed):', err.message);
+        await releaseAdvisoryLock(prisma);
+        process.exit(1);
       }
 
-      const combinedOutput = activeRecord
-        ? `${result.output}\nMigration name: ${activeRecord.migration_name}\n${activeRecord.logs || ''}`
-        : result.output;
+      const combinedOutput = `${result.output}\nMigration name: ${activeRecord.migration_name}\n${activeRecord.logs || ''}`;
 
       const evaluation = evaluateMigrationFailure(combinedOutput, remaining);
 
@@ -760,6 +987,21 @@ async function main() {
               `  Details: ${evaluation.details || 'N/A'}\n` +
               '  Halting immediately to prevent improper resolution.'
           );
+        } else if (evaluation.reason === 'MISSING_ERROR_CODE') {
+          console.error(
+            `\n✗ Migration "${evaluation.migrationName}" failure report is MISSING a PostgreSQL error code.\n` +
+              '  Resolution requires an authentic PostgreSQL error code. Halting immediately.'
+          );
+        } else if (evaluation.reason === 'ABORTED_TRANSACTION_CODE_ONLY') {
+          console.error(
+            `\n✗ Migration "${evaluation.migrationName}" reported ONLY 25P02 (transaction aborted).\n` +
+              '  Resolution requires the root causal error code rather than the aborted transaction symptom. Halting immediately.'
+          );
+        } else if (evaluation.reason === 'AMBIGUOUS_MIGRATION_NAMES') {
+          console.error(
+            `\n✗ Failure report contains ambiguous/conflicting migration names: ${(evaluation.conflictingNames || []).join(', ')}.\n` +
+              '  Halting immediately.'
+          );
         } else {
           console.error(`\n✗ Migration failure could not be resolved: reason=${evaluation.reason}`);
         }
@@ -768,9 +1010,9 @@ async function main() {
       }
 
       // Cross-check with DB: verify that active failed record in _prisma_migrations matches
-      if (activeRecord && activeRecord.migration_name !== evaluation.migrationName) {
+      if (activeRecord.migration_name !== evaluation.migrationName) {
         console.error(
-          `✗ Active unapplied database migration "${activeRecord.migration_name}" ` +
+          `✗ FATAL: Active unapplied database migration "${activeRecord.migration_name}" ` +
             `does not match evaluated failure "${evaluation.migrationName}". Halting.`
         );
         await releaseAdvisoryLock(prisma);
@@ -805,6 +1047,8 @@ module.exports = {
   extractFailureDetails,
   evaluateMigrationFailure,
   verifyDatabasePreconditions,
+  buildEffectiveMigrationState,
+  validateResumptionState,
   loadKnownResolveChain,
   DOC_PATH,
 };
