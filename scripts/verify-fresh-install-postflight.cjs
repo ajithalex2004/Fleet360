@@ -585,6 +585,28 @@ async function verifyDeterministicDualTenantRls(options = {}) {
       }
       console.log(`  ✓ Authenticated as "${who.current_user}" on database "${who.current_database}" (search_path: ${who.search_path}).`);
 
+      // 1b. Runtime connection: finance_payments shadow assertion (Reviewer Correction #1)
+      const [shadowOids] = await tx.$queryRawUnsafe(`
+        SELECT to_regclass('finance_payments')::oid AS unqual_oid,
+               to_regclass('finance.finance_payments')::oid AS fin_oid,
+               to_regclass('public.finance_payments')::oid AS pub_oid
+      `);
+      if (!shadowOids || !shadowOids.unqual_oid) {
+        throw new Error('Runtime lookup: unqualified "finance_payments" does not exist in relation catalog.');
+      }
+      if (!shadowOids.fin_oid) {
+        throw new Error('Runtime lookup: canonical relation "finance.finance_payments" does not exist.');
+      }
+      if (shadowOids.unqual_oid !== shadowOids.fin_oid) {
+        throw new Error(
+          `Runtime lookup: unqualified finance_payments (OID ${shadowOids.unqual_oid}) resolves to a different relation than finance.finance_payments (OID ${shadowOids.fin_oid}).`
+        );
+      }
+      if (shadowOids.pub_oid !== null) {
+        throw new Error('Runtime lookup: shadow relation "public.finance_payments" still exists in schema public (must be absent).');
+      }
+      console.log('  ✓ Runtime connection: finance_payments object identity matches finance.finance_payments and public shadow is absent.');
+
       // 2. Multi-domain fixtures for Tenant A
       await tx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', $1, true)`, TENANT_A);
 

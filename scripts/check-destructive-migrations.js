@@ -65,6 +65,11 @@ const ALLOWLIST = {
     'real environment: this migration is additive there (every DROP COLUMN target is ' +
     'guarded to only run against the wrong-shape table a fresh replay produces, and is a ' +
     'no-op wherever the column was never there to begin with).',
+  '20260915290000_fresh_replay_drop_finance_payments_shadow':
+    'Drops public.finance_payments, an unintended duplicate shadow table created by ' +
+    '20260910000026_finance_payments_table_and_rls due to missing schema qualification. ' +
+    'The canonical, tenant-isolated table is finance.finance_payments. Having public.finance_payments ' +
+    'shadows finance.finance_payments on unqualified references, violating tenant isolation.',
 };
 
 // Statements that can destroy data. DROP INDEX and DROP POLICY are deliberately

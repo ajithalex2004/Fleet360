@@ -284,6 +284,9 @@ describe('Post-flight verification manifest and privilege audits', () => {
             },
           ];
         }
+        if (sql.includes('to_regclass')) {
+          return [{ unqual_oid: 12345, fin_oid: 12345, pub_oid: null }];
+        }
         if (sql.includes('FROM audit_logs')) {
           return [{ action: args[0], tenant_id: tenantContext }];
         }
