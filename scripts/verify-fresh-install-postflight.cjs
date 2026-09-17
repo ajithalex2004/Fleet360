@@ -388,7 +388,7 @@ async function verifyDeterministicDualTenantRls(prisma, roleName = RUNTIME_ROLE)
     // 1. Insert Tenant A row under Tenant A context
     await tx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', $1, true)`, TENANT_A);
     await tx.$executeRawUnsafe(
-      `INSERT INTO audit_logs (id, "tenantId", action, entity, "entityId", details, "createdAt")
+      `INSERT INTO audit_logs (id, tenant_id, action, entity_type, entity_id, details, created_at)
        VALUES (gen_random_uuid(), $1, $2, 'TestEntity', '123', '{"test":true}', NOW())`,
       TENANT_A,
       actionA
@@ -397,7 +397,7 @@ async function verifyDeterministicDualTenantRls(prisma, roleName = RUNTIME_ROLE)
     // 2. Insert Tenant B row under Tenant B context
     await tx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', $1, true)`, TENANT_B);
     await tx.$executeRawUnsafe(
-      `INSERT INTO audit_logs (id, "tenantId", action, entity, "entityId", details, "createdAt")
+      `INSERT INTO audit_logs (id, tenant_id, action, entity_type, entity_id, details, created_at)
        VALUES (gen_random_uuid(), $1, $2, 'TestEntity', '456', '{"test":true}', NOW())`,
       TENANT_B,
       actionB
@@ -406,7 +406,7 @@ async function verifyDeterministicDualTenantRls(prisma, roleName = RUNTIME_ROLE)
     // 3. Test Isolation as Tenant A:
     await tx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', $1, true)`, TENANT_A);
     const rowsSeenByA = await tx.$queryRawUnsafe(
-      `SELECT action, "tenantId" FROM audit_logs WHERE action IN ($1, $2)`,
+      `SELECT action, tenant_id FROM audit_logs WHERE action IN ($1, $2)`,
       actionA,
       actionB
     );
@@ -430,7 +430,7 @@ async function verifyDeterministicDualTenantRls(prisma, roleName = RUNTIME_ROLE)
     // 4. Test Isolation as Tenant B:
     await tx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', $1, true)`, TENANT_B);
     const rowsSeenByB = await tx.$queryRawUnsafe(
-      `SELECT action, "tenantId" FROM audit_logs WHERE action IN ($1, $2)`,
+      `SELECT action, tenant_id FROM audit_logs WHERE action IN ($1, $2)`,
       actionA,
       actionB
     );
