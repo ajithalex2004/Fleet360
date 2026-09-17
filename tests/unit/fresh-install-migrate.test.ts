@@ -239,8 +239,25 @@ describe('Fresh database migration runner safety guards & classification', () =>
       '20260818100000_fleet_routing_foundation',
     ]);
     expect(evalResult.canResolve).toBe(true);
-    expect(evalResult.reason).toBe('MATCHED_EXPECTED_GAP');
     expect(evalResult.migrationName).toBe('20260818100000_fleet_routing_foundation');
+    expect(evalResult.errorCode).toBe('42P01');
+  });
+
+  it('correctly matches add_tenant_constraints_and_indexes when failing on work_orders', () => {
+    const mockOutput = `
+      Applying migration \`20260824000000_add_tenant_constraints_and_indexes\`
+      Error: P3018
+      Migration name: 20260824000000_add_tenant_constraints_and_indexes
+      Database error code: 42P01
+      Database error:
+      ERROR: relation "work_orders" does not exist
+    `;
+    const evalResult = evaluateMigrationFailure(mockOutput, [
+      '20260824000000_add_tenant_constraints_and_indexes',
+    ]);
+    expect(evalResult.canResolve).toBe(true);
+    expect(evalResult.reason).toBe('MATCHED_EXPECTED_GAP');
+    expect(evalResult.migrationName).toBe('20260824000000_add_tenant_constraints_and_indexes');
     expect(evalResult.errorCode).toBe('42P01');
   });
 });

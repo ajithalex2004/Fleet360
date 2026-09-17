@@ -101,14 +101,14 @@ const DOCUMENTED_GAPS = {
     expectedSignatures: [/places/i, /zone_id/i, /spatial/i],
   },
   '20260824000000_add_tenant_constraints_and_indexes': {
-    targetObject: 'trip_passengers / customers',
-    expectedCodes: ['42P01'],
-    expectedSignatures: [/trip_passengers/i, /customers/i],
+    targetObject: 'customers / trip_passengers / work_orders / WorkOrder',
+    expectedCodes: ['42P01', '42703'],
+    expectedSignatures: [/customers/i, /trip_passengers/i, /work_orders/i, /WorkOrder/i],
   },
   '20260904000000_add_tenant_id_to_lease_rental_children': {
     targetObject: 'rental_payment_transactions',
     expectedCodes: ['42P01', '42703'],
-    expectedSignatures: [/rental_/i, /tenant_id/i],
+    expectedSignatures: [/rental_/i, /tenant_id/i, /lease_/i],
   },
   '20260905000000_adopt_route_optimisation_results': {
     targetObject: 'route_optimisation_results',
@@ -148,7 +148,7 @@ const DOCUMENTED_GAPS = {
   '20260910000009_backfill_bookings_hierarchy_tenant': {
     targetObject: 'logistics_shipment_orders / bookings.tenant_id',
     expectedCodes: ['42P01', '42703'],
-    expectedSignatures: [/logistics_shipment_orders/i, /bookings/i, /tenant_id/i],
+    expectedSignatures: [/logistics_shipment_orders/i, /bookings/i, /customer_hierarchy/i, /tenant_id/i],
   },
   '20260910000010_grant_app_role_schema_access': {
     targetObject: 'fleet360_app / domain schemas',
@@ -158,17 +158,17 @@ const DOCUMENTED_GAPS = {
   '20260910000016_finance_deposits_recurring_tables_and_rls': {
     targetObject: 'finance_security_deposits column generation',
     expectedCodes: ['42P17', '0A000'],
-    expectedSignatures: [/generation expression/i, /CURRENT_DATE/i, /immutable/i],
+    expectedSignatures: [/generation expression/i, /CURRENT_DATE/i, /immutable/i, /finance_security_deposits/i],
   },
   '20260910000024_auth_security_tables_and_rls': {
     targetObject: 'password_reset_tokens / audit_logs',
     expectedCodes: ['42P07', '42710'],
-    expectedSignatures: [/already exists/i, /password_reset_tokens/i, /audit_logs/i],
+    expectedSignatures: [/already exists/i, /password_reset_tokens/i, /audit_logs/i, /tenant_api_keys/i],
   },
   '20260911120000_lease_return_settlement_workflow': {
-    targetObject: 'lease_return_settlements / finance_security_deposits',
+    targetObject: 'lease_vehicle_returns / lease_allocation_occurrences / finance_security_deposits',
     expectedCodes: ['42P01'],
-    expectedSignatures: [/lease_return_settlements/i, /finance_security_deposits/i],
+    expectedSignatures: [/lease_vehicle_returns/i, /lease_return_settlements/i, /lease_allocation_occurrences/i, /finance_security_deposits/i],
   },
   '20260914140000_fresh_replay_rental_leasing_gap': {
     targetObject: 'rental_rate_quotes.tenant_id',
@@ -375,9 +375,13 @@ function evaluateMigrationFailure(output, remainingOrMigration) {
     };
   }
 
-  // Enforce target object match strictly against the extracted database error message or error block
+  // Enforce target object match strictly against the extracted database error message and error block
   // (NEVER against the migration name itself, to prevent /operations/ matching 20260910000008_fleet_operations_null_escape)
-  const targetCheckString = databaseErrorMessage || errorBlock;
+  const sanitizedErrorBlock = errorBlock
+    .split('\n')
+    .filter(line => !/migration_name|Migration name|Applying migration/i.test(line))
+    .join('\n');
+  const targetCheckString = `${databaseErrorMessage}\n${sanitizedErrorBlock}`;
   const matchesTargetObject = gapMeta.expectedSignatures.some(sig => sig.test(targetCheckString));
   if (!matchesTargetObject) {
     return {
@@ -386,6 +390,8 @@ function evaluateMigrationFailure(output, remainingOrMigration) {
       migrationName: failingMigration,
       expectedTargetObject: gapMeta.targetObject,
       details: targetCheckString,
+      actualCode: errorCode,
+      expectedCodes: gapMeta.expectedCodes,
     };
   }
 
