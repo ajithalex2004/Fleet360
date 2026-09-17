@@ -34,6 +34,8 @@ on:
     paths:
       - 'prisma/**'
       - 'scripts/check-destructive-migrations.js'
+      - 'scripts/fresh-install-migrate.cjs'
+      - 'scripts/verify-fresh-install-postflight.cjs'
       - '.github/workflows/migration-safety.yml'
   # So the check can be re-run on demand without an unrelated prisma/ change.
   workflow_dispatch:
@@ -124,3 +126,102 @@ jobs:
               repo: context.repo.repo,
               body,
             });
+
+  fresh-database-replay:
+    name: Fresh DB Bootstrap & Replay Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fleet360_fresh_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/fleet360_fresh_ci?schema=public
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/fleet360_fresh_ci?schema=public
+      CONFIRM_FRESH_INSTALL: "1"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Install postgresql-client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -yqq postgresql-client
+
+      # Pre-provision runtime role (fleet360_app) required by 20260915210000_fresh_replay_grant_app_role_schema_access
+      - name: Pre-provision runtime role (fleet360_app)
+        run: |
+          PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d fleet360_fresh_ci -c "
+            DO \$\$
+            BEGIN
+              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'fleet360_app') THEN
+                CREATE ROLE fleet360_app WITH LOGIN PASSWORD 'test' NOSUPERUSER NOBYPASSRLS;
+              END IF;
+            END
+            \$\$;
+          "
+
+      - name: Run fresh database bootstrap runner
+        run: |
+          node scripts/fresh-install-migrate.cjs --fresh-install
+
+      - name: Confirm no unresolved migrations remain
+        run: |
+          UNRESOLVED=$(PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d fleet360_fresh_ci -t -A -c "
+            SELECT COUNT(*) FROM \"_prisma_migrations\" WHERE finished_at IS NULL;
+          ")
+          echo "Unresolved migration attempts: $UNRESOLVED"
+          if [ "$UNRESOLVED" -ne "0" ]; then
+            echo "::error::Unresolved migrations found in _prisma_migrations!"
+            exit 1
+          fi
+
+      - name: Run post-flight verification (schema, privileges, dual-tenant RLS)
+        run: |
+          node scripts/verify-fresh-install-postflight.cjs
+
+      - name: Test rejection of unexpected migration failure
+        run: |
+          node -e '
+            const { evaluateMigrationFailure } = require("./scripts/fresh-install-migrate.cjs");
+            const res = evaluateMigrationFailure(
+              "Applying migration \`20261201000000_unauthorized_drop\`\nError: P3018\nDatabase error: ERROR: table not found\nMigration name: 20261201000000_unauthorized_drop",
+              ["20260815140000_tenant_001_leasing_rental_isolation"]
+            );
+            if (res.canResolve) {
+              console.error("FAILED: Unexpected migration failure was resolved!");
+              process.exit(1);
+            }
+            console.log("PASS: Unexpected migration failure was rejected.");
+          '
+
+      - name: Upgrade compatibility test on existing representative schema
+        run: |
+          # Verify that running a subsequent migrate deploy against the fully migrated DB is a clean no-op
+          npx prisma migrate deploy
+

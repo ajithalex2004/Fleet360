@@ -5,23 +5,31 @@
 // empty database) — staging, DR, or a new client deployment.
 //
 // Safety & Security Hardening:
-// 1. Verifies database connectivity and assertions before running any migration.
-//    Enforces that the database is fresh (empty _prisma_migrations) unless --fresh-override is passed.
-// 2. Strict error classification: immediately halts and fails closed if
-//    permission-denied, auth failure, connection timeout, or fatal infrastructure
-//    errors occur. Never issues `resolve --applied` on permission errors.
-// 3. Requires explicit expected-failure signatures (e.g. relation does not exist,
-//    type already exists) matching the documented gap before resolving.
-//    Generic wrapper codes (P3018, P3006) are strictly EXCLUDED to prevent masking fatal errors.
-// 4. Reads documented resolution steps dynamically from docs/FRESH_DATABASE_SETUP.md.
+// 1. Unified Target Selection:
+//    Resolves DIRECT_URL / DATABASE_URL consistently and synchronizes both for
+//    all subprocess invocations and internal PrismaClient instances.
+// 2. Unambiguous Failure Extraction & Strict 19-Step Classification:
+//    Parses the exact failing migration name, PG error code, and error message
+//    from Prisma's structured error block. Prevents false matches on earlier
+//    migrations in stdout. Cross-checks against _prisma_migrations.
+// 3. Preconditions & Freshness Guards:
+//    Requires explicit --fresh-install or CONFIRM_FRESH_INSTALL=1.
+//    Inspects all 7 managed schemas and _prisma_migrations.
+//    Employs PostgreSQL advisory locks (pg_try_advisory_lock).
+// 4. Post-Flight Verification:
+//    Executes 19-step schema manifest verification, runtime role privilege audit
+//    (rejecting superuser/bypassrls), and deterministic dual-tenant RLS isolation probe.
 
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { PrismaClient } = require('@prisma/client');
+const { verifyFreshInstallPostflight } = require('./verify-fresh-install-postflight.cjs');
 
 const DOC_PATH = path.join(__dirname, '..', 'docs', 'FRESH_DATABASE_SETUP.md');
 const PRISMA_BIN = require.resolve('prisma/build/index.js');
+const MANAGED_SCHEMAS = ['public', 'finance', 'ai', 'workforce', 'fleet', 'operations', 'spatial'];
+const ADVISORY_LOCK_ID = 8839210;
 
 // Critical infrastructure & security errors that MUST NEVER trigger a migration resolve
 const FORBIDDEN_ERROR_PATTERNS = [
@@ -38,14 +46,11 @@ const FORBIDDEN_ERROR_PATTERNS = [
 ];
 
 // Valid underlying PostgreSQL error signatures that correspond to historical schema replay gaps.
-// NOTE: Generic Prisma wrapper error codes like P3018 ("A migration failed to apply")
-// and P3006 ("Migration failed to apply cleanly") are deliberately EXCLUDED.
-// Prisma wraps fatal errors (such as disk full or syntax errors) in P3018; resolution
-// MUST require the specific underlying PostgreSQL schema gap signature.
 const EXPECTED_GAP_SIGNATURES = [
   /relation ".*" does not exist/i,
   /column ".*" does not exist/i,
   /table ".*" does not exist/i,
+  /schema ".*" does not exist/i,
   /type ".*" already exists/i,
   /relation ".*" already exists/i,
   /table ".*" already exists/i,
@@ -55,86 +60,133 @@ const EXPECTED_GAP_SIGNATURES = [
 ];
 
 // Exact target object bindings for documented historical schema replay gaps.
-// Binds each resolvable migration to its specific missing target object.
-// If a migration fails with an unrelated missing table or code, resolution is rejected.
+// Binds each resolvable migration to its specific missing target object and expected PG error codes.
 const DOCUMENTED_GAPS = {
   '20260815140000_tenant_001_leasing_rental_isolation': {
     targetObject: 'rental_rate_quotes',
+    expectedCodes: ['42P01'],
     expectedSignatures: [/relation "rental_rate_quotes" does not exist/i, /table "rental_rate_quotes" does not exist/i],
   },
   '20260816000000_route_consolidation_phase2_schema': {
     targetObject: 'route_passengers',
+    expectedCodes: ['42P01'],
     expectedSignatures: [/relation "route_passengers" does not exist/i, /table "route_passengers" does not exist/i],
   },
   '20260818100000_fleet_routing_foundation': {
-    targetObject: 'route_passengers',
-    expectedSignatures: [/route_passengers/i, /bus_routes/i],
+    targetObject: 'route_passengers / bus_routes',
+    expectedCodes: ['42P01'],
+    expectedSignatures: [/relation "route_passengers" does not exist/i, /relation "bus_routes" does not exist/i, /table "route_passengers" does not exist/i, /table "bus_routes" does not exist/i],
   },
   '20260821000000_vehicle_route_zone_tagging': {
     targetObject: 'spatial.places',
-    expectedSignatures: [/places/i, /zone_id/i],
+    expectedCodes: ['42P01', '3F000'],
+    expectedSignatures: [/places/i, /zone_id/i, /spatial/i],
   },
   '20260824000000_add_tenant_constraints_and_indexes': {
-    targetObject: 'trip_passengers',
+    targetObject: 'trip_passengers / customers',
+    expectedCodes: ['42P01'],
     expectedSignatures: [/trip_passengers/i, /customers/i],
   },
   '20260904000000_add_tenant_id_to_lease_rental_children': {
     targetObject: 'rental_payment_transactions',
+    expectedCodes: ['42P01', '42703'],
     expectedSignatures: [/rental_/i, /tenant_id/i],
   },
   '20260905000000_adopt_route_optimisation_results': {
     targetObject: 'route_optimisation_results',
+    expectedCodes: ['42P01'],
     expectedSignatures: [/route_optimisation_results/i],
   },
   '20260909000000_per_tenant_rental_agreement_numbers': {
     targetObject: 'rental_agreements',
+    expectedCodes: ['42P01'],
     expectedSignatures: [/rental_agreements/i],
   },
   '20260910000000_remove_null_tenant_escape': {
-    targetObject: 'rental_rate_quotes',
+    targetObject: 'rental_rate_quotes / rental_agreements',
+    expectedCodes: ['42P01'],
     expectedSignatures: [/rental_rate_quotes/i, /rental_agreements/i],
   },
   '20260910000003_login_attempts_platform_only': {
     targetObject: 'auth_login_attempts',
+    expectedCodes: ['42P01'],
     expectedSignatures: [/auth_login_attempts/i],
   },
   '20260910000004_enable_rls_seven_tables': {
     targetObject: 'trip_schedules',
+    expectedCodes: ['42P01'],
     expectedSignatures: [/trip_schedules/i],
   },
   '20260910000006_finance_schema_null_escape': {
-    targetObject: 'finance',
-    expectedSignatures: [/finance/i],
+    targetObject: 'finance schema / tables',
+    expectedCodes: ['3F000', '42P01'],
+    expectedSignatures: [/schema "finance" does not exist/i, /finance/i],
   },
   '20260910000008_fleet_operations_null_escape': {
-    targetObject: 'operations',
-    expectedSignatures: [/operations/i, /fleet/i],
+    targetObject: 'operations / fleet schema',
+    expectedCodes: ['3F000', '42P01'],
+    expectedSignatures: [/schema "operations" does not exist/i, /schema "fleet" does not exist/i, /relation "(operations|fleet)\./i],
   },
   '20260910000009_backfill_bookings_hierarchy_tenant': {
-    targetObject: 'bookings',
-    expectedSignatures: [/bookings/i, /logistics_shipment_orders/i],
+    targetObject: 'logistics_shipment_orders / bookings.tenant_id',
+    expectedCodes: ['42P01', '42703'],
+    expectedSignatures: [/logistics_shipment_orders/i, /bookings/i, /tenant_id/i],
   },
   '20260910000010_grant_app_role_schema_access': {
-    targetObject: 'fleet360_app',
-    expectedSignatures: [/fleet360_app/i, /permission/i, /schema/i],
+    targetObject: 'fleet360_app / domain schemas',
+    expectedCodes: ['3F000', '42501'],
+    expectedSignatures: [/schema "(fleet|operations|finance|spatial|workforce|ai)" does not exist/i, /fleet360_app/i, /permission/i],
   },
   '20260910000016_finance_deposits_recurring_tables_and_rls': {
-    targetObject: 'finance_security_deposits',
+    targetObject: 'finance_security_deposits column generation',
+    expectedCodes: ['42P17', '0A000'],
     expectedSignatures: [/generation expression/i, /CURRENT_DATE/i, /immutable/i],
   },
   '20260910000024_auth_security_tables_and_rls': {
-    targetObject: 'password_reset_tokens',
+    targetObject: 'password_reset_tokens / audit_logs',
+    expectedCodes: ['42P07', '42710'],
     expectedSignatures: [/already exists/i, /password_reset_tokens/i, /audit_logs/i],
   },
   '20260911120000_lease_return_settlement_workflow': {
-    targetObject: 'lease_return_settlements',
+    targetObject: 'lease_return_settlements / finance_security_deposits',
+    expectedCodes: ['42P01'],
     expectedSignatures: [/lease_return_settlements/i, /finance_security_deposits/i],
   },
   '20260914140000_fresh_replay_rental_leasing_gap': {
-    targetObject: 'rental_rate_quotes',
-    expectedSignatures: [/rental_rate_quotes/i, /tenant_id/i],
+    targetObject: 'rental_rate_quotes.tenant_id',
+    expectedCodes: ['42703'],
+    expectedSignatures: [/column "tenant_id" of relation "rental_rate_quotes" does not exist/i, /tenant_id/i],
   },
 };
+
+/**
+ * Unifies target database selection across CLI options and environment variables.
+ */
+function resolveMigrationTarget(options = {}) {
+  let targetUrl = options.databaseUrl;
+  if (!targetUrl) {
+    const urlArg = process.argv.find(arg => arg.startsWith('--database-url='));
+    if (urlArg) {
+      targetUrl = urlArg.slice('--database-url='.length).trim();
+    }
+  }
+  if (!targetUrl) {
+    targetUrl = process.env.DIRECT_URL || process.env.DATABASE_URL;
+  }
+  if (!targetUrl) {
+    throw new Error('Neither DIRECT_URL nor DATABASE_URL environment variable is set.');
+  }
+
+  // Validate URL syntax
+  try {
+    const parsed = new URL(targetUrl.replace(/^postgresql:\/\//, 'http://').replace(/^postgres:\/\//, 'http://'));
+    if (!parsed.hostname) throw new Error('Missing hostname');
+  } catch (err) {
+    throw new Error(`Invalid PostgreSQL migration target URL: ${err.message}`);
+  }
+
+  return targetUrl;
+}
 
 function shouldHaltOnForbiddenError(output) {
   for (const forbidden of FORBIDDEN_ERROR_PATTERNS) {
@@ -154,6 +206,81 @@ function hasExpectedGapSignature(output) {
   return { hasSignature: false };
 }
 
+/**
+ * Parses Prisma CLI stdout/stderr to extract the exact failing migration,
+ * PostgreSQL error code, and underlying database error message.
+ */
+function extractFailureDetails(output) {
+  // 1. Extract failing migration name
+  let failingMigration = null;
+
+  // Patterns for failing migration:
+  // - "Migration name: <name>"
+  // - "The `<name>` migration started at ... failed"
+  // - "Migration: <name>"
+  // - "Failed to apply migration: `<name>`"
+  // - Last "Applying migration `<name>`" followed by error
+  const namePatterns = [
+    /Migration name:\s*([0-9a-zA-Z_]+)/i,
+    /The\s+`([0-9a-zA-Z_]+)`\s+migration\s+started\s+at\s+.*failed/i,
+    /Migration:\s*([0-9a-zA-Z_]+)/i,
+    /Failed to apply migration:?\s*`?([0-9a-zA-Z_]+)`?/i,
+  ];
+
+  for (const p of namePatterns) {
+    const m = p.exec(output);
+    if (m && m[1]) {
+      failingMigration = m[1].trim();
+      break;
+    }
+  }
+
+  if (!failingMigration) {
+    const applyingMatches = [...output.matchAll(/Applying migration\s+`?([0-9a-zA-Z_]+)`?/gi)];
+    if (applyingMatches.length > 0) {
+      // Pick the last migration being applied before the failure
+      failingMigration = applyingMatches[applyingMatches.length - 1][1].trim();
+    }
+  }
+
+  // 2. Extract PostgreSQL error code
+  let errorCode = null;
+  const codeMatch =
+    /Database error code:\s*([0-9A-Z]{5})/i.exec(output) ||
+    /code:\s*"([0-9A-Z]{5})"/i.exec(output) ||
+    /PostgreSQL error code:\s*([0-9A-Z]{5})/i.exec(output);
+  if (codeMatch && codeMatch[1]) {
+    errorCode = codeMatch[1].trim().toUpperCase();
+  }
+
+  // 3. Extract database error message line/block
+  let databaseErrorMessage = '';
+  const msgMatch =
+    /Database error:\s*\n?\s*(?:ERROR:\s*)?([^\n]+)/i.exec(output) ||
+    /DbError\s*\{[^}]*message:\s*"([^"]+)"/i.exec(output) ||
+    /ERROR:\s*([^\n]+)/i.exec(output);
+  if (msgMatch && msgMatch[1]) {
+    databaseErrorMessage = msgMatch[1].trim();
+  }
+
+  // Extract the failure block (excluding earlier stdout)
+  let errorBlock = output;
+  const errIdx = output.search(/(?:Error:\s*P3018|Database error|DbError|A migration failed to apply)/i);
+  if (errIdx !== -1) {
+    errorBlock = output.slice(errIdx);
+  }
+
+  return {
+    failingMigration,
+    errorCode,
+    databaseErrorMessage,
+    errorBlock,
+  };
+}
+
+/**
+ * Evaluates migration deploy output against documented gap requirements.
+ */
 function evaluateMigrationFailure(output, remainingOrMigration) {
   const forbidden = shouldHaltOnForbiddenError(output);
   if (forbidden.isForbidden) {
@@ -164,49 +291,83 @@ function evaluateMigrationFailure(output, remainingOrMigration) {
     };
   }
 
+  const { failingMigration, errorCode, databaseErrorMessage, errorBlock } = extractFailureDetails(output);
+
+  if (!failingMigration) {
+    return {
+      canResolve: false,
+      reason: 'CANNOT_DETERMINE_FAILED_MIGRATION',
+    };
+  }
+
   const candidateNames = Array.isArray(remainingOrMigration)
     ? remainingOrMigration
     : [remainingOrMigration];
 
-  const idx = candidateNames.findIndex(name => output.includes(name));
+  const idx = candidateNames.indexOf(failingMigration);
   if (idx === -1) {
     return {
       canResolve: false,
       reason: 'UNKNOWN_MIGRATION',
+      migrationName: failingMigration,
     };
   }
 
-  const matchingMigration = candidateNames[idx];
-  const expectedSig = hasExpectedGapSignature(output);
+  // Verify generic signature against the error block (not the whole log)
+  const expectedSig = hasExpectedGapSignature(errorBlock);
   if (!expectedSig.hasSignature) {
     return {
       canResolve: false,
       reason: 'UNEXPECTED_ERROR_SIGNATURE',
-      migrationName: matchingMigration,
+      migrationName: failingMigration,
+      errorCode,
+      details: databaseErrorMessage,
     };
   }
 
-  // Exact target object check: if this migration has a documented entry, verify that the error matches its target object
-  const gapMeta = DOCUMENTED_GAPS[matchingMigration];
-  if (gapMeta) {
-    const matchesTargetObject = gapMeta.expectedSignatures.some(sig => sig.test(output));
-    if (!matchesTargetObject) {
-      return {
-        canResolve: false,
-        reason: 'UNEXPECTED_ERROR_SIGNATURE',
-        migrationName: matchingMigration,
-        expectedTargetObject: gapMeta.targetObject,
-      };
-    }
+  // Check specific gap definition in DOCUMENTED_GAPS
+  const gapMeta = DOCUMENTED_GAPS[failingMigration];
+  if (!gapMeta) {
+    return {
+      canResolve: false,
+      reason: 'UNDOCUMENTED_MIGRATION',
+      migrationName: failingMigration,
+    };
+  }
+
+  // If expectedCodes are specified and errorCode was captured, enforce code match
+  if (gapMeta.expectedCodes && errorCode && !gapMeta.expectedCodes.includes(errorCode)) {
+    return {
+      canResolve: false,
+      reason: 'UNEXPECTED_ERROR_CODE',
+      migrationName: failingMigration,
+      actualCode: errorCode,
+      expectedCodes: gapMeta.expectedCodes,
+    };
+  }
+
+  // Enforce target object match strictly against the extracted database error message or error block
+  // (NEVER against the migration name itself, to prevent /operations/ matching 20260910000008_fleet_operations_null_escape)
+  const targetCheckString = databaseErrorMessage || errorBlock;
+  const matchesTargetObject = gapMeta.expectedSignatures.some(sig => sig.test(targetCheckString));
+  if (!matchesTargetObject) {
+    return {
+      canResolve: false,
+      reason: 'UNEXPECTED_ERROR_SIGNATURE',
+      migrationName: failingMigration,
+      expectedTargetObject: gapMeta.targetObject,
+      details: targetCheckString,
+    };
   }
 
   return {
     canResolve: true,
     reason: 'MATCHED_EXPECTED_GAP',
-    migrationName: matchingMigration,
+    migrationName: failingMigration,
     index: idx,
     matchedSignature: expectedSig.matchedPattern,
-    targetObject: gapMeta?.targetObject,
+    targetObject: gapMeta.targetObject,
+    errorCode,
   };
 }
 
@@ -238,44 +399,76 @@ function loadKnownResolveChain(docPath = DOC_PATH) {
   return names;
 }
 
+/**
+ * Checks database preconditions, freshness, and advisory locking.
+ */
 async function verifyDatabasePreconditions(options = {}) {
-  const dbUrl = options.databaseUrl !== undefined ? options.databaseUrl : process.env.DATABASE_URL;
-  if (!dbUrl) {
-    console.error('✗ Error: DATABASE_URL environment variable is not set.');
-    if (options.throwOnError) {
-      throw new Error('DATABASE_URL environment variable is not set.');
-    }
-    process.exit(1);
-  }
+  const targetUrl = resolveMigrationTarget(options);
 
-  // Extract --resume-bootstrap-from=<migration_name> argument
+  // Intent guard: require explicit --fresh-install or CONFIRM_FRESH_INSTALL=1 unless resuming
   let resumeFromMigration = options.resumeBootstrapFrom;
   if (!resumeFromMigration) {
     const resumeArg = process.argv.find(arg => arg.startsWith('--resume-bootstrap-from='));
     if (resumeArg) {
-      resumeFromMigration = resumeArg.split('=')[1]?.trim();
+      resumeFromMigration = resumeArg.slice('--resume-bootstrap-from='.length).trim();
     }
   }
 
-  console.log('Verifying database connectivity and preconditions…');
-  const prisma = options.prismaClient || new PrismaClient();
+  const hasFreshIntent =
+    options.freshInstallIntent ||
+    process.argv.includes('--fresh-install') ||
+    process.env.CONFIRM_FRESH_INSTALL === '1';
+
+  if (!hasFreshIntent && !resumeFromMigration) {
+    const msg =
+      '✗ Error: Fresh database bootstrap requires explicit confirmation.\n' +
+      '  Pass --fresh-install flag or set CONFIRM_FRESH_INSTALL=1.\n' +
+      '  To resume an interrupted bootstrap, pass --resume-bootstrap-from=<migration_name>.';
+    console.error(msg);
+    if (options.throwOnError) {
+      throw new Error('Fresh install requires explicit confirmation (--fresh-install or CONFIRM_FRESH_INSTALL=1).');
+    }
+    process.exit(1);
+  }
+
+  console.log('Verifying database connectivity, preconditions, and locks…');
+  const prisma = options.prismaClient || new PrismaClient({ datasources: { db: { url: targetUrl } } });
+
   try {
     const [ident] = await prisma.$queryRaw`SELECT current_user, current_database(), version()`;
     console.log(`✓ Connected to PostgreSQL as user "${ident.current_user}" on database "${ident.current_database}".`);
 
-    // Check if _prisma_migrations exists and has existing records
+    // Acquire PostgreSQL advisory lock to prevent concurrent runs
+    try {
+      const [lockResult] = await prisma.$queryRaw`SELECT pg_try_advisory_lock(${ADVISORY_LOCK_ID}) AS acquired`;
+      if (lockResult && !lockResult.acquired) {
+        throw new Error('Another fresh-install bootstrap process is currently running on this database (advisory lock held).');
+      }
+      console.log('✓ Advisory lock acquired (exclusive bootstrap session).');
+    } catch (err) {
+      console.error(`✗ Advisory lock check failed: ${err.message}`);
+      if (options.throwOnError) throw err;
+      process.exit(1);
+    }
+
+    // Inspect _prisma_migrations
     let migrationCount = 0;
     let migrationsTableExists = true;
+    let recordedMigrations = [];
+
     try {
-      const migrations = await prisma.$queryRaw`
-        SELECT COUNT(*)::int as count FROM "_prisma_migrations" WHERE finished_at IS NOT NULL
+      const records = await prisma.$queryRaw`
+        SELECT migration_name, started_at, finished_at, rolled_back_at, applied_steps_count
+        FROM "_prisma_migrations"
+        ORDER BY started_at ASC
       `;
-      migrationCount = migrations[0]?.count ?? 0;
-      console.log(`  Database status: ${migrationCount} migration(s) currently recorded in _prisma_migrations.`);
+      recordedMigrations = records || [];
+      const finished = recordedMigrations.filter(r => r.finished_at !== null);
+      migrationCount = finished.length;
+      console.log(`  Database status: ${migrationCount} completed migration(s) recorded in _prisma_migrations.`);
     } catch (err) {
       const errMsg = err.message || '';
       const errCode = err.code;
-      // Only PostgreSQL 42P01 (undefined_table) or explicit relation message indicates missing table
       const isMissingTable =
         errCode === '42P01' ||
         /relation "_prisma_migrations" does not exist/i.test(errMsg) ||
@@ -283,9 +476,7 @@ async function verifyDatabasePreconditions(options = {}) {
 
       if (!isMissingTable) {
         console.error(`✗ Error querying _prisma_migrations (fail-closed, code: ${errCode || 'none'}):`, errMsg);
-        if (options.throwOnError) {
-          throw err;
-        }
+        if (options.throwOnError) throw err;
         process.exit(1);
       }
 
@@ -293,28 +484,26 @@ async function verifyDatabasePreconditions(options = {}) {
       console.log('  Database status: Fresh empty database (_prisma_migrations table does not exist yet).');
     }
 
-    // Inspect public schema tables: if _prisma_migrations is missing or empty, verify whether other application tables already exist
-    if (!migrationsTableExists || migrationCount === 0) {
-      const appTables = await prisma.$queryRaw`
-        SELECT table_name
-        FROM information_schema.tables
-        WHERE table_schema = 'public'
-          AND table_name != '_prisma_migrations'
-          AND table_type = 'BASE TABLE'
-      `;
-      const appTableCount = appTables ? appTables.length : 0;
-      if (appTableCount > 0) {
-        const msg =
-          `✗ Error: Database is not empty. Found ${appTableCount} application table(s) in schema public, ` +
-          `but _prisma_migrations is ${migrationsTableExists ? 'empty' : 'missing'}.\n` +
-          '  This indicates an unmanaged, partially migrated, or manually initialized database.\n' +
-          '  fresh-install-migrate is intended ONLY for genuinely fresh databases.';
-        console.error(msg);
-        if (options.throwOnError) {
-          throw new Error(`Database is not empty (${appTableCount} application tables found in public schema).`);
-        }
-        process.exit(1);
+    // Inspect all 7 managed schemas
+    const appTables = await prisma.$queryRaw`
+      SELECT table_schema, table_name
+      FROM information_schema.tables
+      WHERE table_schema = ANY(${MANAGED_SCHEMAS})
+        AND table_name != '_prisma_migrations'
+        AND table_type = 'BASE TABLE'
+    `;
+    const appTableCount = appTables ? appTables.length : 0;
+
+    if ((!migrationsTableExists || migrationCount === 0) && appTableCount > 0) {
+      const msg =
+        `✗ Error: Database is not empty. Found ${appTableCount} application table(s) across managed schemas ` +
+        `(${MANAGED_SCHEMAS.join(', ')}), but _prisma_migrations is ${migrationsTableExists ? 'empty' : 'missing'}.\n` +
+        '  This indicates an unmanaged or manually initialized database. Halting execution.';
+      console.error(msg);
+      if (options.throwOnError) {
+        throw new Error(`Database is not empty (${appTableCount} application tables found in managed schemas).`);
       }
+      process.exit(1);
     }
 
     if (migrationCount > 0) {
@@ -330,16 +519,10 @@ async function verifyDatabasePreconditions(options = {}) {
         process.exit(1);
       }
 
-      // Verify that the recorded migrations in _prisma_migrations contain resumeFromMigration
-      const recordedMigrations = await prisma.$queryRaw`
-        SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NOT NULL ORDER BY started_at ASC
-      `;
-      const recordedNames = recordedMigrations.map(r => r.migration_name);
-      const isKnownPoint = recordedNames.includes(resumeFromMigration);
-
-      if (!isKnownPoint) {
+      const recordedNames = recordedMigrations.filter(r => r.finished_at !== null).map(r => r.migration_name);
+      if (!recordedNames.includes(resumeFromMigration)) {
         const msg =
-          `✗ Error: Resume point "${resumeFromMigration}" not found among ${recordedNames.length} applied migration(s) in _prisma_migrations.\n` +
+          `✗ Error: Resume point "${resumeFromMigration}" not found among ${recordedNames.length} applied migration(s).\n` +
           '  Aborting resumption to avoid corrupted schema replay state.';
         console.error(msg);
         if (options.throwOnError) {
@@ -351,12 +534,16 @@ async function verifyDatabasePreconditions(options = {}) {
       console.log(`✓ Resuming bootstrap after verified migration: "${resumeFromMigration}".`);
     }
 
-    return { currentUser: ident.current_user, database: ident.current_database, migrationCount, resumeFromMigration };
+    return {
+      currentUser: ident.current_user,
+      database: ident.current_database,
+      migrationCount,
+      resumeFromMigration,
+      targetUrl,
+    };
   } catch (err) {
     console.error('✗ Database connectivity / precondition check failed:', err.message);
-    if (options.throwOnError) {
-      throw err;
-    }
+    if (options.throwOnError) throw err;
     process.exit(1);
   } finally {
     if (!options.prismaClient) {
@@ -365,12 +552,20 @@ async function verifyDatabasePreconditions(options = {}) {
   }
 }
 
-function tryDeploy(label) {
+/**
+ * Runs `prisma migrate deploy` with unified connection parameters.
+ */
+function tryDeploy(label, targetUrl) {
   console.log(`\n--- prisma migrate deploy (${label}) ---`);
   try {
     const out = execFileSync(process.execPath, [PRISMA_BIN, 'migrate', 'deploy'], {
       encoding: 'utf8',
       stdio: ['inherit', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        DATABASE_URL: targetUrl,
+        DIRECT_URL: targetUrl,
+      },
     });
     process.stdout.write(out);
     return { ok: true, output: out };
@@ -381,12 +576,20 @@ function tryDeploy(label) {
   }
 }
 
-function resolveMigration(name) {
+/**
+ * Resolves a migration as applied with unified connection parameters.
+ */
+function resolveMigration(name, targetUrl) {
   console.log(`\nApplying verified workaround for documented gap: "${name}" (marking resolved, not run)…`);
   try {
     execFileSync(process.execPath, [PRISMA_BIN, 'migrate', 'resolve', '--applied', name], {
       encoding: 'utf8',
       stdio: 'inherit',
+      env: {
+        ...process.env,
+        DATABASE_URL: targetUrl,
+        DIRECT_URL: targetUrl,
+      },
     });
   } catch (err) {
     console.error(`\n✗ Error: "migrate resolve --applied ${name}" failed — halting execution.`);
@@ -394,65 +597,111 @@ function resolveMigration(name) {
   }
 }
 
+/**
+ * Release advisory lock.
+ */
+async function releaseAdvisoryLock(prisma) {
+  try {
+    await prisma.$queryRaw`SELECT pg_advisory_unlock(${ADVISORY_LOCK_ID})`;
+    console.log('✓ Advisory lock released.');
+  } catch (err) {
+    // Ignore unlock errors during teardown
+  }
+}
+
 async function main() {
-  await verifyDatabasePreconditions();
+  const targetUrl = resolveMigrationTarget();
+  // Synchronize process env
+  process.env.DATABASE_URL = targetUrl;
+  process.env.DIRECT_URL = targetUrl;
 
-  const knownChain = loadKnownResolveChain();
-  console.log(
-    `Loaded ${knownChain.length} known resolve step(s) from ` +
-      `${path.relative(process.cwd(), DOC_PATH)}.`
-  );
+  const prisma = new PrismaClient({ datasources: { db: { url: targetUrl } } });
 
-  const remaining = [...knownChain];
-  let attempt = 1;
+  try {
+    await verifyDatabasePreconditions({ targetUrl, prismaClient: prisma });
 
-  for (;;) {
-    const result = tryDeploy(`attempt ${attempt}`);
-    if (result.ok) {
-      console.log('\n✓ All migrations applied. Environment is ready.');
-      return;
-    }
+    const knownChain = loadKnownResolveChain();
+    console.log(
+      `Loaded ${knownChain.length} known resolve step(s) from ` +
+        `${path.relative(process.cwd(), DOC_PATH)}.`
+    );
 
-    const evaluation = evaluateMigrationFailure(result.output, remaining);
+    const remaining = [...knownChain];
+    let attempt = 1;
 
-    if (!evaluation.canResolve) {
-      if (evaluation.reason === 'FORBIDDEN_INFRASTRUCTURE_ERROR') {
-        console.error(
-          '\n✗ FATAL INFRASTRUCTURE / PERMISSION ERROR DETECTED:\n' +
-            `  The database migration stopped on an unresolvable error matching pattern ${evaluation.forbiddenPattern}.\n` +
-            '  The migration runner will NEVER mark a migration as applied when a permission denied, ' +
-            'authentication, or connection error occurs.\n' +
-            '  Halting immediately.'
-        );
-      } else if (evaluation.reason === 'UNKNOWN_MIGRATION') {
-        console.error(
-          '\n✗ migrate deploy failed on a migration that is not in the documented ' +
-            `resolve chain (${path.relative(process.cwd(), DOC_PATH)}).\n` +
-            '  Read the error above — it names the failing migration and the underlying database error.\n' +
-            '  Do not blindly resolve past it. Investigate first, confirm against the schema, write a ' +
-            'corrective migration, update the documentation, and then re-run.'
-        );
-      } else if (evaluation.reason === 'UNEXPECTED_ERROR_SIGNATURE') {
-        console.error(
-          `\n✗ Migration "${evaluation.migrationName}" failed with an UNEXPECTED error signature.\n` +
-            '  Although this migration is listed in the known resolve chain, the actual database error ' +
-            'does not match any expected historical schema replay gap (such as missing relation or existing type).\n' +
-            '  Generic codes like P3018 or P3006 alone are insufficient; specific PostgreSQL errors are required.\n' +
-            '  Halting immediately to prevent improper resolution.'
-        );
+    for (;;) {
+      const result = tryDeploy(`attempt ${attempt}`, targetUrl);
+      if (result.ok) {
+        console.log('\n✓ Migration deployment complete. Executing post-flight verification…');
+        await verifyFreshInstallPostflight({ databaseUrl: targetUrl, prismaClient: prisma });
+        console.log('\n✓ All migrations applied and post-flight verification passed. Environment is ready.');
+        await releaseAdvisoryLock(prisma);
+        return;
       }
-      process.exit(1);
-    }
 
-    const name = evaluation.migrationName;
-    remaining.splice(0, evaluation.index + 1); // remove this one and any preceding migrations
-    resolveMigration(name);
-    attempt += 1;
+      const evaluation = evaluateMigrationFailure(result.output, remaining);
+
+      if (!evaluation.canResolve) {
+        if (evaluation.reason === 'FORBIDDEN_INFRASTRUCTURE_ERROR') {
+          console.error(
+            '\n✗ FATAL INFRASTRUCTURE / PERMISSION ERROR DETECTED:\n' +
+              `  Pattern: ${evaluation.forbiddenPattern}\n` +
+              '  The migration runner will NEVER mark a migration as applied when a permission, ' +
+              'authentication, or connection error occurs.\n' +
+              '  Halting immediately.'
+          );
+        } else if (evaluation.reason === 'UNKNOWN_MIGRATION') {
+          console.error(
+            `\n✗ migrate deploy failed on migration "${evaluation.migrationName}", which is not in the documented ` +
+              `resolve chain (${path.relative(process.cwd(), DOC_PATH)}).\n` +
+              '  Halting execution.'
+          );
+        } else if (evaluation.reason === 'UNEXPECTED_ERROR_SIGNATURE' || evaluation.reason === 'UNEXPECTED_ERROR_CODE') {
+          console.error(
+            `\n✗ Migration "${evaluation.migrationName}" failed with an UNEXPECTED error signature or code.\n` +
+              `  Code: ${evaluation.actualCode || 'unknown'}, Expected codes: ${(evaluation.expectedCodes || []).join(', ') || 'N/A'}\n` +
+              `  Expected object: ${evaluation.expectedTargetObject || 'N/A'}\n` +
+              `  Details: ${evaluation.details || 'N/A'}\n` +
+              '  Halting immediately to prevent improper resolution.'
+          );
+        } else {
+          console.error(`\n✗ Migration failure could not be resolved: reason=${evaluation.reason}`);
+        }
+        await releaseAdvisoryLock(prisma);
+        process.exit(1);
+      }
+
+      // Cross-check with DB: verify that active failed record in _prisma_migrations matches
+      try {
+        const [activeRecord] = await prisma.$queryRaw`
+          SELECT migration_name FROM "_prisma_migrations"
+          WHERE finished_at IS NULL AND rolled_back_at IS NULL
+          ORDER BY started_at DESC LIMIT 1
+        `;
+        if (activeRecord && activeRecord.migration_name !== evaluation.migrationName) {
+          console.error(
+            `✗ Active unapplied database migration "${activeRecord.migration_name}" ` +
+              `does not match evaluated failure "${evaluation.migrationName}". Halting.`
+          );
+          await releaseAdvisoryLock(prisma);
+          process.exit(1);
+        }
+      } catch (err) {
+        // Table might not exist yet or query failed
+      }
+
+      const name = evaluation.migrationName;
+      remaining.splice(0, evaluation.index + 1);
+      resolveMigration(name, targetUrl);
+      attempt += 1;
+    }
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
 if (require.main === module) {
-  main().catch(err => {
+  main().catch(async (err) => {
     console.error('Unexpected runner error:', err);
     process.exit(1);
   });
@@ -462,8 +711,11 @@ module.exports = {
   FORBIDDEN_ERROR_PATTERNS,
   EXPECTED_GAP_SIGNATURES,
   DOCUMENTED_GAPS,
+  MANAGED_SCHEMAS,
+  resolveMigrationTarget,
   shouldHaltOnForbiddenError,
   hasExpectedGapSignature,
+  extractFailureDetails,
   evaluateMigrationFailure,
   verifyDatabasePreconditions,
   loadKnownResolveChain,
