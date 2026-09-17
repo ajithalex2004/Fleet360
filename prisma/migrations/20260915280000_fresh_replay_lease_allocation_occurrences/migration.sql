@@ -219,3 +219,15 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON "lease_allocation_occurrences" TO fleet3
 GRANT SELECT, INSERT, UPDATE, DELETE ON "lease_return_adjustments" TO fleet360_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON "lease_contract_closures" TO fleet360_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON "lease_deposit_applications" TO fleet360_app;
+
+-- 8. Protect migration history ledger against runtime role writes
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = '_prisma_migrations'
+  ) THEN
+    EXECUTE 'REVOKE INSERT, UPDATE, DELETE ON public._prisma_migrations FROM fleet360_app';
+  END IF;
+END $$;
+
