@@ -193,13 +193,21 @@ jobs:
       - name: Confirm no unresolved migrations remain
         run: |
           UNRESOLVED=$(PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d fleet360_fresh_ci -t -A -c "
-            SELECT COUNT(*) FROM \"_prisma_migrations\" WHERE finished_at IS NULL;
+            SELECT COUNT(*) FROM \"_prisma_migrations\" m1
+            WHERE m1.finished_at IS NULL
+              AND m1.rolled_back_at IS NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM \"_prisma_migrations\" m2
+                WHERE m2.migration_name = m1.migration_name
+                  AND m2.finished_at IS NOT NULL
+              );
           ")
           echo "Unresolved migration attempts: $UNRESOLVED"
           if [ "$UNRESOLVED" -ne "0" ]; then
             echo "::error::Unresolved migrations found in _prisma_migrations!"
             exit 1
           fi
+          npx prisma migrate status
 
       - name: Run post-flight verification (schema, privileges, dual-tenant RLS)
         run: |
