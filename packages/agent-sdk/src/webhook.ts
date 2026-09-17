@@ -72,7 +72,7 @@ export class WebhookReceiver {
   private verify(body: string, signature: string): void {
     try {
       // Node.js environment
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const crypto = require('crypto') as typeof import('crypto');
       const expected = crypto.createHmac('sha256', this.secret!).update(body).digest('hex');
       const provided  = signature.replace('sha256=', '');
@@ -91,7 +91,7 @@ export class WebhookReceiver {
    */
   sign(body: string): string {
     if (!this.secret) throw new Error('No secret configured');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const crypto = require('crypto') as typeof import('crypto');
     return 'sha256=' + crypto.createHmac('sha256', this.secret).update(body).digest('hex');
   }
