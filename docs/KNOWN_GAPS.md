@@ -61,7 +61,7 @@ it does NOT run in production. However:
 ---
 
 ## SEC-002 — Rotate Neon credentials
-**Status:** in progress · **Target:** before go-live · **Owner:** athom
+**Status:** rotation complete; retirement verification pending · **Target:** before go-live · **Owner:** athom
 
 `.env.test` (gitignored) historically contained a Neon Postgres password
 (`<redacted_credential>`). The credential lived in the project folder, which was
@@ -78,8 +78,14 @@ broader than acceptable for a DB credential.
   - Runtime migration credential isolation guard verified (`scripts/check-no-runtime-migration-secrets.mjs`).
 - **Verified in Deployment:**
   - Deployed Railway staging cluster candidate verified against GitHub Actions Staging Acceptance Gate using `STAGING_DATABASE_URL` secret.
-- **Rotation Unverified; Treat Credentials as Compromised:**
-  - Code eradication prevents future leakage, but does not rotate live database credentials. Both previously exposed database credentials (`fleet360_app` and `neondb_owner`) must be treated as compromised until the live operational rotation sequence below is executed and verified.
+- **Rotation Executed (2026-09-17):**
+  - Both role passwords (`fleet360_app`, `neondb_owner`) reset via the Neon console by the operator (`athom`).
+  - New passwords propagated to every known consumer: Railway `fleet360-app` (production + staging) — `DATABASE_URL`, `RUNTIME_DIRECT_DATABASE_URL`, `PHASE0_DATABASE_URL`, `DIRECT_URL`, `MIGRATION_DATABASE_URL`, plus staging-only `DIRECT_DATABASE_URL`; Railway `fleet360-backend` (production + staging) — `DATABASE_URL`; GitHub Actions secrets `STAGING_DATABASE_URL` and `PHASE0_DATABASE_URL` (repo `ajithalex2004/Fleet360`, confirmed updated `2026-09-17T06:47Z`).
+  - Both Railway services restarted in both environments to pick up the new values (`railway variables --set` does not itself trigger a redeploy).
+  - Live verification: `GET /api/health` on both `fleet360-app-production.up.railway.app` and `fleet360-app-staging.up.railway.app` returned `db.status: "connected"` and `backend.status: "ready"` post-rotation.
+  - **Incident note:** production briefly went down (`db.status: "error", "database unreachable"`) between the Neon-side password reset and the Railway variable update/restart, because `railway variables --set` does not auto-restart a service — the old password remained loaded in the running process until an explicit `railway restart` was issued. Outage window: confirmed unhealthy at `2026-09-17T06:24Z` and `06:33Z`, confirmed recovered at `06:41Z`. For any future rotation, set the new Railway variables and issue the restart in the same breath to minimize this gap.
+- **Retirement Verification — Not Yet Done:**
+  - The old `fleet360_app`/`neondb_owner` passwords have not been confirmed rejected (`28P01`) from the Neon console, and no session-termination (`pg_terminate_backend`) pass has been run against connections still holding them. Until that check runs, treat the old passwords as rotated-but-unconfirmed-retired rather than fully closed out.
 
 **Credential Ownership Matrix:**
 - **Application Runtime (`DATABASE_URL`):** Least-privileged application role (`fleet360_app`, pooled endpoint). Holds `SELECT, INSERT, UPDATE, DELETE` grants on application schemas; does NOT own tables and does NOT hold `rolbypassrls`.
@@ -88,16 +94,17 @@ broader than acceptable for a DB credential.
 - **Staging Acceptance & Tenant Isolation Gate (`STAGING_DATABASE_URL`):** Dedicated application role (`fleet360_app`). Proves real tenant isolation and cross-tenant access denial.
 
 **Operational Rotation & Retirement Runbook:**
-1. **Target Inventory:** Identify affected Neon project (`ep-calm-heart-a15voo2a`), branch (`main` / staging), roles (`fleet360_app`, `neondb_owner`), and consumers.
-2. **Distribution Preparation:** Prepare new high-entropy random secrets for each consumer separately.
-3. **Password Rotation:** Reset role passwords via Neon Console or Neon Management API (`/projects/{project_id}/branches/{branch_id}/roles/{role_name}/reset_password`) to prevent plaintext passwords in non-ephemeral database SQL logs.
-4. **Consumer Updates:** Update GitHub Actions repository secrets (`STAGING_DATABASE_URL`, `DATABASE_URL`) and Railway environment variables (`DATABASE_URL`, `RUNTIME_DIRECT_DATABASE_URL`, `MIGRATION_DATABASE_URL`, `DIRECT_URL`). Recycle/restart application services.
-5. **Session & Pool Termination:** Terminate active sessions holding old credentials (`SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename IN ('fleet360_app', 'neondb_owner') AND pid <> pg_backend_pid();`).
-6. **Retirement Verification:**
+1. ✅ **Target Inventory:** Identify affected Neon project (`ep-calm-heart-a15voo2a`), branch (`main` / staging), roles (`fleet360_app`, `neondb_owner`), and consumers. — 13 consumer locations catalogued (see above).
+2. ✅ **Distribution Preparation:** Prepare new high-entropy random secrets for each consumer separately. — new passwords generated by the operator in the Neon console.
+3. ✅ **Password Rotation:** Reset role passwords via Neon Console or Neon Management API (`/projects/{project_id}/branches/{branch_id}/roles/{role_name}/reset_password`) to prevent plaintext passwords in non-ephemeral database SQL logs. — done 2026-09-17.
+4. ✅ **Consumer Updates:** Update GitHub Actions repository secrets (`STAGING_DATABASE_URL`, `PHASE0_DATABASE_URL`) and Railway environment variables (`DATABASE_URL`, `RUNTIME_DIRECT_DATABASE_URL`, `MIGRATION_DATABASE_URL`, `DIRECT_URL`, `PHASE0_DATABASE_URL`, `DIRECT_DATABASE_URL`) across both services and both environments. Services restarted. — done 2026-09-17, verified live via `/api/health`.
+5. ⬜ **Session & Pool Termination:** Terminate active sessions holding old credentials (`SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE usename IN ('fleet360_app', 'neondb_owner') AND pid <> pg_backend_pid();`). — **not yet run.**
+6. ⬜ **Retirement Verification:**
    - Execute fresh direct and pooled connections using retired credentials; verify connection rejection with `28P01 (password authentication failed)` (distinguished from network timeouts or DNS errors).
    - Execute fresh connections using new credentials; verify clean authentication.
    - Run cross-tenant denial tests to prove RLS enforcement remains intact.
-7. **Audit Record:** Record sanitized evidence, rotation timestamp, and responsible operator.
+   - **not yet run.**
+7. ⬜ **Audit Record:** Record sanitized evidence, rotation timestamp, and responsible operator. — partially satisfied by this entry; close out once steps 5–6 are confirmed.
 
 ---
 
