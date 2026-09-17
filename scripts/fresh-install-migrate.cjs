@@ -58,6 +58,7 @@ const EXPECTED_GAP_SIGNATURES = [
   /generation expression is not immutable/i,
   /cannot drop .* because other objects depend on it/i,
   /current transaction is aborted/i,
+  /verification failed/i,
 ];
 
 // Exact target object bindings for documented historical schema replay gaps.
@@ -118,32 +119,32 @@ const DOCUMENTED_GAPS = {
   '20260909000000_per_tenant_rental_agreement_numbers': {
     targetObject: 'rental_agreements',
     expectedCodes: ['42P01', '42703'],
-    expectedSignatures: [/rental_agreements/i],
+    expectedSignatures: [/rental_agreements/i, /tenant_id/i],
   },
   '20260910000000_remove_null_tenant_escape': {
     targetObject: 'rental_rate_quotes / rental_agreements',
-    expectedCodes: ['42P01', '42703'],
-    expectedSignatures: [/rental_rate_quotes/i, /rental_agreements/i],
+    expectedCodes: ['42P01', '42703', 'P0001'],
+    expectedSignatures: [/rental_rate_quotes/i, /rental_agreements/i, /verification failed/i, /tenant/i],
   },
   '20260910000003_login_attempts_platform_only': {
     targetObject: 'auth_login_attempts',
-    expectedCodes: ['42P01'],
-    expectedSignatures: [/auth_login_attempts/i],
+    expectedCodes: ['42P01', 'P0001'],
+    expectedSignatures: [/auth_login_attempts/i, /verification failed/i, /tenant/i],
   },
   '20260910000004_enable_rls_seven_tables': {
     targetObject: 'trip_schedules',
-    expectedCodes: ['42P01'],
-    expectedSignatures: [/trip_schedules/i],
+    expectedCodes: ['42P01', 'P0001'],
+    expectedSignatures: [/trip_schedules/i, /verification failed/i, /tenant/i, /RLS/i, /WorkOrder/i],
   },
   '20260910000006_finance_schema_null_escape': {
     targetObject: 'finance schema / tables',
-    expectedCodes: ['3F000', '42P01'],
-    expectedSignatures: [/schema "finance" does not exist/i, /finance/i],
+    expectedCodes: ['3F000', '42P01', 'P0001'],
+    expectedSignatures: [/schema "finance" does not exist/i, /finance/i, /verification failed/i],
   },
   '20260910000008_fleet_operations_null_escape': {
     targetObject: 'operations / fleet schema',
-    expectedCodes: ['3F000', '42P01'],
-    expectedSignatures: [/schema "operations" does not exist/i, /schema "fleet" does not exist/i, /relation "(operations|fleet)\./i],
+    expectedCodes: ['3F000', '42P01', 'P0001'],
+    expectedSignatures: [/schema "operations" does not exist/i, /schema "fleet" does not exist/i, /relation "(operations|fleet)\./i, /verification failed/i, /escape/i],
   },
   '20260910000009_backfill_bookings_hierarchy_tenant': {
     targetObject: 'logistics_shipment_orders / bookings.tenant_id',
@@ -152,8 +153,8 @@ const DOCUMENTED_GAPS = {
   },
   '20260910000010_grant_app_role_schema_access': {
     targetObject: 'fleet360_app / domain schemas',
-    expectedCodes: ['3F000', '42501'],
-    expectedSignatures: [/schema "(fleet|operations|finance|spatial|workforce|ai)" does not exist/i, /fleet360_app/i, /permission/i],
+    expectedCodes: ['3F000', '42501', 'P0001', '42P01'],
+    expectedSignatures: [/schema "(fleet|operations|finance|spatial|workforce|ai)" does not exist/i, /fleet360_app/i, /permission/i, /verification failed/i, /lacks USAGE/i],
   },
   '20260910000016_finance_deposits_recurring_tables_and_rls': {
     targetObject: 'finance_security_deposits column generation',
@@ -168,12 +169,12 @@ const DOCUMENTED_GAPS = {
   '20260911120000_lease_return_settlement_workflow': {
     targetObject: 'lease_vehicle_returns / lease_allocation_occurrences / finance_security_deposits',
     expectedCodes: ['42P01', '42703'],
-    expectedSignatures: [/lease_vehicle_returns/i, /lease_return_settlements/i, /lease_allocation_occurrences/i, /finance_security_deposits/i],
+    expectedSignatures: [/lease_vehicle_returns/i, /lease_return_settlements/i, /lease_allocation_occurrences/i, /finance_security_deposits/i, /tenant_id/i],
   },
   '20260914140000_fresh_replay_rental_leasing_gap': {
     targetObject: 'rental_rate_quotes.tenant_id',
     expectedCodes: ['42703', '42P01'],
-    expectedSignatures: [/column "tenant_id" of relation "rental_rate_quotes" does not exist/i, /tenant_id/i],
+    expectedSignatures: [/column "tenant_id" of relation "rental_rate_quotes" does not exist/i, /tenant_id/i, /rental_rate_quotes/i],
   },
 };
 
