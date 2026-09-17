@@ -522,6 +522,162 @@ function loadKnownResolveChain(docPath = DOC_PATH) {
 }
 
 /**
+ * Lexically splits a SQL script into discrete statements, honoring comments,
+ * single-quoted strings (with '' escaping), and PostgreSQL dollar-quoted blocks.
+ */
+function splitSqlStatements(sql) {
+  const statements = [];
+  let current = '';
+  let inString = false;
+  let inDollarQuote = false;
+  let dollarTag = '';
+  let inLineComment = false;
+  let inBlockComment = false;
+
+  for (let i = 0; i < sql.length; i++) {
+    const char = sql[i];
+    const nextChar = sql[i + 1] || '';
+
+    if (inLineComment) {
+      current += char;
+      if (char === '\n') inLineComment = false;
+    } else if (inBlockComment) {
+      current += char;
+      if (char === '*' && nextChar === '/') {
+        current += nextChar;
+        i++;
+        inBlockComment = false;
+      }
+    } else if (inString) {
+      current += char;
+      if (char === "'") {
+        if (nextChar === "'") {
+          current += nextChar;
+          i++;
+        } else {
+          inString = false;
+        }
+      }
+    } else if (inDollarQuote) {
+      current += char;
+      if (char === '$' && sql.slice(i - dollarTag.length, i) === dollarTag) {
+        inDollarQuote = false;
+      }
+    } else {
+      if (char === '-' && nextChar === '-') {
+        inLineComment = true;
+        current += char;
+      } else if (char === '/' && nextChar === '*') {
+        inBlockComment = true;
+        current += char;
+      } else if (char === "'") {
+        inString = true;
+        current += char;
+      } else if (char === '$') {
+        const match = /^\$[a-zA-Z0-9_]*\$/.exec(sql.slice(i));
+        if (match) {
+          inDollarQuote = true;
+          dollarTag = match[0].slice(1, -1);
+          current += match[0];
+          i += match[0].length - 1;
+        } else {
+          current += char;
+        }
+      } else if (char === ';') {
+        const trimmed = current.trim();
+        if (trimmed) {
+          statements.push(trimmed);
+        }
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+  }
+
+  const last = current.trim();
+  if (last) statements.push(last);
+  return statements;
+}
+
+/**
+ * Extracts the underlying PostgreSQL error code and message from Prisma Client errors.
+ */
+function extractPostgresErrorFromPrisma(err) {
+  let code = null;
+  let message = err.message || '';
+
+  if (err.meta) {
+    if (typeof err.meta.code === 'string') {
+      code = err.meta.code;
+    }
+    if (typeof err.meta.message === 'string') {
+      message = err.meta.message;
+    }
+  }
+
+  if (!code || code === 'P2010') {
+    const m =
+      /Code:\s*[`"']?([0-9A-Z]{5})[`"']?/i.exec(err.message) ||
+      /SqlState\(E?([0-9A-Z]{5})\)/i.exec(err.message) ||
+      /code:\s*[`"']?([0-9A-Z]{5})[`"']?/i.exec(err.message);
+    if (m && m[1]) {
+      code = m[1].toUpperCase();
+    }
+  }
+
+  return { code, message };
+}
+
+/**
+ * Probes the discrete statements of a failing migration inside an interactive transaction
+ * to discover the genuine root PostgreSQL error code and message that caused a transaction abort (25P02).
+ * Always rolls back with zero permanent changes.
+ */
+async function probeCausalMigrationFailure(
+  prisma,
+  migrationName,
+  migrationsDir = path.join(__dirname, '..', 'prisma', 'migrations')
+) {
+  const sqlPath = path.join(migrationsDir, migrationName, 'migration.sql');
+  if (!fs.existsSync(sqlPath)) {
+    return null;
+  }
+  const rawSql = fs.readFileSync(sqlPath, 'utf8');
+  const statements = splitSqlStatements(rawSql);
+
+  let rootError = null;
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      for (const rawStmt of statements) {
+        const cleanStmt = rawStmt.replace(/^(\s*--[^\n]*\n|\s*\/\*[\s\S]*?\*\/\s*)+/g, '').trim();
+        if (/^BEGIN\b/i.test(cleanStmt) || /^COMMIT\b/i.test(cleanStmt)) {
+          continue;
+        }
+
+        try {
+          await tx.$executeRawUnsafe(rawStmt);
+        } catch (err) {
+          const { code, message } = extractPostgresErrorFromPrisma(err);
+          rootError = {
+            statement: cleanStmt,
+            code,
+            message,
+          };
+          throw new Error('__PROBE_CAUSAL_ROLLBACK__');
+        }
+      }
+      throw new Error('__PROBE_CAUSAL_ROLLBACK__');
+    });
+  } catch (err) {
+    // Expected rollback sentinel
+  }
+
+  return rootError;
+}
+
+/**
  * Builds an effective migration state from _prisma_migrations attempt history.
  * Accounts for retried, resolved, rolled back, and unresolved attempts.
  */
@@ -962,7 +1118,25 @@ async function main() {
 
       const combinedOutput = `${result.output}\nMigration name: ${activeRecord.migration_name}\n${activeRecord.logs || ''}`;
 
-      const evaluation = evaluateMigrationFailure(combinedOutput, remaining);
+      let evaluation = evaluateMigrationFailure(combinedOutput, remaining);
+
+      // If the failure report only contains 25P02 (current transaction is aborted),
+      // probe the failing migration statements to extract the authentic causal root error.
+      // 25P02 itself is never resolved directly — we strictly require the underlying PostgreSQL failure.
+      if (!evaluation.canResolve && evaluation.reason === 'ABORTED_TRANSACTION_CODE_ONLY') {
+        console.log(`  Probing root causal failure for migration "${evaluation.migrationName}"…`);
+        const rootCausal = await probeCausalMigrationFailure(prisma, evaluation.migrationName);
+        if (rootCausal && rootCausal.code && rootCausal.code !== '25P02') {
+          console.log(`  ✓ Uncovered root causal PostgreSQL error: ${rootCausal.code} (${rootCausal.message.split('\n')[0]})`);
+          const syntheticCausalOutput = [
+            `Migration name: ${evaluation.migrationName}`,
+            `Database error code: ${rootCausal.code}`,
+            `Database error: ERROR: ${rootCausal.message}`,
+            `DbError { code: SqlState(E${rootCausal.code}), message: "${rootCausal.message.replace(/"/g, '\\"')}" }`,
+          ].join('\n');
+          evaluation = evaluateMigrationFailure(syntheticCausalOutput, remaining);
+        }
+      }
 
       if (!evaluation.canResolve) {
         if (evaluation.reason === 'FORBIDDEN_INFRASTRUCTURE_ERROR') {
@@ -1050,5 +1224,8 @@ module.exports = {
   buildEffectiveMigrationState,
   validateResumptionState,
   loadKnownResolveChain,
+  splitSqlStatements,
+  extractPostgresErrorFromPrisma,
+  probeCausalMigrationFailure,
   DOC_PATH,
 };

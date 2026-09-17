@@ -8,6 +8,9 @@ import {
   buildEffectiveMigrationState,
   validateResumptionState,
   resolveMigrationTarget,
+  splitSqlStatements,
+  extractPostgresErrorFromPrisma,
+  probeCausalMigrationFailure,
   FORBIDDEN_ERROR_PATTERNS,
   EXPECTED_GAP_SIGNATURES,
   DOCUMENTED_GAPS,
@@ -589,4 +592,80 @@ describe('Resumption state machine & effective migration history', () => {
     );
   });
 });
+
+describe('Lexical SQL splitter and root causal failure probe', () => {
+  it('correctly splits multi-statement SQL handling comments, quotes, and dollar quoting', () => {
+    const sql = `
+      -- First statement
+      CREATE TABLE test_table (id TEXT PRIMARY KEY);
+      /* Multi-line comment; with semicolon */
+      INSERT INTO test_table (id) VALUES ('text with ; semicolon and ''escaped'' quote');
+      DO $$
+      BEGIN
+        RAISE NOTICE 'block with ; semicolon';
+      END;
+      $$;
+    `;
+
+    const stmts = splitSqlStatements(sql);
+    expect(stmts.length).toBe(3);
+    expect(stmts[0]).toContain('CREATE TABLE test_table');
+    expect(stmts[1]).toContain('INSERT INTO test_table');
+    expect(stmts[2]).toContain('DO $$');
+  });
+
+  it('extracts PostgreSQL error code and message from Prisma Client errors', () => {
+    const prismaErrWithMeta = {
+      code: 'P2010',
+      message: 'Raw query failed. Code: `42P01`. Message: `relation "public.bus_routes" does not exist`',
+      meta: {
+        code: '42P01',
+        message: 'relation "public.bus_routes" does not exist',
+      },
+    };
+
+    const extracted1 = extractPostgresErrorFromPrisma(prismaErrWithMeta);
+    expect(extracted1.code).toBe('42P01');
+    expect(extracted1.message).toBe('relation "public.bus_routes" does not exist');
+
+    const prismaErrNoMeta = {
+      code: 'P2010',
+      message: 'Raw query failed. Code: `23505`. Message: `duplicate key value violates unique constraint`',
+    };
+
+    const extracted2 = extractPostgresErrorFromPrisma(prismaErrNoMeta);
+    expect(extracted2.code).toBe('23505');
+    expect(extracted2.message).toContain('duplicate key');
+  });
+
+  it('probes failing migration statements in interactive transaction with guaranteed rollback', async () => {
+    const mockTx = {
+      $executeRawUnsafe: vi.fn().mockImplementation(async (stmt: string) => {
+        if (stmt.includes('bus_routes')) {
+          const err = new Error('Raw query failed. Code: `42P01`. Message: `relation "public.bus_routes" does not exist`');
+          (err as any).meta = { code: '42P01', message: 'relation "public.bus_routes" does not exist' };
+          throw err;
+        }
+        return 0;
+      }),
+    };
+
+    const mockPrisma = {
+      $transaction: vi.fn().mockImplementation(async (callback: (tx: any) => Promise<any>) => {
+        await callback(mockTx);
+      }),
+    };
+
+    const rootError = (await probeCausalMigrationFailure(
+      mockPrisma as any,
+      '20260816000000_route_consolidation_phase2_schema'
+    )) as any;
+
+    expect(rootError).toBeTruthy();
+    expect(rootError.code).toBe('42P01');
+    expect(rootError.message).toBe('relation "public.bus_routes" does not exist');
+    expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+});
+
 
