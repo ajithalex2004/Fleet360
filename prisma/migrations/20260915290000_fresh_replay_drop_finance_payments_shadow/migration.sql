@@ -13,4 +13,9 @@ BEGIN
     DROP TABLE public.finance_payments;
     RAISE NOTICE 'dropped public.finance_payments shadow table';
   END IF;
+
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'fleet360_app') THEN
+    ALTER ROLE fleet360_app SET search_path = "$user", public, finance, ai, fleet, operations, spatial, workforce;
+    RAISE NOTICE 'configured search_path for fleet360_app';
+  END IF;
 END $$;

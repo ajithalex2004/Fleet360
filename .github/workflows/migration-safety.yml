@@ -150,7 +150,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/fleet360_fresh_ci?schema=public
       DIRECT_URL: postgresql://postgres:postgres@localhost:5432/fleet360_fresh_ci?schema=public
-      BOOTSTRAP_RUNTIME_DATABASE_URL: postgresql://fleet360_app:test@localhost:5432/fleet360_fresh_ci?schema=public
+      BOOTSTRAP_RUNTIME_DATABASE_URL: postgresql://fleet360_app:test@localhost:5432/fleet360_fresh_ci
       CONFIRM_FRESH_INSTALL: "1"
 
     steps:
@@ -187,6 +187,7 @@ jobs:
               IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'fleet360_app') THEN
                 CREATE ROLE fleet360_app WITH LOGIN PASSWORD 'test' NOSUPERUSER NOBYPASSRLS;
               END IF;
+              ALTER ROLE fleet360_app SET search_path = \"\$user\", public, finance, ai, fleet, operations, spatial, workforce;
             END
             \$\$;
           "

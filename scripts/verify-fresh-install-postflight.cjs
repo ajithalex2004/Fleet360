@@ -588,6 +588,13 @@ async function verifyDeterministicDualTenantRls(options = {}) {
         throw new Error(`Active runtime role "${who.current_user}" holds rolbypassrls=true.`);
       }
       console.log(`  ✓ Authenticated as "${who.current_user}" on database "${who.current_database}" (search_path: ${who.search_path}).`);
+      // Ensure session search_path includes domain schemas if not already present
+      const currentSp = who.search_path || '';
+      if (!currentSp.includes('finance')) {
+        await tx.$executeRawUnsafe(
+          `SET search_path TO "$user", public, finance, ai, fleet, operations, spatial, workforce`
+        );
+      }
 
       // 1b. Runtime connection: finance_payments shadow assertion (Reviewer Correction #1)
       const [shadowOids] = await tx.$queryRawUnsafe(`
