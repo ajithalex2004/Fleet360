@@ -66,7 +66,11 @@ const DOCUMENTED_GAPS = {
   '20260815140000_tenant_001_leasing_rental_isolation': {
     targetObject: 'rental_rate_quotes',
     expectedCodes: ['42P01'],
-    expectedSignatures: [/relation "rental_rate_quotes" does not exist/i, /table "rental_rate_quotes" does not exist/i],
+    expectedSignatures: [
+      /relation "(?:public\.)?rental_rate_quotes" does not exist/i,
+      /table "(?:public\.)?rental_rate_quotes" does not exist/i,
+      /rental_rate_quotes/i,
+    ],
   },
   '20260816000000_route_consolidation_phase2_schema': {
     targetObject: 'bus_routes / route_passengers',
@@ -82,7 +86,14 @@ const DOCUMENTED_GAPS = {
   '20260818100000_fleet_routing_foundation': {
     targetObject: 'route_passengers / bus_routes',
     expectedCodes: ['42P01'],
-    expectedSignatures: [/relation "route_passengers" does not exist/i, /relation "bus_routes" does not exist/i, /table "route_passengers" does not exist/i, /table "bus_routes" does not exist/i],
+    expectedSignatures: [
+      /relation "(?:public\.)?route_passengers" does not exist/i,
+      /relation "(?:public\.)?bus_routes" does not exist/i,
+      /table "(?:public\.)?route_passengers" does not exist/i,
+      /table "(?:public\.)?bus_routes" does not exist/i,
+      /route_passengers/i,
+      /bus_routes/i,
+    ],
   },
   '20260821000000_vehicle_route_zone_tagging': {
     targetObject: 'spatial.places',

@@ -225,6 +225,24 @@ describe('Fresh database migration runner safety guards & classification', () =>
     expect(evalResult.reason).toBe('MATCHED_EXPECTED_GAP');
     expect(evalResult.migrationName).toBe('20260816000000_route_consolidation_phase2_schema');
   });
+
+  it('correctly matches fleet_routing_foundation when Postgres reports public-qualified table name', () => {
+    const mockOutput = `
+      Applying migration \`20260818100000_fleet_routing_foundation\`
+      Error: P3018
+      Migration name: 20260818100000_fleet_routing_foundation
+      Database error code: 42P01
+      Database error:
+      ERROR: relation "public.route_passengers" does not exist
+    `;
+    const evalResult = evaluateMigrationFailure(mockOutput, [
+      '20260818100000_fleet_routing_foundation',
+    ]);
+    expect(evalResult.canResolve).toBe(true);
+    expect(evalResult.reason).toBe('MATCHED_EXPECTED_GAP');
+    expect(evalResult.migrationName).toBe('20260818100000_fleet_routing_foundation');
+    expect(evalResult.errorCode).toBe('42P01');
+  });
 });
 
 describe('Database target resolution & preconditions', () => {
