@@ -201,6 +201,30 @@ describe('Fresh database migration runner safety guards & classification', () =>
     expect(evalResult.migrationName).toBe('20260910000010_grant_app_role_schema_access');
     expect(evalResult.errorCode).toBe('3F000');
   });
+
+  it('correctly handles Prisma Rust schema-engine backtrace without misclassifying "with" as migration name', () => {
+    const mockOutput = `
+      Applying migration \`20260815150000_backfill_rls_with_check\`
+      Applying migration \`20260816000000_route_consolidation_phase2_schema\`
+
+      Error: ERROR: current transaction is aborted, commands ignored until end of transaction block
+         0: schema_core::commands::apply_migrations::Applying migration
+                 with migration_name="20260816000000_route_consolidation_phase2_schema"
+                   at schema-engine/core/src/commands/apply_migrations.rs:91
+         1: schema_core::state::ApplyMigrations
+                   at schema-engine/core/src/state.rs:226
+    `;
+    const details = extractFailureDetails(mockOutput);
+    expect(details.failingMigration).toBe('20260816000000_route_consolidation_phase2_schema');
+    expect(details.errorCode).toBe('25P02');
+
+    const evalResult = evaluateMigrationFailure(mockOutput, [
+      '20260816000000_route_consolidation_phase2_schema',
+    ]);
+    expect(evalResult.canResolve).toBe(true);
+    expect(evalResult.reason).toBe('MATCHED_EXPECTED_GAP');
+    expect(evalResult.migrationName).toBe('20260816000000_route_consolidation_phase2_schema');
+  });
 });
 
 describe('Database target resolution & preconditions', () => {

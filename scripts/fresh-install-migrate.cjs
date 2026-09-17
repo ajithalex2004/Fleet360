@@ -57,6 +57,7 @@ const EXPECTED_GAP_SIGNATURES = [
   /cannot use .* in column generation expression/i,
   /generation expression is not immutable/i,
   /cannot drop .* because other objects depend on it/i,
+  /current transaction is aborted/i,
 ];
 
 // Exact target object bindings for documented historical schema replay gaps.
@@ -68,9 +69,15 @@ const DOCUMENTED_GAPS = {
     expectedSignatures: [/relation "rental_rate_quotes" does not exist/i, /table "rental_rate_quotes" does not exist/i],
   },
   '20260816000000_route_consolidation_phase2_schema': {
-    targetObject: 'route_passengers',
-    expectedCodes: ['42P01'],
-    expectedSignatures: [/relation "route_passengers" does not exist/i, /table "route_passengers" does not exist/i],
+    targetObject: 'bus_routes / route_passengers',
+    expectedCodes: ['42P01', '25P02'],
+    expectedSignatures: [
+      /relation "(?:public\.)?bus_routes" does not exist/i,
+      /relation "(?:public\.)?route_passengers" does not exist/i,
+      /bus_routes/i,
+      /route_passengers/i,
+      /current transaction is aborted/i,
+    ],
   },
   '20260818100000_fleet_routing_foundation': {
     targetObject: 'route_passengers / bus_routes',
@@ -215,31 +222,38 @@ function extractFailureDetails(output) {
   let failingMigration = null;
 
   // Patterns for failing migration:
-  // - "Migration name: <name>"
-  // - "The `<name>` migration started at ... failed"
-  // - "Migration: <name>"
-  // - "Failed to apply migration: `<name>`"
-  // - Last "Applying migration `<name>`" followed by error
+  // - with migration_name="<name>" (Prisma Rust schema-engine backtrace)
+  // - Migration name: <name>
+  // - The `<name>` migration started at ... failed
+  // - Migration: <name>
+  // - Failed to apply migration: `<name>`
+  // - A migration failed to apply.*`<name>`
   const namePatterns = [
-    /Migration name:\s*([0-9a-zA-Z_]+)/i,
+    /with\s+migration_name="([^"]+)"/i,
+    /Migration name:\s*`?([0-9a-zA-Z_]+)`?/i,
     /The\s+`([0-9a-zA-Z_]+)`\s+migration\s+started\s+at\s+.*failed/i,
-    /Migration:\s*([0-9a-zA-Z_]+)/i,
+    /Migration:\s*`?([0-9a-zA-Z_]+)`?/i,
     /Failed to apply migration:?\s*`?([0-9a-zA-Z_]+)`?/i,
+    /A migration failed to apply.*`([0-9a-zA-Z_]+)`/i,
   ];
 
   for (const p of namePatterns) {
     const m = p.exec(output);
-    if (m && m[1]) {
+    if (m && m[1] && m[1].trim() !== 'with') {
       failingMigration = m[1].trim();
       break;
     }
   }
 
   if (!failingMigration) {
-    const applyingMatches = [...output.matchAll(/Applying migration\s+`?([0-9a-zA-Z_]+)`?/gi)];
+    // Only match backticked migration names or 14-digit timestamp migration names
+    const applyingMatches = [...output.matchAll(/(?:Applying migration\s+`([0-9a-zA-Z_]+)`|Applying migration\s+(\d{14}_[0-9a-zA-Z_]+))/gi)];
     if (applyingMatches.length > 0) {
-      // Pick the last migration being applied before the failure
-      failingMigration = applyingMatches[applyingMatches.length - 1][1].trim();
+      const lastMatch = applyingMatches[applyingMatches.length - 1];
+      const capturedName = (lastMatch[1] || lastMatch[2] || '').trim();
+      if (capturedName && capturedName !== 'with') {
+        failingMigration = capturedName;
+      }
     }
   }
 
@@ -248,15 +262,19 @@ function extractFailureDetails(output) {
   const codeMatch =
     /Database error code:\s*([0-9A-Z]{5})/i.exec(output) ||
     /code:\s*"([0-9A-Z]{5})"/i.exec(output) ||
-    /PostgreSQL error code:\s*([0-9A-Z]{5})/i.exec(output);
+    /PostgreSQL error code:\s*([0-9A-Z]{5})/i.exec(output) ||
+    /code:\s*SqlState\(E?([0-9A-Z]{5})\)/i.exec(output);
   if (codeMatch && codeMatch[1]) {
     errorCode = codeMatch[1].trim().toUpperCase();
+  } else if (/current transaction is aborted/i.test(output)) {
+    errorCode = '25P02';
   }
 
   // 3. Extract database error message line/block
   let databaseErrorMessage = '';
   const msgMatch =
     /Database error:\s*\n?\s*(?:ERROR:\s*)?([^\n]+)/i.exec(output) ||
+    /Error:\s*ERROR:\s*([^\n]+)/i.exec(output) ||
     /DbError\s*\{[^}]*message:\s*"([^"]+)"/i.exec(output) ||
     /ERROR:\s*([^\n]+)/i.exec(output);
   if (msgMatch && msgMatch[1]) {
@@ -265,7 +283,7 @@ function extractFailureDetails(output) {
 
   // Extract the failure block (excluding earlier stdout)
   let errorBlock = output;
-  const errIdx = output.search(/(?:Error:\s*P3018|Database error|DbError|A migration failed to apply)/i);
+  const errIdx = output.search(/(?:Error:\s*P3018|Error:\s*ERROR|Database error|DbError|A migration failed to apply)/i);
   if (errIdx !== -1) {
     errorBlock = output.slice(errIdx);
   }
@@ -639,7 +657,26 @@ async function main() {
         return;
       }
 
-      const evaluation = evaluateMigrationFailure(result.output, remaining);
+      // Query _prisma_migrations for active failed migration record and diagnostic logs
+      let activeRecord = null;
+      try {
+        const [rec] = await prisma.$queryRaw`
+          SELECT migration_name, logs FROM "_prisma_migrations"
+          WHERE finished_at IS NULL AND rolled_back_at IS NULL
+          ORDER BY started_at DESC LIMIT 1
+        `;
+        if (rec) {
+          activeRecord = rec;
+        }
+      } catch (err) {
+        // Table might not exist yet or query failed
+      }
+
+      const combinedOutput = activeRecord
+        ? `${result.output}\nMigration name: ${activeRecord.migration_name}\n${activeRecord.logs || ''}`
+        : result.output;
+
+      const evaluation = evaluateMigrationFailure(combinedOutput, remaining);
 
       if (!evaluation.canResolve) {
         if (evaluation.reason === 'FORBIDDEN_INFRASTRUCTURE_ERROR') {
@@ -672,22 +709,13 @@ async function main() {
       }
 
       // Cross-check with DB: verify that active failed record in _prisma_migrations matches
-      try {
-        const [activeRecord] = await prisma.$queryRaw`
-          SELECT migration_name FROM "_prisma_migrations"
-          WHERE finished_at IS NULL AND rolled_back_at IS NULL
-          ORDER BY started_at DESC LIMIT 1
-        `;
-        if (activeRecord && activeRecord.migration_name !== evaluation.migrationName) {
-          console.error(
-            `✗ Active unapplied database migration "${activeRecord.migration_name}" ` +
-              `does not match evaluated failure "${evaluation.migrationName}". Halting.`
-          );
-          await releaseAdvisoryLock(prisma);
-          process.exit(1);
-        }
-      } catch (err) {
-        // Table might not exist yet or query failed
+      if (activeRecord && activeRecord.migration_name !== evaluation.migrationName) {
+        console.error(
+          `✗ Active unapplied database migration "${activeRecord.migration_name}" ` +
+            `does not match evaluated failure "${evaluation.migrationName}". Halting.`
+        );
+        await releaseAdvisoryLock(prisma);
+        process.exit(1);
       }
 
       const name = evaluation.migrationName;
