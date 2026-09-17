@@ -679,9 +679,9 @@ async function verifyDatabasePreconditions(options = {}) {
   }
 
   const hasFreshIntent =
-    options.freshInstallIntent ||
-    process.argv.includes('--fresh-install') ||
-    process.env.CONFIRM_FRESH_INSTALL === '1';
+    options.freshInstallIntent !== undefined
+      ? Boolean(options.freshInstallIntent)
+      : (process.argv.includes('--fresh-install') || process.env.CONFIRM_FRESH_INSTALL === '1');
 
   if (!hasFreshIntent && !resumeFromMigration) {
     const msg =

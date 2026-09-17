@@ -410,13 +410,19 @@ describe('Database target resolution & preconditions', () => {
   });
 
   it('requires explicit fresh install intent (--fresh-install or CONFIRM_FRESH_INSTALL=1) when not resuming', async () => {
-    await expect(
-      verifyDatabasePreconditions({
-        databaseUrl: 'postgresql://postgres:postgres@localhost:5432/fleet360_fresh',
-        freshInstallIntent: false,
-        throwOnError: true,
-      })
-    ).rejects.toThrow('Fresh install requires explicit confirmation');
+    const saved = process.env.CONFIRM_FRESH_INSTALL;
+    delete process.env.CONFIRM_FRESH_INSTALL;
+    try {
+      await expect(
+        verifyDatabasePreconditions({
+          databaseUrl: 'postgresql://postgres:postgres@localhost:5432/fleet360_fresh',
+          freshInstallIntent: false,
+          throwOnError: true,
+        })
+      ).rejects.toThrow('Fresh install requires explicit confirmation');
+    } finally {
+      if (saved !== undefined) process.env.CONFIRM_FRESH_INSTALL = saved;
+    }
   });
 
   it('fails closed when querying _prisma_migrations returns permission denied (code 42501)', async () => {
