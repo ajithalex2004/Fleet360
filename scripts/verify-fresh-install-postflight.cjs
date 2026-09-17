@@ -233,10 +233,14 @@ const POSTFLIGHT_MANIFEST = [
     name: 'finance_payments shadow resolution, object identity, and RLS',
     check: async (prisma) => {
       // 1. Assert unqualified lookup and finance lookup match identical relation OID
+      // (Using search_path = 'public, finance' to verify resolution order with public preceding finance)
       const [oids] = await prisma.$queryRaw`
-        SELECT to_regclass('finance_payments')::oid AS unqual_oid,
-               to_regclass('finance.finance_payments')::oid AS fin_oid,
-               to_regclass('public.finance_payments')::oid AS pub_oid
+        SELECT (
+          SELECT to_regclass('finance_payments')::oid
+          FROM (SELECT set_config('search_path', 'public, finance', true)) _
+        ) AS unqual_oid,
+        to_regclass('finance.finance_payments')::oid AS fin_oid,
+        to_regclass('public.finance_payments')::oid AS pub_oid
       `;
       if (!oids || !oids.unqual_oid) {
         throw new Error('Unqualified "finance_payments" does not exist in relation catalog.');
