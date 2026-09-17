@@ -127,10 +127,12 @@ jobs:
                                    # Re-enforce once cleanup PR lands.
 
       # ── Typecheck ratchet ────────────────────────────────────────────────
-      # Same shape as the Runtime-DDL guard above: blocks any NEW file from
-      # gaining a type error while the pre-existing KNOWN-TS-001 backlog in
-      # scripts/typecheck-baseline.json is paid down incrementally. See
-      # scripts/check-typecheck-ratchet.mjs for the full explanation.
+      # Enforces fail-closed ratchet behavior: multi-line diagnostic chains,
+      # semantic detail preservation, per-file totals, error-code counts,
+      # fingerprint multiplicities, and schemaVersion 2 baseline integrity.
+      - name: Typecheck Ratchet Self-Tests (Blocking)
+        run: npx vitest run tests/unit/check-typecheck-ratchet.test.ts
+
       - name: Typecheck ratchet (blocks new errors only)
         run: node scripts/check-typecheck-ratchet.mjs
 

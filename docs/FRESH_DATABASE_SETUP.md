@@ -40,6 +40,30 @@ diagnosing a stop the script doesn't recognize.
 
 ## Full resolve chain
 
+### Rental quote prerequisite (added September 17, 2026)
+
+`20260815135900_create_rental_rate_quotes_prerequisite` is a **new** migration
+that intentionally sorts immediately before TENANT-001's first quote-table
+ALTER. No previously applied migration was edited or renamed. It creates
+the canonical quote table, indexes and tenant RLS on fresh databases; on
+existing databases it verifies the critical column shape without changing
+rows or policies. Prisma applies this pending migration on upgrade even
+though its name sorts before already-applied migrations.
+
+TENANT-001 still needs the controlled resolve below: after quote creation,
+fresh replay next encounters `rental_vehicle_exchanges`, also missing from
+the historical prerequisites. Its other legacy tables, backfills and
+constraints remain repaired by the September corrective migrations. Do not
+mark TENANT-001 rolled back and blindly retry it, or remove its classifier.
+The runner only accepts the documented missing-table names with SQLSTATE
+42P01; unrelated errors must stop the bootstrap.
+
+The migration-safety job verifies prerequisite ordering, quote-data/policy
+preservation and typed journal CRUD through the generated Prisma client.
+The journal `id` mappings now declare `@db.Uuid`, matching the UUID columns
+and `journal_entry_id` FK already created by the historical finance DDL;
+no database type conversion is needed. Regenerate Prisma Client on upgrade.
+
 Run `npx prisma migrate deploy`, resolve the migration it stops at, and
 repeat. Every stop below is expected; each is closed by a later migration in
 the same `migrate deploy` run once resolved.

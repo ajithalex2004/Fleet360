@@ -34,6 +34,34 @@ const TSC_BIN = join(root, 'node_modules', 'typescript', 'bin', 'tsc');
 const DIAGNOSTIC_LINE_RE = /^(.+?)\((\d+,\d+)\): error (TS\d+): (.*)$/;
 const GLOBAL_ERROR_RE = /^error (TS\d+): (.*)$/;
 
+/**
+ * Validates that essential dependencies are present in node_modules.
+ * Prevents broken/corrupted environments (e.g. missing next/package.json) from qualifying as clean or establishing a false baseline.
+ */
+export function verifyDependencyPreflight(customRoot = root) {
+  const criticalDeps = [
+    { name: 'typescript', pkgPath: join(customRoot, 'node_modules', 'typescript', 'package.json') },
+    { name: 'next', pkgPath: join(customRoot, 'node_modules', 'next', 'package.json') },
+    { name: '@prisma/client', pkgPath: join(customRoot, 'node_modules', '@prisma', 'client', 'package.json') },
+  ];
+
+  const missing = [];
+  for (const dep of criticalDeps) {
+    if (!existsSync(dep.pkgPath)) {
+      missing.push(dep.name);
+    }
+  }
+
+  if (missing.length > 0) {
+    return {
+      valid: false,
+      error: `Missing or incomplete core dependencies in node_modules: ${missing.join(', ')}. ` +
+        `Run 'npm ci --legacy-peer-deps' and 'npx prisma generate' before running the typecheck ratchet.`,
+    };
+  }
+  return { valid: true, error: null };
+}
+
 export function sortTypeProperties(content) {
   const parts = [];
   let paren = 0, bracket = 0, brace = 0, angle = 0;
@@ -90,9 +118,19 @@ export function sortTypeProperties(content) {
 export function normalizeMessage(msg) {
   let s = msg.trim().replace(/\s+/g, ' ');
 
-  // Truncated missing properties list is non-deterministic across OS engines/iteration order
-  // e.g. "is missing the following properties from type 'Foo': "a", "b", and 2 more."
-  s = s.replace(/is missing the following properties from type (.+?):.*$/, 'is missing properties from type $1');
+  // Semantic missing-properties normalization:
+  // Extracts the missing property names, sorts them alphabetically, and preserves the target type.
+  // e.g. "is missing the following properties from type 'Foo': id, name" -> "is missing properties [id, name] from type 'Foo'"
+  // e.g. "is missing the following properties from type 'Foo': tenantId, currency" -> "is missing properties [currency, tenantId] from type 'Foo'"
+  s = s.replace(/is missing the following properties from type (.+?):\s*([^\n\r.]+)/g, (_, targetType, propListStr) => {
+    const rawProps = propListStr.split(',').map(p => {
+      let cleaned = p.trim().replace(/^["']|["']$/g, '');
+      if (/^and \d+ more$/i.test(cleaned)) return '';
+      return cleaned;
+    }).filter(Boolean);
+    rawProps.sort((a, b) => a.localeCompare(b));
+    return `is missing properties [${rawProps.join(', ')}] from type ${targetType}`;
+  });
 
   // Terminating bracket-aware normalization for structural type literals:
   // Replaces innermost `{...}` with tokens to guarantee termination and sort properties deterministically
@@ -150,11 +188,15 @@ export function runTsc(customRoot = root) {
   }
 
   try {
-    const out = execFileSync(process.execPath, [bin, '--noEmit', '--pretty', 'false'], {
-      cwd: customRoot,
-      encoding: 'utf8',
-      maxBuffer: 64 * 1024 * 1024,
-    });
+    const out = execFileSync(
+      process.execPath,
+      [bin, '--noEmit', '--pretty', 'false', '--noErrorTruncation'],
+      {
+        cwd: customRoot,
+        encoding: 'utf8',
+        maxBuffer: 64 * 1024 * 1024,
+      }
+    );
     return { exitCode: 0, signal: null, output: out, error: null };
   } catch (err) {
     const combined = `${err.stdout || ''}\n${err.stderr || ''}`.trim();
@@ -171,45 +213,149 @@ export function parseDiagnostics(tscOutput) {
   const fileDiagnostics = new Map();
   const globalErrors = [];
 
-  for (const line of tscOutput.split('\n')) {
-    const trimmed = line.trim();
+  const lines = tscOutput.split('\n');
+  let currentDiag = null;
+
+  function flushCurrentDiag() {
+    if (!currentDiag) return;
+    const { rel, code, rawLines } = currentDiag;
+    const normalized = rawLines
+      .map(line => normalizeMessage(line))
+      .filter(Boolean)
+      .join('\n');
+    const fingerprint = `${code}:${normalized}`;
+
+    const entry = fileDiagnostics.get(rel) || {
+      total: 0,
+      codes: {},
+      fingerprints: {},
+    };
+
+    entry.total += 1;
+    entry.codes[code] = (entry.codes[code] || 0) + 1;
+    entry.fingerprints[fingerprint] = (entry.fingerprints[fingerprint] || 0) + 1;
+    fileDiagnostics.set(rel, entry);
+    currentDiag = null;
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i];
+    const trimmed = rawLine.trim();
     if (!trimmed) continue;
 
+    // 1. Line starts a new file diagnostic: `path/to/file.ts(line,col): error TSxxxx: message`
     const fileMatch = DIAGNOSTIC_LINE_RE.exec(trimmed);
     if (fileMatch) {
+      flushCurrentDiag();
       const rel = fileMatch[1].trim().replace(/\\/g, '/');
-      if (rel.startsWith('.next/')) continue; // Next.js generated route types
-
       const code = fileMatch[3];
-      const rawMessage = fileMatch[4];
-      const fingerprint = `${code}:${normalizeMessage(rawMessage)}`;
-
-      const entry = fileDiagnostics.get(rel) || {
-        total: 0,
-        codes: {},
-        fingerprints: {},
+      const headline = fileMatch[4];
+      currentDiag = {
+        rel,
+        code,
+        rawLines: [headline],
       };
-
-      entry.total += 1;
-      entry.codes[code] = (entry.codes[code] || 0) + 1;
-      entry.fingerprints[fingerprint] = (entry.fingerprints[fingerprint] || 0) + 1;
-      fileDiagnostics.set(rel, entry);
       continue;
     }
 
+    // 2. Global compiler error: `error TSxxxx: message`
     const globalMatch = GLOBAL_ERROR_RE.exec(trimmed);
     if (globalMatch) {
+      flushCurrentDiag();
       globalErrors.push(trimmed);
+      continue;
+    }
+
+    // 3. Indented continuation line belonging to the active diagnostic
+    if (currentDiag && (rawLine.startsWith('  ') || rawLine.startsWith('\t'))) {
+      currentDiag.rawLines.push(trimmed);
       continue;
     }
   }
 
+  flushCurrentDiag();
   return { fileDiagnostics, globalErrors };
+}
+
+/**
+ * Validates baseline schema version and mathematical integrity.
+ * Requires schemaVersion: 2, non-empty fingerprints, and asserts sum(codes) === sum(fingerprints) === total.
+ * Rejects malformed or weakened baseline structures.
+ */
+export function validateBaselineStructure(data, baselinePath = BASELINE_PATH) {
+  if (!data || typeof data !== 'object') {
+    throw new Error(`Invalid baseline in ${baselinePath}: must be a JSON object.`);
+  }
+  if (data.schemaVersion !== 2) {
+    throw new Error(
+      `Incompatible baseline schema version (${data.schemaVersion ?? 'unversioned'}) in ${baselinePath}. ` +
+      `Expected schemaVersion: 2. Run 'node scripts/check-typecheck-ratchet.mjs --update-baseline' to migrate.`
+    );
+  }
+  if (typeof data.totalErrors !== 'number' || typeof data.totalFiles !== 'number') {
+    throw new Error(`Invalid baseline in ${baselinePath}: missing totalErrors or totalFiles summary.`);
+  }
+  if (!data.files || typeof data.files !== 'object') {
+    throw new Error(`Invalid baseline in ${baselinePath}: missing or invalid 'files' map.`);
+  }
+
+  let computedTotalErrors = 0;
+  for (const [file, entry] of Object.entries(data.files)) {
+    if (!entry || typeof entry !== 'object') {
+      throw new Error(`Malformed baseline entry for file "${file}": entry must be an object.`);
+    }
+    if (typeof entry.total !== 'number' || entry.total <= 0) {
+      throw new Error(`Malformed baseline entry for file "${file}": total must be a positive integer.`);
+    }
+    if (!entry.codes || typeof entry.codes !== 'object' || Object.keys(entry.codes).length === 0) {
+      throw new Error(`Malformed baseline entry for file "${file}": codes map must be non-empty.`);
+    }
+    if (!entry.fingerprints || typeof entry.fingerprints !== 'object' || Object.keys(entry.fingerprints).length === 0) {
+      throw new Error(`Malformed baseline entry for file "${file}": fingerprints map must be non-empty.`);
+    }
+
+    let codesSum = 0;
+    for (const [code, count] of Object.entries(entry.codes)) {
+      if (typeof count !== 'number' || count <= 0) {
+        throw new Error(`Malformed baseline entry for file "${file}": code ${code} count must be positive.`);
+      }
+      codesSum += count;
+    }
+    if (codesSum !== entry.total) {
+      throw new Error(
+        `Baseline integrity failure for file "${file}": sum of error codes (${codesSum}) does not match total (${entry.total}).`
+      );
+    }
+
+    let fingerprintsSum = 0;
+    for (const [fp, count] of Object.entries(entry.fingerprints)) {
+      if (typeof count !== 'number' || count <= 0) {
+        throw new Error(`Malformed baseline entry for file "${file}": fingerprint count must be positive.`);
+      }
+      fingerprintsSum += count;
+    }
+    if (fingerprintsSum !== entry.total) {
+      throw new Error(
+        `Baseline integrity failure for file "${file}": sum of fingerprints (${fingerprintsSum}) does not match total (${entry.total}).`
+      );
+    }
+
+    computedTotalErrors += entry.total;
+  }
+
+  if (computedTotalErrors !== data.totalErrors) {
+    throw new Error(
+      `Baseline summary integrity failure: sum of file errors (${computedTotalErrors}) does not match totalErrors (${data.totalErrors}).`
+    );
+  }
+
+  return true;
 }
 
 export function compareDiagnostics(currentDiagnostics, baseline) {
   const violations = [];
   const cleanFiles = [];
+  const reducedFiles = [];
 
   for (const [file, current] of currentDiagnostics.entries()) {
     const base = baseline.files?.[file];
@@ -225,6 +371,10 @@ export function compareDiagnostics(currentDiagnostics, baseline) {
       continue;
     }
 
+    if (current.total < base.total) {
+      reducedFiles.push({ file, before: base.total, after: current.total });
+    }
+
     // Check individual error codes
     for (const [code, count] of Object.entries(current.codes)) {
       const baseCount = base.codes?.[code] || 0;
@@ -235,15 +385,13 @@ export function compareDiagnostics(currentDiagnostics, baseline) {
       }
     }
 
-    // Check diagnostic fingerprints (code + normalized message) and multiplicity
-    if (base.fingerprints) {
-      for (const [fingerprint, count] of Object.entries(current.fingerprints)) {
-        const baseCount = base.fingerprints?.[fingerprint] || 0;
-        if (count > baseCount) {
-          violations.push(
-            `[NEW/INCREASED FINGERPRINT] ${file}: [${fingerprint}] occurred ${count} time(s), baseline allowed ${baseCount}`
-          );
-        }
+    // Check diagnostic fingerprints (code + normalized multi-line message) and multiplicity
+    for (const [fingerprint, count] of Object.entries(current.fingerprints)) {
+      const baseCount = base.fingerprints?.[fingerprint] || 0;
+      if (count > baseCount) {
+        violations.push(
+          `[NEW/INCREASED FINGERPRINT] ${file}: [${fingerprint}] occurred ${count} time(s), baseline allowed ${baseCount}`
+        );
       }
     }
   }
@@ -256,25 +404,19 @@ export function compareDiagnostics(currentDiagnostics, baseline) {
     }
   }
 
-  return { violations, cleanFiles };
+  return { violations, cleanFiles, reducedFiles };
 }
 
 export function loadBaseline(baselinePath = BASELINE_PATH) {
   if (!existsSync(baselinePath)) {
-    return { files: {} };
+    return { schemaVersion: 2, totalErrors: 0, totalFiles: 0, files: {} };
   }
   try {
     const data = JSON.parse(readFileSync(baselinePath, 'utf8'));
-    if (Array.isArray(data.files)) {
-      const filesMap = {};
-      for (const f of data.files) {
-        filesMap[f] = { total: 9999, codes: {}, fingerprints: {} };
-      }
-      return { files: filesMap };
-    }
+    validateBaselineStructure(data, baselinePath);
     return data;
   } catch (err) {
-    console.error(`✗ Error parsing baseline file ${baselinePath}:`, err.message);
+    console.error(`✗ Error validating baseline file ${baselinePath}:`, err.message);
     exit(1);
   }
 }
@@ -312,30 +454,43 @@ export function writeBaseline(fileDiagnostics, baselinePath = BASELINE_PATH) {
   const payload = {
     _comment:
       'Generated by `node scripts/check-typecheck-ratchet.mjs --update-baseline`. ' +
-      'Stores diagnostic fingerprints and error code counts per file. ' +
+      'Stores multi-line diagnostic fingerprints and error code counts per file. ' +
       'The gate fails if new files fail, total errors increase, new error codes appear, or diagnostic fingerprints change.',
+    schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     totalErrors,
     totalFiles: sortedKeys.length,
     files: sortedFiles,
   };
 
-  console.log(`Writing baseline to ${baselinePath} (${totalErrors} errors, ${sortedKeys.length} files)...`);
+  validateBaselineStructure(payload, baselinePath);
+
+  console.log(`Writing baseline (schemaVersion 2) to ${baselinePath} (${totalErrors} errors, ${sortedKeys.length} files)...`);
   writeFileSync(baselinePath, JSON.stringify(payload, null, 2) + '\n', 'utf8');
   console.log(`Successfully wrote ${baselinePath}`);
   return payload;
 }
 
 export function runRatchetGate(options = {}) {
+  const customRoot = options.customRoot || root;
   const updateMode = options.updateMode ?? argv.includes('--update-baseline');
   const baselinePath = options.baselinePath || BASELINE_PATH;
 
-  console.log('Running `tsc --noEmit`… (analyzing project diagnostics)');
-  const tscResult = options.tscResult || runTsc();
+  // 1. Dependency Preflight Guard: fail closed if essential project packages are missing/incomplete
+  const preflight = options.preflightResult || verifyDependencyPreflight(customRoot);
+  if (!preflight.valid) {
+    console.error(`\n✗ typecheck ratchet FAILED — dependency preflight check failed:\n  ${preflight.error}\n`);
+    if (options.throwOnError) {
+      throw new Error(preflight.error);
+    }
+    exit(1);
+  }
+
+  console.log('Running `tsc --noEmit`… (analyzing project diagnostics with complete diagnostic chains)');
+  const tscResult = options.tscResult || runTsc(customRoot);
   const { exitCode, signal, output } = tscResult;
 
   // Crash guard 1: abnormal exit, OOM, SIGKILL/SIGSEGV, or compiler crash
-  // Fails closed immediately, even if partial diagnostics were emitted before crash
   if (isCompilerCrash(tscResult)) {
     console.error(
       `\n✗ typecheck ratchet FAILED — TypeScript compiler crashed or exited abnormally (code: ${exitCode}, signal: ${signal || 'none'}):\n`
@@ -363,6 +518,7 @@ export function runRatchetGate(options = {}) {
     exit(1);
   }
 
+  // Global compiler error guard: fail closed on tsconfig or environment errors
   if (globalErrors.length > 0) {
     console.error(`\n✗ typecheck ratchet FAILED — global compiler configuration error(s):\n`);
     globalErrors.forEach(e => console.error(`   ${e}`));
@@ -375,13 +531,13 @@ export function runRatchetGate(options = {}) {
   if (updateMode) {
     const payload = writeBaseline(fileDiagnostics, baselinePath);
     console.log(
-      `\nBaseline written: ${payload.totalErrors} total error(s) across ${payload.totalFiles} file(s).`
+      `\nBaseline written (schemaVersion 2): ${payload.totalErrors} total error(s) across ${payload.totalFiles} file(s).`
     );
     return { success: true, mode: 'updated', payload };
   }
 
   const baseline = loadBaseline(baselinePath);
-  const { violations, cleanFiles } = compareDiagnostics(fileDiagnostics, baseline);
+  const { violations, cleanFiles, reducedFiles } = compareDiagnostics(fileDiagnostics, baseline);
 
   if (violations.length > 0) {
     console.error(`\n✗ typecheck ratchet FAILED — ${violations.length} new or increased diagnostic violation(s):\n`);
@@ -399,10 +555,15 @@ export function runRatchetGate(options = {}) {
     exit(1);
   }
 
+  if (reducedFiles.length > 0) {
+    console.log(`  🎉 Debt reduced in ${reducedFiles.length} file(s):`);
+    reducedFiles.forEach(r => console.log(`     - ${r.file}: ${r.before} -> ${r.after} errors`));
+  }
+
   console.log(
     `✓ typecheck ratchet passed — ${fileDiagnostics.size} file(s) with pre-existing errors (${cleanFiles.length} file(s) now completely clean).`
   );
-  return { success: true, mode: 'verified', cleanFiles, errorFiles: fileDiagnostics.size };
+  return { success: true, mode: 'verified', cleanFiles, reducedFiles, errorFiles: fileDiagnostics.size };
 }
 
 // Execute main if invoked directly from CLI

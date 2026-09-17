@@ -132,6 +132,20 @@ describe('Fresh database migration runner safety guards & classification', () =>
     expect(evalResult.reason).toBe('UNEXPECTED_ERROR_SIGNATURE');
   });
 
+  it.each(['rental_vehicle_exchanges', 'rental_invoices', 'rental_invoice_line_items', 'rental_invoice_payments'])(
+    'recognizes the remaining historical rental prerequisite %s after quotes are created', (table) => {
+      const output = `Migration name: ${targetMigration}\nDatabase error code: 42P01\nDatabase error:\nERROR: relation "public.${table}" does not exist`;
+      expect(evaluateMigrationFailure(output, candidateList).canResolve).toBe(true);
+    },
+  );
+
+  it.each(['rental_invoices_backup', 'unrelated_custom_table'])(
+    'does not resolve a different missing table %s merely because quotes appear in SQL context', (table) => {
+      const output = `Migration name: ${targetMigration}\nDatabase error code: 42P01\nDatabase error:\nERROR: relation "${table}" does not exist\nCONTEXT: SQL statement referencing rental_rate_quotes`;
+      expect(evaluateMigrationFailure(output, candidateList).canResolve).toBe(false);
+    },
+  );
+
   it('correctly matches other specific schema gap signatures (type exists, column generation)', () => {
     const altMigration = '20260910000016_finance_deposits_recurring_tables_and_rls';
     const altCandidateList = [altMigration];

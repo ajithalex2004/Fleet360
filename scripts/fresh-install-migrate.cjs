@@ -65,12 +65,16 @@ const EXPECTED_GAP_SIGNATURES = [
 // Binds each resolvable migration to its specific missing target object and expected PG error codes.
 const DOCUMENTED_GAPS = {
   '20260815140000_tenant_001_leasing_rental_isolation': {
-    targetObject: 'rental_rate_quotes',
+    // The new 20260815135900 prerequisite fixes quote creation order. Old
+    // checkouts failed on quotes; fresh replay now reaches the next documented
+    // missing rental table. September's corrective chain creates these tables.
+    // Keep exact object names: an unrelated missing table must still halt.
+    targetObject: 'legacy rental tables (quotes, exchanges, invoices and invoice children)',
     expectedCodes: ['42P01'],
     expectedSignatures: [
       /relation "(?:public\.)?rental_rate_quotes" does not exist/i,
       /table "(?:public\.)?rental_rate_quotes" does not exist/i,
-      /rental_rate_quotes/i,
+      /^(?:ERROR:\s*)?(?:relation|table) "(?:public\.)?(?:rental_vehicle_exchanges|rental_invoices|rental_invoice_line_items|rental_invoice_payments)" does not exist\.?$/im,
     ],
   },
   '20260816000000_route_consolidation_phase2_schema': {

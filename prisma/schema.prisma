@@ -5349,7 +5349,7 @@ model FinanceInvoice {
 // Logistics freight settlement writes here via postFreightSettlementToFinance.
 // tenant_id is RLS-covered by the same migration as FinanceInvoice above.
 model FinanceJournalEntry {
-  id        String    @id @default(uuid())
+  id        String    @id @default(uuid()) @db.Uuid
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
@@ -5389,7 +5389,7 @@ model FinanceJournalEntry {
 
 // One debit or credit leg on a journal entry.
 model FinanceJournalLine {
-  id        String   @id @default(uuid())
+  id        String   @id @default(uuid()) @db.Uuid
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   journalEntryId String              @map("journal_entry_id") @db.Uuid
