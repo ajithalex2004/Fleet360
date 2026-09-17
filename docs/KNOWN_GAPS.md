@@ -246,6 +246,69 @@ or onboarding a new developer's local database all require a working fresh
 
 ---
 
+## OPS-001 — `PHASE0_DATABASE_URL` undocumented; production was 21 migrations behind
+**Status:** ✅ resolved (production caught up) · unresolved (still undocumented, no drift alarm) · **Target:** before next migration lands · **Owner:** athom
+
+**2026-09-17:** while investigating why PR #88's CI (`Audit log transaction
+race`, `Cross-tenant isolation`, `RLS isolation (TypeScript)`, `Leasing
+return workflow`, `Dunning & collections dispatch`) was failing identically
+on `main` — not just this branch — traced it to `PHASE0_DATABASE_URL`.
+
+**Finding 1 — the secret is undocumented.** `PHASE0_DATABASE_URL` isn't
+mentioned in any `.md` file in the repo. The only description of it lives in
+a comment inside `.github/workflows/phase0.yml` ("a connection string for
+the fleet360_app role — NOT the application's DATABASE_URL, which connects
+as neondb_owner"), which describes the *role* but not *which database*.
+Checking `gh secret list` timestamps and cross-referencing against this
+session's own credential rotation confirmed: **`PHASE0_DATABASE_URL` points
+at `neondb` — production itself** — not a dedicated Phase 0 branch/schema, as
+the workflow's own naming might suggest to a future reader.
+
+**Finding 2 — production was 21 migrations behind.** A direct read of
+`_prisma_migrations` on production (via a plain `SELECT`, since `prisma
+migrate status` itself was blocked as a production-read action in this
+session) showed 143 of 164 migrations applied — everything from
+`20260914140000_fresh_replay_rental_leasing_gap` through
+`20260915280000_fresh_replay_lease_allocation_occurrences` (21 migrations,
+spanning three days) had never been deployed to production, despite being
+merged to `main`. This is exactly the audit_logs `NOT NULL` gap PR #88's CI
+caught, plus 20 more.
+
+**Action taken (2026-09-17, operator athom, with explicit confirmation
+before each production-affecting step):**
+1. Confirmed `PHASE0_DATABASE_URL`'s target via secret timestamp + the
+   credential rotation record in SEC-002, rather than guessing.
+2. Read `_prisma_migrations` directly (safe, read-only) to get the full
+   pending list — deliberately *not* the single audit_logs migration
+   originally suspected, to know full scope before deploying.
+3. Ran `npx prisma migrate deploy` against production. All 21 migrations
+   applied cleanly, no partial failures. (Blocked from running this directly
+   in the automated session as a `[Production Deploy]` action — the operator
+   ran it manually and shared output for verification, same pattern as the
+   SEC-002 credential rotation.)
+4. Verified production `/api/health` stayed `db.status: "connected"`,
+   `backend.status: "ready"` throughout — no observed disruption.
+5. Re-ran PR #88's Phase 0 jobs: `Audit log transaction race`,
+   `RLS isolation (TypeScript)`, `Leasing return workflow`, and
+   `Dunning & collections dispatch` confirmed passing post-deploy.
+   `Cross-tenant isolation` (Go) was still running at last check — verify
+   independently before treating this gap as fully closed.
+
+**Still open:**
+- Document `PHASE0_DATABASE_URL` properly (target database, role, and that
+  it is production) somewhere durable — this entry is a start, but the
+  workflow file itself should say so plainly, not just imply a role.
+- Nothing currently alerts when production's applied-migration count drifts
+  from what's merged to `main`. This drift sat for three days, silently
+  failing 5 CI jobs on every single `main` push and PR, before anyone
+  investigated why. A cheap fix: a scheduled or push-triggered check that
+  runs `prisma migrate status` against production and fails loudly (not just
+  the already-passing `ci: refine unresolved migration query...` check,
+  which evidently didn't catch this) is worth adding so this can't recur
+  silently for days.
+
+---
+
 ## DEP-001 — Dependency vulnerability triage (npm audit)
 **Status:** open · **Target:** before go-live · **Owner:** athom
 
