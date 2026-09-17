@@ -26,8 +26,8 @@ describe('Fresh database migration runner safety guards & classification', () =>
     expect(regexStrings.some((s: string) => s.includes('schema'))).toBe(true);
   });
 
-  it('catalogues all 19 documented resolve steps in DOCUMENTED_GAPS', () => {
-    expect(Object.keys(DOCUMENTED_GAPS).length).toBe(19);
+  it('catalogues all 20 documented resolve steps in DOCUMENTED_GAPS', () => {
+    expect(Object.keys(DOCUMENTED_GAPS).length).toBe(20);
   });
 
   it('rejects resolution and halts when permission denied occurs', () => {
@@ -278,6 +278,23 @@ describe('Fresh database migration runner safety guards & classification', () =>
     expect(evalResult.reason).toBe('MATCHED_EXPECTED_GAP');
     expect(evalResult.migrationName).toBe('20260904000000_add_tenant_id_to_lease_rental_children');
     expect(evalResult.errorCode).toBe('42703');
+  });
+
+  it('correctly matches resolve_finance_payments_shadow when Postgres reports verification failed on unqualified finance_payments', () => {
+    const shadowMigration = '20260910000005_resolve_finance_payments_shadow';
+    const mockOutput = `
+      Applying migration \`${shadowMigration}\`
+      Error: P3018
+      Migration name: ${shadowMigration}
+      Database error code: P0001
+      Database error:
+      ERROR: verification failed: unqualified finance_payments resolves to <NULL>
+    `;
+    const evalResult = evaluateMigrationFailure(mockOutput, [shadowMigration]);
+    expect(evalResult.canResolve).toBe(true);
+    expect(evalResult.reason).toBe('MATCHED_EXPECTED_GAP');
+    expect(evalResult.migrationName).toBe(shadowMigration);
+    expect(evalResult.errorCode).toBe('P0001');
   });
 });
 

@@ -78,6 +78,9 @@ npx prisma migrate resolve --applied 20260910000003_login_attempts_platform_only
 npx prisma migrate deploy   # stops at 20260910000004
 npx prisma migrate resolve --applied 20260910000004_enable_rls_seven_tables
 
+npx prisma migrate deploy   # stops at 20260910000005
+npx prisma migrate resolve --applied 20260910000005_resolve_finance_payments_shadow
+
 npx prisma migrate deploy   # stops at 20260910000006
 npx prisma migrate resolve --applied 20260910000006_finance_schema_null_escape
 

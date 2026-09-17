@@ -8,7 +8,7 @@
 // 1. Unified Target Selection:
 //    Resolves DIRECT_URL / DATABASE_URL consistently and synchronizes both for
 //    all subprocess invocations and internal PrismaClient instances.
-// 2. Unambiguous Failure Extraction & Strict 19-Step Classification:
+// 2. Unambiguous Failure Extraction & Strict 20-Step Classification:
 //    Parses the exact failing migration name, PG error code, and error message
 //    from Prisma's structured error block. Prevents false matches on earlier
 //    migrations in stdout. Cross-checks against _prisma_migrations.
@@ -135,6 +135,11 @@ const DOCUMENTED_GAPS = {
     targetObject: 'trip_schedules',
     expectedCodes: ['42P01', 'P0001'],
     expectedSignatures: [/trip_schedules/i, /verification failed/i, /tenant/i, /RLS/i, /WorkOrder/i],
+  },
+  '20260910000005_resolve_finance_payments_shadow': {
+    targetObject: 'finance_payments shadow resolution / verification',
+    expectedCodes: ['P0001', '42P01'],
+    expectedSignatures: [/unqualified finance_payments resolves to/i, /finance_payments/i, /verification failed/i],
   },
   '20260910000006_finance_schema_null_escape': {
     targetObject: 'finance schema / tables',
