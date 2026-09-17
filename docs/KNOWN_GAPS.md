@@ -185,6 +185,67 @@ legacy `v0` transparent backward compatibility, and dual-key rotation via
 
 ---
 
+## MIGRATE-001 — `prisma migrate deploy` cannot replay migration history from scratch
+**Status:** open · **Target:** before any fresh-environment provisioning is needed · **Owner:** athom
+
+**2026-09-17:** discovered while provisioning a clean staging database. Running
+`prisma migrate deploy` against a genuinely empty Postgres database (all 160
+migrations, in order) fails partway through — it is **not** currently possible
+to bootstrap a fresh environment for this project from migration history alone.
+
+**Root cause:** migration `20260815140000_tenant_001_leasing_rental_isolation`
+runs `ALTER TABLE rental_rate_quotes ADD COLUMN ...` (and the same for
+`rental_vehicle_exchanges`, `rental_invoices`, `rental_invoice_line_items`,
+`rental_invoice_payments`) with no existence guard, but none of those five
+tables are `CREATE TABLE`'d by any earlier migration. They're only created by
+later migrations — `20260914140000_fresh_replay_rental_leasing_gap` and
+`20260915250000_fresh_replay_rental_leasing_gap_v2` — whose own names and
+comments make clear they were written specifically to patch "fresh database
+bootstrap" gaps like this one. Since `migrate deploy` applies migrations
+strictly in order and halts on the first failure, it dies at `20260815140000`
+long before it ever reaches the fixes meant to cover it.
+
+Separately, `20260815140000`'s tenant backfill logic (`SELECT id INTO
+default_tenant FROM tenants ... IF default_tenant IS NULL THEN RAISE
+EXCEPTION`) requires at least one pre-existing row in `tenants`, so a truly
+empty database also needs a seed tenant before this migration can pass, even
+once the table-ordering issue is fixed.
+
+**Why this hasn't been noticed before:** every real environment (production,
+the original staging database) was provisioned incrementally over time, so by
+the time `20260815140000` ran, `rental_rate_quotes` etc. already existed via
+whatever created them originally (likely ad hoc `db push`/runtime DDL before
+migrations were the source of truth) — the ordering bug only bites a true
+from-scratch replay.
+
+**Workaround used for staging (2026-09-17):** rather than editing an
+already-applied historical migration (risky — `migrate deploy` may re-validate
+checksums of migrations already recorded as applied, which would need
+verifying against production before ever touching that file), the clean
+staging database was built via `prisma db push` (schema-driven, ignores
+migration history and its ordering entirely) plus a targeted replay of RLS
+policies, grants, and the tables Prisma doesn't model, sourced directly from
+production's live structure via `prisma migrate diff --to-schema-datasource`.
+This works but is a one-off manual process, not something `migrate deploy`
+can do unattended.
+
+**Real fix needed:** move the `CREATE TABLE IF NOT EXISTS` statements for
+`rental_rate_quotes`, `rental_vehicle_exchanges`, `rental_invoices`,
+`rental_invoice_line_items`, and `rental_invoice_payments` earlier in history
+— either by making `20260815140000` itself defensive (guarding each `ALTER
+TABLE` with an existence check, matching the pattern already used elsewhere
+in this same migration for lease tables), or via some other mechanism that
+doesn't risk the checksum of an already-applied production migration. Whoever
+picks this up should first confirm whether `prisma migrate deploy` actually
+re-checks checksums of prior applied migrations in this Prisma version, since
+that determines whether editing the file in place is even safe.
+
+**Risk if left open:** disaster recovery, spinning up a second environment,
+or onboarding a new developer's local database all require a working fresh
+`migrate deploy` — none of those paths currently work end-to-end.
+
+---
+
 ## DEP-001 — Dependency vulnerability triage (npm audit)
 **Status:** open · **Target:** before go-live · **Owner:** athom
 
