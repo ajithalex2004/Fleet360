@@ -296,6 +296,24 @@ describe('Fresh database migration runner safety guards & classification', () =>
     expect(evalResult.migrationName).toBe(shadowMigration);
     expect(evalResult.errorCode).toBe('P0001');
   });
+
+  it('correctly matches finance_schema_null_escape when Postgres reports missing tenant_id column on finance table', () => {
+    const financeMigration = '20260910000006_finance_schema_null_escape';
+    const mockOutput = `
+      Applying migration \`${financeMigration}\`
+      Error: P3018
+      Migration name: ${financeMigration}
+      Database error code: 42703
+      Database error:
+      ERROR: column "tenant_id" does not exist
+      DbError { severity: "ERROR", parsed_severity: Some(Error), code: SqlState(E42703), message: "column \\"tenant_id\\" does not exist", detail: None, hint: None, position: Some(Internal { position: 59, query: "SELECT count(*) FROM finance.finance_vat_audit_logs WHERE tenant_id IS NULL" }) }
+    `;
+    const evalResult = evaluateMigrationFailure(mockOutput, [financeMigration]);
+    expect(evalResult.canResolve).toBe(true);
+    expect(evalResult.reason).toBe('MATCHED_EXPECTED_GAP');
+    expect(evalResult.migrationName).toBe(financeMigration);
+    expect(evalResult.errorCode).toBe('42703');
+  });
 });
 
 describe('Database target resolution & preconditions', () => {

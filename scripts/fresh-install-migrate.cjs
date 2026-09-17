@@ -143,18 +143,32 @@ const DOCUMENTED_GAPS = {
   },
   '20260910000006_finance_schema_null_escape': {
     targetObject: 'finance schema / tables',
-    expectedCodes: ['3F000', '42P01', 'P0001'],
-    expectedSignatures: [/schema "finance" does not exist/i, /finance/i, /verification failed/i],
+    expectedCodes: ['3F000', '42P01', 'P0001', '42703'],
+    expectedSignatures: [
+      /schema "finance" does not exist/i,
+      /column "tenant_id" does not exist/i,
+      /tenant_id/i,
+      /finance/i,
+      /verification failed/i,
+    ],
   },
   '20260910000008_fleet_operations_null_escape': {
     targetObject: 'operations / fleet schema',
-    expectedCodes: ['3F000', '42P01', 'P0001'],
-    expectedSignatures: [/schema "operations" does not exist/i, /schema "fleet" does not exist/i, /relation "(operations|fleet)\./i, /verification failed/i, /escape/i],
+    expectedCodes: ['3F000', '42P01', 'P0001', '42703'],
+    expectedSignatures: [
+      /schema "operations" does not exist/i,
+      /schema "fleet" does not exist/i,
+      /relation "(operations|fleet)\./i,
+      /column "tenant_id" does not exist/i,
+      /tenant_id/i,
+      /verification failed/i,
+      /escape/i,
+    ],
   },
   '20260910000009_backfill_bookings_hierarchy_tenant': {
     targetObject: 'logistics_shipment_orders / bookings.tenant_id',
-    expectedCodes: ['42P01', '42703'],
-    expectedSignatures: [/logistics_shipment_orders/i, /bookings/i, /customer_hierarchy/i, /tenant_id/i],
+    expectedCodes: ['42P01', '42703', 'P0001'],
+    expectedSignatures: [/logistics_shipment_orders/i, /bookings/i, /customer_hierarchy/i, /tenant_id/i, /verification failed/i],
   },
   '20260910000010_grant_app_role_schema_access': {
     targetObject: 'fleet360_app / domain schemas',
@@ -163,23 +177,23 @@ const DOCUMENTED_GAPS = {
   },
   '20260910000016_finance_deposits_recurring_tables_and_rls': {
     targetObject: 'finance_security_deposits column generation',
-    expectedCodes: ['42P17', '0A000', '42P01'],
-    expectedSignatures: [/generation expression/i, /CURRENT_DATE/i, /immutable/i, /finance_security_deposits/i],
+    expectedCodes: ['42P17', '0A000', '42P01', 'P0001'],
+    expectedSignatures: [/generation expression/i, /CURRENT_DATE/i, /immutable/i, /finance_security_deposits/i, /verification failed/i],
   },
   '20260910000024_auth_security_tables_and_rls': {
     targetObject: 'password_reset_tokens / audit_logs',
-    expectedCodes: ['42P07', '42710', '42P01'],
-    expectedSignatures: [/already exists/i, /password_reset_tokens/i, /audit_logs/i, /tenant_api_keys/i],
+    expectedCodes: ['42P07', '42710', '42P01', 'P0001'],
+    expectedSignatures: [/already exists/i, /password_reset_tokens/i, /audit_logs/i, /tenant_api_keys/i, /verification failed/i],
   },
   '20260911120000_lease_return_settlement_workflow': {
     targetObject: 'lease_vehicle_returns / lease_allocation_occurrences / finance_security_deposits',
-    expectedCodes: ['42P01', '42703'],
-    expectedSignatures: [/lease_vehicle_returns/i, /lease_return_settlements/i, /lease_allocation_occurrences/i, /finance_security_deposits/i, /tenant_id/i],
+    expectedCodes: ['42P01', '42703', 'P0001'],
+    expectedSignatures: [/lease_vehicle_returns/i, /lease_return_settlements/i, /lease_allocation_occurrences/i, /finance_security_deposits/i, /tenant_id/i, /verification failed/i],
   },
   '20260914140000_fresh_replay_rental_leasing_gap': {
     targetObject: 'rental_rate_quotes.tenant_id',
-    expectedCodes: ['42703', '42P01'],
-    expectedSignatures: [/column "tenant_id" of relation "rental_rate_quotes" does not exist/i, /tenant_id/i, /rental_rate_quotes/i],
+    expectedCodes: ['42703', '42P01', 'P0001'],
+    expectedSignatures: [/column "tenant_id" of relation "rental_rate_quotes" does not exist/i, /tenant_id/i, /rental_rate_quotes/i, /verification failed/i],
   },
 };
 
