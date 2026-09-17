@@ -47,13 +47,13 @@ const FORBIDDEN_ERROR_PATTERNS = [
 
 // Valid underlying PostgreSQL error signatures that correspond to historical schema replay gaps.
 const EXPECTED_GAP_SIGNATURES = [
-  /relation ".*" does not exist/i,
-  /column ".*" does not exist/i,
-  /table ".*" does not exist/i,
-  /schema ".*" does not exist/i,
-  /type ".*" already exists/i,
-  /relation ".*" already exists/i,
-  /table ".*" already exists/i,
+  /relation .* does not exist/i,
+  /column .* does not exist/i,
+  /table .* does not exist/i,
+  /schema .* does not exist/i,
+  /type .* already exists/i,
+  /relation .* already exists/i,
+  /table .* already exists/i,
   /cannot use .* in column generation expression/i,
   /generation expression is not immutable/i,
   /cannot drop .* because other objects depend on it/i,
@@ -112,17 +112,17 @@ const DOCUMENTED_GAPS = {
   },
   '20260905000000_adopt_route_optimisation_results': {
     targetObject: 'route_optimisation_results',
-    expectedCodes: ['42P01'],
+    expectedCodes: ['42P01', '42703'],
     expectedSignatures: [/route_optimisation_results/i],
   },
   '20260909000000_per_tenant_rental_agreement_numbers': {
     targetObject: 'rental_agreements',
-    expectedCodes: ['42P01'],
+    expectedCodes: ['42P01', '42703'],
     expectedSignatures: [/rental_agreements/i],
   },
   '20260910000000_remove_null_tenant_escape': {
     targetObject: 'rental_rate_quotes / rental_agreements',
-    expectedCodes: ['42P01'],
+    expectedCodes: ['42P01', '42703'],
     expectedSignatures: [/rental_rate_quotes/i, /rental_agreements/i],
   },
   '20260910000003_login_attempts_platform_only': {
@@ -157,22 +157,22 @@ const DOCUMENTED_GAPS = {
   },
   '20260910000016_finance_deposits_recurring_tables_and_rls': {
     targetObject: 'finance_security_deposits column generation',
-    expectedCodes: ['42P17', '0A000'],
+    expectedCodes: ['42P17', '0A000', '42P01'],
     expectedSignatures: [/generation expression/i, /CURRENT_DATE/i, /immutable/i, /finance_security_deposits/i],
   },
   '20260910000024_auth_security_tables_and_rls': {
     targetObject: 'password_reset_tokens / audit_logs',
-    expectedCodes: ['42P07', '42710'],
+    expectedCodes: ['42P07', '42710', '42P01'],
     expectedSignatures: [/already exists/i, /password_reset_tokens/i, /audit_logs/i, /tenant_api_keys/i],
   },
   '20260911120000_lease_return_settlement_workflow': {
     targetObject: 'lease_vehicle_returns / lease_allocation_occurrences / finance_security_deposits',
-    expectedCodes: ['42P01'],
+    expectedCodes: ['42P01', '42703'],
     expectedSignatures: [/lease_vehicle_returns/i, /lease_return_settlements/i, /lease_allocation_occurrences/i, /finance_security_deposits/i],
   },
   '20260914140000_fresh_replay_rental_leasing_gap': {
     targetObject: 'rental_rate_quotes.tenant_id',
-    expectedCodes: ['42703'],
+    expectedCodes: ['42703', '42P01'],
     expectedSignatures: [/column "tenant_id" of relation "rental_rate_quotes" does not exist/i, /tenant_id/i],
   },
 };

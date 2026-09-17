@@ -260,6 +260,25 @@ describe('Fresh database migration runner safety guards & classification', () =>
     expect(evalResult.migrationName).toBe('20260824000000_add_tenant_constraints_and_indexes');
     expect(evalResult.errorCode).toBe('42P01');
   });
+
+  it('correctly matches add_tenant_id_to_lease_rental_children when Postgres reports unquoted column error', () => {
+    const mockOutput = `
+      Applying migration \`20260904000000_add_tenant_id_to_lease_rental_children\`
+      Error: P3018
+      Migration name: 20260904000000_add_tenant_id_to_lease_rental_children
+      Database error code: 42703
+      Database error:
+      ERROR: column p.tenant_id does not exist
+      HINT: Perhaps you meant to reference the column "c.tenant_id".
+    `;
+    const evalResult = evaluateMigrationFailure(mockOutput, [
+      '20260904000000_add_tenant_id_to_lease_rental_children',
+    ]);
+    expect(evalResult.canResolve).toBe(true);
+    expect(evalResult.reason).toBe('MATCHED_EXPECTED_GAP');
+    expect(evalResult.migrationName).toBe('20260904000000_add_tenant_id_to_lease_rental_children');
+    expect(evalResult.errorCode).toBe('42703');
+  });
 });
 
 describe('Database target resolution & preconditions', () => {
