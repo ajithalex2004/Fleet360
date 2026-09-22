@@ -103,8 +103,8 @@ export async function POST(req: NextRequest) {
 
         if (dryRun) {
           for (const a of assessments) {
-            if (a.action === 'NO_SHOW') counts.noShow += 1;
-            else if (a.action === 'LATE_RETURN') counts.lateReturn += 1;
+            if (a.kind === 'NO_SHOW') counts.noShow += 1;
+            else if (a.kind === 'LATE_RETURN') counts.lateReturn += 1;
             else counts.skipped += 1;
           }
           return {
@@ -117,13 +117,8 @@ export async function POST(req: NextRequest) {
 
         for (const a of assessments) {
           try {
-            if (a.action === 'SKIP' || !a.action) {
-              counts.skipped += 1;
-              continue;
-            }
-
-            const chargeType = chargeTypeFor(a.action);
-            const amount = a.amount ?? 0;
+            const chargeType = chargeTypeFor(a.kind);
+            const amount = a.feeAmount ?? 0;
             const noteFingerprint = `${chargeType}:${a.bookingId}:${today.toISOString().slice(0, 10)}`;
 
             const agreement = await tx.rentalAgreement.findFirst({
@@ -147,19 +142,19 @@ export async function POST(req: NextRequest) {
                   agreementId: agreement?.id ?? null,
                   chargeType,
                   amount,
-                  currency: a.currency ?? 'AED',
+                  currency: a.feeCurrency ?? 'AED',
                   notes: noteFingerprint,
                 } as any,
               });
             }
 
-            if (a.action === 'NO_SHOW') {
+            if (a.kind === 'NO_SHOW') {
               await tx.rentalBooking.updateMany({
                 where: { id: a.bookingId, tenantId } as any,
                 data: { status: 'NO_SHOW' },
               });
               counts.noShow += 1;
-            } else if (a.action === 'LATE_RETURN') {
+            } else if (a.kind === 'LATE_RETURN') {
               counts.lateReturn += 1;
             }
           } catch (err) {

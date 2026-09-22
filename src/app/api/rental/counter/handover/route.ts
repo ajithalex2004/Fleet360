@@ -136,6 +136,11 @@ export async function POST(req: NextRequest) {
           const agreement = await tx.rentalAgreement.upsert({
             where: { bookingId: data.bookingId },
             create: {
+              // RentalAgreement.tenantId is a required column — this was
+              // missing entirely, so every handover for a booking without
+              // an existing agreement would have hit the DB's NOT NULL
+              // constraint at runtime.
+              tenantId,
               agreementNo,
               bookingId: data.bookingId,
               customerId: booking.customerId,
