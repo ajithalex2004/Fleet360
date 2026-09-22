@@ -40,6 +40,7 @@ concurrency:
 jobs:
   phase0:
     name: Cross-tenant isolation
+    needs: [rls-isolation-ts]
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -262,6 +263,7 @@ jobs:
   # / lease_deposit_applications / lease_contract_closures tables.
   leasing-return-workflow-integration:
     name: Leasing return workflow (Postgres)
+    needs: [phase0]
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -342,6 +344,7 @@ jobs:
 
   dunning-collections-integration:
     name: Dunning & collections dispatch (Postgres)
+    needs: [leasing-return-workflow-integration]
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -431,6 +434,7 @@ jobs:
 
   audit-log-race-integration:
     name: Audit log transaction race (Postgres)
+    needs: [dunning-collections-integration]
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
