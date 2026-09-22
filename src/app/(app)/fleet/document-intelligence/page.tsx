@@ -8,33 +8,75 @@ import {
   AlertCircle,
   Clock,
   Sparkles,
-  Car,
-  User,
-  DollarSign,
-  Calendar,
-  Building,
   Shield,
   FileCheck,
   RefreshCw,
-  ExternalLink,
-  ChevronRight,
   ArrowRight,
   Check,
   Eye,
   AlertTriangle,
   Layers,
-  Search,
-  ShieldAlert,
   Edit3,
-  Flame,
   Bookmark,
   Send,
   Zap,
   Package,
   Filter,
-  CheckSquare,
   XCircle,
 } from 'lucide-react';
+import type {
+  DocumentExtractionResult,
+  MasterDataCrossCheckResult,
+  CrossDocRelationshipResult,
+  DocumentSourceGrounding,
+  ContractObligationItem,
+  MasterDataMismatch,
+  DocIntelligenceCategory,
+  DocumentLifecycleStatus,
+} from '@/lib/agents/types';
+import type { BatchJobSummary } from '@/lib/agents/document-intelligence/pipeline/batch-worker';
+
+// Shape of one row returned by GET /api/documents/intelligence/extractions
+// (a flattened SQL projection of document_intelligence_extractions).
+interface ExtractionRow {
+  id: string;
+  tenantId?: string;
+  fileName: string;
+  mimeType?: string;
+  docCategory: DocIntelligenceCategory | string;
+  templateFamily?: string;
+  confidence?: string;
+  confidenceScore?: number;
+  riskScore?: number;
+  riskLevel?: string;
+  lifecycleStatus?: DocumentLifecycleStatus | string;
+  referenceNumber?: string;
+  issueDate?: string;
+  expiryDate?: string;
+  extractedData?: DocumentExtractionResult;
+  sourceGrounding?: DocumentSourceGrounding;
+  masterDataValidation?: MasterDataCrossCheckResult;
+  crossDocValidation?: CrossDocRelationshipResult;
+  contractObligations?: ContractObligationItem[];
+  duplicateHash?: string;
+  autoPopulateStatus?: string;
+  linkedEntityType?: string;
+  linkedEntityId?: string;
+  createdAt?: string;
+}
+
+interface DocIntelligenceStats {
+  totalProcessed: number;
+  autoApplied: number;
+  pendingReview: number;
+  stpRatePct: number;
+  avgConfidence: number;
+  avgRiskScore: number;
+  activeDocuments: number;
+  supersededDocuments: number;
+  estimatedHoursSaved: number;
+  estimatedSavingsAed: number;
+}
 
 const DOC_CATEGORIES = [
   { key: 'ALL', label: 'All Documents' },
@@ -128,8 +170,8 @@ Payment Terms: Net 30 Days`,
 ];
 
 export default function DocumentIntelligencePage() {
-  const [extractions, setExtractions] = useState<any[]>([]);
-  const [stats, setStats] = useState<any>({
+  const [extractions, setExtractions] = useState<ExtractionRow[]>([]);
+  const [stats, setStats] = useState<DocIntelligenceStats>({
     totalProcessed: 0,
     autoApplied: 0,
     pendingReview: 0,
@@ -143,7 +185,7 @@ export default function DocumentIntelligencePage() {
   });
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('ALL');
-  const [selectedExtraction, setSelectedExtraction] = useState<any | null>(null);
+  const [selectedExtraction, setSelectedExtraction] = useState<ExtractionRow | null>(null);
 
   // Source Grounding Highlight state
   const [highlightedField, setHighlightedField] = useState<string | null>(null);
@@ -168,8 +210,7 @@ export default function DocumentIntelligencePage() {
   // Priority 3: Batch Upload State
   const [batchZipBase64, setBatchZipBase64] = useState<string | null>(null);
   const [batchZipName, setBatchZipName] = useState<string>('');
-  const [batchJobs, setBatchJobs] = useState<any[]>([]);
-  const [activeBatchJob, setActiveBatchJob] = useState<any | null>(null);
+  const [activeBatchJob, setActiveBatchJob] = useState<BatchJobSummary | null>(null);
   const [isProcessingBatch, setIsProcessingBatch] = useState(false);
   const zipInputRef = useRef<HTMLInputElement>(null);
 
@@ -280,14 +321,14 @@ export default function DocumentIntelligencePage() {
           createdAt: new Date().toISOString(),
         });
       }
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Processing failed' });
+    } catch (err) {
+      setActionMessage({ type: 'error', text: err instanceof Error ? err.message : 'Processing failed' });
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const handleApplyRecord = async (extraction: any) => {
+  const handleApplyRecord = async (extraction: ExtractionRow) => {
     try {
       const res = await fetch('/api/documents/intelligence/apply', {
         method: 'POST',
@@ -306,8 +347,8 @@ export default function DocumentIntelligencePage() {
         text: `Updated Fleet360: ${data.message}`,
       });
       loadExtractions();
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Apply failed' });
+    } catch (err) {
+      setActionMessage({ type: 'error', text: err instanceof Error ? err.message : 'Apply failed' });
     }
   };
 
@@ -335,8 +376,8 @@ export default function DocumentIntelligencePage() {
       setActionMessage({ type: 'success', text: data.message });
       setShowFeedbackModal(false);
       setCorrectedVal('');
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message });
+    } catch (err) {
+      setActionMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to submit feedback' });
     } finally {
       setFeedbackSubmitting(false);
     }
@@ -387,8 +428,8 @@ export default function DocumentIntelligencePage() {
       setBatchZipBase64(null);
       setBatchZipName('');
       await loadExtractions();
-    } catch (err: any) {
-      setActionMessage({ type: 'error', text: err.message || 'Batch execution failed' });
+    } catch (err) {
+      setActionMessage({ type: 'error', text: err instanceof Error ? err.message : 'Batch execution failed' });
     } finally {
       setIsProcessingBatch(false);
     }
@@ -897,7 +938,7 @@ export default function DocumentIntelligencePage() {
                     {activeMasterCheck.passed ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}
                     Master Data Verification: {activeMasterCheck.summary}
                   </div>
-                  {activeMasterCheck.mismatches?.map((m: any, idx: number) => (
+                  {activeMasterCheck.mismatches?.map((m: MasterDataMismatch, idx: number) => (
                     <div key={idx} className="text-slate-300 pl-5">
                       • {m.description}
                     </div>
@@ -1050,7 +1091,7 @@ export default function DocumentIntelligencePage() {
                     Contract Obligations & SLA Penalties
                   </div>
                   <div className="space-y-2 text-xs">
-                    {activeContractObs.map((ob: any, idx: number) => (
+                    {activeContractObs.map((ob: ContractObligationItem, idx: number) => (
                       <div key={idx} className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between">
                         <div>
                           <div className="font-semibold text-white flex items-center gap-2">
@@ -1099,8 +1140,8 @@ export default function DocumentIntelligencePage() {
                             setActionMessage({ type: 'warning', text: 'Document rejected.' });
                             loadExtractions();
                           }
-                        } catch (err: any) {
-                          setActionMessage({ type: 'error', text: err.message || 'Reject failed' });
+                        } catch (err) {
+                          setActionMessage({ type: 'error', text: err instanceof Error ? err.message : 'Reject failed' });
                         }
                       }}
                       className="px-3 py-1.5 rounded-lg bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 font-medium text-xs transition flex items-center gap-1"

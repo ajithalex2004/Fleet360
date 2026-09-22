@@ -9,33 +9,88 @@
 
 import React, { useEffect, useState } from 'react';
 import {
-  Briefcase,
-  DollarSign,
-  Award,
-  Truck,
-  User,
   Clock,
   MapPin,
   CheckCircle2,
   Copy,
   ExternalLink,
-  Plus,
   Send,
   X,
-  Radio,
 } from 'lucide-react';
+
+interface PartnerQuoteRow {
+  id: string;
+  revisionNo: number;
+  amount: number | string;
+  vatAmount: number | string;
+  totalAmount: number | string;
+  currency: string;
+  status: string;
+  notes?: string | null;
+}
+
+interface OutsourceRequestRow {
+  id: string;
+  requestNumber: string;
+  domain: string;
+  pricingMethod: string;
+  status: string;
+  serviceDate: string;
+  pickupTime: string;
+  pickupLocation: string;
+  dropoffLocation: string;
+  requiredCapacity: number;
+  vehicleTypeRequired?: string | null;
+  specialInstructions?: string | null;
+  // OutsourceRequest itself has no closesAt column — it lives on the related
+  // MarketplaceOpportunity (only present once the request has been published).
+  opportunity?: { closesAt?: string | null } | null;
+  quotes?: PartnerQuoteRow[];
+}
+
+interface PartnerAssignmentRow {
+  id: string;
+  vehiclePlate?: string | null;
+  driverName?: string | null;
+  driverPhone?: string | null;
+  pod?: {
+    passengerCount?: number | null;
+    signedByName?: string | null;
+  } | null;
+}
+
+interface OutsourceAwardRow {
+  id: string;
+  status: string;
+  totalAwarded: number | string;
+  partnerId: string;
+  request?: OutsourceRequestRow | null;
+  assignment?: PartnerAssignmentRow | null;
+}
+
+interface PartnerVehicleRow {
+  id: string;
+  licensePlate: string;
+  vehicleType: string;
+}
+
+interface PartnerDriverRow {
+  id: string;
+  fullName: string;
+  mobileNumber: string;
+}
 
 export default function ExchangeJobsPage() {
   const [activeTab, setActiveTab] = useState<'REQUESTS' | 'AWARDS'>('REQUESTS');
-  const [requests, setRequests] = useState<any[]>([]);
-  const [awards, setAwards] = useState<any[]>([]);
-  const [vehicles, setVehicles] = useState<any[]>([]);
-  const [drivers, setDrivers] = useState<any[]>([]);
+  const [requests, setRequests] = useState<OutsourceRequestRow[]>([]);
+  const [awards, setAwards] = useState<OutsourceAwardRow[]>([]);
+  const [vehicles, setVehicles] = useState<PartnerVehicleRow[]>([]);
+  const [drivers, setDrivers] = useState<PartnerDriverRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Modals state
-  const [selectedRequestForQuote, setSelectedRequestForQuote] = useState<any | null>(null);
-  const [selectedAwardForAssign, setSelectedAwardForAssign] = useState<any | null>(null);
+  const [selectedRequestForQuote, setSelectedRequestForQuote] = useState<OutsourceRequestRow | null>(null);
+  const [selectedAwardForAssign, setSelectedAwardForAssign] = useState<OutsourceAwardRow | null>(null);
   const [generatedDriverLink, setGeneratedDriverLink] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
 
@@ -112,10 +167,57 @@ export default function ExchangeJobsPage() {
         </div>
       )}
 
+      {/* Driver Execution Link — shown once, right when it's generated, since the raw
+          token is only ever returned by the assign endpoint and can't be retrieved later. */}
+      {generatedDriverLink && (
+        <div className="p-4 rounded-2xl bg-cyan-950/30 border border-cyan-500/40 text-xs space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-cyan-300 flex items-center gap-1.5">
+              <Send className="w-3.5 h-3.5" />
+              Driver Execution Link Generated
+            </span>
+            <button onClick={() => setGeneratedDriverLink(null)} className="text-slate-400 hover:text-white">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <p className="text-[11px] text-slate-400">
+            Already dispatched to the driver via WhatsApp/SMS — copy or open it below if you need it directly.
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 truncate px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 font-mono text-[11px]">
+              {`${window.location.origin}${generatedDriverLink}`}
+            </code>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}${generatedDriverLink}`);
+                showToast('✓ Driver trip link copied to clipboard!');
+              }}
+              className="px-2.5 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-[11px] flex items-center gap-1 shadow shrink-0"
+            >
+              <Copy className="w-3 h-3" />
+              <span>Copy</span>
+            </button>
+            <a
+              href={generatedDriverLink}
+              target="_blank"
+              rel="noreferrer"
+              className="p-1.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white shrink-0"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          </div>
+        </div>
+      )}
+
       {/* TAB 1: OPEN REQUESTS */}
       {activeTab === 'REQUESTS' && (
         <div className="space-y-4">
-          {requests.length > 0 ? (
+          {loading ? (
+            <div className="p-12 text-center text-xs text-slate-500 rounded-3xl bg-slate-900/40 border border-slate-800 flex items-center justify-center gap-2">
+              <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              Loading open requests...
+            </div>
+          ) : requests.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {requests.map((r) => {
                 const existingQuote = r.quotes?.[0];
@@ -133,7 +235,11 @@ export default function ExchangeJobsPage() {
                       </div>
                       <span className="text-[11px] text-slate-400 flex items-center gap-1">
                         <Clock className="w-3 h-3 text-slate-500" />
-                        <span>Closes {new Date(r.closesAt).toLocaleDateString()}</span>
+                        <span>
+                          {r.opportunity?.closesAt
+                            ? `Closes ${new Date(r.opportunity.closesAt).toLocaleDateString()}`
+                            : 'No deadline set'}
+                        </span>
                       </span>
                     </div>
 
@@ -186,7 +292,12 @@ export default function ExchangeJobsPage() {
       {/* TAB 2: AWARDED JOBS */}
       {activeTab === 'AWARDS' && (
         <div className="space-y-4">
-          {awards.length > 0 ? (
+          {loading ? (
+            <div className="p-12 text-center text-xs text-slate-500 rounded-3xl bg-slate-900/40 border border-slate-800 flex items-center justify-center gap-2">
+              <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              Loading awarded jobs...
+            </div>
+          ) : awards.length > 0 ? (
             <div className="space-y-3">
               {awards.map((a) => {
                 const assignment = a.assignment;
@@ -233,28 +344,14 @@ export default function ExchangeJobsPage() {
 
                       <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800/80 flex flex-col justify-between">
                         <span className="text-slate-400 text-[11px] block">Driver Execution Link</span>
-                        {assignment?.driverToken ? (
-                          <div className="flex items-center gap-2 mt-1">
-                            <button
-                              onClick={() => {
-                                const url = `${window.location.origin}/track/partner-trip/${assignment.driverToken}`;
-                                navigator.clipboard.writeText(url);
-                                showToast('✓ Driver trip link copied to clipboard!');
-                              }}
-                              className="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-[11px] flex items-center gap-1 shadow"
-                            >
-                              <Copy className="w-3 h-3" />
-                              <span>Copy Link</span>
-                            </button>
-                            <a
-                              href={`/track/partner-trip/${assignment.driverToken}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="p-1 text-slate-400 hover:text-white"
-                            >
-                              <ExternalLink className="w-4 h-4" />
-                            </a>
-                          </div>
+                        {assignment ? (
+                          // The raw driver token is one-time-only (see the reveal banner
+                          // above right after assignment) — only its hash is ever stored,
+                          // so it can't be recovered or re-copied from here afterward.
+                          <span className="text-[11px] text-emerald-400 mt-1 flex items-center gap-1">
+                            <Send className="w-3 h-3" />
+                            Delivered to driver via WhatsApp/SMS
+                          </span>
                         ) : (
                           <span className="text-[11px] text-amber-400">Assign driver to generate link</span>
                         )}
@@ -332,7 +429,7 @@ function SubmitQuoteModal({
   onClose,
   onSubmitted,
 }: {
-  request: any;
+  request: OutsourceRequestRow;
   onClose: () => void;
   onSubmitted: () => void;
 }) {
@@ -458,16 +555,25 @@ function AssignDriverModal({
   onClose,
   onAssigned,
 }: {
-  award: any;
-  vehicles: any[];
-  drivers: any[];
+  award: OutsourceAwardRow;
+  vehicles: PartnerVehicleRow[];
+  drivers: PartnerDriverRow[];
   onClose: () => void;
   onAssigned: (link: string) => void;
 }) {
+  const hasRegisteredVehicles = vehicles.length > 0;
+  const hasRegisteredDrivers = drivers.length > 0;
+
   const [vehiclePlate, setVehiclePlate] = useState<string>(vehicles[0]?.licensePlate || '');
   const [driverName, setDriverName] = useState<string>(drivers[0]?.fullName || '');
   const [driverPhone, setDriverPhone] = useState<string>(drivers[0]?.mobileNumber || '+971501234567');
   const [submitting, setSubmitting] = useState(false);
+
+  const handleDriverSelect = (fullName: string) => {
+    setDriverName(fullName);
+    const match = drivers.find((d) => d.fullName === fullName);
+    if (match) setDriverPhone(match.mobileNumber);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -513,26 +619,56 @@ function AssignDriverModal({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-slate-300 font-semibold mb-1">Select Partner Vehicle *</label>
-            <input
-              type="text"
-              required
-              value={vehiclePlate}
-              onChange={(e) => setVehiclePlate(e.target.value)}
-              placeholder="e.g. Dubai K 44102"
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white font-mono uppercase focus:outline-none focus:border-cyan-500"
-            />
+            {hasRegisteredVehicles ? (
+              <select
+                required
+                value={vehiclePlate}
+                onChange={(e) => setVehiclePlate(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white font-mono uppercase focus:outline-none focus:border-cyan-500"
+              >
+                {vehicles.map((v) => (
+                  <option key={v.id} value={v.licensePlate}>
+                    {v.licensePlate} — {v.vehicleType}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                required
+                value={vehiclePlate}
+                onChange={(e) => setVehiclePlate(e.target.value)}
+                placeholder="e.g. Dubai K 44102 (no vehicles registered yet)"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white font-mono uppercase focus:outline-none focus:border-cyan-500"
+              />
+            )}
           </div>
 
           <div>
             <label className="block text-slate-300 font-semibold mb-1">Driver Full Name *</label>
-            <input
-              type="text"
-              required
-              value={driverName}
-              onChange={(e) => setDriverName(e.target.value)}
-              placeholder="e.g. Rashid Tariq"
-              className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-cyan-500"
-            />
+            {hasRegisteredDrivers ? (
+              <select
+                required
+                value={driverName}
+                onChange={(e) => handleDriverSelect(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-cyan-500"
+              >
+                {drivers.map((d) => (
+                  <option key={d.id} value={d.fullName}>
+                    {d.fullName} ({d.mobileNumber})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                required
+                value={driverName}
+                onChange={(e) => setDriverName(e.target.value)}
+                placeholder="e.g. Rashid Tariq (no drivers registered yet)"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-white focus:outline-none focus:border-cyan-500"
+              />
+            )}
           </div>
 
           <div>

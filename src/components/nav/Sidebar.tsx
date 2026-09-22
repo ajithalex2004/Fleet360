@@ -271,7 +271,7 @@ export default function Sidebar({ onTabsFull }: Props) {
                                 <React.Fragment key={sp.href}>
                                   {showHeader && (
                                     <li aria-hidden="true" className={`px-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)] ${idx > 0 ? 'pt-2' : ''}`}>
-                                      {tLabel(sp.group)}
+                                      {tLabel(sp.group ?? '')}
                                     </li>
                                   )}
                                   <li>
@@ -371,7 +371,7 @@ export default function Sidebar({ onTabsFull }: Props) {
                   <React.Fragment key={sp.href}>
                     {showHeader && (
                       <li aria-hidden="true" className={`px-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)] ${idx > 0 ? 'pt-2' : ''}`}>
-                        {tLabel(sp.group)}
+                        {tLabel(sp.group ?? '')}
                       </li>
                     )}
                     <li>

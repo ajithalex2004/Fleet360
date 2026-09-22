@@ -68,7 +68,7 @@ export default function JobClosurePage() {
 
         try {
             // Send closure notifications
-            await sendJobClosureEmailAction(request, []);
+            await sendJobClosureEmailAction(request);
 
             // Update request status
             const updatedRequest: EnhancedMaintenanceRequest = {

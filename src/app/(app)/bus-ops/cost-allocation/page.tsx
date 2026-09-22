@@ -7,13 +7,9 @@ import {
   Users,
   TrendingUp,
   Download,
-  FileSpreadsheet,
-  Settings2,
   RefreshCw,
   CheckCircle2,
   AlertCircle,
-  Building2,
-  ArrowUpRight,
   Calculator,
   Sliders,
   Send,
@@ -92,7 +88,7 @@ export default function CostAllocationPage() {
             baseFeePerDept: baseFee,
             scanFeePerBoarding: scanFee,
             kmFeePerPaxKm: kmFee,
-          },
+          } satisfies RateConfig,
         }),
       });
 
@@ -157,7 +153,7 @@ export default function CostAllocationPage() {
     document.body.removeChild(link);
   };
 
-  const filteredDepts = useMemo(() => {
+  const filteredDepts: DepartmentUsage[] = useMemo(() => {
     if (!data?.departments) return [];
     if (!searchQuery.trim()) return data.departments;
     const q = searchQuery.toLowerCase();
@@ -218,6 +214,16 @@ export default function CostAllocationPage() {
           </div>
 
           <button
+            onClick={() => fetchData()}
+            disabled={refreshing}
+            title="Refresh cost allocation data"
+            className="flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium text-[var(--text-main)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg transition disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-indigo-400 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+
+          <button
             onClick={() => setShowRateModal(true)}
             className="flex items-center gap-2 px-3.5 py-1.5 text-xs font-medium text-[var(--text-main)] bg-[var(--bg-surface)] hover:bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg transition"
           >
@@ -244,6 +250,20 @@ export default function CostAllocationPage() {
           </button>
         </div>
       </div>
+
+      {/* Fetch error */}
+      {error && (
+        <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{error}</span>
+          <button
+            onClick={() => fetchData()}
+            className="ml-auto px-2.5 py-1 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 font-semibold transition"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">

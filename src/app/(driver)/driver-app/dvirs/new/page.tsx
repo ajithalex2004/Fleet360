@@ -106,7 +106,17 @@ function NewDvirPageInner() {
     (async () => {
       try {
         const net = await getNetwork();
-        if (!cancelled) setOnline(Boolean((net as any).connected));
+        if (net) {
+          // `net` is the whole @capacitor/network module namespace, not the
+          // status itself — the actual connection state comes from calling
+          // its Network plugin's getStatus().
+          const status = await net.Network.getStatus();
+          if (!cancelled) setOnline(status.connected);
+        } else if (typeof navigator !== 'undefined' && 'onLine' in navigator) {
+          // No native plugin (plain web build) — fall back to the browser API,
+          // matching the fallback pattern used for the camera below.
+          if (!cancelled) setOnline(navigator.onLine);
+        }
       } catch { /* no plugin */ }
     })();
     return () => { cancelled = true; };

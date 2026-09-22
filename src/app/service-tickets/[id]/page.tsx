@@ -238,7 +238,7 @@ export default function ServiceTicketDetailsPage({ params }: PageProps) {
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between p-2 rounded-lg bg-slate-950 border border-slate-800">
                   <span className="text-slate-400">Requester</span>
-                  <span className="font-medium text-slate-200">{ticket.requestorName || ticket.requestorId || 'Self-service'}</span>
+                  <span className="font-medium text-slate-200">{ticket.requestorId || 'Self-service'}</span>
                 </div>
 
                 <div className="flex items-center justify-between p-2 rounded-lg bg-slate-950 border border-slate-800">

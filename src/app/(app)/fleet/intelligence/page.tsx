@@ -49,7 +49,7 @@ interface RiskScore {
     repeatSubsystems?: string[];
     subsystemRUL?: {
       powertrainPct: number;
-      brakeSystemPct: number;
+      brakingPct: number;
       electricalPct: number;
       hvacPct: number;
     };
@@ -429,7 +429,7 @@ export default function FleetIntelligencePage() {
                         <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest mb-2">Component Remaining Useful Life (RUL)</p>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                           <SubsystemGauge label="Powertrain & Engine" value={score.factors.subsystemRUL.powertrainPct} />
-                          <SubsystemGauge label="Brake Subsystem" value={score.factors.subsystemRUL.brakeSystemPct} />
+                          <SubsystemGauge label="Brake Subsystem" value={score.factors.subsystemRUL.brakingPct} />
                           <SubsystemGauge label="Electrical & Battery" value={score.factors.subsystemRUL.electricalPct} />
                           <SubsystemGauge label="HVAC / Climate" value={score.factors.subsystemRUL.hvacPct} />
                         </div>
