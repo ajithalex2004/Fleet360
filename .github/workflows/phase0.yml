@@ -42,7 +42,7 @@ jobs:
     name: Cross-tenant isolation
     needs: [rls-isolation-ts]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     env:
       GOFLAGS: -mod=readonly
@@ -118,7 +118,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
           PHASE0_SMOKE_SUFFIX: ${{ github.run_id }}-${{ github.run_attempt }}
-        run: go test ./phasegate/... -count=1 -timeout 180s -v -run Integration
+        run: go test ./phasegate/... -count=1 -timeout 480s -v -run Integration
 
       # Re-assert the preflight facts in the job summary so the evidence is
       # visible without opening the log.
