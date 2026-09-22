@@ -13,7 +13,7 @@ import { RecoveryOutsourcingAdapter } from './recovery-adapter';
 import { LimousineOutsourcingAdapter } from './limo-adapter';
 
 export class AdapterRegistry {
-  private static adapters: Map<PartnerServiceDomain, OutsourcingSourceAdapter> = new Map([
+  private static adapters: Map<PartnerServiceDomain, OutsourcingSourceAdapter> = new Map<PartnerServiceDomain, OutsourcingSourceAdapter>([
     [PartnerServiceDomain.PASSENGER_TRANSPORT, new BusOpsOutsourcingAdapter()],
     [PartnerServiceDomain.FREIGHT, new FreightOutsourcingAdapter()],
     [PartnerServiceDomain.RECOVERY, new RecoveryOutsourcingAdapter()],

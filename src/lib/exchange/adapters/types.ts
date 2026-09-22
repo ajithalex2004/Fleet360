@@ -9,7 +9,7 @@
  * - LIMOUSINE (Limousine & Chauffeur)
  */
 
-import { PartnerServiceDomain } from '@prisma/client';
+import { PartnerServiceDomain, Prisma } from '@prisma/client';
 
 export interface OutsourcingSource {
   domain: PartnerServiceDomain;
@@ -25,7 +25,11 @@ export interface OutsourcingSource {
   serviceDate: Date;
   pickupTime: string;
   specialInstructions?: string;
-  domainPayload: Record<string, any>;
+  // Holds one of the typed *Requirements payloads below, keyed by `domain` —
+  // left as `unknown` (rather than Record<string, unknown>) so each adapter
+  // can freely assert it to its own concrete Requirements type in both
+  // directions without TS rejecting the cast for insufficient overlap.
+  domainPayload: unknown;
 }
 
 export interface ValidationResult {
@@ -37,7 +41,7 @@ export interface DomainEligibilityCriteria {
   domain: PartnerServiceDomain;
   pickupCity: string;
   serviceDate: Date;
-  domainPayload: Record<string, any>;
+  domainPayload: Record<string, unknown>;
 }
 
 // -----------------------------------------------------------------------------
@@ -111,15 +115,40 @@ export interface DomainExecutionProof {
 // Canonical Outsourcing Source Adapter Interface
 // -----------------------------------------------------------------------------
 
+/**
+ * Shape passed to applyAward() once a partner quote is awarded. This isn't a
+ * raw OutsourceAward row — callers spread the created award (from
+ * OutsourceEngine.awardQuote) together with whatever sourceReferenceId they
+ * already have on hand, since `request` isn't always included on that award.
+ */
+export interface AwardApplicationPayload {
+  tenantId: string;
+  partnerId: string;
+  requestId?: string;
+  totalAwarded: number | string | Prisma.Decimal;
+  awardedBy: string;
+  sourceReferenceId?: string;
+  request?: { sourceReferenceId?: string | null } | null;
+}
+
+/** Shape passed to syncExecutionStatus() — a lightweight milestone event, not a raw PartnerTripEvent row. */
+export interface ExecutionStatusEvent {
+  sourceReferenceId: string;
+  eventType: string;
+}
+
 export interface OutsourcingSourceAdapter {
   domain: PartnerServiceDomain;
 
   getSourceReference(sourceReferenceId: string, tenantId: string): Promise<OutsourcingSource>;
   validateOutsource(source: OutsourcingSource): Promise<ValidationResult>;
-  buildRequirementsPayload(source: OutsourcingSource): Promise<Record<string, any>>;
+  buildRequirementsPayload(source: OutsourcingSource): Promise<Record<string, unknown>>;
   buildEligibilityRequirements(source: OutsourcingSource): Promise<DomainEligibilityCriteria>;
-  applyAward(award: any): Promise<void>;
-  applyAssignment(assignment: any): Promise<void>;
-  syncExecutionStatus(event: any): Promise<void>;
+  applyAward(award: AwardApplicationPayload): Promise<void>;
+  // No adapter has a real implementation yet (bus-ops's is the most
+  // complete and is still a stub) — kept as unknown until a concrete shape
+  // is established by an actual caller.
+  applyAssignment(assignment: Record<string, unknown>): Promise<void>;
+  syncExecutionStatus(event: ExecutionStatusEvent): Promise<void>;
   handleCancellation(requestId: string, reason: string): Promise<void>;
 }

@@ -20,8 +20,8 @@ export class DisclosurePolicyService {
     dropoffLocation: string,
     serviceDate: Date,
     pickupTime: string,
-    requirementsPayload: Record<string, any>
-  ): Record<string, any> {
+    requirementsPayload: Record<string, unknown>
+  ): Record<string, unknown> {
     // City / Area extraction
     const pickupZone = pickupLocation.split(',')[0] || pickupLocation;
     const dropoffZone = dropoffLocation.split(',')[0] || dropoffLocation;
@@ -95,9 +95,9 @@ export class DisclosurePolicyService {
     domain: PartnerServiceDomain,
     pickupLocation: string,
     dropoffLocation: string,
-    requirementsPayload: Record<string, any>,
+    requirementsPayload: Record<string, unknown>,
     specialInstructions?: string
-  ): Record<string, any> {
+  ): Record<string, unknown> {
     return {
       domain,
       fullPickupAddress: pickupLocation,

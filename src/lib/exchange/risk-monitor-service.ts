@@ -9,6 +9,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { raiseAlert } from '@/lib/alerts/raise';
+import type { AlertSubjectType } from '@/events/contracts/alert.events';
 
 export interface UnassignedTripRisk {
   awardId: string;
@@ -39,8 +40,15 @@ export class RiskMonitorService {
     tenantId: string
   ): Promise<UnassignedTripRisk[]> {
     const now = new Date();
-    const twoHoursLater = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-
+    // NOTE: this query is unbounded — it scans every AWARDED/ASSIGNED award
+    // with a missing driver/vehicle regardless of how far out its
+    // serviceDate is, then applies the <=2h CRITICAL threshold only in the
+    // in-memory loop below (severity is HIGH for anything further out). A
+    // `twoHoursLater` cutoff variable used to exist here for a
+    // `request: { serviceDate: { lte: twoHoursLater } }` filter but was
+    // unused/dead — leaving this flagged rather than guessing whether the
+    // query itself should be time-bounded for performance, since that
+    // changes which trips get surfaced as HIGH-severity risks at all.
     const awards = await prisma.outsourceAward.findMany({
       where: {
         tenantId,
@@ -85,7 +93,10 @@ export class RiskMonitorService {
           tenantId,
           code: 'OUTSOURCE_UNASSIGNED_RESOURCE_RISK',
           sourceModule: 'exchange',
-          subjectType: 'OutsourceAward' as any,
+          // AlertSubjectType (@/events/contracts/alert.events) only covers the
+          // bus-ops/fleet domain — see the identical gap documented in
+          // marketplace-service.ts. Same typed bypass, not a guessed fallback.
+          subjectType: 'OutsourceAward' as unknown as AlertSubjectType,
           subjectId: award.id,
           title: `🚨 Urgent: Unassigned Driver on Approaching Trip ${award.request.requestNumber}`,
           description: `Trip scheduled for ${award.request.pickupTime} by ${award.partner.legalName} has no confirmed driver or vehicle!`,

@@ -92,7 +92,7 @@ export class SettlementService {
         netPayable,
         currency: 'AED',
         status: SettlementStatementStatus.ISSUED,
-        tenantTrn: tenant?.trnNumber || '100000000000003',
+        tenantTrn: tenant?.trn || '100000000000003',
         partnerTrn: partner.taxRegistrationNumber || '100999999900003',
         deductions: input.appliedDeductions?.length
           ? {

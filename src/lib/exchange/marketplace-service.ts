@@ -8,7 +8,9 @@
 import { prisma } from '@/lib/prisma';
 import { logAudit } from '@/lib/audit';
 import { raiseAlert } from '@/lib/alerts/raise';
-import { OutsourceVisibility, PartnerServiceDomain } from '@prisma/client';
+import { OutsourceVisibility } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
+import type { AlertSubjectType } from '@/events/contracts/alert.events';
 import { DisclosurePolicyService } from './disclosure-service';
 import { OutsourceEngine } from './outsource-engine';
 
@@ -18,7 +20,7 @@ export interface PublishOpportunityInput {
   visibility?: OutsourceVisibility;
   closesAt?: Date | string;
   createdByUserId: string;
-  requirementsPayload?: Record<string, any>;
+  requirementsPayload?: Record<string, unknown>;
 }
 
 export interface AwardMarketplaceOpportunityInput {
@@ -41,7 +43,13 @@ export class MarketplaceService {
     if (!request) throw new Error('Outsource request not found');
     if (request.opportunity) throw new Error('Request is already published to Marketplace');
 
-    const closesAt = input.closesAt ? new Date(input.closesAt) : request.closesAt;
+    // OutsourceRequest itself has no closesAt column — the deadline is only
+    // ever stored on the MarketplaceOpportunity we're about to create, so
+    // there's nothing on `request` to fall back to. Default to 24h out,
+    // matching OutsourceEngine.createOutsourceRequest's default window.
+    const closesAt = input.closesAt
+      ? new Date(input.closesAt)
+      : new Date(Date.now() + 24 * 60 * 60 * 1000);
     const visibility = input.visibility || OutsourceVisibility.EXCHANGE_NETWORK;
 
     // Generate Sanitized Disclosure Payload
@@ -62,7 +70,7 @@ export class MarketplaceService {
         visibility,
         status: 'OPEN',
         closesAt,
-        disclosurePayload: sanitizedPayload,
+        disclosurePayload: sanitizedPayload as Prisma.InputJsonValue,
         requirementsVersion: 1,
         createdBy: input.createdByUserId,
       },
@@ -73,7 +81,17 @@ export class MarketplaceService {
       tenantId: input.tenantId,
       code: 'MARKETPLACE_OPPORTUNITY_PUBLISHED',
       sourceModule: 'exchange',
-      subjectType: 'MarketplaceOpportunity' as any,
+      // AlertSubjectType (@/events/contracts/alert.events) only covers the
+      // bus-ops/fleet domain (Vehicle, Driver, TripSchedule, Route, ...) —
+      // it has no member for Exchange/Marketplace entities. This same gap
+      // repeats as `as any` across most of src/lib/exchange/*.ts
+      // (outsource-engine.ts, partner-invoice-service.ts,
+      // telematics-service.ts, risk-monitor-service.ts,
+      // exception-service.ts, partner-service.ts) — extending the shared
+      // union to cover the Exchange domain is a cross-cutting decision
+      // beyond this one file, so this keeps the same subjectType value,
+      // just as an explicit typed bypass instead of `any`.
+      subjectType: 'MarketplaceOpportunity' as unknown as AlertSubjectType,
       subjectId: opportunity.id,
       title: `🌐 Marketplace RFQ Published: ${request.requestNumber} (${request.domain})`,
       description: `Opportunity open for quotes until ${closesAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`,
@@ -192,7 +210,7 @@ export class MarketplaceService {
           tenantId: input.tenantId,
           partnerId: quote.partnerId,
           status: 'TRANSACTIONAL',
-          notes: `Established automatically upon Marketplace Award for request ${opportunity.request.requestNumber}`,
+          commercialNotes: `Established automatically upon Marketplace Award for request ${opportunity.request.requestNumber}`,
         },
       });
     }

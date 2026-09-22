@@ -50,7 +50,7 @@ export class WebhookReceiptService {
       });
 
       const matchingEvent = dispatchEvents.find((e) => {
-        const payload = e.payload as any;
+        const payload = e.payload as Record<string, unknown> | null;
         return payload?.messageId === input.messageId;
       });
 
@@ -83,7 +83,7 @@ export class WebhookReceiptService {
               tenantId: assignment.award.request.tenantId,
               code: 'DRIVER_DISPATCH_DELIVERY_FAILED',
               sourceModule: 'exchange',
-              subjectType: 'TripSchedule' as any,
+              subjectType: 'TripSchedule',
               subjectId: assignment.award.request.sourceReferenceId,
               title: `⚠️ Driver WhatsApp Delivery Failed: ${assignment.driverName} (${assignment.driverPhone})`,
               description: `WhatsApp message failed to deliver: ${input.errorDetails?.message || 'Undelivered'}. Please contact driver directly.`,
@@ -126,7 +126,7 @@ export class WebhookReceiptService {
       });
 
       const matchingEvent = dispatchEvents.find((e) => {
-        const payload = e.payload as any;
+        const payload = e.payload as Record<string, unknown> | null;
         return payload?.messageId === input.messageSid;
       });
 
@@ -158,7 +158,7 @@ export class WebhookReceiptService {
               tenantId: assignment.award.request.tenantId,
               code: 'DRIVER_DISPATCH_DELIVERY_FAILED',
               sourceModule: 'exchange',
-              subjectType: 'TripSchedule' as any,
+              subjectType: 'TripSchedule',
               subjectId: assignment.award.request.sourceReferenceId,
               title: `⚠️ Driver SMS Delivery Failed: ${assignment.driverName} (${assignment.driverPhone})`,
               description: `SMS failed to deliver to ${input.to}: ${input.errorMessage || 'Undelivered'}.`,

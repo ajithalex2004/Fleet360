@@ -6,7 +6,50 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@prisma/client';
 import { hashDriverToken } from './outsource-engine';
+
+// `assignment.award.request`'s shape when fetched with
+// `include: { award: { include: { request: true } } }`, used by both
+// getWaypoints and recordWaypointMilestone below.
+type AssignmentWithRequest = Prisma.PartnerAssignmentGetPayload<{
+  include: { award: { include: { request: true } } };
+}>;
+
+// The subset of OutsourceRequest fields extractWaypointsFromRequest actually
+// reads, kept as its own loose interface rather than the full Prisma
+// OutsourceRequest type: callers — including this file's own integration
+// test suite — legitimately pass partial/synthetic request-like objects,
+// not full Prisma rows.
+//
+// `requirementsPayload` is not a real OutsourceRequest column (see the
+// no-op note in recordWaypointMilestone below) — kept optional here so
+// this documented-dead read keeps compiling rather than being silently
+// deleted or given a fabricated real column.
+interface WaypointSourceRequest {
+  pickupLocation?: string;
+  dropoffLocation?: string;
+  pickupTime?: string;
+  requirementsPayload?: { waypoints?: LegacyWaypointPayloadItem[] };
+}
+
+interface LegacyWaypointPayloadItem {
+  sequence?: number;
+  name?: string;
+  // Untyped external/test-supplied data — narrowed to the strict
+  // WaypointItem union with an explicit cast where it's consumed below,
+  // rather than constraining this interface to the literal union (which
+  // would reject the loosely-typed request objects this method has always
+  // accepted, e.g. from the integration test suite).
+  type?: string;
+  plannedTime?: string;
+  passengerCount?: number;
+  palletCount?: number;
+  isCompleted?: boolean;
+  arrivedAt?: string;
+  departedAt?: string;
+  notes?: string;
+}
 
 export interface WaypointItem {
   sequence: number;
@@ -36,13 +79,16 @@ export class WaypointService {
   /**
    * Helper to resolve waypoints from request requirements or default corridor
    */
-  static extractWaypointsFromRequest(request: any): WaypointItem[] {
-    const payload = request.requirementsPayload as any;
+  static extractWaypointsFromRequest(request: WaypointSourceRequest): WaypointItem[] {
+    const payload = request.requirementsPayload;
     if (payload?.waypoints && Array.isArray(payload.waypoints) && payload.waypoints.length > 0) {
-      return payload.waypoints.map((w: any, idx: number) => ({
+      const rawWaypoints = payload.waypoints;
+      return rawWaypoints.map((w, idx: number) => ({
         sequence: w.sequence || idx + 1,
         name: w.name || `Waypoint ${idx + 1}`,
-        type: w.type || (idx === payload.waypoints.length - 1 ? 'DROPOFF' : 'PICKUP'),
+        type:
+          (w.type as WaypointItem['type'] | undefined) ||
+          (idx === rawWaypoints.length - 1 ? 'DROPOFF' : 'PICKUP'),
         plannedTime: w.plannedTime,
         passengerCount: w.passengerCount,
         palletCount: w.palletCount,
@@ -80,7 +126,7 @@ export class WaypointService {
   static async getWaypoints(rawToken: string): Promise<WaypointProgressResult> {
     const tokenHash = hashDriverToken(rawToken);
 
-    let assignment: any = null;
+    let assignment: AssignmentWithRequest | null = null;
     try {
       assignment = await prisma.partnerAssignment.findUnique({
         where: { driverTokenHash: tokenHash },
@@ -145,7 +191,7 @@ export class WaypointService {
   ): Promise<WaypointProgressResult> {
     const tokenHash = hashDriverToken(rawToken);
 
-    let assignment: any = null;
+    let assignment: AssignmentWithRequest | null = null;
     try {
       assignment = await prisma.partnerAssignment.findUnique({
         where: { driverTokenHash: tokenHash },
@@ -170,19 +216,16 @@ export class WaypointService {
         if (payload?.headcount) targetWaypoint.passengerCount = payload.headcount;
         if (payload?.notes) targetWaypoint.notes = payload.notes;
 
-        // Save back to request requirementsPayload
-        const currentReqPayload = (request.requirementsPayload as any) || {};
-        try {
-          await prisma.outsourceRequest.update({
-            where: { id: request.id },
-            data: {
-              requirementsPayload: {
-                ...currentReqPayload,
-                waypoints,
-              },
-            },
-          });
-        } catch {}
+        // NOTE: OutsourceRequest has no JSON column to persist waypoint
+        // progress on (no `requirementsPayload` field exists in the
+        // schema), so this write was always a no-op — it threw a Prisma
+        // validation error that was silently swallowed by the catch below.
+        // extractWaypointsFromRequest() therefore always falls through to
+        // its default 2-waypoint corridor fallback rather than reflecting
+        // real completion state; persisting per-waypoint progress durably
+        // would need a real schema column (flagged for follow-up, not
+        // something to add unilaterally here). The per-waypoint completion
+        // is still recorded in the immutable PartnerTripEvent ledger below.
       }
 
       // Record event in immutable ledger
