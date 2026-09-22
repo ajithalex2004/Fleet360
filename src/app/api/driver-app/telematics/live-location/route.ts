@@ -43,26 +43,35 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // 1. Update Vehicle if linked
-      if (vehicleId) {
-        await tx.vehicle
-          .update({
-            where: { id: vehicleId, tenantId },
+      // Vehicle has no currentLatitude/currentLongitude columns — those
+      // never existed in the schema, so this used to silently no-op every
+      // single ping (the .catch(() => {}) swallowed the Prisma validation
+      // error). Live position is tracked in BusGpsPing instead — the same
+      // table the telematics gateway and geofence evaluator read from —
+      // keyed by vehicleId, so resolve vehiclePlate → vehicleId first when
+      // the caller didn't supply the id directly.
+      let resolvedVehicleId = vehicleId as string | undefined;
+      if (!resolvedVehicleId && vehiclePlate) {
+        const v = await tx.vehicle.findFirst({
+          where: { licensePlate: vehiclePlate, tenantId, deletedAt: null },
+          select: { id: true },
+        });
+        resolvedVehicleId = v?.id;
+      }
+
+      if (resolvedVehicleId) {
+        await tx.busGpsPing
+          .create({
             data: {
-              currentLatitude: lat,
-              currentLongitude: lng,
-              updatedAt: new Date(),
-            },
-          })
-          .catch(() => {});
-      } else if (vehiclePlate) {
-        await tx.vehicle
-          .updateMany({
-            where: { licensePlate: vehiclePlate, tenantId, deletedAt: null },
-            data: {
-              currentLatitude: lat,
-              currentLongitude: lng,
-              updatedAt: new Date(),
+              tenantId,
+              vehicleId: resolvedVehicleId,
+              latitude: lat,
+              longitude: lng,
+              speedKmh,
+              headingDeg: heading,
+              accuracyM: accuracy,
+              occurredAt: new Date(),
+              source: 'DRIVER_APP',
             },
           })
           .catch(() => {});

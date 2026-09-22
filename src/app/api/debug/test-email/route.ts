@@ -23,6 +23,6 @@ export async function GET(req: NextRequest) {
 
         return NextResponse.json({ success: true, message: 'Triggered notification logic', result });
         } catch (e) {
-        return NextResponse.json({ error: e.message }, { status: 500 });
+        return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed' }, { status: 500 });
     }
 }

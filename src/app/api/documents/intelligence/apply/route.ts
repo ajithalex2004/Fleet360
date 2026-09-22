@@ -33,7 +33,9 @@ export async function POST(req: NextRequest) {
         extractionId?: string;
         extractionData?: DocumentExtractionResult;
         action?: 'APPLY' | 'REJECT';
+        reason?: string;
       };
+      const { extractionId, extractionData, action, reason } = body;
 
       if (action === 'REJECT') {
         if (extractionId) {
@@ -50,7 +52,7 @@ export async function POST(req: NextRequest) {
 
         dispatchDocumentWebhook(tenantId, 'DOCUMENT_REJECTED', {
           documentId: extractionId || 'UNKNOWN',
-          reason: body.reason || 'Rejected during Human-in-the-Loop review',
+          reason: reason || 'Rejected during Human-in-the-Loop review',
         }).catch((whErr) => console.warn('[DocIntelligenceApplyAPI] Webhook error:', whErr));
 
         return NextResponse.json({
@@ -94,7 +96,7 @@ export async function POST(req: NextRequest) {
             docCategory: extractionData.docCategory,
             linkedEntityType: result.linkedEntityType,
             linkedEntityId: result.linkedEntityId,
-            updatedFields: result.updatedFields,
+            fieldsUpdated: result.fieldsUpdated,
           }
         ).catch((whErr) => console.warn('[DocIntelligenceApplyAPI] Webhook error:', whErr));
       }
@@ -104,7 +106,7 @@ export async function POST(req: NextRequest) {
         message: result.message,
         linkedEntityType: result.linkedEntityType,
         linkedEntityId: result.linkedEntityId,
-        updatedFields: result.updatedFields,
+        fieldsUpdated: result.fieldsUpdated,
       });
     } catch (err: any) {
       console.error('[DocIntelligenceApplyAPI] Error:', err);

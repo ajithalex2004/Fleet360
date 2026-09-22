@@ -193,10 +193,15 @@ export async function POST(req: NextRequest) {
           const priority = hasCritical ? 'Critical' : 'Medium';
           serviceTicketReadableId = await nextReadableId(ctx.tenantId, 'MAINTENANCE', 'MNT');
 
-          const vehicle = await tx.vehicle.findFirst({
-            where: { id: trip.vehicleId, tenantId: ctx.tenantId },
-            select: { licensePlate: true, make: true, model: true },
-          }).catch(() => null);
+          // trip.vehicleId can be null (no vehicle allocated yet) — passing
+          // that straight through would make the `id` filter `undefined`
+          // and match ANY vehicle in the tenant, so skip the lookup instead.
+          const vehicle = trip.vehicleId
+            ? await tx.vehicle.findFirst({
+                where: { id: trip.vehicleId, tenantId: ctx.tenantId },
+                select: { licensePlate: true, make: true, model: true },
+              }).catch(() => null)
+            : null;
 
           // P0 Safety Rule: Auto-ground vehicle if inspection has CRITICAL defect (e.g. brakes, steering, tires)
           if (hasCritical && trip.vehicleId) {

@@ -6,6 +6,21 @@ import { prisma } from '@/lib/prisma';
 import { randomUUID } from 'crypto';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+
+// `catch (e)` is typed `unknown` under strict mode — `e?.message`/`e?.code`
+// don't compile (an optional-chained `unknown` narrows to `{}`, which has
+// no known properties). These narrow it safely instead of casting to `any`.
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error && e.message ? e.message : fallback;
+}
+function errorCode(e: unknown): string | undefined {
+  if (typeof e === 'object' && e !== null && 'code' in e) {
+    const code = (e as { code?: unknown }).code;
+    return typeof code === 'string' ? code : undefined;
+  }
+  return undefined;
+}
+
 export async function GET(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -101,7 +116,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json(shaped);
       } catch (e) {
         console.error('GET /api/customers error:', e);
-        return NextResponse.json({ error: e?.message ?? 'Failed to fetch customers' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(e, 'Failed to fetch customers') }, { status: 500 });
       }
   });
 }
@@ -238,10 +253,10 @@ export async function POST(req: NextRequest) {
         return NextResponse.json((rows as any[])[0], { status: 201 });
         } catch (e) {
         console.error('POST /api/customers error:', e);
-        if (e?.message?.includes('unique') || e?.code === '23505') {
+        if (errorMessage(e, '').includes('unique') || errorCode(e) === '23505') {
           return NextResponse.json({ error: 'Customer code already exists' }, { status: 409 });
         }
-        return NextResponse.json({ error: e?.message ?? 'Failed to create customer' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(e, 'Failed to create customer') }, { status: 500 });
       }
   });
 }

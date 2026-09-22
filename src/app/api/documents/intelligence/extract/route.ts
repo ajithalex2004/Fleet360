@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
         tenant_id: tenantId,
         event_type: 'document.uploaded',
         entity_id: fileName,
-        metadata: {
+        payload: {
           fileName,
           mimeType,
           imageBase64,
