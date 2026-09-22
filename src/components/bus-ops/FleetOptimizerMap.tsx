@@ -14,8 +14,12 @@
  */
 
 import { useEffect, useRef } from 'react';
-import { loadGoogleMaps } from '@/lib/google-maps-loader';
+import { loadGoogleMaps, type GMapsMap } from '@/lib/google-maps-loader';
 import { decodePolyline } from '@/lib/planning/fleet-routing/polyline';
+
+/** Minimal shape shared by every overlay type (Polyline, Marker) we track
+ * so we can clear them all uniformly — avoids pulling in google.maps.MVCObject. */
+type MapOverlay = { setMap: (m: GMapsMap | null) => void };
 
 export interface FleetMapRoute {
   vehicleId: string;
@@ -51,8 +55,8 @@ const VEHICLE_COLORS = [
 
 export default function FleetOptimizerMap({ routes, unassigned, className = '' }: Props) {
   const mapDivRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<google.maps.Map | null>(null);
-  const overlaysRef = useRef<google.maps.MVCObject[]>([]);
+  const mapRef = useRef<GMapsMap | null>(null);
+  const overlaysRef = useRef<MapOverlay[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -104,7 +108,7 @@ export default function FleetOptimizerMap({ routes, unassigned, className = '' }
           strokeColor: color,
           strokeOpacity: 0.85,
           strokeWeight: 4,
-        }) as unknown as google.maps.MVCObject & { setMap: (m: google.maps.Map) => void };
+        }) as unknown as MapOverlay;
         line.setMap(map);
         overlaysRef.current.push(line);
         for (const p of path) bounds.extend(new g.LatLng(p.lat, p.lng));
@@ -124,7 +128,7 @@ export default function FleetOptimizerMap({ routes, unassigned, className = '' }
             strokeColor: 'white',
             strokeWeight: 2,
           },
-        }) as unknown as google.maps.MVCObject & { setMap: (m: null) => void };
+        }) as unknown as MapOverlay;
         overlaysRef.current.push(marker);
         bounds.extend(new g.LatLng(s.lat, s.lng));
       });
@@ -141,7 +145,7 @@ export default function FleetOptimizerMap({ routes, unassigned, className = '' }
           strokeColor: '#DC2626',
           strokeWeight: 3,
         },
-      }) as unknown as google.maps.MVCObject & { setMap: (m: null) => void };
+      }) as unknown as MapOverlay;
       overlaysRef.current.push(marker);
       bounds.extend(new g.LatLng(u.stopLat, u.stopLng));
     });
