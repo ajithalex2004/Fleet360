@@ -24,6 +24,12 @@ import { driverHoursPolicyEngine } from './policy-engine';
 import { resourceCostEngine } from './cost-engine';
 import { repositionSolver, DepotInventoryState } from './reposition-solver';
 
+// TripScheduleItem's origin/destination/startLocation/endLocation fields are
+// a union of CanonicalLocation | LatLng | a free-form address object — only
+// the free-form member actually carries name/addressName, so reads below go
+// through this narrower view rather than the full union.
+type LocationNameFields = { name?: string; addressName?: string };
+
 export class MasterPlannerSolver {
   /**
    * Execute master constraint optimization
@@ -130,8 +136,7 @@ export class MasterPlannerSolver {
       const passengerCount = trip.passengerCount || 20;
 
       // Find best available vehicle
-      let selectedVehicle = vehicles.find((v) => {
-        const vCat = (v.category || v.vehicleType || 'COASTER_30').toUpperCase();
+      const selectedVehicle = vehicles.find((v) => {
         const vCap = v.capacity || v.seatingCapacity || 30;
         if (vCap < passengerCount) return false;
 
@@ -142,7 +147,7 @@ export class MasterPlannerSolver {
       });
 
       // Find best available driver
-      let selectedDriver = drivers.find((d) => {
+      const selectedDriver = drivers.find((d) => {
         const dUsedDuty = driverDutyMap.get(d.driverId || d.id || '') || (d.dutyMinutesUsed || 0);
         const check = driverHoursPolicyEngine.validateDutyBlock(policy, dUsedDuty, 0, durationMin);
         if (!check.isValid) return false;
@@ -197,8 +202,8 @@ export class MasterPlannerSolver {
           tripId: trip.id,
           tripNumber: trip.tripNumber,
           clientName: trip.clientName || 'Commercial Client',
-          originName: (trip.startLocation as any)?.addressName || (trip.origin as any)?.name || 'Depot',
-          destinationName: (trip.endLocation as any)?.addressName || (trip.destination as any)?.name || 'Worksites',
+          originName: (trip.startLocation as LocationNameFields | undefined)?.addressName || (trip.origin as LocationNameFields | undefined)?.name || 'Depot',
+          destinationName: (trip.endLocation as LocationNameFields | undefined)?.addressName || (trip.destination as LocationNameFields | undefined)?.name || 'Worksites',
           pickupTime: new Date(tripStart).toISOString(),
           dropoffTime: new Date(tripEnd).toISOString(),
           passengerCount,

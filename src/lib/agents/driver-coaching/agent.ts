@@ -227,9 +227,11 @@ async function runDriverCoaching(event: AgentEvent): Promise<AgentRunResult> {
 
             coachingPlan = resp.content;
             aiCount++;
-            totalInputTokens += resp.telemetry.inputTokens;
-            totalOutputTokens += resp.telemetry.outputTokens;
-            totalCostAed += resp.telemetry.costAed;
+            // AgentRunTelemetry's token/cost fields are all optional —
+            // default to 0 when the gateway call didn't report them.
+            totalInputTokens += resp.telemetry.inputTokens ?? 0;
+            totalOutputTokens += resp.telemetry.outputTokens ?? 0;
+            totalCostAed += resp.telemetry.costAed ?? 0;
           }
 
           // Upsert coaching plan

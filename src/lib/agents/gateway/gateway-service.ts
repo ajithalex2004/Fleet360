@@ -18,7 +18,7 @@ import {
   ModelProviderType,
   AgentRunTelemetry,
 } from '../types';
-import { calculateTokenCost, USD_TO_AED_RATE } from '../telemetry';
+import { calculateTokenCost } from '../telemetry';
 
 export interface GatewayMessage {
   role: 'system' | 'user' | 'assistant';
@@ -582,8 +582,8 @@ export class AIGatewayService {
       if (!res.ok) {
         const errorBody = await res.text();
         const err = new Error(`Gemini HTTP ${res.status}: ${errorBody}`);
-        (err as any).status = res.status;
-        (err as any).body = errorBody;
+        (err as Error & { status?: number; body?: string }).status = res.status;
+        (err as Error & { status?: number; body?: string }).body = errorBody;
         throw err;
       }
 
@@ -627,10 +627,11 @@ export class AIGatewayService {
 
     try {
       return await invokeGeminiModel(model);
-    } catch (primaryErr: any) {
+    } catch (primaryErrUnknown) {
       // In-Provider Graceful Model Fallback:
       // If primary model was a Pro model (gemini-pro-latest, gemini-2.5-pro, etc.) and failed with 503 UNAVAILABLE or capacity exhaustion,
       // failover to Flash model (gemini-flash-latest) which has significantly higher throughput and separate capacity allocations.
+      const primaryErr = primaryErrUnknown as (Error & { status?: number; body?: string }) | undefined;
       const errorMsg = String(primaryErr?.message || primaryErr?.body || '');
       const isCapacityError =
         primaryErr?.status === 503 ||

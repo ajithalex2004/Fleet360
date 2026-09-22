@@ -33,6 +33,118 @@ import {
   detectProcurementAnomalies,
 } from './detectors';
 
+// ── Raw Row Shapes ──────────────────────────────────────────────────────────────
+// One interface per $queryRawUnsafe call below, matching that query's actual
+// SELECT column list (aliases included). Nullability follows what each query
+// can genuinely produce (COALESCE literal fallbacks are non-null; plain
+// passed-through / LEFT JOIN-sourced columns are nullable); the .map() calls
+// already do the Number()/Boolean() coercion and null→undefined handling for
+// the optional target fields.
+
+interface MaintenanceRawRow {
+  id: string;
+  vehicleId: string;
+  vehicleCode: string;
+  workOrderId: string;
+  garageName: string;
+  partName: string;
+  invoicedPartPrice: number | null;
+  invoicedLaborHours: number | null;
+  serviceDate: string;
+}
+
+interface FuelRawRow {
+  id: string;
+  vehicleId: string;
+  vehicleCode: string;
+  fuelCardNumber: string | null;
+  fuelGrade: string;
+  liters: number | null;
+  totalCost: number | null;
+  tankCapacityLiters: number | null;
+  fuelDate: string;
+  stationName: string | null;
+  odometerKm: number | null;
+}
+
+interface VendorInvoiceRawRow {
+  id: string;
+  invoiceNumber: string;
+  vendorName: string;
+  category: string | null;
+  invoiceDate: string;
+  subtotal: number | null;
+  vatAmount: number | null;
+  totalAmount: number | null;
+  currency: string;
+  description: string | null;
+}
+
+interface PartnerSettlementRawRow {
+  id: string;
+  partnerId: string;
+  partnerName: string;
+  tripId: string;
+  agreedQuoteAmount: number | null;
+  invoicedSettlementAmount: number | null;
+  hasTelematicsProof: boolean;
+  completionDate: string;
+}
+
+interface DriverExpenseRawRow {
+  id: string;
+  driverId: string;
+  driverName: string;
+  expenseDate: string;
+  category: string;
+  claimedAmount: number | null;
+  currency: string;
+  description: string | null;
+}
+
+interface TripTollRawRow {
+  id: string;
+  tripId: string | null;
+  rentalAgreementId: string | null;
+  vehicleId: string;
+  vehicleCode: string;
+  driverId: string | null;
+  tollGateName: string;
+  tollAmount: number | null;
+  timestamp: string;
+  isBilledToCustomer: boolean;
+  isDeductedFromDriver: boolean;
+  responsibleParty: string;
+}
+
+interface ContractAuditRawRow {
+  id: string;
+  contractNumber: string;
+  vehicleId: string;
+  vehicleCode: string;
+  customerId: string;
+  customerName: string;
+  contractStatus: string;
+  startOdometer: number | null;
+  checkInOdometer: number | null;
+  excessKmBilled: boolean;
+  damageNoted: boolean;
+  damageAmountEstimated: number | null;
+  damageBilled: boolean;
+  currentTelematicsOdometer: number | null;
+}
+
+interface ProcurementRawRow {
+  id: string;
+  poNumber: string;
+  vendorName: string;
+  itemName: string;
+  authorizedPoAmount: number | null;
+  invoicedAmount: number | null;
+  poDate: string;
+  invoiceDate: string | null;
+}
+
 // ── Multi-Tenant Data Fetchers ─────────────────────────────────────────────────
 
 async function fetchMaintenanceRecords(tenantId: string): Promise<MaintenanceRecord[]> {
@@ -49,7 +161,7 @@ async function fetchMaintenanceRecords(tenantId: string): Promise<MaintenanceRec
     // checks stay disabled (catalogBaselinePrice/standardLaborHours = 0)
     // rather than invent baseline numbers. The repeat-repair-within-warranty
     // check needs nothing but real part/date data, so it runs live.
-    const rows = await prisma.$queryRawUnsafe<any[]>(`
+    const rows = await prisma.$queryRawUnsafe<MaintenanceRawRow[]>(`
       SELECT
         pu.id::text,
         mr.vehicle_id AS "vehicleId",
@@ -100,7 +212,7 @@ async function fetchFuelRecords(tenantId: string): Promise<FuelLogRecord[]> {
     // the tank-overfill and UAE grade-benchmark checks don't need it.
     // vehicles has no fuel_tank_capacity_liters column either; estimate from
     // vehicle_group rather than a single flat number across the whole fleet.
-    const rows = await prisma.$queryRawUnsafe<any[]>(`
+    const rows = await prisma.$queryRawUnsafe<FuelRawRow[]>(`
       SELECT
         fl.id::text,
         fl.vehicle_id::text AS "vehicleId",
@@ -128,13 +240,13 @@ async function fetchFuelRecords(tenantId: string): Promise<FuelLogRecord[]> {
       id: r.id,
       vehicleId: r.vehicleId,
       vehicleCode: r.vehicleCode,
-      fuelCardNumber: r.fuelCardNumber,
+      fuelCardNumber: r.fuelCardNumber ?? undefined,
       fuelGrade: r.fuelGrade,
       liters: Number(r.liters ?? 0),
       totalCost: Number(r.totalCost ?? 0),
       tankCapacityLiters: Number(r.tankCapacityLiters ?? 60),
       fuelDate: r.fuelDate,
-      stationName: r.stationName,
+      stationName: r.stationName ?? undefined,
       stationLat: null,
       stationLng: null,
       vehicleLatAtTime: null,
@@ -160,7 +272,7 @@ async function fetchVendorInvoices(tenantId: string): Promise<VendorInvoiceRecor
     // and genuinely fires on every large invoice, because that's true:
     // this AP ledger has never captured vendor TRNs, which is itself a
     // real FTA-compliance gap worth surfacing, not a fabricated one.
-    const rows = await prisma.$queryRawUnsafe<any[]>(`
+    const rows = await prisma.$queryRawUnsafe<VendorInvoiceRawRow[]>(`
       SELECT
         fp.id::text,
         fp.payable_number AS "invoiceNumber",
@@ -190,7 +302,7 @@ async function fetchVendorInvoices(tenantId: string): Promise<VendorInvoiceRecor
       agreedRateCardAmount: undefined,
       category: r.category ?? 'GENERAL',
       currency: r.currency,
-      description: r.description,
+      description: r.description ?? undefined,
     }));
   } catch {
     return [];
@@ -212,7 +324,7 @@ async function fetchPartnerSettlements(tenantId: string): Promise<PartnerSettlem
     // disables the ghost-trip check rather than firing it on every real
     // settlement (same honest-disable pattern used for the other streams'
     // unavailable data).
-    const rows = await prisma.$queryRawUnsafe<any[]>(`
+    const rows = await prisma.$queryRawUnsafe<PartnerSettlementRawRow[]>(`
       SELECT
         pi.id::text,
         pi.partner_id::text AS "partnerId",
@@ -257,7 +369,7 @@ async function fetchDriverExpenses(tenantId: string): Promise<DriverExpenseRecor
     // claimedDistanceKm and telematicsDistanceKm to be present to fire, so
     // leaving them NULL disables it honestly rather than fabricating
     // distances — same pattern as the other streams' unavailable checks.
-    const rows = await prisma.$queryRawUnsafe<any[]>(`
+    const rows = await prisma.$queryRawUnsafe<DriverExpenseRawRow[]>(`
       SELECT
         fe.id::text,
         fe.driver_id AS "driverId",
@@ -286,7 +398,7 @@ async function fetchDriverExpenses(tenantId: string): Promise<DriverExpenseRecor
       claimedDistanceKm: undefined,
       telematicsDistanceKm: undefined,
       currency: r.currency,
-      description: r.description,
+      description: r.description ?? undefined,
     }));
   } catch {
     return [];
@@ -298,7 +410,7 @@ async function fetchTripTolls(tenantId: string): Promise<TripTollRecord[]> {
     // toll_transactions is a genuinely new table (migration 20260910000037,
     // design approved this session) — no toll-transaction log existed
     // anywhere before. Real columns throughout, no fabricated fallbacks.
-    const rows = await prisma.$queryRawUnsafe<any[]>(`
+    const rows = await prisma.$queryRawUnsafe<TripTollRawRow[]>(`
       SELECT
         t.id::text,
         t.trip_id AS "tripId",
@@ -321,17 +433,17 @@ async function fetchTripTolls(tenantId: string): Promise<TripTollRecord[]> {
 
     return rows.map(r => ({
       id: r.id,
-      tripId: r.tripId,
-      rentalAgreementId: r.rentalAgreementId,
+      tripId: r.tripId ?? undefined,
+      rentalAgreementId: r.rentalAgreementId ?? undefined,
       vehicleId: r.vehicleId,
       vehicleCode: r.vehicleCode,
-      driverId: r.driverId,
+      driverId: r.driverId ?? undefined,
       tollGateName: r.tollGateName,
       tollAmount: Number(r.tollAmount ?? 0),
       timestamp: r.timestamp,
       isBilledToCustomer: Boolean(r.isBilledToCustomer),
       isDeductedFromDriver: Boolean(r.isDeductedFromDriver),
-      responsibleParty: r.responsibleParty,
+      responsibleParty: r.responsibleParty as TripTollRecord['responsibleParty'],
     }));
   } catch {
     return [];
@@ -354,7 +466,7 @@ async function fetchContractAudits(tenantId: string): Promise<ContractAuditRecor
     // than invent a flat allowance. Whether excess-km/damage were actually
     // billed IS real, FK-backed data via rental_additional_charges and
     // damage_claims, so those two checks run on genuine data.
-    const rows = await prisma.$queryRawUnsafe<any[]>(`
+    const rows = await prisma.$queryRawUnsafe<ContractAuditRawRow[]>(`
       SELECT
         ra.id::text,
         COALESCE(ra.agreement_no, ra.id::text) AS "contractNumber",
@@ -418,7 +530,7 @@ async function fetchProcurementRecords(tenantId: string): Promise<ProcurementRec
     // invoiced_amount is nullable (a PO may not be invoiced yet); 0 is the
     // factually correct value for "nothing invoiced against this PO yet",
     // and correctly never trips the invoiced-vs-authorized variance check.
-    const rows = await prisma.$queryRawUnsafe<any[]>(`
+    const rows = await prisma.$queryRawUnsafe<ProcurementRawRow[]>(`
       SELECT
         po.id::text,
         po.po_number AS "poNumber",
@@ -442,7 +554,7 @@ async function fetchProcurementRecords(tenantId: string): Promise<ProcurementRec
       authorizedPoAmount: Number(r.authorizedPoAmount ?? 0),
       invoicedAmount: Number(r.invoicedAmount ?? 0),
       poDate: r.poDate,
-      invoiceDate: r.invoiceDate,
+      invoiceDate: r.invoiceDate ?? undefined,
     }));
   } catch {
     return [];

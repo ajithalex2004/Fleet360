@@ -12,7 +12,7 @@
  *   8. Procurement (PO line item variances, price escalation)
  */
 
-import { AnomalyFlag, AnomalySeverity, AnomalyActionRecommendation, FinanceStreamType } from '../types';
+import { AnomalyFlag, AnomalySeverity } from '../types';
 
 // ── Transaction Record Types ───────────────────────────────────────────────────
 
@@ -132,7 +132,9 @@ export interface ProcurementRecord {
   authorizedPoAmount: number;
   invoicedAmount: number;
   poDate: string;
-  invoiceDate: string;
+  // A PO that hasn't been invoiced yet (invoicedAmount still 0) has no
+  // invoice date either — optional rather than always-present.
+  invoiceDate?: string;
 }
 
 // ── Math & Spatial Helpers ────────────────────────────────────────────────────
