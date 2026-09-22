@@ -1,4 +1,9 @@
 // @ts-nocheck — one-off CLI script, types not maintained
+// `export {}` marks this file as an ES module rather than a global
+// script — without it, every top-level const/let here (e.g. `req`)
+// leaks into the ambient global scope for the whole project, since
+// tsconfig's `include` covers scripts/*.ts too.
+export {};
 const http = require('http');
 
 const options = {
