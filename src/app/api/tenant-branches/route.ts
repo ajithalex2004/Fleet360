@@ -7,34 +7,6 @@ import { logAudit } from '@/lib/audit';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 // ---------------------------------------------------------------------------
-// UAE Emirates
-// ---------------------------------------------------------------------------
-export const UAE_EMIRATES = [
-  'ABU_DHABI', 'DUBAI', 'SHARJAH', 'AJMAN',
-  'UMM_AL_QUWAIN', 'RAS_AL_KHAIMAH', 'FUJAIRAH',
-];
-
-export const EMIRATE_LABELS: Record<string, string> = {
-  ABU_DHABI:      'Abu Dhabi',
-  DUBAI:          'Dubai',
-  SHARJAH:        'Sharjah',
-  AJMAN:          'Ajman',
-  UMM_AL_QUWAIN: 'Umm Al Quwain',
-  RAS_AL_KHAIMAH: 'Ras Al Khaimah',
-  FUJAIRAH:       'Fujairah',
-};
-
-export const LICENSE_AUTHORITIES: Record<string, string[]> = {
-  ABU_DHABI:      ['ADDED', 'ADCCI', 'ADGM', 'twofour54'],
-  DUBAI:          ['DED Dubai', 'DIFC', 'JAFZA', 'DAFZA', 'DMCC'],
-  SHARJAH:        ['Sharjah DED', 'SHAMS', 'SAIF Zone'],
-  AJMAN:          ['Ajman DED', 'Ajman Free Zone'],
-  UMM_AL_QUWAIN: ['UAQ DED', 'UAQ Free Trade Zone'],
-  RAS_AL_KHAIMAH: ['RAKEZ', 'RAK DED'],
-  FUJAIRAH:       ['Fujairah DED', 'FFZA'],
-};
-
-// ---------------------------------------------------------------------------
 // Schema note
 // ---------------------------------------------------------------------------
 // tenant_branches, tenants.trn, vehicles.branch_id, and trip_logs.branch_id

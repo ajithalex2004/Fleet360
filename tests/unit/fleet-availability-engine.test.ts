@@ -3,7 +3,7 @@ import {
   LEAD_TIME_RULES_HOURS,
   STANDARD_DEPOTS,
   CATEGORY_SAMPLE_MODELS,
-} from '@/app/api/fleet/availability/route';
+} from '@/lib/fleet/availability-types';
 
 describe('Real-Time Fleet Availability & Inventory Engine', () => {
   it('enforces strict service lead-time requirements for dispatch preparation', () => {

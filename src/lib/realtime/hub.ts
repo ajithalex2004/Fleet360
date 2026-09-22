@@ -21,7 +21,9 @@ export type RealtimeMessage = {
 type Listener = (msg: RealtimeMessage) => void;
 
 declare global {
+  // eslint-disable-next-line no-var -- TS requires var (not let/const) for ambient globals inside declare global
   var __fleet360RealtimeHub: Map<string, Set<Listener>> | undefined;
+  // eslint-disable-next-line no-var
   var __fleet360RealtimeRedisSubStarted: boolean | undefined;
 }
 

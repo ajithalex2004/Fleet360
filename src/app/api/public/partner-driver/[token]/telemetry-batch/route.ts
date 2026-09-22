@@ -11,10 +11,10 @@ export const runtime = 'nodejs';
  */
 export async function POST(
   req: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   try {
-    const rawToken = params.token;
+    const { token: rawToken } = await params;
     const body = await req.json().catch(() => ({}));
     const points = Array.isArray(body.points) ? body.points : [];
 

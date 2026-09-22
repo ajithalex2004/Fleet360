@@ -19,6 +19,7 @@ import {
 import { PageHeader } from '@/components/ui/page-theme';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { PassengerDriverChat } from '@/components/booking/PassengerDriverChat';
+import { SERVICE_MODULE_MAP } from '@/lib/booking-portal/service-module-map';
 
 interface Booking {
   id: string;
@@ -67,14 +68,6 @@ function statusStyle(s: string | null) {
 
 // ── Service cards ─────────────────────────────────────────────────────────────
 
-export const SERVICE_MODULE_MAP: Record<string, string> = {
-  RENTAL:          'rental',
-  LEASING:         'leasing',
-  STAFF_TRANSPORT: 'bus-ops',
-  EXECUTIVE:       'dispatch',
-  LOGISTICS:       'logistics',
-  SCHOOL_BUS:      'school-bus',
-};
 
 const SERVICE_CARDS = [
   {

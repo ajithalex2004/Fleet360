@@ -13,7 +13,7 @@ import {
   Smartphone,
   AlertCircle,
 } from 'lucide-react';
-import { TenantMobileConfig } from '@/app/api/tenant/mobile-config/route';
+import { TenantMobileConfig } from '@/lib/tenant/mobile-config';
 import { MultiStopRoutePicker } from '@/components/booking/MultiStopRoutePicker';
 import { InstantPricingCostCenter } from '@/components/booking/InstantPricingCostCenter';
 import { OmnichannelNotificationPreferences } from '@/components/booking/OmnichannelNotificationPreferences';

@@ -26,7 +26,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { logAudit, type AuditPayload } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
-type Handler<Ctx = unknown> = (req: NextRequest, ctx?: Ctx) => Promise<NextResponse> | NextResponse;
+// `ctx` is required whenever a real Ctx shape was inferred (dynamic
+// routes) -- Next.js's generated route validator rejects an exported
+// handler whose second parameter type includes `| undefined` for those.
+// It stays optional when Ctx is left at its `unknown` default (routes
+// with no dynamic segments, whose inner handler only takes `req`) so
+// those call sites -- including tests that invoke the exported handler
+// with just one argument -- keep typechecking.
+type Handler<Ctx = unknown> = unknown extends Ctx
+  ? (req: NextRequest, ctx?: Ctx) => Promise<NextResponse> | NextResponse
+  : (req: NextRequest, ctx: Ctx) => Promise<NextResponse> | NextResponse;
 
 interface WithAuditOptions<Body = unknown> {
   entityType: string;
@@ -49,7 +58,9 @@ export function withAudit<Ctx = unknown, Body = unknown>(
   handler: (req: NextRequest, ctx: Ctx) => Promise<NextResponse> | NextResponse,
   opts: WithAuditOptions<Body>
 ): Handler<Ctx> {
-  return async (req, ctx) => {
+  // Explicit params -- the conditional Handler<Ctx> return type above cannot
+  // contextually type this arrow function's parameters.
+  return (async (req: NextRequest, ctx?: Ctx) => {
     let response: NextResponse;
     try {
       // `ctx` here is `Ctx | undefined` (this wrapper's own signature keeps
@@ -90,5 +101,5 @@ export function withAudit<Ctx = unknown, Body = unknown>(
     }
 
     return response;
-  };
+  }) as Handler<Ctx>;
 }

@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 
-export interface ActiveConsolidationPool {
+interface ActiveConsolidationPool {
   poolId: string;
   corridorName: string;
   truckClass: string;
@@ -18,7 +18,7 @@ export interface ActiveConsolidationPool {
   activeShippers: string[];
 }
 
-export const ACTIVE_CONSOLIDATION_POOLS: ActiveConsolidationPool[] = [
+const ACTIVE_CONSOLIDATION_POOLS: ActiveConsolidationPool[] = [
   {
     poolId: 'POOL-E11-DXB-AUH-01',
     corridorName: 'JAFZA Base ➔ Dubai Mall ➔ Abu Dhabi Kizad (E11)',

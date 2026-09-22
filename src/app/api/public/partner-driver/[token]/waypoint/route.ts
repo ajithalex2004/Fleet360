@@ -11,10 +11,10 @@ export const runtime = 'nodejs';
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   try {
-    const rawToken = params.token;
+    const { token: rawToken } = await params;
     const progress = await WaypointService.getWaypoints(rawToken);
     return NextResponse.json(progress);
   } catch (err) {
@@ -31,10 +31,10 @@ export async function GET(
  */
 export async function POST(
   req: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   try {
-    const rawToken = params.token;
+    const { token: rawToken } = await params;
     const body = await req.json().catch(() => ({}));
     const { sequence, action, headcount, notes } = body;
 

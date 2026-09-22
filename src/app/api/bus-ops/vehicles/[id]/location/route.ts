@@ -41,7 +41,7 @@ import {
 } from '@/lib/bus-gps';
 import { sendWhatsApp } from '@/lib/whatsapp';
 import { recordAbsence } from '@/lib/bus-ops/passenger-attendance';
-import { upsertFleetPosition } from '@/app/api/bus-ops/fleet-positions/route';
+import { upsertFleetPosition } from '@/lib/bus-ops/fleet-positions';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';

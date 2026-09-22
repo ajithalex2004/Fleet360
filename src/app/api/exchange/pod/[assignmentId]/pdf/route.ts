@@ -12,10 +12,10 @@ export const runtime = 'nodejs';
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: { assignmentId: string } }
+  { params }: { params: Promise<{ assignmentId: string }> }
 ) {
   try {
-    const assignmentId = params.assignmentId;
+    const { assignmentId } = await params;
 
     let assignment: any = null;
     try {

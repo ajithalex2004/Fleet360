@@ -5,7 +5,7 @@ import { Calculator, CreditCard, Building2, AlertCircle, CheckCircle2, Receipt, 
 import {
   calculateInstantQuotation,
   QuotationResponse,
-} from '@/app/api/booking-portal/quotation/route';
+} from '@/lib/pricing/instant-quotation';
 
 export interface PricingState {
   fareSubtotal: number;

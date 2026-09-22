@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
-import { useTenantPortal } from '../layout';
+import { useTenantPortal } from '../tenant-portal-shell';
 
 /* ─────────────────────────── Types ─────────────────────────── */
 interface PLModule {

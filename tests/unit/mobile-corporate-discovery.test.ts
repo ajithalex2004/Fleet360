@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveTenantByEmailOrCode } from '@/app/api/tenant/mobile-config/route';
+import { resolveTenantByEmailOrCode } from '@/lib/tenant/mobile-config';
 
 describe('Universal Mobile App Corporate Email Domain Auto-Discovery Engine', () => {
   it('automatically discovers EXL Solutions Logistics from @ein360.ae corporate email domain', () => {

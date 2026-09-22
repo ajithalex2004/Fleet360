@@ -12,10 +12,10 @@ export const runtime = 'nodejs';
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const statementId = params.id;
+    const { id: statementId } = await params;
 
     let statement: any = null;
     let tenant: { name: string | null } | null = null;

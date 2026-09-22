@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   calculateInstantQuotation,
   SERVICE_BASE_RATES,
-} from '@/app/api/booking-portal/quotation/route';
+} from '@/lib/pricing/instant-quotation';
 import {
   CORPORATE_COST_CENTERS,
   CORPORATE_BILLING_METHODS,

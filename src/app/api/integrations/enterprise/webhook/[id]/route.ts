@@ -26,9 +26,9 @@ function safeCompare(a: string, b: string): boolean {
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   await ensureAgentSchema();
-  const connectionId = params.id;
+  const { id: connectionId } = await params;
 
   try {
     const rawConnections = await withPlatformAdmin(prisma, (tx) =>
