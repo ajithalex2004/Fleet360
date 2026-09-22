@@ -6,6 +6,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@prisma/client';
 import {
   DocumentExtractionResult,
   MasterDataCrossCheckResult,
@@ -13,12 +14,22 @@ import {
 } from '../../types';
 import { compareBilingualNames } from './bilingual-normalizer';
 
+// The subset of Driver fields this function actually reads, shared between
+// the full `prisma.driver.findFirst` result and the narrower
+// `select: { id, name, licenseNumber }` result from the bilingual fuzzy-match
+// fallback below.
+interface MatchedDriverRef {
+  id: string;
+  name: string | null;
+  licenseNumber: string | null;
+}
+
 export async function crossCheckWithMasterData(
   tenantId: string,
   extraction: DocumentExtractionResult
 ): Promise<MasterDataCrossCheckResult> {
   const mismatches: MasterDataMismatch[] = [];
-  const { docCategory, vehicle, driver, supplier, referenceNumber } = extraction;
+  const { docCategory, vehicle, driver } = extraction;
 
   // 1. Vehicle Master Cross-Validation
   if (
@@ -119,12 +130,12 @@ export async function crossCheckWithMasterData(
     const searchLic = driver?.licenseNumber;
     const searchName = driver?.driverName || driver?.fullNameEn || driver?.fullNameAr;
 
-    let matchedDriver = await prisma.driver.findFirst({
+    let matchedDriver: MatchedDriverRef | null = await prisma.driver.findFirst({
       where: {
         tenantId,
         OR: [
           ...(searchLic ? [{ licenseNumber: searchLic }] : []),
-          ...(searchName ? [{ name: { contains: searchName, mode: 'insensitive' as any } }] : []),
+          ...(searchName ? [{ name: { contains: searchName, mode: 'insensitive' as Prisma.QueryMode } }] : []),
         ],
       },
     }).catch(() => null);
@@ -142,12 +153,12 @@ export async function crossCheckWithMasterData(
           if (d.name) {
             const comp = compareBilingualNames(searchName, d.name);
             if (comp.match) {
-              matchedDriver = d as any;
+              matchedDriver = d;
               break;
             }
           }
         }
-      } catch (dErr) {
+      } catch {
         // Ignore fallback error
       }
     }

@@ -6,6 +6,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@prisma/client';
 import { DocumentExtractionResult } from '../types';
 
 export interface AutoPopulateResult {
@@ -20,7 +21,7 @@ export async function autoPopulateFleet360Record(
   tenantId: string,
   extraction: DocumentExtractionResult
 ): Promise<AutoPopulateResult> {
-  const { docCategory, vehicle, driver, expiryDate, referenceNumber, supplier, financials } = extraction;
+  const { docCategory, vehicle, driver, expiryDate, referenceNumber, financials } = extraction;
   const fieldsUpdated: string[] = [];
 
   // 1. Handle Vehicle Updates (Mulkiya, Registration, Insurance, Inspection)
@@ -32,10 +33,6 @@ export async function autoPopulateFleet360Record(
     vehicle?.licensePlate
   ) {
     // Find matching vehicle by VIN or License Plate
-    const whereConditions: any[] = [{ tenantId }];
-    if (vehicle?.vin) whereConditions.push({ vin: vehicle.vin });
-    if (vehicle?.licensePlate) whereConditions.push({ licensePlate: vehicle.licensePlate });
-
     const matchedVehicle = await prisma.vehicle.findFirst({
       where: {
         tenantId,
@@ -47,7 +44,7 @@ export async function autoPopulateFleet360Record(
     }).catch(() => null);
 
     if (matchedVehicle) {
-      const updatePayload: any = { updatedAt: new Date() };
+      const updatePayload: Prisma.VehicleUpdateInput = { updatedAt: new Date() };
 
       if (expiryDate) {
         const expDateObj = new Date(expiryDate);
@@ -99,14 +96,14 @@ export async function autoPopulateFleet360Record(
         tenantId,
         OR: [
           ...(driver?.licenseNumber ? [{ licenseNumber: driver.licenseNumber }] : []),
-          ...(driver?.fullNameEn ? [{ name: { contains: driver.fullNameEn, mode: 'insensitive' as any } }] : []),
-          ...(driver?.driverName ? [{ name: { contains: driver.driverName, mode: 'insensitive' as any } }] : []),
+          ...(driver?.fullNameEn ? [{ name: { contains: driver.fullNameEn, mode: 'insensitive' as Prisma.QueryMode } }] : []),
+          ...(driver?.driverName ? [{ name: { contains: driver.driverName, mode: 'insensitive' as Prisma.QueryMode } }] : []),
         ],
       },
     }).catch(() => null);
 
     if (matchedDriver) {
-      const updatePayload: any = { updatedAt: new Date() };
+      const updatePayload: Prisma.DriverUpdateInput = { updatedAt: new Date() };
 
       if (expiryDate) {
         updatePayload.licenseExpiry = new Date(expiryDate);

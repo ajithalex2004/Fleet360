@@ -9,6 +9,20 @@ import { prisma } from '@/lib/prisma';
 import { DocIntelligenceCategory, DocumentLifecycleStatus } from '../../types';
 import { dispatchDocumentWebhook } from './webhook-dispatcher';
 
+// Row shape for the `RETURNING id` clause of the supersede-on-ACTIVE UPDATE below.
+interface SupersededDocRow {
+  id: string | number;
+}
+
+// Row shape for the `RETURNING id, doc_category, expiry_date::text,
+// lifecycle_status` clause shared by the expired/expiring sweep UPDATEs below.
+interface ExpirySweepRow {
+  id: string | number;
+  doc_category: string;
+  expiry_date: string;
+  lifecycle_status: DocumentLifecycleStatus;
+}
+
 export interface TransitionInput {
   tenantId: string;
   documentId: string;
@@ -41,7 +55,7 @@ export async function transitionDocumentLifecycle(input: TransitionInput): Promi
 
     // 2. If becoming ACTIVE, supersede any previous active documents for the same entity & category
     if (newStatus === 'ACTIVE' && entityType && entityId && category) {
-      const supersededRows = await prisma.$queryRawUnsafe<any[]>(`
+      const supersededRows = await prisma.$queryRawUnsafe<SupersededDocRow[]>(`
         UPDATE document_intelligence_extractions
         SET lifecycle_status = 'SUPERSEDED',
             updated_at = NOW()
@@ -68,12 +82,12 @@ export async function transitionDocumentLifecycle(input: TransitionInput): Promi
       supersededCount,
       message: `Document transitioned to ${newStatus}${supersededCount > 0 ? ` (${supersededCount} older version(s) marked SUPERSEDED)` : ''}.`,
     };
-  } catch (err: any) {
+  } catch (err) {
     console.warn('[LifecycleManager] Transition warning:', err);
     return {
       success: false,
       supersededCount: 0,
-      message: err.message || 'Failed to update lifecycle status.',
+      message: err instanceof Error ? err.message : 'Failed to update lifecycle status.',
     };
   }
 }
@@ -122,8 +136,8 @@ export async function sweepDocumentExpiries(tenantId?: string): Promise<ExpirySw
          RETURNING id, doc_category, expiry_date::text, lifecycle_status;`;
 
     const expiredRows = tenantId
-      ? await prisma.$queryRawUnsafe<any[]>(expiredQuery, tenantId)
-      : await prisma.$queryRawUnsafe<any[]>(expiredQuery);
+      ? await prisma.$queryRawUnsafe<ExpirySweepRow[]>(expiredQuery, tenantId)
+      : await prisma.$queryRawUnsafe<ExpirySweepRow[]>(expiredQuery);
 
     if (expiredRows && expiredRows.length > 0) {
       expiredCount = expiredRows.length;
@@ -156,8 +170,8 @@ export async function sweepDocumentExpiries(tenantId?: string): Promise<ExpirySw
          RETURNING id, doc_category, expiry_date::text, lifecycle_status;`;
 
     const expiringRows = tenantId
-      ? await prisma.$queryRawUnsafe<any[]>(expiringQuery, tenantId)
-      : await prisma.$queryRawUnsafe<any[]>(expiringQuery);
+      ? await prisma.$queryRawUnsafe<ExpirySweepRow[]>(expiringQuery, tenantId)
+      : await prisma.$queryRawUnsafe<ExpirySweepRow[]>(expiringQuery);
 
     if (expiringRows && expiringRows.length > 0) {
       expiringCount = expiringRows.length;

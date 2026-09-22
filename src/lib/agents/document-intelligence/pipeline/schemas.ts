@@ -5,15 +5,6 @@
  * ensuring consistent entity structures and eliminating freeform parsing ambiguity.
  */
 
-import {
-  DocIntelligenceCategory,
-  ExtractedVehicleInfo,
-  ExtractedDriverInfo,
-  ExtractedFinancials,
-  ExtractedSupplierInfo,
-  ContractObligationItem,
-} from '../../types';
-
 export interface VehicleRegistrationDocument {
   documentType: 'REGISTRATION_CARD';
   vehiclePlate: string;

@@ -12,6 +12,23 @@ import {
 } from '../../types';
 import { prisma } from '@/lib/prisma';
 
+// NOTE: `poNumber` (top-level), `financials.poNumber`, and `extractedData`
+// are not real fields on DocumentExtractionResult (see src/lib/agents/types.ts)
+// — ExtractedFinancials has no `poNumber` field, and DocumentExtractionResult
+// has no `extractedData` property (that name belongs to a different type,
+// DossierDocumentItem.extractedData, elsewhere in the pipeline). So these
+// three reads in resolveLinkedDocumentsFromDb below have always evaluated to
+// undefined/{} at runtime — the function's actual working signal is the raw
+// `text` (OCR) parameter plus `extraction.referenceNumber`. Preserved as-is
+// (loosely typed, not deleted) rather than inventing new fields on
+// DocumentExtractionResult; flagged for a product decision on whether a real
+// PO-number field should be added to the extraction shape.
+interface LegacyExtractionPoFields {
+  poNumber?: string;
+  financials?: { poNumber?: string };
+  extractedData?: unknown;
+}
+
 export interface ChainReconciliationInput {
   currentExtraction: DocumentExtractionResult;
   linkedQuotation?: { reference: string; amountAed: number; date: string };
@@ -129,12 +146,13 @@ export async function resolveLinkedDocumentsFromDb(
   let linkedPo: { reference: string; amountAed: number; date: string } | undefined;
   let linkedWorkOrder: { reference: string; amountAed: number; date: string } | undefined;
 
+  const legacyFields = extraction as LegacyExtractionPoFields;
   const combinedText = [
     text,
     extraction.referenceNumber || '',
-    (extraction as any).poNumber || '',
-    (extraction as any).financials?.poNumber || '',
-    JSON.stringify((extraction as any).extractedData || {}),
+    legacyFields.poNumber || '',
+    legacyFields.financials?.poNumber || '',
+    JSON.stringify(legacyFields.extractedData || {}),
   ].join(' ');
 
   // 1. Scan for PO candidates: e.g. PO-99120, PO-2026-001, PO#4819, Purchase Order: PO-1234
@@ -239,6 +257,11 @@ export async function resolveLinkedDocumentsFromDb(
  * automatically registers a high-priority flag in ai.agent_anomaly_flags for
  * the Finance Anomaly Agent and controller review queue.
  */
+// Row shape for the `RETURNING id` clause of the anomaly-flag upsert below.
+interface AnomalyFlagInsertRow {
+  id: string | number;
+}
+
 export async function escalateToFinanceAnomaly(
   tenantId: string,
   documentId: string,
@@ -255,7 +278,7 @@ export async function escalateToFinanceAnomaly(
   const poAmount = crossDocResult.poAmountAed ?? 0;
 
   try {
-    const rows = await prisma.$queryRawUnsafe<any[]>(
+    const rows = await prisma.$queryRawUnsafe<AnomalyFlagInsertRow[]>(
       `INSERT INTO ai.agent_anomaly_flags (
          detector_id, entity_type, entity_id, tenant_id, stream_type,
          severity, confidence, explanation, amount, currency,
@@ -310,11 +333,11 @@ export async function escalateToFinanceAnomaly(
       anomalyId,
       message: `Escalated commercial variance anomaly to Finance Anomaly Agent (ID: ${anomalyId || 'RECORDED'}).`,
     };
-  } catch (err: any) {
+  } catch (err) {
     console.warn('[CrossDocIntelligence] Failed to persist finance anomaly flag:', err);
     return {
       success: false,
-      message: err.message || 'Failed to insert into ai.agent_anomaly_flags',
+      message: err instanceof Error ? err.message : 'Failed to insert into ai.agent_anomaly_flags',
     };
   }
 }

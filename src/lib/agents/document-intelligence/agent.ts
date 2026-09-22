@@ -16,21 +16,25 @@ import {
   AgentRunTelemetry,
 } from '../types';
 import { ensureAgentSchema } from '../schema';
-import { executeDocumentControlPipeline } from './pipeline';
+import { executeDocumentControlPipeline, type PipelineExecutionInput } from './pipeline';
 
 async function runDocumentIntelligence(event: AgentEvent): Promise<AgentRunResult> {
   const startTime = Date.now();
   await ensureAgentSchema();
 
   const tenantId = event.tenant_id || 'default';
-  const fileName = (event.metadata?.fileName as string) || 'document.pdf';
-  const imageBase64 = event.metadata?.imageBase64 as string | undefined;
-  const mimeType = (event.metadata?.mimeType as string) || 'application/pdf';
-  const documentText = event.metadata?.documentText as string | undefined;
-  const autoApply = event.metadata?.autoApply !== false;
-  const linkedQuotation = event.metadata?.linkedQuotation as any;
-  const linkedPo = event.metadata?.linkedPo as any;
-  const linkedWorkOrder = event.metadata?.linkedWorkOrder as any;
+  const fileName = (event.payload?.fileName as string) || 'document.pdf';
+  const imageBase64 = event.payload?.imageBase64 as string | undefined;
+  const mimeType = (event.payload?.mimeType as string) || 'application/pdf';
+  const documentText = event.payload?.documentText as string | undefined;
+  const autoApply = event.payload?.autoApply !== false;
+  // event.payload is externally-supplied (Record<string, unknown>); these
+  // fields are only ever forwarded straight through to
+  // executeDocumentControlPipeline, whose PipelineExecutionInput declares
+  // their real shape — narrow to that shape at this one boundary.
+  const linkedQuotation = event.payload?.linkedQuotation as PipelineExecutionInput['linkedQuotation'];
+  const linkedPo = event.payload?.linkedPo as PipelineExecutionInput['linkedPo'];
+  const linkedWorkOrder = event.payload?.linkedWorkOrder as PipelineExecutionInput['linkedWorkOrder'];
 
   // Execute the complete 8-stage specialist pipeline
   const pipelineResult = await executeDocumentControlPipeline({
@@ -77,7 +81,7 @@ export const DOCUMENT_INTELLIGENCE_AGENT: AgentDefinition = {
   version: '2.0.0',
   agentType: 'BATCH',
   autonomyLevel: 'L2',
-  subscribedEvents: ['document.uploaded' as any, 'document.process_scan' as any, 'compliance.doc_ingest' as any],
+  subscribedEvents: ['document.uploaded', 'document.process_scan', 'compliance.doc_ingest'],
   supportsEntityScan: true,
   run: runDocumentIntelligence,
 };
