@@ -10,6 +10,7 @@ import { logAudit } from '@/lib/audit';
 import { raiseAlert } from '@/lib/alerts/raise';
 import { OutsourceExceptionType, OutsourceExceptionStatus } from '@prisma/client';
 import { OutsourceEngine } from '@/lib/exchange/outsource-engine';
+import type { AlertSubjectType } from '@/events/contracts/alert.events';
 
 export interface RaiseExceptionInput {
   tenantId: string;
@@ -63,7 +64,13 @@ export class ExceptionService {
       tenantId: input.tenantId,
       code: 'OUTSOURCE_EXCEPTION_RAISED',
       sourceModule: 'exchange',
-      subjectType: 'OutsourceException' as any,
+      // AlertSubjectType (events/contracts/alert.events) only covers the
+      // bus-ops/fleet domain today (TripSchedule/Vehicle/Driver/...); the
+      // Exchange module's own subject kinds (see marketplace-service.ts for
+      // the established pattern) aren't represented. Widening that union is
+      // a cross-cutting decision beyond this file, so this stays a narrow
+      // cast rather than a silent `any`.
+      subjectType: 'OutsourceException' as unknown as AlertSubjectType,
       subjectId: exception.id,
       title: `🚨 Outsource Exception: ${input.type.replace(/_/g, ' ')} (${exception.partner.legalName})`,
       description: input.description,

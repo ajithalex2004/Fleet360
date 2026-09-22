@@ -6,7 +6,6 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { logAudit } from '@/lib/audit';
 import { PartnerPerformanceTier } from '@prisma/client';
 
 export interface ScorecardEvaluationResult {
@@ -50,6 +49,12 @@ export class ScorecardService {
             assignment: {
               include: { pod: true, events: true },
             },
+            // OutsourceAward.request → OutsourceRequest (has pickupTime/
+            // serviceDate) is required below for on-time-performance
+            // scheduling comparison; without it award.request was always
+            // undefined and every completed award silently counted as
+            // on-time.
+            request: true,
           },
         },
         exceptions: true,

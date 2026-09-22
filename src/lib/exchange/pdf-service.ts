@@ -134,7 +134,7 @@ export class PdfDocumentService {
     if (data.deductions && data.deductions.length > 0) {
       lines.push('');
       lines.push('OPERATIONAL DEDUCTIONS & SLA ADJUSTMENTS:');
-      data.deductions.forEach((d, idx) => {
+      data.deductions.forEach((d) => {
         lines.push(`  - [${d.type}] ${d.reason}: -AED ${d.amountAed.toFixed(2)}`);
       });
     }
