@@ -34,7 +34,7 @@ on:
   pull_request:
 
 concurrency:
-  group: phase0-${{ github.ref }}
+  group: phase0-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: true
 
 jobs:
