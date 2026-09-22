@@ -38,9 +38,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       });
       if (!cal) return NextResponse.json({ error: 'Calendar not found' }, { status: 404 });
 
-      try {
-        const bodyRaw = await req.json();
+      const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
+      try {
         if (!body?.entryDate) return NextResponse.json({ error: 'entryDate is required' }, { status: 400 });
         if (!body?.kind || !VALID_KINDS.has(body.kind)) {
           return NextResponse.json({ error: `kind must be one of ${[...VALID_KINDS].join('|')}` }, { status: 400 });
@@ -58,8 +58,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         // P2002 = unique constraint (calendar_id, entry_date). Return existing.
         const code = (e as { code?: string } | null)?.code;
         if (code === 'P2002') {
+          // TransportCalendarEntry has no tenant_id column — tenant scoping
+          // already happened via the calendarId ownership check above, so
+          // filtering by it here isn't valid Prisma anyway. Also: `req.json()`
+          // can only be read once per request; re-reading it here (after it
+          // was already consumed by `body` above) would throw "body already
+          // read" and crash this catch block, so reuse `body.entryDate`.
           const existing = await tx.transportCalendarEntry.findFirst({
-            where: { tenantId, calendarId, entryDate: new Date((await req.json())?.entryDate ?? new Date()) },
+            where: { calendarId, entryDate: new Date(body?.entryDate ?? new Date()) },
           });
           return NextResponse.json(existing, { status: 200 });
         }

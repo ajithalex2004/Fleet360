@@ -83,7 +83,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         // Verify the route exists in this tenant so we don't create a variant
         // pointing at a stranger's route (RLS on public.bus_routes may not be
         // enforced everywhere; belt-and-suspenders check).
-        const route = await tx.busRoute.findFirst({ where: { id: routeId, OR: [{ tenantId }, { tenantId: null }] } });
+        // BusRoute.tenantId is required/non-nullable — the `{ tenantId: null }`
+        // OR-branch here could never match anything (same dead-code shape
+        // already fixed in bus-ops/route-stops/route.ts).
+        const route = await tx.busRoute.findFirst({ where: { id: routeId, tenantId } });
         if (!route) return NextResponse.json({ error: 'Route not found' }, { status: 404 });
 
         // Wrap variant + first DRAFT version in one transaction so we never

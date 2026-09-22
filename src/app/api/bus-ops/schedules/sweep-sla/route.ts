@@ -36,13 +36,7 @@ export async function POST(req: NextRequest) {
       action: 'SWEEP_SHIFT_SLA',
       entityType: 'TripSchedule',
       entityId: 'BATCH',
-      details: {
-        totalActiveTrips: summary.totalActiveTrips,
-        atRiskCount: summary.atRiskCount,
-        breachCount: summary.breachCount,
-        onTimeCount: summary.onTimeCount,
-        impactedPassengers: summary.totalImpactedPassengers,
-      },
+      details: `Shift SLA sweep: ${summary.totalActiveTrips} active trips, ${summary.atRiskCount} at risk, ${summary.breachCount} breached, ${summary.onTimeCount} on time, ${summary.totalImpactedPassengers} passengers impacted.`,
     });
 
     return NextResponse.json({

@@ -342,13 +342,13 @@ async function markAbsentAtStop(
   scheduleId: string,
   stopId: string,
   occurredAt: Date,
-  tenantId: string | null,
+  tenantId: string,
 ): Promise<number> {
   const rows = await prisma.tripPassenger.findMany({
     where: {
       // tenantId is already a parameter of this helper — it was passed in and
       // then not used, so the query matched passengers across tenants.
-      ...(tenantId ? { tenantId } : {}),
+      tenantId,
       tripId: scheduleId,
       boardingStopId: stopId,
       status: 'CONFIRMED',

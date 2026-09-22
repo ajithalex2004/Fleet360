@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import type { Prisma } from '@prisma/client';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-cache';
@@ -189,12 +190,19 @@ export async function POST(req: NextRequest) {
               // Verdict is PASS or WARN — write inside the same tx while
               // the lock is still held.
               const s = await tx.tripSchedule.create({
+                // body is untyped JSON (any), and spreading it alongside
+                // explicit typed fields sharpens the inferred literal
+                // shape enough that it stops matching either half of
+                // Prisma's Checked/Unchecked create-input union. body
+                // supplies routeId/vehicleId/driverId as plain FK strings
+                // (not nested relation `connect` objects), so Unchecked
+                // is the correct variant to assert here.
                 data: {
                   ...body,
                   tripNumber,
                   tenantId,
                   routeVariantVersionId: snapshot?.id ?? null,
-                },
+                } as Prisma.TripScheduleUncheckedCreateInput,
                 include: { route: true },
               });
               return { verdict: v.verdict, validation: v, schedule: s };
@@ -218,7 +226,7 @@ export async function POST(req: NextRequest) {
               tripNumber,
               tenantId,
               routeVariantVersionId: snapshot?.id ?? null,
-            },
+            } as Prisma.TripScheduleUncheckedCreateInput,
             include: { route: true },
           });
         }

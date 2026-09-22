@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-cache';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import type { Prisma } from '@prisma/client';
 const CACHE_TAG = 'bus-ops:transport-requests';
 
 // Runs inside unstable_cache (via cacheRead), which strips Next.js request
@@ -80,7 +81,7 @@ export async function POST(req: NextRequest) {
         );
         const requestNo = body.requestNo ?? `REQ-${String((max ?? 0) + 1).padStart(5, '0')}`;
         const request = await tx.staffTransportRequest.create({
-          data: { ...body, requestNo, tenantId },
+          data: { ...body, requestNo, tenantId } as Prisma.StaffTransportRequestUncheckedCreateInput,
           include: { staffMember: true },
         });
         revalidateCache([CACHE_TAG]);

@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-cache';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import type { Prisma } from '@prisma/client';
 const CACHE_TAG = 'bus-ops:staff';
 
 // Runs inside unstable_cache (via cacheRead), which strips Next.js request
@@ -98,7 +99,7 @@ export async function POST(req: NextRequest) {
         // Body wins for fields we accept, but tenantId is always stamped from the
         // session header — never trust body-supplied tenantId.
         const staffMember = await tx.staffMember.create({
-          data: { ...body, tenantId },
+          data: { ...body, tenantId } as Prisma.StaffMemberUncheckedCreateInput,
         });
         revalidateCache([CACHE_TAG]);
         return NextResponse.json(staffMember, { status: 201 });
