@@ -37,8 +37,12 @@ export function ColdChainTelemetryGraph({
   cargoTypeKey = 'FROZEN_PHARMA',
   onAlertTriggered,
 }: ColdChainTelemetryGraphProps) {
+  // The cargo type / target temperature band is switchable in-component —
+  // it starts from the prop but the operator can re-profile the shipment
+  // against a different GDP band without leaving the page.
+  const [bandKey, setBandKey] = useState(cargoTypeKey);
   const [profile, setProfile] = useState<ColdChainTelemetryProfile>(
-    generateContinuousTelemetryStream(tripRef, cargoTypeKey)
+    generateContinuousTelemetryStream(tripRef, bandKey)
   );
   const [selectedPoint, setSelectedPoint] = useState<ColdChainTelemetryReading | null>(null);
   const [showCertificateModal, setShowCertificateModal] = useState(false);
@@ -47,10 +51,30 @@ export function ColdChainTelemetryGraph({
   // Periodic live telemetry simulation pulse
   useEffect(() => {
     const timer = setInterval(() => {
-      setProfile(generateContinuousTelemetryStream(tripRef, cargoTypeKey));
+      setProfile(generateContinuousTelemetryStream(tripRef, bandKey));
     }, 15000);
     return () => clearInterval(timer);
-  }, [tripRef, cargoTypeKey]);
+  }, [tripRef, bandKey]);
+
+  // Re-profile immediately when the operator switches cargo type
+  const handleBandChange = (key: string) => {
+    setBandKey(key);
+    setProfile(generateContinuousTelemetryStream(tripRef, key));
+    setSelectedPoint(null);
+  };
+
+  // Download the current certificate/telemetry profile as a JSON audit record
+  const handleDownloadCertificate = () => {
+    const blob = new Blob([JSON.stringify(profile, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${profile.certificateSeal.slice(0, 16)}-cold-chain-certificate.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   // Simulate Door Opening
   const handleSimulateDoorOpen = () => {
@@ -126,9 +150,25 @@ export function ColdChainTelemetryGraph({
             Live IoT Telematics & Continuous In-Transit Cold-Chain Graph
           </span>
         </div>
-        <span className="text-[10px] bg-cyan-500/10 text-cyan-300 font-mono font-bold px-2 py-0.5 rounded-full border border-cyan-500/20">
-          GDP Compliant · 10s BLE Stream
-        </span>
+        <div className="flex items-center gap-2">
+          <label className="flex items-center gap-1.5 text-[10px] text-slate-400">
+            <Layers className="w-3.5 h-3.5 text-cyan-400" />
+            <select
+              value={bandKey}
+              onChange={(e) => handleBandChange(e.target.value)}
+              className="bg-slate-950 border border-white/15 rounded-lg px-2 py-1 text-[10px] text-white font-mono focus:outline-none focus:ring-1 focus:ring-cyan-500"
+            >
+              {Object.entries(COLD_CHAIN_TARGET_BANDS).map(([key, band]) => (
+                <option key={key} value={key}>
+                  {band.cargoType}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="text-[10px] bg-cyan-500/10 text-cyan-300 font-mono font-bold px-2 py-0.5 rounded-full border border-cyan-500/20">
+            GDP Compliant · 10s BLE Stream
+          </span>
+        </div>
       </div>
 
       {/* Real-Time Sensor Telemetry HUD */}
@@ -183,8 +223,8 @@ export function ColdChainTelemetryGraph({
           <span className="text-2xl font-mono font-bold text-emerald-400 block">
             {profile.complianceScorePercent}%
           </span>
-          <span className="text-[10px] text-emerald-300 font-bold block">
-            ✓ Dubai Foodwatch Approved
+          <span className="text-[10px] text-emerald-300 font-bold flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3" /> Dubai Foodwatch Approved
           </span>
         </div>
       </div>
@@ -280,14 +320,20 @@ export function ColdChainTelemetryGraph({
         {/* Hovered / Selected Data Point Details */}
         {selectedPoint ? (
           <div className="bg-slate-900 border border-cyan-500/30 rounded-lg p-2 flex items-center justify-between text-xs text-slate-300">
-            <span>
-              Time: <strong className="text-white font-mono">{selectedPoint.formattedTime}</strong>
+            <span className="flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5 text-slate-400" />
+              <strong className="text-white font-mono">{selectedPoint.formattedTime}</strong>
             </span>
             <span>
               Temp: <strong className="text-cyan-300 font-mono">{selectedPoint.temperatureC}°C</strong>
             </span>
-            <span>
-              Door: <strong className="text-white">{selectedPoint.doorStatus}</strong>
+            <span className="flex items-center gap-1">
+              {selectedPoint.doorStatus === 'OPEN' ? (
+                <DoorOpen className="w-3.5 h-3.5 text-orange-400" />
+              ) : (
+                <DoorClosed className="w-3.5 h-3.5 text-emerald-400" />
+              )}
+              <strong className="text-white">{selectedPoint.doorStatus}</strong>
             </span>
             <span>
               Humidity: <strong className="text-white font-mono">{selectedPoint.humidityPercent}%</strong>
@@ -303,7 +349,10 @@ export function ColdChainTelemetryGraph({
       {/* Simulated Incident Testing Controls */}
       <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-white/10">
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400">Live Simulator:</span>
+          <span className="text-xs text-slate-400 flex items-center gap-1">
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            Live Simulator:
+          </span>
           <button
             type="button"
             onClick={handleSimulateDoorOpen}
@@ -377,7 +426,9 @@ export function ColdChainTelemetryGraph({
                   <span className="text-emerald-400 font-bold block text-sm">
                     {profile.gdpStatus} ({profile.complianceScorePercent}%)
                   </span>
-                  <span className="text-[10px] text-slate-400">Dubai Foodwatch & MOHAP Certified</span>
+                  <span className="text-[10px] text-slate-400 flex items-center justify-end gap-1">
+                    <Building2 className="w-3 h-3" /> Dubai Foodwatch & MOHAP Certified
+                  </span>
                 </div>
               </div>
 
@@ -409,13 +460,22 @@ export function ColdChainTelemetryGraph({
             </div>
 
             <div className="flex items-center justify-between pt-2">
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold"
-              >
-                <Printer className="w-4 h-4" /> Print Certificate PDF
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold"
+                >
+                  <Printer className="w-4 h-4" /> Print Certificate PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadCertificate}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold"
+                >
+                  <Download className="w-4 h-4" /> Download Certificate JSON
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowCertificateModal(false)}

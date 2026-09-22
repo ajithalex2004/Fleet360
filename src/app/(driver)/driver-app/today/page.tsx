@@ -4,22 +4,28 @@
  * Driver's home screen — the first thing they see after login.
  *
  * Features:
- *   - Current trip assignments and roster
+ *   - Current trip assignments and roster (server-live, with an
+ *     offline-cache fallback when the network is unavailable)
  *   - Continuous driving CBA compliance watcher
  *   - 🚨 SOS Emergency Panic Button (Critical dispatch to operations)
  *   - 📡 Real-Time Live Location Sharing (10s telemetry pings)
  *   - 🚚 Non-Revenue Movement (NRM / Deadhead) Toggle & Ops Notification
+ *   - ⚡ Geofence auto-lifecycle: auto-starts/ends a trip when the
+ *     vehicle leaves the origin / enters the destination geofence,
+ *     for the "driver forgot to tap Start/End" case
+ *   - Timing-aware Start/End button + per-trip driving score badge
  */
 
 'use client';
 
 import React, { Suspense, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { getAllTrips, type OfflineTrip } from '@/lib/driver-offline/db';
+import { getAllTrips, putTrips, type OfflineTrip } from '@/lib/driver-offline/db';
 import { syncSummary, forceDrain } from '@/lib/driver-offline/sync';
 import { BackButton } from '@/components/driver-app/BackButton';
 import { ALERT_LEVEL_META } from '@/lib/driver-offline/continuous-driving-watcher';
 import { useContinuousDriving } from '@/hooks/useContinuousDriving';
+import { getCurrentShift } from '@/lib/driver-session-client';
 import {
   startButtonState,
   timingChipClass,
@@ -37,7 +43,6 @@ import {
   Truck,
   RotateCcw,
   X,
-  Phone,
   CheckCircle2,
   MapPin,
   Clock,
@@ -71,6 +76,22 @@ interface ServerTrip {
     idleMinutes: number;
   };
   eventCount: number;
+}
+
+/** A single geocoded stop, as returned by /api/driver-app/trips/[id]/geofences. */
+interface GeofencePoint extends LatLng {
+  radiusM: number;
+  name: string | null;
+}
+
+interface GeofenceInfo {
+  origin: GeofencePoint;
+  destination: GeofencePoint;
+}
+
+const KNOWN_OFFLINE_STATUSES: readonly OfflineTrip['status'][] = ['SCHEDULED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
+function isKnownTripStatus(s: string): s is OfflineTrip['status'] {
+  return (KNOWN_OFFLINE_STATUSES as readonly string[]).includes(s);
 }
 
 function scoreColor(score: number | null): { bg: string; text: string; ring: string; label: string } {
@@ -131,9 +152,12 @@ function DriverTodayContent() {
   const [offlineTrips, setOfflineTrips] = useState<OfflineTrip[] | null>(null);
   const [serverTrips, setServerTrips] = useState<ServerTrip[] | null>(null);
   const [sync, setSync] = useState<{ queued: number; failed: number } | null>(null);
+  const [syncingNow, setSyncingNow] = useState(false);
   const [now, setNow] = useState<Date>(() => new Date());
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [autoToasts, setAutoToasts] = useState<Array<{ id: string; tripId: string; text: string; at: number }>>([]);
+  const [geofenceMeta, setGeofenceMeta] = useState<Record<string, { armed: boolean; destinationName: string | null }>>({});
+  const [dvirBanner, setDvirBanner] = useState<string | null>(null);
 
   // 1. Live Location Sharing State
   const [liveLocationActive, setLiveLocationActive] = useState<boolean>(true);
@@ -149,7 +173,11 @@ function DriverTodayContent() {
   const [activeNrm, setActiveNrm] = useState<{ reason: string; startedAt: string } | null>(null);
   const [nrmFeedback, setNrmFeedback] = useState<string | null>(null);
 
+  // 4. Geofence auto-lifecycle watchers, one per SCHEDULED/IN_PROGRESS trip
   const autoWatchersRef = useRef<Map<string, AutoLifecycleHandle>>(new Map());
+  const geofenceCacheRef = useRef<Map<string, GeofenceInfo>>(new Map());
+  const geofenceCheckedRef = useRef<Set<string>>(new Set());
+  const tenantIdRef = useRef<string | null>(null);
 
   // Continuous-driving watcher
   const driving = useContinuousDriving();
@@ -183,6 +211,17 @@ function DriverTodayContent() {
     void refresh();
     void fetchRoster();
   }, [refresh, fetchRoster]);
+
+  // A DVIR submission deep-links back here as ?dvir=<id> (see dvirs/new/page.tsx).
+  // Surface a confirmation banner once, then strip the query param.
+  useEffect(() => {
+    const dvirId = searchParams?.get('dvir');
+    if (!dvirId) return;
+    setDvirBanner('Pre/post-trip inspection submitted — queued for sync.');
+    router.replace('/driver-app/today');
+    const t = setTimeout(() => setDvirBanner(null), 6000);
+    return () => clearTimeout(t);
+  }, [searchParams, router]);
 
   // Keep "now" fresh
   useEffect(() => {
@@ -223,7 +262,9 @@ function DriverTodayContent() {
     return () => clearInterval(interval);
   }, [liveLocationActive, serverTrips]);
 
-  // Lifecycle action: tap Start or End on a trip
+  // Lifecycle action: tap Start or End on a trip (also called by the
+  // geofence auto-lifecycle watcher below when it detects the vehicle
+  // has left the origin / entered the destination).
   const handleLifecycle = useCallback(async (tripId: string, action: 'START' | 'END') => {
     if (pending.has(tripId)) return;
     setPending((p) => new Set(p).add(tripId));
@@ -250,6 +291,160 @@ function DriverTodayContent() {
       });
     }
   }, [pending, fetchRoster]);
+
+  // Best-effort: mirror today's server roster into the offline IndexedDB
+  // cache so the page still has something useful to show if the driver
+  // loses connectivity later in the shift. Never blocks the online UI.
+  const cacheTripsOffline = useCallback(async (trips: ServerTrip[]) => {
+    try {
+      if (!tenantIdRef.current) {
+        const ctx = await getCurrentShift();
+        tenantIdRef.current = ctx?.tenantId ?? null;
+      }
+      if (!tenantIdRef.current) return;
+
+      const toCache: OfflineTrip[] = trips
+        .filter((t) => isKnownTripStatus((t.status || '').toUpperCase()))
+        .map((t) => {
+          const status = (t.status || '').toUpperCase();
+          const geo = geofenceCacheRef.current.get(t.id);
+          return {
+            id: t.id,
+            tenantId: tenantIdRef.current as string,
+            routeName: t.routeName || 'Assigned Route',
+            origin: geo?.origin.name || 'Origin',
+            destination: geo?.destination.name || 'Destination',
+            scheduledDeparture: t.departureTime,
+            scheduledArrival: t.arrivalTime,
+            vehicleId: null,
+            vehiclePlate: t.vehiclePlate,
+            status: (isKnownTripStatus(status) ? status : 'SCHEDULED'),
+            stops: geo ? [
+              { id: 'origin', sequence: 0, name: geo.origin.name || 'Origin', lat: geo.origin.lat, lng: geo.origin.lng, estimatedArrival: null, arrivedAt: null },
+              { id: 'destination', sequence: 1, name: geo.destination.name || 'Destination', lat: geo.destination.lat, lng: geo.destination.lng, estimatedArrival: null, arrivedAt: null },
+            ] : [],
+            cachedAt: Date.now(),
+          };
+        });
+      if (toCache.length > 0) {
+        await putTrips(toCache);
+        await refresh();
+      }
+    } catch {
+      // Offline caching is best-effort — never blocks the online UI.
+    }
+  }, [refresh]);
+
+  // Arm the geofence auto-lifecycle watcher for one trip: fetches the
+  // route's origin/destination geofence, then starts a watcher that
+  // fires handleLifecycle('START'/'END') the moment the vehicle leaves
+  // the origin radius / enters the destination radius. Silently leaves
+  // the trip un-armed (manual Start/End still works) if the route has
+  // no geocoded stops or the fetch fails.
+  const armAutoLifecycle = useCallback(async (trip: ServerTrip) => {
+    if (autoWatchersRef.current.has(trip.id) || geofenceCheckedRef.current.has(trip.id)) return;
+    geofenceCheckedRef.current.add(trip.id);
+    try {
+      const res = await fetch(`/api/driver-app/trips/${trip.id}/geofences`, { credentials: 'include' });
+      if (!res.ok) return;
+      const data: GeofenceInfo = await res.json();
+      if (data.origin.lat == null || data.origin.lng == null || data.destination.lat == null || data.destination.lng == null) return;
+
+      geofenceCacheRef.current.set(trip.id, data);
+
+      const handle = createAutoLifecycle({
+        tripId: trip.id,
+        origin: { lat: data.origin.lat, lng: data.origin.lng, radiusM: data.origin.radiusM, name: data.origin.name },
+        destination: { lat: data.destination.lat, lng: data.destination.lng, radiusM: data.destination.radiusM, name: data.destination.name },
+        onShouldStart: () => {
+          setAutoToasts((prev) => [...prev, {
+            id: `${trip.id}-start-${Date.now()}`,
+            tripId: trip.id,
+            text: `Left ${data.origin.name || 'the origin'} — trip auto-started`,
+            at: Date.now(),
+          }]);
+          void handleLifecycle(trip.id, 'START');
+        },
+        onShouldEnd: () => {
+          setAutoToasts((prev) => [...prev, {
+            id: `${trip.id}-end-${Date.now()}`,
+            tripId: trip.id,
+            text: `Arrived at ${data.destination.name || 'the destination'} — trip auto-ended`,
+            at: Date.now(),
+          }]);
+          void handleLifecycle(trip.id, 'END');
+        },
+      });
+      handle.start();
+      autoWatchersRef.current.set(trip.id, handle);
+      setGeofenceMeta((prev) => ({ ...prev, [trip.id]: { armed: true, destinationName: data.destination.name } }));
+    } catch {
+      // Offline, or the API rejected the request — auto-lifecycle stays unavailable for this trip.
+    }
+  }, [handleLifecycle]);
+
+  const disarmAutoLifecycle = useCallback((tripId: string) => {
+    const handle = autoWatchersRef.current.get(tripId);
+    if (handle) {
+      handle.stop();
+      autoWatchersRef.current.delete(tripId);
+    }
+    setGeofenceMeta((prev) => {
+      if (!(tripId in prev)) return prev;
+      const next = { ...prev };
+      delete next[tripId];
+      return next;
+    });
+  }, []);
+
+  // Keep the set of armed watchers in sync with the current roster, and
+  // best-effort mirror the roster into the offline cache.
+  useEffect(() => {
+    if (!serverTrips) return;
+    const activeIds = new Set(
+      serverTrips
+        .filter((t) => ['SCHEDULED', 'IN_PROGRESS'].includes((t.status || '').toUpperCase()))
+        .map((t) => t.id),
+    );
+    for (const t of serverTrips) {
+      if (activeIds.has(t.id)) void armAutoLifecycle(t);
+    }
+    for (const id of Array.from(autoWatchersRef.current.keys())) {
+      if (!activeIds.has(id)) disarmAutoLifecycle(id);
+    }
+    void cacheTripsOffline(serverTrips);
+  }, [serverTrips, armAutoLifecycle, disarmAutoLifecycle, cacheTripsOffline]);
+
+  // Stop every watcher when the page unmounts. Reading `.current` inside
+  // the cleanup is intentional here (not the stale-DOM-ref case the rule
+  // guards against): we want whatever watchers are armed at unmount time,
+  // not a snapshot from when the effect was set up.
+  useEffect(() => {
+    return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      for (const handle of autoWatchersRef.current.values()) handle.stop();
+      autoWatchersRef.current.clear();
+    };
+  }, []);
+
+  // Auto-expire toast notifications.
+  useEffect(() => {
+    if (autoToasts.length === 0) return;
+    const t = setInterval(() => {
+      setAutoToasts((prev) => prev.filter((x) => Date.now() - x.at < 8000));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [autoToasts.length]);
+
+  const handleRetrySync = useCallback(async () => {
+    setSyncingNow(true);
+    try {
+      await forceDrain();
+    } finally {
+      await refresh();
+      setSyncingNow(false);
+    }
+  }, [refresh]);
 
   // Emergency SOS Trigger
   const handleTriggerSos = async (emergencyType: string, notes?: string) => {
@@ -303,10 +498,10 @@ function DriverTodayContent() {
       setShowNrmModal(false);
       if (isStarting) {
         setActiveNrm({ reason, startedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
-        setNrmFeedback(`✓ NRM started: ${reason}. Ops team notified.`);
+        setNrmFeedback(json.message || `✓ NRM started: ${reason}. Ops team notified.`);
       } else {
         setActiveNrm(null);
-        setNrmFeedback('✓ NRM run completed. Returned to standard roster.');
+        setNrmFeedback(json.message || '✓ NRM run completed. Returned to standard roster.');
       }
       setTimeout(() => setNrmFeedback(null), 4000);
     } catch (e) {
@@ -361,12 +556,13 @@ function DriverTodayContent() {
                 type="button"
                 data-testid="continuous-driving-chip"
                 onClick={() => router.push('/driver-app/behavior')}
-                className={`rounded-xl px-2.5 py-1.5 text-[11px] font-semibold transition active:scale-95 ${
+                className={`rounded-xl px-2.5 py-1.5 text-[11px] font-semibold flex items-center gap-1 transition active:scale-95 ${
                   driving.state.level === 'ok' ? 'bg-emerald-500/15 text-emerald-200' :
                   driving.state.level === 'warning' ? 'bg-amber-500/15 text-amber-200' :
                   'bg-rose-500/20 text-rose-200 ring-1 ring-rose-500/40 animate-pulse'
                 }`}
               >
+                <span>{ALERT_LEVEL_META[driving.state.level].emoji}</span>
                 <span>{driving.state.levelLabel}</span>
               </button>
             )}
@@ -379,6 +575,33 @@ function DriverTodayContent() {
         <div className="bg-rose-950/90 border-b border-rose-500/50 p-3.5 text-center text-xs text-rose-200 font-bold flex items-center justify-center gap-2 animate-bounce">
           <AlertTriangle className="w-4 h-4 text-rose-400" />
           <span>{sosSentNotice}</span>
+        </div>
+      )}
+
+      {/* DVIR Submitted Confirmation (deep-linked from dvirs/new) */}
+      {dvirBanner && (
+        <div className="bg-emerald-950/80 border-b border-emerald-500/40 p-2.5 text-center text-xs text-emerald-200 font-semibold flex items-center justify-center gap-2">
+          <CheckCircle2 className="w-4 h-4" />
+          <span>{dvirBanner}</span>
+        </div>
+      )}
+
+      {/* Offline sync status */}
+      {sync && (sync.queued > 0 || sync.failed > 0) && (
+        <div className="bg-slate-800/80 border-b border-white/10 px-4 py-2 flex items-center justify-between gap-2 text-[11px]">
+          <span className="text-slate-300">
+            {sync.failed > 0
+              ? `${sync.failed} item${sync.failed === 1 ? '' : 's'} failed to sync · ${sync.queued} queued`
+              : `${sync.queued} item${sync.queued === 1 ? '' : 's'} waiting to sync`}
+          </span>
+          <button
+            onClick={handleRetrySync}
+            disabled={syncingNow}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold transition disabled:opacity-50 shrink-0"
+          >
+            <RotateCcw className={`w-3 h-3 ${syncingNow ? 'animate-spin' : ''}`} />
+            {syncingNow ? 'Syncing…' : 'Retry sync'}
+          </button>
         </div>
       )}
 
@@ -427,7 +650,7 @@ function DriverTodayContent() {
           </div>
         )}
 
-        {/* Trips Roster */}
+        {/* Trips Roster: server-live, offline-cache fallback, or empty state */}
         {serverTrips && serverTrips.length > 0 ? (
           <div className="space-y-3">
             <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">Assigned Trips Today</h2>
@@ -435,6 +658,19 @@ function DriverTodayContent() {
               const status = (t.status || 'SCHEDULED').toUpperCase();
               const badge = statusBadge(status);
               const isProgress = status === 'IN_PROGRESS';
+              const meta = geofenceMeta[t.id];
+              const sc = scoreColor(t.eventCount > 0 ? t.score.score : null);
+              const btnState: StartButtonState | null = (status === 'SCHEDULED' || isProgress)
+                ? startButtonState({
+                    status: status as TripStatus,
+                    scheduledDeparture: t.departureTime,
+                    actualDeparture: t.actualDepartureAt,
+                    actualArrival: t.actualArrivalAt,
+                    durationMinutes: t.durationMinutes,
+                  })
+                : null;
+              const action = btnState?.action ?? null;
+              const msUntilDeparture = status === 'SCHEDULED' ? new Date(t.departureTime).getTime() - now.getTime() : null;
 
               return (
                 <div
@@ -453,33 +689,102 @@ function DriverTodayContent() {
                         <Clock className="w-3.5 h-3.5 text-slate-500" />
                         <span>{new Date(t.departureTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                         {t.vehiclePlate && <span className="font-mono text-emerald-400 ml-2">[{t.vehiclePlate}]</span>}
+                        {msUntilDeparture != null && msUntilDeparture > 0 && (
+                          <span className="text-slate-500 ml-2">· in {formatH(msUntilDeparture)}</span>
+                        )}
+                      </div>
+                      {meta?.destinationName && (
+                        <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-1">
+                          <MapPin className="w-3 h-3" />
+                          <span>→ {meta.destinationName}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {meta?.armed && (
+                        <span
+                          title="Automatic start/end detection is active for this trip"
+                          className="text-[9px] px-1.5 py-1 rounded-full font-bold bg-emerald-500/15 text-emerald-300 flex items-center gap-0.5"
+                        >
+                          <Zap className="w-2.5 h-2.5" /> Auto
+                        </span>
+                      )}
+                      <span
+                        title={`Driving score ${sc.label} · ${t.score.harshBrake} harsh brakes · ${t.score.harshAccel} harsh accel · ${t.score.speeding} speeding events · ${t.score.idleMinutes}m idle`}
+                        className={`text-[10px] px-2 py-1 rounded-full font-bold ring-1 ${sc.bg} ${sc.text} ${sc.ring}`}
+                      >
+                        {sc.label}
+                      </span>
+                      <span className={`text-[10px] px-2 py-1 rounded-full font-bold border ${badge.bg} ${badge.text}`}>
+                        {badge.label}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Timing-aware lifecycle control */}
+                  {action && btnState && (
+                    <div>
+                      <button
+                        onClick={() => handleLifecycle(t.id, action)}
+                        disabled={pending.has(t.id)}
+                        className={`w-full py-2.5 rounded-xl font-bold text-xs shadow-md transition disabled:opacity-50 ${
+                          action === 'START'
+                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                            : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+                        }`}
+                      >
+                        {btnState.label}
+                      </button>
+                      <div className="flex items-center justify-between gap-2 mt-1.5">
+                        {btnState.helperLine && (
+                          <p className="text-[10px] text-slate-500">{btnState.helperLine}</p>
+                        )}
+                        {btnState.timing !== 'unknown' && (
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0 ${timingChipClass(btnState.timing)}`}>
+                            {btnState.timing === 'late'
+                              ? `${btnState.deltaMinutes}m late`
+                              : btnState.timing === 'early'
+                              ? `${Math.abs(btnState.deltaMinutes)}m early`
+                              : 'On time'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : offlineTrips && offlineTrips.length > 0 ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2">
+              <Radio className="w-3.5 h-3.5" />
+              <span>Offline — showing your last synced roster ({offlineTrips.length} trip{offlineTrips.length === 1 ? '' : 's'})</span>
+            </div>
+            {offlineTrips.map((t) => {
+              const badge = statusBadge(t.status);
+              return (
+                <div key={t.id} className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 space-y-2">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="text-base font-bold text-white">{t.routeName}</h3>
+                      <div className="text-xs text-slate-400 flex items-center gap-1 mt-1">
+                        <Clock className="w-3.5 h-3.5 text-slate-500" />
+                        <span>{new Date(t.scheduledDeparture).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        {t.vehiclePlate && <span className="font-mono text-emerald-400 ml-2">[{t.vehiclePlate}]</span>}
+                      </div>
+                      <div className="text-[11px] text-slate-500 flex items-center gap-1 mt-1">
+                        <MapPin className="w-3 h-3" />
+                        <span>{t.origin} → {t.destination}</span>
                       </div>
                     </div>
                     <span className={`text-[10px] px-2 py-1 rounded-full font-bold border ${badge.bg} ${badge.text}`}>
                       {badge.label}
                     </span>
                   </div>
-
-                  {/* Lifecycle Controls */}
-                  {status === 'SCHEDULED' && (
-                    <button
-                      onClick={() => handleLifecycle(t.id, 'START')}
-                      disabled={pending.has(t.id)}
-                      className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition disabled:opacity-50"
-                    >
-                      ▶️ Start Trip
-                    </button>
-                  )}
-
-                  {isProgress && (
-                    <button
-                      onClick={() => handleLifecycle(t.id, 'END')}
-                      disabled={pending.has(t.id)}
-                      className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md transition disabled:opacity-50"
-                    >
-                      ⏹️ Complete / End Trip
-                    </button>
-                  )}
+                  <p className="text-[10px] text-slate-500">
+                    Cached {new Date(t.cachedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} — reconnect to start/end trips.
+                  </p>
                 </div>
               );
             })}
@@ -490,6 +795,29 @@ function DriverTodayContent() {
           </div>
         )}
       </main>
+
+      {/* Auto-lifecycle toasts */}
+      {autoToasts.length > 0 && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-2rem)] max-w-md space-y-2">
+          {autoToasts.map((t) => (
+            <div
+              key={t.id}
+              className="bg-slate-900/95 border border-emerald-500/40 rounded-xl px-3 py-2 text-[11px] text-emerald-200 shadow-lg flex items-center justify-between gap-2 backdrop-blur"
+            >
+              <span className="flex items-center gap-1.5">
+                <Zap className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                {t.text}
+              </span>
+              <button
+                onClick={() => setAutoToasts((prev) => prev.filter((x) => x.id !== t.id))}
+                className="text-slate-400 hover:text-white shrink-0"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* 🚨 SOS Emergency Modal */}
       {showSosModal && (

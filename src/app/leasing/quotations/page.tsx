@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { addMonths, addDays, toDateInput, calcValidUntil, inquiryToQuotation } from '@/lib/autoFill';
-import { VEHICLE_MAKES, getModelsForMake, getAllMakes } from '@/lib/vehicleMaster';
+import { addMonths, calcValidUntil, inquiryToQuotation } from '@/lib/autoFill';
+import { getModelsForMake, getAllMakes } from '@/lib/vehicleMaster';
 import { useSearchParams } from 'next/navigation';
 import { Plus, Eye, Check, Send, FileText, X, ArrowRight, Mail, History, MessageSquare, Workflow } from 'lucide-react';
 import WorkflowModal from '@/components/leasing/WorkflowModal';
@@ -69,6 +69,50 @@ interface LeaseQuotation {
   driverIncluded?: boolean;
 }
 
+interface QuotationFormData {
+  lesseeId: string;
+  lesseeName: string;
+  leaseType: 'LONG_TERM' | 'SHORT_TERM' | 'DAILY' | 'MONTHLY';
+  duration: number;
+  startDate: string;
+  currency: 'AED' | 'USD' | 'EUR' | 'SAR';
+  endDate: string;
+  validUntil: string;
+  vehicles: Vehicle[];
+  baseMonthlyRate: number;
+  interestRate: number;
+  markupRate: number;
+  accessoriesCost: number;
+  servicesCost: number;
+  insuranceCost: number;
+  maintenanceCost: number;
+  driverCost: number;
+  mileageCap: number;
+  securityDeposit: number;
+  insuranceIncluded: boolean;
+  maintenanceIncluded: boolean;
+  driverIncluded: boolean;
+  notes: string;
+  inquiryId: string;
+}
+
+interface LesseeOption {
+  id: string;
+  name: string;
+  type?: string;
+  tradeLicense?: string | null;
+  licenseNo?: string | null;
+  deletedAt?: string | null;
+}
+
+interface QuotationHistoryEntry {
+  action?: string;
+  event?: string;
+  createdAt?: string;
+  comments?: string;
+  approverName?: string;
+}
+
 const STATUS_PIPELINE = [
   'NEW',
   'PENDING_APPROVAL',
@@ -120,16 +164,16 @@ export default function LeaseQuotationsPage() {
   const [submitMode, setSubmitMode]     = useState<'draft'|'submit'>('draft');
   const [submitResult, setSubmitResult] = useState<{success:boolean;message:string}|null>(null);
   const [wfToast, setWfToast] = useState<{type:'success'|'warn'|'error'; msg:string}|null>(null);
-  const [lessees, setLessees]           = useState<any[]>([]);
+  const [lessees, setLessees]           = useState<LesseeOption[]>([]);
   const vehicleMakesList                = getAllMakes();
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<QuotationFormData>({
     lesseeId: '',
     lesseeName: '',
-    leaseType: 'LONG_TERM' as const,
+    leaseType: 'LONG_TERM',
     duration: 24,
     startDate: '',
-    currency: 'AED' as const,
+    currency: 'AED',
     endDate: '',
     validUntil: '',
     vehicles: [
@@ -295,7 +339,7 @@ export default function LeaseQuotationsPage() {
         const lData = await lRes.json();
         if (Array.isArray(lData)) {
           const searchName = (inq.companyName ?? inq.customerName ?? '').toLowerCase().trim();
-          const match = lData.find((l: any) =>
+          const match = (lData as LesseeOption[]).find((l) =>
             l.name.toLowerCase().includes(searchName) ||
             searchName.includes(l.name.toLowerCase())
           );
@@ -332,7 +376,7 @@ export default function LeaseQuotationsPage() {
       fetch('/api/leasing/quotations').then(r => r.ok ? r.json() : Promise.reject(r)),
     ])
       .then(([lesseesData, quotationsData]) => {
-        setLessees(Array.isArray(lesseesData) ? lesseesData.filter((l: any) => !l.deletedAt) : []);
+        setLessees(Array.isArray(lesseesData) ? (lesseesData as LesseeOption[]).filter((l) => !l.deletedAt) : []);
         setQuotations(quotationsData);
       })
       .catch(() => setQuotations(mockQuotations))
@@ -504,7 +548,7 @@ export default function LeaseQuotationsPage() {
         driverIncluded:      totals.totalDriver       > 0,
         notes:               formData.notes || null,
         status:              'NEW',
-        inquiryId:           (formData as any).inquiryId || null,
+        inquiryId:           formData.inquiryId || null,
         vehicles,
       };
 
@@ -545,41 +589,13 @@ export default function LeaseQuotationsPage() {
       setShowNewModal(false);
       setActiveStep(1);
       setSubmitResult(null);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to save quotation:', err);
-      setSubmitResult({ success: false, message: err.message ?? 'Save failed' });
+      setSubmitResult({ success: false, message: err instanceof Error ? err.message : 'Save failed' });
     } finally {
       setSaving(false);
     }
   };
-
-  const handleApproveAction = async (quotationId: string, action: 'APPROVE' | 'REJECT' = 'APPROVE') => {
-    try {
-      const res = await fetch(`/api/leasing/quotations/${quotationId}/approve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          action,
-          approverName: 'System Admin', 
-          comments: `Quotation ${action.toLowerCase()}d via dashboard`
-        }),
-      });
-      if (res.ok) {
-        const updated = await res.json();
-        setQuotations(prev => prev.map(q => q.id === quotationId ? updated : q));
-      } else {
-        const err = await res.json().catch(() => ({}));
-        alert(err.error || 'Failed to update status');
-      }
-    } catch (e) {
-      console.error(e);
-      alert('Network error while updating status');
-    }
-  };
-
-  const handleApproveInternally = (quotationId: string) => handleApproveAction(quotationId, 'APPROVE');
-  const handleSendToCustomer    = (quotationId: string) => handleApproveAction(quotationId, 'APPROVE');
-  const handleGenericApprove    = (quotationId: string) => handleApproveAction(quotationId, 'APPROVE');
 
   const handleConvertToContract = async (quotationId: string) => {
     if (!confirm('Are you sure you want to convert this quotation into a live contract?')) return;
@@ -623,7 +639,7 @@ export default function LeaseQuotationsPage() {
   };
 
   const [processingActionId, setProcessingActionId] = useState<string | null>(null);
-  const [quotationHistory, setQuotationHistory] = useState<any[]>([]);
+  const [quotationHistory, setQuotationHistory] = useState<QuotationHistoryEntry[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [showCommentModal, setShowCommentModal] = useState(false);
   const [commentAction, setCommentAction] = useState<{ id: string, label: string, targetStatus?: string } | null>(null);
@@ -920,7 +936,22 @@ export default function LeaseQuotationsPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredQuotations.map((quotation) => {
+              {loading ? (
+                <tr>
+                  <td colSpan={10} className="px-3 py-12 text-center text-sm text-[var(--text-faint)]">
+                    <div className="flex items-center justify-center gap-2">
+                      <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      Loading quotations...
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredQuotations.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="px-3 py-12 text-center text-sm text-[var(--text-faint)]">
+                    No quotations found.
+                  </td>
+                </tr>
+              ) : filteredQuotations.map((quotation) => {
                 const veh = quotation.vehicles ?? [];
                 const totalVehicleCount = veh.reduce((sum, v) => sum + (v.quantity||0), 0);
                 const vehicleTypes = veh.map((v) => v.vehicleType).join(', ');
@@ -943,6 +974,9 @@ export default function LeaseQuotationsPage() {
                     </td>
                     <td className="px-3 py-3 text-sm text-[var(--text-main)] font-semibold">
                       {totalVehicleCount || quotation.vehicleCount || '0'} units
+                      {vehicleTypes && (
+                        <div className="text-xs font-normal text-[var(--text-faint)] mt-0.5">{vehicleTypes}</div>
+                      )}
                     </td>
                     <td className="px-3 py-3 text-sm font-medium text-emerald-400">
                       {(Number(quotation.totalMonthlyRate ?? 0)).toLocaleString('en-AE')}{' '}
@@ -955,8 +989,10 @@ export default function LeaseQuotationsPage() {
                     <td className="px-3 py-3 text-sm whitespace-nowrap">
                       <select
                         value={quotation.status}
+                        disabled={updatingStatus}
                         onChange={async (e) => {
-                          const newStatus = e.target.value;
+                          const newStatus = e.target.value as LeaseQuotation['status'];
+                          setUpdatingStatus(true);
                           try {
                             const res = await fetch(`/api/leasing/quotations/${quotation.id}`, {
                               method: 'PATCH',
@@ -964,13 +1000,15 @@ export default function LeaseQuotationsPage() {
                               body: JSON.stringify({ status: newStatus }),
                             });
                             if (res.ok) {
-                              setQuotations(prev => prev.map(q => q.id === quotation.id ? { ...q, status: newStatus as any } : q));
+                              setQuotations(prev => prev.map(q => q.id === quotation.id ? { ...q, status: newStatus } : q));
                               await triggerWorkflowIfNeeded(quotation.id, newStatus, quotation.quotationNumber ?? quotation.id);
                             }
-                          } catch {}
+                          } catch {} finally {
+                            setUpdatingStatus(false);
+                          }
                         }}
                         onClick={(e) => e.stopPropagation()}
-                        className={`text-xs px-2 py-1.5 rounded-lg border font-medium cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 ${getStatusColor(quotation.status)} bg-[var(--bg-surface)]`}
+                        className={`text-xs px-2 py-1.5 rounded-lg border font-medium cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-wait ${getStatusColor(quotation.status)} bg-[var(--bg-surface)]`}
                       >
                         {STATUS_PIPELINE.map(s => (
                           <option key={s} value={s} className="bg-[var(--bg-surface)] text-[var(--text-main)]">{s.replace(/_/g, ' ')}</option>
@@ -992,7 +1030,11 @@ export default function LeaseQuotationsPage() {
                         {getQuotationAction(quotation.status) && (
                           <button
                             disabled={processingActionId === quotation.id}
-                            onClick={() => handleWorkflowAction(quotation.id, getQuotationAction(quotation.status)!.label)}
+                            onClick={() => {
+                              const action = getQuotationAction(quotation.status)!;
+                              setCommentAction({ id: quotation.id, label: action.label, targetStatus: action.nextStatus });
+                              setShowCommentModal(true);
+                            }}
                             className={`px-2.5 py-1 rounded text-xs transition-all flex items-center gap-1 border ${
                               getQuotationAction(quotation.status)!.color === 'emerald'
                                 ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30'
@@ -1125,7 +1167,7 @@ export default function LeaseQuotationsPage() {
                         <div>
                           <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Lease Type *</label>
                           <select value={formData.leaseType}
-                            onChange={e => setFormData({ ...formData, leaseType: e.target.value as any })}
+                            onChange={e => setFormData({ ...formData, leaseType: e.target.value as 'LONG_TERM' | 'SHORT_TERM' | 'DAILY' | 'MONTHLY' })}
                             className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-[var(--text-main)] focus:outline-none focus:border-blue-500">
                             <option value="LONG_TERM">Long Term (12+ months)</option>
                             <option value="SHORT_TERM">Short Term (3-12 months)</option>
@@ -1150,7 +1192,7 @@ export default function LeaseQuotationsPage() {
                               const s = e.target.value;
                               setFormData({ ...formData, startDate: s,
                                 endDate: s && formData.duration ? addMonths(s, formData.duration) : formData.endDate,
-                                validUntil: formData.validUntil || addDays(s, 30) });
+                                validUntil: formData.validUntil || calcValidUntil(s) });
                             }}
                             className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-[var(--text-main)] focus:outline-none focus:border-blue-500" />
                         </div>
@@ -1170,7 +1212,7 @@ export default function LeaseQuotationsPage() {
                         <div>
                           <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Currency</label>
                           <select value={formData.currency}
-                            onChange={e => setFormData({ ...formData, currency: e.target.value as any })}
+                            onChange={e => setFormData({ ...formData, currency: e.target.value as 'AED' | 'USD' | 'EUR' | 'SAR' })}
                             className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-[var(--text-main)] focus:outline-none focus:border-blue-500">
                             <option value="AED">AED - UAE Dirham</option>
                             <option value="USD">USD - US Dollar</option>
@@ -1248,7 +1290,7 @@ export default function LeaseQuotationsPage() {
                             <select value={vehicle.vehicleType}
                               onChange={e => {
                                 const v = [...formData.vehicles];
-                                v[index] = { ...v[index], vehicleType: e.target.value as any };
+                                v[index] = { ...v[index], vehicleType: e.target.value };
                                 setFormData({ ...formData, vehicles: v });
                               }}
                               className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-[var(--text-main)] text-sm focus:outline-none focus:border-blue-500">
@@ -1326,12 +1368,12 @@ export default function LeaseQuotationsPage() {
                         <div className="mt-4 pt-4 border-t border-[var(--border-subtle)]">
                           <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Bundled Services for this Vehicle Type</p>
                           <div className="grid grid-cols-3 gap-3">
-                            {[
+                            {([
                               { flag: 'insuranceIncluded', costKey: 'insuranceCostPerUnit', label: 'Insurance', color: 'blue' },
                               { flag: 'maintenanceIncluded', costKey: 'maintenanceCostPerUnit', label: 'Maintenance', color: 'emerald' },
                               { flag: 'driverIncluded', costKey: 'driverCostPerUnit', label: 'Driver', color: 'amber' },
-                            ].map(({ flag, costKey, label, color }) => {
-                              const isOn = !!(vehicle as any)[flag];
+                            ] as const).map(({ flag, costKey, label, color }) => {
+                              const isOn = !!vehicle[flag];
                               return (
                                 <div key={flag} className={`rounded-xl border p-3 transition-all ${isOn ? `border-${color}-500/40 bg-${color}-500/10` : 'border-[var(--border-subtle)] bg-[var(--bg-surface)]/50'}`}>
                                   <div className="flex items-center justify-between mb-2">
@@ -1350,7 +1392,7 @@ export default function LeaseQuotationsPage() {
                                     <div>
                                       <label className="block text-xs text-[var(--text-muted)] mb-1">Cost per Unit / month ({formData.currency})</label>
                                       <input type="number" min="0" step="0.01"
-                                        value={(vehicle as any)[costKey] || ''}
+                                        value={vehicle[costKey] || ''}
                                         placeholder="0.00"
                                         onChange={e => {
                                           const v = [...formData.vehicles];
@@ -1358,9 +1400,9 @@ export default function LeaseQuotationsPage() {
                                           setFormData({ ...formData, vehicles: v });
                                         }}
                                         className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-lg px-2 py-1.5 text-[var(--text-main)] text-xs focus:outline-none focus:border-blue-500" />
-                                      {(vehicle as any)[costKey] > 0 && (
+                                      {(vehicle[costKey] ?? 0) > 0 && (
                                         <p className="text-xs text-[var(--text-faint)] mt-1">
-                                          Total: {formData.currency} {((Number((vehicle as any)[costKey]) || 0) * (Number(vehicle.quantity) || 0)).toLocaleString('en-AE')} / month
+                                          Total: {formData.currency} {((Number(vehicle[costKey]) || 0) * (Number(vehicle.quantity) || 0)).toLocaleString('en-AE')} / month
                                         </p>
                                       )}
                                     </div>
@@ -1422,16 +1464,16 @@ export default function LeaseQuotationsPage() {
                         Pricing Adjustments
                       </h3>
                       <div className="grid grid-cols-3 gap-4">
-                        {[
+                        {([
                           { label:'Interest Rate (%)', key:'interestRate', help:'Annual interest rate applied to base monthly rate' },
                           { label:'Markup (%)', key:'markupRate', help:'Profit markup percentage on base monthly rate' },
                           { label:'Accessories Cost (monthly)', key:'accessoriesCost', help:'Monthly cost for vehicle accessories/upgrades' },
                           { label:'Services Cost (monthly)', key:'servicesCost', help:'Monthly cost for additional services' },
-                        ].map(({ label, key, help }) => (
+                        ] as const).map(({ label, key, help }) => (
                           <div key={key}>
                             <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">{label}</label>
                             <input type="number" min="0" step="0.01"
-                              value={(formData as any)[key] || ''}
+                              value={formData[key] || ''}
                               placeholder="0"
                               onChange={e => setFormData({ ...formData, [key]: parseFloat(e.target.value) || 0 })}
                               className="w-full bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl px-3 py-2.5 text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-blue-500" />
@@ -1904,7 +1946,11 @@ export default function LeaseQuotationsPage() {
                     </div>
                     <button
                       disabled={processingActionId === viewQuotation.id}
-                      onClick={() => handleWorkflowAction(viewQuotation.id, getQuotationAction(viewQuotation.status)!.label)}
+                      onClick={() => {
+                        const action = getQuotationAction(viewQuotation.status)!;
+                        setCommentAction({ id: viewQuotation.id, label: action.label, targetStatus: action.nextStatus });
+                        setShowCommentModal(true);
+                      }}
                       className="px-5 py-2.5 rounded-xl bg-blue-600 text-[var(--text-main)] font-semibold text-sm hover:bg-blue-500 transition-all disabled:opacity-50 flex items-center gap-2 flex-shrink-0"
                     >
                       {processingActionId === viewQuotation.id
@@ -1927,9 +1973,12 @@ export default function LeaseQuotationsPage() {
                 <div className="text-[var(--text-faint)] text-sm animate-pulse py-2">Loading history...</div>
               ) : quotationHistory.length > 0 && (
                 <div>
-                  <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Approval History</h4>
+                  <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <History className="h-3.5 w-3.5" />
+                    Approval History
+                  </h4>
                   <div className="space-y-2">
-                    {quotationHistory.map((h: any, idx: number) => (
+                    {quotationHistory.map((h, idx) => (
                       <div key={idx} className="flex items-start gap-3 p-3 bg-[var(--bg-surface-hover)]/30 border border-[var(--border-subtle)] rounded-xl">
                         <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${h.action === 'APPROVE' ? 'bg-emerald-400' : h.action === 'REJECT' ? 'bg-rose-400' : 'bg-blue-400'}`} />
                         <div className="flex-1">
@@ -1937,7 +1986,7 @@ export default function LeaseQuotationsPage() {
                             <p className="text-sm font-semibold text-[var(--text-main)]">{h.action ?? h.event ?? '-'}</p>
                             <span className="text-xs text-[var(--text-faint)]">{h.createdAt ? new Date(h.createdAt).toLocaleDateString() : '-'}</span>
                           </div>
-                          {h.comments && <p className="text-xs text-[var(--text-muted)] mt-0.5 italic">"{h.comments}"</p>}
+                          {h.comments && <p className="text-xs text-[var(--text-muted)] mt-0.5 italic">&ldquo;{h.comments}&rdquo;</p>}
                           {h.approverName && <p className="text-xs text-[var(--text-faint)] mt-0.5">By: {h.approverName}</p>}
                         </div>
                       </div>
@@ -1959,6 +2008,70 @@ export default function LeaseQuotationsPage() {
         </div>
       )}
       {showWorkflow && <WorkflowModal onClose={() => setShowWorkflow(false)} />}
+
+      {/*  Workflow Action Comment Modal  */}
+      {showCommentModal && commentAction && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-md flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-subtle)]">
+              <h3 className="text-lg font-bold text-[var(--text-main)] flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-blue-400" />
+                {commentAction.label}
+              </h3>
+              <button
+                onClick={() => { setShowCommentModal(false); setCommentAction(null); setWorkflowComment(''); }}
+                className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] transition-all"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Comments (optional)</label>
+                <textarea
+                  value={workflowComment}
+                  onChange={e => setWorkflowComment(e.target.value)}
+                  rows={3}
+                  placeholder="Add a note for this action..."
+                  className="w-full px-3 py-2 rounded-xl bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:border-blue-500 focus:outline-none resize-none"
+                />
+              </div>
+              {commentAction.label === 'Submit Quotation' && (
+                <div>
+                  <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">
+                    Recipient Email <span className="text-[var(--text-faint)]">(leave blank to use lessee&apos;s email)</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={recipientEmail}
+                    onChange={e => setRecipientEmail(e.target.value)}
+                    placeholder="customer@company.com"
+                    className="w-full px-3 py-2 rounded-xl bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:border-blue-500 focus:outline-none"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t border-[var(--border-subtle)] flex justify-end gap-2">
+              <button
+                onClick={() => { setShowCommentModal(false); setCommentAction(null); setWorkflowComment(''); }}
+                className="px-4 py-2 rounded-xl border border-[var(--border-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] font-medium text-sm transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={processingActionId === commentAction.id}
+                onClick={() => handleWorkflowAction(commentAction.id, commentAction.label, commentAction.targetStatus, workflowComment, recipientEmail || undefined)}
+                className="px-5 py-2 rounded-xl bg-blue-600 text-[var(--text-main)] font-semibold text-sm hover:bg-blue-500 disabled:opacity-50 flex items-center gap-2 transition-all"
+              >
+                {processingActionId === commentAction.id && (
+                  <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                )}
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

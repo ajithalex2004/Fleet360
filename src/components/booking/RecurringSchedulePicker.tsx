@@ -3,14 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Repeat,
-  Calendar,
-  Clock,
-  CheckCircle2,
-  DollarSign,
   Sparkles,
-  Layers,
-  ChevronRight,
-  ShieldCheck,
   CalendarDays,
 } from 'lucide-react';
 import {
@@ -166,8 +159,22 @@ export function RecurringSchedulePicker({
                 <option value="DAILY">Daily (Mon - Fri)</option>
                 <option value="BI_WEEKLY">Bi-Weekly (Every 2 Weeks)</option>
                 <option value="MONTHLY">Monthly Standing Schedule</option>
-                <option value="SCHOOL_TERM">Academic School Term</option>
+                {/* Academic terms only make sense for school-bus enrollment */}
+                {serviceType === 'SCHOOL_BUS' && (
+                  <option value="SCHOOL_TERM">Academic School Term</option>
+                )}
               </select>
+            </div>
+
+            <div>
+              <label className="text-slate-300 block mb-1 font-semibold">Standing Contract Start Date</label>
+              <input
+                type="date"
+                value={startDate}
+                min={new Date().toISOString().split('T')[0]}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="w-full bg-slate-950 border border-white/15 rounded-xl px-3 py-2 text-white font-mono"
+              />
             </div>
 
             <div>
@@ -193,6 +200,21 @@ export function RecurringSchedulePicker({
                 <option value="36">36 Runs (3 Months Standing)</option>
                 <option value="48">48 Runs (4 Months Standing)</option>
               </select>
+            </div>
+
+            <div>
+              <label className="text-slate-300 block mb-1 font-semibold">Standing Contract Discount</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  min={0}
+                  max={40}
+                  value={standingDiscountPercent}
+                  onChange={(e) => setStandingDiscountPercent(Math.max(0, Math.min(40, Number(e.target.value))))}
+                  className="w-full bg-slate-950 border border-white/15 rounded-xl px-3 py-2 pr-7 text-white font-mono"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">%</span>
+              </div>
             </div>
           </div>
 

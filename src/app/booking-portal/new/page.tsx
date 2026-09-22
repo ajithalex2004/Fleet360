@@ -10,15 +10,8 @@ import {
   Plane,
   ShieldCheck,
   FileCheck,
-  Calendar,
   Clock,
   Sparkles,
-  Navigation,
-  Gauge,
-  DollarSign,
-  CheckCircle2,
-  ArrowRightLeft,
-  Layers,
 } from 'lucide-react';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { InteractiveRoutePicker } from '@/components/booking/InteractiveRoutePicker';
@@ -1293,6 +1286,70 @@ function NewBookingInner() {
                     cargoTypeKey="FROZEN_PHARMA"
                     onAlertTriggered={(alertMsg) => {
                       onChange('coldChainAlert', alertMsg);
+                    }}
+                  />
+                )}
+
+                {/* Multi-Stop Route Optimizer — plans intermediate pickup/dropoff
+                    legs beyond the single origin/destination above, with LTL
+                    consolidation pooling. */}
+                {serviceType === 'LOGISTICS' && (
+                  <MultiStopRoutePicker
+                    initialOrigin={(form.origin as string) || undefined}
+                    initialDestination={(form.destination as string) || undefined}
+                    baseFareAed={Number(form.fareSubtotal) || 550}
+                    onRouteChange={(result) => {
+                      onChange('multiStopDistanceKm', result.totalDistanceKm);
+                      onChange('multiStopDurationMins', result.totalDurationMins);
+                      onChange('multiStopSalikTollsAed', result.totalSalikTollsAed);
+                      onChange('multiStopTotalPallets', result.totalPallets);
+                      onChange('multiStopTotalWeightTons', result.totalWeightTons);
+                      onChange('multiStopCo2EmissionsKg', result.co2EmissionsKg);
+                      if (result.ltlConsolidation.isEligible) {
+                        onChange('ltlConsolidationEligible', true);
+                        onChange('ltlConsolidationDiscountPercent', result.ltlConsolidation.discountPercent);
+                      }
+                    }}
+                  />
+                )}
+
+                {/* Digital eBOL (Electronic Bill of Lading) — pallet-level scan
+                    verification, generated at intake for the dispatch console. */}
+                {serviceType === 'LOGISTICS' && (
+                  <DigitalEbolScanner
+                    shipperName={(form.companyName as string) || undefined}
+                    consigneeName={(form.destination as string) || undefined}
+                    onEbolGenerated={(ebol) => {
+                      onChange('ebolNumber', ebol.ebolNumber);
+                      onChange('ebolIssuedAt', ebol.issuedAt);
+                      onChange('ebolTotalPallets', ebol.totalPallets);
+                    }}
+                  />
+                )}
+
+                {/* Driver Handover / Electronic Proof-of-Delivery — pre-configured
+                    here so ops can preview the delivery-completion flow the
+                    assigned driver will run against this shipment's eBOL. */}
+                {serviceType === 'LOGISTICS' && (
+                  <DriverHandoverEpod
+                    ebolNumber={(form.ebolNumber as string) || undefined}
+                    consigneeName={(form.destination as string) || undefined}
+                    onEpodCompleted={(epod) => {
+                      onChange('epodNumber', epod.epodNumber);
+                      onChange('epodDeliveredAt', epod.deliveredAt);
+                    }}
+                  />
+                )}
+
+                {/* Bulk Consignment Upload — batch-dispatch a multi-store /
+                    multi-consignment manifest instead of a single shipment. */}
+                {serviceType === 'LOGISTICS' && (
+                  <BulkConsignmentUploader
+                    onBatchDispatched={(result) => {
+                      onChange('bulkManifestNumber', result.masterManifestNumber);
+                      onChange('bulkTotalPallets', result.totalPallets);
+                      onChange('bulkTotalWeightKg', result.totalWeightKg);
+                      onChange('bulkSummaryPricingAed', result.summaryPricingAed);
                     }}
                   />
                 )}

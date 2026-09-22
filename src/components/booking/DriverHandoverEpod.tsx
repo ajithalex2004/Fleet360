@@ -1,21 +1,15 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   Truck,
   Camera,
   CheckCircle2,
   ShieldCheck,
-  Building2,
   FileCheck,
   Signature,
-  MapPin,
-  Clock,
-  Download,
   Printer,
-  Sparkles,
   ThermometerSnowflake,
-  AlertTriangle,
 } from 'lucide-react';
 import {
   DeliveryExecutionStatus,
@@ -65,11 +59,23 @@ export function DriverHandoverEpod({
     },
   ]);
 
-  // Signature state
-  const [signed, setSigned] = useState(true);
-  const [signatureSvg, setSignatureSvg] = useState(
-    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="60"><path d="M 10 35 Q 50 10 90 35 T 180 30" stroke="%23f97316" stroke-width="3" fill="none"/></svg>'
-  );
+  // Signature state — the receiver must explicitly sign before the e-POD
+  // can be sealed; the "Photo & e-Sign Verified" badge above is only true
+  // once this has actually happened.
+  const DEFAULT_SIGNATURE_SVG =
+    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="60"><path d="M 10 35 Q 50 10 90 35 T 180 30" stroke="%23f97316" stroke-width="3" fill="none"/></svg>';
+  const [signed, setSigned] = useState(false);
+  const [signatureSvg, setSignatureSvg] = useState('');
+
+  const handleSignNow = () => {
+    setSigned(true);
+    setSignatureSvg(DEFAULT_SIGNATURE_SVG);
+  };
+
+  const handleClearSignature = () => {
+    setSigned(false);
+    setSignatureSvg('');
+  };
 
   // Generated EPOD
   const [generatedEpod, setGeneratedEpod] = useState<DigitalEPODRecord | null>(null);
@@ -123,8 +129,12 @@ export function DriverHandoverEpod({
             Driver Mobile Handover & Electronic Proof of Delivery (e-POD)
           </span>
         </div>
-        <span className="text-[10px] bg-emerald-500/10 text-emerald-300 font-mono font-bold px-2 py-0.5 rounded-full border border-emerald-500/20">
-          Photo & e-Sign Verified
+        <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
+          signed
+            ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
+            : 'bg-amber-500/10 text-amber-300 border-amber-500/20'
+        }`}>
+          {signed ? 'Photo & e-Sign Verified' : 'Awaiting Signature'}
         </span>
       </div>
 
@@ -182,32 +192,52 @@ export function DriverHandoverEpod({
       {/* Main Handover Workspace */}
       {!generatedEpod ? (
         <form onSubmit={handleCompleteHandover} className="space-y-4">
-          {/* Pallet Condition & Temperature Checklist */}
+          {/* Pallet Condition & Temperature Checklist — tap a pallet's
+              condition badge to cycle it if the driver finds an issue
+              (e.g. a torn wrap or a rejected/damaged load) during handover. */}
           <div className="bg-slate-950/60 border border-white/10 rounded-xl p-3.5 space-y-2.5">
             <span className="text-xs font-bold text-slate-200 block">
               1. Receiving Pallet Condition & Cold-Chain Probe Verification:
             </span>
 
             <div className="space-y-2">
-              {pallets.map((item, idx) => (
-                <div
-                  key={item.palletId}
-                  className="bg-slate-900 border border-white/5 rounded-lg p-2.5 flex items-center justify-between text-xs"
-                >
-                  <div className="space-y-0.5">
-                    <span className="font-bold text-white block">
-                      {idx + 1}. {item.palletId}
-                    </span>
-                    <span className="text-[10px] text-blue-300 flex items-center gap-1 font-mono">
-                      <ThermometerSnowflake className="w-3 h-3 text-cyan-400" />
-                      {item.temperatureVerified}
-                    </span>
+              {pallets.map((item, idx) => {
+                const conditionMeta: Record<PalletDeliveryCondition['condition'], { label: string; cls: string }> = {
+                  INTACT_PERFECT:   { label: '✓ Condition Intact & Sealed', cls: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' },
+                  MINOR_TEAR:       { label: '⚠ Minor Tear / Wrap Damage',  cls: 'bg-amber-500/10 text-amber-300 border-amber-500/20' },
+                  DAMAGED_REJECTED: { label: '✕ Damaged — Rejected',        cls: 'bg-rose-500/10 text-rose-300 border-rose-500/20' },
+                };
+                const meta = conditionMeta[item.condition];
+                const cycleCondition = () => {
+                  const order: PalletDeliveryCondition['condition'][] = ['INTACT_PERFECT', 'MINOR_TEAR', 'DAMAGED_REJECTED'];
+                  const next = order[(order.indexOf(item.condition) + 1) % order.length];
+                  setPallets((prev) => prev.map((p, i) => (i === idx ? { ...p, condition: next } : p)));
+                };
+                return (
+                  <div
+                    key={item.palletId}
+                    className="bg-slate-900 border border-white/5 rounded-lg p-2.5 flex items-center justify-between text-xs"
+                  >
+                    <div className="space-y-0.5">
+                      <span className="font-bold text-white block">
+                        {idx + 1}. {item.palletId}
+                      </span>
+                      <span className="text-[10px] text-blue-300 flex items-center gap-1 font-mono">
+                        <ThermometerSnowflake className="w-3 h-3 text-cyan-400" />
+                        {item.temperatureVerified}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={cycleCondition}
+                      title="Tap to change pallet condition"
+                      className={`text-[10px] px-2 py-0.5 rounded border font-bold transition ${meta.cls}`}
+                    >
+                      {meta.label}
+                    </button>
                   </div>
-                  <span className="text-[10px] bg-emerald-500/10 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/20 font-bold">
-                    ✓ Condition Intact & Sealed
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -275,31 +305,50 @@ export function DriverHandoverEpod({
             <div className="border border-white/15 rounded-xl bg-slate-900 p-3 space-y-1.5">
               <div className="flex justify-between text-[10px] text-slate-400">
                 <span>Sign on glass (Consignee Receiving Signature):</span>
-                <span className="text-emerald-400 font-mono">SHA-256 Captured</span>
+                {signed && <span className="text-emerald-400 font-mono">SHA-256 Captured</span>}
               </div>
-              <div className="h-16 bg-slate-950 rounded-lg border border-dashed border-white/20 flex items-center justify-center relative">
-                <svg className="w-48 h-12">
-                  <path
-                    d="M 10 35 Q 50 10 90 35 T 180 30"
-                    stroke="#f97316"
-                    strokeWidth="3"
-                    fill="none"
-                  />
-                </svg>
-                <span className="absolute bottom-1 right-2 text-[9px] text-slate-500 font-mono">
-                  Rashid Al-Mansoori (Signed)
-                </span>
-              </div>
+              {signed ? (
+                <div className="h-16 bg-slate-950 rounded-lg border border-dashed border-white/20 flex items-center justify-center relative">
+                  <svg className="w-48 h-12">
+                    <path
+                      d="M 10 35 Q 50 10 90 35 T 180 30"
+                      stroke="#f97316"
+                      strokeWidth="3"
+                      fill="none"
+                    />
+                  </svg>
+                  <span className="absolute bottom-1 right-2 text-[9px] text-slate-500 font-mono">
+                    {recipientName} (Signed)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleClearSignature}
+                    className="absolute top-1 right-1.5 text-[9px] text-slate-500 hover:text-rose-300"
+                  >
+                    Clear
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleSignNow}
+                  className="w-full h-16 bg-slate-950 rounded-lg border border-dashed border-amber-500/40 flex items-center justify-center gap-2 text-amber-300 text-xs font-semibold hover:border-amber-400 hover:bg-slate-900 transition-colors"
+                >
+                  <Signature className="w-4 h-4" />
+                  Tap to capture receiver signature
+                </button>
+              )}
             </div>
           </div>
 
           <button
             type="submit"
-            disabled={submitting}
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 transition-all"
+            disabled={submitting || !signed}
+            title={!signed ? 'The receiver must sign before the e-POD can be sealed' : undefined}
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <FileCheck className="w-4 h-4" />
-            {submitting ? 'Sealing e-POD…' : 'Seal e-POD Certificate & Release Final VAT Invoice →'}
+            {signed ? <FileCheck className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+            {submitting ? 'Sealing e-POD…' : signed ? 'Seal e-POD Certificate & Release Final VAT Invoice →' : 'Signature Required'}
           </button>
         </form>
       ) : (

@@ -2,32 +2,19 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  Truck,
   Mail,
-  Phone,
   Fingerprint,
-  ShieldCheck,
   Building2,
-  MapPin,
   Clock,
-  ArrowRight,
-  CheckCircle2,
-  Sparkles,
   MessageSquare,
-  FileText,
-  DollarSign,
   Lock,
   Eye,
   EyeOff,
-  KeyRound,
-  RefreshCw,
   Smartphone,
   AlertCircle,
 } from 'lucide-react';
 import { TenantMobileConfig } from '@/app/api/tenant/mobile-config/route';
-import { InteractiveRoutePicker } from '@/components/booking/InteractiveRoutePicker';
 import { MultiStopRoutePicker } from '@/components/booking/MultiStopRoutePicker';
-import { AssetAvailabilitySelector } from '@/components/booking/AssetAvailabilitySelector';
 import { InstantPricingCostCenter } from '@/components/booking/InstantPricingCostCenter';
 import { OmnichannelNotificationPreferences } from '@/components/booking/OmnichannelNotificationPreferences';
 import { DigitalKycUaePass } from '@/components/booking/DigitalKycUaePass';
@@ -44,12 +31,69 @@ type AuthStep =
   | 'RETURNING_USER_LOGIN' // 1-Touch Biometrics or Password Login
   | 'BOOKING_PORTAL'; // Authenticated in Freight Portal
 
+interface RosterUser {
+  id: string;
+  name: string;
+  email: string;
+  mobileNumber: string;
+  role: string;
+  costCenter?: string;
+}
+
+interface RosterClient {
+  id: string;
+  name: string;
+  domain?: string;
+  costCenter?: string;
+  discountPercent?: number;
+}
+
+interface BookingFormState {
+  serviceType: string;
+  requestorName: string;
+  requestorEmail: string;
+  contactPhone: string;
+  cargoType: string;
+  vehicleCategory: string;
+  weightTons: string;
+  palletCount: string;
+  temperatureReq: string;
+  origin: string;
+  destination: string;
+  distanceKm: number;
+  durationMins: number;
+  salikTollsAed: number;
+  fareSubtotal: number;
+  vatAmount: number;
+  totalFareAed: number;
+  costCenter: string;
+  billingMethod: string;
+  budgetStatus: string;
+  uaePassVerified: boolean;
+  emiratesId: string;
+  // Populated incrementally by the individual booking-flow widgets below.
+  bulkBatchManifestNo?: string;
+  bulkBatchTotalPallets?: number;
+  bulkBatchTotalRoutes?: number;
+  recurringScheduleType?: string;
+  recurringFrequency?: string;
+  recurringTotalTrips?: number;
+  recurringTotalContractAed?: number;
+  notificationChannels?: string;
+  signatureHash?: string;
+  ebolNumber?: string;
+  uaeCustomsDeclarationNo?: string;
+  epodNumber?: string;
+  epodConfirmed?: boolean;
+  coldChainAlert?: string;
+}
+
 export function UniversalMobileBookingApp() {
   // Auth state machine
   const [authStep, setAuthStep] = useState<AuthStep>('IDENTIFIER_INPUT');
   const [identifier, setIdentifier] = useState('fatima@ein360.ae'); // email or mobile
-  const [rosterUser, setRosterUser] = useState<any>(null);
-  const [rosterClient, setRosterClient] = useState<any>(null);
+  const [rosterUser, setRosterUser] = useState<RosterUser | null>(null);
+  const [rosterClient, setRosterClient] = useState<RosterClient | null>(null);
   const [channelsDispatched, setChannelsDispatched] = useState<string[]>(['EMAIL', 'WHATSAPP', 'SMS']);
   const [enableSmsAuth, setEnableSmsAuth] = useState(true);
 
@@ -58,6 +102,13 @@ export function UniversalMobileBookingApp() {
   const [otpError, setOtpError] = useState<string | null>(null);
   const [otpTimer, setOtpTimer] = useState(60);
   const [verifyingOtp, setVerifyingOtp] = useState(false);
+
+  // Resend-OTP countdown: ticks otpTimer down to 0 while the OTP screen is active.
+  useEffect(() => {
+    if (authStep !== 'DUAL_CHANNEL_OTP' || otpTimer <= 0) return;
+    const id = setTimeout(() => setOtpTimer((t) => t - 1), 1000);
+    return () => clearTimeout(id);
+  }, [authStep, otpTimer]);
 
   // Password Setup state
   const [password, setPassword] = useState('FleetSecure2026!');
@@ -71,7 +122,7 @@ export function UniversalMobileBookingApp() {
 
   // Freight Booking state
   const [config, setConfig] = useState<TenantMobileConfig | null>(null);
-  const [form, setForm] = useState<Record<string, any>>({
+  const [form, setForm] = useState<BookingFormState>({
     serviceType: 'LOGISTICS',
     requestorName: 'Fatima Al-Nuaimi',
     requestorEmail: 'fatima@ein360.ae',
@@ -121,7 +172,7 @@ export function UniversalMobileBookingApp() {
       setEnableSmsAuth(json.enableSmsAuth ?? true);
       setAuthStep('DUAL_CHANNEL_OTP');
       setOtpTimer(60);
-    } catch (err) {
+    } catch {
       setOtpError('Failed to dispatch OTP. Please check your connection.');
     }
   };
@@ -147,7 +198,7 @@ export function UniversalMobileBookingApp() {
 
       // Proceed to Password Creation Gate
       setAuthStep('PASSWORD_CREATION_GATE');
-    } catch (err) {
+    } catch {
       setOtpError('Verification failed');
     } finally {
       setVerifyingOtp(false);
@@ -377,15 +428,19 @@ export function UniversalMobileBookingApp() {
                 Synchronized OTP Sent To:
               </span>
               <div className="space-y-1.5 text-xs text-slate-300">
-                <div className="flex items-center gap-2">
-                  <Mail className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Work Email: <strong className="text-white">{rosterUser.email}</strong></span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>WhatsApp Cloud: <strong className="text-white">{rosterUser.mobileNumber}</strong></span>
-                </div>
-                {enableSmsAuth && (
+                {channelsDispatched.includes('EMAIL') && (
+                  <div className="flex items-center gap-2">
+                    <Mail className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Work Email: <strong className="text-white">{rosterUser.email}</strong></span>
+                  </div>
+                )}
+                {channelsDispatched.includes('WHATSAPP') && (
+                  <div className="flex items-center gap-2">
+                    <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>WhatsApp Cloud: <strong className="text-white">{rosterUser.mobileNumber}</strong></span>
+                  </div>
+                )}
+                {enableSmsAuth && channelsDispatched.includes('SMS') && (
                   <div className="flex items-center gap-2">
                     <Smartphone className="w-3.5 h-3.5 text-amber-400" />
                     <span>Cellular SMS: <strong className="text-white">{rosterUser.mobileNumber}</strong></span>
@@ -441,9 +496,17 @@ export function UniversalMobileBookingApp() {
               <button
                 type="button"
                 onClick={handleSendOtp}
-                className="text-orange-400 hover:text-orange-300"
+                disabled={otpTimer > 0}
+                className="text-orange-400 hover:text-orange-300 disabled:text-slate-500 disabled:cursor-not-allowed flex items-center gap-1"
               >
-                Resend OTP ↺
+                {otpTimer > 0 ? (
+                  <>
+                    <Clock className="w-3 h-3" />
+                    Resend in {otpTimer}s
+                  </>
+                ) : (
+                  'Resend OTP ↺'
+                )}
               </button>
             </div>
           </div>
@@ -646,8 +709,9 @@ export function UniversalMobileBookingApp() {
                 <button
                   type="button"
                   onClick={() => setAuthStep('RETURNING_USER_LOGIN')}
-                  className="text-[10px] text-slate-400 hover:text-white border border-white/10 rounded-lg px-2 py-1"
+                  className="text-[10px] text-slate-400 hover:text-white border border-white/10 rounded-lg px-2 py-1 flex items-center gap-1"
                 >
+                  <Lock className="w-3 h-3" />
                   Lock
                 </button>
               </div>
