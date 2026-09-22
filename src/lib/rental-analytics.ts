@@ -138,7 +138,14 @@ function round(n: number, dp = 2): number {
 
 export function computeRentalAnalytics(input: AnalyticsInput): AnalyticsResult {
   const { periodFrom, periodTo, bookings, vehicles } = input;
-  const invoices = input.invoices ?? [];
+  // `input.invoices` (actual AnalyticsInvoice rows: totalAmount/paidAmount)
+  // is accepted but never consumed — every revenue figure below (totalRevenue,
+  // revPAC, ADR, per-category/channel revenue) is derived from booking rate
+  // estimates, not actual invoiced/collected amounts. Whether the report
+  // should also surface a real collected-vs-invoiced reconciliation (and
+  // where that would live in AnalyticsResult) is a reporting-design call,
+  // so this is flagged rather than wired up.
+  void input.invoices;
   const damages = input.damageClaims ?? [];
 
   const daysInPeriod = Math.max(1, Math.ceil((periodTo.getTime() - periodFrom.getTime()) / 86400000));

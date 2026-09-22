@@ -6,7 +6,15 @@
 import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer';
 import type { Lang } from '../theme';
 import { colors, spacing, typography, fontFor, dirFor, formatMoney, formatDate } from '../theme';
-import { t } from '../i18n';
+import { t, pdfStrings, type PdfStringKey } from '../i18n';
+
+// `t()` throws (rather than returning undefined) for a key that isn't in
+// pdfStrings, so a bare `t(key, lang) ?? raw` fallback never actually
+// engages for an unmapped transaction type. Check existence first — same
+// pattern as receipt.tsx's translateOrRaw().
+function translateOrRaw(key: string, lang: Lang, raw: string): string {
+  return key in pdfStrings ? t(key as PdfStringKey, lang) : raw;
+}
 
 export type StatementTxnType = 'INVOICE' | 'PAYMENT';
 
@@ -132,7 +140,7 @@ export function StatementPdf({ data, lang }: { data: StatementPdfData; lang: Lan
               data.transactions.map((tx, i) => (
                 <View key={i} style={[s.tableRow, i % 2 === 1 ? s.tableRowAlt : {}]}>
                   <Text style={[s.cellText, { fontFamily: font, flex: 1.5 }]}>{formatDate(tx.date, lang)}</Text>
-                  <Text style={[s.cellText, { fontFamily: font, flex: 1.5 }]}>{t(`txn_${tx.type}` as any, lang) ?? tx.type}</Text>
+                  <Text style={[s.cellText, { fontFamily: font, flex: 1.5 }]}>{translateOrRaw(`txn_${tx.type}`, lang, tx.type)}</Text>
                   <Text style={[s.cellText, { fontFamily: font, flex: 2 }]}>{tx.reference}{tx.description ? ` · ${tx.description}` : ''}</Text>
                   <Text style={[s.cellAmount, { fontFamily: font, flex: 1.2 }]}>{tx.debit ? formatMoney(tx.debit, ccy) : '—'}</Text>
                   <Text style={[s.cellAmount, { fontFamily: font, flex: 1.2 }]}>{tx.credit ? formatMoney(tx.credit, ccy) : '—'}</Text>

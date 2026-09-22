@@ -11,7 +11,6 @@
  */
 
 import type { Prisma } from '@prisma/client';
-import { raiseAlert } from '@/lib/alerts/raise';
 
 export const DEFAULT_APPROACH_RADIUS_M = 800;
 export const DEFAULT_ARRIVAL_RADIUS_M = 100;
@@ -221,10 +220,13 @@ export async function evaluateAndRecordStopVisits(
     const remainingMinutes = Math.round((distKm / avgSpeed) * 60) + 2;
     const estimatedArrival = new Date(ping.occurredAt.getTime() + remainingMinutes * 60 * 1000);
 
+    // TripSchedule's estimate field is `arrivalTime` (per its schema
+    // comment: "arrivalTime is an estimate" vs. the separate hard-deadline
+    // `latestArrivalTime`) — there is no `estimatedArrival` column.
     await tx.tripSchedule.update({
       where: { id: scheduleId },
       data: {
-        estimatedArrival,
+        arrivalTime: estimatedArrival,
       },
     }).catch(() => {});
   }

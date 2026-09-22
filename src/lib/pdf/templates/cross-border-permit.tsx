@@ -83,7 +83,7 @@ function PermitPage({ data, lang }: PermitProps) {
     .filter(Boolean).join(' ');
 
   return (
-    <Page size="A4" style={[s.page, { fontFamily: font }]}>
+    <Page size="A4" style={[s.page, { fontFamily: font, direction: dir }]}>
       <View style={s.header}>
         <View>
           <Text style={s.brandName}>{data.vendor.name}</Text>

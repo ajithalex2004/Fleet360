@@ -135,7 +135,7 @@ function ManifestPage({ data, lang }: PageProps) {
     .filter(Boolean).join(' ');
 
   return (
-    <Page size="A4" orientation="landscape" style={[s.page, { fontFamily: font }]}>
+    <Page size="A4" orientation="landscape" style={[s.page, { fontFamily: font, direction: dir }]}>
       <View style={s.header}>
         <View>
           <Text style={s.brandName}>{data.vendor.name}</Text>
