@@ -4,7 +4,6 @@ import {
   MANAGED_SCHEMAS,
   RUNTIME_ROLE,
   verifyRolePrivileges,
-  verifySchemaIntegrity,
   verifyDeterministicDualTenantRls,
 } from '../../scripts/verify-fresh-install-postflight.cjs';
 
@@ -31,7 +30,7 @@ describe('Post-flight verification manifest and privilege audits', () => {
   });
 
   it('verifies Step 12 checks finance_payments object identity, absence of public shadow, and RLS', async () => {
-    const step12 = POSTFLIGHT_MANIFEST.find((s: any) => s.step === 12)!;
+    const step12 = POSTFLIGHT_MANIFEST.find((s) => s.step === 12)!;
     expect(step12).toBeTruthy();
     expect(step12.migration).toBe('20260910000005_resolve_finance_payments_shadow');
 
@@ -41,7 +40,7 @@ describe('Post-flight verification manifest and privilege audits', () => {
         { unqual_oid: 11111, fin_oid: 22222, pub_oid: null },
       ]),
     };
-    await expect(step12.check(mockMismatchedOids as any)).rejects.toThrow(
+    await expect(step12.check(mockMismatchedOids)).rejects.toThrow(
       'Unqualified finance_payments (OID 11111) resolves to a different relation than finance.finance_payments (OID 22222)'
     );
 
@@ -51,7 +50,7 @@ describe('Post-flight verification manifest and privilege audits', () => {
         { unqual_oid: 22222, fin_oid: 22222, pub_oid: 33333 },
       ]),
     };
-    await expect(step12.check(mockShadowExists as any)).rejects.toThrow(
+    await expect(step12.check(mockShadowExists)).rejects.toThrow(
       'Shadow relation "public.finance_payments" still exists'
     );
 
@@ -62,11 +61,11 @@ describe('Post-flight verification manifest and privilege audits', () => {
         .mockResolvedValueOnce([{ unqual_oid: 22222, fin_oid: 22222, pub_oid: null }])
         .mockResolvedValueOnce([{ relrowsecurity: true }]),
     };
-    await expect(step12.check(mockSuccess as any)).resolves.toBeUndefined();
+    await expect(step12.check(mockSuccess)).resolves.toBeUndefined();
   });
 
   it('verifies Step 3 asserts latest_pickup and required_arrival_time (not latest_dropoff)', async () => {
-    const step3 = POSTFLIGHT_MANIFEST.find((s: any) => s.step === 3)!;
+    const step3 = POSTFLIGHT_MANIFEST.find((s) => s.step === 3)!;
     expect(step3).toBeTruthy();
 
     const mockPrisma = {
@@ -78,11 +77,11 @@ describe('Post-flight verification manifest and privilege audits', () => {
           { column_name: 'required_arrival_time' },
         ]),
     };
-    await expect(step3.check(mockPrisma as any)).resolves.toBeUndefined();
+    await expect(step3.check(mockPrisma)).resolves.toBeUndefined();
   });
 
   it('verifies Step 8 validates partial unique index on (tenant_id, agreement_no) with predicate', async () => {
-    const step8 = POSTFLIGHT_MANIFEST.find((s: any) => s.step === 8)!;
+    const step8 = POSTFLIGHT_MANIFEST.find((s) => s.step === 8)!;
     expect(step8).toBeTruthy();
 
     const mockPrisma = {
@@ -97,7 +96,7 @@ describe('Post-flight verification manifest and privilege audits', () => {
           },
         ]),
     };
-    await expect(step8.check(mockPrisma as any)).resolves.toBeUndefined();
+    await expect(step8.check(mockPrisma)).resolves.toBeUndefined();
   });
 
   it('rejects runtime role if rolsuper is true', async () => {
@@ -112,7 +111,7 @@ describe('Post-flight verification manifest and privilege audits', () => {
       ]),
     };
 
-    await expect(verifyRolePrivileges(mockPrisma as any, RUNTIME_ROLE)).rejects.toThrow(
+    await expect(verifyRolePrivileges(mockPrisma, RUNTIME_ROLE)).rejects.toThrow(
       'CRITICAL SECURITY FAILURE: Runtime role "fleet360_app" has rolsuper=true'
     );
   });
@@ -129,7 +128,7 @@ describe('Post-flight verification manifest and privilege audits', () => {
       ]),
     };
 
-    await expect(verifyRolePrivileges(mockPrisma as any, RUNTIME_ROLE)).rejects.toThrow(
+    await expect(verifyRolePrivileges(mockPrisma, RUNTIME_ROLE)).rejects.toThrow(
       'CRITICAL SECURITY FAILURE: Runtime role "fleet360_app" has rolbypassrls=true'
     );
   });
@@ -146,7 +145,7 @@ describe('Post-flight verification manifest and privilege audits', () => {
       ]),
     };
 
-    await expect(verifyRolePrivileges(mockPrisma as any, RUNTIME_ROLE)).rejects.toThrow(
+    await expect(verifyRolePrivileges(mockPrisma, RUNTIME_ROLE)).rejects.toThrow(
       'Runtime role "fleet360_app" cannot log in'
     );
   });
@@ -169,7 +168,7 @@ describe('Post-flight verification manifest and privilege audits', () => {
         ]), // recursive role tree query
     };
 
-    await expect(verifyRolePrivileges(mockPrisma as any, RUNTIME_ROLE)).rejects.toThrow(
+    await expect(verifyRolePrivileges(mockPrisma, RUNTIME_ROLE)).rejects.toThrow(
       'SECURITY VIOLATION: Runtime role "fleet360_app" inherits superuser via role "grandparent_admin"'
     );
   });
@@ -192,7 +191,7 @@ describe('Post-flight verification manifest and privilege audits', () => {
         ]), // owned objects query
     };
 
-    await expect(verifyRolePrivileges(mockPrisma as any, RUNTIME_ROLE)).rejects.toThrow(
+    await expect(verifyRolePrivileges(mockPrisma, RUNTIME_ROLE)).rejects.toThrow(
       'SECURITY VIOLATION: Runtime role "fleet360_app" owns 1 database object(s)'
     );
   });
@@ -221,7 +220,7 @@ describe('Post-flight verification manifest and privilege audits', () => {
         .mockResolvedValueOnce([{ schema_name: 'public' }]), // CREATE on public!
     };
 
-    await expect(verifyRolePrivileges(mockPrisma as any, RUNTIME_ROLE)).rejects.toThrow(
+    await expect(verifyRolePrivileges(mockPrisma, RUNTIME_ROLE)).rejects.toThrow(
       'SECURITY VIOLATION: Runtime role "fleet360_app" has CREATE privilege on schema(s): public'
     );
   });
@@ -251,7 +250,7 @@ describe('Post-flight verification manifest and privilege audits', () => {
         .mockResolvedValueOnce([{ i: false, u: false, d: false, t: true }]), // TRUNCATE on _prisma_migrations!
     };
 
-    await expect(verifyRolePrivileges(mockPrisma as any, RUNTIME_ROLE)).rejects.toThrow(
+    await expect(verifyRolePrivileges(mockPrisma, RUNTIME_ROLE)).rejects.toThrow(
       'SECURITY VIOLATION: Runtime role "fleet360_app" has write or truncate privileges on _prisma_migrations table'
     );
   });
@@ -272,7 +271,7 @@ describe('Post-flight verification manifest and privilege audits', () => {
   it('executes multi-domain probe transaction and requires sentinel rollback', async () => {
     let tenantContext = '';
     const mockTx = {
-      $queryRawUnsafe: vi.fn().mockImplementation(async (sql: string, ...args: any[]) => {
+      $queryRawUnsafe: vi.fn().mockImplementation(async (sql: string, ...args: unknown[]) => {
         if (sql.includes('current_user')) {
           return [
             {
@@ -300,9 +299,9 @@ describe('Post-flight verification manifest and privilege audits', () => {
         }
         return [];
       }),
-      $executeRawUnsafe: vi.fn().mockImplementation(async (sql: string, ...args: any[]) => {
+      $executeRawUnsafe: vi.fn().mockImplementation(async (sql: string, ...args: unknown[]) => {
         if (sql.includes('set_config')) {
-          tenantContext = args[0] || '';
+          tenantContext = args[0] ? String(args[0]) : '';
         }
         return 0;
       }),

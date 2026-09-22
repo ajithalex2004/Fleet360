@@ -92,7 +92,7 @@ describe('Predictive Maintenance Agent — 9 Failure Signals', () => {
     const repeatRes = calcRepeatFailuresAndRUL(repairs, 120_000, 45, 0, 0);
     expect(repeatRes.repeatCount).toBe(2);
     expect(repeatRes.repeatSubsystems).toContain('BRAKES');
-    expect(repeatRes.subsystemRUL.brakeSystemPct).toBeLessThan(80);
+    expect(repeatRes.subsystemRUL.brakingPct).toBeLessThan(80);
   });
 
   it('Full Comprehensive Scorer: Correctly escalates critical hazard vehicle', () => {

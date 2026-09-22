@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { eventDispatcher, publishEvent } from '@/lib/agents/dispatcher';
 import { registerAgent, unregisterAgent, getAgentsForEvent, getAgent } from '@/lib/agents/registry';
-import { AgentEvent, AgentRunResult, AgentDefinition } from '@/lib/agents/types';
+import { AgentEvent, AgentRunResult, AgentDefinition, AgentId } from '@/lib/agents/types';
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -66,7 +66,7 @@ describe('Phase 5: Agent Registry Governance & Multi-Tenant Event Dispatcher', (
     expect(fetched.name).toBe('Test Telematics Agent');
 
     const matchingAgents = await getAgentsForEvent('telematics.speeding');
-    expect(matchingAgents.some(a => a.id === 'test-telematics-agent')).toBe(true);
+    expect(matchingAgents.some(a => a.id === ('test-telematics-agent' as AgentId))).toBe(true);
 
     // Publish event
     const results = await publishEvent(
@@ -80,7 +80,7 @@ describe('Phase 5: Agent Registry Governance & Multi-Tenant Event Dispatcher', (
     );
 
     expect(results.length).toBeGreaterThanOrEqual(1);
-    const testResult = results.find(r => r.agentId === 'test-telematics-agent');
+    const testResult = results.find(r => r.agentId === ('test-telematics-agent' as AgentId));
     expect(testResult?.status).toBe('COMPLETED');
     expect(testResult?.tenantId).toBe('tenant-uae-101');
 
@@ -89,7 +89,7 @@ describe('Phase 5: Agent Registry Governance & Multi-Tenant Event Dispatcher', (
     expect(removed).toBe(true);
 
     const matchingAfterUnregister = await getAgentsForEvent('telematics.speeding');
-    expect(matchingAfterUnregister.some(a => a.id === 'test-telematics-agent')).toBe(false);
+    expect(matchingAfterUnregister.some(a => a.id === ('test-telematics-agent' as AgentId))).toBe(false);
   });
 
   it('deduplicates duplicate events within idempotency TTL window', async () => {
@@ -163,8 +163,8 @@ describe('Phase 5: Agent Registry Governance & Multi-Tenant Event Dispatcher', (
     );
 
     expect(results.length).toBe(2);
-    const crashingResult = results.find(r => r.agentId === 'crashing-sub-agent');
-    const healthyResult = results.find(r => r.agentId === 'healthy-sub-agent');
+    const crashingResult = results.find(r => r.agentId === ('crashing-sub-agent' as AgentId));
+    const healthyResult = results.find(r => r.agentId === ('healthy-sub-agent' as AgentId));
 
     expect(crashingResult?.status).toBe('FAILED');
     expect(crashingResult?.error).toContain('Database connection failed');

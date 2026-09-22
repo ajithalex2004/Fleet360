@@ -120,10 +120,10 @@ describe('Phase 3: Spatial Filtering & Pre-Routing Top-K Shortlisting', () => {
   describe('2. Road Matrix Refinement & Cost Avoidance Telemetry', () => {
     it('scores top policy candidates with road matrix refinement and tracks avoided costs', async () => {
       // Pre-seed L1 cache for D-1 to simulate a cache hit
-      const d1Loc = { lat: 25.2100, lng: 25.2750 };
+      const d1Loc = { latitude: 25.2100, longitude: 25.2750 };
       await routingIntelligence.getTravelTime(
-        { lat: 25.2100, lng: 55.2750 },
-        { lat: baseJob.pickupLat, lng: baseJob.pickupLng },
+        { latitude: 25.2100, longitude: 55.2750 },
+        { latitude: baseJob.pickupLat, longitude: baseJob.pickupLng },
         { tier: 'TRAFFIC_DYNAMIC' },
       );
 
@@ -234,32 +234,42 @@ describe('Phase 3: Spatial Filtering & Pre-Routing Top-K Shortlisting', () => {
       const mockRouteA: RouteFacts = {
         id: 'R-101',
         name: 'Sonapur to DXB Cargo',
-        code: 'R101',
-        shift: 'MORNING',
-        direction: 'INBOUND',
-        plannedDeparture: '06:00',
-        plannedArrival: '06:45',
+        routeType: null,
+        requiredVehicleGroup: null,
+        totalDistanceKm: null,
+        estimatedDurationMins: null,
+        representativeShift: 'MORNING',
+        representativeDirection: 'INBOUND',
+        representativeDepartureTime: '06:00',
+        representativeArrivalTime: '06:45',
         capacity: 30,
-        passengerCount: 20,
+        enrolledCount: 20,
+        assignedVehicleId: null,
+        assignedDriverId: null,
         stops: [
-          { name: 'Sonapur Camp', sequence: 1, lat: 25.2780, lng: 55.3950 },
-          { name: 'DXB Cargo', sequence: 2, lat: 25.2500, lng: 55.3600 },
+          { placeId: 'Sonapur Camp', sequence: 1, lat: 25.2780, lng: 55.3950 },
+          { placeId: 'DXB Cargo', sequence: 2, lat: 25.2500, lng: 55.3600 },
         ],
       };
 
       const mockRouteB: RouteFacts = {
         id: 'R-102',
         name: 'Muhaisnah to DXB Cargo',
-        code: 'R102',
-        shift: 'MORNING',
-        direction: 'INBOUND',
-        plannedDeparture: '06:10',
-        plannedArrival: '06:50',
+        routeType: null,
+        requiredVehicleGroup: null,
+        totalDistanceKm: null,
+        estimatedDurationMins: null,
+        representativeShift: 'MORNING',
+        representativeDirection: 'INBOUND',
+        representativeDepartureTime: '06:10',
+        representativeArrivalTime: '06:50',
         capacity: 30,
-        passengerCount: 15,
+        enrolledCount: 15,
+        assignedVehicleId: null,
+        assignedDriverId: null,
         stops: [
-          { name: 'Muhaisnah Gate A', sequence: 1, lat: 25.2750, lng: 55.4050 },
-          { name: 'DXB Cargo Gate 2', sequence: 2, lat: 25.2520, lng: 55.3620 },
+          { placeId: 'Muhaisnah Gate A', sequence: 1, lat: 25.2750, lng: 55.4050 },
+          { placeId: 'DXB Cargo Gate 2', sequence: 2, lat: 25.2520, lng: 55.3620 },
         ],
       };
 

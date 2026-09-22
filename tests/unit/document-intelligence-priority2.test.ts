@@ -105,6 +105,7 @@ describe('Document Intelligence Priority 2: Intelligence & Q&A Suite', () => {
         suggestedTitle: 'UAE Driving License',
         confidence: 'HIGH',
         confidenceScore: 0.98,
+        summary: 'UAE driving license for Mohamed Rasheed (DL-DXB-9912).',
         driver: {
           licenseNumber: 'DL-DXB-9912',
           driverName: 'Mohamed Rasheed',
