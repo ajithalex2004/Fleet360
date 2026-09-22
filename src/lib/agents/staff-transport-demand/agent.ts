@@ -109,7 +109,7 @@ async function runStaffTransportDemandForecast(event: AgentEvent): Promise<Agent
   await ensureAgentSchema();
 
   const tenantId = event.tenant_id || 'default';
-  const historyWeeks = Number(event.metadata?.weeks ?? 4);
+  const historyWeeks = Number((event.payload?.weeks as number | undefined) ?? 4);
   const weeks = Math.max(1, Math.min(12, historyWeeks));
 
   const now = new Date();
@@ -333,7 +333,7 @@ Provide a concise 2-sentence executive briefing highlighting immediate actions r
       { role: 'system', content: 'You provide crisp, professional fleet dispatch summaries for transport directors in the UAE.' },
       { role: 'user', content: summaryPrompt },
     ], {
-      tier: 'ECONOMY_TEXT',
+      capabilityAlias: 'ECONOMY_TEXT',
       maxTokens: 150,
       temperature: 0.2,
     });
@@ -462,7 +462,7 @@ export const STAFF_TRANSPORT_DEMAND_AGENT: AgentDefinition = {
   version: '1.0.0',
   agentType: 'BATCH',
   autonomyLevel: 'L2',
-  subscribedEvents: ['bus.demand.forecast' as any],
+  subscribedEvents: ['bus.demand.forecast'],
   supportsEntityScan: true,
   run: runStaffTransportDemandForecast,
 };

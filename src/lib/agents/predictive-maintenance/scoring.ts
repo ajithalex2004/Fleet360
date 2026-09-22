@@ -263,7 +263,7 @@ export function calcRepeatFailuresAndRUL(
   repeatSubsystems: string[];
   subsystemRUL: {
     powertrainPct: number;
-    brakeSystemPct: number;
+    brakingPct: number;
     electricalPct: number;
     hvacPct: number;
   };
@@ -319,7 +319,7 @@ export function calcRepeatFailuresAndRUL(
     repeatSubsystems,
     subsystemRUL: {
       powertrainPct: powertrainRUL,
-      brakeSystemPct: brakeRUL,
+      brakingPct: brakeRUL,
       electricalPct: electricalRUL,
       hvacPct: hvacRUL,
     },

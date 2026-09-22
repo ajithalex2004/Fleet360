@@ -9,9 +9,7 @@ import { prisma } from '@/lib/prisma';
 import {
   AgentEvaluationEvent,
   AgentId,
-  AgentRunTelemetry,
   ModelCapabilityAlias,
-  ModelProviderType,
 } from './types';
 import { ensureAgentSchema } from './schema';
 

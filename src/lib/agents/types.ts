@@ -200,6 +200,9 @@ export type AgentEventType =
   | 'driver.week_end'         // trigger weekly coaching
   | 'booking.created'         // new booking (demand signal)
   | 'booking.completed'       // completed booking (demand history)
+  | 'trip.completed'          // vehicle-reuse pairing trip finished (VehicleReuseAgent)
+  | 'compliance.sweep_scheduled'     // scheduled compliance health/readiness sweep (ComplianceAgent)
+  | 'planning.master_run_scheduled'  // multi-depot workforce master plan run (FleetWorkforcePlannerAgent)
   | 'bus_ops.shift_schedule_updated' // staff transport shift changed
   | 'bus_ops.manifest_updated'       // employee accommodation manifest updated
   | 'bus_ops.plan_requested'         // staff transport plan requested
@@ -208,7 +211,20 @@ export type AgentEventType =
   | 'chat.message_sent'          // user sent a chat widget message
   | 'chat.stats_requested'       // pull 7-day chat stats
   | 'ops.query_received'         // XL Ops Assistant query
-  | 'ops.stats_requested';       // pull 7-day Ops Assistant stats
+  | 'ops.stats_requested'        // pull 7-day Ops Assistant stats
+  | 'document.uploaded'          // document scan/image submitted for extraction
+  | 'document.process_scan'      // batch document processing scan
+  | 'compliance.doc_ingest'      // compliance document ingested for extraction
+  | 'bus.demand.forecast'        // staff transport demand forecast requested
+  | 'enterprise.sync'            // outbound ERP entity sync requested
+  | 'enterprise.external_event'  // inbound webhook event from an external ERP
+  | 'vehicle.telematics_received' // telematics ping ingested (PM burn-down input)
+  | 'vehicle.trip_completed'     // trip finished (PM burn-down input)
+  | 'leasing.quotation_copilot_requested'  // NL brief → suggested lease quotation (QuotationCopilotAgent)
+  | 'rental.copilot_requested'             // NL brief → suggested RAC booking (RentalCopilotAgent)
+  | 'rental.damage_classify_requested'     // handover/return photo(s) → damage assessment (DamageClassifierAgent)
+  | 'leasing.document_classify_requested'  // compliance document image → extracted fields (DocClassifierAgent)
+  | 'leasing.contract_qa_requested';       // NL question against a contract (ContractQaAgent)
 
 // ── Inbound Event (what any platform sends to the orchestrator) ────────────────
 export interface AgentEvent {
@@ -302,16 +318,17 @@ export interface MaintenanceRiskFactors {
   repeatFailureScore: number;
   repeatFailureCount: number;
   repeatSubsystems: string[];
+  // Only these 4 subsystems are actually computed by
+  // calcRepeatFailuresAndRUL() in predictive-maintenance/scoring.ts, and
+  // only these 4 are read by any consumer (work-order description in
+  // predictive-maintenance/agent.ts, fleet/intelligence dashboard) — the
+  // type previously declared 5 more (suspension/cooling/fuel
+  // system/exhaust aftertreatment/tires) that nothing ever computed.
   subsystemRUL: {
     powertrainPct: number;
     brakingPct: number;
     electricalPct: number;
     hvacPct: number;
-    suspensionPct: number;
-    coolingPct: number;
-    fuelSystemPct: number;
-    exhaustAftertreatmentPct: number;
-    tiresWheelsPct: number;
   };
 }
 
@@ -326,6 +343,7 @@ export interface VehicleRiskScore {
   factors: MaintenanceRiskFactors;
   recommendedAction: MaintenanceAction;
   predictedFailureWindow?: string;
+  primaryFailureReason?: string;
   autoWorkOrderId?: string;
   scoredAt: string;
 }
@@ -501,26 +519,28 @@ export interface StaffTransportPlanRecommendation {
 }
 
 // ── Finance Anomaly Types ─────────────────────────────────────────────────────
+// Kept in sync with the detector ids actually emitted by
+// src/lib/agents/finance-anomaly/detectors.ts (kebab-case, descriptive ids —
+// not the earlier MAINT_01_-style scheme, which was never implemented and had
+// no other references in the codebase).
 export type AnomalyDetectorId =
-  | 'MAINT_01_REPAIR_COST_SPIKE'
-  | 'MAINT_02_REPEAT_REPAIR'
-  | 'FUEL_01_CONSUMPTION_SURGE'
-  | 'FUEL_02_PRICE_ABNORMALITY'
-  | 'FUEL_03_TANK_CAPACITY_EXCEEDED'
-  | 'FUEL_04_GPS_STATION_MISMATCH'
-  | 'INV_01_DUPLICATE_INVOICE'
-  | 'INV_02_PO_VARIANCE'
-  | 'INV_03_TAX_FTA_5PCT_CALC_ERROR'
-  | 'PARTNER_01_SETTLEMENT_DISPUTE'
-  | 'PARTNER_02_RATE_CARD_MISMATCH'
-  | 'EXP_01_DRIVER_DAILY_LIMIT'
-  | 'EXP_02_UNRECOVERED_SALIK_FINES'
-  | 'TRIP_01_UNBILLED_OFF_CONTRACT_MILEAGE'
-  | 'TRIP_02_EXCESS_MILEAGE_UNBILLED'
-  | 'CONT_01_RATE_LEAKAGE'
-  | 'CONT_02_ESCROW_SHORTFALL'
-  | 'PROC_01_UNMATCHED_GRN'
-  | 'PROC_02_PRICE_DRIFT';
+  | 'category-mismatch'
+  | 'contract-off-contract-mileage'
+  | 'contract-unbilled-damage'
+  | 'contract-unbilled-excess-mileage'
+  | 'driver-mileage-inflated'
+  | 'fuel-gps-mismatch'
+  | 'fuel-rapid-consecutive'
+  | 'fuel-tank-overfill'
+  | 'maintenance-labor-srt-overrun'
+  | 'maintenance-parts-inflation'
+  | 'maintenance-repeat-repair-warranty'
+  | 'partner-ghost-trip'
+  | 'partner-quote-divergence'
+  | 'procurement-po-variance'
+  | 'trip-unbilled-salik-tolls'
+  | 'vendor-rate-card-breach'
+  | 'vendor-vat-compliance';
 
 export type AnomalyEntityType =
   | 'WORK_ORDER'
@@ -531,16 +551,25 @@ export type AnomalyEntityType =
   | 'PARTNER_SETTLEMENT'
   | 'CONTRACT'
   | 'PURCHASE_ORDER'
-  | 'JOURNAL_ENTRY';
+  | 'JOURNAL_ENTRY'
+  | 'EXCHANGE_QUOTATION'
+  | 'RENTAL_AGREEMENT'
+  | 'SALIK_TOLL';
 
+// Singular forms — matches the values detectors.ts emits and that
+// src/lib/agents/finance-anomaly/agent.ts and
+// src/app/(app)/finance/anomalies/page.tsx filter/display on. (Not the
+// plural forms this type previously had, which nothing else in the
+// codebase used — that mismatch would have made the per-stream dashboard
+// counts silently show zero.)
 export type FinanceStreamType =
   | 'MAINTENANCE'
   | 'FUEL'
-  | 'VENDOR_INVOICES'
-  | 'PARTNER_SETTLEMENTS'
-  | 'DRIVER_EXPENSES'
-  | 'TRIP_COSTS'
-  | 'CONTRACTS'
+  | 'VENDOR_INVOICE'
+  | 'PARTNER_SETTLEMENT'
+  | 'DRIVER_EXPENSE'
+  | 'TRIP_COST'
+  | 'CONTRACT'
   | 'PROCUREMENT'
   | 'JOURNAL_ENTRY';
 
@@ -592,6 +621,57 @@ export interface AgentRunResult {
   output: unknown;
   error?: string;
   telemetry?: AgentRunTelemetry;
+}
+
+// ── Route Optimiser Agent output shape ──────────────────────────────────────
+// Declared here (rather than inline in the agent file) so they can be
+// imported like every other agent's output types. Field shapes mirror
+// exactly what route-optimiser/agent.ts constructs.
+export interface SingleRouteOptimisationResult {
+  routeId: string;
+  routeName: string;
+  routeNumber: string;
+  distanceSavedKm: number;
+  distanceSavedPct: number;
+  status: 'AUTO_APPLIED' | 'SUGGESTED';
+}
+
+export interface ConsolidationRecommendationItem {
+  id: string;
+  sourceRouteIds: string[];
+  sourceRouteNames: string[];
+  sourceRouteNumbers: string[];
+  candidateType: 'SIMULTANEOUS_MERGE';
+  direction: string;
+  shift: string;
+  combinedPassengers: number;
+  requiredCapacity: number;
+  operatorScore: number;
+  detourMinutes: number;
+  detourKm: number;
+  dailyDistanceSavedKm: number;
+  weeklySavingsAed: number;
+  monthlySavingsAed: number;
+  vehiclesReleased: number;
+  status: 'SUGGESTED';
+}
+
+export interface NetworkDesignSummary {
+  currentRoutesCount: number;
+  currentVehiclesCount: number;
+  recommendedRoutesCount: number;
+  recommendedVehiclesCount: number;
+  vehiclesSaved: number;
+  dailyKmSaved: number;
+  monthlyCostSavedAed: number;
+  annualCostSavedAed: number;
+}
+
+export interface RouteOptimiserOutput {
+  summary: string;
+  networkDesign: NetworkDesignSummary;
+  consolidations: ConsolidationRecommendationItem[];
+  singleRouteResults: SingleRouteOptimisationResult[];
 }
 
 // ── Agent Registry Entry ───────────────────────────────────────────────────────
@@ -757,7 +837,10 @@ export interface DocumentRecord {
 
 export interface ComplianceCriticalItem {
   entityId: string;
-  entityType: 'VEHICLE' | 'DRIVER' | 'VENDOR' | 'CONTRACT';
+  // Matches DocumentRecord['entityType'] below — this is populated directly
+  // from DocumentRecord.entityType in fleet-risk.ts, which also allows
+  // 'EQUIPMENT'; this union was missing that member.
+  entityType: 'VEHICLE' | 'DRIVER' | 'VENDOR' | 'CONTRACT' | 'EQUIPMENT';
   code: string;
   item: string;
   status: 'EXPIRED' | 'IMMINENT_EXPIRY' | 'SUSPENDED' | 'MISSING';

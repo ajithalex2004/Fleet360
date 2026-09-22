@@ -59,6 +59,49 @@ export interface ApprovalItem {
   createdAt: string;
 }
 
+// Row shape for the `tenant_ai_policies` SELECT in getTenantPolicy below
+// (camelCase via SQL aliases).
+interface TenantPolicyRow {
+  tenantId: string;
+  maxAutonomyLevel: AgentAutonomyLevel | null;
+  dailyBudgetAed: number | null;
+  monthlyBudgetAed: number | null;
+  requireHumanApprovalThresholdAed: number | null;
+  disabledAgents: unknown;
+  circuitBreakerTriggered: boolean | null;
+}
+
+// Row shape for the `agent_roi_metrics` daily-spend SELECT in checkBudgetQuota.
+interface TodayCostRow {
+  todayCostAed: number;
+}
+
+// Row shape for the `gen_random_uuid()` SELECT in createApprovalItem.
+interface GenUuidRow {
+  id: string;
+}
+
+// Row shape for the `agent_approvals` SELECTs in getPendingApprovals and
+// reviewApprovalItem below (camelCase via SQL aliases).
+interface ApprovalItemRow {
+  id: string;
+  tenantId: string;
+  agentId: string;
+  entityType: string;
+  entityId: string;
+  actionType: string;
+  title: string;
+  description: string;
+  financialImpactAed: number;
+  proposedPayload: unknown;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPIRED';
+  requestedAutonomy: AgentAutonomyLevel;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  reviewNotes: string | null;
+  createdAt: string;
+}
+
 const AUTONOMY_RANKS: Record<AgentAutonomyLevel, number> = {
   L0: 0,
   L1: 1,
@@ -85,7 +128,7 @@ export class PolicyService {
     const cleanTenant = tenantId?.trim() || 'default';
 
     try {
-      const rows = await prisma.$queryRawUnsafe<any[]>(
+      const rows = await prisma.$queryRawUnsafe<TenantPolicyRow[]>(
         `SELECT
            tenant_id AS "tenantId",
            max_autonomy_level AS "maxAutonomyLevel",
@@ -258,7 +301,7 @@ export class PolicyService {
 
     try {
       // Check today's aggregated cost from agent_roi_metrics
-      const rows = await prisma.$queryRawUnsafe<any[]>(
+      const rows = await prisma.$queryRawUnsafe<TodayCostRow[]>(
         `SELECT COALESCE(SUM(total_cost_aed), 0)::float8 AS "todayCostAed"
          FROM agent_roi_metrics
          WHERE tenant_id = $1 AND period_date = CURRENT_DATE`,
@@ -302,7 +345,7 @@ export class PolicyService {
     }
 
     const cleanTenant = (typeof tenantId === 'string' && tenantId.trim()) ? tenantId.trim() : 'default';
-    const id = (await prisma.$queryRawUnsafe<any[]>(`SELECT gen_random_uuid()::text AS id`))[0]?.id || `appr_${Date.now()}`;
+    const id = (await prisma.$queryRawUnsafe<GenUuidRow[]>(`SELECT gen_random_uuid()::text AS id`))[0]?.id || `appr_${Date.now()}`;
 
     await prisma.$executeRawUnsafe(
       `INSERT INTO agent_approvals (
@@ -366,13 +409,13 @@ export class PolicyService {
          ORDER BY financial_impact_aed DESC, created_at DESC`;
 
     const rows = agentId
-      ? await prisma.$queryRawUnsafe<any[]>(sql, cleanTenant, agentId)
-      : await prisma.$queryRawUnsafe<any[]>(sql, cleanTenant);
+      ? await prisma.$queryRawUnsafe<ApprovalItemRow[]>(sql, cleanTenant, agentId)
+      : await prisma.$queryRawUnsafe<ApprovalItemRow[]>(sql, cleanTenant);
 
     return rows.map((r) => ({
       ...r,
       financialImpactAed: Number(r.financialImpactAed || 0),
-      proposedPayload: r.proposedPayload ?? {},
+      proposedPayload: (r.proposedPayload ?? {}) as Record<string, unknown>,
     }));
   }
 
@@ -397,7 +440,7 @@ export class PolicyService {
       approvalId,
     );
 
-    const rows = await prisma.$queryRawUnsafe<any[]>(
+    const rows = await prisma.$queryRawUnsafe<ApprovalItemRow[]>(
       `SELECT id::text, tenant_id AS "tenantId", agent_id AS "agentId", entity_type AS "entityType",
               entity_id AS "entityId", action_type AS "actionType", title, description,
               financial_impact_aed::float8 AS "financialImpactAed", proposed_payload AS "proposedPayload",
@@ -416,7 +459,7 @@ export class PolicyService {
     return {
       ...r,
       financialImpactAed: Number(r.financialImpactAed || 0),
-      proposedPayload: r.proposedPayload ?? {},
+      proposedPayload: (r.proposedPayload ?? {}) as Record<string, unknown>,
     };
   }
 }
