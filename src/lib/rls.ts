@@ -368,9 +368,17 @@ export async function withWebhookTenant<T>(
  *
  * The mapped return type preserves tuple positions so existing destructuring
  * (`const [a, b] = await ...`) keeps its types.
+ *
+ * `ops` is typed as `readonly [...T]` rather than plain `T` — with just `T`,
+ * TypeScript infers an array literal argument as a widened `(A | B | ...)[]`
+ * instead of a tuple, so every destructured element ends up typed as the
+ * union of ALL operations' return types instead of its own specific one
+ * (silently defeating the "preserves tuple positions" guarantee above). The
+ * variadic-tuple parameter form is what makes tuple inference from a literal
+ * array argument actually work.
  */
 export async function runSequential<T extends readonly PromiseLike<unknown>[]>(
-  ops: T,
+  ops: readonly [...T],
 ): Promise<{ -readonly [K in keyof T]: Awaited<T[K]> }> {
   const out: unknown[] = [];
   for (const op of ops) out.push(await op);

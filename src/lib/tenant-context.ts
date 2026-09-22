@@ -279,13 +279,42 @@ export function requireAuthorizedTenant(
 }
 
 /**
+ * Guard for admin routes that operate on an explicit :id path param for a
+ * DIFFERENT tenant than the caller's own — e.g. /api/admin/tenants/[id]/*,
+ * where a platform admin manages any tenant's record. requireAuthorizedTenant()
+ * alone only resolves the CALLER's own session tenant; it does not check
+ * that against the URL's target tenant. Call this after requireAuthorizedTenant()
+ * succeeds, before touching the target tenant's data:
+ *
+ *   const authz = requireAuthorizedTenant(req);
+ *   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
+ *   const guard = requireSuperAdminForTenant(authz, params.id);
+ *   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
+ *
+ * Same SUPER_ADMIN-only rule requireAuthorizedTenant()'s allowPlatformSwitch
+ * already enforces for ?tenantId= switching — this just applies it to a path
+ * param instead of a query/header switch.
+ */
+export function requireSuperAdminForTenant(
+  authz: Extract<AuthorizedTenantResult, { ok: true }>,
+  targetTenantId: string,
+): { ok: true } | { ok: false; status: 403; error: string } {
+  if (targetTenantId === authz.tenantId) return { ok: true };
+  if (authz.role !== 'SUPER_ADMIN') {
+    return { ok: false, status: 403, error: 'Only a platform admin can access another tenant' };
+  }
+  return { ok: true };
+}
+
+/**
  * Strip tenant ownership fields from untrusted request bodies.
  * Tenant ownership must come from context, never from normal business input.
  */
 export function stripTenantOwnershipFields<T extends object>(
   body: T,
 ): Omit<T, 'tenantId' | 'tenant_id'> {
-  const { tenantId: _a, tenant_id: _b, ...rest } = body as T & {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { tenantId, tenant_id, ...rest } = body as T & {
     tenantId?: unknown;
     tenant_id?: unknown;
   };

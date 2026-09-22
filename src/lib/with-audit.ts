@@ -26,22 +26,38 @@ import { NextRequest, NextResponse } from 'next/server';
 import { logAudit, type AuditPayload } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
-type Handler = (req: NextRequest, ctx?: any) => Promise<NextResponse> | NextResponse;
+type Handler<Ctx = unknown> = (req: NextRequest, ctx?: Ctx) => Promise<NextResponse> | NextResponse;
 
-interface WithAuditOptions {
+interface WithAuditOptions<Body = unknown> {
   entityType: string;
   action: 'CREATE' | 'UPDATE' | 'DELETE' | 'APPROVE' | 'REJECT' | 'CANCEL' | 'EXPORT' | 'VIEW';
   /** Optional: derive a human-readable description from request + response body. */
-  describe?: (req: NextRequest, responseBody: any) => string | undefined;
+  describe?: (req: NextRequest, responseBody: Body) => string | undefined;
   /** Optional: derive entityId/entityName from response body. */
-  extractEntity?: (responseBody: any) => { id?: string; name?: string };
+  extractEntity?: (responseBody: Body) => { id?: string; name?: string };
 }
 
-export function withAudit(handler: Handler, opts: WithAuditOptions): Handler {
+export function withAudit<Ctx = unknown, Body = unknown>(
+  // `ctx` is declared required (not optional) here so that dynamic-segment
+  // route handlers — which always destructure a required
+  // `{ params: Promise<{ id: string }> }` second argument — are assignable.
+  // A function accepting fewer params (the common case: no ctx at all) is
+  // still assignable to a function type expecting more, so non-dynamic
+  // routes' `(req) => ...` handlers keep working unchanged. The exported
+  // wrapper below stays `Handler<Ctx>` (ctx optional), matching how Next.js
+  // actually invokes route handlers — with or without a second argument.
+  handler: (req: NextRequest, ctx: Ctx) => Promise<NextResponse> | NextResponse,
+  opts: WithAuditOptions<Body>
+): Handler<Ctx> {
   return async (req, ctx) => {
     let response: NextResponse;
     try {
-      response = await handler(req, ctx);
+      // `ctx` here is `Ctx | undefined` (this wrapper's own signature keeps
+      // it optional for non-dynamic routes); Next.js only omits it for
+      // routes with no dynamic segments, in which case `handler` itself
+      // ignores the second argument, so the cast is safe at the one call
+      // site that actually invokes the caller-supplied handler.
+      response = await handler(req, ctx as Ctx);
     } catch (err) {
       captureException(err, { context: `route:${opts.entityType}.${opts.action}` });
       throw err;
@@ -53,8 +69,8 @@ export function withAudit(handler: Handler, opts: WithAuditOptions): Handler {
       let body: unknown = null;
       try { body = await response.clone().json(); } catch { /* non-JSON, fine */ }
 
-      const entity = opts.extractEntity?.(body) ?? {};
-      const description = opts.describe?.(req, body);
+      const entity = opts.extractEntity?.(body as Body) ?? {};
+      const description = opts.describe?.(req, body as Body);
 
       const payload: AuditPayload = {
         tenantId:    req.headers.get('x-tenant-id')   ?? undefined,

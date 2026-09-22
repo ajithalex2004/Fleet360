@@ -24,8 +24,25 @@ import {
   SpatialShortlistOptions,
   SpatialShortlistResult,
 } from '@/lib/agents/types';
-import { calculateRoutingCost, USD_TO_AED_RATE } from '@/lib/agents/telemetry';
+import { calculateRoutingCost } from '@/lib/agents/telemetry';
 import { ensureAgentSchema } from '@/lib/agents/schema';
+
+// ── Point Shape Normalization ──────────────────────────────────────────────────
+// Callers across the codebase pass points as either { latitude, longitude }
+// (LatLng) or the shorthand { lat, lng } — normalize to the former.
+
+function normalizeLatLng(
+  point?: LatLng | { lat: number; lng: number } | null,
+): { latitude: number; longitude: number } | null {
+  if (!point) return null;
+  if ('latitude' in point && 'longitude' in point) {
+    return { latitude: point.latitude, longitude: point.longitude };
+  }
+  if ('lat' in point && 'lng' in point) {
+    return { latitude: point.lat, longitude: point.lng };
+  }
+  return null;
+}
 
 // ── Geohash Encoding Engine (Base32) ──────────────────────────────────────────
 
@@ -170,8 +187,9 @@ export class RoutingIntelligenceService {
   }): CanonicalLocation {
     const latitude = input.latitude ?? input.lat ?? 0;
     const longitude = input.longitude ?? input.lng ?? 0;
-    const accessLat = (input.accessPoint as any)?.latitude ?? (input.accessPoint as any)?.lat ?? latitude;
-    const accessLng = (input.accessPoint as any)?.longitude ?? (input.accessPoint as any)?.lng ?? longitude;
+    const accessNormalized = normalizeLatLng(input.accessPoint);
+    const accessLat = accessNormalized?.latitude ?? latitude;
+    const accessLng = accessNormalized?.longitude ?? longitude;
 
     const access: LatLng = {
       latitude: accessLat,
@@ -206,8 +224,9 @@ export class RoutingIntelligenceService {
     const minCandidates = options.minCandidates ?? 1;
     const maxCandidates = options.maxCandidates ?? 20;
 
-    const origLat = (origin as any).latitude ?? (origin as any).lat ?? 0;
-    const origLng = (origin as any).longitude ?? (origin as any).lng ?? 0;
+    const originNormalized = normalizeLatLng(origin);
+    const origLat = originNormalized?.latitude ?? 0;
+    const origLng = originNormalized?.longitude ?? 0;
 
     let currentRadius = initialRadiusKm;
     let expanded = false;

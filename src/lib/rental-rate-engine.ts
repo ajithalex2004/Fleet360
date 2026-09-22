@@ -71,7 +71,47 @@ function daysAndHours(from: Date, to: Date): { days: number; hours: number } {
   return { days: Math.max(1, days), hours: totalHours };
 }
 
-function isInSeason(rule: any, date: Date): boolean {
+// A `pricing_rules` row as returned by `SELECT * FROM pricing_rules` (raw
+// SQL — see src/app/api/rental/rates/calculate/route.ts) — snake_case
+// column names, matching PricingRule in schema.prisma. Decimal/timestamptz
+// columns are typed loosely (string | number / string | Date) since the raw
+// driver's exact runtime representation isn't guaranteed; every numeric
+// field already goes through Number(...) below, and date fields through
+// new Date(...).
+interface PricingRuleRow {
+  id: string;
+  name?: string | null;
+  vehicle_category: string;
+  base_daily_rate: string | number;
+  monthly_rate?: string | number | null;
+  weekly_rate?: string | number | null;
+  multiplier?: string | number | null;
+  online_discount?: string | number | null;
+  season_from?: string | Date | null;
+  season_to?: string | Date | null;
+  customer_type?: string | null;
+  corporate_account_id?: string | null;
+  airline_code?: string | null;
+  pickup_location_code?: string | null;
+  channel?: string | null;
+  credit_card_type?: string | null;
+  promo_code?: string | null;
+  promo_discount_pct?: string | number | null;
+  promo_valid_from?: string | Date | null;
+  promo_valid_to?: string | Date | null;
+  promo_max_uses?: number | null;
+  promo_used_count?: number | null;
+  priority?: number | null;
+  is_active?: boolean | null;
+  insurance_plans?: string | null;
+  grace_period_min?: number | null;
+  late_fee_per_hour?: string | number | null;
+  late_fee_cap?: string | number | null;
+  included_km_per_day?: number | null;
+  excess_km_rate?: string | number | null;
+}
+
+function isInSeason(rule: PricingRuleRow, date: Date): boolean {
   if (!rule.season_from && !rule.season_to) return true;
   const d = date.getTime();
   const from = rule.season_from ? new Date(rule.season_from).getTime() : 0;
@@ -79,7 +119,7 @@ function isInSeason(rule: any, date: Date): boolean {
   return d >= from && d <= to;
 }
 
-function matchScore(rule: any, req: RateRequest): number {
+function matchScore(rule: PricingRuleRow, req: RateRequest): number {
   let score = 0;
   if (rule.customer_type && rule.customer_type !== req.customerType) return -1;
   if (rule.corporate_account_id && rule.corporate_account_id !== req.corporateAccountId) return -1;
@@ -104,8 +144,8 @@ function matchScore(rule: any, req: RateRequest): number {
   return score;
 }
 
-function pickBestRate(rules: any[], req: RateRequest): any | null {
-  let best: any = null;
+function pickBestRate(rules: PricingRuleRow[], req: RateRequest): PricingRuleRow | null {
+  let best: PricingRuleRow | null = null;
   let bestScore = -1;
   for (const r of rules) {
     if (!r.is_active) continue;
@@ -116,7 +156,7 @@ function pickBestRate(rules: any[], req: RateRequest): any | null {
   return best;
 }
 
-function resolveInsurancePlan(rule: any, planCode: string | undefined): { code: string; dailyRate: number } | null {
+function resolveInsurancePlan(rule: PricingRuleRow | null, planCode: string | undefined): { code: string; dailyRate: number } | null {
   if (!planCode || !rule?.insurance_plans) return null;
   try {
     const plans: { code: string; name: string; dailyRate: number }[] = JSON.parse(rule.insurance_plans);
@@ -127,7 +167,7 @@ function resolveInsurancePlan(rule: any, planCode: string | undefined): { code: 
 
 // ── main export ───────────────────────────────────────────────────────────────
 
-export function calculateRate(rules: any[], req: RateRequest): RateResult {
+export function calculateRate(rules: PricingRuleRow[], req: RateRequest): RateResult {
   const { days, hours } = daysAndHours(req.pickupDate, req.dropoffDate);
   const currency = req.currency ?? 'AED';
   const TAX_RATE = 5; // UAE VAT
