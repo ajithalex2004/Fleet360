@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
+import type { Prisma } from '@prisma/client';
 
 export async function GET(req: NextRequest) {
 
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
     const bodyRaw = await req.json();
   const body = stripTenantOwnershipFields(bodyRaw);
     const branch = await withTenantRls(prisma, tenantId, async (tx) =>
-      tx.leaseBranch.create({ data: { ...body, tenantId } }),
+      tx.leaseBranch.create({ data: { ...body, tenantId } as Prisma.LeaseBranchUncheckedCreateInput }),
     );
     return NextResponse.json(branch, { status: 201 });
     } catch (e) {

@@ -61,14 +61,16 @@ export async function POST(
     );
 
     if (allocation.contractVehicleId) {
-      // LeaseContractVehicle is scoped via the parent contract (already
-      // owned by this tenant via the allocation), no tenant column on
-      // the model itself.
+      // Narrowed to a local const: TS doesn't carry the `if` guard's
+      // narrowing of allocation.contractVehicleId through the closure
+      // below, since the property could theoretically change by the time
+      // it runs.
+      const contractVehicleId = allocation.contractVehicleId;
       await withTenantRls(prisma, tenantId, async (tx) =>
         tx.leaseContractVehicle.updateMany({
         where: {
           tenantId,
-          id: allocation.contractVehicleId,
+          id: contractVehicleId,
           driverId: allocation.driverId,
         },
         data: { driverId: null },
