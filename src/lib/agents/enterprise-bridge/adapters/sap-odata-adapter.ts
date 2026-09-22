@@ -7,9 +7,11 @@
  *  - SAP-compliant XML / JSON payload formatting.
  */
 
-import { BaseEnterpriseAdapter } from './base-adapter';
+import { BaseEnterpriseAdapter, CanonicalPayload } from './base-adapter';
 import {
   CanonicalEntityType,
+  CanonicalInvoice,
+  CanonicalWorkOrder,
   EnterpriseSyncResult,
 } from '../../types';
 import { applyFieldMappings } from '../canonical-models';
@@ -67,11 +69,11 @@ export class SapOdataAdapter extends BaseEnterpriseAdapter {
         latencyMs,
         message: `Connected to SAP S/4HANA. CSRF Token handshake valid (${token ? 'Secured' : 'Open'}).`,
       };
-    } catch (err: any) {
+    } catch (err) {
       return {
         success: false,
         latencyMs: Date.now() - start,
-        message: `SAP OData connection failed: ${err.message || String(err)}`,
+        message: `SAP OData connection failed: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
   }
@@ -79,7 +81,7 @@ export class SapOdataAdapter extends BaseEnterpriseAdapter {
   async pushEntity(
     entityType: CanonicalEntityType,
     entityId: string,
-    canonicalPayload: any
+    canonicalPayload: CanonicalPayload
   ): Promise<EnterpriseSyncResult> {
     const start = Date.now();
     const entitySet = this.getSapEntitySet(entityType);
@@ -92,17 +94,22 @@ export class SapOdataAdapter extends BaseEnterpriseAdapter {
       if (cookie) headers['Cookie'] = cookie;
 
       // Map canonical to SAP field naming conventions
-      const sapPayload: Record<string, any> = applyFieldMappings(canonicalPayload, this.connection.fieldMappings);
+      const sapPayload: Record<string, unknown> = applyFieldMappings(canonicalPayload, this.connection.fieldMappings);
 
+      let financialImpactAed = 0;
       if (entityType === 'INVOICE') {
+        const invoice = canonicalPayload as CanonicalInvoice;
         sapPayload['CustomerInvoice'] = sapPayload['invoiceNumber'] || entityId;
         sapPayload['TotalGrossAmount'] = sapPayload['totalAmountAed'] || 0;
         sapPayload['TransactionCurrency'] = sapPayload['currency'] || 'AED';
         sapPayload['TaxAmount'] = sapPayload['totalVatAed'] || 0;
+        financialImpactAed = invoice.totalAmountAed || 0;
       } else if (entityType === 'WORK_ORDER') {
+        const workOrder = canonicalPayload as CanonicalWorkOrder;
         sapPayload['ServiceOrder'] = sapPayload['workOrderNumber'] || entityId;
         sapPayload['ServiceOrderDescription'] = sapPayload['issueDescription'] || '';
         sapPayload['ServiceOrderPriority'] = sapPayload['severity'] === 'CRITICAL' ? '1' : '3';
+        financialImpactAed = workOrder.estimatedCostAed || 0;
       }
 
       const res = await fetch(url, {
@@ -137,12 +144,12 @@ export class SapOdataAdapter extends BaseEnterpriseAdapter {
         entityType,
         status: 'SUCCESS',
         externalReferenceId: String(sapRef),
-        financialImpactAed: canonicalPayload.totalAmountAed || canonicalPayload.estimatedCostAed || 0,
+        financialImpactAed,
         durationMs: latencyMs,
         retryCount: 0,
         message: `SAP S/4HANA Document Created: ${sapRef}`,
       };
-    } catch (err: any) {
+    } catch (err) {
       return {
         syncId: `SAP-SYNC-${Date.now()}`,
         connectionId: this.connection.id,
@@ -151,15 +158,21 @@ export class SapOdataAdapter extends BaseEnterpriseAdapter {
         status: 'FAILED',
         durationMs: Date.now() - start,
         retryCount: 0,
-        message: `SAP OData Network Error: ${err.message}`,
+        message: `SAP OData Network Error: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
   }
 
   async pullEntities(
     entityType: CanonicalEntityType,
-    params: Record<string, any> = {}
-  ): Promise<{ success: boolean; data: any[]; message: string }> {
+    params: Record<string, unknown> = {}
+  ): Promise<{ success: boolean; data: unknown[]; message: string }> {
+    // Inbound pull is not yet wired to a SAP OData $filter query — like the
+    // Odoo adapter's pullEntities, nothing calls this direction yet (the
+    // sync orchestrator only drives pushEntity today), so there's nothing
+    // to translate `params` into. Kept on the signature to match the
+    // adapter contract.
+    void params;
     const entitySet = this.getSapEntitySet(entityType);
     const url = `${this.connection.baseUrl.replace(/\/$/, '')}${entitySet}?$top=50&$format=json`;
 
@@ -176,8 +189,8 @@ export class SapOdataAdapter extends BaseEnterpriseAdapter {
         data: results,
         message: `Pulled ${results.length} records from SAP S/4HANA.`,
       };
-    } catch (err: any) {
-      return { success: false, data: [], message: `SAP Pull failed: ${err.message}` };
+    } catch (err) {
+      return { success: false, data: [], message: `SAP Pull failed: ${err instanceof Error ? err.message : String(err)}` };
     }
   }
 }

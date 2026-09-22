@@ -5,9 +5,11 @@
  * and Custom Enterprise API backends.
  */
 
-import { BaseEnterpriseAdapter } from './base-adapter';
+import { BaseEnterpriseAdapter, CanonicalPayload } from './base-adapter';
 import {
   CanonicalEntityType,
+  CanonicalInvoice,
+  CanonicalWorkOrder,
   EnterpriseSyncResult,
 } from '../../types';
 import { applyFieldMappings, reverseFieldMappings } from '../canonical-models';
@@ -28,8 +30,13 @@ export class GenericRestAdapter extends BaseEnterpriseAdapter {
         return '/work-orders';
       case 'SHIPMENT_PO':
         return '/purchase-orders';
-      default:
-        return `/${entityType.toLowerCase()}s`;
+      default: {
+        // CanonicalEntityType only has the four members above, so this is
+        // unreachable at runtime under type safety — kept as a defensive
+        // exhaustiveness check rather than a live code path.
+        const _exhaustive: never = entityType;
+        throw new Error(`Unhandled canonical entity type: ${_exhaustive}`);
+      }
     }
   }
 
@@ -59,11 +66,11 @@ export class GenericRestAdapter extends BaseEnterpriseAdapter {
         latencyMs,
         message: `HTTP Error ${res.status}: ${res.statusText}`,
       };
-    } catch (err: any) {
+    } catch (err) {
       return {
         success: false,
         latencyMs: Date.now() - start,
-        message: `Connection failed: ${err.message || String(err)}`,
+        message: `Connection failed: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
   }
@@ -71,7 +78,7 @@ export class GenericRestAdapter extends BaseEnterpriseAdapter {
   async pushEntity(
     entityType: CanonicalEntityType,
     entityId: string,
-    canonicalPayload: any
+    canonicalPayload: CanonicalPayload
   ): Promise<EnterpriseSyncResult> {
     const start = Date.now();
     const endpoint = this.getEndpointForEntity(entityType);
@@ -106,6 +113,15 @@ export class GenericRestAdapter extends BaseEnterpriseAdapter {
 
       const externalRef = responseJson.id || responseJson.externalId || responseJson.referenceNumber || entityId;
 
+      // Financial impact only applies to Invoice / Work Order payloads —
+      // Roster and Shipment PO entities don't carry a monetary amount here.
+      let financialImpactAed = 0;
+      if (entityType === 'INVOICE') {
+        financialImpactAed = (canonicalPayload as CanonicalInvoice).totalAmountAed || 0;
+      } else if (entityType === 'WORK_ORDER') {
+        financialImpactAed = (canonicalPayload as CanonicalWorkOrder).estimatedCostAed || 0;
+      }
+
       return {
         syncId: `SYNC-${Date.now()}`,
         connectionId: this.connection.id,
@@ -113,12 +129,12 @@ export class GenericRestAdapter extends BaseEnterpriseAdapter {
         entityType,
         status: 'SUCCESS',
         externalReferenceId: String(externalRef),
-        financialImpactAed: canonicalPayload.totalAmountAed || canonicalPayload.estimatedCostAed || 0,
+        financialImpactAed,
         durationMs: latencyMs,
         retryCount: 0,
         message: `Successfully synchronized ${entityType} ${entityId} to ${this.connection.systemName}.`,
       };
-    } catch (err: any) {
+    } catch (err) {
       return {
         syncId: `SYNC-${Date.now()}`,
         connectionId: this.connection.id,
@@ -127,15 +143,15 @@ export class GenericRestAdapter extends BaseEnterpriseAdapter {
         status: 'FAILED',
         durationMs: Date.now() - start,
         retryCount: 0,
-        message: `Network error pushing to ${this.connection.systemName}: ${err.message}`,
+        message: `Network error pushing to ${this.connection.systemName}: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
   }
 
   async pullEntities(
     entityType: CanonicalEntityType,
-    params: Record<string, any> = {}
-  ): Promise<{ success: boolean; data: any[]; message: string }> {
+    params: Record<string, string> = {}
+  ): Promise<{ success: boolean; data: unknown[]; message: string }> {
     const endpoint = this.getEndpointForEntity(entityType);
     const queryString = new URLSearchParams(params).toString();
     const url = `${this.connection.baseUrl.replace(/\/$/, '')}${endpoint}${queryString ? `?${queryString}` : ''}`;
@@ -152,10 +168,12 @@ export class GenericRestAdapter extends BaseEnterpriseAdapter {
       }
 
       const rawData = await res.json();
-      const items = Array.isArray(rawData) ? rawData : (rawData.data || rawData.items || [rawData]);
+      const items = (
+        Array.isArray(rawData) ? rawData : (rawData.data || rawData.items || [rawData])
+      ) as Record<string, unknown>[];
 
       // Apply reverse mapping to canonical
-      const canonicalData = items.map((item: any) =>
+      const canonicalData = items.map((item) =>
         reverseFieldMappings(item, this.connection.fieldMappings)
       );
 
@@ -164,11 +182,11 @@ export class GenericRestAdapter extends BaseEnterpriseAdapter {
         data: canonicalData,
         message: `Pulled ${canonicalData.length} records from ${this.connection.systemName}.`,
       };
-    } catch (err: any) {
+    } catch (err) {
       return {
         success: false,
         data: [],
-        message: `Error pulling entities: ${err.message}`,
+        message: `Error pulling entities: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
   }

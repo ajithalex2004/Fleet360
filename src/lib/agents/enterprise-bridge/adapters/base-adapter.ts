@@ -7,15 +7,26 @@
 
 import {
   CanonicalEntityType,
+  CanonicalInvoice,
+  CanonicalRoster,
+  CanonicalShipmentPO,
+  CanonicalWorkOrder,
   EnterpriseConnectionConfig,
   EnterpriseSyncResult,
 } from '../../types';
+
+/** Shared across all enterprise-bridge adapters (Odoo, SAP, generic REST). */
+export type CanonicalPayload = CanonicalInvoice | CanonicalRoster | CanonicalWorkOrder | CanonicalShipmentPO;
 
 export interface AdapterExecutionOptions {
   connection: EnterpriseConnectionConfig;
   entityType: CanonicalEntityType;
   entityId: string;
-  payload: any;
+  // Not constructed or consumed anywhere in the codebase today (no caller
+  // builds an AdapterExecutionOptions — each adapter implements the
+  // lifecycle methods below directly), so this is left as unknown rather
+  // than guessing a shape for this unused, unwired interface.
+  payload: unknown;
   customHeaders?: Record<string, string>;
 }
 
@@ -37,7 +48,7 @@ export abstract class BaseEnterpriseAdapter {
   abstract pushEntity(
     entityType: CanonicalEntityType,
     entityId: string,
-    canonicalPayload: any
+    canonicalPayload: CanonicalPayload
   ): Promise<EnterpriseSyncResult>;
 
   /**
@@ -45,8 +56,8 @@ export abstract class BaseEnterpriseAdapter {
    */
   abstract pullEntities(
     entityType: CanonicalEntityType,
-    params?: Record<string, any>
-  ): Promise<{ success: boolean; data: any[]; message: string }>;
+    params?: Record<string, unknown>
+  ): Promise<{ success: boolean; data: unknown[]; message: string }>;
 
   /**
    * Builds standardized authentication headers based on authType.
