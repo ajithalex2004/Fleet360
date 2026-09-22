@@ -26,6 +26,7 @@
 import OpenAI from 'openai';
 import { z } from 'zod';
 import { env, hasOpenAI } from '@/lib/env';
+import type { AgentDefinition, AgentEvent, AgentRunResult } from '../types';
 
 /* ── Output schemas ─────────────────────────────────────────────────────── */
 
@@ -293,3 +294,79 @@ export async function classifyDamage(
     };
   }
 }
+
+/* ── AgentDefinition adapter (event-driven dispatch) ─────────────────────────
+ * The REST endpoint (POST /api/rental/damage-claims/classify) accepts real
+ * multipart file uploads and calls classifyDamage() directly — that remains
+ * the primary way this agent is used. This wrapper exposes it through the
+ * generic AgentEvent/orchestrator dispatch path (registry.ts) instead, where
+ * image bytes travel as base64 strings in the JSON payload rather than as
+ * multipart File objects.
+ */
+
+interface DamageClassifyEventImage {
+  base64: string;
+  mimeType: string;
+  label?: 'BEFORE_HANDOVER' | 'AFTER_RETURN' | 'PHOTO';
+}
+
+function isDamageClassifyEventImage(v: unknown): v is DamageClassifyEventImage {
+  return (
+    typeof v === 'object' && v !== null &&
+    typeof (v as Record<string, unknown>).base64 === 'string' &&
+    typeof (v as Record<string, unknown>).mimeType === 'string'
+  );
+}
+
+async function runDamageClassifierEvent(event: AgentEvent): Promise<AgentRunResult> {
+  const t0 = Date.now();
+  const rawImages = event.payload?.images;
+  const images: ClassifyDamageInput['images'] = Array.isArray(rawImages)
+    ? rawImages.filter(isDamageClassifyEventImage).map((img) => ({
+        buffer: Buffer.from(img.base64, 'base64'),
+        mimeType: img.mimeType,
+        label: img.label,
+      }))
+    : [];
+
+  const result = await classifyDamage({ images });
+
+  if (!result.ok) {
+    return {
+      agentId: event.agent_id,
+      tenantId: event.tenant_id,
+      eventType: event.event_type,
+      entityId: event.entity_id,
+      status: 'FAILED',
+      durationMs: Date.now() - t0,
+      itemsProcessed: 0,
+      actionsCreated: 0,
+      output: result.detail ?? null,
+      error: result.error,
+    };
+  }
+
+  return {
+    agentId: event.agent_id,
+    tenantId: event.tenant_id,
+    eventType: event.event_type,
+    entityId: event.entity_id,
+    status: 'COMPLETED',
+    durationMs: result.durationMs,
+    itemsProcessed: images.length,
+    actionsCreated: 0, // advisory classification only — no DamageClaim is created here
+    output: result.classification,
+  };
+}
+
+export const DAMAGE_CLASSIFIER_AGENT: AgentDefinition = {
+  id: 'damage-classifier',
+  name: 'Vehicle Damage Classifier',
+  description: 'Identifies visible vehicle damage from handover/return photos (or isolates new damage between a before/after pair) and estimates repair cost from the UAE bodyshop index, for staff to review before creating a DamageClaim.',
+  version: '1.0.0',
+  agentType: 'INTERACTIVE_COPILOT',
+  autonomyLevel: 'L1',
+  subscribedEvents: ['rental.damage_classify_requested', 'manual.trigger'],
+  supportsEntityScan: false,
+  run: runDamageClassifierEvent,
+};

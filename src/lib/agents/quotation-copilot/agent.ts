@@ -17,6 +17,7 @@
 import OpenAI from 'openai';
 import { z } from 'zod';
 import { env, hasOpenAI } from '@/lib/env';
+import type { AgentDefinition, AgentEvent, AgentRunResult } from '../types';
 
 /* ── Output schema ───────────────────────────────────────────────────────── */
 
@@ -218,3 +219,57 @@ function zodToOpenAiSchema(): Record<string, unknown> {
     },
   };
 }
+
+/* ── AgentDefinition adapter (event-driven dispatch) ─────────────────────────
+ * The REST endpoint (POST /api/leasing/quotations/copilot) calls
+ * generateQuotationSuggestion() directly and remains the primary way this
+ * co-pilot is used. This wrapper additionally exposes it through the
+ * generic AgentEvent/orchestrator dispatch path (registry.ts), for callers
+ * that go through dispatch() rather than the REST endpoint directly.
+ */
+
+async function runQuotationCopilotEvent(event: AgentEvent): Promise<AgentRunResult> {
+  const t0 = Date.now();
+  const brief = typeof event.payload?.brief === 'string' ? event.payload.brief : '';
+
+  const result = await generateQuotationSuggestion(brief);
+
+  if (!result.ok) {
+    return {
+      agentId: event.agent_id,
+      tenantId: event.tenant_id,
+      eventType: event.event_type,
+      entityId: event.entity_id,
+      status: 'FAILED',
+      durationMs: Date.now() - t0,
+      itemsProcessed: 0,
+      actionsCreated: 0,
+      output: result.detail ?? null,
+      error: result.error,
+    };
+  }
+
+  return {
+    agentId: event.agent_id,
+    tenantId: event.tenant_id,
+    eventType: event.event_type,
+    entityId: event.entity_id,
+    status: 'COMPLETED',
+    durationMs: result.durationMs,
+    itemsProcessed: 1,
+    actionsCreated: 0, // advisory suggestion only — nothing persisted or auto-executed here
+    output: result.suggestion,
+  };
+}
+
+export const QUOTATION_COPILOT_AGENT: AgentDefinition = {
+  id: 'quotation-copilot',
+  name: 'Lease Quotation Co-pilot',
+  description: 'Turns a natural-language leasing brief (EN/AR) into a structured, priced lease-quotation suggestion for staff to review before converting it into a real quotation.',
+  version: '1.0.0',
+  agentType: 'INTERACTIVE_COPILOT',
+  autonomyLevel: 'L1',
+  subscribedEvents: ['leasing.quotation_copilot_requested', 'manual.trigger'],
+  supportsEntityScan: false,
+  run: runQuotationCopilotEvent,
+};

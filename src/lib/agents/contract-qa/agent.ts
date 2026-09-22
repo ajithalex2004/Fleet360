@@ -21,6 +21,7 @@
 import OpenAI from 'openai';
 import { prisma } from '@/lib/prisma';
 import { env, hasOpenAI } from '@/lib/env';
+import type { AgentDefinition, AgentEvent, AgentRunResult } from '../types';
 
 /* ── Tool schemas (OpenAI tool-call format) ──────────────────────────────── */
 
@@ -394,3 +395,94 @@ export async function answerContractQuestion(
     };
   }
 }
+
+/* ── AgentDefinition adapter (event-driven dispatch) ─────────────────────────
+ * The REST endpoint (POST /api/leasing/contracts-v2/[id]/qa) verifies the
+ * contract belongs to the caller's tenant before invoking
+ * answerContractQuestion() — that remains the primary way this agent is
+ * used. This wrapper exposes it through the generic AgentEvent/orchestrator
+ * dispatch path (registry.ts), and repeats the same tenant-ownership check
+ * here (rather than trusting the caller), since the tools this agent calls
+ * read real contract/invoice/lessee data by contractId alone.
+ */
+
+async function runContractQaEvent(event: AgentEvent): Promise<AgentRunResult> {
+  const t0 = Date.now();
+  const contractId = event.entity_id ?? (typeof event.payload?.contractId === 'string' ? event.payload.contractId : '');
+  const question = typeof event.payload?.question === 'string' ? event.payload.question : '';
+
+  if (!contractId) {
+    return {
+      agentId: event.agent_id,
+      tenantId: event.tenant_id,
+      eventType: event.event_type,
+      entityId: event.entity_id,
+      status: 'FAILED',
+      durationMs: Date.now() - t0,
+      itemsProcessed: 0,
+      actionsCreated: 0,
+      output: null,
+      error: 'No contractId provided (pass it as entity_id or payload.contractId).',
+    };
+  }
+
+  const contract = await prisma.leaseContract2.findFirst({
+    where: { id: contractId, tenantId: event.tenant_id },
+    select: { id: true },
+  });
+  if (!contract) {
+    return {
+      agentId: event.agent_id,
+      tenantId: event.tenant_id,
+      eventType: event.event_type,
+      entityId: event.entity_id,
+      status: 'FAILED',
+      durationMs: Date.now() - t0,
+      itemsProcessed: 0,
+      actionsCreated: 0,
+      output: null,
+      error: 'Contract not found for this tenant.',
+    };
+  }
+
+  const result = await answerContractQuestion(contractId, question);
+
+  if (!result.ok) {
+    return {
+      agentId: event.agent_id,
+      tenantId: event.tenant_id,
+      eventType: event.event_type,
+      entityId: event.entity_id,
+      status: 'FAILED',
+      durationMs: Date.now() - t0,
+      itemsProcessed: 0,
+      actionsCreated: 0,
+      output: result.detail ?? null,
+      error: result.error,
+    };
+  }
+
+  return {
+    agentId: event.agent_id,
+    tenantId: event.tenant_id,
+    eventType: event.event_type,
+    entityId: event.entity_id,
+    status: 'COMPLETED',
+    durationMs: result.durationMs,
+    itemsProcessed: 1,
+    actionsCreated: 0, // read-only — answers a question, doesn't change contract state
+    output: { answer: result.answer, toolsCalled: result.toolsCalled },
+  };
+}
+
+export const CONTRACT_QA_AGENT: AgentDefinition = {
+  id: 'contract-qa',
+  name: 'Lease Contract Q&A',
+  description: 'Answers natural-language questions (EN/AR) about a lease contract — payment schedule, mileage, invoices, lessee KYC — grounded on real contract data via tool calls.',
+  version: '1.0.0',
+  agentType: 'INTERACTIVE_COPILOT',
+  autonomyLevel: 'L0',
+  subscribedEvents: ['leasing.contract_qa_requested', 'manual.trigger'],
+  supportsEntityScan: false,
+  run: runContractQaEvent,
+};
