@@ -13,8 +13,6 @@
  *   2. Vercel Cron / GitHub Actions schedule
  */
 
-import { prisma } from '@/lib/prisma';
-
 import { captureException, captureMessage } from '@/lib/sentry';
 import { runSweep } from '@/lib/prisma-sweep';
 import type { TxClient } from '@/lib/rls';

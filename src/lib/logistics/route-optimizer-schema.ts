@@ -52,7 +52,8 @@ async function run(): Promise<void> {
       shipments_assigned  INTEGER,
       vehicles_used       INTEGER,
       estimated_cost      NUMERIC(15,2),
-      committed_at        TIMESTAMPTZ
+      committed_at        TIMESTAMPTZ,
+      committed_by        TEXT
     )
   `);
   await prisma.$executeRawUnsafe(`
@@ -125,4 +126,12 @@ async function run(): Promise<void> {
     prisma.$executeRawUnsafe(`ALTER TABLE logistics_assignments ADD COLUMN IF NOT EXISTS route_plan_id     TEXT`),
     prisma.$executeRawUnsafe(`ALTER TABLE logistics_assignments ADD COLUMN IF NOT EXISTS sequence_in_route INTEGER`),
   ]);
+
+  // Route plans: mirrors the existing created_by column — records who
+  // committed the plan (commitPlan()'s actorUserId), same as created_by
+  // records who ran the optimizer. Additive ALTER for deployments where the
+  // table already existed before this column was added.
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE logistics_route_plans ADD COLUMN IF NOT EXISTS committed_by TEXT`
+  );
 }

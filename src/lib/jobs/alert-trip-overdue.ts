@@ -34,7 +34,11 @@ interface OverdueTrip {
   route_variant_version_id: string | null;
 }
 
-export async function runAlertTripOverdue(_ctx: JobContext): Promise<JobResult> {
+export async function runAlertTripOverdue(ctx: JobContext): Promise<JobResult> {
+  // Required by the JobHandler contract (registry.ts), but this sweep is
+  // self-contained — it queries its own bounded window directly rather
+  // than reading anything from the invocation context.
+  void ctx;
   const now = new Date();
   const cutoff = new Date(now.getTime() - OVERDUE_TOLERANCE_MIN * 60_000);
   const windowStart = new Date(now.getTime() - SCAN_WINDOW_HOURS * 3600_000);

@@ -243,10 +243,6 @@ export async function checkModuleAccess(userId: string, module: string): Promise
  * Finance Hub is READ-ONLY — it does not own any transaction tables.
  */
 export async function getFinanceSummary(opts?: { from?: Date; to?: Date }) {
-  const dateFilter = {
-    ...(opts?.from ? { gte: opts.from } : {}),
-    ...(opts?.to   ? { lte: opts.to }   : {}),
-  };
   const hasDateFilter = opts?.from || opts?.to;
 
   const [

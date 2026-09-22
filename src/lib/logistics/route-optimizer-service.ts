@@ -385,9 +385,9 @@ export async function commitPlan(tenantId: string, planId: string, actorUserId: 
 
   await prisma.$executeRawUnsafe(
     `UPDATE logistics_route_plans
-        SET status = 'COMMITTED', committed_at = NOW(), updated_at = NOW()
+        SET status = 'COMMITTED', committed_at = NOW(), committed_by = $3, updated_at = NOW()
       WHERE id = $1 AND tenant_id = $2`,
-    planId, tenantId,
+    planId, tenantId, actorUserId,
   );
 
   return { assignmentsCreated: created };

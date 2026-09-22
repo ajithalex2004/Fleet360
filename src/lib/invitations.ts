@@ -9,7 +9,6 @@
  */
 
 import crypto from 'crypto';
-import { prisma } from '@/lib/prisma';
 
 export const INVITATION_TTL_DAYS = 7;
 
