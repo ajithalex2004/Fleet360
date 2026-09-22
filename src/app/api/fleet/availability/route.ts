@@ -7,6 +7,10 @@ import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import type { CategoryStock, AvailabilityResponse } from '@/lib/fleet/availability-types';
 import { STANDARD_DEPOTS } from '@/lib/fleet/availability-types';
 
+// Re-exported so tests can assert on the real depot list without duplicating
+// it — same pattern as LEAD_TIME_RULES_HOURS/CATEGORY_SAMPLE_MODELS below.
+export { STANDARD_DEPOTS };
+
 export const LEAD_TIME_RULES_HOURS: Record<string, number> = {
   EXECUTIVE: 2,
   LOGISTICS: 4,

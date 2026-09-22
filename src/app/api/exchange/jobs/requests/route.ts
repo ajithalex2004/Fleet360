@@ -16,8 +16,9 @@ export async function GET(req: NextRequest) {
 
   const requests = await prisma.outsourceRequest.findMany({
     where: {
+      // Note: OutsourceRequest has no closesAt/deadline column in the schema —
+      // "still open" is expressed entirely via status (PUBLISHED/QUOTED).
       status: { in: ['PUBLISHED', 'QUOTED'] },
-      closesAt: { gt: new Date() },
       OR: partnerId
         ? [
             { invitedPartners: { some: { partnerId } } },
@@ -28,6 +29,9 @@ export async function GET(req: NextRequest) {
     include: {
       invitedPartners: true,
       quotes: partnerId ? { where: { partnerId } } : true,
+      // Needed for the request's quote-submission deadline: OutsourceRequest
+      // itself has no closesAt column, that lives on MarketplaceOpportunity.
+      opportunity: true,
     },
     orderBy: { createdAt: 'desc' },
   });

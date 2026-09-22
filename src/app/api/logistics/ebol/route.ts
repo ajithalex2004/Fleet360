@@ -30,7 +30,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const rawBody = await req.json();
-    const body = stripTenantOwnershipFields(rawBody);
+    // Body is user-supplied and untyped; this cast matches the function's
+    // actual (unchanged) runtime behavior — it does not itself validate
+    // missing required fields, same as before.
+    const body = stripTenantOwnershipFields(rawBody) as Parameters<typeof createDigitalEBOL>[0];
     const ebol = createDigitalEBOL(body);
     EBOL_STORE[ebol.ebolNumber] = ebol;
 

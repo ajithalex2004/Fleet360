@@ -109,7 +109,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         tenant_id: tenantId,
         event_type: 'enterprise.external_event',
         entity_id: body.entityId,
-        metadata: { sourceSystem: connection.system_type, payload: body },
+        // AgentEvent only has a `payload` field (no `metadata`); the
+        // enterprise-bridge agent already expects event.payload.payload
+        // to be the caller-supplied entity body (see agent.ts:99-103).
+        payload: { sourceSystem: connection.system_type, payload: body },
       }).catch((e) => console.warn('[EnterpriseWebhook] Dispatch failed:', e));
     }
 

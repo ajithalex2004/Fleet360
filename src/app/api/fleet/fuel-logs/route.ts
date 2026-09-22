@@ -8,6 +8,7 @@ import { getEventBus }    from '@/events/event-bus';
 import { FUEL_FILLED }    from '@/events/registry';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import type { Prisma } from '@prisma/client';
 export async function GET(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -57,7 +58,7 @@ export async function POST(req: NextRequest) {
     try {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-        const fuelLog = await tx.fuelLog.create({ data: { ...body, tenantId } });
+        const fuelLog = await tx.fuelLog.create({ data: { ...body, tenantId } as Prisma.FuelLogUncheckedCreateInput });
 
         // Publish via outbox — Finance consumer picks this up asynchronously
         // Publishes under the authenticated tenant. This previously read

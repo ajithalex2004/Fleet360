@@ -30,7 +30,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const rawBody = await req.json();
-    const body = stripTenantOwnershipFields(rawBody);
+    // Body is user-supplied and untyped; this cast matches the function's
+    // actual (unchanged) runtime behavior.
+    const body = stripTenantOwnershipFields(rawBody) as Parameters<typeof createDigitalEPOD>[0];
     const epod = createDigitalEPOD(body);
     EPOD_STORE[epod.epodNumber] = epod;
 
