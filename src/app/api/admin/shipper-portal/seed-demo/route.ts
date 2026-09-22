@@ -37,6 +37,9 @@ export async function POST(req: NextRequest) {
   }
 
   const { tenantId, userId, role } = authz;
+  if (!userId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
 
   const force = req.nextUrl.searchParams.get('force') === 'true';
   if (process.env.NODE_ENV === 'production' && !(force && role === 'SUPER_ADMIN')) {

@@ -71,7 +71,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     void logAudit({
       tenantId,
-      userId,
+      userId: userId ?? undefined,
       userRole: req.headers.get('x-user-role') ?? 'OPERATOR',
       entityType: 'Customer',
       entityId: customerId,

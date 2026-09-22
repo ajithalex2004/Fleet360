@@ -38,6 +38,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId, userId } = authz;
+  if (!userId) {
+    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
 
   try {
     const { id: customerId } = await params;

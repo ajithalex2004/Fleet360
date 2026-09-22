@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
 
     void logAudit({
       tenantId,
-      userId, userRole: role,
+      userId: userId ?? undefined, userRole: role,
       entityType: 'Subscription',
       action: 'CREATE',
       details: `Checkout session created for ${plan}/${currency.toUpperCase()} → ${session.id}`,
