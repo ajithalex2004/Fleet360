@@ -86,10 +86,19 @@ export const POST = withAudit(
         return NextResponse.json({ error: 'dateTo must be on or after dateFrom' }, { status: 400 });
       }
 
-      const event = await withTenantRls(prisma, tenantId, async (tx) =>
-        tx.rateEvent.upsert({
-        where: { eventCode: parsed.data.eventCode, tenantId },
-        update: {
+      // RateEvent.eventCode has no unique/@@unique constraint in the
+      // schema (only a plain index) — Prisma's upsert() requires a real
+      // WhereUniqueInput, so `where: { eventCode, tenantId }` was never
+      // buildable and this call could never have worked. find-then-
+      // create/update is the equivalent without a migration; it isn't
+      // perfectly atomic under concurrent POSTs for the same (tenant,
+      // eventCode), same as any find+write without a DB-level unique
+      // constraint backing it.
+      const event = await withTenantRls(prisma, tenantId, async (tx) => {
+        const existing = await tx.rateEvent.findFirst({
+          where: { tenantId, eventCode: parsed.data.eventCode },
+        });
+        const fields = {
           name: parsed.data.name,
           description: parsed.data.description ?? null,
           dateFrom,
@@ -100,23 +109,12 @@ export const POST = withAudit(
           priority: parsed.data.priority ?? 0,
           isActive: parsed.data.isActive ?? true,
           notes: parsed.data.notes ?? null,
-        },
-        create: {
-          tenantId,
-          eventCode: parsed.data.eventCode,
-          name: parsed.data.name,
-          description: parsed.data.description ?? null,
-          dateFrom,
-          dateTo,
-          multiplier: parsed.data.multiplier,
-          applicableCategories: parsed.data.applicableCategories ?? null,
-          applicableChannels: parsed.data.applicableChannels ?? null,
-          priority: parsed.data.priority ?? 0,
-          isActive: parsed.data.isActive ?? true,
-          notes: parsed.data.notes ?? null,
-        },
-      }),
-      );
+        };
+        if (existing) {
+          return tx.rateEvent.update({ where: { id: existing.id }, data: fields });
+        }
+        return tx.rateEvent.create({ data: { tenantId, eventCode: parsed.data.eventCode, ...fields } });
+      });
       return NextResponse.json(event, { status: 201 });
       } catch (err) {
       captureException(err, { context: 'rental.rate-events.POST' });
@@ -126,8 +124,8 @@ export const POST = withAudit(
   {
     entityType: 'RateEvent',
     action: 'CREATE',
-    extractEntity: (body) => ({ id: body?.id, name: body?.eventCode }),
-    describe: (_req, body) =>
+    extractEntity: (body: { id?: string; eventCode?: string }) => ({ id: body?.id, name: body?.eventCode }),
+    describe: (_req, body: { eventCode?: string; name?: string; multiplier?: number }) =>
       body?.eventCode
         ? `Saved rate event ${body.eventCode} (${body.name}, multiplier ${body.multiplier})`
         : undefined,

@@ -10,6 +10,11 @@ import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error ? e.message : fallback;
+}
+
+
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
 
@@ -103,7 +108,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         }, { status: 201 });
         } catch (e) {
         console.error('Invoice payment error:', e);
-        return NextResponse.json({ error: e.message ?? 'Failed to record payment' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(e, 'Failed to record payment') }, { status: 500 });
       }
   });
 }

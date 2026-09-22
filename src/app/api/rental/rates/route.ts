@@ -7,6 +7,11 @@ import { prisma } from '@/lib/prisma';
 import { paginate, paginatedResponse } from '@/lib/pagination';
 import { pricingRuleToRow, rowToCamel } from '@/lib/pricing-rule-helpers';
 
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error ? e.message : fallback;
+}
+
+
 // GET  /api/rental/rates  — list pricing rules (paginated, filterable)
 export async function GET(req: NextRequest) {
 
@@ -90,7 +95,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(rowToCamel(rows[0]), { status: 201 });
         } catch (e) {
         console.error('Failed to create pricing rule:', e);
-        return NextResponse.json({ error: e.message ?? 'Failed to create rule' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(e, 'Failed to create rule') }, { status: 500 });
       }
   });
 }

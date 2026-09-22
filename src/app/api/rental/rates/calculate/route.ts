@@ -11,6 +11,11 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 import { prisma } from '@/lib/prisma';
 import { calculateRate, type RateRequest } from '@/lib/rental-rate-engine';
 
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error ? e.message : fallback;
+}
+
+
 export async function POST(req: NextRequest) {
 
   const authz = requireAuthorizedTenant(req);
@@ -97,7 +102,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(result);
       } catch (e) {
         console.error('Rate calculation error:', e);
-        return NextResponse.json({ error: e.message ?? 'Calculation failed' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(e, 'Calculation failed') }, { status: 500 });
       }
   });
 }

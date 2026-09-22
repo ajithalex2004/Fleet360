@@ -11,6 +11,11 @@ import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error ? e.message : fallback;
+}
+
+
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
 
@@ -64,7 +69,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         });
         } catch (e) {
         console.error('Invoice send error:', e);
-        return NextResponse.json({ error: e.message ?? 'Failed to send invoice' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(e, 'Failed to send invoice') }, { status: 500 });
       }
   });
 }

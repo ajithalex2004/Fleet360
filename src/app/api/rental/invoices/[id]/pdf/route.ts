@@ -98,7 +98,7 @@ function jsonErr(error: string, status: number) {
   return new Response(JSON.stringify({ error }), { status, headers: { 'Content-Type': 'application/json' } });
 }
 function pdfResponse(buffer: Buffer, filename: string, download: boolean) {
-  return new Response(buffer, {
+  return new Response(new Uint8Array(buffer), {
     status: 200,
     headers: {
       'Content-Type': 'application/pdf',
