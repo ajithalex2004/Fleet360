@@ -99,7 +99,7 @@ export async function PUT(req: NextRequest) {
 
       audit = {
         tenantId,
-        userId,
+        userId: userId ?? undefined,
         userRole: req.headers.get('x-user-role') ?? 'TENANT_ADMIN',
         entityType: 'TenantSettings',
         entityId: tenantId,
