@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getMyPendingApprovals } from '@/lib/workflow-db';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
+
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error ? e.message : fallback;
+}
+
 export async function GET(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -16,6 +21,6 @@ export async function GET(req: NextRequest) {
     const approvals = await getMyPendingApprovals(email);
     return NextResponse.json(approvals);
   } catch (e) {
-    return NextResponse.json({ error: e?.message }, { status: 500 });
+    return NextResponse.json({ error: errorMessage(e, 'Failed to fetch approvals') }, { status: 500 });
   }
 }

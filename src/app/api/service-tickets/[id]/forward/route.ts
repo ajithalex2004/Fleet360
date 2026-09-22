@@ -245,7 +245,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
       void logAudit({
         tenantId,
-        userId,
+        userId: userId ?? undefined,
         entityType: 'ServiceTicket',
         entityId: updated.id,
         entityName: updated.readable_id ?? updated.id,

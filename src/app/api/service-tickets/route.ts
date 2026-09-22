@@ -297,7 +297,7 @@ export async function POST(req: NextRequest) {
 
         void logAudit({
           tenantId,
-          userId,
+          userId: userId ?? undefined,
           userRole: 'USER',
           entityType: 'ServiceTicket',
           entityId: ticket.id,

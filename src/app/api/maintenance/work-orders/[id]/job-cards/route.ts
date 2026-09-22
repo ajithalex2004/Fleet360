@@ -23,10 +23,10 @@ export async function GET(
     try {
             const { id } = params;
 
-            // workOrderId comes from the URL and nothing resolves the work
-            // order first, so tenantId is the only thing scoping this.
+            // JobCard has no tenantId column of its own — it is scoped
+            // through its WorkOrder relation, which does carry tenantId.
             const cards = await tx.jobCard.findMany({
-                where:   { workOrderId: id, tenantId },
+                where:   { workOrderId: id, WorkOrder: { tenantId } },
                 include: { tasks: { orderBy: { createdAt: 'asc' } } },
                 orderBy: { createdAt: 'asc' },
             });
@@ -62,6 +62,18 @@ export async function POST(
     try {
             const { id } = params;
             const body = await request.json();
+
+            // Real bug: nothing previously verified that the work order
+            // named in the URL belongs to this tenant before attaching a
+            // job card to it — a caller who knew another tenant's work
+            // order id could write a job card onto it.
+            const workOrder = await tx.workOrder.findFirst({ where: { id, tenantId } });
+            if (!workOrder) {
+                return NextResponse.json(
+                    { error: 'Work order not found' },
+                    { status: 404 },
+                );
+            }
 
             const card = await tx.jobCard.create({
                 data: {

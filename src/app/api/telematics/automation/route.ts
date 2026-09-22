@@ -21,6 +21,9 @@ export async function GET(req: NextRequest) {
     try {
       // 1. Fetch active trips (SCHEDULED, STARTED, EN_ROUTE, and the legacy
       // DEPARTED/IN_TRANSIT strings those were renamed from)
+      // Note: TripSchedule.vehicleId / driverId are plain FK columns with no
+      // Prisma relation declared (unlike routeId -> route), so vehicle/driver
+      // are batch-fetched separately below and joined in-memory.
       const activeTrips = await tx.tripSchedule.findMany({
         where: {
           tenantId,
@@ -34,8 +37,6 @@ export async function GET(req: NextRequest) {
               },
             },
           },
-          vehicle: true,
-          driver: true,
         },
         orderBy: { departureTime: 'asc' },
         take: 15,
@@ -55,7 +56,30 @@ export async function GET(req: NextRequest) {
         visitMap.set(`${v.scheduleId}:${v.stopId}`, v);
       }
 
+      const tripVehicleIds = [...new Set(activeTrips.map((t) => t.vehicleId).filter((id): id is string => !!id))];
+      const tripDriverIds = [...new Set(activeTrips.map((t) => t.driverId).filter((id): id is string => !!id))];
+
+      const [tripVehicles, tripDrivers] = await Promise.all([
+        tripVehicleIds.length
+          ? tx.vehicle.findMany({
+              where: { id: { in: tripVehicleIds } },
+              select: { id: true, vehicleCode: true, licensePlate: true, deviceId: true },
+            })
+          : Promise.resolve([]),
+        tripDriverIds.length
+          ? tx.driver.findMany({
+              where: { id: { in: tripDriverIds } },
+              select: { id: true, firstName: true, lastName: true },
+            })
+          : Promise.resolve([]),
+      ]);
+
+      const vehicleById = new Map(tripVehicles.map((v) => [v.id, v]));
+      const driverById = new Map(tripDrivers.map((d) => [d.id, d]));
+
       const activeTripProgress = activeTrips.map((trip) => {
+        const tripVehicle = trip.vehicleId ? vehicleById.get(trip.vehicleId) : undefined;
+        const tripDriver = trip.driverId ? driverById.get(trip.driverId) : undefined;
         const stops = (trip.route?.stops || []).map((stop) => {
           const visit = visitMap.get(`${trip.id}:${stop.id}`);
           let state: 'PENDING' | 'APPROACHING' | 'AT_STOP' | 'DEPARTED' = 'PENDING';
@@ -90,20 +114,20 @@ export async function GET(req: NextRequest) {
           shiftType: trip.shiftType,
           status: trip.status,
           departureTime: trip.departureTime.toISOString(),
-          estimatedArrival: trip.estimatedArrival ? trip.estimatedArrival.toISOString() : null,
-          vehicle: trip.vehicle
+          estimatedArrival: trip.arrivalTime ? trip.arrivalTime.toISOString() : null,
+          vehicle: tripVehicle
             ? {
-                id: trip.vehicle.id,
-                vehicleCode: trip.vehicle.vehicleCode,
-                licensePlate: trip.vehicle.licensePlate,
-                deviceId: trip.vehicle.deviceId,
+                id: tripVehicle.id,
+                vehicleCode: tripVehicle.vehicleCode,
+                licensePlate: tripVehicle.licensePlate,
+                deviceId: tripVehicle.deviceId,
               }
             : null,
-          driver: trip.driver
+          driver: tripDriver
             ? {
-                id: trip.driver.id,
-                firstName: trip.driver.firstName,
-                lastName: trip.driver.lastName,
+                id: tripDriver.id,
+                firstName: tripDriver.firstName,
+                lastName: tripDriver.lastName,
               }
             : null,
           routeName: trip.route?.name || `${trip.route?.origin} → ${trip.route?.destination}`,

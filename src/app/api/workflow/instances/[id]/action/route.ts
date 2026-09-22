@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { advanceWorkflow, getWorkflowInstanceWithHistory } from '@/lib/workflow-db';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
+
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error && e.message ? e.message : fallback;
+}
+
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -31,8 +36,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     const result = await advanceWorkflow(params.id, stepOrder, action, comments ?? '', actionedByEmail);
     return NextResponse.json(result);
   } catch (e) {
-    console.error('POST /api/workflow/instances/[id]/action error:', e?.message);
-    return NextResponse.json({ error: e?.message ?? 'Failed' }, { status: 500 });
+    console.error('POST /api/workflow/instances/[id]/action error:', errorMessage(e, 'Failed'));
+    return NextResponse.json({ error: errorMessage(e, 'Failed') }, { status: 500 });
   }
 }
 
@@ -49,6 +54,6 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
     if (!instance) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json(instance);
   } catch (e) {
-    return NextResponse.json({ error: e?.message }, { status: 500 });
+    return NextResponse.json({ error: errorMessage(e, 'Failed to fetch workflow instance') }, { status: 500 });
   }
 }
