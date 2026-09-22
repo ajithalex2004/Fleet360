@@ -45,17 +45,19 @@ export async function POST(req: NextRequest) {
 
   try {
     const rawBody = await req.json();
-    const body = stripTenantOwnershipFields(rawBody);
+    // Body is user-supplied and may omit any of these — that's why every
+    // destructured field below has a default (or is checked for emptiness).
+    const body = stripTenantOwnershipFields(rawBody) as Partial<{
+      bookingRef: string;
+      sender: 'PASSENGER' | 'DRIVER' | 'DISPATCHER';
+      senderName: string;
+      text: string;
+    }>;
     const {
       bookingRef = 'DEFAULT',
       sender = 'PASSENGER',
       senderName = 'Passenger',
       text,
-    }: {
-      bookingRef: string;
-      sender: 'PASSENGER' | 'DRIVER' | 'DISPATCHER';
-      senderName: string;
-      text: string;
     } = body;
 
     if (!text || text.trim() === '') {

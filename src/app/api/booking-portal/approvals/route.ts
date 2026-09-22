@@ -19,10 +19,12 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
+      // Booking has no deletedAt column (no soft-delete on this model) —
+      // filtering on it would throw a PrismaClientValidationError at
+      // runtime on every request to this route.
       const bookings = await tx.booking.findMany({
         where: {
           tenantId,
-          deletedAt: null,
         },
         orderBy: { createdAt: 'desc' },
         take: 100,
@@ -138,7 +140,7 @@ export async function POST(req: NextRequest) {
       }
 
       const booking = await tx.booking.findFirst({
-        where: { id: bookingId, tenantId, deletedAt: null },
+        where: { id: bookingId, tenantId },
       });
 
       if (!booking) {

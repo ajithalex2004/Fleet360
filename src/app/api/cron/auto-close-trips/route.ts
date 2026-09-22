@@ -8,7 +8,7 @@
  * New cron entries should point to: POST /api/jobs/run?job=auto-close-trips
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { isJobAuthorized, JOB_MAP, type JobContext } from '@/lib/jobs/registry';
+import { verifyJobAuthorization, JOB_MAP, type JobContext } from '@/lib/jobs/registry';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const dynamic     = 'force-dynamic';

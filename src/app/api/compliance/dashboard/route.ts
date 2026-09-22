@@ -91,14 +91,21 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      // 3. Fetch Drivers for License & Permit expiry
+      // 3. Fetch Drivers for License expiry.
+      // NOTE: there is no `permitExpiry` on Driver — that field only exists
+      // on the unrelated, non-tenant-scoped PartnerDriver model (outsource
+      // exchange marketplace partners, see src/lib/exchange/), so it can't
+      // be pulled into a per-tenant dashboard without a real cross-tenant
+      // leak. The "RTA Commercial Permit" block was referencing a field
+      // that never existed on this model; removed rather than faked.
       const drivers = await tx.driver.findMany({
         where: { tenantId, deletedAt: null },
         select: {
           id: true,
           name: true,
+          firstName: true,
+          lastName: true,
           licenseExpiry: true,
-          permitExpiry: true,
         },
       }).catch(() => []);
 
@@ -106,25 +113,13 @@ export async function GET(req: NextRequest) {
         if (d.licenseExpiry) {
           const exp = new Date(d.licenseExpiry);
           const days = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+          const driverName =
+            d.name || [d.firstName, d.lastName].filter(Boolean).join(' ') || `Driver ${d.id.slice(0, 6)}`;
           items.push({
             id: `drv-lic-${d.id}`,
             entityType: 'DRIVER',
-            entityId: d.name,
+            entityId: driverName,
             docType: 'UAE Driving License',
-            expiryDate: exp.toISOString(),
-            daysRemaining: days,
-            status: days <= 0 ? 'EXPIRED' : days <= 30 ? 'EXPIRING_SOON' : 'COMPLIANT',
-          });
-        }
-
-        if (d.permitExpiry) {
-          const exp = new Date(d.permitExpiry);
-          const days = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-          items.push({
-            id: `drv-pmt-${d.id}`,
-            entityType: 'DRIVER',
-            entityId: d.name,
-            docType: 'RTA Commercial Permit',
             expiryDate: exp.toISOString(),
             daysRemaining: days,
             status: days <= 0 ? 'EXPIRED' : days <= 30 ? 'EXPIRING_SOON' : 'COMPLIANT',

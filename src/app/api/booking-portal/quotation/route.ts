@@ -122,7 +122,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const rawBody = await req.json();
-    const body: QuotationRequest = stripTenantOwnershipFields(rawBody);
+    // Body is user-supplied; calculateInstantQuotation already defends
+    // against missing fields internally (e.g. `params.serviceType || 'RENTAL'`).
+    const body = stripTenantOwnershipFields(rawBody) as QuotationRequest;
     const quotation = calculateInstantQuotation(body);
     return NextResponse.json(quotation);
   } catch (err) {

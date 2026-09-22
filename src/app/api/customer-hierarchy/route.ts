@@ -6,6 +6,11 @@ import { prisma } from '@/lib/prisma';
 import { randomUUID } from 'crypto';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error ? e.message : fallback;
+}
+
 export async function GET(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -30,7 +35,7 @@ export async function GET(req: NextRequest) {
         );
         return NextResponse.json(items);
       } catch (e) {
-        return NextResponse.json({ error: e?.message ?? 'Failed' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(e, 'Failed') }, { status: 500 });
       }
   });
 }
@@ -65,7 +70,7 @@ export async function POST(req: NextRequest) {
         const rows = await tx.$queryRawUnsafe(`SELECT * FROM customer_hierarchy WHERE id = '${id}'`);
         return NextResponse.json((rows as any[])[0], { status: 201 });
         } catch (e) {
-        return NextResponse.json({ error: e?.message ?? 'Failed' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(e, 'Failed') }, { status: 500 });
       }
   });
 }
