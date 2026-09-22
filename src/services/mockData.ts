@@ -4,17 +4,12 @@ import {
     Garage,
     MaintenanceRequest,
     Alert,
-    MaintenanceStatus,
-    AlertSeverity,
-    AlertType,
-    ActionStatus,
     ServiceSchedule,
     Invoice,
-    PaymentStatus,
-    InvoiceCategory,
     ServiceRequest,
-    QuotationStatus,
     Quotation,
+    WorkOrder,
+    User,
 } from '../types/maintenance';
 
 // DEPRECATED: These arrays are kept for backward compatibility during migration.
@@ -26,26 +21,26 @@ export const mockMaintenanceRequests: MaintenanceRequest[] = [];
 export const mockAlerts: Alert[] = [];
 export const mockSchedules: ServiceSchedule[] = [];
 export const mockInvoices: Invoice[] = [];
-export let mockServiceRequests: ServiceRequest[] = [];
-export const mockAlertConfigs: any[] = []; // Placeholder
+export const mockServiceRequests: ServiceRequest[] = [];
+export const mockAlertConfigs: Record<string, unknown>[] = []; // Placeholder
 
 // API Helpers
 export const api = {
-    get: async <T = any>(endpoint: string): Promise<T> => {
+    get: async <T = unknown>(endpoint: string): Promise<T> => {
         const res = await fetch(`/api/${endpoint}`, { cache: 'no-store' });
         if (!res.ok) {
             let errorDetails = `Status: ${res.status}`;
             try {
                 const text = await res.text();
                 if (text) errorDetails += `, Details: ${text}`;
-            } catch (e) {
+            } catch {
                 // Ignore text reading error
             }
             throw new Error(`Failed to fetch ${endpoint} (${errorDetails})`);
         }
         return res.json() as T;
     },
-    post: async <T = any>(endpoint: string, data: any): Promise<T> => {
+    post: async <T = unknown>(endpoint: string, data: unknown): Promise<T> => {
         const response = await fetch(`/api/${endpoint}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -57,7 +52,7 @@ export const api = {
         }
         return response.json() as T;
     },
-    delete: async <T = any>(endpoint: string): Promise<T> => {
+    delete: async <T = unknown>(endpoint: string): Promise<T> => {
         const response = await fetch(`/api/${endpoint}`, {
             method: 'DELETE',
         });
@@ -67,7 +62,7 @@ export const api = {
         }
         return response.json() as T;
     },
-    patch: async <T = any>(endpoint: string, data: any): Promise<T> => {
+    patch: async <T = unknown>(endpoint: string, data: unknown): Promise<T> => {
         const response = await fetch(`/api/${endpoint}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -79,7 +74,7 @@ export const api = {
         }
         return response.json() as T;
     },
-    put: async <T = any>(endpoint: string, data: any): Promise<T> => {
+    put: async <T = unknown>(endpoint: string, data: unknown): Promise<T> => {
         const response = await fetch(`/api/${endpoint}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -95,21 +90,21 @@ export const api = {
 // Vehicles
 export const getVehicles = () => api.get<Vehicle[]>('vehicles');
 export const getVehicleById = async (id: string) => api.get<Vehicle>(`vehicles/${id}`);
-export const createVehicle = (vehicle: any) => api.post<Vehicle>('vehicles', vehicle);
-export const updateVehicle = (id: string, updates: any) => api.patch<Vehicle>(`vehicles/${id}`, updates);
+export const createVehicle = (vehicle: Omit<Vehicle, 'id'>) => api.post<Vehicle>('vehicles', vehicle);
+export const updateVehicle = (id: string, updates: Partial<Vehicle>) => api.patch<Vehicle>(`vehicles/${id}`, updates);
 export const deleteVehicle = (id: string) => api.delete(`vehicles/${id}`);
 
 // Drivers
 export const getDrivers = () => api.get<Driver[]>('drivers');
 export const getDriverById = async (id: string) => api.get<Driver>(`drivers/${id}`);
-export const createDriver = (driver: any) => api.post<Driver>('drivers', driver);
-export const updateDriver = (id: string, updates: any) => api.patch<Driver>(`drivers/${id}`, updates);
+export const createDriver = (driver: Omit<Driver, 'id'>) => api.post<Driver>('drivers', driver);
+export const updateDriver = (id: string, updates: Partial<Driver>) => api.patch<Driver>(`drivers/${id}`, updates);
 export const deleteDriver = (id: string) => api.delete(`drivers/${id}`);
 
 // Users
-export const getUsers = () => api.get('users');
-export const createUser = (user: any) => api.post('users', user);
-export const updateUser = (id: string, updates: any) => api.patch(`users/${id}`, updates);
+export const getUsers = () => api.get<User[]>('users');
+export const createUser = (user: Omit<User, 'id'>) => api.post<User>('users', user);
+export const updateUser = (id: string, updates: Partial<User>) => api.patch<User>(`users/${id}`, updates);
 export const deleteUser = (id: string) => api.delete(`users/${id}`);
 
 // Garages
@@ -127,15 +122,15 @@ export const createMaintenanceRequest = (request: Omit<MaintenanceRequest, 'id' 
 export const updateMaintenanceRequest = (id: string, updates: Partial<MaintenanceRequest>) => api.patch<MaintenanceRequest>(`maintenance-requests/${id}`, updates);
 
 // Quotations
-export const createQuotation = (quotation: any) => api.post<Quotation>('quotations', quotation);
-export const updateQuotation = (id: string, updates: any) => api.patch<Quotation>(`quotations/${id}`, updates);
+export const createQuotation = (quotation: Partial<Quotation>) => api.post<Quotation>('quotations', quotation);
+export const updateQuotation = (id: string, updates: Partial<Quotation>) => api.patch<Quotation>(`quotations/${id}`, updates);
 
 // Work Orders
-export const createWorkOrder = (workOrder: any) => api.post('work-orders', workOrder);
+export const createWorkOrder = (workOrder: Omit<WorkOrder, 'id'>) => api.post<WorkOrder>('work-orders', workOrder);
 
 // Alerts
 export const getAlerts = () => api.get<Alert[]>('alerts');
-export const createAlert = (alert: any) => api.post<Alert>('alerts', alert);
+export const createAlert = (alert: Omit<Alert, 'id'>) => api.post<Alert>('alerts', alert);
 export const updateAlert = (id: string, updates: Partial<Alert>) => api.patch<Alert>(`alerts/${id}`, updates);
 
 // Invoices (Mock for now)
@@ -189,9 +184,9 @@ export const sendEmailNotification = async (to: string, subject: string, body: s
 };
 
 // Alert Configs
-export const getAlertConfigs = () => api.get('alert-configs');
-export const createAlertConfig = (config: any) => api.post('alert-configs', config);
-export const updateAlertConfig = (id: string, updates: any) => api.patch(`alert-configs/${id}`, updates);
+export const getAlertConfigs = () => api.get<Record<string, unknown>[]>('alert-configs');
+export const createAlertConfig = (config: Record<string, unknown>) => api.post('alert-configs', config);
+export const updateAlertConfig = (id: string, updates: Record<string, unknown>) => api.patch(`alert-configs/${id}`, updates);
 export const deleteAlertConfig = (id: string) => api.delete(`alert-configs/${id}`);
 // File Upload
 export const uploadFile = async (file: File) => {

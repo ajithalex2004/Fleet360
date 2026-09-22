@@ -97,7 +97,13 @@ describe('Fleet360 Exchange: Phase 3.5 Commercial Settlement, Statements & Dispu
     };
 
     // Raise Dispute on 200 AED waiting time fee
-    const dispute = {
+    const dispute: {
+      id: string;
+      disputeNumber: string;
+      disputedAmount: number;
+      status: DisputeStatus;
+      reason: string;
+    } = {
       id: 'dsp-001',
       disputeNumber: 'DSP-998811',
       disputedAmount: 200.0,

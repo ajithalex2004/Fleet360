@@ -167,7 +167,14 @@ describe('Fleet360 Exchange: Phase 3 Private Marketplace Acceptance Test Suite',
   });
 
   it('Test 5: Cross-Domain Attack Defense — Strict 403 Rejection on Unauthorized Quoting', () => {
-    const isPartnerDomainEligible = (partner: typeof busPartner, oppDomain: PartnerServiceDomain) => {
+    // `typeof busPartner` would narrow `capabilities` to a single-member
+    // literal array type (inferred from busPartner's own initializer),
+    // which rejects freightPartner/recoveryPartner despite them sharing
+    // the same shape — accept any partner shaped like these fixtures instead.
+    const isPartnerDomainEligible = (
+      partner: { capabilities: PartnerServiceDomain[] },
+      oppDomain: PartnerServiceDomain,
+    ) => {
       return partner.capabilities.includes(oppDomain);
     };
 

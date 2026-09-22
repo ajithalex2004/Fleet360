@@ -175,7 +175,9 @@ describe('Fleet360 Exchange: Live End-to-End UI & Workflow Execution', () => {
     });
 
     expect(pdfBytes.length).toBeGreaterThan(500);
-    expect(pdfBytes.toString('utf-8')).toContain('%PDF-1.4');
+    // generateTaxInvoicePdf returns a Uint8Array, not a Buffer — its
+    // toString() takes no encoding argument, unlike Buffer's.
+    expect(Buffer.from(pdfBytes).toString('utf-8')).toContain('%PDF-1.4');
 
     // -------------------------------------------------------------------------
     // STEP 10: Partner Performance Scorecard & Tier Recalculation

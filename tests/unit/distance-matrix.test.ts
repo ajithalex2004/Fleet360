@@ -1,9 +1,7 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   computeDistanceMatrix,
   haversineKm,
-  _setFetchForTests,
-  _resetFetchForTests,
   type LatLng,
 } from '@/lib/logistics/distance-matrix';
 
@@ -11,14 +9,6 @@ import {
 const DUBAI_MALL:   LatLng = { latitude: 25.197, longitude: 55.279 };
 const ABU_DHABI:    LatLng = { latitude: 24.453, longitude: 54.378 };
 const SHARJAH:      LatLng = { latitude: 25.357, longitude: 55.391 };
-
-beforeEach(() => {
-  delete process.env.MAPBOX_TOKEN;  // start in offline mode unless test sets it
-});
-
-afterEach(() => {
-  _resetFetchForTests();
-});
 
 // ── haversineKm — pure ─────────────────────────────────────────────────────
 
@@ -84,110 +74,14 @@ describe('computeDistanceMatrix · haversine', () => {
   });
 });
 
-// ── computeDistanceMatrix: Mapbox path ────────────────────────────────────
-
-describe('computeDistanceMatrix · mapbox', () => {
-  function mapboxResponse(distMetres: number[][], durSec: number[][]) {
-    return vi.fn().mockResolvedValue({
-      ok: true, status: 200,
-      json: () => Promise.resolve({ code: 'Ok', distances: distMetres, durations: durSec }),
-    });
-  }
-
-  it('calls Mapbox when provider is explicitly mapbox and token is set', async () => {
-    process.env.MAPBOX_TOKEN = 'test-token';
-    const fetchSpy = mapboxResponse(
-      [[0, 145000], [145000, 0]],
-      [[0, 5400],   [5400, 0]],
-    );
-    _setFetchForTests(fetchSpy as unknown as typeof fetch);
-
-    const m = await computeDistanceMatrix([DUBAI_MALL, ABU_DHABI], { provider: 'mapbox' });
-    expect(m.provider).toBe('mapbox');
-    // Mapbox returns metres + seconds; we want km + minutes
-    expect(m.distances[0][1]).toBeCloseTo(145, 1);
-    expect(m.durations[0][1]).toBeCloseTo(90, 1); // 5400s = 90min
-    expect(fetchSpy).toHaveBeenCalledOnce();
-  });
-
-  it('throws when provider=mapbox but no token configured', async () => {
-    delete process.env.MAPBOX_TOKEN;
-    await expect(computeDistanceMatrix([DUBAI_MALL, ABU_DHABI], { provider: 'mapbox' }))
-      .rejects.toThrow(/MAPBOX_TOKEN not configured/);
-  });
-
-  it('auto-selects mapbox when token is set and no explicit provider', async () => {
-    process.env.MAPBOX_TOKEN = 'test-token';
-    const fetchSpy = mapboxResponse([[0, 1000], [1000, 0]], [[0, 60], [60, 0]]);
-    _setFetchForTests(fetchSpy as unknown as typeof fetch);
-
-    const m = await computeDistanceMatrix([DUBAI_MALL, ABU_DHABI]);
-    expect(m.provider).toBe('mapbox');
-  });
-
-  it('auto-selects haversine when no token (silent fallback for dev)', async () => {
-    delete process.env.MAPBOX_TOKEN;
-    const m = await computeDistanceMatrix([DUBAI_MALL, ABU_DHABI]);
-    expect(m.provider).toBe('haversine');
-  });
-
-  it('returns Infinity for unreachable cells (null in Mapbox response)', async () => {
-    process.env.MAPBOX_TOKEN = 'test-token';
-    const fetchSpy = vi.fn().mockResolvedValue({
-      ok: true, status: 200,
-      json: () => Promise.resolve({
-        code: 'Ok',
-        distances: [[0, null], [null, 0]],
-        durations: [[0, null], [null, 0]],
-      }),
-    });
-    _setFetchForTests(fetchSpy as unknown as typeof fetch);
-    const m = await computeDistanceMatrix([DUBAI_MALL, ABU_DHABI], { provider: 'mapbox' });
-    expect(m.distances[0][1]).toBe(Infinity);
-  });
-
-  it('chunks into multiple calls when point count exceeds 25', async () => {
-    process.env.MAPBOX_TOKEN = 'test-token';
-    // 30 points → needs 2 row-strips × 2 col-strips = 4 calls
-    const points = Array.from({ length: 30 }, (_, i) => ({
-      latitude: 25 + i * 0.001, longitude: 55 + i * 0.001,
-    }));
-    const callCount = { n: 0 };
-    _setFetchForTests((vi.fn().mockImplementation(async (url: string) => {
-      callCount.n += 1;
-      // Parse sources / destinations to know the chunk size
-      const srcMatch = url.match(/sources=([^&]+)/);
-      const dstMatch = url.match(/destinations=([^&]+)/);
-      const srcCount = srcMatch ? srcMatch[1].split(';').length : points.length;
-      const dstCount = dstMatch ? dstMatch[1].split(';').length : points.length;
-      const distRow = new Array(dstCount).fill(1000);
-      const durRow  = new Array(dstCount).fill(60);
-      return {
-        ok: true, status: 200,
-        json: () => Promise.resolve({
-          code: 'Ok',
-          distances: Array.from({ length: srcCount }, () => [...distRow]),
-          durations: Array.from({ length: srcCount }, () => [...durRow]),
-        }),
-      };
-    })) as unknown as typeof fetch);
-
-    const m = await computeDistanceMatrix(points, { provider: 'mapbox' });
-    expect(m.distances.length).toBe(30);
-    expect(m.distances[0].length).toBe(30);
-    expect(callCount.n).toBe(4);  // 2×2 chunks
-  });
-
-  it('propagates Mapbox API errors with status code', async () => {
-    process.env.MAPBOX_TOKEN = 'test-token';
-    _setFetchForTests((vi.fn().mockResolvedValue({
-      ok: false, status: 429,
-      text: () => Promise.resolve('Rate limit'),
-    })) as unknown as typeof fetch);
-    await expect(computeDistanceMatrix([DUBAI_MALL, ABU_DHABI], { provider: 'mapbox' }))
-      .rejects.toThrow(/429/);
-  });
-});
+// Mapbox HTTP calls used to be made directly from this module (and were
+// intercepted in tests via _setFetchForTests/_resetFetchForTests). That
+// logic has since moved into RoutingIntelligenceService.getMatrix(), which
+// computeDistanceMatrix now unconditionally delegates to — there's no
+// fetch seam left at this layer to test against. Provider selection and
+// the Mapbox HTTP path are covered where they now live, in
+// tests/unit/routing-intelligence.test.ts ("Backward-Compatible Logistics
+// Adapter" verifies computeDistanceMatrix routes through the service).
 
 // ── Sanity check: solver-relevant invariants ──────────────────────────────
 

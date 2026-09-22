@@ -191,6 +191,21 @@ export interface Driver {
     dallasId?: string;
 }
 
+// System user (admin/data-masters), distinct from a Driver.
+export interface User {
+    id: string;
+    username: string;
+    email: string;
+    mobileNumber?: string;
+    hierarchy?: string;
+    userType?: string;
+    firstName?: string;
+    lastName?: string;
+    department?: string;
+    position?: string;
+    employeeId?: string;
+}
+
 export interface Garage {
     id: string;
     name: string;
