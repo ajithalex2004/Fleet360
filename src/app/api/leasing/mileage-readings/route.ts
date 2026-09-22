@@ -26,6 +26,7 @@ import { withTenantRls } from '@/lib/rls';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 import { computeAndInvoiceMileageOverage } from '@/lib/leasing/mileage-overage';
+import type { Prisma } from '@prisma/client';
 
 export async function GET(req: NextRequest) {
 
@@ -79,7 +80,7 @@ export async function POST(req: NextRequest) {
     const readingDate = body.readingDate ? new Date(body.readingDate) : new Date();
     const reading = await withTenantRls(prisma, tenantId, async (tx) =>
       tx.leaseMileageReading.create({
-      data: { ...body, readingDate, tenantId },
+      data: { ...body, readingDate, tenantId } as Prisma.LeaseMileageReadingUncheckedCreateInput,
     }),
     );
 

@@ -5,6 +5,7 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { lockSerialSeries } from '@/lib/leasing/serial-lock';
+import type { Prisma } from '@prisma/client';
 
 /**
  * Traffic fines list (GET) + record (POST).
@@ -77,7 +78,7 @@ export async function POST(req: NextRequest) {
       const count = await tx.leaseTrafficFine.count({ where: { tenantId } });
       const fineNo = body.fineNo ?? `TF-${String(count + 1).padStart(6, '0')}`;
       return tx.leaseTrafficFine.create({
-        data: { ...body, violationDate, dueDate, tenantId, fineNo, finalAmount },
+        data: { ...body, violationDate, dueDate, tenantId, fineNo, finalAmount } as Prisma.LeaseTrafficFineUncheckedCreateInput,
       });
     });
     return NextResponse.json(fine, { status: 201 });

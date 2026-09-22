@@ -15,6 +15,11 @@ import { withTenantRls } from '@/lib/rls';
 import nodemailer from 'nodemailer';
 import { quotationEmailHtml, quotationEmailText } from '@/lib/email-templates/quotation';
 
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error ? e.message : fallback;
+}
+
+
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const authz = requireAuthorizedTenant(req);
@@ -153,6 +158,6 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     });
     } catch (e) {
     console.error('Submit quotation error:', e);
-    return NextResponse.json({ error: e?.message ?? 'Failed to submit quotation' }, { status: 500 });
+    return NextResponse.json({ error: errorMessage(e, 'Failed to submit quotation') }, { status: 500 });
   }
 }

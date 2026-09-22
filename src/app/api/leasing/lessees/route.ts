@@ -98,8 +98,8 @@ export const POST = withAudit(
   {
     entityType: 'Lessee',
     action: 'CREATE',
-    extractEntity: (body) => ({ id: body?.id, name: body?.name }),
-    describe: (_req, body) =>
+    extractEntity: (body: { id?: string; name?: string }) => ({ id: body?.id, name: body?.name }),
+    describe: (_req, body: { name?: string; type?: string }) =>
       body?.name
         ? `Onboarded lessee ${body.name} (${body.type})`
         : undefined,
