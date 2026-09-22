@@ -26,6 +26,13 @@ export default defineConfig({
   },
 
   test: {
+    // Prisma's native Rust query-engine binding (N-API) doesn't reliably
+    // survive Vitest's default worker-thread teardown -- causes an
+    // intermittent `Segmentation fault (core dumped)` after tests finish
+    // (prisma/prisma#19631, vitest-dev/vitest#3106). Isolated child
+    // processes avoid the shared-thread teardown that triggers it.
+    pool: 'forks',
+
     // Run in Node.js — no jsdom or browser emulation needed for API tests
     environment: 'node',
 
