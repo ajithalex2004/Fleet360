@@ -5,7 +5,21 @@
 import { Document, Page, View, Text, StyleSheet } from '@react-pdf/renderer';
 import type { Lang } from '../theme';
 import { colors, spacing, typography, fontFor, dirFor, formatMoney, formatDate } from '../theme';
-import { t } from '../i18n';
+import { t, pdfStrings, type PdfStringKey } from '../i18n';
+
+/**
+ * `paymentType`/`paymentMethod` are typed as a known literal union with a
+ * `| string` escape hatch for forward-compat with values this template
+ * doesn't know about yet. Building `pt_${value}` / `pm_${value}` can
+ * therefore land on a key `pdfStrings` doesn't have — `t()` does a direct
+ * `pdfStrings[key][lang]` lookup with no existence check, so calling it
+ * with an unmapped key throws (not returns undefined), which would have
+ * made the `t(ptKey, lang) ?? data.paymentType` fallback below dead code
+ * for exactly the case it exists to handle. This checks membership first.
+ */
+function translateOrRaw(key: string, lang: Lang, raw: string): string {
+  return key in pdfStrings ? t(key as PdfStringKey, lang) : raw;
+}
 
 export interface ReceiptPdfData {
   receiptNumber: string;
@@ -58,8 +72,8 @@ const s = StyleSheet.create({
 
 export function ReceiptPdf({ data, lang }: { data: ReceiptPdfData; lang: Lang }) {
   const dir = dirFor(lang); const font = fontFor(lang); const ccy = data.currency;
-  const ptKey = `pt_${data.paymentType}` as any;
-  const pmKey = data.paymentMethod ? `pm_${data.paymentMethod}` as any : null;
+  const ptKey = `pt_${data.paymentType}`;
+  const pmKey = data.paymentMethod ? `pm_${data.paymentMethod}` : null;
 
   return (
     <Document title={`${t('receipt', lang)} ${data.receiptNumber}`} author={data.vendor.name} creator="Fleet360 Platform">
@@ -105,12 +119,12 @@ export function ReceiptPdf({ data, lang }: { data: ReceiptPdfData; lang: Lang })
             <View style={s.detailGrid}>
               <View style={s.detailItem}>
                 <Text style={[s.detailLabel, { fontFamily: font }]}>{t('paymentType', lang)}</Text>
-                <Text style={[s.detailValue, { fontFamily: font }]}>{t(ptKey, lang) ?? data.paymentType}</Text>
+                <Text style={[s.detailValue, { fontFamily: font }]}>{translateOrRaw(ptKey, lang, data.paymentType)}</Text>
               </View>
               {data.paymentMethod && (
                 <View style={s.detailItem}>
                   <Text style={[s.detailLabel, { fontFamily: font }]}>{t('paymentMethod', lang)}</Text>
-                  <Text style={[s.detailValue, { fontFamily: font }]}>{pmKey ? (t(pmKey, lang) ?? data.paymentMethod) : data.paymentMethod}</Text>
+                  <Text style={[s.detailValue, { fontFamily: font }]}>{pmKey ? translateOrRaw(pmKey, lang, data.paymentMethod) : data.paymentMethod}</Text>
                 </View>
               )}
               {data.chequeNo && (

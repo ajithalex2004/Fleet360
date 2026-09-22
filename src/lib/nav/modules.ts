@@ -13,12 +13,12 @@
  */
 
 import {
-  LayoutDashboard, Headphones, Bot, Wrench, FileText, Car, Bus, School,
+  LayoutDashboard, Headphones, Wrench, FileText, Car, Bus, School,
   Truck, Siren, CarFront, UserCog, Building2, Smartphone, Banknote, Scale,
   AppWindow, BarChart3, Settings, Radio, Leaf, Package,
   Radar, Route, Gavel, Users, ClipboardList, MapPin, Receipt, ShieldCheck,
   Shield, CreditCard,   BookOpen, RefreshCw, ArrowLeftRight, Fuel, AlertTriangle,
-  GraduationCap, Trophy, Calendar, Workflow, Eye, Bell, Mail, Activity,
+  GraduationCap, Trophy, Calendar, Workflow, Eye, Bell, Activity,
   Calculator, Repeat, Wallet, DollarSign, Lock, Network, Sliders, FileSearch,
   Sparkles, MessageCircle, Tag, History, CheckCircle2, PieChart, Brain, GitMerge,
   Paperclip, Send, Info, Pin, FileMinus, Target, BookText, TrendingUp, Clock,

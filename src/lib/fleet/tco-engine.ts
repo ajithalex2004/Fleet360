@@ -347,6 +347,10 @@ export async function calculateFleetTcoSummary(
 
   const finesMap = new Map<string, { totalFines: number; count: number }>();
   for (const f of fines) {
+    // vehicleId is nullable on TrafficFine (unassigned fines); the query's
+    // `vehicleId: { in: vehicleIds }` filter already excludes nulls at the
+    // DB level, but TS can't narrow that, so guard explicitly.
+    if (!f.vehicleId) continue;
     const prev = finesMap.get(f.vehicleId) || { totalFines: 0, count: 0 };
     prev.totalFines += Number(f.fineAmount || 0);
     prev.count += 1;
@@ -371,7 +375,7 @@ export async function calculateFleetTcoSummary(
       },
       PartUsage: {
         select: {
-          quantity: true,
+          quantityUsed: true,
           unitCost: true,
         },
       },
@@ -386,7 +390,7 @@ export async function calculateFleetTcoSummary(
     const prev = maintMap.get(vid) || { totalCost: 0, count: 0 };
     const laborCost = (wo.totalLaborHours || 2) * 90; // Standard 90 AED/hr garage labor rate
     const partsCost = (wo.PartUsage || []).reduce(
-      (sum, p) => sum + (p.quantity || 1) * Number(p.unitCost || 0),
+      (sum, p) => sum + (p.quantityUsed || 1) * Number(p.unitCost || 0),
       0,
     );
     prev.totalCost += laborCost + partsCost;

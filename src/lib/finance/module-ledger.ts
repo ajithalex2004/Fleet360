@@ -209,21 +209,21 @@ export async function mirrorLeaseInvoiceToFinance(
   });
   if (!invoice) return { mirrored: false, reason: 'lease_invoice_not_found' };
 
-  const invoiceNo       = (invoice as any).invoiceNo ?? invoice.id;
+  const invoiceNo       = invoice.invoiceNo ?? invoice.id;
   const financeInvoiceNo = `LSE-${invoiceNo.replace(/^INV-/, '')}`;
-  const status          = LEASING_STATUS_MAP[(invoice as any).status ?? ''] ?? (invoice as any).status ?? 'DRAFT';
-  const subtotal        = Number((invoice as any).subTotal    ?? 0);
-  const vatAmount       = Number((invoice as any).vatAmount   ?? 0);
-  const totalAmount     = Number((invoice as any).totalAmount ?? 0);
+  const status          = LEASING_STATUS_MAP[invoice.status ?? ''] ?? invoice.status ?? 'DRAFT';
+  const subtotal        = Number(invoice.subTotal    ?? 0);
+  const vatAmount       = Number(invoice.vatAmount   ?? 0);
+  const totalAmount     = Number(invoice.totalAmount ?? 0);
   const paidAmount      = status === 'PAID' ? totalAmount : 0;
-  const currency        = (invoice as any).currency ?? 'AED';
-  const vatRate         = Number((invoice as any).vatPct ?? 5);
+  const currency        = invoice.currency ?? 'AED';
+  const vatRate         = Number(invoice.vatPct ?? 5);
 
   const contractIds = Array.from(
-    new Set((invoice.lines as any[]).map(l => l.contractId).filter(Boolean)),
+    new Set(invoice.lines.map(l => l.contractId).filter(Boolean)),
   ) as string[];
 
-  const lineItems = (invoice.lines as any[]).map(line => ({
+  const lineItems = invoice.lines.map(line => ({
     description:  line.description,
     qty:          Number(line.quantity  ?? 1),
     unitPrice:    Number(line.unitAmount ?? 0),
@@ -240,9 +240,9 @@ export async function mirrorLeaseInvoiceToFinance(
     referenceType:     'LEASE_INVOICE',
     referenceId:       invoice.id,
     invoiceNumber:     financeInvoiceNo,
-    clientName:        (invoice as any).lessee?.name ?? (invoice as any).lesseeId,
-    clientEmail:       (invoice as any).lessee?.email ?? null,
-    clientPhone:       (invoice as any).lessee?.phone ?? null,
+    clientName:        invoice.lessee?.name ?? invoice.lesseeId,
+    clientEmail:       invoice.lessee?.email ?? null,
+    clientPhone:       invoice.lessee?.phone ?? null,
     serviceType:       'LEASING',
     description:       `Vehicle Leasing invoice ${invoiceNo}`,
     lineItems,
@@ -252,22 +252,22 @@ export async function mirrorLeaseInvoiceToFinance(
     totalAmount,
     paidAmount,
     currency,
-    issueDate:         toDateOnly((invoice as any).issueDate),
-    dueDate:           (invoice as any).dueDate ? toDateOnly((invoice as any).dueDate) : null,
+    issueDate:         toDateOnly(invoice.issueDate),
+    dueDate:           invoice.dueDate ? toDateOnly(invoice.dueDate) : null,
     paymentStatus:     status,
-    notes:             (invoice as any).notes ?? null,
+    notes:             invoice.notes ?? null,
     sourceEntityType:  'LEASE_INVOICE',
     sourceEntityId:    invoice.id,
     sourceEntityNo:    invoiceNo,
-    sourceCustomerId:  (invoice as any).lesseeId,
-    sourceCustomerName:(invoice as any).lessee?.name ?? null,
+    sourceCustomerId:  invoice.lesseeId,
+    sourceCustomerName: invoice.lessee?.name ?? null,
     sourceContractIds: contractIds,
     sourcePayload: {
       leaseInvoiceId: invoice.id,
-      leaseInvoiceNo: (invoice as any).invoiceNo,
-      billingPeriod:  (invoice as any).billingPeriod,
+      leaseInvoiceNo: invoice.invoiceNo,
+      billingPeriod:  invoice.billingPeriod,
       contractIds,
-      status:         (invoice as any).status,
+      status:         invoice.status,
     },
     actor,
   });
@@ -306,16 +306,16 @@ export async function mirrorMaintenanceToFinance(
   });
   if (!req) return { mirrored: false, reason: 'maintenance_request_not_found' };
 
-  const cost = Number((req as any).actualCost ?? (req as any).estimatedCost ?? 0);
+  const cost = Number(req.actualCost ?? req.estimatedCost ?? 0);
   if (cost <= 0) return { mirrored: false, reason: 'no_billable_cost' };
 
   const vatAmount  = parseFloat((cost * 0.05).toFixed(2));
   const total      = parseFloat((cost + vatAmount).toFixed(2));
-  const garageName = (req as any).Garage?.name ?? 'Workshop';
-  const garageId   = (req as any).Garage?.id   ?? null;
-  const vehicleRef = (req as any).Vehicle?.registrationNo ?? req.vehicleId ?? 'N/A';
-  const workOrderNo = (req as any).workOrderNo ?? req.id;
-  const description = `Maintenance: ${(req as any).maintenanceType ?? 'SERVICE'} — ${vehicleRef}`;
+  const garageName = req.Garage?.name ?? 'Workshop';
+  const garageId   = req.Garage?.id   ?? null;
+  const vehicleRef = req.Vehicle?.registrationNo ?? req.vehicleId ?? 'N/A';
+  const workOrderNo = req.workOrderNo ?? req.id;
+  const description = `Maintenance: ${req.maintenanceType ?? 'SERVICE'} — ${vehicleRef}`;
   const issueDate   = new Date().toISOString().slice(0, 10);
 
   // ── 1. AP Payable ─────────────────────────────────────────────────────────

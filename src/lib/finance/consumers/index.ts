@@ -19,12 +19,12 @@
  * tick, test) without depending on the Next.js-coupled prisma.ts.
  */
 import type { PrismaClient } from '@prisma/client';
-import { register } from '../../outbox/registry.ts';
-import { handleFuelExpenseEvent, FuelExpenseEventSchema } from './fuel-expense-consumer.ts';
+import { register } from '../../outbox/registry';
+import { handleFuelExpenseEvent, FuelExpenseEventSchema } from './fuel-expense-consumer';
 import {
   handleTripCompletedEvent,
   TripCompletedEventSchema,
-} from './trip-completed-consumer.ts';
+} from './trip-completed-consumer';
 
 // ── finance.fuelExpense ─────────────────────────────────────────
 // Fleet emits this when a fuel transaction is recorded. Finance

@@ -43,13 +43,12 @@ export function downloadXLSX(filename: string, rows: Record<string, unknown>[], 
 
   const cellType = (v: unknown) => typeof v === 'number' ? 'n' : 's';
 
-  const headerRow = cols.map((c, i) => {
-    const col = colLetter(i);
+  const headerRow = cols.map((c) => {
     return `<Cell ss:StyleID="header"><Data ss:Type="String">${xmlEsc(c)}</Data></Cell>`;
   }).join('');
 
   const dataRows = rows.map(r =>
-    '<Row>' + cols.map((c, i) => {
+    '<Row>' + cols.map((c) => {
       const v = r[c];
       const t = cellType(v);
       return `<Cell><Data ss:Type="${t === 'n' ? 'Number' : 'String'}">${xmlEsc(v)}</Data></Cell>`;
@@ -99,16 +98,6 @@ export function downloadFTAFormat(
     ...data.branches.map(b => ({ Field: b.branch, Value: `Taxable: ${b.taxable.toFixed(2)}  VAT: ${b.vat.toFixed(2)}` })),
   ];
   downloadCSV(filename, rows, ['Field', 'Value']);
-}
-
-function colLetter(n: number): string {
-  let s = '';
-  n++;
-  while (n > 0) {
-    s = String.fromCharCode(64 + (n % 26 || 26)) + s;
-    n = Math.floor((n - 1) / 26);
-  }
-  return s;
 }
 
 function triggerDownload(blob: Blob, filename: string) {

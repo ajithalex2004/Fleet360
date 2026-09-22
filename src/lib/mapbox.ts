@@ -191,12 +191,19 @@ export async function geocodeAddress(address: string): Promise<GeocodeResult[]> 
  */
 export const DEFAULT_FUEL_PRICE_AED = 3.0;
 
-export function estimateFuelCost(distanceKm: number, vehicleType: 'van' | 'truck' | 'bus' = 'van') {
+export function estimateFuelCost(
+  distanceKm: number,
+  vehicleType: 'van' | 'truck' | 'bus' = 'van',
+  // Both callers (route-optimizer/optimize and route-consolidation's
+  // computeEstimatedSavings) pass the fleet's real fuel-log price here —
+  // this parameter used to be silently dropped, so every estimate always
+  // used the hardcoded default regardless of what was actually fetched.
+  pricePerLitreAED: number = DEFAULT_FUEL_PRICE_AED,
+) {
   const consumption = vehicleType === 'truck' ? 15 : vehicleType === 'bus' ? 18 : 10; // L/100km
-  const pricePerLitre = DEFAULT_FUEL_PRICE_AED; // AED
   const litres = (distanceKm / 100) * consumption;
-  const cost   = litres * pricePerLitre;
-  return { litres: Math.round(litres * 10) / 10, costAED: Math.round(cost) };
+  const cost   = litres * pricePerLitreAED;
+  return { litres: Math.round(litres * 10) / 10, costAED: Math.round(cost), pricePerLitreAED };
 }
 
 /**

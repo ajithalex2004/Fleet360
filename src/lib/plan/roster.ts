@@ -77,8 +77,6 @@ export interface RosterResult {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-function ymd(iso: string): string { return iso.slice(0, 10); }
-
 // Compute the Monday of the week containing `isoDate`.
 // Returns YYYY-MM-DD.
 function mondayOf(isoDate: string): string {
@@ -117,6 +115,19 @@ export function roster(
   opts: RosterOptions = {},
   rules: WorkRules = DEFAULT_WORK_RULES,
 ): RosterResult {
+  // `rules` is accepted (and the one real caller,
+  // src/app/api/bus-ops/plan/compute/route.ts, does pass its resolved
+  // WorkRules through) but never consulted below: every field WorkRules has
+  // — daily/spread caps, OT threshold, report/wrap/deadhead minutes,
+  // trips-per-run — is already baked into each Run's precomputed
+  // workMins/payMins/overtimeMins by the upstream runcut step this function
+  // reads from. The one weekly concept roster() does enforce,
+  // `driver.weeklyHourCap ?? 48`, has no WorkRules equivalent at all (there
+  // is no maxWorkHoursPerWeek field). So `rules` currently has zero
+  // observable effect here — kept in the signature since the caller passes
+  // it, but left flagged rather than silently wiring in a weekly-cap
+  // fallback or deciding this parameter should be dropped.
+  void rules;
   const defaultPattern: RosterPattern = opts.defaultPattern ?? '5/2';
   const unassigned: string[] = [];
 

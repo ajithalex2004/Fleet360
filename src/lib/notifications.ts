@@ -96,7 +96,7 @@ export const sendServerEmail = async (
 
         return true;
 
-    } catch (error: any) {
+    } catch (error) {
         console.error('[ServerNotification] Failed to send email:', error);
 
         // Log Failure
@@ -122,7 +122,7 @@ export const sendServerEmail = async (
 
 export const processNotificationRules = async (
     event: string,
-    data: Record<string, any>,
+    data: Record<string, unknown>,
     explicitRecipient?: string
 ) => {
     try {
@@ -147,7 +147,6 @@ export const processNotificationRules = async (
         let sentCount = 0;
 
         for (const rule of rules) {
-            // @ts-ignore - Handle stale client types
             const template = rule.template;
             if (!template) {
                 console.warn(`[ServerNotification] Rule ${rule.id} has no template`);
@@ -157,8 +156,7 @@ export const processNotificationRules = async (
             // 2. Determine Recipients
             const recipients: string[] = [];
 
-            // @ts-ignore - Handle stale client types
-            const rTypes = rule.recipientTypes as RecipientType[];
+            const rTypes: RecipientType[] = rule.recipientTypes;
 
             if (rTypes.includes('ASSIGNEE') && explicitRecipient) {
                 recipients.push(explicitRecipient);
