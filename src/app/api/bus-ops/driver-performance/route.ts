@@ -36,10 +36,12 @@ export async function GET(req: NextRequest) {
       }
 
       const perf = await tx.driverPerformance.findMany({
-        // Without tenantId this returned every organisation's driver
-        // performance for the period, and the driver lookup below then
-        // resolved names against that same cross-tenant id set.
-        where: { tenantId, periodYear: year, periodMonth: month },
+        // DriverPerformance has no tenant_id column — migration
+        // 20260914010000 added a `tenant_isolation_via_driver` RLS policy
+        // instead (joins through drivers.tenant_id), which withTenantRls
+        // already enforces via app.tenant_id. The driver lookup below is
+        // still explicitly tenant-scoped as defence in depth.
+        where: { periodYear: year, periodMonth: month },
       });
       const driverIds = perf.map(p => p.driverId);
       const drivers = driverIds.length > 0

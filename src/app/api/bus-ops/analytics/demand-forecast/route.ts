@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
         agent_id: 'staff-transport-demand',
         tenant_id: tenantId,
         event_type: 'bus.demand.forecast',
-        metadata: { weeks },
+        payload: { weeks },
       });
 
       const output = agentRun.output as StaffTransportDemandResult | null;

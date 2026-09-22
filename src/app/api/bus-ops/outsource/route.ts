@@ -128,8 +128,15 @@ export async function POST(req: NextRequest) {
         });
 
         if (tripId) {
+          // BusOpsOutsourcingAdapter has no markAwarded() method — that
+          // call never existed and would throw a TypeError at runtime.
+          // applyAward() is the adapter's real "mark the source trip as
+          // assigned" hook; it reads sourceReferenceId off the award
+          // (via award.request, which isn't included on this award
+          // object) or falls back to award.sourceReferenceId, so pass
+          // the tripId we already have through that fallback.
           const adapter = new BusOpsOutsourcingAdapter();
-          await adapter.markAwarded(award.id, tripId, tenantId);
+          await adapter.applyAward({ ...award, sourceReferenceId: tripId });
         }
 
         return NextResponse.json({ ok: true, award });
@@ -190,7 +197,7 @@ export async function POST(req: NextRequest) {
 
         if (tripId) {
           const adapter = new BusOpsOutsourcingAdapter();
-          await adapter.markAwarded(award.id, tripId, tenantId);
+          await adapter.applyAward({ ...award, sourceReferenceId: tripId });
         }
 
         return NextResponse.json({ ok: true, award });

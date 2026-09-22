@@ -85,11 +85,9 @@ export async function POST(req: NextRequest) {
       action: 'POST_RECHARGE_JOURNAL_BATCH',
       entityType: 'JournalEntry',
       entityId: result.journalEntryId || 'NONE',
-      details: {
-        period: summary.period,
-        totalDebited: result.totalDebited,
-        departmentsCount: summary.departments.length,
-      },
+      // AuditPayload.details is a human-readable string, not a structured
+      // object — this was passing the raw object straight through.
+      details: `Posted recharge journal batch for ${summary.period}: AED ${result.totalDebited} debited across ${summary.departments.length} department(s).`,
     });
 
     return NextResponse.json({
