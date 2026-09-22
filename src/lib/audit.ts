@@ -47,7 +47,13 @@ export interface AuditPayload {
   logoutTime?:  Date | string;
 }
 
-type AuditDb = { $executeRawUnsafe: (...args: any[]) => Promise<any> };
+// Minimal duck-typed shape both PrismaClient and Prisma.TransactionClient
+// satisfy for $executeRawUnsafe — real signature is
+// `(query: string, ...values: any[]) => Prisma.PrismaPromise<number>`;
+// `unknown[]` here still structurally accepts that (a function taking
+// `any[]` is assignable wherever `unknown[]` is expected), and `number` is
+// the actual resolved value (rows affected), which no caller here inspects.
+type AuditDb = { $executeRawUnsafe: (query: string, ...values: unknown[]) => Promise<number> };
 
 function writeAuditRow(db: AuditDb, payload: AuditPayload) {
   return db.$executeRawUnsafe(

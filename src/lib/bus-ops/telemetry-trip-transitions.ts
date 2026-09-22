@@ -17,7 +17,7 @@
  * Human / API transitions via /depart and /complete always win.
  */
 
-import type { PrismaClient } from '@prisma/client';
+import type { PrismaClient, Prisma } from '@prisma/client';
 import { haversineM, DEFAULT_ARRIVAL_RADIUS_M } from '@/lib/bus-gps';
 import {
   assertTripTransition,
@@ -192,6 +192,14 @@ export function computeGeofenceTuning(opts: {
     },
   };
 }
+
+// Every `db` parameter in this file only ever calls model-delegate methods
+// (e.g. `db.tripSchedule.findFirst`) and `$queryRawUnsafe`, both of which are
+// available on an active Prisma transaction client, not just the top-level
+// PrismaClient. Typed as the union so callers running inside
+// `prisma.$transaction(...)` (e.g. withTenantRls) can pass their tx client
+// directly instead of casting it to PrismaClient.
+type DbClient = PrismaClient | Prisma.TransactionClient;
 
 export type TelemetryMode = 'shadow' | 'live' | 'off';
 
@@ -458,7 +466,7 @@ type ScheduleWithStops = {
 };
 
 async function loadSchedule(
-  db: PrismaClient,
+  db: DbClient,
   ping: TelemetryPing,
   now: Date,
 ): Promise<ScheduleWithStops | null> {
@@ -509,7 +517,7 @@ async function loadSchedule(
 }
 
 async function loadRecentSamples(
-  db: PrismaClient,
+  db: DbClient,
   ping: TelemetryPing,
   scheduleId: string,
   now: Date,
@@ -781,7 +789,7 @@ export function decideTelemetryTransition(
 }
 
 async function applyDecision(
-  db: PrismaClient,
+  db: DbClient,
   decision: Extract<TelemetryDecision, { action: 'STARTED' | 'EN_ROUTE' | 'COMPLETED' }>,
   now: Date,
   // trip_logs.tenant_id is NOT NULL as of 20260910000000. Taken from the
@@ -836,7 +844,7 @@ async function applyDecision(
  * Shadow mode logs only; live mode applies writes.
  */
 export async function evaluateTelemetryTripTransitions(
-  db: PrismaClient,
+  db: DbClient,
   ping: TelemetryPing,
   opts?: { mode?: TelemetryMode },
 ): Promise<TelemetryResult> {

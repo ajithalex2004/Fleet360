@@ -22,11 +22,22 @@
  * In the web dev build these resolve to null and the fallbacks fire.
  */
 
-let _camera: any = null;
-let _network: any = null;
-let _app: any = null;
-let _geo: any = null;
+import type { CapacitorGlobal } from '@capacitor/core';
+
+type CapacitorCameraModule = typeof import('@capacitor/camera');
+type CapacitorNetworkModule = typeof import('@capacitor/network');
+type CapacitorAppModule = typeof import('@capacitor/app');
+type CapacitorGeolocationModule = typeof import('@capacitor/geolocation');
+
+let _camera: CapacitorCameraModule | null = null;
+let _network: CapacitorNetworkModule | null = null;
+let _app: CapacitorAppModule | null = null;
+let _geo: CapacitorGeolocationModule | null = null;
 let _capabilityProbed = false;
+
+function getCapacitorGlobal(): CapacitorGlobal | undefined {
+  return (window as unknown as { Capacitor?: CapacitorGlobal }).Capacitor;
+}
 
 async function isCapacitor(): Promise<boolean> {
   if (typeof window === 'undefined') return false;
@@ -35,13 +46,15 @@ async function isCapacitor(): Promise<boolean> {
   // presence of @capacitor/core because the core module is bundled
   // into the web build too — but the runtime global is only there
   // in the native shell.
-  const w = window as any;
-  return Boolean(w.Capacitor?.isNativePlatform?.());
+  return Boolean(getCapacitorGlobal()?.isNativePlatform?.());
 }
 
-async function tryImport(speccer: string): Promise<any> {
+// The module specifier is only known at runtime (kept as a plain string so
+// bundlers don't try to resolve these native-only packages into the web
+// build), so the actual shape has to be asserted per call site via T.
+async function tryImport<T>(speccer: string): Promise<T | null> {
   try {
-    return await import(/* webpackIgnore: true */ /* @vite-ignore */ speccer);
+    return (await import(/* webpackIgnore: true */ /* @vite-ignore */ speccer)) as T;
   } catch {
     return null;
   }
@@ -52,10 +65,10 @@ async function probeCapabilities(): Promise<void> {
   _capabilityProbed = true;
   if (!(await isCapacitor())) return;
   const [camera, network, app, geo] = await Promise.all([
-    tryImport('@capacitor/camera'),
-    tryImport('@capacitor/network'),
-    tryImport('@capacitor/app'),
-    tryImport('@capacitor/geolocation'),
+    tryImport<CapacitorCameraModule>('@capacitor/camera'),
+    tryImport<CapacitorNetworkModule>('@capacitor/network'),
+    tryImport<CapacitorAppModule>('@capacitor/app'),
+    tryImport<CapacitorGeolocationModule>('@capacitor/geolocation'),
   ]);
   _camera = camera;
   _network = network;
@@ -63,22 +76,22 @@ async function probeCapabilities(): Promise<void> {
   _geo = geo;
 }
 
-export async function getCamera(): Promise<any | null> {
+export async function getCamera(): Promise<CapacitorCameraModule | null> {
   await probeCapabilities();
   return _camera;
 }
 
-export async function getNetwork(): Promise<any | null> {
+export async function getNetwork(): Promise<CapacitorNetworkModule | null> {
   await probeCapabilities();
   return _network;
 }
 
-export async function getApp(): Promise<any | null> {
+export async function getApp(): Promise<CapacitorAppModule | null> {
   await probeCapabilities();
   return _app;
 }
 
-export async function getGeolocation(): Promise<any | null> {
+export async function getGeolocation(): Promise<CapacitorGeolocationModule | null> {
   await probeCapabilities();
   return _geo;
 }

@@ -221,6 +221,11 @@ export async function getTenantAdhocRequests(
     const startOfToday = new Date(now);
     startOfToday.setHours(0, 0, 0, 0);
 
+    // Note: TripSchedule.vehicleId / driverId are plain FK columns with no
+    // Prisma relation declared (unlike routeId -> route), so vehicle/driver
+    // can't be fetched via `include` here — they're batch-fetched separately
+    // below and joined in-memory, the same way standbyVehicles/availableDrivers
+    // already are.
     const scheduledTrips = await tx.tripSchedule.findMany({
       where: {
         tenantId,
@@ -229,48 +234,69 @@ export async function getTenantAdhocRequests(
       },
       include: {
         route: true,
-        vehicle: true,
-        driver: true,
         passengers: { select: { id: true } },
       },
       take: 20,
     });
 
-    const formattedTrips = scheduledTrips.map((t) => ({
-      id: t.id,
-      tripNumber: t.tripNumber,
-      departureTime: t.departureTime.toISOString(),
-      capacity: t.capacity || 30,
-      confirmedCount: t.passengers.length,
-      route: t.route ? { name: t.route.name, origin: t.route.origin, destination: t.route.destination } : undefined,
-      vehicle: t.vehicle ? { id: t.vehicle.id, vehicleCode: t.vehicle.vehicleCode, licensePlate: t.vehicle.licensePlate ?? undefined } : undefined,
-      driver: t.driver ? { id: t.driver.id, firstName: t.driver.firstName, lastName: t.driver.lastName } : undefined,
-    }));
+    const tripVehicleIds = [...new Set(scheduledTrips.map((t) => t.vehicleId).filter((id): id is string => !!id))];
+    const tripDriverIds = [...new Set(scheduledTrips.map((t) => t.driverId).filter((id): id is string => !!id))];
 
-    const standbyVehicles = await tx.vehicle.findMany({
-      where: {
-        tenantId,
-        status: 'ACTIVE',
-      },
-      select: {
-        id: true,
-        vehicleCode: true,
-        licensePlate: true,
-      },
-      take: 5,
-    });
+    const [tripVehicles, tripDrivers, standbyVehicles, availableDrivers] = await Promise.all([
+      tripVehicleIds.length
+        ? tx.vehicle.findMany({
+            where: { id: { in: tripVehicleIds } },
+            select: { id: true, vehicleCode: true, licensePlate: true },
+          })
+        : Promise.resolve([]),
+      tripDriverIds.length
+        ? tx.driver.findMany({
+            where: { id: { in: tripDriverIds } },
+            select: { id: true, firstName: true, lastName: true },
+          })
+        : Promise.resolve([]),
+      tx.vehicle.findMany({
+        where: {
+          tenantId,
+          status: 'ACTIVE',
+        },
+        select: {
+          id: true,
+          vehicleCode: true,
+          licensePlate: true,
+        },
+        take: 5,
+      }),
+      tx.driver.findMany({
+        where: {
+          tenantId,
+          status: 'ACTIVE',
+        },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+        },
+        take: 5,
+      }),
+    ]);
 
-    const availableDrivers = await tx.driver.findMany({
-      where: {
-        tenantId,
-        status: 'ACTIVE',
-      },
-      select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-      },
-      take: 5,
+    const vehicleById = new Map(tripVehicles.map((v) => [v.id, v]));
+    const driverById = new Map(tripDrivers.map((d) => [d.id, d]));
+
+    const formattedTrips = scheduledTrips.map((t) => {
+      const v = t.vehicleId ? vehicleById.get(t.vehicleId) : undefined;
+      const d = t.driverId ? driverById.get(t.driverId) : undefined;
+      return {
+        id: t.id,
+        tripNumber: t.tripNumber,
+        departureTime: t.departureTime.toISOString(),
+        capacity: t.capacity || 30,
+        confirmedCount: t.passengers.length,
+        route: t.route ? { name: t.route.name, origin: t.route.origin, destination: t.route.destination } : undefined,
+        vehicle: v ? { id: v.id, vehicleCode: v.vehicleCode || v.licensePlate || 'VEH', licensePlate: v.licensePlate ?? undefined } : undefined,
+        driver: d ? { id: d.id, firstName: d.firstName || '', lastName: d.lastName || '' } : undefined,
+      };
     });
 
     // Attach candidate solutions to each request
@@ -281,8 +307,8 @@ export async function getTenantAdhocRequests(
         dropLocation: req.dropLocation || 'Site',
         passengerCount: 1,
         scheduledTrips: formattedTrips,
-        standbyVehicles: standbyVehicles.map(v => ({ id: v.id, vehicleCode: v.vehicleCode, licensePlate: v.licensePlate ?? undefined })),
-        availableDrivers,
+        standbyVehicles: standbyVehicles.map(v => ({ id: v.id, vehicleCode: v.vehicleCode || v.licensePlate || 'VEH', licensePlate: v.licensePlate ?? undefined })),
+        availableDrivers: availableDrivers.map(d => ({ id: d.id, firstName: d.firstName || '', lastName: d.lastName || '' })),
       });
 
       return {
@@ -323,8 +349,8 @@ export async function fulfillAdhocRequest(
           tripId: candidate.targetTripId,
           staffMemberId: request.staffMemberId,
           status: 'CONFIRMED',
-          boardingStop: request.pickupLocation,
-          alightingStop: request.dropLocation,
+          boardingStopName: request.pickupLocation,
+          alightingStopName: request.dropLocation,
         },
       });
       assignedTripId = candidate.targetTripId;
@@ -366,8 +392,8 @@ export async function fulfillAdhocRequest(
           tripId: trip.id,
           staffMemberId: request.staffMemberId,
           status: 'CONFIRMED',
-          boardingStop: request.pickupLocation,
-          alightingStop: request.dropLocation,
+          boardingStopName: request.pickupLocation,
+          alightingStopName: request.dropLocation,
         },
       });
 
@@ -406,12 +432,7 @@ export async function fulfillAdhocRequest(
       action: 'FULFILL_ADHOC_TRANSPORT_REQUEST',
       entityType: 'StaffTransportRequest',
       entityId: request.id,
-      details: {
-        requestNo: request.requestNo,
-        tier: candidate.tier,
-        cost: candidate.estimatedCost,
-        assignedTripId,
-      },
+      details: `Fulfilled ${request.requestNo} via ${candidate.tier} (AED ${candidate.estimatedCost})${assignedTripId ? `, trip ${assignedTripId}` : ''}.`,
     });
 
     return {

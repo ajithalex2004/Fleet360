@@ -81,6 +81,16 @@ export async function getEligibleCandidates(
   radiusKm: number,
   preferSameZone: boolean,
 ): Promise<Candidate[]> {
+  // NOTE: preferSameZone is accepted (engine.ts passes config.preferSameZone
+  // through) but not actually consulted anywhere — this is pure pass/fail
+  // eligibility (see file header), and scoring.ts's zoneBonus already
+  // applies its flat +0.05 same-zone boost unconditionally, regardless of
+  // this flag. So "prefer same zone" currently has no observable effect
+  // whether true or false. Wiring it in for real (hard-filter cross-zone
+  // candidates? weight the scoring boost by it?) is a product decision,
+  // flagged for follow-up rather than decided here.
+  void preferSameZone;
+
   const pickup: GeoPoint | null =
     job.pickupLat != null && job.pickupLng != null
       ? { lat: job.pickupLat, lng: job.pickupLng }
@@ -147,7 +157,6 @@ export async function getEligibleCandidates(
         break;
     }
 
-    const sameZone  = !job.zoneId || !row.zone_id || job.zoneId === s(row.zone_id);
     const avgSpeed  = job.serviceType === 'DELIVERY' ? 30 : 40;
     const etaMin    = estimateEtaMin(distanceKm, avgSpeed);
 
@@ -252,10 +261,10 @@ export async function getAmbulanceEligibleCandidates(
     // Ambulances travel faster (emergency speed)
     const etaMin = estimateEtaMin(distanceKm, 70);
 
-    // Equipment match score (for scoring layer input)
-    const equipMatchScore = requiredEquip.length > 0
-      ? requiredEquip.filter(eq => equipmentOnBoard.includes(eq)).length / requiredEquip.length
-      : 1;
+    // Equipment match score: scoring.ts already independently recomputes
+    // this exact ratio from candidate.equipmentTags + job.metadata (see
+    // its equipScore), so nothing here needs to pass a precomputed value
+    // through — Candidate has no field for it anyway.
 
     candidates.push({
       driverId:        s(row.driver_id),

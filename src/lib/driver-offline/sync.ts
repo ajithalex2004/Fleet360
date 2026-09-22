@@ -34,7 +34,6 @@ import {
   dequeueSync,
   getSyncQueue,
   type OfflineSyncQueueItem,
-  newId,
 } from './db';
 
 /** Where the API lives. Defaults to same-origin (web dev), or set
@@ -63,13 +62,18 @@ function authHeader(): Record<string, string> {
 
 /** Network status from the Capacitor Network plugin. When the plugin
  *  isn't present (web dev), fall back to navigator.onLine. */
-let netPlugin: any = null;
+let netPlugin: typeof import('@capacitor/network') | null = null;
 async function getNetworkStatus(): Promise<boolean> {
   try {
     if (!netPlugin) {
       const mod = '@capacitor/network';
       netPlugin = await import(/* webpackIgnore: true */ /* @vite-ignore */ mod);
     }
+    // TS can't carry the `!netPlugin` narrowing above across the `await` for
+    // a module-scoped `let` (it could theoretically be reassigned by a
+    // concurrent call) — the assignment above guarantees this is non-null,
+    // so re-narrow synchronously (no `await` between this check and use).
+    if (!netPlugin) throw new Error('Failed to load @capacitor/network');
     const status = await netPlugin.Network.getStatus();
     return Boolean(status.connected);
   } catch {
