@@ -94,6 +94,41 @@ async function getOpsAssistantAgent(): Promise<AgentDefinition> {
   return OPS_ASSISTANT_AGENT;
 }
 
+async function getChatWidgetAgent(): Promise<AgentDefinition> {
+  const { CHAT_WIDGET_AGENT } = await import('./chat-widget/agent');
+  return CHAT_WIDGET_AGENT;
+}
+
+// ── Interactive co-pilot wrappers ────────────────────────────────────────────
+// These agents' primary interface is a dedicated REST endpoint that calls
+// their underlying function directly (see each module's own doc comment);
+// these loaders additionally expose them through the generic
+// AgentEvent/orchestrator dispatch path.
+async function getQuotationCopilotAgent(): Promise<AgentDefinition> {
+  const { QUOTATION_COPILOT_AGENT } = await import('./quotation-copilot/agent');
+  return QUOTATION_COPILOT_AGENT;
+}
+
+async function getRentalCopilotAgent(): Promise<AgentDefinition> {
+  const { RENTAL_COPILOT_AGENT } = await import('./rental-copilot/agent');
+  return RENTAL_COPILOT_AGENT;
+}
+
+async function getDamageClassifierAgent(): Promise<AgentDefinition> {
+  const { DAMAGE_CLASSIFIER_AGENT } = await import('./damage-classifier/agent');
+  return DAMAGE_CLASSIFIER_AGENT;
+}
+
+async function getDocClassifierAgent(): Promise<AgentDefinition> {
+  const { DOC_CLASSIFIER_AGENT } = await import('./doc-classifier/agent');
+  return DOC_CLASSIFIER_AGENT;
+}
+
+async function getContractQaAgent(): Promise<AgentDefinition> {
+  const { CONTRACT_QA_AGENT } = await import('./contract-qa/agent');
+  return CONTRACT_QA_AGENT;
+}
+
 const AGENT_LOADERS: Record<AgentId, () => Promise<AgentDefinition>> = {
   // ── Batch / Scan ────────────────────────────────────────────────────────────
   'predictive-maintenance':     getPMAgent,
@@ -114,6 +149,13 @@ const AGENT_LOADERS: Record<AgentId, () => Promise<AgentDefinition>> = {
   // ── Conversational (always-on, stats wrappers) ─────────────────────────────
   'whatsapp-agent':             getWhatsAppAgent,
   'ops-assistant':              getOpsAssistantAgent,
+  'chat-widget':                getChatWidgetAgent,
+  // ── Interactive co-pilots ───────────────────────────────────────────────────
+  'quotation-copilot':          getQuotationCopilotAgent,
+  'rental-copilot':             getRentalCopilotAgent,
+  'damage-classifier':          getDamageClassifierAgent,
+  'doc-classifier':             getDocClassifierAgent,
+  'contract-qa':                getContractQaAgent,
 };
 
 const DYNAMIC_AGENTS = new Map<string, AgentDefinition>();
@@ -187,7 +229,11 @@ export async function getAgentsForEvent(eventType: AgentEventType | string): Pro
   for (const id of allIds) {
     try {
       const agent = await getAgent(id);
-      const events: string[] = agent.subscribedEvents ?? (agent as any).events ?? [];
+      // Defensive fallback: subscribedEvents is required by AgentDefinition,
+      // but a dynamically-loaded/legacy agent registration could still only
+      // have the older `events` field name — narrow cast, not `any`.
+      const events: string[] =
+        agent.subscribedEvents ?? (agent as unknown as { events?: string[] }).events ?? [];
       const isSubscribed = events.some(pattern =>
         matchesEventPattern(pattern, eventType),
       );

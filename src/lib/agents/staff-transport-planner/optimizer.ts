@@ -340,7 +340,6 @@ export function optimizeStaffTransportPlan(
     let currentEndMin = parseTime(rootRoute.calculatedDepartureTime) + rootRoute.totalDurationMin;
     let currentEndLat = rootRoute.destinationLat;
     let currentEndLng = rootRoute.destinationLng;
-    let currentEndLocation = rootRoute.destinationName;
 
     // Filter candidate downstream routes spatially before evaluating time windows
     const unassignedDownstream = sortedRoutes
@@ -361,12 +360,15 @@ export function optimizeStaffTransportPlan(
       { lat: currentEndLat, lng: currentEndLng },
       spatialCandidates,
       {
+        // Radius expansion is unconditional inside spatialShortlist itself
+        // (it always widens until minCandidates or maxRadiusKm is hit) —
+        // there is no adaptiveExpansion option to turn that off, so passing
+        // one here was a no-op (see dispatch-optimiser/scoring.ts).
         maxCandidates: 15,
         initialRadiusKm: 25,
         expansionStepKm: 15,
         maxRadiusKm: 50,
         minCandidates: 1,
-        adaptiveExpansion: true,
       },
     );
 
@@ -387,7 +389,6 @@ export function optimizeStaffTransportPlan(
         currentEndMin = candidateStartMin + candidate.totalDurationMin;
         currentEndLat = candidate.destinationLat;
         currentEndLng = candidate.destinationLng;
-        currentEndLocation = candidate.destinationName;
       }
     }
 

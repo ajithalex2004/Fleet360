@@ -122,7 +122,7 @@ export class BenchmarkRunner {
     ];
 
     const flaggedIds = new Set(detectedFlags.map((f) => f.entityId));
-    let totalExposure = detectedFlags.reduce((sum, f) => sum + (f.financialExposureAed ?? 0), 0);
+    const totalExposure = detectedFlags.reduce((sum, f) => sum + (f.financialExposureAed ?? 0), 0);
 
     let tp = 0;
     let fn = 0;

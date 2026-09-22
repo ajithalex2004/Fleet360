@@ -16,7 +16,7 @@ import { DocumentSourceGrounding, FieldGroundingItem } from '../../types';
 export interface GroundingInput {
   documentText?: string;
   totalPages?: number;
-  extractedFields: Record<string, any>;
+  extractedFields: Record<string, unknown>;
 }
 
 export function generateSourceGrounding(input: GroundingInput): DocumentSourceGrounding {
