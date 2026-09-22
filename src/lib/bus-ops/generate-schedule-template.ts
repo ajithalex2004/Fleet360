@@ -87,8 +87,11 @@ export async function generateScheduleTemplate({
   for (const cal of calendars) {
     for (const e of cal.entries) {
       const iso = new Date(Date.UTC(e.entryDate.getUTCFullYear(), e.entryDate.getUTCMonth(), e.entryDate.getUTCDate())).toISOString().slice(0, 10);
-      if (e.kind === 'HOLIDAY')                overrideSet.has(iso) || holidaySet.add(iso);
-      else if (e.kind === 'WORKING_OVERRIDE')  overrideSet.add(iso);
+      if (e.kind === 'HOLIDAY') {
+        if (!overrideSet.has(iso)) holidaySet.add(iso);
+      } else if (e.kind === 'WORKING_OVERRIDE') {
+        overrideSet.add(iso);
+      }
     }
   }
 
