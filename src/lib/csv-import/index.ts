@@ -14,7 +14,7 @@
  */
 
 import Papa from 'papaparse';
-import type { z, ZodTypeAny } from 'zod';
+import type { z } from 'zod';
 
 export type ImportMode = 'preview' | 'commit';
 
@@ -115,8 +115,33 @@ export function parseCsv<T>(
 
   const detectedHeaders = parsed.meta.fields ?? [];
   const headerMap = buildHeaderMap(detectedHeaders, cfg);
-  const knownFields = new Set(headerMap.values());
-  const schemaShape = (cfg.schema as any)._def?.schema?.shape ?? (cfg.schema as any)._def?.shape;
+  // Reflects into Zod internals to recover the schema's field names for
+  // "unknown header" detection below — Zod doesn't publicly expose a
+  // walk-any-wrapped-schema-and-list-its-fields API. `_def.schema.shape`
+  // was Zod v3's ZodEffects wrapping shape (.refine()/.transform()); this
+  // codebase is on Zod v4, where that path no longer exists (`_def.schema`
+  // is always undefined now) and a plain ZodObject's shape lives directly
+  // on `_def.shape`. That still resolves correctly for the plain-object
+  // schemas actually in use (e.g. vehicleImportSchema) but NOT for
+  // lesseeImportSchema, which is `z.preprocess(fn, z.discriminatedUnion(...))`
+  // — under Zod v4 its field names live at `_def.out._def.options[].shape`,
+  // a different path neither branch here reaches. Confirmed via direct
+  // introspection: schemaFields resolves to [] for lesseeImportSchema
+  // today, so the unknown-header warning silently never fires for lessee
+  // CSV imports (it still works for vehicle imports). Flagged for
+  // follow-up — walking wrapped/discriminated-union schemas needs a real
+  // decision on how far to generalize, not something to build unilaterally
+  // here — so this keeps the exact same (partially-working) behavior,
+  // just typed instead of `any`.
+  interface ZodDefWithShape {
+    _def?: {
+      schema?: { shape?: Record<string, unknown> };
+      shape?: Record<string, unknown>;
+    };
+  }
+  const schemaShape =
+    (cfg.schema as ZodDefWithShape)._def?.schema?.shape ??
+    (cfg.schema as ZodDefWithShape)._def?.shape;
   const schemaFields = schemaShape ? Object.keys(schemaShape) : [];
 
   // Headers we couldn't map to any schema field (warn, don't fail).

@@ -7,6 +7,7 @@ import { revalidateCache } from '@/lib/server-cache';
 import { logAudit } from '@/lib/audit';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import type { Prisma } from '@prisma/client';
 // Must match the tag used by the list endpoint's cacheRead — every write
 // here invalidates the same key so the next GET /api/bus-ops/routes serves
 // fresh data instead of the cached snapshot.
@@ -115,7 +116,7 @@ export async function PATCH(req: NextRequest, { params }: IdCtx) {
                   },
                 }
               : {}),
-          },
+          } as Prisma.BusRouteUncheckedUpdateInput,
           include: { stops: { orderBy: { sequence: 'asc' } } },
         });
 

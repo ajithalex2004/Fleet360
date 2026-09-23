@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import type { Prisma } from '@prisma/client';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
@@ -62,14 +63,30 @@ export async function POST(req: NextRequest) {
     // strict DateTime parser rejects ("premature end of input") — every
     // renewal proposal 500'd on submission because of this (same bug class
     // as the invoices route).
-    const proposedStartDate = body.proposedStartDate ? new Date(body.proposedStartDate) : undefined;
-    const proposedEndDate = body.proposedEndDate ? new Date(body.proposedEndDate) : undefined;
+    if (!body.proposedStartDate || !body.proposedEndDate) {
+      return NextResponse.json(
+        { error: 'proposedStartDate and proposedEndDate are required' },
+        { status: 400 },
+      );
+    }
+    // LeaseRenewal.proposedStartDate/proposedEndDate are required columns —
+    // passing `undefined` through to tx.leaseRenewal.create() below would
+    // hit the DB's NOT NULL constraint at runtime, so both are validated
+    // above rather than silently defaulting to undefined.
+    const proposedStartDate = new Date(body.proposedStartDate);
+    const proposedEndDate = new Date(body.proposedEndDate);
     const renewal = await withTenantRls(prisma, tenantId, async (tx) => {
       await lockSerialSeries(tx, tenantId, 'renewal');
       const count = await tx.leaseRenewal.count({ where: { tenantId } });
       const renewalNo = `RNW-${String(count + 1).padStart(5, '0')}`;
       return tx.leaseRenewal.create({
-        data: { ...body, proposedStartDate, proposedEndDate, renewalNo, tenantId },
+        // body is untyped JSON; spreading it alongside explicit typed
+        // fields (proposedStartDate/proposedEndDate as Date, tenantId as
+        // string) sharpens the inferred shape enough that it stops
+        // matching Prisma's Checked/Unchecked create-input union.
+        // originalContractId comes through as a plain FK string from
+        // body, so Unchecked is the correct variant.
+        data: { ...body, proposedStartDate, proposedEndDate, renewalNo, tenantId } as Prisma.LeaseRenewalUncheckedCreateInput,
       });
     });
     return NextResponse.json(renewal, { status: 201 });

@@ -12,10 +12,13 @@ import { aiGateway } from '../../gateway';
 import {
   DocIntelligenceCategory,
   DocumentExtractionResult,
+  ExtractedDriverInfo,
+  ExtractedSupplierInfo,
+  ExtractedVehicleInfo,
 } from '../../types';
 import { generateSourceGrounding } from './grounding';
 import { extractContractObligations } from './contract-intelligence';
-import { normalizePlateInfo, normalizeIsoDate } from './schemas';
+import { normalizeIsoDate } from './schemas';
 
 export interface ExtractionInput {
   fileName: string;
@@ -66,7 +69,7 @@ Return ONLY valid JSON adhering to:
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userContent },
       ], {
-        tier: selectedTier === 'TIER_3' ? 'REASONING_PREMIUM' : 'VISION_FAST',
+        capabilityAlias: selectedTier === 'TIER_3' ? 'ADVANCED_REASONING' : 'VISION_FAST',
         maxTokens: 1000,
         temperature: 0.1,
       });
@@ -125,9 +128,9 @@ function executeTier0Extraction(input: ExtractionInput): DocumentExtractionResul
   let taxAmount: number | undefined;
   let subtotal: number | undefined;
 
-  const vehicle: any = {};
-  const driver: any = {};
-  const supplier: any = {};
+  const vehicle: ExtractedVehicleInfo = {};
+  const driver: ExtractedDriverInfo = {};
+  const supplier: ExtractedSupplierInfo = {};
 
   // 1. Category Classification
   if (textLower.includes('proof of delivery') || textLower.includes('waybill') || textLower.includes('pod') || textLower.includes('awb')) {

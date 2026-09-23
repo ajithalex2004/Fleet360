@@ -2,18 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import {
-  MapPin,
   Plus,
   Trash2,
-  ArrowUpDown,
   Sparkles,
   Route,
-  Clock,
-  DollarSign,
-  ShieldCheck,
   Leaf,
-  Layers,
-  ChevronRight,
   Warehouse,
 } from 'lucide-react';
 import {
@@ -97,16 +90,26 @@ export function MultiStopRoutePicker({
   const [enableLtlConsolidation, setEnableLtlConsolidation] = useState(true);
   const [isOptimizing, setIsOptimizing] = useState(false);
 
-  // Recalculate route whenever waypoints change
+  // Recalculate route whenever waypoints change. The LTL consolidation
+  // discount is only reported upstream when the driver/ops actually opts
+  // in via the checkbox below — otherwise the discount fields are zeroed
+  // so the booking isn't silently priced with a discount nobody applied.
   const recalculate = () => {
     const res = computeMultiStopRoute(originNode, intermediateNodes, destinationNode, baseFareAed);
     setRouteResult(res);
-    onRouteChange(res);
+    onRouteChange(
+      enableLtlConsolidation
+        ? res
+        : {
+            ...res,
+            ltlConsolidation: { ...res.ltlConsolidation, isEligible: false, discountPercent: 0, discountAmountAed: 0 },
+          }
+    );
   };
 
   useEffect(() => {
     recalculate();
-  }, [originNode, intermediateNodes, destinationNode, baseFareAed]);
+  }, [originNode, intermediateNodes, destinationNode, baseFareAed, enableLtlConsolidation]);
 
   // Add intermediate stop
   const handleAddStop = () => {
@@ -167,7 +170,7 @@ export function MultiStopRoutePicker({
         <div className="bg-slate-950/60 border border-emerald-500/30 rounded-xl p-3.5 space-y-2">
           <div className="flex items-center justify-between text-xs">
             <span className="font-bold text-emerald-400 flex items-center gap-1.5">
-              🟢 Stop 1 · Origin Pickup
+              <Warehouse className="w-3.5 h-3.5" /> Stop 1 · Origin Pickup
             </span>
             <span className="text-[10px] text-slate-400 font-mono">
               Gate: {originNode.dockGate} · {originNode.pallets} Pallets ({originNode.weightTons}T)

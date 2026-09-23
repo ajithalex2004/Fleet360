@@ -33,6 +33,12 @@ import { transitionDocumentLifecycle } from './lifecycle-manager';
 import { ensureAgentSchema } from '../../schema';
 import { dispatchDocumentWebhook } from './webhook-dispatcher';
 
+/** Row shape shared by both raw-SQL statements in this file — each only
+ * ever selects/returns the extraction row's `id`. */
+interface DocumentExtractionIdRow {
+  id: string;
+}
+
 export interface PipelineExecutionInput extends ExtractionInput {
   tenantId: string;
   autoApply?: boolean;
@@ -69,7 +75,7 @@ export async function executeDocumentControlPipeline(
   let existingDuplicateDocId: string | undefined;
 
   try {
-    const dupRows = await prisma.$queryRawUnsafe<any[]>(`
+    const dupRows = await prisma.$queryRawUnsafe<DocumentExtractionIdRow[]>(`
       SELECT id FROM document_intelligence_extractions
       WHERE tenant_id = $1 AND duplicate_hash = $2
       LIMIT 1
@@ -78,7 +84,7 @@ export async function executeDocumentControlPipeline(
     if (dupRows && dupRows.length > 0) {
       existingDuplicateDocId = dupRows[0].id;
     }
-  } catch (err) {
+  } catch {
     // Ignore db read error
   }
 
@@ -134,7 +140,10 @@ export async function executeDocumentControlPipeline(
   // 7. Straight-Through Processing (STP) & Auto-Population Decision
   const shouldAutoProcess = autoApply && riskEvaluation.decision === 'AUTO_PROCESS';
   let autoPopulateStatus: 'APPLIED' | 'PENDING_REVIEW' | 'REJECTED' = shouldAutoProcess ? 'APPLIED' : 'PENDING_REVIEW';
-  let linkedEntityType: 'VEHICLE' | 'DRIVER' | 'INVOICE' | 'WORK_ORDER' | 'SHIPMENT' | 'NONE' = 'NONE';
+  // Widened to include 'PARTNER': autoPopulateFleet360Record() can return
+  // 'SHIPMENT' while crossCheckWithMasterData() can return 'PARTNER' — this
+  // variable is fed from either source below, so it must accept both.
+  let linkedEntityType: 'VEHICLE' | 'DRIVER' | 'INVOICE' | 'WORK_ORDER' | 'SHIPMENT' | 'PARTNER' | 'NONE' = 'NONE';
   let linkedEntityId: string | undefined;
   let populateMessage = '';
   let lifecycleStatus = shouldAutoProcess ? 'ACTIVE' : 'VALIDATED';
@@ -155,7 +164,7 @@ export async function executeDocumentControlPipeline(
   // 8. Persist to Database with full audit metadata
   let extractionRecordId = `DOC-${Date.now()}`;
   try {
-    const rows = await prisma.$queryRawUnsafe<any[]>(`
+    const rows = await prisma.$queryRawUnsafe<DocumentExtractionIdRow[]>(`
       INSERT INTO document_intelligence_extractions (
         tenant_id, file_name, mime_type, doc_category, template_family,
         confidence, confidence_score, risk_score, risk_level, lifecycle_status,
@@ -225,9 +234,12 @@ export async function executeDocumentControlPipeline(
         documentId: extractionRecordId,
         fileName,
         docCategory: extraction.docCategory,
-        anomalySummary: crossDocResult.summary,
-        financialVarianceAed: crossDocResult.discrepancies.reduce((acc, d) => acc + (d.delta || 0), 0),
-        discrepancies: crossDocResult.discrepancies,
+        // CrossDocRelationshipResult has no `summary`/`discrepancies` fields —
+        // the reconciler already computes the variance and a human-readable
+        // message directly; `chain` is the real per-document breakdown.
+        anomalySummary: crossDocResult.message,
+        financialVarianceAed: crossDocResult.varianceAed,
+        chain: crossDocResult.chain,
       }).catch((whErr) => console.warn('[PipelineExecution] Webhook error:', whErr));
     } catch (escalateErr) {
       console.warn('[PipelineExecution] Anomaly escalation warning:', escalateErr);

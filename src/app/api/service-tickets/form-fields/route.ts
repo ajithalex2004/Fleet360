@@ -33,7 +33,7 @@ import { captureException } from '@/lib/sentry';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
-export interface ServiceTypeConfig {
+interface ServiceTypeConfig {
   // Presentation metadata sourced from service_types row.
   name: string;
   longLabel: string;

@@ -15,31 +15,124 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Radio,
-  Wifi,
   WifiOff,
   Activity,
-  Gauge,
-  Fuel,
   Cpu,
   RefreshCw,
   Search,
-  Plus,
   Play,
   Copy,
   Check,
   Zap,
   Clock,
-  Compass,
   AlertTriangle,
-  Send,
   Terminal,
   Navigation,
-  MapPin,
   CheckCircle2,
   Wrench,
   ArrowRight,
   ShieldCheck,
+  Shield,
+  Award,
+  Flame,
 } from 'lucide-react';
+
+interface DriverSafetyEntry {
+  driverId: string;
+  driverName: string;
+  phone: string | null;
+  status?: string | null;
+  score: number;
+  ragStatus: 'GREEN' | 'AMBER' | 'RED';
+  harshBrakes: number;
+  harshAccels: number;
+  harshCornerings?: number;
+  overspeedEvents: number;
+  excessiveIdlingMins?: number;
+  summary: string;
+}
+
+interface FuelAlertEntry {
+  id: string;
+  severity?: string | null;
+  title: string;
+  description: string | null;
+  createdAt: string;
+}
+
+interface DtcServiceRequestEntry {
+  id: string;
+  priority: string | null;
+  status: string | null;
+  description?: string | null;
+  vehicle: { id: string; vehicleCode: string | null; licensePlate: string | null; deviceId: string | null } | null;
+  createdAt: string;
+}
+
+interface TelematicsAnalyticsData {
+  driverLeaderboard: DriverSafetyEntry[];
+  averageSafetyScore: number;
+  fuelAlerts: FuelAlertEntry[];
+  dtcServiceRequests: DtcServiceRequestEntry[];
+  referenceDtcs?: unknown;
+}
+
+interface AutomationStopEntry {
+  stopId: string;
+  stopName: string;
+  sequence: number;
+  gpsLat: number | null;
+  gpsLng: number | null;
+  approachedAt: string | null;
+  enteredAt: string | null;
+  leftAt: string | null;
+  state: 'PENDING' | 'APPROACHING' | 'AT_STOP' | 'DEPARTED';
+}
+
+interface AutomationTripProgress {
+  tripId: string;
+  tripNumber: string | null;
+  shiftType: string | null;
+  status: string | null;
+  departureTime: string;
+  estimatedArrival: string | null;
+  vehicle: { id: string; vehicleCode: string | null; licensePlate: string | null; deviceId: string | null } | null;
+  driver: { id: string; firstName: string; lastName: string } | null;
+  routeName: string;
+  totalStops: number;
+  completedStops: number;
+  currentStop: AutomationStopEntry | null;
+  stops: AutomationStopEntry[];
+}
+
+interface PmStatusEntry {
+  vehicleId: string;
+  vehicleCode: string | null;
+  licensePlate: string | null;
+  make: string | null;
+  model: string | null;
+  deviceId: string | null;
+  currentOdometerKm: number;
+  nextDueKm: number;
+  kmRemaining: number;
+  status: 'OK' | 'DUE_SOON' | 'OVERDUE';
+}
+
+interface TelematicsAutomationData {
+  activeTripsCount: number;
+  activeTripProgress: AutomationTripProgress[];
+  pmDueSoonCount: number;
+  pmOverdueCount: number;
+  pmStatusList: PmStatusEntry[];
+}
+
+// The webhook simulator posts arbitrary vendor-shaped payloads (Flespi/Teltonika/
+// Traccar/generic) and echoes back whatever the normalizer parsed — `success`/
+// `error` are the only fields every vendor path shares, the rest is dynamic.
+interface SimWebhookResponse {
+  status: number;
+  data: { success?: boolean; error?: string } & Record<string, unknown>;
+}
 
 interface DeviceItem {
   vehicleId: string;
@@ -75,14 +168,16 @@ export default function TelematicsPage() {
   const [pairingSaving, setPairingSaving] = useState(false);
 
   // Active Tab state
-  const [activeTab, setActiveTab] = useState<'devices' | 'automation' | 'simulator' | 'guide'>('devices');
-  const [automationData, setAutomationData] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState<'devices' | 'automation' | 'safety' | 'simulator' | 'guide'>('devices');
+  const [automationData, setAutomationData] = useState<TelematicsAutomationData | null>(null);
   const [automationLoading, setAutomationLoading] = useState(false);
+  const [analyticsData, setAnalyticsData] = useState<TelematicsAnalyticsData | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   const [simVendor, setSimVendor] = useState<'flespi' | 'teltonika' | 'traccar' | 'generic'>('flespi');
   const [simPayload, setSimPayload] = useState('');
   const [simSubmitting, setSimSubmitting] = useState(false);
-  const [simResponse, setSimResponse] = useState<any>(null);
+  const [simResponse, setSimResponse] = useState<SimWebhookResponse | null>(null);
   const [copied, setCopied] = useState(false);
 
   const fetchDevices = useCallback(async () => {
@@ -115,12 +210,29 @@ export default function TelematicsPage() {
     }
   }, []);
 
+  const fetchAnalytics = useCallback(async () => {
+    setAnalyticsLoading(true);
+    try {
+      const res = await fetch('/api/telematics/analytics');
+      if (res.ok) {
+        const data = await res.json();
+        setAnalyticsData(data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch analytics data', err);
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchDevices();
     if (activeTab === 'automation') {
       fetchAutomation();
+    } else if (activeTab === 'safety') {
+      fetchAnalytics();
     }
-  }, [fetchDevices, fetchAutomation, activeTab]);
+  }, [fetchDevices, fetchAutomation, fetchAnalytics, activeTab]);
 
   // Load sample payloads for simulator
   useEffect(() => {
@@ -247,10 +359,10 @@ export default function TelematicsPage() {
     setSimSubmitting(true);
     setSimResponse(null);
     try {
-      let parsedBody: any;
+      let parsedBody: unknown;
       try {
         parsedBody = JSON.parse(simPayload);
-      } catch (err) {
+      } catch {
         alert('Invalid JSON in payload editor');
         setSimSubmitting(false);
         return;
@@ -670,7 +782,7 @@ export default function TelematicsPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {automationData.activeTripProgress.map((trip: any) => (
+                {automationData.activeTripProgress.map((trip) => (
                   <div
                     key={trip.tripId}
                     className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/70 p-5 space-y-4 shadow-lg"
@@ -708,7 +820,7 @@ export default function TelematicsPage() {
                     {/* Horizontal Stop Chain */}
                     <div className="overflow-x-auto pb-2">
                       <div className="flex items-center gap-2 min-w-max">
-                        {trip.stops.map((stop: any, idx: number) => {
+                        {trip.stops.map((stop, idx: number) => {
                           const isDeparted = stop.state === 'DEPARTED';
                           const isAtStop = stop.state === 'AT_STOP';
                           const isApproaching = stop.state === 'APPROACHING';
@@ -782,7 +894,7 @@ export default function TelematicsPage() {
                       </td>
                     </tr>
                   ) : (
-                    automationData.pmStatusList.map((item: any) => {
+                    automationData.pmStatusList.map((item) => {
                       const isOverdue = item.status === 'OVERDUE';
                       const isDueSoon = item.status === 'DUE_SOON';
 
@@ -920,7 +1032,7 @@ export default function TelematicsPage() {
                       </td>
                     </tr>
                   ) : (
-                    analyticsData.driverLeaderboard.map((d: any, index: number) => {
+                    analyticsData.driverLeaderboard.map((d, index: number) => {
                       const isGreen = d.ragStatus === 'GREEN';
                       const isAmber = d.ragStatus === 'AMBER';
 
@@ -1003,7 +1115,7 @@ export default function TelematicsPage() {
                     No fuel theft or siphoning anomalies detected.
                   </div>
                 ) : (
-                  analyticsData.fuelAlerts.map((a: any) => (
+                  analyticsData.fuelAlerts.map((a) => (
                     <div
                       key={a.id}
                       className="p-3 rounded-xl bg-rose-950/40 border border-rose-500/30 space-y-1"
@@ -1034,7 +1146,7 @@ export default function TelematicsPage() {
                     No active DTC engine fault tickets. Vehicle powertrains healthy.
                   </div>
                 ) : (
-                  analyticsData.dtcServiceRequests.map((sr: any) => (
+                  analyticsData.dtcServiceRequests.map((sr) => (
                     <div
                       key={sr.id}
                       className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/30 space-y-1"
@@ -1141,7 +1253,7 @@ export default function TelematicsPage() {
               </div>
             ) : (
               <div className="p-12 text-center text-[var(--text-faint)] text-xs">
-                Click <strong>"Simulate Ingestion"</strong> on the left to test the webhook and see normalized state updates.
+                Click <strong>&ldquo;Simulate Ingestion&rdquo;</strong> on the left to test the webhook and see normalized state updates.
               </div>
             )}
           </div>

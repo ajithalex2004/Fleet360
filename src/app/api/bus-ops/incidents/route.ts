@@ -7,6 +7,7 @@ import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-ca
 import { raiseAlert } from '@/lib/alerts/raise';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import type { Prisma } from '@prisma/client';
 const CACHE_TAG = 'bus-ops:incidents';
 
 // Runs inside unstable_cache (via cacheRead), which strips Next.js request
@@ -80,7 +81,7 @@ export async function POST(req: NextRequest) {
         const incidentNo = body.incidentNo ?? `INC-${String(count + 1).padStart(5, '0')}`;
         const source = req.headers.get('x-incident-source') ?? body.source ?? 'ops-ui';
         const incident = await tx.tripIncident.create({
-          data: { ...body, incidentNo, tenantId },
+          data: { ...body, incidentNo, tenantId } as Prisma.TripIncidentUncheckedCreateInput,
         });
 
         // Alert Engine — reference migration. Instead of writing tx.alert

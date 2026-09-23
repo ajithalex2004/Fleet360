@@ -82,7 +82,7 @@ export function inquiryToQuotation(inq: InquiryForFill) {
     maintenanceIncluded: inq.requiresMaintenance ?? false,
     driverIncluded:      inq.requiresDriver      ?? false,
     vehicles: [{
-      vehicleType: (inq.vehicleType as any) ?? 'SEDAN',
+      vehicleType: inq.vehicleType ?? 'SEDAN',
       make: '', model: '',
       year: new Date().getFullYear(),
       quantity: inq.vehicleCount ?? 1,
@@ -119,7 +119,7 @@ export interface QuotationForFill {
   insuranceIncluded?: boolean;
   maintenanceIncluded?: boolean;
   driverIncluded?: boolean;
-  vehicles?: any[];
+  vehicles?: unknown[]; // carried through from the caller's Quotation shape; not read here
   notes?: string;
 }
 

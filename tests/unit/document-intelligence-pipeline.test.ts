@@ -69,6 +69,7 @@ Total AED: 5,092.50`;
           plateNumber: '48291',
           vin: 'ABC1234567', // Document VIN
         },
+        summary: 'Extracted INSURANCE_POLICY for Commercial Fleet Insurance.',
       };
 
       const result = await crossCheckWithMasterData('tenant-test', extractionWithVinMismatch);
@@ -89,6 +90,7 @@ Total AED: 5,092.50`;
           licenseNumber: 'DL-DXB-99182',
           emiratesId: '784-1990-1234567-1',
         },
+        summary: 'Extracted DRIVER_LICENSE for UAE Driver License.',
       };
 
       const result = await crossCheckWithMasterData('tenant-test', extractionDriver);
@@ -111,6 +113,7 @@ Total AED: 5,092.50`;
           totalAmountAed: 6200.00,
           currency: 'AED',
         },
+        summary: 'Extracted INVOICE for Workshop Repair Invoice.',
       };
 
       const chainResult = reconcileCrossDocumentChain({
@@ -141,6 +144,7 @@ Total AED: 5,092.50`;
           totalAmountAed: 4300.00,
           currency: 'AED',
         },
+        summary: 'Extracted INVOICE for Spare Parts Invoice.',
       };
 
       const chainResult = reconcileCrossDocumentChain({
@@ -170,6 +174,7 @@ Total AED: 5,092.50`;
           totalAmount: 1050.00,
           currency: 'AED',
         },
+        summary: 'Extracted TAX_INVOICE for Fleet Fuel Bill.',
       };
 
       const compliance = evaluateComplianceRules(compliantDoc);
@@ -191,6 +196,7 @@ Total AED: 5,092.50`;
           taxAmount: 150.00, // 15% instead of 5%
           totalAmount: 1150.00,
         },
+        summary: 'Extracted TAX_INVOICE for Repair Invoice.',
       };
 
       const compliance = evaluateComplianceRules(badVatDoc);
@@ -209,6 +215,7 @@ Total AED: 5,092.50`;
         referenceNumber: 'MULK-991',
         expiryDate: '2027-08-30',
         vehicle: { plateNumber: '78219', vin: '1HGBH41JXMN109182' },
+        summary: 'Extracted REGISTRATION_CARD for Mulkiya.',
       };
 
       const riskEval = evaluateDocumentRisk({
@@ -232,6 +239,7 @@ Total AED: 5,092.50`;
         suggestedTitle: 'Mulkiya',
         confidence: 'HIGH',
         confidenceScore: 0.95,
+        summary: 'Extracted REGISTRATION_CARD for Mulkiya.',
       };
 
       const riskEval = evaluateDocumentRisk({
@@ -345,6 +353,7 @@ Owner: Fleet360 Bus Transport LLC`;
           supplierName: 'Suspicious Parts Trading',
           trnNumber: '200111222333444', // Invalid: does not begin with 100
         },
+        summary: 'Extracted TAX_INVOICE for Vendor Invoice.',
       };
 
       const integrity = evaluateIntegrityIndicators(fraudulentDoc);
@@ -390,6 +399,7 @@ Owner: Fleet360 Bus Transport LLC`;
         confidence: 'HIGH',
         confidenceScore: 0.95,
         referenceNumber: 'INV-7712',
+        summary: 'Extracted INVOICE for Garage Invoice.',
       };
 
       const docText = `INVOICE FOR FLEET REPAIR

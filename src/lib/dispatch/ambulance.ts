@@ -7,7 +7,6 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { randomUUID } from 'crypto';
 import type { DispatchJob, DispatchPriority, Candidate } from './types';
 import { haversineKm } from './eligibility';
 

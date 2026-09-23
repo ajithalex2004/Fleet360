@@ -5,14 +5,22 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { randomUUID } from 'crypto';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, requireSuperAdminForTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error ? e.message : fallback;
+}
+
 export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const authz = requireAuthorizedTenant({ headers: _req.headers, nextUrl: _req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
+  const guard = requireSuperAdminForTenant(authz, params.id);
+  if (!guard.ok) {
+    return NextResponse.json({ error: guard.error }, { status: guard.status });
+  }
 
   try {
     return await withTenantRls(prisma, params.id, async (tx) => {
@@ -57,7 +65,10 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
+  const guard = requireSuperAdminForTenant(authz, params.id);
+  if (!guard.ok) {
+    return NextResponse.json({ error: guard.error }, { status: guard.status });
+  }
 
   try {
     return await withTenantRls(prisma, params.id, async (tx) => {
@@ -74,6 +85,6 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
     });
     } catch (e) {
     console.error('PUT tenant settings error:', e);
-    return NextResponse.json({ error: e?.message ?? 'Failed to save settings' }, { status: 500 });
+    return NextResponse.json({ error: errorMessage(e, 'Failed to save settings') }, { status: 500 });
   }
 }

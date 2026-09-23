@@ -6,14 +6,24 @@
  *  - Executes `execute_kw` calls on models (`account.move`, `fleet.vehicle.log.services`, `hr.employee`).
  */
 
-import { BaseEnterpriseAdapter } from './base-adapter';
+import { BaseEnterpriseAdapter, CanonicalPayload } from './base-adapter';
 import {
   CanonicalEntityType,
+  CanonicalInvoice,
+  CanonicalWorkOrder,
   EnterpriseSyncResult,
 } from '../../types';
 
 export class OdooJsonRpcAdapter extends BaseEnterpriseAdapter {
-  private async executeKw(model: string, method: string, args: any[], kwargs: any = {}): Promise<any> {
+  // The JSON-RPC response shape depends entirely on which Odoo model/method
+  // was called (e.g. `create` returns a numeric id, `search_read` returns a
+  // record array), so each call site asserts its own expected shape via T.
+  private async executeKw<T = unknown>(
+    model: string,
+    method: string,
+    args: unknown[],
+    kwargs: Record<string, unknown> = {}
+  ): Promise<T> {
     const url = `${this.connection.baseUrl.replace(/\/$/, '')}/jsonrpc`;
     const { db = 'odoo', uid = 1, password = '' } = this.connection.authCredentials || {};
 
@@ -40,7 +50,7 @@ export class OdooJsonRpcAdapter extends BaseEnterpriseAdapter {
       throw new Error(data.error.data?.message || data.error.message || 'Odoo RPC Error');
     }
 
-    return data.result;
+    return data.result as T;
   }
 
   async testConnection(): Promise<{ success: boolean; latencyMs: number; message: string }> {
@@ -67,31 +77,36 @@ export class OdooJsonRpcAdapter extends BaseEnterpriseAdapter {
   async pushEntity(
     entityType: CanonicalEntityType,
     entityId: string,
-    canonicalPayload: any
+    canonicalPayload: CanonicalPayload
   ): Promise<EnterpriseSyncResult> {
     const start = Date.now();
 
     try {
       let model = 'account.move';
-      let vals: Record<string, any> = {};
+      let vals: Record<string, unknown> = {};
+      let financialImpactAed = 0;
 
       if (entityType === 'INVOICE') {
+        const invoice = canonicalPayload as CanonicalInvoice;
         model = 'account.move';
         vals = {
           move_type: 'out_invoice',
-          name: canonicalPayload.invoiceNumber || entityId,
-          amount_total: canonicalPayload.totalAmountAed,
+          name: invoice.invoiceNumber || entityId,
+          amount_total: invoice.totalAmountAed,
           narration: `Fleet360 automated transport invoice sync`,
         };
+        financialImpactAed = invoice.totalAmountAed || 0;
       } else if (entityType === 'WORK_ORDER') {
+        const workOrder = canonicalPayload as CanonicalWorkOrder;
         model = 'fleet.vehicle.log.services';
         vals = {
-          description: canonicalPayload.issueDescription,
-          amount: canonicalPayload.estimatedCostAed || 0,
+          description: workOrder.issueDescription,
+          amount: workOrder.estimatedCostAed || 0,
         };
+        financialImpactAed = workOrder.estimatedCostAed || 0;
       }
 
-      const odooId = await this.executeKw(model, 'create', [vals]).catch(() => 101);
+      const odooId = await this.executeKw<number>(model, 'create', [vals]).catch(() => 101);
 
       const latencyMs = Date.now() - start;
       return {
@@ -101,12 +116,12 @@ export class OdooJsonRpcAdapter extends BaseEnterpriseAdapter {
         entityType,
         status: 'SUCCESS',
         externalReferenceId: String(odooId),
-        financialImpactAed: canonicalPayload.totalAmountAed || canonicalPayload.estimatedCostAed || 0,
+        financialImpactAed,
         durationMs: latencyMs,
         retryCount: 0,
         message: `Odoo ${model} record #${odooId} created successfully.`,
       };
-    } catch (err: any) {
+    } catch (err) {
       return {
         syncId: `ODOO-SYNC-${Date.now()}`,
         connectionId: this.connection.id,
@@ -115,26 +130,31 @@ export class OdooJsonRpcAdapter extends BaseEnterpriseAdapter {
         status: 'FAILED',
         durationMs: Date.now() - start,
         retryCount: 0,
-        message: `Odoo RPC Sync Error: ${err.message}`,
+        message: `Odoo RPC Sync Error: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
   }
 
   async pullEntities(
     entityType: CanonicalEntityType,
-    params: Record<string, any> = {}
-  ): Promise<{ success: boolean; data: any[]; message: string }> {
+    params: Record<string, unknown> = {}
+  ): Promise<{ success: boolean; data: unknown[]; message: string }> {
+    // Inbound pull is not yet wired to an Odoo search domain — no caller
+    // passes filter params today (this direction isn't hooked up to the
+    // sync orchestrator yet), so there's nothing to translate `params`
+    // into. Kept on the signature to match the adapter contract.
+    void params;
     try {
       const model = entityType === 'ROSTER' ? 'hr.employee' : 'account.move';
-      const records = await this.executeKw(model, 'search_read', [[]], { limit: 50 });
+      const records = await this.executeKw<Record<string, unknown>[]>(model, 'search_read', [[]], { limit: 50 });
 
       return {
         success: true,
         data: records || [],
         message: `Pulled ${records?.length || 0} records from Odoo.`,
       };
-    } catch (err: any) {
-      return { success: false, data: [], message: `Odoo pull failed: ${err.message}` };
+    } catch (err) {
+      return { success: false, data: [], message: `Odoo pull failed: ${err instanceof Error ? err.message : String(err)}` };
     }
   }
 }

@@ -73,10 +73,19 @@ export const POST = withAudit(
           { status: 400 },
         );
       }
-      const item = await withTenantRls(prisma, tenantId, async (tx) =>
-        tx.rentalAncillary.upsert({
-        where: { code: parsed.data.code, tenantId },
-        update: {
+      // RentalAncillary.code has no unique/@@unique constraint in the
+      // schema (only a plain index) — Prisma's upsert() requires a real
+      // WhereUniqueInput, so `where: { code, tenantId }` was never
+      // buildable and this call could never have worked. find-then-
+      // create/update is the equivalent without a migration; it isn't
+      // perfectly atomic under concurrent POSTs for the same (tenant,
+      // code), same as any find+write without a DB-level unique
+      // constraint backing it.
+      const item = await withTenantRls(prisma, tenantId, async (tx) => {
+        const existing = await tx.rentalAncillary.findFirst({
+          where: { tenantId, code: parsed.data.code },
+        });
+        const fields = {
           nameEn: parsed.data.nameEn,
           nameAr: parsed.data.nameAr ?? null,
           description: parsed.data.description ?? null,
@@ -88,24 +97,12 @@ export const POST = withAudit(
           isActive: parsed.data.isActive ?? true,
           sortOrder: parsed.data.sortOrder ?? 0,
           notes: parsed.data.notes ?? null,
-        },
-        create: {
-          tenantId,
-          code: parsed.data.code,
-          nameEn: parsed.data.nameEn,
-          nameAr: parsed.data.nameAr ?? null,
-          description: parsed.data.description ?? null,
-          category: parsed.data.category ?? null,
-          pricingType: parsed.data.pricingType,
-          unitPrice: parsed.data.unitPrice,
-          currency: parsed.data.currency ?? 'AED',
-          applicableCategories: parsed.data.applicableCategories ?? null,
-          isActive: parsed.data.isActive ?? true,
-          sortOrder: parsed.data.sortOrder ?? 0,
-          notes: parsed.data.notes ?? null,
-        },
-      }),
-      );
+        };
+        if (existing) {
+          return tx.rentalAncillary.update({ where: { id: existing.id }, data: fields });
+        }
+        return tx.rentalAncillary.create({ data: { tenantId, code: parsed.data.code, ...fields } });
+      });
       return NextResponse.json(item, { status: 201 });
       } catch (err) {
       captureException(err, { context: 'rental.ancillaries.POST' });
@@ -115,8 +112,11 @@ export const POST = withAudit(
   {
     entityType: 'RentalAncillary',
     action: 'CREATE',
-    extractEntity: (b) => ({ id: b?.id, name: b?.code }),
-    describe: (_req, b) =>
+    extractEntity: (b: { id?: string; code?: string }) => ({ id: b?.id, name: b?.code }),
+    describe: (
+      _req,
+      b: { code?: string; nameEn?: string; unitPrice?: number; currency?: string; pricingType?: string }
+    ) =>
       b?.code ? `Saved ancillary ${b.code} (${b.nameEn}, ${b.unitPrice} ${b.currency} ${b.pricingType})` : undefined,
   },
 );

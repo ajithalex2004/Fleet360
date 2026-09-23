@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useCallback } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import {
   BusFront, Map as MapIcon, Calendar, Clock as ClockIcon, Users, AlertTriangle, FileText, ArrowRight, Sparkles,
@@ -9,15 +9,60 @@ import { PageHeader, Panel, StatusPill } from '@/components/bus-ops/theme';
 import { useFetchedData } from '@/hooks/useFetchedData';
 import { useLanguage } from '@/contexts/LanguageContext';
 
+interface BusRouteRow {
+  id: string;
+  isActive?: boolean | null;
+}
+
+interface TripScheduleRow {
+  id: string;
+  tripNumber?: string | null;
+  departureTime: string;
+  status?: string | null;
+  shiftType?: string | null;
+  direction?: string | null;
+  confirmedCount?: number | null;
+  capacity?: number | null;
+  route?: { name?: string | null } | null;
+}
+
+interface StaffMemberRow {
+  id: string;
+  isActive?: boolean | null;
+}
+
+interface TripIncidentRow {
+  id: string;
+  incidentNo?: string | null;
+  incidentType: string;
+  incidentDate: string;
+  status?: string | null;
+  severity?: string | null;
+  location?: string | null;
+}
+
+interface StaffTransportRequestRow {
+  id: string;
+  status?: string | null;
+}
+
+interface QuickActionLink {
+  label: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  accent: string;
+  badge?: string;
+}
+
 export default function BusOpsDashboard() {
   // Session-scoped fetch cache — 1st visit hits the cached server endpoints
   // (unstable_cache + private s-maxage), 2nd visit in the same tab is
   // instant from the in-memory Map.
-  const { data: routesRaw,    loading: routesLoading }    = useFetchedData<any[]>('/api/bus-ops/routes');
-  const { data: schedulesRaw, loading: schedulesLoading } = useFetchedData<any[]>('/api/bus-ops/schedules');
-  const { data: staffRaw,     loading: staffLoading }     = useFetchedData<any[]>('/api/bus-ops/staff');
-  const { data: incidentsRaw, loading: incidentsLoading } = useFetchedData<any[]>('/api/bus-ops/incidents');
-  const { data: requestsRaw,  loading: requestsLoading }  = useFetchedData<any[]>('/api/bus-ops/transport-requests');
+  const { data: routesRaw,    loading: routesLoading }    = useFetchedData<BusRouteRow[]>('/api/bus-ops/routes');
+  const { data: schedulesRaw, loading: schedulesLoading } = useFetchedData<TripScheduleRow[]>('/api/bus-ops/schedules');
+  const { data: staffRaw,     loading: staffLoading }     = useFetchedData<StaffMemberRow[]>('/api/bus-ops/staff');
+  const { data: incidentsRaw, loading: incidentsLoading } = useFetchedData<TripIncidentRow[]>('/api/bus-ops/incidents');
+  const { data: requestsRaw,  loading: requestsLoading }  = useFetchedData<StaffTransportRequestRow[]>('/api/bus-ops/transport-requests');
   const { data: me } = useFetchedData<{ role?: string }>('/api/auth/me');
   const isTenantAdmin = me?.role === 'TENANT_ADMIN' || me?.role === 'SUPER_ADMIN';
   const { tLabel } = useLanguage();
@@ -28,14 +73,50 @@ export default function BusOpsDashboard() {
   const incidents = Array.isArray(incidentsRaw) ? incidentsRaw : [];
   const requests  = Array.isArray(requestsRaw)  ? requestsRaw  : [];
   const loading   = routesLoading || schedulesLoading || staffLoading || incidentsLoading || requestsLoading;
-  const todayTrips    = schedules.filter((s: any) => {
+  const todayTrips    = schedules.filter((s) => {
     const d = new Date(s.departureTime);
     const now = new Date();
     return d.toDateString() === now.toDateString();
   });
-  const activeTrips   = schedules.filter((s: any) => ['STARTED','EN_ROUTE','DEPARTED','IN_TRANSIT'].includes(s.status ?? ''));
-  const openIncidents = incidents.filter((i: any) => i.status === 'OPEN');
-  const pendingReqs   = requests.filter((r: any) => r.status === 'PENDING');
+  const activeTrips   = schedules.filter((s) => ['STARTED','EN_ROUTE','DEPARTED','IN_TRANSIT'].includes(s.status ?? ''));
+  const openIncidents = incidents.filter((i) => i.status === 'OPEN');
+  const pendingReqs   = requests.filter((r) => r.status === 'PENDING');
+
+  const quickActionLinks: QuickActionLink[] = [
+    // Headway and CBA moved inside this gate along with the rest.
+    // They used to render for every role, but both now live behind
+    // the Planning Engine's bus-ops:admin:planning-core guard — an
+    // ungated tile would just walk the user into a permission wall.
+    ...(isTenantAdmin ? [
+      { label: 'Planning Engine',   href: '/bus-ops/planning-engine',            icon: Sparkles, accent: 'violet', badge: 'P0' },
+      { label: 'PCE Constraints',   href: '/bus-ops/planning-constraints',       icon: Shield,   accent: 'violet' },
+      { label: 'Route Consolidation', href: '/bus-ops/route-consolidation',      icon: GitMerge, accent: 'violet' },
+      { label: 'Vehicle/Resource Optimization', href: '/bus-ops/vehicle-resource-optimization', icon: Repeat, accent: 'violet' },
+      { label: 'Headway Mgmt',      href: '/bus-ops/planning-engine?tab=headway', icon: Timer,   accent: 'cyan',   badge: 'P1' },
+      { label: 'Operational Rules Engine', href: '/bus-ops/planning-engine?tab=cba', icon: Scale, accent: 'amber',  badge: 'P1' },
+    ] : []),
+    { label: 'Shift SLA Monitor', href: '/bus-ops/sla-monitor',  icon: Shield,        accent: 'rose',   badge: 'P0' },
+    { label: 'Driver Fatigue & Rest', href: '/bus-ops/drivers/fatigue', icon: Shield, accent: 'rose', badge: 'P1' },
+    // Shifts and vehicle-document expiry are owned by Driver
+    // Management and Fleet respectively (shared resources across
+    // every module, not bus-ops-exclusive) — these link out rather
+    // than duplicating a second CRUD surface here. RVE's D3 "no
+    // shift" warning and its vehicle-document checks both read
+    // from exactly what these two screens manage.
+    { label: 'Driver Shifts',     href: '/driver-mgmt/shifts',    icon: ClockIcon,     accent: 'rose',   badge: 'Drivers' },
+    { label: 'Vehicle Doc Expiry', href: '/fleet/documents',      icon: FileText,      accent: 'amber',  badge: 'Fleet' },
+    { label: 'Ad-Hoc / Overtime Dispatch', href: '/bus-ops/adhoc-dispatch', icon: Zap, accent: 'amber', badge: 'P0' },
+    { label: 'Cost Allocation & Recharge', href: '/bus-ops/cost-allocation', icon: Calculator, accent: 'emerald', badge: 'P0' },
+    { label: 'ESG Carbon Footprint', href: '/bus-ops/esg',       icon: Leaf,          accent: 'emerald', badge: 'P2' },
+    { label: 'Power BI Connector',href: '/bus-ops/powerbi',      icon: BarChart3,     accent: 'emerald', badge: 'P1' },
+    { label: 'Multilayer GIS',    href: '/bus-ops/gis',          icon: Layers,        accent: 'rose',   badge: 'P1' },
+    { label: 'Rider App (PWA)',   href: '/bus-ops/passenger/app',icon: Smartphone,    accent: 'cyan',   badge: 'P1' },
+    { label: 'Add Route',         href: '/bus-ops/routes',       icon: MapIcon,       accent: 'cyan' },
+    { label: 'New Trip',          href: '/bus-ops/schedules',    icon: Calendar,      accent: 'emerald' },
+    { label: 'Register Staff',    href: '/bus-ops/staff',        icon: Users,         accent: 'violet' },
+    { label: 'Log Incident',      href: '/bus-ops/incidents',    icon: AlertTriangle, accent: 'rose' },
+    { label: 'Manage Passengers', href: '/bus-ops/passengers',   icon: Users,         accent: 'amber' },
+  ];
 
   if (loading) return <div className="flex items-center justify-center h-full"><div className="text-[var(--text-muted)] animate-pulse">{tLabel('Loading dashboard...')}</div></div>;
 
@@ -51,10 +132,10 @@ export default function BusOpsDashboard() {
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
         {[
-          { label: 'Active Routes',      value: routes.filter((r:any)=>r.isActive).length,     href: '/bus-ops/routes',      tone: 'from-cyan-500 to-blue-600' },
+          { label: 'Active Routes',      value: routes.filter((r)=>r.isActive).length,          href: '/bus-ops/routes',      tone: 'from-cyan-500 to-blue-600' },
           { label: "Today's Trips",      value: todayTrips.length,                              href: '/bus-ops/schedules',   tone: 'from-emerald-500 to-teal-600' },
           { label: 'In Progress',        value: activeTrips.length,                             href: '/bus-ops/schedules',   tone: 'from-amber-500 to-orange-600' },
-          { label: 'Staff Registered',   value: staff.filter((s:any)=>s.isActive).length,       href: '/bus-ops/staff',       tone: 'from-violet-500 to-purple-600' },
+          { label: 'Staff Registered',   value: staff.filter((s)=>s.isActive).length,           href: '/bus-ops/staff',       tone: 'from-violet-500 to-purple-600' },
           { label: 'Open Incidents',     value: openIncidents.length,                           href: '/bus-ops/incidents',   tone: 'from-rose-500 to-pink-600' },
           { label: 'Pending Requests',   value: pendingReqs.length,                             href: '/bus-ops/passengers',  tone: 'from-slate-500 to-slate-700' },
         ].map(card => (
@@ -82,7 +163,7 @@ export default function BusOpsDashboard() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {todayTrips.slice(0,6).map((t: any) => (
+            {todayTrips.slice(0,6).map((t) => (
               <div key={t.id} className="rounded-xl bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] p-4 hover:border-[var(--border-subtle)] transition-colors">
                 <div className="flex items-start justify-between mb-2 gap-2">
                   <div className="min-w-0">
@@ -117,14 +198,14 @@ export default function BusOpsDashboard() {
             <div className="text-center text-[var(--text-muted)] py-6 text-sm">{tLabel('No open incidents')}</div>
           ) : (
             <div className="space-y-2">
-              {openIncidents.slice(0,4).map((inc: any) => (
+              {openIncidents.slice(0,4).map((inc) => (
                 <div key={inc.id} className="flex items-center gap-3 p-3 rounded-xl bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)]">
                   <div className={`w-2 h-2 rounded-full shrink-0 ${inc.severity === 'CRITICAL' ? 'bg-rose-500' : inc.severity === 'HIGH' ? 'bg-orange-500' : inc.severity === 'MEDIUM' ? 'bg-amber-500' : 'bg-slate-500'}`} />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-[var(--text-main)] truncate">{inc.incidentNo} — {inc.incidentType}</div>
                     <div className="text-xs text-[var(--text-faint)] truncate">{inc.location ?? '—'} · {new Date(inc.incidentDate).toLocaleDateString()}</div>
                   </div>
-                  <StatusPill status={inc.severity === 'CRITICAL' || inc.severity === 'HIGH' ? 'danger' : 'warning'} label={inc.severity} />
+                  <StatusPill status={inc.severity === 'CRITICAL' || inc.severity === 'HIGH' ? 'danger' : 'warning'} label={inc.severity ?? undefined} />
                 </div>
               ))}
             </div>
@@ -186,53 +267,19 @@ export default function BusOpsDashboard() {
 
         <Panel title="Quick Actions" icon={Sparkles} accent="violet">
           <div className="grid grid-cols-2 gap-2">
-            {[
-              // Headway and CBA moved inside this gate along with the rest.
-              // They used to render for every role, but both now live behind
-              // the Planning Engine's bus-ops:admin:planning-core guard — an
-              // ungated tile would just walk the user into a permission wall.
-              ...(isTenantAdmin ? [
-                { label: 'Planning Engine',   href: '/bus-ops/planning-engine',            icon: Sparkles, accent: 'violet' as const, badge: 'P0' },
-                { label: 'PCE Constraints',   href: '/bus-ops/planning-constraints',       icon: Shield,   accent: 'violet' as const },
-                { label: 'Route Consolidation', href: '/bus-ops/route-consolidation',      icon: GitMerge, accent: 'violet' as const },
-                { label: 'Vehicle/Resource Optimization', href: '/bus-ops/vehicle-resource-optimization', icon: Repeat, accent: 'violet' as const },
-                { label: 'Headway Mgmt',      href: '/bus-ops/planning-engine?tab=headway', icon: Timer,   accent: 'cyan' as const,   badge: 'P1' },
-                { label: 'Operational Rules Engine', href: '/bus-ops/planning-engine?tab=cba', icon: Scale, accent: 'amber' as const,  badge: 'P1' },
-              ] : []),
-              { label: 'Shift SLA Monitor', href: '/bus-ops/sla-monitor',  icon: Shield,        accent: 'rose' as const,   badge: 'P0' },
-              { label: 'Driver Fatigue & Rest', href: '/bus-ops/drivers/fatigue', icon: Shield, accent: 'rose' as const, badge: 'P1' },
-              // Shifts and vehicle-document expiry are owned by Driver
-              // Management and Fleet respectively (shared resources across
-              // every module, not bus-ops-exclusive) — these link out rather
-              // than duplicating a second CRUD surface here. RVE's D3 "no
-              // shift" warning and its vehicle-document checks both read
-              // from exactly what these two screens manage.
-              { label: 'Driver Shifts',     href: '/driver-mgmt/shifts',    icon: ClockIcon,     accent: 'rose' as const,   badge: 'Drivers' },
-              { label: 'Vehicle Doc Expiry', href: '/fleet/documents',      icon: FileText,      accent: 'amber' as const,  badge: 'Fleet' },
-              { label: 'Ad-Hoc / Overtime Dispatch', href: '/bus-ops/adhoc-dispatch', icon: Zap, accent: 'amber' as const, badge: 'P0' },
-              { label: 'Cost Allocation & Recharge', href: '/bus-ops/cost-allocation', icon: Calculator, accent: 'emerald' as const, badge: 'P0' },
-              { label: 'ESG Carbon Footprint', href: '/bus-ops/esg',       icon: Leaf,          accent: 'emerald' as const,badge: 'P2' },
-              { label: 'Power BI Connector',href: '/bus-ops/powerbi',      icon: BarChart3,     accent: 'emerald' as const,badge: 'P1' },
-              { label: 'Multilayer GIS',    href: '/bus-ops/gis',          icon: Layers,        accent: 'rose' as const,   badge: 'P1' },
-              { label: 'Rider App (PWA)',   href: '/bus-ops/passenger/app',icon: Smartphone,    accent: 'cyan' as const,   badge: 'P1' },
-              { label: 'Add Route',         href: '/bus-ops/routes',       icon: MapIcon,       accent: 'cyan' as const },
-              { label: 'New Trip',          href: '/bus-ops/schedules',    icon: Calendar,      accent: 'emerald' as const },
-              { label: 'Register Staff',    href: '/bus-ops/staff',        icon: Users,         accent: 'violet' as const },
-              { label: 'Log Incident',      href: '/bus-ops/incidents',    icon: AlertTriangle, accent: 'rose' as const },
-              { label: 'Manage Passengers', href: '/bus-ops/passengers',   icon: Users,         accent: 'amber' as const },
-            ].map(link => {
+            {quickActionLinks.map(link => {
               const Icon = link.icon;
               return (
                 <Link key={link.label} href={link.href}
                   className="flex items-center gap-2.5 p-3 rounded-xl bg-[var(--bg-surface)]/40 border border-[var(--border-subtle)] hover:border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]/60 transition-all">
                   <Icon className="w-4 h-4 text-[var(--text-muted)] shrink-0" strokeWidth={1.75} />
                   <span className="text-xs text-[var(--text-main)] truncate flex-1">{tLabel(link.label)}</span>
-                  {(link as any).badge && (
+                  {link.badge && (
                     <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                      (link as any).badge === 'P0'
+                      link.badge === 'P0'
                         ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30'
                         : 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-                    }`}>{(link as any).badge}</span>
+                    }`}>{link.badge}</span>
                   )}
                 </Link>
               );

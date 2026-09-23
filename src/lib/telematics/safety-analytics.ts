@@ -315,7 +315,7 @@ export async function processCanbusDiagnosticsAndSafety(
           data: {
             tenantId,
             vehicleId: vehicle.id,
-            requestType: 'REPAIR',
+            serviceType: 'REPAIR',
             priority: 'URGENT',
             status: 'OPEN',
             description: `[AUTO-GENERATED VIA CAN-BUS TELEMETRY] Critical Engine Fault Detected: ${topCode.code} - ${topCode.description}. ${topCode.recommendedAction}`,

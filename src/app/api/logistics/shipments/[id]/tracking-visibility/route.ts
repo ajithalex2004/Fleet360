@@ -95,7 +95,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Audit log so the change has a trail beyond the row itself.
     void logAudit({
       tenantId,
-      userId,
+      userId: userId ?? undefined,
       userRole: req.headers.get('x-user-role') ?? 'OPERATOR',
       entityType: 'LogisticsShipmentOrder',
       entityId: shipmentId,

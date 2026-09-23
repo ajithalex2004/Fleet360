@@ -10,6 +10,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import type { Prisma } from '@prisma/client';
 import { withTenantRls } from '@/lib/rls';
 import { raiseAlert } from '@/lib/alerts/raise';
 import { evaluateAndRecordStopVisits } from '@/lib/telematics/geofence-evaluator';
@@ -51,8 +52,15 @@ export interface IngestResult {
  * Normalizes an incoming raw JSON object or packet into the standard NormalizedTelemetryPing schema.
  * Handles Flespi, Teltonika, Traccar, and Generic formats.
  */
-export function normalizeTelemetryPacket(raw: Record<string, any>): NormalizedTelemetryPing | null {
+export function normalizeTelemetryPacket(raw: Record<string, unknown>): NormalizedTelemetryPing | null {
   if (!raw || typeof raw !== 'object') return null;
+
+  // The nested `position`/`location` sub-objects and the vendor-specific
+  // io/attributes/params bag are all genuinely unstructured (they vary by
+  // gateway vendor), so they're narrowed once here rather than cast at each
+  // of the many read sites below.
+  const position = raw.position as Record<string, unknown> | undefined;
+  const location = raw.location as Record<string, unknown> | undefined;
 
   // 1. Extract IMEI / Device Identifier
   const imei = String(
@@ -75,10 +83,10 @@ export function normalizeTelemetryPacket(raw: Record<string, any>): NormalizedTe
       // Check if unix seconds vs milliseconds
       occurredAt = new Date(raw.timestamp < 1e11 ? raw.timestamp * 1000 : raw.timestamp);
     } else {
-      occurredAt = new Date(raw.timestamp);
+      occurredAt = new Date(raw.timestamp as string);
     }
   } else if (raw.occurredAt || raw.occurred_at || raw.fixTime || raw.time || raw.event_time) {
-    occurredAt = new Date(raw.occurredAt || raw.occurred_at || raw.fixTime || raw.time || raw.event_time);
+    occurredAt = new Date((raw.occurredAt || raw.occurred_at || raw.fixTime || raw.time || raw.event_time) as string);
   }
 
   if (isNaN(occurredAt.getTime())) {
@@ -90,8 +98,8 @@ export function normalizeTelemetryPacket(raw: Record<string, any>): NormalizedTe
     raw.latitude ??
     raw.lat ??
     raw['position.latitude'] ??
-    raw.position?.latitude ??
-    raw.location?.lat ??
+    position?.latitude ??
+    location?.lat ??
     raw.y
   );
 
@@ -100,8 +108,8 @@ export function normalizeTelemetryPacket(raw: Record<string, any>): NormalizedTe
     raw.lng ??
     raw.lon ??
     raw['position.longitude'] ??
-    raw.position?.longitude ??
-    raw.location?.lng ??
+    position?.longitude ??
+    location?.lng ??
     raw.x
   );
 
@@ -115,7 +123,7 @@ export function normalizeTelemetryPacket(raw: Record<string, any>): NormalizedTe
     raw.speed_kmh ??
     raw.speed ??
     raw['position.speed'] ??
-    raw.position?.speed ??
+    position?.speed ??
     0
   );
 
@@ -126,16 +134,16 @@ export function normalizeTelemetryPacket(raw: Record<string, any>): NormalizedTe
     raw.angle ??
     raw.course ??
     raw['position.direction'] ??
-    raw.position?.direction ??
+    position?.direction ??
     0
   );
 
-  const altitudeM = raw.altitude ?? raw['position.altitude'] ?? raw.position?.altitude ? Number(raw.altitude ?? raw['position.altitude'] ?? raw.position?.altitude) : undefined;
-  const satellites = raw.satellites ?? raw['position.satellites'] ?? raw.position?.satellites ? Number(raw.satellites ?? raw['position.satellites'] ?? raw.position?.satellites) : undefined;
+  const altitudeM = raw.altitude ?? raw['position.altitude'] ?? position?.altitude ? Number(raw.altitude ?? raw['position.altitude'] ?? position?.altitude) : undefined;
+  const satellites = raw.satellites ?? raw['position.satellites'] ?? position?.satellites ? Number(raw.satellites ?? raw['position.satellites'] ?? position?.satellites) : undefined;
   const accuracyM = raw.accuracy ?? raw.hdop ? Number(raw.accuracy ?? raw.hdop) : undefined;
 
   // 5. Vehicle State & CAN-bus
-  const io = raw.io || raw.attributes || raw.params || {};
+  const io = (raw.io || raw.attributes || raw.params || {}) as Record<string, unknown>;
   const ignition = (
     raw.ignition !== undefined ? Boolean(raw.ignition) :
     raw['engine.ignition.status'] !== undefined ? Boolean(raw['engine.ignition.status']) :
@@ -285,12 +293,12 @@ export function normalizeTelemetryPacket(raw: Record<string, any>): NormalizedTe
 export function normalizeTelemetryBatch(input: unknown): NormalizedTelemetryPing[] {
   if (!input) return [];
 
-  let items: any[] = [];
+  let items: unknown[] = [];
   if (Array.isArray(input)) {
     items = input;
   } else if (typeof input === 'object') {
     // Check if wrapped in data or records
-    const obj = input as Record<string, any>;
+    const obj = input as Record<string, unknown>;
     if (Array.isArray(obj.data)) items = obj.data;
     else if (Array.isArray(obj.records)) items = obj.records;
     else if (Array.isArray(obj.pings)) items = obj.pings;
@@ -298,7 +306,7 @@ export function normalizeTelemetryBatch(input: unknown): NormalizedTelemetryPing
   }
 
   return items
-    .map((item) => normalizeTelemetryPacket(item))
+    .map((item) => normalizeTelemetryPacket(item as Record<string, unknown>))
     .filter((p): p is NormalizedTelemetryPing => p !== null);
 }
 
@@ -378,7 +386,7 @@ export async function processTelemetryBatch(
         });
 
         // 3. Update Vehicle current state
-        const updateData: Record<string, any> = {
+        const updateData: Prisma.VehicleUpdateInput = {
           updatedAt: new Date(),
         };
 
@@ -428,19 +436,20 @@ export async function processTelemetryBatch(
             activeTrip.routeId,
           ).catch((err) => console.warn('[telematics-ingest] Stop visit eval failed:', err));
 
-          // Evaluate auto-depart and auto-complete transitions
-          void evaluateTelemetryTripTransitions(tx as any, {
+          // Evaluate auto-depart and auto-complete transitions.
+          // Note: TelemetryPing has no `headingDeg`/`source` fields (grep
+          // confirms telemetry-trip-transitions.ts never reads either), so
+          // they're omitted rather than passed and silently dropped.
+          void evaluateTelemetryTripTransitions(tx, {
             tenantId,
             vehicleId: vehicle.id,
             scheduleId: activeTrip.id,
             latitude: ping.latitude,
             longitude: ping.longitude,
             speedKmh: ping.speedKmh,
-            headingDeg: ping.headingDeg,
             accuracyM: ping.accuracyM,
             occurredAt: ping.occurredAt,
-            source: 'GATEWAY',
-          } as any).catch((err) => console.warn('[telematics-ingest] Trip transition eval failed:', err));
+          }).catch((err) => console.warn('[telematics-ingest] Trip transition eval failed:', err));
         }
 
         // B. Preventive Maintenance (PM) Odometer Threshold Alerts

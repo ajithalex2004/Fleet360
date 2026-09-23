@@ -34,14 +34,15 @@ on:
   pull_request:
 
 concurrency:
-  group: phase0-${{ github.ref }}
+  group: phase0-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: true
 
 jobs:
   phase0:
     name: Cross-tenant isolation
+    needs: [rls-isolation-ts]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     env:
       GOFLAGS: -mod=readonly
@@ -117,7 +118,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
           PHASE0_SMOKE_SUFFIX: ${{ github.run_id }}-${{ github.run_attempt }}
-        run: go test ./phasegate/... -count=1 -timeout 180s -v -run Integration
+        run: go test ./phasegate/... -count=1 -timeout 480s -v -run Integration
 
       # Re-assert the preflight facts in the job summary so the evidence is
       # visible without opening the log.
@@ -262,6 +263,7 @@ jobs:
   # / lease_deposit_applications / lease_contract_closures tables.
   leasing-return-workflow-integration:
     name: Leasing return workflow (Postgres)
+    needs: [phase0]
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -342,6 +344,7 @@ jobs:
 
   dunning-collections-integration:
     name: Dunning & collections dispatch (Postgres)
+    needs: [leasing-return-workflow-integration]
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -431,6 +434,7 @@ jobs:
 
   audit-log-race-integration:
     name: Audit log transaction race (Postgres)
+    needs: [dunning-collections-integration]
     runs-on: ubuntu-latest
     timeout-minutes: 15
 

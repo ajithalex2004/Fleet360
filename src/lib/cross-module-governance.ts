@@ -32,7 +32,10 @@ export interface OperationalContext {
  * separate piece of work; this stub keeps the build green meanwhile.
  */
 export async function ensureOperationalTenantColumn(_tableName: string): Promise<void> {
-  // intentional no-op
+  // intentional no-op — _tableName is kept to match the original
+  // implementation's signature (see file header) so callers don't need
+  // to change when it's restored.
+  void _tableName;
 }
 
 /**
@@ -53,5 +56,11 @@ export async function tenantScopedIds(
   // Touch prisma to ensure the import resolves (otherwise TS may
   // tree-shake the import even though the runtime needs it).
   void prisma;
+  // _tableName/_tenantId/_options are kept to match the original
+  // implementation's signature (see file header) so callers don't need
+  // to change when it's restored.
+  void _tableName;
+  void _tenantId;
+  void _options;
   return [];
 }

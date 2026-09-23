@@ -1,17 +1,22 @@
 export const dynamic = 'force-dynamic';
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+
+function errorMessage(e: unknown, fallback: string): string {
+    return e instanceof Error && e.message ? e.message : fallback;
+}
+
 export async function PATCH(
-    request: Request,
+    request: NextRequest,
     props: { params: Promise<{ id: string }> }
 ) {
     const params = await props.params;
 
-    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+    const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
     }
@@ -53,7 +58,7 @@ export async function PATCH(
             return NextResponse.json({
                 success: true,
                 mock: true,
-                fallbackReason: e.message || 'Internal Error',
+                fallbackReason: errorMessage(e, 'Internal Error'),
                 id: params.id,
                 ...await request.json().catch(() => ({}))
             });

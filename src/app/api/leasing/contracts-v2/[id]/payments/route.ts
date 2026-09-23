@@ -13,6 +13,11 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error ? e.message : fallback;
+}
+
+
 export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
 
@@ -59,7 +64,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
           return NextResponse.json({ success: true, count: payments?.length ?? 0 });
         }
       } catch (e) {
-        return NextResponse.json({ error: e?.message ?? 'Failed' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(e, 'Failed') }, { status: 500 });
       }
   });
 }

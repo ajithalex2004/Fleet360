@@ -14,6 +14,7 @@ import { prisma } from '@/lib/prisma';
 import { logAuditInTx } from '@/lib/audit';
 import { raiseAlert } from '@/lib/alerts/raise';
 import { InvoiceVarianceReason } from '@prisma/client';
+import type { AlertSubjectType } from '@/events/contracts/alert.events';
 
 export interface InvoiceLineItemInput {
   description: string;
@@ -107,7 +108,10 @@ export class PartnerInvoiceService {
       tenantId: award.tenantId,
       code: verificationStatus === 'VARIANCE_REVIEW' ? 'PARTNER_INVOICE_VARIANCE' : 'PARTNER_INVOICE_SUBMITTED',
       sourceModule: 'exchange',
-      subjectType: 'PartnerInvoice' as any,
+      // See exception-service.ts / marketplace-service.ts: AlertSubjectType
+      // doesn't yet cover the Exchange module's subject kinds — flagged as
+      // a cross-cutting taxonomy gap, not fixed here.
+      subjectType: 'PartnerInvoice' as unknown as AlertSubjectType,
       subjectId: invoice.id,
       title: verificationStatus === 'VARIANCE_REVIEW'
         ? `⚠️ Partner Invoice Variance Detected: ${award.partner.legalName} (${invoice.invoiceNumber})`
@@ -157,20 +161,28 @@ export class PartnerInvoiceService {
       const payable = await tx.financePayable.create({
         data: {
           tenantId: input.tenantId,
+          // FinancePayable has no invoiceNumber column — it's already
+          // embedded in payableNumber below.
           payableNumber: `PAY-${invoice.invoiceNumber}`,
           sourceType: 'CARRIER_SETTLEMENT',
           sourceId: invoice.id,
           vendorId: invoice.partnerId,
           vendorName: invoice.partner.legalName,
-          invoiceNumber: invoice.invoiceNumber,
-          invoiceDate: invoice.invoiceDate,
+          issueDate: invoice.invoiceDate,
           dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // Net 30 default
-          subtotalAmount: invoice.subtotalAmount,
-          taxAmount: invoice.vatAmount,
+          subtotal: invoice.subtotalAmount,
+          vatAmount: invoice.vatAmount,
           totalAmount: approvedTotal,
-          outstandingBalance: approvedTotal,
+          // No outstandingBalance column — paidAmount defaults to 0 on
+          // create, so totalAmount already represents the balance owed.
           currency: invoice.currency,
-          status: 'PENDING_APPROVAL',
+          // Finance has already approved this amount by the time we get
+          // here (this method is `approveInvoice`), so the payable enters
+          // the DRAFT→SUBMITTED→APPROVED→POSTED ledger workflow already
+          // APPROVED rather than at the un-modeled 'PENDING_APPROVAL'.
+          status: 'APPROVED',
+          approvedBy: input.approvedByUserId,
+          approvedAt: new Date(),
         },
       });
 

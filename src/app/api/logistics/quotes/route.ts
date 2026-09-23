@@ -39,7 +39,7 @@ const INSURANCE_RATE      = 0.005; // 0.5% of cargo value
 const CUSTOMS_FIXED       = 350;   // AED fixed for customs clearance
 const FUEL_SURCHARGE_PCT  = 0.08;  // 8%
 
-export interface FreightCalculation {
+interface FreightCalculation {
   baseFreight:       number;
   fuelSurcharge:     number;
   urgencySurcharge:  number;
@@ -50,7 +50,7 @@ export interface FreightCalculation {
   breakdown:         { label: string; amount: number }[];
 }
 
-export function calculateFreight(params: {
+function calculateFreight(params: {
   distanceKm: number;
   weightTonnes: number;
   shipmentType: string;

@@ -160,14 +160,17 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         tenantId
       );
 
-      // Audit log entry
+      // Audit log entry. AuditPayload has no structured "newData" field
+      // (audit_logs has no matching column) — the full record was being
+      // silently dropped; record it as the human-readable `details`
+      // string instead, same as historyEntry.note above.
       await logAudit({
         tenantId,
-        userId,
+        userId: userId ?? undefined,
         action: 'CREATE',
         entityType: 'service_case_cost',
         entityId: costLine.id,
-        newData: { ...costLine },
+        details: `[${costType}] ${costDisplay} (Payer: ${payerType}). Ref: ${costLine.invoiceReference || 'None'}.`,
       }).catch(() => {});
 
       const summary = await calculateCostSummary(ticketId, tenantId, tx);

@@ -5,6 +5,11 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error ? e.message : fallback;
+}
+
 export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
 
@@ -36,7 +41,7 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
           documents: docs,
         });
         } catch (e) {
-        return NextResponse.json({ error: e?.message ?? 'Failed' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(e, 'Failed') }, { status: 500 });
       }
   });
 }
@@ -81,7 +86,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         const rows = await tx.$queryRawUnsafe(`SELECT * FROM customers WHERE id = '${params.id}'`);
         return NextResponse.json((rows as any[])[0]);
       } catch (e) {
-        return NextResponse.json({ error: e?.message ?? 'Failed' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(e, 'Failed') }, { status: 500 });
       }
   });
 }

@@ -96,9 +96,9 @@ function parseDate(dateStr: string, timeStr?: string): Date | null {
   // Try DD/MM/YYYY (UAE format) and DD-MM-YYYY.
   const m = /^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})\s*(\d{1,2}:\d{2}(:\d{2})?)?\s*([AP]M)?$/i.exec(combined);
   if (m) {
-    let [, dd, mm, yyyy, time, , ampm] = m;
-    if (yyyy.length === 2) yyyy = '20' + yyyy;
-    let [hh = '0', mi = '0', se = '0'] = (time ?? '').split(':');
+    const [, dd, mm, yyyyRaw, time, , ampm] = m;
+    const yyyy = yyyyRaw.length === 2 ? '20' + yyyyRaw : yyyyRaw;
+    const [hh = '0', mi = '0', se = '0'] = (time ?? '').split(':');
     let h = parseInt(hh, 10);
     if (ampm) {
       if (/PM/i.test(ampm) && h < 12) h += 12;

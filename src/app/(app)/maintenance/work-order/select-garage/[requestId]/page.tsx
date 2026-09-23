@@ -115,7 +115,7 @@ export default function SelectGaragePage() {
             console.log('Work Order Created:', workOrder);
 
             // Send work order email
-            await sendWorkOrderEmailAction(request, selectedGarage.email);
+            await sendWorkOrderEmailAction(request, selectedGarage.name, selectedGarage.email);
 
             // If driver assigned, send driver notification
             if (selectedDriverId) {
@@ -123,7 +123,9 @@ export default function SelectGaragePage() {
                 if (driver) {
                     await sendDriverAssignmentEmailAction(
                         request,
-                        driver.email || `${driver.name.toLowerCase().replace(/\s+/g, '')}@company.com`
+                        driver.name,
+                        driver.email || `${driver.name.toLowerCase().replace(/\s+/g, '')}@company.com`,
+                        selectedGarage.name
                     );
                 }
             }

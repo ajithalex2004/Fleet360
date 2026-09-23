@@ -4,14 +4,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, requireSuperAdminForTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
+  const guard = requireSuperAdminForTenant(authz, params.id);
+  if (!guard.ok) {
+    return NextResponse.json({ error: guard.error }, { status: guard.status });
+  }
 
   return withTenantRls(prisma, params.id, async (tx) => {
     const modules = await tx.tenantModule.findMany({ where: { tenantId: params.id } });
@@ -26,13 +29,16 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
+  const guard = requireSuperAdminForTenant(authz, params.id);
+  if (!guard.ok) {
+    return NextResponse.json({ error: guard.error }, { status: guard.status });
+  }
 
   try {
     return await withTenantRls(prisma, params.id, async (tx) => {
       const bodyRaw = await req.json();
-    const body = stripTenantOwnershipFields(bodyRaw);
-    const { enabledModules }: { enabledModules: string[] } = body;
+    const body = stripTenantOwnershipFields(bodyRaw) as { enabledModules: string[] };
+    const { enabledModules } = body;
       // TxClient's public type doesn't expose $transaction; use the
       // savepoint cast pattern (runtime supports it; same GUC on the
       // inner connection).

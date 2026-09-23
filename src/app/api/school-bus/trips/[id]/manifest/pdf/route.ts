@@ -173,7 +173,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         });
 
         const filename = `school-bus-manifest-${data.manifestNo}.pdf`;
-        return new Response(buffer, {
+        return new Response(new Uint8Array(buffer), {
           headers: {
             'Content-Type': 'application/pdf',
             'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename="${filename}"`,

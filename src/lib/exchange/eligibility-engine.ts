@@ -26,7 +26,7 @@ export interface EligibilityRequirementInput {
   pickupCity?: string;
   requiredCapacity?: number;
   serviceDate: Date | string;
-  domainPayload?: Record<string, any>;
+  domainPayload?: Record<string, unknown>;
 }
 
 export interface PartnerEligibilityResult {

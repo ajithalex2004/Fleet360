@@ -5,7 +5,6 @@
  * Connects Roadside Assistance, Vehicle Breakdowns, and Accident Towing to Fleet360 Exchange Core.
  */
 
-import { prisma } from '@/lib/prisma';
 import { logAudit } from '@/lib/audit';
 import { PartnerServiceDomain } from '@prisma/client';
 import {
@@ -14,6 +13,8 @@ import {
   ValidationResult,
   DomainEligibilityCriteria,
   RecoveryRequirements,
+  AwardApplicationPayload,
+  ExecutionStatusEvent,
 } from './types';
 
 export class RecoveryOutsourcingAdapter implements OutsourcingSourceAdapter {
@@ -52,7 +53,7 @@ export class RecoveryOutsourcingAdapter implements OutsourcingSourceAdapter {
     return { isValid: errors.length === 0, errors };
   }
 
-  async buildRequirementsPayload(source: OutsourcingSource): Promise<Record<string, any>> {
+  async buildRequirementsPayload(source: OutsourcingSource): Promise<Record<string, unknown>> {
     const payload = source.domainPayload as RecoveryRequirements;
     return {
       disabledVehicleType: payload.disabledVehicleType,
@@ -77,7 +78,7 @@ export class RecoveryOutsourcingAdapter implements OutsourcingSourceAdapter {
     };
   }
 
-  async applyAward(award: any): Promise<void> {
+  async applyAward(award: AwardApplicationPayload): Promise<void> {
     await logAudit({
       tenantId: award.tenantId,
       entityType: 'BreakdownReport',
@@ -88,15 +89,19 @@ export class RecoveryOutsourcingAdapter implements OutsourcingSourceAdapter {
     }).catch(() => {});
   }
 
-  async applyAssignment(assignment: any): Promise<void> {
+  async applyAssignment(assignment: Record<string, unknown>): Promise<void> {
     // Notify breakdown ticket of assigned flatbed truck & operator
+    void assignment;
   }
 
-  async syncExecutionStatus(event: any): Promise<void> {
+  async syncExecutionStatus(event: ExecutionStatusEvent): Promise<void> {
     // Synchronize recovery milestone: REACHED_SCENE, LOADED, DELIVERED_TO_WORKSHOP
+    void event;
   }
 
   async handleCancellation(requestId: string, reason: string): Promise<void> {
     // Handle roadside cancellation
+    void requestId;
+    void reason;
   }
 }

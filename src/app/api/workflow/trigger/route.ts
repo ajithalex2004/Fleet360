@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { triggerWorkflow } from '@/lib/workflow-db';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
+
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error ? e.message : fallback;
+}
+
 export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -51,7 +56,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(result, { status: 201 });
   } catch (e) {
-    console.error('POST /api/workflow/trigger error:', e?.message);
-    return NextResponse.json({ error: e?.message ?? 'Failed to trigger workflow' }, { status: 500 });
+    console.error('POST /api/workflow/trigger error:', errorMessage(e, 'Failed to trigger workflow'));
+    return NextResponse.json({ error: errorMessage(e, 'Failed to trigger workflow') }, { status: 500 });
   }
 }

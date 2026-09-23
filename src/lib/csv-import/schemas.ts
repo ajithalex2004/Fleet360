@@ -73,13 +73,16 @@ export const lesseeImportSchema = z
     (val) => {
       // Coerce common type aliases to canonical 'corporate' | 'individual'
       if (val && typeof val === 'object' && 'type' in val) {
-        const v = (val as any).type;
+        // The `'type' in val` check above already narrows `val` to
+        // `object & Record<'type', unknown>`, so `val.type` is accessible
+        // (and assignable) without a cast.
+        const v = val.type;
         if (typeof v === 'string') {
           const t = v.toLowerCase().trim();
           if (['b2b', 'company', 'corp', 'corporate'].includes(t)) {
-            (val as any).type = 'corporate';
+            val.type = 'corporate';
           } else if (['b2c', 'person', 'individual', 'retail'].includes(t)) {
-            (val as any).type = 'individual';
+            val.type = 'individual';
           }
         }
       }

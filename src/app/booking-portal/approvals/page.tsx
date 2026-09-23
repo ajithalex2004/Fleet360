@@ -139,6 +139,21 @@ export default function MultiLevelApprovalsPage() {
     }
   };
 
+  // Approver identity/timestamp for a given tier — approvalHistory is fetched
+  // per booking but was previously never surfaced anywhere in the stepper.
+  const findTierApproval = (b: ApprovalBooking, tier: number) =>
+    b.approvalHistory.find((h) => h.tier === tier);
+
+  const formatRelativeTime = (iso: string) => {
+    const diffMs = Date.now() - new Date(iso).getTime();
+    const mins = Math.round(diffMs / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.round(hrs / 24)}d ago`;
+  };
+
   const filteredBookings = bookings.filter((b) => {
     if (activeTab === 'ALL') return b.status === 'PENDING';
     if (activeTab === 'TIER_1') return b.status === 'PENDING' && b.policyEvaluation.currentTier === 'TIER_1_PENDING';
@@ -205,7 +220,11 @@ export default function MultiLevelApprovalsPage() {
       </div>
 
       {/* ── Filter Tabs ── */}
-      <div className="flex flex-wrap gap-2 border-b border-white/10 pb-3">
+      <div className="flex flex-wrap items-center gap-2 border-b border-white/10 pb-3">
+        <span className="flex items-center gap-1 text-[10px] text-slate-500 uppercase font-bold tracking-wider mr-1">
+          <Filter className="w-3 h-3" />
+          Filter:
+        </span>
         <button
           onClick={() => setActiveTab('ALL')}
           className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
@@ -308,15 +327,23 @@ export default function MultiLevelApprovalsPage() {
                         Requested by <strong className="text-slate-300">{b.requestorName || 'Employee'}</strong> (
                         {b.requestorEmail || 'N/A'})
                       </p>
+                      {b.createdAt && (
+                        <p className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          Submitted {formatRelativeTime(b.createdAt)}
+                        </p>
+                      )}
                     </div>
                   </div>
 
                   {/* Fare & Cost Center Pill */}
                   <div className="text-left sm:text-right">
-                    <div className="text-lg font-bold font-mono text-emerald-400">
+                    <div className="text-lg font-bold font-mono text-emerald-400 flex items-center gap-1 sm:justify-end">
+                      <DollarSign className="w-4 h-4" />
                       AED {Number(b.financials.totalFareAed || 0).toFixed(2)}
                     </div>
-                    <p className="text-[11px] text-slate-400">
+                    <p className="text-[11px] text-slate-400 flex items-center gap-1 sm:justify-end">
+                      <Building2 className="w-3 h-3" />
                       Cost Center: <strong className="text-slate-300">{b.financials.costCenter}</strong>
                     </p>
                   </div>
@@ -346,6 +373,12 @@ export default function MultiLevelApprovalsPage() {
                           ? 'Approved ✅'
                           : 'Pending Sign-Off ⏳'}
                       </p>
+                      {findTierApproval(b, 1) && (
+                        <p className="text-[10px] text-slate-500 flex items-center gap-1">
+                          <UserCheck className="w-3 h-3 text-emerald-500" />
+                          {findTierApproval(b, 1)!.approverName} · {formatRelativeTime(findTierApproval(b, 1)!.timestamp)}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -375,6 +408,12 @@ export default function MultiLevelApprovalsPage() {
                           ? 'Escalation Approved ✅'
                           : 'Pending VP Sign-Off ⏳'}
                       </p>
+                      {findTierApproval(b, 2) && (
+                        <p className="text-[10px] text-slate-500 flex items-center gap-1">
+                          <UserCheck className="w-3 h-3 text-emerald-500" />
+                          {findTierApproval(b, 2)!.approverName} · {formatRelativeTime(findTierApproval(b, 2)!.timestamp)}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -394,7 +433,10 @@ export default function MultiLevelApprovalsPage() {
                       3
                     </div>
                     <div>
-                      <p className="font-semibold text-white">Tier 3: Fleet Dispatch</p>
+                      <p className="font-semibold text-white flex items-center gap-1">
+                        <Truck className="w-3.5 h-3.5 text-blue-400" />
+                        Tier 3: Fleet Dispatch
+                      </p>
                       <p className="text-[10px] text-slate-400">
                         {b.status === 'CONFIRMED' ? 'Dispatched ✅' : 'Vehicle Assignment ⏳'}
                       </p>
@@ -405,6 +447,10 @@ export default function MultiLevelApprovalsPage() {
                 {/* Policy Violations & Warning Badges */}
                 {b.policyEvaluation.policyViolations.length > 0 && (
                   <div className="space-y-1.5">
+                    <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1">
+                      <ShieldAlert className="w-3.5 h-3.5" />
+                      Policy Compliance Flags
+                    </p>
                     {b.policyEvaluation.policyViolations.map((v, i) => (
                       <div
                         key={i}
@@ -423,8 +469,9 @@ export default function MultiLevelApprovalsPage() {
                     <button
                       onClick={() => handleAction(b.id, 'REJECT', b.bookingRef || b.id.slice(0, 8))}
                       disabled={isProcessing}
-                      className="px-4 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-semibold border border-red-500/30 transition-colors disabled:opacity-40"
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-semibold border border-red-500/30 transition-colors disabled:opacity-40"
                     >
+                      <XCircle className="w-3.5 h-3.5" />
                       Reject Request
                     </button>
 

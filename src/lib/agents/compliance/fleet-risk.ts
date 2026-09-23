@@ -52,7 +52,7 @@ export function evaluateFleetComplianceRisk(
       const fine = getEstimatedFine(doc.documentType);
       criticalItems.push({
         entityId: doc.entityId,
-        entityType: doc.entityType as any,
+        entityType: doc.entityType,
         code: doc.entityCode,
         item: formatDocumentName(doc.documentType),
         status: 'EXPIRED',
@@ -64,7 +64,7 @@ export function evaluateFleetComplianceRisk(
       const fine = getEstimatedFine(doc.documentType);
       urgentItems.push({
         entityId: doc.entityId,
-        entityType: doc.entityType as any,
+        entityType: doc.entityType,
         code: doc.entityCode,
         item: formatDocumentName(doc.documentType),
         status: 'IMMINENT_EXPIRY',

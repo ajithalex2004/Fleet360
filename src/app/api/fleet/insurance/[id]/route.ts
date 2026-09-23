@@ -6,6 +6,11 @@ import { prisma } from '@/lib/prisma';
 import { ensureFleetSchema } from '@/lib/fleet/schema';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error && e.message ? e.message : fallback;
+}
+
 export async function GET(_: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
 
@@ -24,7 +29,7 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
         if (!rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
         return NextResponse.json(rows[0]);
       } catch (e) {
-        return NextResponse.json({ error: e.message ?? 'Failed to fetch' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(e, 'Failed to fetch') }, { status: 500 });
       }
   });
 }
@@ -88,7 +93,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
         );
         return NextResponse.json(rows[0]);
       } catch (e) {
-        return NextResponse.json({ error: e.message ?? 'Failed to update' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(e, 'Failed to update') }, { status: 500 });
       }
   });
 }
@@ -111,7 +116,7 @@ export async function DELETE(_: NextRequest, props: { params: Promise<{ id: stri
         );
         return NextResponse.json({ success: true });
         } catch (e) {
-        return NextResponse.json({ error: e.message ?? 'Failed to delete' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(e, 'Failed to delete') }, { status: 500 });
       }
   });
 }

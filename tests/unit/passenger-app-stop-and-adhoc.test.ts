@@ -4,11 +4,15 @@ import { evaluateAdhocFulfillmentSync } from '@/lib/bus-ops/adhoc-dispatch';
 describe('Passenger App Features: Pickup Stop Change & Ad-Hoc Requests', () => {
   describe('Ad-Hoc Transport Request Fulfillment', () => {
     it('evaluates dynamic route insertion when scheduled bus has available capacity', () => {
+      // Shape matches evaluateAdhocFulfillmentSync's scheduledTrips param
+      // (capacity/confirmedCount, not vehicle.seatingCapacity/passengers[]).
       const scheduledTrips = [
         {
           id: 'trip-101',
           tripNumber: 'TRIP-101',
-          departureTime: new Date('2026-09-03T18:00:00Z'),
+          departureTime: '2026-09-03T18:00:00Z',
+          capacity: 30,
+          confirmedCount: 20, // 10 spare seats
           route: {
             name: 'Al Quoz Industrial Shuttle',
             origin: 'Al Quoz Depot',
@@ -17,13 +21,12 @@ describe('Passenger App Features: Pickup Stop Change & Ad-Hoc Requests', () => {
           vehicle: {
             id: 'veh-1',
             vehicleCode: 'BUS-104',
-            seatingCapacity: 30,
           },
           driver: {
             id: 'drv-1',
-            name: 'Rashid Khan',
+            firstName: 'Rashid',
+            lastName: 'Khan',
           },
-          passengers: new Array(20).fill({ id: 'p' }), // 10 spare seats
         },
       ];
 

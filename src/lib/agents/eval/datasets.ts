@@ -160,6 +160,10 @@ export const FINANCE_GROUND_TRUTH_DATASETS: {
       currentTelematicsOdometer: 18500, // 3,500 km off-contract unaccounted movement!
       excessKmRateAed: 0.75,
       excessKmBilled: false,
+      // This fixture's anomaly is the excess-km/off-contract movement, not
+      // damage — ContractAuditRecord requires both regardless.
+      damageNoted: false,
+      damageBilled: false,
     },
   ],
 };
@@ -178,19 +182,15 @@ export const MAINTENANCE_GROUND_TRUTH_VEHICLE: ComprehensiveVehicleInput = {
   recentFuelLper100: 31.5,
   openWorkOrders: 3,
   workOrdersLast90Days: 4,
+  // HistoricalRepairRecord only carries `subsystem` + `completedAt` — that's
+  // all calcRepeatFailuresAndRUL() reads for repeat-failure/RUL scoring.
   historicalRepairs: [
     {
-      workOrderId: 'wo-rep-1',
-      system: 'Cooling System',
       subsystem: 'POWERTRAIN',
-      description: 'Coolant leak repaired',
       completedAt: new Date(Date.now() - 30 * 86400000).toISOString(),
     },
     {
-      workOrderId: 'wo-rep-2',
-      system: 'Cooling System',
       subsystem: 'POWERTRAIN',
-      description: 'Radiator hose burst',
       completedAt: new Date(Date.now() - 10 * 86400000).toISOString(),
     },
   ],

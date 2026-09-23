@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
         tenant_id: tenantId,
         event_type: 'enterprise.sync',
         entity_id: entityId,
-        metadata: { entityType, payload },
+        payload: { entityType, payload },
       });
 
       return NextResponse.json(runResult);

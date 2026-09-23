@@ -5,7 +5,6 @@
  * Connects Freight Orders, FTL/LTL shipments, and Container movements to Fleet360 Exchange Core.
  */
 
-import { prisma } from '@/lib/prisma';
 import { logAudit } from '@/lib/audit';
 import { PartnerServiceDomain } from '@prisma/client';
 import {
@@ -14,6 +13,8 @@ import {
   ValidationResult,
   DomainEligibilityCriteria,
   FreightRequirements,
+  AwardApplicationPayload,
+  ExecutionStatusEvent,
 } from './types';
 
 export class FreightOutsourcingAdapter implements OutsourcingSourceAdapter {
@@ -55,7 +56,7 @@ export class FreightOutsourcingAdapter implements OutsourcingSourceAdapter {
     return { isValid: errors.length === 0, errors };
   }
 
-  async buildRequirementsPayload(source: OutsourcingSource): Promise<Record<string, any>> {
+  async buildRequirementsPayload(source: OutsourcingSource): Promise<Record<string, unknown>> {
     const payload = source.domainPayload as FreightRequirements;
     return {
       cargoType: payload.cargoType,
@@ -86,7 +87,7 @@ export class FreightOutsourcingAdapter implements OutsourcingSourceAdapter {
     };
   }
 
-  async applyAward(award: any): Promise<void> {
+  async applyAward(award: AwardApplicationPayload): Promise<void> {
     await logAudit({
       tenantId: award.tenantId,
       entityType: 'FreightShipment',
@@ -97,15 +98,19 @@ export class FreightOutsourcingAdapter implements OutsourcingSourceAdapter {
     }).catch(() => {});
   }
 
-  async applyAssignment(assignment: any): Promise<void> {
+  async applyAssignment(assignment: Record<string, unknown>): Promise<void> {
     // Synchronize carrier truck and driver to freight tracking system
+    void assignment;
   }
 
-  async syncExecutionStatus(event: any): Promise<void> {
+  async syncExecutionStatus(event: ExecutionStatusEvent): Promise<void> {
     // Update freight shipment status (DISPATCHED, IN_TRANSIT, DELIVERED)
+    void event;
   }
 
   async handleCancellation(requestId: string, reason: string): Promise<void> {
     // Handle freight cancellation
+    void requestId;
+    void reason;
   }
 }

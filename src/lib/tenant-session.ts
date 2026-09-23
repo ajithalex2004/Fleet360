@@ -8,6 +8,7 @@
  */
 
 import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 import { isSessionRevoked } from '@/lib/session-blocklist';
 import { requireSessionSecret } from '@/lib/session-secret';
 
@@ -120,7 +121,12 @@ async function hmacVerify(data: string, hexSig: string): Promise<boolean> {
     // a real SESSION_SECRET was configured, which let anyone who knew
     // that default string forge a valid session for any tenant/role.)
     const primaryKey = await getKey();
-    const valid = await globalThis.crypto.subtle.verify('HMAC', primaryKey, sigBytes, enc.encode(data));
+    const valid = await globalThis.crypto.subtle.verify(
+      'HMAC',
+      primaryKey,
+      new Uint8Array(sigBytes),
+      enc.encode(data),
+    );
     return valid;
   } catch {
     return false;

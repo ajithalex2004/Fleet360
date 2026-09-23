@@ -246,8 +246,11 @@ async function runDemandForecasting(event: AgentEvent): Promise<AgentRunResult> 
       );
 
       executiveSummary = macroResp.content;
-      aiTokensUsed = macroResp.telemetry.inputTokens + macroResp.telemetry.outputTokens;
-      aiCostAed = macroResp.telemetry.costAed;
+      // AgentRunTelemetry's token/cost fields are all optional (shared
+      // across many different agent types) — default to 0 when a given
+      // gateway call didn't report them.
+      aiTokensUsed = (macroResp.telemetry.inputTokens ?? 0) + (macroResp.telemetry.outputTokens ?? 0);
+      aiCostAed = macroResp.telemetry.costAed ?? 0;
     } catch {
       // Graceful fallback to deterministic summary
       executiveSummary = `Demand forecast for ${forecastPeriod} complete across ${forecastsCreated} fleet segments with moving average and holiday trend models.`;

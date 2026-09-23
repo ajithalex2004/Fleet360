@@ -60,6 +60,15 @@ export function recommendLowestImpactSlot(
     upcomingBookings = [],
     depots = [],
   } = input;
+  // Every candidate slot below has a hardcoded fixed width (e.g. the midday
+  // bracket is always 13:00-16:30, a flat 3.5h) regardless of how long the
+  // job is actually expected to take. A job longer than a bracket's width
+  // could be recommended into a slot it won't finish within, and a much
+  // shorter job overstates the window trips get flagged as disrupted in.
+  // Deciding how duration should reshape these brackets (extend endTime by
+  // duration? disqualify brackets shorter than the job? add a buffer?) is a
+  // scheduling-policy call, so this is flagged rather than guessed at.
+  void estimatedDurationHours;
 
   const targetDate = new Date(projectedDueDate);
   const candidateDays: Date[] = [];

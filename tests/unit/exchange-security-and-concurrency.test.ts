@@ -110,7 +110,10 @@ describe('Fleet360 Exchange: Security & Concurrency Hardening (Phase 1.5)', () =
 
       const retryRes = awardIdempotencyHandler('req-001');
       expect(retryRes.isRetry).toBe(true);
-      expect(retryRes.award.id).toBe('award-001');
+      // Deterministic given requestId === award.requestId above — award is
+      // guaranteed non-null on this branch, but the handler's return type
+      // is a union, so TS needs the assertion to narrow it here.
+      expect(retryRes.award!.id).toBe('award-001');
     });
   });
 

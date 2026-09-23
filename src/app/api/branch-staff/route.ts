@@ -5,6 +5,12 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+
+// `catch (err)` is typed `unknown` under strict mode — `err.message` doesn't
+// compile without narrowing first.
+function errorMessage(err: unknown, fallback: string): string {
+  return err instanceof Error && err.message ? err.message : fallback;
+}
 // ─────────────────────────────────────────────────────────────────────────────
 // Auto-generate staff number: STF-YYYYMM-XXXX
 // ─────────────────────────────────────────────────────────────────────────────
@@ -115,7 +121,7 @@ export async function GET(req: NextRequest) {
         });
         } catch (err) {
         console.error('[branch-staff GET]', err);
-        return NextResponse.json({ error: err.message || 'Failed' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(err, 'Failed') }, { status: 500 });
       }
   });
 }
@@ -163,7 +169,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(rows[0], { status: 201 });
         } catch (err) {
         console.error('[branch-staff POST]', err);
-        return NextResponse.json({ error: err.message || 'Failed to create staff assignment' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(err, 'Failed to create staff assignment') }, { status: 500 });
       }
   });
 }
@@ -217,7 +223,7 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json(rows[0]);
       } catch (err) {
         console.error('[branch-staff PATCH]', err);
-        return NextResponse.json({ error: err.message || 'Failed to update' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(err, 'Failed to update') }, { status: 500 });
       }
   });
 }
@@ -246,7 +252,7 @@ export async function DELETE(req: NextRequest) {
         return NextResponse.json({ success: true });
         } catch (err) {
         console.error('[branch-staff DELETE]', err);
-        return NextResponse.json({ error: err.message || 'Failed' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(err, 'Failed') }, { status: 500 });
       }
   });
 }

@@ -18,6 +18,7 @@
 import OpenAI from 'openai';
 import { z } from 'zod';
 import { env, hasOpenAI } from '@/lib/env';
+import type { AgentDefinition, AgentEvent, AgentRunResult } from '../types';
 
 /* ── Output schema ───────────────────────────────────────────────────────── */
 
@@ -229,6 +230,66 @@ export async function classifyDocument(input: ClassifyInput): Promise<ClassifyRe
     };
   }
 }
+
+/* ── AgentDefinition adapter (event-driven dispatch) ─────────────────────────
+ * The REST endpoint (POST /api/leasing/documents/classify) accepts a real
+ * multipart file upload and calls classifyDocument() directly — that
+ * remains the primary way this agent is used. This wrapper exposes it
+ * through the generic AgentEvent/orchestrator dispatch path (registry.ts)
+ * instead, where the file travels as a base64 string in the JSON payload.
+ */
+
+async function runDocClassifierEvent(event: AgentEvent): Promise<AgentRunResult> {
+  const t0 = Date.now();
+  const base64 = typeof event.payload?.base64 === 'string' ? event.payload.base64 : '';
+  const mimeType = typeof event.payload?.mimeType === 'string' ? event.payload.mimeType : '';
+  const expectedDocType = typeof event.payload?.expectedDocType === 'string' ? event.payload.expectedDocType : undefined;
+
+  const result = await classifyDocument({
+    buffer: Buffer.from(base64, 'base64'),
+    mimeType,
+    expectedDocType,
+  });
+
+  if (!result.ok) {
+    return {
+      agentId: event.agent_id,
+      tenantId: event.tenant_id,
+      eventType: event.event_type,
+      entityId: event.entity_id,
+      status: 'FAILED',
+      durationMs: Date.now() - t0,
+      itemsProcessed: 0,
+      actionsCreated: 0,
+      output: result.detail ?? null,
+      error: result.error,
+    };
+  }
+
+  return {
+    agentId: event.agent_id,
+    tenantId: event.tenant_id,
+    eventType: event.event_type,
+    entityId: event.entity_id,
+    status: 'COMPLETED',
+    durationMs: result.durationMs,
+    itemsProcessed: 1,
+    actionsCreated: 0, // advisory classification only — the doc still goes through the normal upload endpoint
+    output: result.classification,
+  };
+}
+
+export const DOC_CLASSIFIER_AGENT: AgentDefinition = {
+  id: 'doc-classifier',
+  name: 'Compliance Document Classifier',
+  description: 'Extracts type, holder, and expiry fields from a UAE compliance document image (trade license, Emirates ID, Mulkiya, insurance, driving license) to prefill the document upload form for staff review.',
+  version: '1.0.0',
+  agentType: 'INTERACTIVE_COPILOT',
+  autonomyLevel: 'L1',
+  subscribedEvents: ['leasing.document_classify_requested', 'document.uploaded', 'manual.trigger'],
+  supportsEntityScan: false,
+  run: runDocClassifierEvent,
+};
 
 /**
  * Map the agent's docType to the LeaseDocument schema's docType enum.

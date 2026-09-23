@@ -67,7 +67,6 @@ function dayActive(mask: string, dow: number): boolean {
 function addMinutesToHm(hm: string, minutes: number): string {
   const { h, m } = parseHm(hm);
   const total = h * 60 + m + minutes;
-  const days  = Math.floor(total / (24 * 60));
   const rem   = ((total % (24 * 60)) + 24 * 60) % (24 * 60);
   const nh    = Math.floor(rem / 60);
   const nm    = rem % 60;

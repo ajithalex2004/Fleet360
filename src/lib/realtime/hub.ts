@@ -21,7 +21,7 @@ export type RealtimeMessage = {
 type Listener = (msg: RealtimeMessage) => void;
 
 declare global {
-  // eslint-disable-next-line no-var
+  // eslint-disable-next-line no-var -- TS requires var (not let/const) for ambient globals inside declare global
   var __fleet360RealtimeHub: Map<string, Set<Listener>> | undefined;
   // eslint-disable-next-line no-var
   var __fleet360RealtimeRedisSubStarted: boolean | undefined;
@@ -155,14 +155,14 @@ export async function ensureRedisSubscriber(): Promise<void> {
       enableReadyCheck: true,
     });
 
-    sub.on('error', (err: any) => {
+    sub.on('error', (err) => {
       console.warn('[realtime] Redis subscriber error', err?.message ?? err);
     });
 
     // rt:{tenantId}:{channel}
     await sub.psubscribe('rt:*');
 
-    sub.on('pmessage', (_pattern: any, _redisChannel: any, raw: any) => {
+    sub.on('pmessage', (_pattern, _redisChannel, raw) => {
       try {
         const msg = JSON.parse(String(raw)) as RealtimeMessage;
         if (!msg?.tenantId || !msg?.channel || !msg?.type) return;

@@ -38,8 +38,8 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
 
   try {
     const bodyRaw = await req.json();
-    const body = stripTenantOwnershipFields(bodyRaw);
-    const { permissionIds }: { permissionIds: string[] } = body;
+    const body = stripTenantOwnershipFields(bodyRaw) as { permissionIds: string[] };
+    const { permissionIds } = body;
     const perms = await withPlatformAdmin(prisma, async (tx) => {
       await tx.rolePermission.deleteMany({ where: { roleId: params.id } });
       if (permissionIds.length > 0) {

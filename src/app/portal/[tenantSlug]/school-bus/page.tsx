@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { useTenantPortal } from '../layout';
+import { useTenantPortal } from '../tenant-portal-shell';
 
 /* ─────────────────────────── Types ─────────────────────────── */
 interface StudentStats {

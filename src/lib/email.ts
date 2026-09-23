@@ -208,7 +208,7 @@ async function sendViaSmtp(msg: EmailMessage, recipients: string[]): Promise<Ema
   try {
     const nodemailer = await import('nodemailer');
     const transporter = nodemailer.default.createTransport(transportOptions);
-    const info = await transporter.sendMail({
+    await transporter.sendMail({
       from: fromAddr,
       to: recipients.join(', '),
       subject: msg.subject,

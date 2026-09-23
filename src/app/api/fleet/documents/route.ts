@@ -7,6 +7,7 @@ import { paginate, paginatedResponse } from '@/lib/pagination';
 import { revalidateCache } from '@/lib/server-cache';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import type { Prisma } from '@prisma/client';
 const CACHE_TAGS = ['fleet:stats', 'fleet:documents-expiring'];
 
 export async function GET(req: NextRequest) {
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
     try {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-        const document = await tx.vehicleDocument.create({ data: { ...body, tenantId } });
+        const document = await tx.vehicleDocument.create({ data: { ...body, tenantId } as Prisma.VehicleDocumentUncheckedCreateInput });
         // A new document can shift the expiring-docs list and the fleet-stats
         // counters. Bust the cache so the dashboard and document widgets
         // pick up the change on the next render.

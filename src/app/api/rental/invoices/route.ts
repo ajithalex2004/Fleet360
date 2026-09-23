@@ -6,6 +6,11 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 import { prisma } from '@/lib/prisma';
 import { paginate, paginatedResponse } from '@/lib/pagination';
 
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error ? e.message : fallback;
+}
+
+
 export async function GET(req: NextRequest) {
 
   const authz = requireAuthorizedTenant(req);
@@ -142,7 +147,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(invoice[0], { status: 201 });
         } catch (e) {
         console.error('Invoice create error:', e);
-        return NextResponse.json({ error: e.message ?? 'Failed to create invoice' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(e, 'Failed to create invoice') }, { status: 500 });
       }
   });
 }

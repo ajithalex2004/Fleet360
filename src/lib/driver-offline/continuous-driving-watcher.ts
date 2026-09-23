@@ -104,7 +104,7 @@ export function createContinuousDrivingWatcher(
 
   let limitMs = opts.limitMs;
   let baselineAt = opts.shiftStartAt;
-  let shiftStartAt = opts.shiftStartAt;
+  const shiftStartAt = opts.shiftStartAt;
   let lastLevel: AlertLevel = 'ok';
   let timer: ReturnType<typeof setInterval> | null = null;
   let running = false;

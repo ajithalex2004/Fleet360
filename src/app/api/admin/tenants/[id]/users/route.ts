@@ -4,14 +4,29 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls, withPlatformAdmin } from '@/lib/rls';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, requireSuperAdminForTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error && e.message ? e.message : fallback;
+}
+function errorCode(e: unknown): string | undefined {
+  if (typeof e === 'object' && e !== null && 'code' in e) {
+    const code = (e as { code?: unknown }).code;
+    return typeof code === 'string' ? code : undefined;
+  }
+  return undefined;
+}
+
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
+  const guard = requireSuperAdminForTenant(authz, params.id);
+  if (!guard.ok) {
+    return NextResponse.json({ error: guard.error }, { status: guard.status });
+  }
 
   try {
     // Single joined query — avoids 2 sequential DB round-trips
@@ -56,7 +71,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
+  const guard = requireSuperAdminForTenant(authz, params.id);
+  if (!guard.ok) {
+    return NextResponse.json({ error: guard.error }, { status: guard.status });
+  }
 
   try {
     const bodyRaw = await req.json();
@@ -102,11 +120,11 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     });
     } catch (e) {
     console.error('POST /api/admin/tenants/[id]/users error:', e);
-    if (e?.code === 'P2002') {
+    if (errorCode(e) === 'P2002') {
       return NextResponse.json({ error: 'User is already assigned to this tenant' }, { status: 409 });
     }
     return NextResponse.json(
-      { error: e?.message ?? 'Failed to assign user to tenant' },
+      { error: errorMessage(e, 'Failed to assign user to tenant') },
       { status: 500 }
     );
   }
@@ -118,7 +136,10 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
+  const guard = requireSuperAdminForTenant(authz, params.id);
+  if (!guard.ok) {
+    return NextResponse.json({ error: guard.error }, { status: guard.status });
+  }
 
   try {
     const { searchParams } = new URL(req.url);
@@ -131,6 +152,6 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
     return NextResponse.json({ success: true });
     } catch (e) {
     console.error('DELETE /api/admin/tenants/[id]/users error:', e);
-    return NextResponse.json({ error: e?.message ?? 'Failed' }, { status: 500 });
+    return NextResponse.json({ error: errorMessage(e, 'Failed') }, { status: 500 });
   }
 }

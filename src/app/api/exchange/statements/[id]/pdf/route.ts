@@ -12,29 +12,38 @@ export const runtime = 'nodejs';
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const statementId = params.id;
+    const { id: statementId } = await params;
 
     let statement: any = null;
+    let tenant: { name: string | null } | null = null;
     try {
+      // PartnerSettlementStatement has no `tenant` relation (only a raw
+      // tenantId column, matching how tenantTrn is denormalized onto the
+      // statement itself), so the tenant name needs its own lookup.
       statement = await prisma.partnerSettlementStatement.findUnique({
         where: { id: statementId },
         include: {
           partner: true,
-          tenant: true,
           invoices: true,
           deductions: true,
         },
       });
+      if (statement?.tenantId) {
+        tenant = await prisma.tenant.findUnique({
+          where: { id: statement.tenantId },
+          select: { name: true },
+        });
+      }
     } catch {
       // Handle test or fallback
     }
 
     // Default mock data fallback if in unmigrated test environment
     const statementNumber = statement?.statementNumber || `STM-${statementId.slice(0, 8)}`;
-    const tenantName = statement?.tenant?.name || 'Fleet360 Enterprise Transport LLC';
+    const tenantName = tenant?.name || 'Fleet360 Enterprise Transport LLC';
     const tenantTrn = statement?.tenantTrn || '100456789000003';
     const partnerName = statement?.partner?.companyName || 'Gulf Premier Fleet Services LLC';
     const partnerTrn = statement?.partnerTrn || '100987654300003';

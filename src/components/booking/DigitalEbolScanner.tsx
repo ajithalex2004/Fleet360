@@ -100,10 +100,22 @@ export function DigitalEbolScanner({
   const [generatedEbol, setGeneratedEbol] = useState<DigitalEBOLRecord | null>(null);
   const [showEbolModal, setShowEbolModal] = useState(false);
 
+  // Live client-side GS1-128 parse of whatever is currently in the scan input,
+  // used both for the inline preview and to reject malformed barcodes before
+  // they ever hit the network (the server endpoint always reports a scan as
+  // verified, so this is the only real format validation in the flow).
+  const livePreview = scanInput.trim() ? parseGs1Barcode(scanInput.trim()) : null;
+
   // Scan / Verify specific pallet
   const handleScanBarcode = async (barcodeToScan?: string) => {
     const code = barcodeToScan || scanInput;
     if (!code) return;
+
+    const preParsed = parseGs1Barcode(code);
+    if (!preParsed.gtin) {
+      setScanFeedback('❌ Barcode format not recognized — missing GS1 GTIN (01) identifier');
+      return;
+    }
 
     setScanning(true);
     setScanFeedback(null);
@@ -171,6 +183,23 @@ export function DigitalEbolScanner({
     if (onEbolGenerated) onEbolGenerated(ebol);
   };
 
+  // Download the sealed e-BOL record as a JSON file for customs/audit archival
+  // (no PDF renderer is wired up here — window.print() covers the printable view).
+  const handleDownloadEbol = () => {
+    if (!generatedEbol) return;
+    const blob = new Blob([JSON.stringify(generatedEbol, null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${generatedEbol.ebolNumber}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const loadedCount = items.filter((i) => i.verificationStatus === 'VERIFIED_LOADED').length;
   const totalWeight = items.reduce((sum, i) => sum + i.weightKg, 0);
 
@@ -212,16 +241,46 @@ export function DigitalEbolScanner({
           <button
             type="button"
             onClick={() => handleScanBarcode()}
-            disabled={scanning}
-            className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold transition-all shadow-md"
+            disabled={scanning || (!!scanInput.trim() && !livePreview?.gtin)}
+            className="px-4 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold transition-all shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {scanning ? 'Scanning…' : 'Scan Pallet'}
           </button>
         </div>
 
+        {/* Live GS1-128 parse preview — updates as the operator types/scans,
+            before anything is submitted to the verify endpoint. */}
+        {livePreview && (
+          livePreview.gtin ? (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-mono text-slate-300 bg-slate-900/60 border border-white/10 rounded-lg px-2.5 py-1.5">
+              <span className="flex items-center gap-1 text-cyan-300">
+                <Package className="w-3.5 h-3.5 shrink-0" /> Parsed:
+              </span>
+              <span>GTIN <strong className="text-white">{livePreview.gtin}</strong></span>
+              {livePreview.batchLot && (
+                <span>Lot <strong className="text-white">{livePreview.batchLot}</strong></span>
+              )}
+              {livePreview.serialNumber && (
+                <span>SN <strong className="text-white">{livePreview.serialNumber}</strong></span>
+              )}
+              {livePreview.weightKg !== undefined && (
+                <span>Wt <strong className="text-white">{livePreview.weightKg} kg</strong></span>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-[10px] text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-1.5">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              Barcode format not recognized — missing GS1 GTIN (01) identifier
+            </div>
+          )
+        )}
+
         {/* 1-Click Pallet Simulation Buttons */}
         <div className="flex items-center gap-2 pt-1">
-          <span className="text-[10px] text-slate-400">Quick Test Scans:</span>
+          <span className="text-[10px] text-slate-400 flex items-center gap-1">
+            <Sparkles className="w-3 h-3 text-amber-400" />
+            Quick Test Scans:
+          </span>
           <button
             type="button"
             onClick={() =>
@@ -340,7 +399,8 @@ export function DigitalEbolScanner({
               {/* Carrier & Customs Top Banner */}
               <div className="grid grid-cols-2 gap-4 border-b border-white/10 pb-3">
                 <div>
-                  <span className="text-[10px] text-slate-500 uppercase block font-bold">
+                  <span className="text-[10px] text-slate-500 uppercase font-bold flex items-center gap-1.5">
+                    <Truck className="w-3 h-3" />
                     Issuing Freight Carrier
                   </span>
                   <strong className="text-white text-sm block">{generatedEbol.carrierName}</strong>
@@ -364,7 +424,8 @@ export function DigitalEbolScanner({
               {/* Shipper & Consignee */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-slate-900/60 p-3 rounded-lg border border-white/5 space-y-1">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold block">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1.5">
+                    <Building2 className="w-3 h-3" />
                     Shipper / Origin:
                   </span>
                   <strong className="text-white block">{generatedEbol.shipperName}</strong>
@@ -381,7 +442,8 @@ export function DigitalEbolScanner({
 
               {/* Manifest Summary */}
               <div className="border-t border-white/10 pt-3 space-y-2">
-                <span className="text-[10px] text-slate-400 uppercase font-bold block">
+                <span className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1.5">
+                  <Layers className="w-3 h-3" />
                   Consignment Cargo Manifest ({generatedEbol.totalPallets} Units ·{' '}
                   {generatedEbol.totalGrossWeightKg} kg Total Gross Weight)
                 </span>
@@ -415,13 +477,22 @@ export function DigitalEbolScanner({
 
             {/* Modal Actions */}
             <div className="flex items-center justify-between pt-2">
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold"
-              >
-                <Printer className="w-4 h-4" /> Print e-BOL PDF
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold"
+                >
+                  <Printer className="w-4 h-4" /> Print e-BOL PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadEbol}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold"
+                >
+                  <Download className="w-4 h-4" /> Download e-BOL JSON
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={() => setShowEbolModal(false)}

@@ -245,7 +245,7 @@ export async function batchAutoMatchTenantFines(
   const fines = await tx.trafficFine.findMany({
     where: {
       tenantId,
-      deletedAt: null,
+      // TrafficFine has no soft-delete (deletedAt) column in the schema.
       status: 'UNPAID',
     },
     select: {

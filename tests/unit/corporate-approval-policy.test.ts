@@ -63,7 +63,9 @@ describe('Multi-Level Corporate Approval & Travel Policy Engine', () => {
     expect(evalRes.policyViolations.some((v) => v.code === 'HIGH_VALUE_FARE')).toBe(true);
 
     // After Department Head signs off, moves to Tier 3
-    ctx.approvalHistory.push({
+    // approvalHistory is optional on the ctx type, but this test always
+    // initializes it above (line 25).
+    ctx.approvalHistory!.push({
       tier: 2,
       tierName: 'Department Head',
       approverName: 'Director Robert',

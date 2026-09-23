@@ -2041,6 +2041,28 @@ model RoutePassenger {
   @@schema("public")
 }
 
+/// Idempotency cache for bulk-import endpoints (currently
+/// route-passengers/bulk-import). Table created by migration
+/// 20260813110000_bulk_import_idempotency but never added to this schema,
+/// so tx.bulkImportJob calls always failed at runtime — added here to match
+/// the live table exactly (see that migration for the source of truth).
+model BulkImportJob {
+  id             String    @id @default(uuid()) @db.Uuid
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime? @map("updated_at") @db.Timestamptz(6)
+  tenantId       String    @map("tenant_id") @db.Uuid
+  idempotencyKey String    @map("idempotency_key")
+  bodyHash       String    @map("body_hash")
+  result         Json
+  createdBy      String?   @map("created_by") @db.Uuid
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, idempotencyKey], map: "uniq_bulk_import_tenant_key")
+  @@index([expiresAt], map: "idx_bulk_import_expires")
+  @@map("bulk_import_jobs")
+  @@schema("public")
+}
+
 /// Recurring schedule template for bus-ops. Describes the RULE
 /// ("Marina MORNING SUN-THU Pickup at 07:00 from Aug 7 onwards"); the
 /// generator materialises this rule into concrete TripSchedule rows for a

@@ -27,11 +27,10 @@ export async function POST(req: NextRequest) {
       const vehicleId = body.vehicleId;
 
       const result = await PREVENTIVE_MAINTENANCE_AGENT.run({
-        event_id: crypto.randomUUID(),
+        agent_id: 'preventive-maintenance',
         event_type: 'manual.trigger',
         tenant_id: tenantId,
         entity_id: vehicleId,
-        timestamp: new Date().toISOString(),
       });
 
       return NextResponse.json({

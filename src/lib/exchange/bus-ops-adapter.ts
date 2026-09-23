@@ -7,13 +7,15 @@
 
 import { prisma } from '@/lib/prisma';
 import { logAudit } from '@/lib/audit';
-import { PartnerServiceDomain } from '@prisma/client';
+import { PartnerServiceDomain, Prisma } from '@prisma/client';
 import {
   OutsourcingSourceAdapter,
   OutsourcingSource,
   ValidationResult,
   DomainEligibilityCriteria,
   BusRequirements,
+  AwardApplicationPayload,
+  ExecutionStatusEvent,
 } from './adapters/types';
 
 export class BusOpsOutsourcingAdapter implements OutsourcingSourceAdapter {
@@ -32,10 +34,16 @@ export class BusOpsOutsourcingAdapter implements OutsourcingSourceAdapter {
       sourceReferenceType: 'TRIP_SCHEDULE',
       sourceReferenceId: trip.id,
       tenantId: trip.tenantId,
-      pickupLocation: trip.route?.pickupLocation || 'Dubai Hub',
-      dropoffLocation: trip.route?.dropoffLocation || 'Destination Site',
-      serviceDate: new Date(trip.serviceDate),
-      pickupTime: trip.departureTime || '07:00',
+      // BusRoute has `origin`/`destination`, not `pickupLocation`/`dropoffLocation`.
+      pickupLocation: trip.route?.origin || 'Dubai Hub',
+      dropoffLocation: trip.route?.destination || 'Destination Site',
+      // TripSchedule has no `serviceDate` column — `departureTime` (a full
+      // timestamp, not just a time-of-day) IS the date this trip runs.
+      serviceDate: trip.departureTime,
+      // TripSchedule.departureTime is a full Date, but pickupTime here is
+      // the 'HH:MM' string OutsourcingSource expects — format it rather
+      // than assigning the Date object itself.
+      pickupTime: trip.departureTime.toTimeString().slice(0, 5),
       specialInstructions: trip.notes || undefined,
       domainPayload: {
         passengerSeats: trip.capacity || 50,
@@ -57,26 +65,28 @@ export class BusOpsOutsourcingAdapter implements OutsourcingSourceAdapter {
     return { isValid: true, errors: [] };
   }
 
-  async buildRequirementsPayload(source: OutsourcingSource): Promise<Record<string, any>> {
+  async buildRequirementsPayload(source: OutsourcingSource): Promise<Record<string, unknown>> {
+    const payload = source.domainPayload as BusRequirements;
     return {
-      passengerSeats: source.domainPayload.passengerSeats || 50,
-      busClass: source.domainPayload.busClass || 'STANDARD_STAFF',
-      luggageAllowed: source.domainPayload.luggageAllowed ?? false,
+      passengerSeats: payload.passengerSeats || 50,
+      busClass: payload.busClass || 'STANDARD_STAFF',
+      luggageAllowed: payload.luggageAllowed ?? false,
     };
   }
 
   async buildEligibilityRequirements(source: OutsourcingSource): Promise<DomainEligibilityCriteria> {
+    const payload = source.domainPayload as BusRequirements;
     return {
       domain: this.domain,
       pickupCity: 'Dubai',
       serviceDate: source.serviceDate,
       domainPayload: {
-        requiredCapacity: source.domainPayload.passengerSeats || 50,
+        requiredCapacity: payload.passengerSeats || 50,
       },
     };
   }
 
-  async applyAward(award: any): Promise<void> {
+  async applyAward(award: AwardApplicationPayload): Promise<void> {
     const tripId = award.request?.sourceReferenceId || award.sourceReferenceId;
     if (!tripId) return;
 
@@ -95,24 +105,27 @@ export class BusOpsOutsourcingAdapter implements OutsourcingSourceAdapter {
     }).catch(() => {});
   }
 
-  async applyAssignment(assignment: any): Promise<void> {
+  async applyAssignment(assignment: Record<string, unknown>): Promise<void> {
     // Synchronize assigned driver info if needed
+    void assignment;
   }
 
-  async syncExecutionStatus(event: any): Promise<void> {
+  async syncExecutionStatus(event: ExecutionStatusEvent): Promise<void> {
     const tripId = event.sourceReferenceId;
     if (!tripId) return;
 
     const status = event.eventType;
     const now = new Date();
-    const updateData: any = { updatedAt: now };
+    const updateData: Prisma.TripScheduleUpdateManyMutationInput = { updatedAt: now };
 
+    // NOTE: TripSchedule has no actualDeparture/actualArrival columns (only
+    // the scheduled departureTime/arrivalTime) — writing to those field
+    // names would fail Prisma's runtime schema validation. Only `status` is
+    // updated here until real "actual time" tracking columns exist.
     if (status === 'STARTED') {
       updateData.status = 'IN_PROGRESS';
-      updateData.actualDeparture = now.toTimeString().slice(0, 5);
     } else if (status === 'COMPLETED') {
       updateData.status = 'COMPLETED';
-      updateData.actualArrival = now.toTimeString().slice(0, 5);
     }
 
     await prisma.tripSchedule.updateMany({
@@ -123,5 +136,7 @@ export class BusOpsOutsourcingAdapter implements OutsourcingSourceAdapter {
 
   async handleCancellation(requestId: string, reason: string): Promise<void> {
     // Reset trip status back to SCHEDULED
+    void requestId;
+    void reason;
   }
 }

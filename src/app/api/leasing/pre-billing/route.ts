@@ -13,6 +13,7 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { lockSerialSeries } from '@/lib/leasing/serial-lock';
+import type { Prisma } from '@prisma/client';
 
 export async function GET(req: NextRequest) {
 
@@ -78,7 +79,7 @@ export async function POST(req: NextRequest) {
       const count = await tx.leasePreBillingStatement.count({ where: { tenantId } });
       const statementNo = `PBS-${String(count + 1).padStart(5, '0')}`;
       return tx.leasePreBillingStatement.create({
-        data: { ...body, dueDate, statementNo, vatAmount, totalAmount, tenantId },
+        data: { ...body, dueDate, statementNo, vatAmount, totalAmount, tenantId } as Prisma.LeasePreBillingStatementUncheckedCreateInput,
       });
     });
     return NextResponse.json(stmt, { status: 201 });

@@ -229,7 +229,7 @@ const BODIES = {
       </p>`,
     ar: (i: DunningTemplateInput, product: string) => `
       <p style="margin:0 0 12px 0;font-size:14px;line-height:1.5">
-        لم نستلم دفعة الفاتورة رقم <strong>${escapeHtml(i.invoiceNo)}</strong>،
+        لم نستلم دفعة فاتورة ${product === 'Vehicle Lease' ? 'إيجار المركبة' : product} رقم <strong>${escapeHtml(i.invoiceNo)}</strong>،
         وهي متأخرة الآن <strong>${i.daysOverdue} يوماً</strong>. قد يؤثر استمرار عدم السداد على
         حالة عقدكم وموقفكم الائتماني.
       </p>
@@ -252,7 +252,7 @@ const BODIES = {
       </p>`,
     ar: (i: DunningTemplateInput, product: string) => `
       <p style="margin:0 0 12px 0;font-size:14px;line-height:1.5;color:#7f1d1d">
-        <strong>هذا إشعار نهائي.</strong> الفاتورة رقم <strong>${escapeHtml(i.invoiceNo)}</strong>
+        <strong>هذا إشعار نهائي.</strong> فاتورة ${product === 'Vehicle Lease' ? 'إيجار المركبة' : product} رقم <strong>${escapeHtml(i.invoiceNo)}</strong>
         لا تزال غير مسددة بعد <strong>${i.daysOverdue} يوماً</strong> من تاريخ الاستحقاق.
       </p>
       <p style="margin:0 0 12px 0;font-size:14px;line-height:1.5">
@@ -281,7 +281,7 @@ const BODIES = {
     ar: (i: DunningTemplateInput, product: string) => `
       <p style="margin:0 0 12px 0;font-size:14px;line-height:1.5;color:#450a0a">
         <strong>تمت إحالة حسابكم إلى إجراءات الاسترداد القانوني.</strong> على الرغم من الإشعارات
-        السابقة، لا تزال الفاتورة رقم <strong>${escapeHtml(i.invoiceNo)}</strong> غير مسددة بعد
+        السابقة، لا تزال فاتورة ${product === 'Vehicle Lease' ? 'إيجار المركبة' : product} رقم <strong>${escapeHtml(i.invoiceNo)}</strong> غير مسددة بعد
         <strong>${i.daysOverdue} يوماً</strong> من تاريخ الاستحقاق.
       </p>
       <p style="margin:0 0 12px 0;font-size:14px;line-height:1.5">

@@ -64,18 +64,10 @@ function isCronDue(cronExpr: string, date: Date): boolean {
 
   const [minField, hourField, domField, monField, dowField] = parts;
 
-  // Format into Dubai timezone parts
-  const dtf = new Intl.DateTimeFormat('en-US', {
-    timeZone: TIMEZONE,
-    minute: 'numeric',
-    hour: 'numeric',
-    hour12: false,
-    day: 'numeric',
-    month: 'numeric',
-    weekday: 'narrow',
-  });
-
-  const partsObj: Record<string, number> = {};
+  // Convert to Dubai wall-clock time, then read the numeric fields off the
+  // resulting Date directly (getDay() already gives the 0-6 weekday the
+  // cron dow field needs, unlike Intl.DateTimeFormat's narrow weekday name,
+  // which would need an extra name->number mapping for no benefit here).
   const dubaiDate = new Date(date.toLocaleString('en-US', { timeZone: TIMEZONE }));
 
   const minute = dubaiDate.getMinutes();
@@ -94,7 +86,6 @@ function isCronDue(cronExpr: string, date: Date): boolean {
 }
 
 let started = false;
-let timerId: any = null;
 
 /** Idempotent — starts an interval-based cron checker once on boot */
 export function startJobScheduler(): void {
@@ -109,7 +100,7 @@ export function startJobScheduler(): void {
 
   let lastCheckedMinute = -1;
 
-  timerId = setInterval(() => {
+  setInterval(() => {
     const now = new Date();
     const currentMinute = now.getMinutes();
 

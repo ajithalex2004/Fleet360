@@ -57,7 +57,27 @@ interface PMPlanDbRow {
   vehicle_id: string;
   plan_id: string;
   plan_name: string;
-  triggers: any;
+  triggers: unknown;
+}
+
+interface TripScheduleRawRow {
+  trip_id: string;
+  trip_number: string | null;
+  departure_time: string;
+  arrival_time: string | null;
+  passenger_count: number;
+}
+
+/**
+ * Shape of each element in PMPlanDbRow.triggers once parsed — matches the
+ * jsonb_build_object('triggerType', ..., 'intervalValue', ..., 'intervalUnit', ...)
+ * projection in fetchActivePMPlans' query, and VehiclePMInput['activePlan'].triggers
+ * in forecaster.ts.
+ */
+interface PMPlanTrigger {
+  triggerType: 'ODOMETER' | 'CALENDAR' | 'ENGINE_HOURS';
+  intervalValue: number;
+  intervalUnit: string;
 }
 
 /**
@@ -93,7 +113,7 @@ async function fetchTelematicsBurnRates(tx: TxClient): Promise<Map<string, Telem
   const map = new Map<string, TelemetryStatsRow>();
 
   try {
-    const rows = await tx.$queryRawUnsafe<any[]>(`
+    const rows = await tx.$queryRawUnsafe<TelemetryStatsRow[]>(`
       SELECT
         vehicle_id::text,
         MAX((payload->'sensors'->>'engineHours')::float8) AS engine_hours,
@@ -118,7 +138,7 @@ async function fetchTelematicsBurnRates(tx: TxClient): Promise<Map<string, Telem
         daily_hours_14d: r.daily_hours_14d ? Number(r.daily_hours_14d) : null,
       });
     }
-  } catch (err) {
+  } catch {
     // telematics table might be empty
   }
 
@@ -132,7 +152,7 @@ async function fetchLastServiceRecords(tx: TxClient): Promise<Map<string, LastSe
   const map = new Map<string, LastServiceDbRow>();
 
   try {
-    const rows = await tx.$queryRawUnsafe<any[]>(`
+    const rows = await tx.$queryRawUnsafe<LastServiceDbRow[]>(`
       SELECT DISTINCT ON (vehicle_id)
         vehicle_id::text,
         created_at::text AS last_service_date,
@@ -149,7 +169,7 @@ async function fetchLastServiceRecords(tx: TxClient): Promise<Map<string, LastSe
         last_service_odometer: r.last_service_odometer ? Number(r.last_service_odometer) : null,
       });
     }
-  } catch (err) {
+  } catch {
     // fallback
   }
 
@@ -163,7 +183,7 @@ async function fetchActivePMPlans(tx: TxClient, tenantId: string): Promise<Map<s
   const map = new Map<string, PMPlanDbRow>();
 
   try {
-    const rows = await tx.$queryRawUnsafe<any[]>(`
+    const rows = await tx.$queryRawUnsafe<PMPlanDbRow[]>(`
       SELECT
         s.vehicle_id::text,
         s.plan_id::text,
@@ -189,7 +209,7 @@ async function fetchActivePMPlans(tx: TxClient, tenantId: string): Promise<Map<s
         triggers: typeof r.triggers === 'string' ? JSON.parse(r.triggers) : r.triggers || [],
       });
     }
-  } catch (err) {
+  } catch {
     // fallback
   }
 
@@ -205,7 +225,7 @@ async function fetchUpcomingTripsForVehicle(
   vehicleId: string
 ): Promise<TripScheduleWindow[]> {
   try {
-    const rows = await tx.$queryRawUnsafe<any[]>(`
+    const rows = await tx.$queryRawUnsafe<TripScheduleRawRow[]>(`
       SELECT
         id::text AS trip_id,
         trip_number,
@@ -223,9 +243,9 @@ async function fetchUpcomingTripsForVehicle(
 
     return rows.map((r) => ({
       tripId: r.trip_id,
-      tripNumber: r.trip_number,
+      tripNumber: r.trip_number ?? undefined,
       departureTime: r.departure_time,
-      arrivalTime: r.arrival_time,
+      arrivalTime: r.arrival_time ?? undefined,
       passengerCount: Number(r.passenger_count) || 0,
     }));
   } catch {
@@ -356,7 +376,7 @@ async function runForTenant(
       activePlan: pmPlan ? {
         planId: pmPlan.plan_id,
         planName: pmPlan.plan_name,
-        triggers: pmPlan.triggers,
+        triggers: (pmPlan.triggers as PMPlanTrigger[] | undefined) || [],
       } : undefined,
     };
 
@@ -431,7 +451,7 @@ async function runForTenant(
           })
         );
         actionsCreated++;
-      } catch (apprErr) {
+      } catch {
         // ignore
       }
     }

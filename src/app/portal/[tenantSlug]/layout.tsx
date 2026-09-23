@@ -1,7 +1,5 @@
 import React from 'react';
-import TenantPortalShell, { useTenantPortal } from './tenant-portal-shell';
-
-export { useTenantPortal };
+import TenantPortalShell from './tenant-portal-shell';
 
 export default function TenantPortalLayout({ children }: { children: React.ReactNode }) {
   return <TenantPortalShell>{children}</TenantPortalShell>;

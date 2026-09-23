@@ -29,7 +29,8 @@ export async function GET(req: NextRequest) {
           id: true,
           firstName: true,
           lastName: true,
-          phone: true,
+          // Driver has no `phone` field — the real column is `contactNumber`.
+          contactNumber: true,
           status: true,
         },
         take: 30,
@@ -54,7 +55,7 @@ export async function GET(req: NextRequest) {
         return {
           driverId: driver.id,
           driverName: `${driver.firstName} ${driver.lastName}`.trim(),
-          phone: driver.phone,
+          phone: driver.contactNumber,
           status: driver.status,
           score: scoreRes.score,
           ragStatus: scoreRes.ragStatus,
@@ -81,24 +82,29 @@ export async function GET(req: NextRequest) {
       });
 
       // 3. Fetch Active CAN-bus DTC Engine Service Requests
+      // ServiceRequest only has a scalar `vehicleId` FK — there is no
+      // `vehicle` relation declared on this model in schema.prisma, so the
+      // linked vehicle is resolved with a second, manually-joined query
+      // rather than a Prisma `include`.
       const dtcServiceRequests = await tx.serviceRequest.findMany({
         where: {
           tenantId,
           description: { contains: 'CAN-BUS' },
         },
-        include: {
-          vehicle: {
-            select: {
-              id: true,
-              vehicleCode: true,
-              licensePlate: true,
-              deviceId: true,
-            },
-          },
-        },
         orderBy: { createdAt: 'desc' },
         take: 10,
       });
+
+      const dtcVehicleIds = [...new Set(
+        dtcServiceRequests.map((sr) => sr.vehicleId).filter((id): id is string => !!id),
+      )];
+      const dtcVehicles = dtcVehicleIds.length > 0
+        ? await tx.vehicle.findMany({
+            where: { id: { in: dtcVehicleIds } },
+            select: { id: true, vehicleCode: true, licensePlate: true, deviceId: true },
+          })
+        : [];
+      const dtcVehicleById = new Map(dtcVehicles.map((v) => [v.id, v]));
 
       // Common standard DTC reference list for quick diagnostic lookups
       const referenceDtcs = evaluateDtcFaultCodesSync([
@@ -123,15 +129,15 @@ export async function GET(req: NextRequest) {
           severity: a.severity,
           title: a.title,
           description: a.description,
-          createdAt: a.createdAt.toISOString(),
+          createdAt: a.createdAt ? a.createdAt.toISOString() : null,
         })),
         dtcServiceRequests: dtcServiceRequests.map((sr) => ({
           id: sr.id,
           priority: sr.priority,
           status: sr.status,
           description: sr.description,
-          vehicle: sr.vehicle,
-          createdAt: sr.createdAt.toISOString(),
+          vehicle: sr.vehicleId ? dtcVehicleById.get(sr.vehicleId) ?? null : null,
+          createdAt: sr.createdAt ? sr.createdAt.toISOString() : null,
         })),
         referenceDtcs,
       });

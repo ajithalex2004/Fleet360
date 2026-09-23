@@ -23,9 +23,13 @@ import {
   OutsourceDeclineReason,
   OutsourcePricingMethod,
   OutsourceRequestStatus,
+  OutsourceVisibility,
   PartnerQuoteStatus,
   PartnerServiceDomain,
 } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
+import type { AlertSubjectType } from '@/events/contracts/alert.events';
+import { DisclosurePolicyService } from './disclosure-service';
 
 export function hashDriverToken(token: string): string {
   return createHash('sha256').update(token.trim()).digest('hex');
@@ -157,8 +161,6 @@ export class OutsourceEngine {
         requiredCapacity: input.requiredCapacity || 50,
         vehicleTypeRequired: input.vehicleTypeRequired || '50-Seat Bus',
         specialInstructions: input.specialInstructions,
-        closesAt,
-        createdBy: input.createdByUserId,
         invitedPartners: allowedPartnerIds
           ? {
               create: allowedPartnerIds.map((pid) => ({
@@ -173,6 +175,33 @@ export class OutsourceEngine {
       },
     });
 
+    // Deadline governance lives on MarketplaceOpportunity (the only table
+    // that actually has a closes_at column — OutsourceRequest never did).
+    // A DIRECT-visibility opportunity models the invite-only RFQ deadline
+    // without publishing this request to the broader marketplace/network.
+    const disclosurePayload = DisclosurePolicyService.buildSanitizedDisclosure(
+      request.domain,
+      request.pickupLocation,
+      request.dropoffLocation,
+      request.serviceDate,
+      request.pickupTime,
+      { requiredCapacity: request.requiredCapacity },
+    );
+
+    const opportunity = await prisma.marketplaceOpportunity.create({
+      data: {
+        tenantId: input.tenantId,
+        outsourceRequestId: request.id,
+        domain: request.domain,
+        visibility: OutsourceVisibility.DIRECT,
+        status: 'OPEN',
+        closesAt,
+        disclosurePayload: disclosurePayload as Prisma.InputJsonValue,
+        requirementsVersion: 1,
+        createdBy: input.createdByUserId,
+      },
+    });
+
     await logAudit({
       tenantId: input.tenantId,
       entityType: 'OutsourceRequest',
@@ -182,7 +211,7 @@ export class OutsourceEngine {
       userId: input.createdByUserId,
     });
 
-    return request;
+    return { ...request, opportunity };
   }
 
   /**
@@ -191,13 +220,16 @@ export class OutsourceEngine {
   static async submitOrReviseQuote(input: SubmitQuoteInput) {
     const request = await prisma.outsourceRequest.findUnique({
       where: { id: input.requestId },
+      include: { opportunity: true },
     });
 
     if (!request) throw new Error('Outsource request not found');
 
-    // Deadline check
-    if (new Date() > request.closesAt) {
-      throw new Error(`Quote submission deadline passed on ${request.closesAt.toISOString()}`);
+    // Deadline check — governed by the linked MarketplaceOpportunity (the
+    // only place a closing deadline is actually stored). Requests with no
+    // opportunity attached (e.g. legacy data) have no deadline to enforce.
+    if (request.opportunity && new Date() > request.opportunity.closesAt) {
+      throw new Error(`Quote submission deadline passed on ${request.opportunity.closesAt.toISOString()}`);
     }
 
     const vatRate = 0.05; // UAE 5% VAT
@@ -273,7 +305,10 @@ export class OutsourceEngine {
       tenantId: newQuote.request.tenantId,
       code: 'OUTSOURCE_QUOTE_RECEIVED',
       sourceModule: 'exchange',
-      subjectType: 'OutsourceRequest' as any,
+      // AlertSubjectType (@/events/contracts/alert.events) only covers the
+      // bus-ops/fleet domain — see the identical gap documented in
+      // marketplace-service.ts. Same typed bypass, not a guessed fallback.
+      subjectType: 'OutsourceRequest' as unknown as AlertSubjectType,
       subjectId: input.requestId,
       title: `💰 Outsource Quote Received: ${newQuote.partner.legalName} (Rev ${revisionNo})`,
       description: `Partner ${newQuote.partner.legalName} quoted AED ${total.toFixed(2)} for ${newQuote.request.requestNumber}.`,
@@ -331,8 +366,17 @@ export class OutsourceEngine {
     tenantId: string,
     userId: string
   ) {
-    const updated = await prisma.outsourceRequest.update({
-      where: { id: requestId, tenantId },
+    // The deadline lives on the linked MarketplaceOpportunity, not on
+    // OutsourceRequest itself — see createOutsourceRequest.
+    const opportunity = await prisma.marketplaceOpportunity.findUnique({
+      where: { outsourceRequestId: requestId },
+    });
+    if (!opportunity || opportunity.tenantId !== tenantId) {
+      throw new Error('Outsource request opportunity not found');
+    }
+
+    const updated = await prisma.marketplaceOpportunity.update({
+      where: { id: opportunity.id },
       data: { closesAt: new Date(newDeadline) },
     });
 
@@ -509,8 +553,9 @@ export class OutsourceEngine {
           pickupLocation: input.pickupLocation,
           dropoffLocation: input.dropoffLocation,
           requiredCapacity: input.requiredCapacity || 50,
-          closesAt: new Date(),
-          createdBy: input.awardedByUserId,
+          // No MarketplaceOpportunity here — a direct contract-rate award
+          // skips the RFQ/bidding window entirely, so there's no deadline
+          // to record.
           invitedPartners: {
             create: [{ partnerId: partner.id, status: 'AWARDED' }],
           },
@@ -580,6 +625,7 @@ export class OutsourceEngine {
         partner: {
           include: { complianceDocuments: true },
         },
+        request: true,
       },
     });
 
@@ -751,7 +797,7 @@ export class OutsourceEngine {
     }
 
     const now = new Date();
-    const updateData: any = {};
+    const updateData: Prisma.PartnerAssignmentUpdateInput = {};
 
     if (milestone === 'REACHED') {
       if (assignment.reachedAt) {

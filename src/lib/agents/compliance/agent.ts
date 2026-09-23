@@ -113,9 +113,8 @@ export class ComplianceAgent {
     // 3. FTA Tax Invoice Audit
     if (payload.invoiceValidationRequest) {
       evalResult.scanType = 'FTA_TAX_AUDIT';
-      const taxAudit = validateFtaInvoice(
-        payload.invoiceValidationRequest as FtaInvoiceValidationRequest,
-      );
+      const invoiceValidationRequest = payload.invoiceValidationRequest as FtaInvoiceValidationRequest;
+      const taxAudit = validateFtaInvoice(invoiceValidationRequest);
       evalResult.taxValidation = taxAudit;
       itemsProcessed++;
 
@@ -126,9 +125,9 @@ export class ComplianceAgent {
         await policyService.createApprovalItem(tenantId, {
           agentId: this.id,
           entityType: 'INVOICE_QUARANTINE',
-          entityId: (payload.invoiceValidationRequest as any).invoiceId,
+          entityId: invoiceValidationRequest.invoiceId,
           actionType: 'AUDIT_INVOICE',
-          title: `Quarantine Non-Compliant FTA Invoice: ${(payload.invoiceValidationRequest as any).invoiceNumber}`,
+          title: `Quarantine Non-Compliant FTA Invoice: ${invoiceValidationRequest.invoiceNumber}`,
           description: taxAudit.summary,
           financialImpactAed: taxAudit.financialRiskAed,
           payload: { taxAudit },

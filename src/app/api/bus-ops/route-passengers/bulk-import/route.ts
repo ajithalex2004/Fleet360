@@ -148,7 +148,11 @@ export async function POST(req: NextRequest) {
           select: { id: true, employeeId: true },
         }),
         tx.busRoute.findMany({
-          where: { deletedAt: null, OR: [{ tenantId }, { tenantId: null }] },
+          // BusRoute.tenantId has been NOT NULL since the multi-tenant
+          // isolation hardening migration (20260910000000) closed the
+          // nullable-tenant escape — there is no such thing as a global/
+          // tenant-less route anymore, so this is a plain tenant filter.
+          where: { deletedAt: null, tenantId },
           select: {
             id: true, name: true, code: true,
             stops: { select: { id: true, stopName: true } },

@@ -50,7 +50,6 @@ export interface DunningClassification {
   severity: 'INFO' | 'WARNING' | 'ERROR';
 }
 
-const GRACE_DAYS = 14;
 const BUCKET_30 = 15;
 const BUCKET_60 = 45;
 const BUCKET_90 = 75;
@@ -97,7 +96,13 @@ export function classify(invoice: InvoiceForDunning, asOf: Date = new Date()): D
     };
   }
 
-  if (days < GRACE_DAYS) {
+  // GRACE is documented as "1-14 days past due" and REMINDER_30 as
+  // "15-44 days past due" (see the DunningBucket comments above) — the
+  // boundary is BUCKET_30 (15), not a separate GRACE_DAYS (14) constant.
+  // The two previously disagreed by one day, silently moving day-14
+  // invoices into REMINDER_30 a day early; BUCKET_30 was already defined
+  // for exactly this but never wired in.
+  if (days < BUCKET_30) {
     return {
       invoiceId: invoice.id,
       bucket: 'GRACE',

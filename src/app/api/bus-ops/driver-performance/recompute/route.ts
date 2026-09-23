@@ -123,8 +123,12 @@ export async function POST(req: NextRequest) {
         let errors = 0;
         for (const s of scores) {
           try {
+            // DriverPerformance has no tenant_id column — tenant isolation
+            // is enforced by the `tenant_isolation_via_driver` RLS policy
+            // (joins through drivers.tenant_id), which withTenantRls
+            // already applies via app.tenant_id.
             const existing = await tx.driverPerformance.findFirst({
-              where: { tenantId, driverId: s.driverId, periodYear: year, periodMonth: month },
+              where: { driverId: s.driverId, periodYear: year, periodMonth: month },
               select: { id: true },
             });
             const data = {

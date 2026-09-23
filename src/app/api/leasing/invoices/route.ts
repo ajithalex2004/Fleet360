@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { withAudit } from '@/lib/with-audit';
 import { lockSerialSeries } from '@/lib/leasing/serial-lock';
+import type { Prisma } from '@prisma/client';
 
 /**
  * Lease invoice list (GET) + issue (POST).
@@ -174,7 +175,7 @@ export const POST = withAudit(
                 contractId: l.contractId || contractId || null,
               })),
             },
-          },
+          } as Prisma.LeaseInvoiceUncheckedCreateInput,
           include: { lines: true, lessee: { select: { name: true } } },
         });
       });
@@ -189,8 +190,17 @@ export const POST = withAudit(
   {
     entityType: 'LeaseInvoice',
     action: 'CREATE',
-    extractEntity: (body) => ({ id: body?.id, name: body?.invoiceNo }),
-    describe: (_req, body) =>
+    extractEntity: (body: { id?: string; invoiceNo?: string }) => ({ id: body?.id, name: body?.invoiceNo }),
+    describe: (
+      _req,
+      body: {
+        invoiceNo?: string;
+        totalAmount?: number;
+        currency?: string;
+        lessee?: { name?: string };
+        lesseeId?: string;
+      }
+    ) =>
       body?.invoiceNo
         ? `Issued invoice ${body.invoiceNo} for ${body.totalAmount ?? 0} ${body.currency ?? 'AED'} (lessee: ${body.lessee?.name ?? body.lesseeId ?? 'unknown'})`
         : undefined,

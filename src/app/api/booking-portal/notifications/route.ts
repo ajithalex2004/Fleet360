@@ -16,19 +16,22 @@ export async function POST(req: NextRequest) {
 
   try {
     const rawBody = await req.json();
-    const body = stripTenantOwnershipFields(rawBody);
+    // Body is user-supplied — every field but payload has a default below
+    // and is genuinely optional; payload has no sensible default and stays
+    // required, matching how it's used (unguarded) further down.
+    const body = stripTenantOwnershipFields(rawBody) as {
+      trigger?: NotificationTrigger;
+      payload: NotificationPayload;
+      channels?: NotificationChannel[];
+      phone?: string;
+      email?: string;
+    };
     const {
       trigger = 'BOOKING_CONFIRMED',
       payload,
       channels = ['WHATSAPP', 'SMS', 'EMAIL'],
       phone = '+971501234567',
       email = 'passenger@company.ae',
-    }: {
-      trigger: NotificationTrigger;
-      payload: NotificationPayload;
-      channels: NotificationChannel[];
-      phone: string;
-      email: string;
     } = body;
 
     const results: Record<string, any> = {};

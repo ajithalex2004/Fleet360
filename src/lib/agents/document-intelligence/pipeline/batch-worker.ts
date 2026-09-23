@@ -27,6 +27,31 @@ export interface BatchProcessingInput {
   autoApply?: boolean;
 }
 
+// Row shape for the `RETURNING id, created_at, updated_at` clause of the
+// batch-job INSERT below — only `id` is actually read.
+interface BatchJobInsertRow {
+  id: string;
+}
+
+// Row shape for the `document_batch_jobs` SELECT in getBatchJobStatus below.
+// `status` is safe as the strict literal union: this table is only ever
+// written by this file's own INSERT ('PROCESSING') and UPDATE
+// ('COMPLETED'|'FAILED'), so every value actually stored is a valid member.
+interface BatchJobRow {
+  id: string;
+  batch_name: string;
+  status: 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  total_documents: number | string;
+  processed_count: number | string;
+  success_count: number | string;
+  failed_count: number | string;
+  stp_count: number | string;
+  review_count: number | string;
+  results: unknown;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface BatchJobSummary {
   batchId: string;
   batchName: string;
@@ -68,7 +93,6 @@ export function unpackZipBuffer(buffer: Buffer): BatchJobDocumentInput[] {
     ) {
       const compressionMethod = buffer.readUInt16LE(offset + 8);
       const compressedSize = buffer.readUInt32LE(offset + 18);
-      const uncompressedSize = buffer.readUInt32LE(offset + 22);
       const fileNameLength = buffer.readUInt16LE(offset + 26);
       const extraFieldLength = buffer.readUInt16LE(offset + 28);
 
@@ -144,8 +168,8 @@ export async function executeBatchJob(input: BatchProcessingInput): Promise<Batc
     try {
       const zipBuf = Buffer.from(input.zipBufferBase64, 'base64');
       docsToProcess = unpackZipBuffer(zipBuf);
-    } catch (zipErr: any) {
-      throw new Error(`Failed to extract Zip archive: ${zipErr.message}`);
+    } catch (zipErr) {
+      throw new Error(`Failed to extract Zip archive: ${zipErr instanceof Error ? zipErr.message : String(zipErr)}`);
     }
   } else if (input.documents && input.documents.length > 0) {
     docsToProcess = input.documents;
@@ -160,7 +184,7 @@ export async function executeBatchJob(input: BatchProcessingInput): Promise<Batc
 
   // 1. Initialize Batch in database
   try {
-    const insertRes = await prisma.$queryRawUnsafe<any[]>(`
+    const insertRes = await prisma.$queryRawUnsafe<BatchJobInsertRow[]>(`
       INSERT INTO document_batch_jobs (
         tenant_id, batch_name, status, total_documents, processed_count,
         success_count, failed_count, stp_count, review_count, results
@@ -218,14 +242,14 @@ export async function executeBatchJob(input: BatchProcessingInput): Promise<Batc
         riskLevel: pipelineRes.riskEvaluation.riskLevel,
         autoPopulateStatus: pipelineRes.autoPopulate.status,
       });
-    } catch (procErr: any) {
+    } catch (procErr) {
       processedCount++;
       failedCount++;
       reviewCount++;
 
       results.push({
         fileName: doc.fileName,
-        error: procErr.message || 'Processing failed',
+        error: procErr instanceof Error ? procErr.message : 'Processing failed',
       });
     }
   }
@@ -281,7 +305,7 @@ export async function executeBatchJob(input: BatchProcessingInput): Promise<Batc
  */
 export async function getBatchJobStatus(tenantId: string, batchId: string): Promise<BatchJobSummary | null> {
   try {
-    const rows = await prisma.$queryRawUnsafe<any[]>(`
+    const rows = await prisma.$queryRawUnsafe<BatchJobRow[]>(`
       SELECT id, batch_name, status, total_documents, processed_count,
              success_count, failed_count, stp_count, review_count, results,
              created_at, updated_at
@@ -295,7 +319,7 @@ export async function getBatchJobStatus(tenantId: string, batchId: string): Prom
     }
 
     const r = rows[0];
-    const parsedResults = typeof r.results === 'string' ? JSON.parse(r.results) : r.results || [];
+    const parsedResults = (typeof r.results === 'string' ? JSON.parse(r.results) : r.results || []) as BatchJobSummary['results'];
 
     return {
       batchId: r.id,

@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import type { Prisma } from '@prisma/client';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
@@ -15,8 +16,15 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
+        // SECURITY FOLLOW-UP: report_schedules has no tenant_id column in
+        // the DB (never added in any migration, unlike every other
+        // business table) — filtering on tenantId here would throw a
+        // Prisma validation error at runtime. Until that's fixed with a
+        // real migration + backfill, this table is global/shared across
+        // every tenant on the platform: any tenant can read any other
+        // tenant's report schedules. Flagged to the user; not fixed in
+        // Phase 2.
         const reportSchedules = await tx.reportSchedule.findMany({
-          where: { tenantId },
           orderBy: { createdAt: 'desc' },
         });
         return NextResponse.json(reportSchedules);
@@ -39,8 +47,13 @@ export async function POST(req: NextRequest) {
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
         const bodyRaw = await req.json();
+      // tenantId is stripped because report_schedules has no tenant_id
+      // column to store it in (see the GET handler's note above) — every
+      // schedule created here is visible to every tenant.
       const body = stripTenantOwnershipFields(bodyRaw);
-        const reportSchedule = await tx.reportSchedule.create({ data: body });
+        const reportSchedule = await tx.reportSchedule.create({
+          data: body as Prisma.ReportScheduleCreateInput,
+        });
         return NextResponse.json(reportSchedule, { status: 201 });
         } catch (e) {
         console.error('Error creating report schedule:', e);

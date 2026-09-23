@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
       userRole: req.headers.get('x-user-role') ?? undefined,
       entityType: 'LeasePreBillingStatement',
       entityId: statement.id,
-      entityName: statement.statementNo,
+      entityName: statement.statementNo ?? undefined,
       action: 'CREATE',
       details: `Aggregated pre-billing ${statement.statementNo} for contract ${aggregated.contractNumber ?? aggregated.contractId} (${billingPeriod}): base ${aggregated.baseRent}, fuel ${aggregated.fuelCharges}, fines ${aggregated.fineCharges}, overage ${aggregated.overageCharges}, total ${aggregated.totalAmount.toFixed(2)} ${aggregated.currency}`,
     });

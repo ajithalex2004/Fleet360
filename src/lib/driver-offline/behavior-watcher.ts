@@ -119,15 +119,6 @@ interface InternalState {
   totalDistanceKm: number;
 }
 
-const ZERO_SCORE: BehaviorScore = {
-  score: 100,
-  harshBrake: 0,
-  harshAccel: 0,
-  speeding: 0,
-  idleMinutes: 0,
-  totalDistanceKm: 0,
-};
-
 /** Haversine distance between two lat/lng points, in km. */
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371; // Earth radius in km
@@ -147,7 +138,7 @@ function classify(prev: { speedKph: number; ts: number } | null, cur: {
   lng: number;
   speedKph: number;
   ts: number;
-}, state: InternalState, speedLimit: number): BehaviorEvent | null {
+}): BehaviorEvent | null {
   // First sample: nothing to compare against.
   if (!prev) return null;
   const dtSec = Math.max(0.5, (cur.ts - prev.ts) / 1000); // floor at 0.5s for divide-by-zero
@@ -201,7 +192,17 @@ export function createBehaviorWatcher(opts: BehaviorWatcherOptions): BehaviorWat
     let harshAccel = 0;
     let speeding = 0;
     let idleMs = 0;
-    let speedingSeconds = 0;
+    // NOTE: the header doc's score formula says "-0.5 per km/h over the
+    // speed limit, integrated over time", but nothing in this file ever
+    // computes that integral — SPEEDING only records a single discrete
+    // event when the over-limit duration crosses SPEEDING_DURATION_MS
+    // (see the SPEEDING state machine in process()); there's no
+    // SPEEDING_END event or magnitude/duration bookkeeping to derive
+    // "km/h-over-limit, integrated over time" from after the fact, the
+    // way idleMs is derived from IDLE_START/IDLE_END pairs above. So
+    // this term has always evaluated to 0 (flagged for follow-up, not
+    // something to design unilaterally here).
+    const speedingSeconds = 0;
 
     // Walk the events in order. IDLE_START / IDLE_END are pairs.
     let openIdle: number | null = null;
@@ -283,7 +284,7 @@ export function createBehaviorWatcher(opts: BehaviorWatcherOptions): BehaviorWat
       state.totalDistanceKm += haversineKm(state.last.lat, state.last.lng, lat, lng);
     }
     // Run delta-based classification
-    const deltaEvent = classify(state.last, cur, state, speedLimit);
+    const deltaEvent = classify(state.last, cur);
     if (deltaEvent) fireEvent(deltaEvent);
 
     // IDLE state machine

@@ -164,14 +164,17 @@ export async function resolveMatrixPairings(
     for (const chunkKeys of chunks) {
       const points = chunkKeys.map(k => ({
         id: k,
-        lat: pointsByKey.get(k)!.lat,
-        lng: pointsByKey.get(k)!.lng,
+        latitude: pointsByKey.get(k)!.lat,
+        longitude: pointsByKey.get(k)!.lng,
       }));
 
       try {
+        // RoutingIntelligenceOptions has no tenantId — the distance matrix
+        // cache is correctly tenant-agnostic (road distance between two
+        // coordinates doesn't vary by tenant), so there was nothing for a
+        // tenantId to scope here (same fix as dispatch-optimiser/scoring.ts).
         const matrixRes = await routingIntelligence.getMatrix(points, points, {
           tier: 'STATIC_DISTANCE',
-          tenantId,
         });
 
         for (let i = 0; i < points.length; i++) {

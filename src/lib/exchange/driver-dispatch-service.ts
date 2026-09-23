@@ -56,6 +56,13 @@ ${dispatchUrl}
     const channel: 'WHATSAPP' | 'SMS' = input.channel === 'SMS' ? 'SMS' : 'WHATSAPP';
     const messageId = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
+    // `messageText` is the real message body a WhatsApp Cloud API / Twilio SMS
+    // call would send — building it is done, but no such call exists yet
+    // (see below). This is a genuine unwired integration, not dead code:
+    // choosing/configuring an actual provider is an infrastructure decision
+    // beyond this fix, so it's flagged rather than guessed at.
+    void messageText;
+
     // In production, invoke WhatsApp Cloud API or Twilio SMS client:
     // await fetch('https://graph.facebook.com/v18.0/.../messages', { ... });
 
@@ -75,6 +82,17 @@ ${dispatchUrl}
         },
       });
     }
+
+    // Platform-wide audit trail, matching the create-domain-record +
+    // logAudit pattern already established for other Exchange actions
+    // (e.g. MarketplaceService.publishOpportunity).
+    await logAudit({
+      entityType: 'PartnerTripDispatch',
+      entityId: input.assignmentId,
+      action: 'CREATE',
+      details: `Dispatched ${channel} trip link to ${input.driverName} (${cleanPhone}) for vehicle ${input.vehiclePlate}`,
+      userId: input.actorUserId,
+    }).catch(() => {});
 
     return {
       success: true,

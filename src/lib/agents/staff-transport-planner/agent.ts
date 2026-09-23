@@ -175,6 +175,27 @@ const DEFAULT_STAFF_REQUIREMENTS: EmployeePickupRequirement[] = [
   },
 ];
 
+interface StaffRequirementRow {
+  id: string;
+  pickupName: string;
+  pickupLat: number | null;
+  pickupLng: number | null;
+  zone: string;
+  destinationName: string;
+  destinationLat: number | null;
+  destinationLng: number | null;
+  shiftName: string;
+  targetArrivalTime: string;
+  passengerCount: number | null;
+}
+
+interface AvailableVehicleRow {
+  id: string;
+  vehicleCode: string;
+  type: string;
+  capacity: number | null;
+}
+
 async function fetchRequirementsFromDb(tenantId: string): Promise<EmployeePickupRequirement[]> {
   try {
     // Guard against querying a table that may not exist yet in this tenant's
@@ -187,7 +208,7 @@ async function fetchRequirementsFromDb(tenantId: string): Promise<EmployeePickup
     );
     if (!exists) return DEFAULT_STAFF_REQUIREMENTS;
 
-    const rows = await prisma.$queryRawUnsafe<any[]>(`
+    const rows = await prisma.$queryRawUnsafe<StaffRequirementRow[]>(`
       SELECT
         r.id::text,
         COALESCE(r.route_name, 'Staff Route') AS "pickupName",
@@ -227,7 +248,7 @@ async function fetchRequirementsFromDb(tenantId: string): Promise<EmployeePickup
 
 async function fetchAvailableVehicles(tenantId: string): Promise<FleetVehicleSpec[]> {
   try {
-    const rows = await prisma.$queryRawUnsafe<any[]>(`
+    const rows = await prisma.$queryRawUnsafe<AvailableVehicleRow[]>(`
       SELECT
         v.id::text,
         COALESCE(v.vehicle_code, v.plate_number, v.id::text) AS "vehicleCode",

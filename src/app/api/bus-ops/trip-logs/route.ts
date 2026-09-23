@@ -5,6 +5,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import type { Prisma } from '@prisma/client';
 export async function GET(req: NextRequest) {
 
   try {
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
 
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-        const log = await tx.tripLog.create({ data: { ...body, tenantId } });
+        const log = await tx.tripLog.create({ data: { ...body, tenantId } as Prisma.TripLogUncheckedCreateInput });
         return NextResponse.json(log, { status: 201 });
     });
   } catch (e) {

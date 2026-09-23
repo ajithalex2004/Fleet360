@@ -4,6 +4,7 @@ import { DOCUMENT_INTELLIGENCE_AGENT } from '@/lib/agents/document-intelligence/
 import { extractDocumentIntelligence } from '@/lib/agents/document-intelligence/extractor';
 import { autoPopulateFleet360Record } from '@/lib/agents/document-intelligence/auto-populator';
 import { DocumentExtractionResult } from '@/lib/agents/types';
+import type { PipelineExecutionResult } from '@/lib/agents/document-intelligence/pipeline';
 
 describe('Document Intelligence Agent v1.0.0', () => {
   it('is properly registered in the Agent Registry', async () => {
@@ -230,6 +231,7 @@ Valid Until: 2027-09-04`;
     it('handles vehicle record linking gracefully when record does not exist in test db', async () => {
       const extraction: DocumentExtractionResult = {
         docCategory: 'REGISTRATION_CARD',
+        suggestedTitle: 'Mulkiya',
         confidence: 'HIGH',
         confidenceScore: 0.98,
         expiryDate: '2027-08-30',
@@ -242,6 +244,7 @@ Valid Until: 2027-09-04`;
           model: 'HiAce',
           year: 2024,
         },
+        summary: 'Extracted REGISTRATION_CARD for Mulkiya.',
       };
 
       const result = await autoPopulateFleet360Record('tenant-test-01', extraction);
@@ -253,6 +256,7 @@ Valid Until: 2027-09-04`;
     it('handles driver record linking gracefully when driver does not exist in test db', async () => {
       const extraction: DocumentExtractionResult = {
         docCategory: 'DRIVER_LICENSE',
+        suggestedTitle: 'UAE Driver License',
         confidence: 'HIGH',
         confidenceScore: 0.96,
         expiryDate: '2027-04-14',
@@ -262,6 +266,7 @@ Valid Until: 2027-09-04`;
           emiratesId: '784-1988-1928471-1',
           categories: ['Heavy Bus (Category 6)'],
         },
+        summary: 'Extracted DRIVER_LICENSE for UAE Driver License.',
       };
 
       const result = await autoPopulateFleet360Record('tenant-test-01', extraction);
@@ -278,7 +283,7 @@ Valid Until: 2027-09-04`;
         tenant_id: 'default',
         event_type: 'document.uploaded',
         entity_id: 'mulkiya_sample.pdf',
-        metadata: {
+        payload: {
           fileName: 'mulkiya_sample.pdf',
           documentText: `VEHICLE REGISTRATION CARD\nPlate: Dubai A 12345\nVIN: 1HGCR2F83HA001928\nExpiry: 2027-01-15`,
           autoApply: false,
@@ -288,8 +293,9 @@ Valid Until: 2027-09-04`;
       expect(runResult.status).toBe('COMPLETED');
       expect(runResult.agentId).toBe('document-intelligence');
       expect(runResult.output).toBeDefined();
-      expect(runResult.output.extraction.docCategory).toBe('REGISTRATION_CARD');
-      expect(runResult.output.timeSavedMinutes).toBe(15);
+      const output = runResult.output as PipelineExecutionResult;
+      expect(output.extraction.docCategory).toBe('REGISTRATION_CARD');
+      expect(output.timeSavedMinutes).toBe(15);
       expect(runResult.telemetry?.costAvoidedAed).toBe(45);
       expect(runResult.telemetry?.decisionQualityScore).toBeGreaterThanOrEqual(0.9);
     });

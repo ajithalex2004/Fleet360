@@ -17,7 +17,7 @@
 
 // ── Types (minimal — we only touch what we use to avoid a huge @types dep) ──
 
-interface GMapsLatLng { lat(): number; lng(): number }
+export interface GMapsLatLng { lat(): number; lng(): number }
 interface GMapsLatLngLiteral { lat: number; lng: number }
 
 export interface GMapsMap {
@@ -33,7 +33,8 @@ export interface GMapsMarker {
   setMap(map: GMapsMap | null): void;
 }
 export interface GMapsLatLngBounds {
-  extend(pos: GMapsLatLngLiteral): void;
+  extend(pos: GMapsLatLngLiteral | GMapsLatLng): void;
+  isEmpty(): boolean;
 }
 export interface GMapsPolyline {
   setMap(map: GMapsMap | null): void;
@@ -85,6 +86,15 @@ export interface GoogleCtors {
   Marker: new (opts: object) => GMapsMarker;
   Geocoder: new () => GMapsGeocoder;
   LatLngBounds: new () => GMapsLatLngBounds;
+  LatLng: new (lat: number, lng: number) => GMapsLatLng;
+  /** google.maps.SymbolPath enum — used for marker icon shapes. */
+  SymbolPath: {
+    CIRCLE: number;
+    FORWARD_CLOSED_ARROW: number;
+    FORWARD_OPEN_ARROW: number;
+    BACKWARD_CLOSED_ARROW: number;
+    BACKWARD_OPEN_ARROW: number;
+  };
   Polyline: new (opts: object) => GMapsPolyline;
   Autocomplete: new (el: HTMLInputElement, opts?: object) => GMapsAutocomplete;
   /** Decode a Google encoded polyline string to lat/lng points. */
@@ -104,7 +114,7 @@ interface GoogleMapsBootstrap {
   // into sub-libraries when they introduced the async loader. Destructuring
   // it from 'maps' (which we used to do) throws
   // `google.maps.LatLngBounds is not a constructor`.
-  importLibrary(name: 'core'):      Promise<{ LatLngBounds: GoogleCtors['LatLngBounds'] }>;
+  importLibrary(name: 'core'):      Promise<{ LatLngBounds: GoogleCtors['LatLngBounds']; LatLng: GoogleCtors['LatLng']; SymbolPath: GoogleCtors['SymbolPath'] }>;
   importLibrary(name: 'maps'):      Promise<{ Map: GoogleCtors['Map']; Polyline: GoogleCtors['Polyline']; Circle: GoogleCtors['Circle']; Polygon: GoogleCtors['Polygon'] }>;
   importLibrary(name: 'marker'):    Promise<{ Marker: GoogleCtors['Marker'] }>;
   importLibrary(name: 'geocoding'): Promise<{ Geocoder: GoogleCtors['Geocoder'] }>;
@@ -201,6 +211,8 @@ export function loadGoogleMaps(): Promise<GoogleCtors> {
       Circle:         mapsLib.Circle,
       Polygon:        mapsLib.Polygon,
       LatLngBounds:   coreLib.LatLngBounds,   // ← 'core', not 'maps'
+      LatLng:         coreLib.LatLng,
+      SymbolPath:     coreLib.SymbolPath,
       Marker:         markerLib.Marker,
       Geocoder:       geocodingLib.Geocoder,
       Autocomplete:   placesLib.Autocomplete,

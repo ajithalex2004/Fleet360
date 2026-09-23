@@ -77,7 +77,15 @@ export function simulateDrive(
   opts: SimulateDriveOptions = {},
 ): SimulateHandle {
   const sampleInterval = opts.sampleIntervalMs ?? SAMPLE_INTERVAL;
+  // `cruiseSpeedKph` is documented as a 60-120 km/h override for the cruise
+  // speed, but every segment below hardcodes its own literal speeds
+  // (60/70/95 km/h) rather than deriving them from this option — passing a
+  // non-default value currently has no effect on the generated trace.
+  // Scaling the whole trace (which of 70/95/etc. are "cruise-relative" vs.
+  // fixed demo waypoints like the 95 km/h speeding event) is a demo-design
+  // call, so this is flagged rather than guessed at.
   const cruiseSpeed = opts.cruiseSpeedKph ?? 60;
+  void cruiseSpeed;
   let stopped = false;
   let sampleIdx = 0;
 

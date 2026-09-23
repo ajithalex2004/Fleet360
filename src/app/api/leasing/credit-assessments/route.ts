@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
+import type { Prisma } from '@prisma/client';
 
 export async function GET(req: NextRequest) {
 
@@ -65,7 +66,7 @@ export async function POST(req: NextRequest) {
     const validUntil = body.validUntil ? new Date(body.validUntil) : undefined;
     const item = await withTenantRls(prisma, tenantId, async (tx) =>
       tx.leaseCreditAssessment.create({
-      data: { ...body, assessmentDate, validUntil, tenantId },
+      data: { ...body, assessmentDate, validUntil, tenantId } as Prisma.LeaseCreditAssessmentUncheckedCreateInput,
     }),
     );
     return NextResponse.json(item, { status: 201 });

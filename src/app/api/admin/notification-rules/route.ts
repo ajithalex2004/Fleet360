@@ -6,8 +6,12 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-export async function GET() {
-    const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+function errorMessage(e: unknown, fallback: string): string {
+    return e instanceof Error && e.message ? e.message : fallback;
+}
+
+export async function GET(request: NextRequest) {
+    const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
     }
@@ -27,7 +31,7 @@ export async function GET() {
         return NextResponse.json(rules);
     } catch (e) {
         console.error('Error fetching rules:', e);
-        return NextResponse.json({ error: `Failed to fetch rules: ${e.message}` }, { status: 500 });
+        return NextResponse.json({ error: `Failed to fetch rules: ${errorMessage(e, 'Unknown error')}` }, { status: 500 });
     }
 }
 
@@ -58,7 +62,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(rule);
     } catch (e) {
         console.error('Error creating rule:', e);
-        return NextResponse.json({ error: `Failed to create rule: ${e.message}` }, { status: 500 });
+        return NextResponse.json({ error: `Failed to create rule: ${errorMessage(e, 'Unknown error')}` }, { status: 500 });
     }
 }
 
@@ -90,6 +94,6 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json(rule);
     } catch (e) {
         console.error('Error updating rule:', e);
-        return NextResponse.json({ error: `Failed to update rule: ${e.message}` }, { status: 500 });
+        return NextResponse.json({ error: `Failed to update rule: ${errorMessage(e, 'Unknown error')}` }, { status: 500 });
     }
 }

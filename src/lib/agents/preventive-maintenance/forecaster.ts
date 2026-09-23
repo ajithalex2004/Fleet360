@@ -17,7 +17,7 @@
  *    "Vehicle V-103 will reach its 20,000 km service threshold in approximately 6 operating days."
  */
 
-import { getNextOEMMilestone, OEMServiceMilestone } from './oem-schedules';
+import { getNextOEMMilestone } from './oem-schedules';
 import { PMUrgencyLevel } from '../types';
 
 export interface VehiclePMInput {

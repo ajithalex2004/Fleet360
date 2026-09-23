@@ -80,24 +80,19 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // 2. Log Audit Trail
-      await logAudit(
-        prisma,
+      // 2. Log Audit Trail. logAudit takes a single AuditPayload object, not
+      // positional args — this call was built against an old signature, so
+      // at runtime `prisma` (a PrismaClient) would have been passed in as
+      // the whole payload and the intended fields silently dropped.
+      await logAudit({
         tenantId,
-        'Vehicle',
-        subjectId,
-        'UPDATE',
-        {
-          action: action === 'START' ? 'NRM_STARTED' : 'NRM_ENDED',
-          reason,
-          startLocation,
-          destination,
-          vehiclePlate,
-          driverName,
-          odometer,
-        },
-        userId || driverName
-      );
+        entityType: 'Vehicle',
+        entityId: subjectId,
+        action: action === 'START' ? 'NRM_STARTED' : 'NRM_ENDED',
+        userId: userId || undefined,
+        userName: userId ? undefined : driverName,
+        details: `Driver ${driverName} ${action === 'START' ? 'started' : 'ended'} Non-Revenue Movement (${reason}). Route: ${startLocation} → ${destination}. Vehicle: ${vehiclePlate || 'unknown'}.${odometer ? ` Odometer: ${odometer}.` : ''}`,
+      });
 
       return NextResponse.json({
         ok: true,

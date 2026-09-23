@@ -21,6 +21,7 @@ import {
   ConsolidationRecommendationItem,
   NetworkDesignSummary,
   RouteOptimiserOutput,
+  SingleRouteOptimisationResult,
 } from '../types';
 import { optimiseRoute, GeoStop, estimateDurationMin } from './tsp';
 import { loadConsolidationFacts } from '@/lib/planning/route-consolidation-facts';
@@ -94,7 +95,7 @@ export async function runRouteOptimiser(event: AgentEvent): Promise<AgentRunResu
   let singleRouteSavedKm = 0;
   let singleRouteAutoApplied = 0;
   let singleRouteSuggested = 0;
-  const singleRouteResults = [];
+  const singleRouteResults: SingleRouteOptimisationResult[] = [];
 
   for (const r of busRoutes) {
     const stops = stopsByRoute.get(r.id) ?? [];
@@ -178,10 +179,10 @@ export async function runRouteOptimiser(event: AgentEvent): Promise<AgentRunResu
   let consolidatedMonthlySavingsAed = 0;
 
   try {
-    const facts = await loadConsolidationFacts(prisma as any, { tenantId });
-    const scoringPolicy = await resolveScoringPolicy(prisma as any, tenantId);
-    const eligibilityPolicy = await resolveEligibilityPolicy(prisma as any, tenantId);
-    const zoneFallbacks = await resolveZoneFallbackKm(prisma as any, tenantId);
+    const facts = await loadConsolidationFacts(prisma, { tenantId });
+    const scoringPolicy = await resolveScoringPolicy(prisma, tenantId);
+    const eligibilityPolicy = await resolveEligibilityPolicy(prisma, tenantId);
+    const zoneFallbacks = await resolveZoneFallbackKm(prisma, tenantId);
 
     const objective = {
       penaltyLambda: 1,
@@ -194,7 +195,7 @@ export async function runRouteOptimiser(event: AgentEvent): Promise<AgentRunResu
 
     if (facts.routes.length >= 2) {
       const analysis = await analyzeConsolidations(
-        prisma as any,
+        prisma,
         tenantId,
         facts,
         objective,

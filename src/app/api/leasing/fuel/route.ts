@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
+import type { Prisma } from '@prisma/client';
 
 /**
  * Fuel logs list (GET) + record (POST).
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest) {
     const fuelDate = body.fuelDate ? new Date(body.fuelDate) : new Date();
     const log = await withTenantRls(prisma, tenantId, async (tx) =>
       tx.leaseFuelLog.create({
-      data: { ...body, fuelDate, tenantId, totalCost },
+      data: { ...body, fuelDate, tenantId, totalCost } as Prisma.LeaseFuelLogUncheckedCreateInput,
     }),
     );
     return NextResponse.json(log, { status: 201 });

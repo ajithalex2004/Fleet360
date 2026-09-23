@@ -234,7 +234,7 @@ async function autoCreateWorkOrder(score: VehicleRiskScore): Promise<string | nu
       dtcList +
       sensorAlerts +
       `Subsystem RUL: Powertrain: ${score.factors.subsystemRUL?.powertrainPct ?? 100}% | ` +
-      `Brakes: ${score.factors.subsystemRUL?.brakeSystemPct ?? 100}% | ` +
+      `Brakes: ${score.factors.subsystemRUL?.brakingPct ?? 100}% | ` +
       `Electrical: ${score.factors.subsystemRUL?.electricalPct ?? 100}% | ` +
       `HVAC: ${score.factors.subsystemRUL?.hvacPct ?? 100}%\n` +
       `Service Overdue: ${score.factors.serviceOverdueDays} days / ${score.factors.serviceOverdueKm} km | ` +

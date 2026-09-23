@@ -5,6 +5,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import type { Prisma } from '@prisma/client';
 export async function GET(req: NextRequest) {
 
   try {
@@ -73,7 +74,7 @@ export async function POST(req: NextRequest) {
         }
 
         const passenger = await tx.tripPassenger.create({
-          data: { ...body, tenantId },
+          data: { ...body, tenantId } as Prisma.TripPassengerUncheckedCreateInput,
           include: { trip: true },
         });
         // Recount confirmedCount from the source of truth (TripPassenger rows)

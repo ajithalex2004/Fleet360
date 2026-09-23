@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { paginate, paginatedResponse } from '@/lib/pagination';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import type { Prisma } from '@prisma/client';
 export async function GET(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
     try {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-        const trafficFine = await tx.trafficFine.create({ data: { ...body, tenantId } });
+        const trafficFine = await tx.trafficFine.create({ data: { ...body, tenantId } as Prisma.TrafficFineUncheckedCreateInput });
         return NextResponse.json(trafficFine, { status: 201 });
         } catch (e) {
         console.error('Error creating traffic fine:', e);

@@ -5,6 +5,7 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { lockSerialSeries } from '@/lib/leasing/serial-lock';
+import type { Prisma } from '@prisma/client';
 
 /**
  * Insurance policies list (GET) + new policy (POST).
@@ -79,7 +80,7 @@ export async function POST(req: NextRequest) {
       const count = await tx.leaseInsurancePolicy.count({ where: { tenantId } });
       const policyNo = body.policyNo ?? `INS-${String(count + 1).padStart(5, '0')}`;
       return tx.leaseInsurancePolicy.create({
-        data: { ...body, startDate, expiryDate, tenantId, policyNo },
+        data: { ...body, startDate, expiryDate, tenantId, policyNo } as Prisma.LeaseInsurancePolicyUncheckedCreateInput,
       });
     });
     return NextResponse.json(policy, { status: 201 });

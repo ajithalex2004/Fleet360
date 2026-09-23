@@ -23,8 +23,6 @@
  * directly against tables that already exist.
  */
 
-import { prisma } from './prisma';
-
 // ── Constants ────────────────────────────────────────────────────────────────
 
 /** Radius at which a bus is treated as "at the stop" (metres). Overridable

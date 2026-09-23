@@ -8,6 +8,16 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import type { PrismaClient } from '@prisma/client';
+import type { TxClient } from '@/lib/rls';
+
+// `client?: any` let `db.$queryRawUnsafe<T>(...)` through unchecked, but
+// TS2347 ("untyped function calls may not accept type arguments") means an
+// `any`-typed callee actually rejects a call carrying an explicit type
+// argument — these were never real generic calls, so DbCostRow[] mapping
+// below was unverified against Prisma's return shape. Typing `client` as
+// the real optional transaction/full-client union restores that check.
+type DbClient = TxClient | PrismaClient;
 
 export type CostType = 'TOWING' | 'PARTS' | 'LABOUR' | 'STORAGE' | 'REPLACEMENT' | 'OTHER';
 export type PayerType = 'TENANT' | 'CUSTOMER' | 'INSURANCE' | 'WARRANTY';
@@ -128,7 +138,7 @@ function mapDbRowToCaseCost(row: DbCostRow): CaseCostLine {
 /**
  * Retrieves all cost lines for a specific service ticket within a tenant.
  */
-export async function getCaseCosts(ticketId: string, tenantId: string, client?: any): Promise<CaseCostLine[]> {
+export async function getCaseCosts(ticketId: string, tenantId: string, client?: DbClient): Promise<CaseCostLine[]> {
   const db = client || prisma;
   const rows = await db.$queryRawUnsafe<DbCostRow[]>(
     `SELECT *
@@ -145,7 +155,7 @@ export async function getCaseCosts(ticketId: string, tenantId: string, client?: 
 /**
  * Adds a new cost line to a ticket's cost ledger.
  */
-export async function addCaseCost(data: AddCaseCostInput, client?: any): Promise<CaseCostLine> {
+export async function addCaseCost(data: AddCaseCostInput, client?: DbClient): Promise<CaseCostLine> {
   const db = client || prisma;
   const [row] = await db.$queryRawUnsafe<DbCostRow[]>(
     `INSERT INTO service_case_costs (
@@ -340,7 +350,7 @@ export function calculateSummaryFromLines(lines: CaseCostLine[], ticketId: strin
 export async function calculateCostSummary(
   ticketId: string,
   tenantId: string,
-  client?: any
+  client?: DbClient
 ): Promise<CaseCostSummary> {
   const lines = await getCaseCosts(ticketId, tenantId, client);
   return calculateSummaryFromLines(lines, ticketId);

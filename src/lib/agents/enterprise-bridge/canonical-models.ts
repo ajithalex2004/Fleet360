@@ -18,15 +18,18 @@ import {
  * Apply customizable field mapping dictionary to a canonical object.
  * e.g. { "tripNumber": "ExternalReferenceID", "totalAmountAed": "NetPriceAmount" }
  */
-export function applyFieldMappings<T extends Record<string, any>>(
+export function applyFieldMappings<T extends object>(
   sourceObj: T,
   mappings: Record<string, string> = {}
-): Record<string, any> {
-  const result: Record<string, any> = { ...sourceObj };
+): Record<string, unknown> {
+  // T has no index signature of its own (it's whatever concrete canonical
+  // interface the caller passes), so reads/spreads below go through this view.
+  const source = sourceObj as Record<string, unknown>;
+  const result: Record<string, unknown> = { ...source };
 
   for (const [canonicalKey, externalKey] of Object.entries(mappings)) {
-    if (canonicalKey in sourceObj && externalKey) {
-      result[externalKey] = sourceObj[canonicalKey];
+    if (canonicalKey in source && externalKey) {
+      result[externalKey] = source[canonicalKey];
       // Keep original or remove if mapped to different property name
       if (canonicalKey !== externalKey) {
         delete result[canonicalKey];
@@ -41,10 +44,10 @@ export function applyFieldMappings<T extends Record<string, any>>(
  * Reverse mapping: transforms external ERP payload into canonical structure.
  */
 export function reverseFieldMappings(
-  externalObj: Record<string, any>,
+  externalObj: Record<string, unknown>,
   mappings: Record<string, string> = {}
-): Record<string, any> {
-  const result: Record<string, any> = { ...externalObj };
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...externalObj };
   const invertedMappings: Record<string, string> = {};
 
   for (const [canonicalKey, externalKey] of Object.entries(mappings)) {
@@ -70,7 +73,7 @@ export function reverseFieldMappings(
  */
 export function validateCanonicalEntity(
   type: CanonicalEntityType,
-  payload: any
+  payload: unknown
 ): { valid: boolean; error?: string } {
   if (!payload || typeof payload !== 'object') {
     return { valid: false, error: 'Payload must be a non-null object' };

@@ -102,7 +102,7 @@ export function detectChronicDefectRisk(
   }
 
   const recurringCategories = Object.entries(categoryCounts)
-    .filter(([_, cnt]) => cnt >= 2)
+    .filter(([, cnt]) => cnt >= 2)
     .map(([cat]) => cat);
 
   let riskSeverity: ChronicRiskEvaluation['riskSeverity'] = 'NONE';

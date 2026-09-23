@@ -14,6 +14,7 @@ import {
   STANDARD_OEM_MILESTONES,
 } from '@/lib/agents/preventive-maintenance/oem-schedules';
 import { PREVENTIVE_MAINTENANCE_AGENT } from '@/lib/agents/preventive-maintenance/agent';
+import type { PreventiveMaintenanceForecast } from '@/lib/agents/types';
 import { POST as runPOST } from '@/app/api/agents/preventive-maintenance/run/route';
 import { GET as forecastsGET } from '@/app/api/agents/preventive-maintenance/forecasts/route';
 import { POST as bookSlotPOST } from '@/app/api/agents/preventive-maintenance/book-slot/route';
@@ -161,16 +162,16 @@ describe('Preventive Maintenance Agent: Continuous Burn-Down & Smart Slot Suite'
       vi.spyOn(prisma, '$executeRawUnsafe').mockResolvedValue(1);
 
       const result = await PREVENTIVE_MAINTENANCE_AGENT.run({
-        event_id: 'evt-1',
+        agent_id: 'preventive-maintenance',
         event_type: 'manual.trigger',
         tenant_id: 'tenant-pm-test',
-        timestamp: new Date().toISOString(),
       });
 
       expect(result.status).toBe('COMPLETED');
       expect(result.itemsProcessed).toBe(1);
-      expect(result.output.forecasts).toHaveLength(1);
-      const f = result.output.forecasts[0];
+      const output = result.output as { forecasts: PreventiveMaintenanceForecast[] };
+      expect(output.forecasts).toHaveLength(1);
+      const f = output.forecasts[0];
       expect(f.vehicleCode).toBe('Vehicle V-103');
       expect(f.recommendedSlot).toBeDefined();
       expect(f.forecastNarrative).toContain('will reach its');

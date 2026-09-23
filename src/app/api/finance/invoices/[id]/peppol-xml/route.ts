@@ -11,9 +11,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await requireAuthorizedTenant(req);
-    if (auth instanceof NextResponse) return auth;
-    const { tenantId } = auth;
+    const authz = requireAuthorizedTenant(req);
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    const { tenantId } = authz;
 
     const { id } = await params;
 
@@ -53,13 +55,13 @@ export async function GET(
           },
         },
         buyer: {
-          name: invoice.lessee?.companyName || invoice.lessee?.name || 'Valued Corporate Client',
-          trn: invoice.lessee?.trn || '100987654321000',
-          crn: invoice.lessee?.tradeLicenseNo || undefined,
+          name: invoice.lessee?.name || 'Valued Corporate Client',
+          trn: '100987654321000',
+          crn: invoice.lessee?.tradeLicense || undefined,
           address: {
             street: invoice.lessee?.address || 'Business Bay, Tower 1',
-            city: invoice.lessee?.city || 'Dubai',
-            state: invoice.lessee?.emirate || 'Dubai',
+            city: 'Dubai',
+            state: 'Dubai',
             countryCode: 'AE',
           },
           contact: {
@@ -74,10 +76,10 @@ export async function GET(
               name: l.description || 'Fleet Mobility & Transport Services',
               description: l.description || undefined,
               quantity: Number(l.quantity ?? 1),
-              unitPrice: Number(l.unitPrice ?? l.amount),
-              netAmount: Number(l.amount),
+              unitPrice: Number(l.unitAmount),
+              netAmount: Number(l.totalAmount),
               vatRatePercent: Number(invoice.vatPct ?? 5),
-              vatAmount: Number(((Number(l.amount) * (Number(invoice.vatPct ?? 5) / 100))).toFixed(2)),
+              vatAmount: Number(((Number(l.totalAmount) * (Number(invoice.vatPct ?? 5) / 100))).toFixed(2)),
               taxCategoryCode: 'S',
             }))
           : [

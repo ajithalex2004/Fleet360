@@ -14,11 +14,23 @@ export const TIER_WEIGHT_MAP: Record<PartnerPerformanceTier, number> = {
   STANDARD: 0.95,
 };
 
+interface RankableQuote {
+  totalAmount: number | string;
+  partner?: {
+    scorecard?: {
+      tier?: PartnerPerformanceTier;
+      compositeScore?: number;
+    } | null;
+  } | null;
+}
+
 export class TieredSourcingService {
   /**
    * Sort and rank partner quotations combining commercial price competitiveness with partner reliability tier
    */
-  static rankQuotes(quotes: any[]) {
+  static rankQuotes<T extends RankableQuote>(
+    quotes: T[]
+  ): Array<T & { tier: PartnerPerformanceTier; score: number; recommendationScore: number; isRecommended: boolean }> {
     if (!quotes || quotes.length === 0) return [];
 
     const minPrice = Math.min(...quotes.map((q) => Number(q.totalAmount)));

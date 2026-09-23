@@ -5,7 +5,6 @@
  * Connects VIP Transfers, Airport Meet & Greet, and Executive Chauffeur bookings to Fleet360 Exchange Core.
  */
 
-import { prisma } from '@/lib/prisma';
 import { logAudit } from '@/lib/audit';
 import { PartnerServiceDomain } from '@prisma/client';
 import {
@@ -14,6 +13,8 @@ import {
   ValidationResult,
   DomainEligibilityCriteria,
   LimousineRequirements,
+  AwardApplicationPayload,
+  ExecutionStatusEvent,
 } from './types';
 
 export class LimousineOutsourcingAdapter implements OutsourcingSourceAdapter {
@@ -52,7 +53,7 @@ export class LimousineOutsourcingAdapter implements OutsourcingSourceAdapter {
     return { isValid: errors.length === 0, errors };
   }
 
-  async buildRequirementsPayload(source: OutsourcingSource): Promise<Record<string, any>> {
+  async buildRequirementsPayload(source: OutsourcingSource): Promise<Record<string, unknown>> {
     const payload = source.domainPayload as LimousineRequirements;
     return {
       luxuryClass: payload.luxuryClass,
@@ -78,7 +79,7 @@ export class LimousineOutsourcingAdapter implements OutsourcingSourceAdapter {
     };
   }
 
-  async applyAward(award: any): Promise<void> {
+  async applyAward(award: AwardApplicationPayload): Promise<void> {
     await logAudit({
       tenantId: award.tenantId,
       entityType: 'LimousineBooking',
@@ -89,15 +90,19 @@ export class LimousineOutsourcingAdapter implements OutsourcingSourceAdapter {
     }).catch(() => {});
   }
 
-  async applyAssignment(assignment: any): Promise<void> {
+  async applyAssignment(assignment: Record<string, unknown>): Promise<void> {
     // Synchronize chauffeur and luxury vehicle details to VIP concierge
+    void assignment;
   }
 
-  async syncExecutionStatus(event: any): Promise<void> {
+  async syncExecutionStatus(event: ExecutionStatusEvent): Promise<void> {
     // Update VIP trip status
+    void event;
   }
 
   async handleCancellation(requestId: string, reason: string): Promise<void> {
     // Handle VIP cancellation
+    void requestId;
+    void reason;
   }
 }

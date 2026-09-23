@@ -253,7 +253,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
         const cfg = await loadServiceConfig(tenantId, ticket.ticket_type as TicketType);
         void logAudit({
           tenantId,
-          userId,
+          userId: userId ?? undefined,
           entityType: 'ServiceTicket',
           entityId: ticket.id,
           entityName: ticket.readable_id ?? ticket.id,
@@ -294,7 +294,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
       );
 
       void logAudit({
-        tenantId, userId, entityType: 'ServiceTicket', entityId: id,
+        tenantId, userId: userId ?? undefined, entityType: 'ServiceTicket', entityId: id,
         action: 'DELETE', details: 'Soft-deleted ticket',
       });
 

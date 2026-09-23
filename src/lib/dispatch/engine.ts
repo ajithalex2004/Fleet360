@@ -18,7 +18,7 @@ import { getEligibleCandidates, getAmbulanceEligibleCandidates } from './eligibi
 import { rankCandidates } from './scoring';
 import { attemptPreemption, ambulanceFallback } from './ambulance';
 import { notifyDriver } from './notifications';
-import type { DispatchJob, Candidate, ServiceType, DispatchPriority } from './types';
+import type { DispatchJob, Candidate, ServiceType, DispatchPriority, DispatchStatus } from './types';
 
 type Row = Record<string, unknown>;
 const n = (v: unknown) => parseFloat(String(v ?? 0)) || 0;
@@ -44,7 +44,7 @@ async function loadJob(jobId: string): Promise<DispatchJob | null> {
     bookingId:        r.booking_id ? s(r.booking_id) : undefined,
     serviceType:      s(r.service_type) as ServiceType,
     priority:         s(r.priority)     as DispatchPriority,
-    status:           s(r.status)       as any,
+    status:           s(r.status)       as DispatchStatus,
     currentAttempt:   n(r.current_attempt),
     maxAttempts:      n(r.max_attempts),
     pickupLat:        r.pickup_lat  != null ? n(r.pickup_lat)  : undefined,

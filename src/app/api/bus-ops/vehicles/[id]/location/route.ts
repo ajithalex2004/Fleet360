@@ -41,7 +41,7 @@ import {
 } from '@/lib/bus-gps';
 import { sendWhatsApp } from '@/lib/whatsapp';
 import { recordAbsence } from '@/lib/bus-ops/passenger-attendance';
-import { upsertFleetPosition } from '@/app/api/bus-ops/fleet-positions/route';
+import { upsertFleetPosition } from '@/lib/bus-ops/fleet-positions';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
@@ -342,13 +342,13 @@ async function markAbsentAtStop(
   scheduleId: string,
   stopId: string,
   occurredAt: Date,
-  tenantId: string | null,
+  tenantId: string,
 ): Promise<number> {
   const rows = await prisma.tripPassenger.findMany({
     where: {
       // tenantId is already a parameter of this helper — it was passed in and
       // then not used, so the query matched passengers across tenants.
-      ...(tenantId ? { tenantId } : {}),
+      tenantId,
       tripId: scheduleId,
       boardingStopId: stopId,
       status: 'CONFIRMED',

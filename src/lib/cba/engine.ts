@@ -13,17 +13,13 @@
  */
 
 import type { CbaRules, CbaRule, CbaRuleCategory } from './types';
-import { findRule, getRuleValue, DEFAULT_CBA_RULES } from './types';
+import { findRule, DEFAULT_CBA_RULES } from './types';
 import type { WorkRules } from '@/lib/plan/runcut';
 import { DEFAULT_WORK_RULES } from '@/lib/plan/runcut';
 import type { PrismaClient } from '@prisma/client';
 
 function n(v: number | undefined, fallback: number): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
-}
-
-function s(v: string | undefined, fallback: string): string {
-  return v && v.length > 0 ? v : fallback;
 }
 
 export function cbaToWorkRules(rules: CbaRules): WorkRules {

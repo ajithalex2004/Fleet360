@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import type { Prisma } from '@prisma/client';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
     try {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-        const booking = await tx.booking.create({ data: body });
+        const booking = await tx.booking.create({ data: body as Prisma.BookingUncheckedCreateInput });
         return NextResponse.json(booking, { status: 201 });
         } catch (e) {
         console.error('Error creating booking:', e);

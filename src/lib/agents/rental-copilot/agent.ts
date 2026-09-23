@@ -24,6 +24,7 @@
 import OpenAI from 'openai';
 import { z } from 'zod';
 import { env, hasOpenAI } from '@/lib/env';
+import type { AgentDefinition, AgentEvent, AgentRunResult } from '../types';
 
 /* ── Output schema ───────────────────────────────────────────────────────── */
 
@@ -304,3 +305,56 @@ export async function generateRentalSuggestion(brief: string): Promise<RentalCop
     };
   }
 }
+
+/* ── AgentDefinition adapter (event-driven dispatch) ─────────────────────────
+ * The REST endpoint (POST /api/rental/bookings/copilot) calls
+ * generateRentalSuggestion() directly and remains the primary way this
+ * co-pilot is used. This wrapper additionally exposes it through the
+ * generic AgentEvent/orchestrator dispatch path (registry.ts).
+ */
+
+async function runRentalCopilotEvent(event: AgentEvent): Promise<AgentRunResult> {
+  const t0 = Date.now();
+  const brief = typeof event.payload?.brief === 'string' ? event.payload.brief : '';
+
+  const result = await generateRentalSuggestion(brief);
+
+  if (!result.ok) {
+    return {
+      agentId: event.agent_id,
+      tenantId: event.tenant_id,
+      eventType: event.event_type,
+      entityId: event.entity_id,
+      status: 'FAILED',
+      durationMs: Date.now() - t0,
+      itemsProcessed: 0,
+      actionsCreated: 0,
+      output: result.detail ?? null,
+      error: result.error,
+    };
+  }
+
+  return {
+    agentId: event.agent_id,
+    tenantId: event.tenant_id,
+    eventType: event.event_type,
+    entityId: event.entity_id,
+    status: 'COMPLETED',
+    durationMs: result.durationMs,
+    itemsProcessed: 1,
+    actionsCreated: 0, // advisory suggestion only — nothing persisted or auto-executed here
+    output: result.suggestion,
+  };
+}
+
+export const RENTAL_COPILOT_AGENT: AgentDefinition = {
+  id: 'rental-copilot',
+  name: 'RAC Booking Co-pilot',
+  description: 'Turns a natural-language rental brief (EN/AR) into a structured, priced RAC booking proposal for staff to review before applying it to a new booking.',
+  version: '1.0.0',
+  agentType: 'INTERACTIVE_COPILOT',
+  autonomyLevel: 'L1',
+  subscribedEvents: ['rental.copilot_requested', 'manual.trigger'],
+  supportsEntityScan: false,
+  run: runRentalCopilotEvent,
+};

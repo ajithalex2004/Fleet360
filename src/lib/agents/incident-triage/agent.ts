@@ -186,9 +186,11 @@ async function runIncidentTriage(event: AgentEvent): Promise<AgentRunResult> {
 
         recommendation = aiResp.content;
         aiCount++;
-        totalInputTokens += aiResp.telemetry.inputTokens;
-        totalOutputTokens += aiResp.telemetry.outputTokens;
-        totalCostAed += aiResp.telemetry.costAed;
+        // AgentRunTelemetry's token/cost fields are all optional —
+        // default to 0 when the gateway call didn't report them.
+        totalInputTokens += aiResp.telemetry.inputTokens ?? 0;
+        totalOutputTokens += aiResp.telemetry.outputTokens ?? 0;
+        totalCostAed += aiResp.telemetry.costAed ?? 0;
       }
 
       // 6. Upsert assessment

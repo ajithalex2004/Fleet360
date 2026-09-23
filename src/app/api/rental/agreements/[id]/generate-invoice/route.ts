@@ -21,6 +21,11 @@ import { calculateRate, type RateRequest } from '@/lib/rental-rate-engine';
 import { getEventBus }               from '@/events/event-bus';
 import { RENTAL_INVOICE_GENERATED }  from '@/events/registry';
 
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error ? e.message : fallback;
+}
+
+
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
 
@@ -246,7 +251,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         return NextResponse.json({ invoice: invoice[0], lineItems }, { status: 201 });
         } catch (e) {
         console.error('Generate invoice error:', e);
-        return NextResponse.json({ error: e.message ?? 'Failed to generate invoice' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(e, 'Failed to generate invoice') }, { status: 500 });
       }
   });
 }

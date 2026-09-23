@@ -114,16 +114,25 @@ describe('Phase 7: Driver Coaching & Demand Forecasting Loop Elimination', () =>
       const { prisma } = await import('@/lib/prisma');
       const chatSpy = vi.spyOn(aiGateway, 'chat').mockResolvedValueOnce({
         content: 'AI Custom Coaching: Focus on speed control and avoiding harsh braking.',
-        modelUsed: 'gpt-4o-mini',
+        model: 'gpt-4o-mini',
         provider: 'openai',
-        capability: 'ECONOMY_TEXT',
+        capabilityAlias: 'ECONOMY_TEXT',
+        inputTokens: 120,
+        outputTokens: 50,
+        cachedTokens: 0,
+        isCacheHit: false,
+        fromFallback: false,
+        costUsd: 0.0001,
+        costAed: 0.000367,
+        costAvoidedUsd: 0,
+        costAvoidedAed: 0,
         telemetry: {
+          modelAlias: 'ECONOMY_TEXT',
           inputTokens: 120,
           outputTokens: 50,
           cachedTokens: 0,
           costUsd: 0.0001,
           costAed: 0.000367,
-          durationMs: 250,
         },
       });
 
@@ -169,16 +178,25 @@ describe('Phase 7: Driver Coaching & Demand Forecasting Loop Elimination', () =>
       const { prisma } = await import('@/lib/prisma');
       const chatSpy = vi.spyOn(aiGateway, 'chat').mockResolvedValueOnce({
         content: 'Macro fleet demand is projected to increase by 12% next week.',
-        modelUsed: 'gpt-4o-mini',
+        model: 'gpt-4o-mini',
         provider: 'openai',
-        capability: 'ECONOMY_TEXT',
+        capabilityAlias: 'ECONOMY_TEXT',
+        inputTokens: 80,
+        outputTokens: 30,
+        cachedTokens: 0,
+        isCacheHit: false,
+        fromFallback: false,
+        costUsd: 0.00008,
+        costAed: 0.00029,
+        costAvoidedUsd: 0,
+        costAvoidedAed: 0,
         telemetry: {
+          modelAlias: 'ECONOMY_TEXT',
           inputTokens: 80,
           outputTokens: 30,
           cachedTokens: 0,
           costUsd: 0.00008,
           costAed: 0.00029,
-          durationMs: 180,
         },
       });
 

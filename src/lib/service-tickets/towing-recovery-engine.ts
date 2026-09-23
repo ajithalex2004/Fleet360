@@ -150,8 +150,13 @@ export async function getRecoveryAndReplacementOptions(
   if (!ticket) return null;
 
   const customFields = (ticket.custom_fields || {}) as Record<string, unknown>;
-  const towingDetails = customFields.towingDispatch as Record<string, unknown> | undefined;
-  const replacementDetails = customFields.replacementProvision as Record<string, unknown> | undefined;
+  // custom_fields is an untyped jsonb blob; dispatchTowingVendor() and the
+  // replacement-provisioning step below both write a real, wider object
+  // (with extra bookkeeping fields like vendorId/dispatchedBy/domainAction)
+  // than RecoveryOptionsData exposes — narrow to exactly what that return
+  // type declares rather than passing the untyped blob through.
+  const towingDetails = customFields.towingDispatch as RecoveryOptionsData['towingDispatchDetails'];
+  const replacementDetails = customFields.replacementProvision as RecoveryOptionsData['replacementDetails'];
 
   // 2. Fetch Grounded Vehicle Details
   let vehiclePlate: string | null = null;

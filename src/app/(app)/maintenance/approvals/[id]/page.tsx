@@ -8,12 +8,6 @@ import {
     Vehicle,
     Garage,
     MaintenanceStatus,
-    MaintenancePriority,
-    MaintenanceType,
-    Attachment,
-    AttachmentType,
-    Quotation,
-    QuotationStatus
 } from '@/types/maintenance';
 import {
     getMaintenanceRequests,
@@ -22,126 +16,6 @@ import {
     updateMaintenanceRequest
 } from '@/services/mockData';
 import StatusBadge from '@/components/ui/StatusBadge';
-import { getNextStatuses } from '@/services/workflowStateMachine-client';
-
-// Comprehensive Maintenance Jobs Database
-const MAINTENANCE_JOBS_DATABASE = {
-    [MaintenanceType.PREVENTIVE]: [
-        'Oil Change',
-        'Oil Filter Replacement',
-        'Air Filter Replacement',
-        'Cabin Filter Replacement',
-        'Fuel Filter Replacement',
-        'Tire Rotation',
-        'Tire Pressure Check',
-        'Brake Inspection',
-        'Brake Pad Replacement',
-        'Brake Fluid Change',
-        'Coolant Flush',
-        'Transmission Fluid Change',
-        'Power Steering Fluid Check',
-        'Battery Check',
-        'Spark Plug Replacement',
-        'Timing Belt Replacement',
-        'Serpentine Belt Replacement',
-        'Wiper Blade Replacement',
-        'Headlight Alignment',
-        'Wheel Alignment',
-        'Wheel Balancing'
-    ],
-    [MaintenanceType.CORRECTIVE]: [
-        'Engine Repair',
-        'Engine Overhaul',
-        'Cylinder Head Repair',
-        'Piston Replacement',
-        'Valve Adjustment',
-        'Timing Chain Replacement',
-        'Transmission Repair',
-        'Transmission Rebuild',
-        'Clutch Replacement',
-        'Gearbox Repair',
-        'Differential Repair',
-        'Suspension Repair',
-        'Shock Absorber Replacement',
-        'Strut Replacement',
-        'Control Arm Replacement',
-        'Ball Joint Replacement',
-        'Tie Rod Replacement',
-        'Brake System Repair',
-        'Brake Caliper Replacement',
-        'Brake Rotor Replacement',
-        'ABS System Repair',
-        'Electrical System Repair',
-        'Alternator Replacement',
-        'Starter Motor Replacement',
-        'Battery Replacement',
-        'Wiring Harness Repair',
-        'Fuel Pump Replacement',
-        'Fuel Injector Cleaning',
-        'Radiator Repair',
-        'Water Pump Replacement',
-        'Thermostat Replacement',
-        'AC Compressor Replacement',
-        'AC Condenser Replacement',
-        'Heater Core Replacement',
-        'Exhaust System Repair',
-        'Muffler Replacement',
-        'Catalytic Converter Replacement',
-        'Body Work',
-        'Dent Removal',
-        'Paint Touch-up',
-        'Bumper Replacement',
-        'Windshield Replacement',
-        'Door Panel Replacement',
-        'Upholstery Repair'
-    ],
-    [MaintenanceType.EMERGENCY]: [
-        'Breakdown Assistance',
-        'Towing Service',
-        'Flat Tire Repair',
-        'Tire Replacement',
-        'Battery Jump Start',
-        'Battery Replacement',
-        'Fuel Delivery',
-        'Lockout Service',
-        'Accident Recovery',
-        'Engine Overheating',
-        'Coolant Leak Repair',
-        'Oil Leak Repair',
-        'Brake Failure Repair',
-        'Steering Failure Repair',
-        'Electrical Failure Repair'
-    ],
-    [MaintenanceType.INSPECTION]: [
-        'Annual Inspection',
-        'Pre-Purchase Inspection',
-        'Safety Inspection',
-        'Emissions Test',
-        'Brake System Inspection',
-        'Suspension Inspection',
-        'Tire Inspection',
-        'Exhaust System Inspection',
-        'Electrical System Inspection',
-        'Engine Diagnostic',
-        'Transmission Diagnostic',
-        'AC System Inspection',
-        'Fluid Level Check',
-        'Belt and Hose Inspection'
-    ],
-    [MaintenanceType.BREAKDOWN]: [
-        'Breakdown Assistance',
-        'Towing Service',
-        'Flat Tyre Repair',
-        'Tyre Replacement',
-        'Battery Jump Start',
-        'Battery Replacement',
-        'Fuel Delivery',
-        'Lockout Service',
-        'Accident Recovery',
-        'Emergency Engine Repair',
-        'Roadside Assistance'
-    ]
-};
 
 export default function ApprovalDetailsPage() {
     const router = useRouter();
@@ -152,18 +26,8 @@ export default function ApprovalDetailsPage() {
     const [garages, setGarages] = useState<Garage[]>([]);
     const [loading, setLoading] = useState(true);
 
-    // Edit Mode State (For Maintenance View)
-    const [isEditMode, setIsEditMode] = useState(false);
-    const [editedFields, setEditedFields] = useState<Partial<MaintenanceRequest>>({});
-    const [availableJobs, setAvailableJobs] = useState<string[]>([]);
-    const [jobSearchQuery, setJobSearchQuery] = useState('');
-
     // RFQ State
     const [candidateGarageIds, setCandidateGarageIds] = useState<string[]>([]);
-
-    // Attachment State
-    const [selectedAttachmentType, setSelectedAttachmentType] = useState<AttachmentType>(AttachmentType.INVOICE);
-    const [showAttachmentModal, setShowAttachmentModal] = useState(false);
 
     // View Mode State - Default to APPROVER for this page
     const [approvalViewMode, setApprovalViewMode] = useState<'MAINTENANCE' | 'APPROVER'>('APPROVER');
@@ -207,137 +71,8 @@ export default function ApprovalDetailsPage() {
         fetchData();
     }, [id]);
 
-    const handleStatusUpdate = async (newStatus: MaintenanceStatus) => {
-        if (!request) return;
-        try {
-            await updateMaintenanceRequest(request.id, { status: newStatus });
-            setRequest({ ...request, status: newStatus });
-            alert(`Status updated to ${newStatus}`);
-        } catch (error) {
-            console.error('Failed to update status', error);
-            alert('Failed to update status');
-        }
-    };
-
-    // ... (Maintenance View Handlers) ...
-    const handleEditMode = () => {
-        if (!request) return;
-        setIsEditMode(true);
-        setEditedFields({
-            odometer: request.odometer,
-            maintenanceType: request.maintenanceType,
-            priority: request.priority,
-            description: request.description,
-            maintenanceJobs: request.maintenanceJobs,
-            expectedEndDate: request.expectedEndDate
-        });
-        // Initialize available jobs if maintenance type is set
-        if (request.maintenanceType) {
-            const jobs = MAINTENANCE_JOBS_DATABASE[request.maintenanceType as MaintenanceType] || [];
-            setAvailableJobs(jobs);
-        }
-    };
-
-    const handleSaveChanges = async () => {
-        if (!request) return;
-        try {
-            await updateMaintenanceRequest(request.id, editedFields);
-            setRequest({ ...request, ...editedFields });
-            setIsEditMode(false);
-            setEditedFields({});
-            alert('Changes saved successfully');
-        } catch (error) {
-            console.error('Failed to save changes', error);
-            alert('Failed to save changes');
-        }
-    };
-
-    const handleCancelEdit = () => {
-        setIsEditMode(false);
-        setEditedFields({});
-    };
-
-    const handleFieldChange = (field: keyof MaintenanceRequest, value: any) => {
-        setEditedFields(prev => {
-            const updated = { ...prev, [field]: value };
-            // Auto-calculate total cost when parts, labor, or other costs change
-            if (field === 'actualPartsCost' || field === 'actualLaborCost' || field === 'actualOtherCost') {
-                const partsCost = field === 'actualPartsCost' ? value : (updated.actualPartsCost || request?.actualPartsCost || 0);
-                const laborCost = field === 'actualLaborCost' ? value : (updated.actualLaborCost || request?.actualLaborCost || 0);
-                const otherCost = field === 'actualOtherCost' ? value : (updated.actualOtherCost || request?.actualOtherCost || 0);
-                updated.actualCost = partsCost + laborCost + otherCost;
-            }
-            return updated;
-        });
-        // Auto-populate jobs when maintenance type changes
-        if (field === 'maintenanceType' && value) {
-            const jobs = MAINTENANCE_JOBS_DATABASE[value as MaintenanceType] || [];
-            setAvailableJobs(jobs);
-            setEditedFields(prev => ({ ...prev, maintenanceJobs: [] }));
-        }
-    };
-
-    const handleJobToggle = (job: string) => {
-        const currentJobs = editedFields.maintenanceJobs || [];
-        const newJobs = currentJobs.includes(job)
-            ? currentJobs.filter(j => j !== job)
-            : [...currentJobs, job];
-        setEditedFields(prev => ({ ...prev, maintenanceJobs: newJobs }));
-    };
-
-    const getFilteredJobs = () => {
-        if (!jobSearchQuery) return availableJobs;
-        return availableJobs.filter(job =>
-            job.toLowerCase().includes(jobSearchQuery.toLowerCase())
-        );
-    };
-
-    const handleGarageToggle = (garageId: string) => {
-        setCandidateGarageIds(prev => {
-            const ids = prev.includes(garageId)
-                ? prev.filter(id => id !== garageId)
-                : [...prev, garageId];
-            return ids;
-        });
-    };
-
     // Quotation Management State
     const [quotations, setQuotations] = useState<{ [garageId: string]: { amount: number, attachmentUrl?: string, attachmentName?: string, estimatedDate?: string } }>({});
-
-    const handleQuotationChange = (garageId: string, field: 'amount' | 'attachmentUrl' | 'attachmentName' | 'estimatedDate', value: any) => {
-        setQuotations(prev => ({
-            ...prev,
-            [garageId]: {
-                ...prev[garageId],
-                [field]: value
-            }
-        }));
-    };
-
-    const handleSaveQuotation = async (garageId: string) => {
-        // ... (Keep existing logic if needed for read-only view or edits)
-    };
-
-    const handleSendRFQ = async () => {
-        // ... (Keep existing logic)
-    };
-
-    const handleSendForApproval = async () => {
-        // ... (Keep existing logic)
-    };
-
-    const handleAddAttachment = () => {
-        setShowAttachmentModal(true);
-    };
-
-    const handleFileSelect = () => {
-        // ... (Keep existing logic)
-    };
-
-    const handleDeleteAttachment = async (attId: string) => {
-        // ... (Keep existing logic)
-    };
-
 
     // Approval Workflow State
     const [selectedGarageForApproval, setSelectedGarageForApproval] = useState<string | null>(null);
@@ -417,9 +152,6 @@ export default function ApprovalDetailsPage() {
 
     if (loading) return <div className="p-8 text-center text-[var(--text-faint)]">Loading details...</div>;
     if (!request) return <div className="p-8 text-center text-[var(--text-faint)]">Request not found.</div>;
-
-    // Get next valid statuses from workflow
-    const nextStatuses = getNextStatuses(request.status);
 
     return (
         <div className="mx-auto max-w-5xl pb-12 space-y-8">
@@ -735,7 +467,7 @@ export default function ApprovalDetailsPage() {
                     <div className="bg-[var(--bg-surface)] rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
                         <h3 className="text-lg font-bold text-[var(--text-main)]">Reject Estimate</h3>
                         <p className="text-sm text-[var(--text-faint)]">
-                            Are you sure you want to reject all estimates? This will return the request to the "Under Estimation" stage.
+                            Are you sure you want to reject all estimates? This will return the request to the &ldquo;Under Estimation&rdquo; stage.
                         </p>
                         <div>
                             <label className="block text-xs font-medium text-[var(--text-faint)] uppercase mb-1">Reason (Optional)</label>

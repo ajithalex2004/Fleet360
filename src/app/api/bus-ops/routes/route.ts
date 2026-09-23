@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-cache';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import type { Prisma } from '@prisma/client';
 const CACHE_TAG = 'bus-ops:routes';
 
 // Runs inside unstable_cache (via cacheRead), which strips Next.js request
@@ -79,7 +80,7 @@ export async function POST(req: NextRequest) {
             stops: stops?.length
               ? { create: stops.map((s: any, i: number) => ({ ...s, sequence: s.sequence ?? i + 1 })) }
               : undefined,
-          },
+          } as Prisma.BusRouteUncheckedCreateInput,
           include: { stops: { orderBy: { sequence: 'asc' } } },
         });
         revalidateCache([CACHE_TAG]);

@@ -5,6 +5,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import type { Prisma } from '@prisma/client';
 export async function GET(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
     try {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-        const performance = await tx.driverPerformance.create({ data: body });
+        const performance = await tx.driverPerformance.create({ data: body as Prisma.DriverPerformanceUncheckedCreateInput });
         return NextResponse.json(performance, { status: 201 });
         } catch (e) {
         console.error('Error creating performance:', e);

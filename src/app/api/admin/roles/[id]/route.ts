@@ -1,12 +1,19 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { revalidateCache } from '@/lib/server-cache';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const CACHE_TAG = 'roles:all';
+
+// `catch (e)` is typed `unknown` under strict mode — `e?.message` doesn't
+// compile without narrowing first.
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error && e.message ? e.message : fallback;
+}
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -52,7 +59,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     return NextResponse.json(role);
   } catch (e) {
     console.error('PATCH /api/admin/roles/[id] error:', e);
-    return NextResponse.json({ error: e?.message ?? 'Failed to update role' }, { status: 500 });
+    return NextResponse.json({ error: errorMessage(e, 'Failed to update role') }, { status: 500 });
   }
 }
 
@@ -74,12 +81,15 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
     return NextResponse.json({ success: true });
     } catch (e) {
     console.error('DELETE /api/admin/roles/[id] error:', e);
-    if (e?.code === 'P2003' || e?.code === 'P2014') {
+    if (
+      e instanceof Prisma.PrismaClientKnownRequestError &&
+      (e.code === 'P2003' || e.code === 'P2014')
+    ) {
       return NextResponse.json(
         { error: 'This role is assigned to users. Remove those assignments first before deleting.' },
         { status: 409 }
       );
     }
-    return NextResponse.json({ error: e?.message ?? 'Failed to delete role' }, { status: 500 });
+    return NextResponse.json({ error: errorMessage(e, 'Failed to delete role') }, { status: 500 });
   }
 }

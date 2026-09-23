@@ -45,9 +45,14 @@ export async function GET(req: NextRequest) {
           where: {
             gpsLat: { not: null },
             gpsLng: { not: null },
+            // BusRoute.tenantId is a required (non-nullable) column — there's
+            // no such thing as a tenant-less "global" route, so the
+            // `{ tenantId: null }` branch below could never match anything
+            // and Prisma rejects it outright (null isn't a valid filter
+            // value for a required String field).
             route: {
               deletedAt: null,
-              OR: [{ tenantId }, { tenantId: null }],
+              tenantId,
             },
           },
           select: {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { SERVICE_MODULE_MAP } from '@/app/booking-portal/page';
+import { SERVICE_MODULE_MAP } from '@/lib/booking-portal/service-module-map';
 
 describe('Booking Portal Dynamic Domain Filtering', () => {
   const ALL_SERVICE_CARDS = [

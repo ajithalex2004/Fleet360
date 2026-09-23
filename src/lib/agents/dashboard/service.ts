@@ -8,8 +8,41 @@
 
 import { prisma } from '@/lib/prisma';
 import { ensureAgentSchema } from '../schema';
-import { policyService, TenantPolicy, ApprovalItem } from '../governance';
+import { policyService, TenantPolicy } from '../governance';
 import { routingIntelligence } from '@/lib/routing/intelligence-service';
+
+interface RunStatsRow {
+  totalRuns: number;
+  successfulRuns: number;
+  failedRuns: number;
+  totalTokens: bigint;
+  totalCostUsd: number;
+  totalCostAed: number;
+  totalAvoidedCostAed: number;
+}
+
+interface AgentRunAggregateRow {
+  agentId: string;
+  totalRuns: number;
+  successfulRuns: number;
+  avgDurationMs: number;
+  totalCostAed: number;
+  totalAvoidedCostAed: number;
+  lastRunAt: string | null;
+}
+
+interface ApprovalQueueRow {
+  pendingCount: number;
+  approvedCount: number;
+  rejectedCount: number;
+  totalPendingFinancialImpactAed: number;
+}
+
+interface EvaluationMetricsRow {
+  avgScore: number;
+  totalEvaluations: number;
+  lastRecordedAt: string | null;
+}
 
 export interface DashboardRoiSummary {
   totalAgentRuns: number;
@@ -91,7 +124,7 @@ export class AIDashboardService {
     let totalAvoidedCostAed = 0;
     let totalAvoidedCostUsd = 0;
 
-    const runStats = await prisma.$queryRawUnsafe<any[]>(
+    const runStats = await prisma.$queryRawUnsafe<RunStatsRow[]>(
       `SELECT 
          COUNT(*)::int AS "totalRuns",
          COUNT(CASE WHEN status = 'SUCCESS' OR status = 'COMPLETED' THEN 1 END)::int AS "successfulRuns",
@@ -133,7 +166,7 @@ export class AIDashboardService {
       : totalAvoidedCostAed > 0 ? 100.0 : 1.0;
 
     // 4. Per-Agent Breakdown
-    const agentRows = await prisma.$queryRawUnsafe<any[]>(
+    const agentRows = await prisma.$queryRawUnsafe<AgentRunAggregateRow[]>(
       `SELECT 
          agent_id AS "agentId",
          COUNT(*)::int AS "totalRuns",
@@ -182,7 +215,7 @@ export class AIDashboardService {
     ];
 
     // 6. Approval Queue Summary
-    const approvalRows = await prisma.$queryRawUnsafe<any[]>(
+    const approvalRows = await prisma.$queryRawUnsafe<ApprovalQueueRow[]>(
       `SELECT 
          COUNT(CASE WHEN status = 'PENDING' THEN 1 END)::int AS "pendingCount",
          COUNT(CASE WHEN status = 'APPROVED' THEN 1 END)::int AS "approvedCount",
@@ -211,7 +244,7 @@ export class AIDashboardService {
     }
 
     // 7. Evaluation & Benchmark Quality Summary
-    const evalRows = await prisma.$queryRawUnsafe<any[]>(
+    const evalRows = await prisma.$queryRawUnsafe<EvaluationMetricsRow[]>(
       `SELECT 
          COALESCE(AVG(metric_value), 0.95)::float8 AS "avgScore",
          COUNT(*)::int AS "totalEvaluations",

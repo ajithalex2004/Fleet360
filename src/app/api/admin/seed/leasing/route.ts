@@ -2,20 +2,24 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
-import { randomUUID } from 'crypto';
+import { withPlatformAdmin } from '@/lib/rls';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 function addMonths(d: Date, m: number) { const r = new Date(d); r.setMonth(r.getMonth() + m); return r; }
 function ago(days: number) { return new Date(Date.now() - days * 86400000); }
+
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error && e.message ? e.message : fallback;
+}
+function errorStack(e: unknown): string | undefined {
+  return e instanceof Error ? e.stack : undefined;
+}
 
 export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
-
   // The leasing demo seed touches every leasing table (customer hierarchy,
   // customers, lessees, contracts, payments, fines, fuel, insurance,
   // mileage, receipts, renewals, credit). Every one of these is
@@ -73,8 +77,19 @@ export async function POST(req: NextRequest) {
     const units = unitDefs;
     results.hierarchy = regions.length + depts.length + units.length;
 
-    //  2. UAE Customers + Linked Lessees 
-    const customerDefs = [
+    //  2. UAE Customers + Linked Lessees
+    interface SeedCustomerDef {
+      id: string; code: string; type: string; nameEn: string;
+      email: string; mobile: string; accountCode: string;
+      tradeLicense?: string; city: string; state: string;
+      creditLimit: number; creditDays: number; regionId: string; departmentId: string; unitId?: string;
+      taxReg: string; priority: string; contactPerson: string;
+      contactPhone: string; contactEmail: string;
+      billingCycle: string; invoiceDelivery: string;
+      allowedWaiting: number; cancellationMin: number; preferredChannel: string;
+      notifEmail: string; bookingNotifications: boolean;
+    }
+    const customerDefs: SeedCustomerDef[] = [
       {
         id: 'cust-slb', code: 'CORP0001', type: 'CORPORATE', nameEn: 'Schlumberger Middle East',
         email: 'info@slb.com', mobile: '554321100', accountCode: 'SLB001',
@@ -162,7 +177,7 @@ export async function POST(req: NextRequest) {
       const nameEn = cd.nameEn.replace(/'/g, "''");
       const tradeLicense = (cd.tradeLicense ?? '').replace(/'/g, "''");
       const contactPerson = cd.contactPerson.replace(/'/g, "''");
-      const unitIdSql = (cd as any).unitId ? "'" + (cd as any).unitId + "'" : 'NULL';
+      const unitIdSql = cd.unitId ? "'" + cd.unitId + "'" : 'NULL';
       const insertSql = "INSERT INTO customers (id, created_at, updated_at, customer_code, customer_type, name_en," +
         " email, mobile_number, mobile_country_code, account_code, trade_license," +
         " city, state, country, credit_limit, credit_days," +
@@ -188,9 +203,6 @@ export async function POST(req: NextRequest) {
         "true, false, 'ACTIVE'" +
         ") ON CONFLICT (id) DO NOTHING";
       await prisma.$executeRawUnsafe(insertSql);
-      const selectSql = "SELECT id FROM customers WHERE id = '" + cd.id + "'";
-      const custRows = await prisma.$queryRawUnsafe(selectSql);
-      const customer = (custRows as any[])[0];
       customerIds.push(cd.id);
       custCount++;
 
@@ -236,7 +248,7 @@ export async function POST(req: NextRequest) {
           id: inq.id, inquiryNumber: `INQ-${inq.id.slice(-3).toUpperCase()}`,
           customerName: inq.name, companyName: inq.name,
           vehicleType: inq.vehicleType, vehicleCount: inq.count,
-          leaseType: inq.type as any, durationMonths: inq.duration,
+          leaseType: inq.type, durationMonths: inq.duration,
           startDate: addMonths(new Date(), 1),
           requiresInsurance: true, requiresMaintenance: true, requiresDriver: false,
           status: inq.status,
@@ -285,11 +297,11 @@ export async function POST(req: NextRequest) {
           id: q.id,
           quotationNumber: `QUO-${q.id.slice(-3).toUpperCase()}`,
           lesseeId: q.lesseeId,
-          leaseType: q.leaseType as any,
+          leaseType: q.leaseType,
           durationMonths: q.duration,
           startDate: q.startDate,
           endDate,
-          vehicleType: q.vehicleType as any,
+          vehicleType: q.vehicleType,
           vehicleCount: q.vehicleCount,
           baseMonthlyRate: q.baseMonthlyRate,
           insuranceCost: q.insuranceCost || null,
@@ -352,7 +364,7 @@ export async function POST(req: NextRequest) {
     let contCount = 0;
     for (const cd of contractDefs) {
       const endDate = addMonths(cd.startDate, cd.duration);
-      const contract = await prisma.leaseContract2.upsert({
+      await prisma.leaseContract2.upsert({
         where: { id: cd.id },
         create: {
           // TODO: read tenantId from request headers via getTenantContext()
@@ -362,7 +374,7 @@ export async function POST(req: NextRequest) {
           agreementType: 'INDIVIDUAL',
           lesseeId: cd.lesseeId,
           quotationId: cd.quotationId ?? null,
-          leaseType: cd.leaseType as any,
+          leaseType: cd.leaseType,
           startDate: cd.startDate,
           endDate,
           monthlyRate: cd.monthlyRate,
@@ -382,6 +394,8 @@ export async function POST(req: NextRequest) {
       await prisma.leaseContractVehicle.upsert({
         where: { id: `cv-${cd.id}` },
         create: {
+          // TODO: read tenantId from request headers via getTenantContext()
+          tenantId: '',
           id: `cv-${cd.id}`, contractId: cd.id,
           vehicleType: cd.vehicleType,
           make: cd.vehicleType === 'SEDAN' ? 'Toyota' : cd.vehicleType === 'SUV' ? 'Nissan' : cd.vehicleType === 'TRUCK' ? 'Isuzu' : 'Ford',
@@ -426,9 +440,11 @@ export async function POST(req: NextRequest) {
     ];
     let fineCount = 0;
     for (const f of finesDefs) {
-      await (prisma as any).leaseTrafficFine.upsert({
+      await prisma.leaseTrafficFine.upsert({
         where: { id: f.id },
         create: {
+          // TODO: read tenantId from request headers via getTenantContext()
+          tenantId: '',
           id: f.id, contractId: f.contractId, violationDate: ago(f.daysAgo),
           violationType: f.type, authority: f.auth, location: f.loc,
           fineAmount: f.amount, discountAmount: f.disc, finalAmount: f.amount - f.disc,
@@ -450,9 +466,11 @@ export async function POST(req: NextRequest) {
     ];
     let fuelCount = 0;
     for (const f of fuelDefs) {
-      await (prisma as any).leaseFuelLog.upsert({
+      await prisma.leaseFuelLog.upsert({
         where: { id: f.id },
         create: {
+          // TODO: read tenantId from request headers via getTenantContext()
+          tenantId: '',
           id: f.id, contractId: f.contractId, fuelDate: ago(f.daysAgo),
           liters: f.liters, costPerLiter: f.cost, totalCost: f.liters * f.cost,
           station: f.station, mileageAtFuel: f.mileage, currency: 'AED',
@@ -474,9 +492,11 @@ export async function POST(req: NextRequest) {
     ];
     let insCount = 0;
     for (const ins of insuranceDefs) {
-      await (prisma as any).leaseInsurancePolicy.upsert({
+      await prisma.leaseInsurancePolicy.upsert({
         where: { id: ins.id },
         create: {
+          // TODO: read tenantId from request headers via getTenantContext()
+          tenantId: '',
           id: ins.id, contractId: ins.contractId,
           policyNo: `POL-${ins.id.slice(-3).toUpperCase()}-2024`,
           insurer: ins.insurer, coverageType: ins.coverage,
@@ -501,9 +521,11 @@ export async function POST(req: NextRequest) {
     ];
     let mileCount = 0;
     for (const m of mileageDefs) {
-      await (prisma as any).leaseMileageReading.upsert({
+      await prisma.leaseMileageReading.upsert({
         where: { id: m.id },
         create: {
+          // TODO: read tenantId from request headers via getTenantContext()
+          tenantId: '',
           id: m.id, contractId: m.contractId, readingDate: ago(m.daysAgo),
           mileage: m.mileage, readingType: m.type, source: 'MANUAL', capturedBy: 'System',
         },
@@ -529,8 +551,8 @@ export async function POST(req: NextRequest) {
           // TODO: read tenantId from request headers via getTenantContext()
           tenantId: '',
           id: r.id, contractId: r.contractId, receiptNumber: `RCT-${r.id.slice(-3).toUpperCase()}`,
-          paymentType: r.type as any, amount: r.amount, currency: 'AED',
-          receivedDate: ago(r.daysAgo), paymentMethod: r.method as any,
+          paymentType: r.type, amount: r.amount, currency: 'AED',
+          receivedDate: ago(r.daysAgo), paymentMethod: r.method,
           bankRef: r.method === 'BANK_TRANSFER' ? r.ref : null,
           chequeNo: r.method === 'CHEQUE' ? r.ref : null,
           receivedBy: 'Finance Team',
@@ -542,9 +564,11 @@ export async function POST(req: NextRequest) {
     results.receipts = rcptCount;
 
     //  11. Lease Renewals 
-    await (prisma as any).leaseRenewal.upsert({
+    await prisma.leaseRenewal.upsert({
       where: { id: 'rnw-001' },
       create: {
+        // TODO: read tenantId from request headers via getTenantContext()
+        tenantId: '',
         id: 'rnw-001', renewalNo: 'RNW-001', originalContractId: 'cont-004',
         renewalType: 'SAME_TERMS',
         proposedStartDate: addMonths(ago(60), 12),
@@ -567,9 +591,11 @@ export async function POST(req: NextRequest) {
     ];
     let caCount = 0;
     for (const ca of creditDefs) {
-      await (prisma as any).leaseCreditAssessment.upsert({
+      await prisma.leaseCreditAssessment.upsert({
         where: { id: ca.id },
         create: {
+          // TODO: read tenantId from request headers via getTenantContext()
+          tenantId: '',
           id: ca.id, lesseeId: ca.lesseeId,
           assessmentDate: ago(30), creditLimit: ca.limit, creditScore: ca.score,
           riskRating: ca.risk, annualRevenue: ca.limit * 50, yearsInBusiness: 10,
@@ -592,7 +618,7 @@ export async function POST(req: NextRequest) {
     });
     } catch (e) {
     console.error('Seed error:', e);
-    return NextResponse.json({ error: e?.message ?? 'Seed failed', stack: e?.stack }, { status: 500 });
+    return NextResponse.json({ error: errorMessage(e, 'Seed failed'), stack: errorStack(e) }, { status: 500 });
   }
   });
 }

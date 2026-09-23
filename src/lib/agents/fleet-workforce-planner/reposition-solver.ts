@@ -53,8 +53,8 @@ export class RepositionSolver {
           let durationMin = 25;
           try {
             const travel = await routingIntelligence.getTravelTime(
-              { lat: source.lat, lng: source.lng },
-              { lat: target.lat, lng: target.lng },
+              { latitude: source.lat, longitude: source.lng },
+              { latitude: target.lat, longitude: target.lng },
             );
             distanceKm = travel.distanceKm;
             durationMin = travel.durationMin;

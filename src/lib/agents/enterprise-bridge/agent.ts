@@ -20,11 +20,27 @@ import {
 } from '../types';
 import { ensureAgentSchema } from '../schema';
 import { policyService } from '../governance';
-import { BaseEnterpriseAdapter } from './adapters/base-adapter';
+import { BaseEnterpriseAdapter, CanonicalPayload } from './adapters/base-adapter';
 import { GenericRestAdapter } from './adapters/rest-adapter';
 import { SapOdataAdapter } from './adapters/sap-odata-adapter';
 import { OdooJsonRpcAdapter } from './adapters/odoo-adapter';
 import { validateCanonicalEntity } from './canonical-models';
+
+/** `enterprise_connections` has no Prisma model — it's raw-SQL only. */
+interface RawEnterpriseConnectionRow {
+  id: string;
+  tenant_id: string;
+  system_name: string;
+  system_type: string;
+  base_url: string;
+  auth_type: string;
+  auth_credentials: unknown;
+  headers: unknown;
+  field_mappings: unknown;
+  is_active: boolean;
+  rate_limit_per_min: number | null;
+  health_status: string;
+}
 
 /**
  * Factory to instantiate the appropriate protocol adapter.
@@ -52,7 +68,7 @@ export async function executeOutboundPushWithRetry(
   adapter: BaseEnterpriseAdapter,
   entityType: CanonicalEntityType,
   entityId: string,
-  payload: any,
+  payload: CanonicalPayload,
   maxRetries = 3
 ): Promise<EnterpriseSyncResult> {
   let lastResult: EnterpriseSyncResult | null = null;
@@ -78,8 +94,8 @@ export async function executeOutboundPushWithRetry(
 
   return {
     syncId: `SYNC-ERR-${Date.now()}`,
-    connectionId: (adapter as any).connection.id,
-    systemType: (adapter as any).connection.systemType,
+    connectionId: (adapter as unknown as { connection: EnterpriseConnectionConfig }).connection.id,
+    systemType: (adapter as unknown as { connection: EnterpriseConnectionConfig }).connection.systemType,
     entityType,
     status: 'FAILED',
     durationMs: 0,
@@ -94,12 +110,16 @@ async function runEnterpriseBridge(event: AgentEvent): Promise<AgentRunResult> {
   await ensureAgentSchema();
 
   const tenantId = event.tenant_id || 'default';
-  const entityType = (event.metadata?.entityType as CanonicalEntityType) || 'INVOICE';
+  const entityType = (event.payload?.entityType as CanonicalEntityType) || 'INVOICE';
   const entityId = event.entity_id || `ENTITY-${Date.now()}`;
-  const payload = event.metadata?.payload || {};
+  // event.payload.payload is the caller-supplied entity body before
+  // validateCanonicalEntity() narrows it against the real Canonical*
+  // interfaces — genuinely untyped at this point (it's `{}` once the
+  // AgentEvent.payload fix above stopped masking this line's own type).
+  const payload = (event.payload?.payload as Record<string, unknown>) || {};
 
   // 1. Fetch active connections for tenant
-  const rawConnections = await prisma.$queryRawUnsafe<any[]>(`
+  const rawConnections = await prisma.$queryRawUnsafe<RawEnterpriseConnectionRow[]>(`
     SELECT * FROM enterprise_connections
     WHERE tenant_id = $1 AND is_active = true
     ORDER BY created_at ASC
@@ -148,7 +168,11 @@ async function runEnterpriseBridge(event: AgentEvent): Promise<AgentRunResult> {
 
   // 3. Governance Policy Check (Human-in-the-Loop Thresholds)
   const tenantPolicy = await policyService.getTenantPolicy(tenantId);
-  const financialImpactAed = Number(payload.totalAmountAed || payload.estimatedCostAed || 0);
+  // totalAmountAed (CanonicalInvoice) / estimatedCostAed (CanonicalWorkOrder)
+  // — whichever the entity type carries; payload isn't narrowed to one
+  // specific canonical shape until validateCanonicalEntity() above.
+  const financialFields = payload as { totalAmountAed?: number; estimatedCostAed?: number };
+  const financialImpactAed = Number(financialFields.totalAmountAed || financialFields.estimatedCostAed || 0);
 
   if (financialImpactAed >= (tenantPolicy.requireHumanApprovalThresholdAed ?? 500)) {
     // Hold in approval queue
@@ -203,19 +227,28 @@ async function runEnterpriseBridge(event: AgentEvent): Promise<AgentRunResult> {
       id: rawConn.id,
       tenantId: rawConn.tenant_id,
       systemName: rawConn.system_name,
-      systemType: rawConn.system_type,
+      // system_type/auth_type/health_status are plain text columns — the
+      // POST /api/integrations/enterprise/connections route that writes
+      // them doesn't enforce the EnterpriseSystemType/EnterpriseAuthType
+      // enums at insert time, so these are boundary casts of DB data into
+      // the app's strict internal types, same as elsewhere in this file.
+      systemType: rawConn.system_type as EnterpriseConnectionConfig['systemType'],
       baseUrl: rawConn.base_url,
-      authType: rawConn.auth_type,
-      authCredentials: typeof rawConn.auth_credentials === 'string' ? JSON.parse(rawConn.auth_credentials) : rawConn.auth_credentials,
-      headers: typeof rawConn.headers === 'string' ? JSON.parse(rawConn.headers) : rawConn.headers,
-      fieldMappings: typeof rawConn.field_mappings === 'string' ? JSON.parse(rawConn.field_mappings) : rawConn.field_mappings,
+      authType: rawConn.auth_type as EnterpriseConnectionConfig['authType'],
+      authCredentials: (typeof rawConn.auth_credentials === 'string' ? JSON.parse(rawConn.auth_credentials) : rawConn.auth_credentials) as Record<string, unknown> | undefined,
+      headers: (typeof rawConn.headers === 'string' ? JSON.parse(rawConn.headers) : rawConn.headers) as Record<string, string> | undefined,
+      fieldMappings: (typeof rawConn.field_mappings === 'string' ? JSON.parse(rawConn.field_mappings) : rawConn.field_mappings) as Record<string, string> | undefined,
       isActive: rawConn.is_active,
       rateLimitPerMin: rawConn.rate_limit_per_min || 60,
-      healthStatus: rawConn.health_status,
+      healthStatus: rawConn.health_status as EnterpriseConnectionConfig['healthStatus'],
     };
 
     const adapter = getAdapterForConnection(connection);
-    const syncRes = await executeOutboundPushWithRetry(adapter, entityType, entityId, payload);
+    // payload was already checked by validateCanonicalEntity() above, but
+    // that's a boolean check, not a type predicate, so it doesn't narrow
+    // payload's static type — same "runtime-validated, statically unknown"
+    // situation as financialFields above.
+    const syncRes = await executeOutboundPushWithRetry(adapter, entityType, entityId, payload as unknown as CanonicalPayload);
     results.push(syncRes);
 
     if (syncRes.status === 'SUCCESS') successfulSyncs++;
@@ -282,7 +315,7 @@ export const ENTERPRISE_BRIDGE_AGENT: AgentDefinition = {
   version: '1.0.0',
   agentType: 'BATCH',
   autonomyLevel: 'L2',
-  subscribedEvents: ['enterprise.sync' as any, 'enterprise.external_event' as any],
+  subscribedEvents: ['enterprise.sync', 'enterprise.external_event'],
   supportsEntityScan: true,
   run: runEnterpriseBridge,
 };

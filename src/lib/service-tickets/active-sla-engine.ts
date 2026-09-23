@@ -173,12 +173,6 @@ export function calculateTicketSlaStatus(
 
   const resolveTargetMinutes = (ticket.slaTargetHours || cfg.defaultResolveHours) * 60;
   const isPending = ticket.status === 'Pending' || ticket.status === 'Awaiting Approval';
-  const isAcknowledged =
-    ticket.status === 'Acknowledged' ||
-    ticket.status === 'Assigned' ||
-    ticket.status === 'In Progress' ||
-    ticket.status === 'Resolved' ||
-    ticket.status === 'Completed';
 
   const isClosedOrResolved =
     ticket.status === 'Resolved' ||

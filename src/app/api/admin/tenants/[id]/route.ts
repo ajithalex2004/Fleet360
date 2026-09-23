@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { revalidateCache } from '@/lib/server-cache';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, requireSuperAdminForTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const CACHE_TAG = 'tenants:list';
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -14,7 +14,10 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
+  const guard = requireSuperAdminForTenant(authz, params.id);
+  if (!guard.ok) {
+    return NextResponse.json({ error: guard.error }, { status: guard.status });
+  }
 
   try {
     return await withTenantRls(prisma, params.id, async (tx) => {
@@ -40,7 +43,10 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
+  const guard = requireSuperAdminForTenant(authz, params.id);
+  if (!guard.ok) {
+    return NextResponse.json({ error: guard.error }, { status: guard.status });
+  }
 
   try {
     return await withTenantRls(prisma, params.id, async (tx) => {
@@ -65,7 +71,10 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
+  const guard = requireSuperAdminForTenant(authz, params.id);
+  if (!guard.ok) {
+    return NextResponse.json({ error: guard.error }, { status: guard.status });
+  }
 
   try {
     return await withTenantRls(prisma, params.id, async (tx) => {

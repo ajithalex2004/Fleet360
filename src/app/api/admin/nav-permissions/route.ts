@@ -19,7 +19,11 @@ import crypto from 'crypto';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 // Keys that the platform admin can enable/disable per tenant
-export const TOGGLEABLE_NAV_KEYS = [
+// Not exported: Next.js route.ts files may only export HTTP method handlers
+// and reserved config constants (dynamic, revalidate, runtime, ...) --
+// exporting anything else fails next build's route-shape validation.
+// Nothing outside this file imports these.
+const TOGGLEABLE_NAV_KEYS = [
   'branches',
   'billing',
   'workflows',
@@ -28,8 +32,6 @@ export const TOGGLEABLE_NAV_KEYS = [
   'dispatch',
   'audit-logs',
 ] as const;
-
-export type NavKey = typeof TOGGLEABLE_NAV_KEYS[number];
 
 // ── GET — fetch enabled nav keys ───────────────────────────────────────────────
 

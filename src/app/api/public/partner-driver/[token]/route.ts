@@ -111,11 +111,10 @@ export async function POST(
 
     if (assignment && assignment.award.request.sourceReferenceType === 'TRIP_SCHEDULE') {
       const adapter = new BusOpsOutsourcingAdapter();
-      await adapter.syncExecutionStatus(
-        assignment.award.request.sourceReferenceId,
-        assignment.award.tenantId,
-        action
-      );
+      await adapter.syncExecutionStatus({
+        sourceReferenceId: assignment.award.request.sourceReferenceId,
+        eventType: action,
+      });
     }
 
     return NextResponse.json({

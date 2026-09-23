@@ -9,27 +9,77 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import type mapboxgl from 'mapbox-gl';
 import {
   MapPin,
   Navigation,
   Clock,
   Gauge,
-  Layers,
-  Sparkles,
-  Maximize2,
   RefreshCw,
-  Eye,
   AlertTriangle,
 } from 'lucide-react';
+
+// Mapbox GL JS is loaded dynamically via a <script> tag (see loadMapbox below)
+// rather than imported as an npm module, so it only ever exists as a runtime
+// global. @types/mapbox-gl is installed purely for its type declarations.
+// (Not declared via `declare global` here to avoid clashing with the
+// separate, narrower `Window.mapboxgl` augmentation already declared in
+// src/components/route-optimizer/MapView.tsx.)
+type MapboxGlobal = typeof import('mapbox-gl');
+
+function getMapboxGlobal(): MapboxGlobal | undefined {
+  return (window as unknown as { mapboxgl?: MapboxGlobal }).mapboxgl;
+}
+
+interface MapLocation {
+  name?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+}
 
 interface OutsourceLiveMapProps {
   token: string;
   tripNumber?: string;
-  initialPickup?: { name?: string; latitude?: number; longitude?: number };
-  initialDropoff?: { name?: string; latitude?: number; longitude?: number };
+  initialPickup?: MapLocation;
+  initialDropoff?: MapLocation;
 }
 
 type MapLayerType = 'STREETS' | 'SATELLITE' | 'TRAFFIC';
+
+interface TelemetryPingPayload {
+  speed?: number;
+  heading?: number;
+  accuracy?: number;
+  distanceToPickup?: number;
+  distanceToDestination?: number;
+  predictedEta?: string;
+}
+
+interface TelemetryLatestPosition {
+  latitude: number;
+  longitude: number;
+  occurredAt: string;
+  payload?: TelemetryPingPayload;
+}
+
+interface TelemetryBreadcrumb {
+  latitude: number;
+  longitude: number;
+  occurredAt: string;
+}
+
+// Matches the JSON shape returned by GET /api/public/partner-driver/[token]/telemetry
+interface TelemetryData {
+  assignmentId?: string;
+  vehiclePlate?: string;
+  driverName?: string;
+  latestPosition?: TelemetryLatestPosition | null;
+  breadcrumbs?: TelemetryBreadcrumb[];
+  pickupLocation?: MapLocation;
+  dropoffLocation?: MapLocation;
+  /** Present when the endpoint returns an error payload instead (e.g. invalid/expired token). */
+  error?: string;
+}
 
 export function OutsourceLiveMap({
   token,
@@ -38,12 +88,12 @@ export function OutsourceLiveMap({
   initialDropoff,
 }: OutsourceLiveMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<any>(null);
-  const vehicleMarkerRef = useRef<any>(null);
-  const pickupMarkerRef = useRef<any>(null);
-  const dropoffMarkerRef = useRef<any>(null);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
+  const vehicleMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const pickupMarkerRef = useRef<mapboxgl.Marker | null>(null);
+  const dropoffMarkerRef = useRef<mapboxgl.Marker | null>(null);
 
-  const [telemetry, setTelemetry] = useState<any | null>(null);
+  const [telemetry, setTelemetry] = useState<TelemetryData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeLayer, setActiveLayer] = useState<MapLayerType>('STREETS');
   const [isMapboxLoaded, setIsMapboxLoaded] = useState(false);
@@ -51,13 +101,18 @@ export function OutsourceLiveMap({
   const fetchLiveTelemetry = async () => {
     try {
       const res = await fetch(`/api/public/partner-driver/${token}/telemetry`);
-      const json = await res.json();
+      const json: TelemetryData = await res.json();
       setTelemetry(json);
     } catch {
       // Fallback
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleManualRefresh = () => {
+    setLoading(true);
+    void fetchLiveTelemetry();
   };
 
   useEffect(() => {
@@ -73,7 +128,7 @@ export function OutsourceLiveMap({
       'pk.eyJ1IjoiZmxlZXQzNjAiLCJhIjoiY2x4bmd0NmJqMDF2ZjJxcHF3eGN3cXoxdSJ9.placeholder';
 
     const loadMapbox = () => {
-      if (typeof window !== 'undefined' && (window as any).mapboxgl) {
+      if (typeof window !== 'undefined' && getMapboxGlobal()) {
         initMap();
       } else {
         const script = document.createElement('script');
@@ -92,11 +147,12 @@ export function OutsourceLiveMap({
     };
 
     const initMap = () => {
-      if (!containerRef.current || mapRef.current || typeof (window as any).mapboxgl === 'undefined') return;
-      (window as any).mapboxgl.accessToken = mapboxToken;
+      const mbgl = getMapboxGlobal();
+      if (!containerRef.current || mapRef.current || !mbgl) return;
+      mbgl.accessToken = mapboxToken;
 
       try {
-        const map = new (window as any).mapboxgl.Map({
+        const map = new mbgl.Map({
           container: containerRef.current,
           style: 'mapbox://styles/mapbox/dark-v11',
           center: [55.2797, 25.1972], // Dubai UAE default
@@ -104,7 +160,7 @@ export function OutsourceLiveMap({
           attributionControl: false,
         });
 
-        map.addControl(new (window as any).mapboxgl.NavigationControl({ showCompass: true }), 'top-right');
+        map.addControl(new mbgl.NavigationControl({ showCompass: true }), 'top-right');
         mapRef.current = map;
         setIsMapboxLoaded(true);
       } catch {
@@ -138,7 +194,8 @@ export function OutsourceLiveMap({
   // Update Markers & Geofences on Map
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || typeof (window as any).mapboxgl === 'undefined') return;
+    const mbgl = getMapboxGlobal();
+    if (!map || !mbgl) return;
 
     const pickup = telemetry?.pickupLocation || initialPickup;
     const dropoff = telemetry?.dropoffLocation || initialDropoff;
@@ -150,7 +207,7 @@ export function OutsourceLiveMap({
         const el = document.createElement('div');
         el.className = 'p-1.5 rounded-full bg-emerald-500 text-white shadow-lg border-2 border-white font-bold text-[10px]';
         el.innerHTML = '📍';
-        pickupMarkerRef.current = new (window as any).mapboxgl.Marker({ element: el })
+        pickupMarkerRef.current = new mbgl.Marker({ element: el })
           .setLngLat([pickup.longitude, pickup.latitude])
           .addTo(map);
       } else {
@@ -164,7 +221,7 @@ export function OutsourceLiveMap({
         const el = document.createElement('div');
         el.className = 'p-1.5 rounded-full bg-rose-500 text-white shadow-lg border-2 border-white font-bold text-[10px]';
         el.innerHTML = '🏁';
-        dropoffMarkerRef.current = new (window as any).mapboxgl.Marker({ element: el })
+        dropoffMarkerRef.current = new mbgl.Marker({ element: el })
           .setLngLat([dropoff.longitude, dropoff.latitude])
           .addTo(map);
       } else {
@@ -178,7 +235,7 @@ export function OutsourceLiveMap({
         const el = document.createElement('div');
         el.className = 'p-2 rounded-full bg-cyan-500 text-white shadow-xl shadow-cyan-500/50 border-2 border-white animate-bounce';
         el.innerHTML = '🚍';
-        vehicleMarkerRef.current = new (window as any).mapboxgl.Marker({ element: el })
+        vehicleMarkerRef.current = new mbgl.Marker({ element: el })
           .setLngLat([latest.longitude, latest.latitude])
           .addTo(map);
       } else {
@@ -243,8 +300,27 @@ export function OutsourceLiveMap({
             <Clock className="w-3.5 h-3.5 text-emerald-400" />
             <span>ETA: {predictedEta}</span>
           </div>
+
+          <button
+            type="button"
+            onClick={handleManualRefresh}
+            disabled={loading}
+            aria-label="Refresh live telemetry"
+            title="Refresh live telemetry"
+            className="flex items-center justify-center p-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 hover:text-white transition disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
+          </button>
         </div>
       </div>
+
+      {/* Telemetry Error Banner (e.g. invalid/expired trip token) */}
+      {telemetry?.error && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-300 text-[11px] font-semibold">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+          <span>{telemetry.error}</span>
+        </div>
+      )}
 
       {/* Vector / Satellite Map Canvas */}
       <div className="relative h-72 w-full rounded-2xl bg-slate-950 border border-slate-800 overflow-hidden shadow-inner">

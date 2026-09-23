@@ -417,7 +417,6 @@ export async function processCanbusTelemetryIngest(
   // 3. Auto-Provision Workshop Service Request for Critical Breakdown Hazards
   if (health.healthGrade === 'CRITICAL_BREAKDOWN_IMMINENT') {
     try {
-      const topFault = health.activeDtcFaults[0]?.code || 'CRITICAL_SENSOR_FAULT';
       const faultSummary = [
         ...health.activeDtcFaults.map((d) => `[${d.code}] ${d.title}`),
         ...health.sensorAnomalies.anomaliesDetected,
@@ -427,7 +426,7 @@ export async function processCanbusTelemetryIngest(
         data: {
           tenantId,
           vehicleId: vehicle.id,
-          requestType: 'REPAIR',
+          serviceType: 'REPAIR',
           priority: 'URGENT',
           status: 'OPEN',
           description: `[AUTO-DISPATCHED CAN-BUS DIAGNOSTIC] Vehicle Health Index: ${health.vhiScore}%. Faults: ${faultSummary}. Recommended: ${health.recommendedWorkshopAction}`,

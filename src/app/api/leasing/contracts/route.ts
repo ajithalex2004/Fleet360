@@ -17,6 +17,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { paginate, paginatedResponse } from '@/lib/pagination';
 import { assertCanWrite } from '@/lib/access-control';
+import type { Prisma } from '@prisma/client';
 
 export async function GET(req: NextRequest) {
 
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
   const body = stripTenantOwnershipFields(bodyRaw);
     const contract = await withTenantRls(prisma, tenantId, async (tx) =>
       tx.leaseContract2.create({
-      data: { ...body, tenantId },
+      data: { ...body, tenantId } as Prisma.LeaseContract2UncheckedCreateInput,
     }),
     );
     return NextResponse.json(contract, { status: 201 });

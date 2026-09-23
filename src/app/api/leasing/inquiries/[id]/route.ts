@@ -12,6 +12,11 @@ import { withTenantRls } from '@/lib/rls';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error ? e.message : fallback;
+}
+
+
 async function guardTenant(tenantId: string, id: string) {
   const owned = await prisma.leaseInquiry.findFirst({
     where: { id, tenantId },
@@ -88,7 +93,7 @@ export async function PATCH(
   } catch (e) {
     console.error('PATCH inquiry error:', e);
     return NextResponse.json(
-      { error: e?.message ?? 'Failed to update inquiry' },
+      { error: errorMessage(e, 'Failed to update inquiry') },
       { status: 500 }
     );
   }

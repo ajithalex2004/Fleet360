@@ -170,7 +170,7 @@ export class TelematicsService {
           tenantId: request.tenantId,
           code: 'IN_TRANSIT_DELAY_PREDICTED',
           sourceModule: 'exchange',
-          subjectType: 'TripSchedule' as any,
+          subjectType: 'TripSchedule',
           subjectId: request.sourceReferenceId,
           title: `⚠️ In-Transit Delay Predicted: ${delayMinutes}m delay on ${request.requestNumber}`,
           description: `Vehicle is ${delayMinutes} mins behind schedule. Projected ETA: ${predictedEta}`,

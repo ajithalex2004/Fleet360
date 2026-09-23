@@ -26,7 +26,7 @@ export default function AgentsShell({ children }: { children: React.ReactNode })
   const pathname = usePathname();
 
   return (
-    <ModuleGuard moduleId="agents" moduleName="AI Agent Ecosystem" moduleIcon={<Sparkles className="w-3.5 h-3.5 text-white" />}>
+    <ModuleGuard moduleId="agents" moduleName="AI Agent Ecosystem" moduleIcon="✨">
       <div className="flex flex-col h-screen bg-[var(--bg-canvas)]">
         <PlatformHomeBar
           moduleName="AI Agent Ecosystem"

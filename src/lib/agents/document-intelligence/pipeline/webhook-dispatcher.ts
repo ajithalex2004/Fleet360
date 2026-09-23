@@ -33,7 +33,19 @@ export interface WebhookDispatchPayload {
   timestamp: string;
   tenantId: string;
   documentId: string;
-  data: Record<string, any>;
+  data: Record<string, unknown>;
+}
+
+// An `enterprise_connections` row as returned by the SELECT below.
+// `auth_credentials`/`headers` are JSONB columns whose driver representation
+// may be a JSON string or an already-parsed object, so they're typed loosely
+// (unknown) and narrowed at their one use site below.
+interface EnterpriseConnectionRow {
+  id: string;
+  system_type: string;
+  base_url: string;
+  auth_credentials: unknown;
+  headers: unknown;
 }
 
 export interface WebhookDeliveryResult {
@@ -59,9 +71,9 @@ export function generateWebhookSignature(payloadString: string, secret: string):
 export async function dispatchDocumentWebhook(
   tenantId: string,
   event: DocumentWebhookEvent,
-  data: Record<string, any>
+  data: Record<string, unknown>
 ): Promise<WebhookDeliveryResult[]> {
-  const documentId = data.documentId || data.extractionId || 'UNKNOWN';
+  const documentId = (data.documentId || data.extractionId || 'UNKNOWN') as string;
   const timestamp = new Date().toISOString();
 
   const payload: WebhookDispatchPayload = {
@@ -76,16 +88,10 @@ export async function dispatchDocumentWebhook(
   const results: WebhookDeliveryResult[] = [];
 
   // 1. Fetch active enterprise connections for this tenant
-  let connections: Array<{
-    id: string;
-    system_type: string;
-    base_url: string;
-    auth_credentials: any;
-    headers: any;
-  }> = [];
+  let connections: EnterpriseConnectionRow[] = [];
 
   try {
-    const rows = await prisma.$queryRawUnsafe<any[]>(`
+    const rows = await prisma.$queryRawUnsafe<EnterpriseConnectionRow[]>(`
       SELECT id, system_type, base_url, auth_credentials, headers
       FROM enterprise_connections
       WHERE tenant_id = $1 AND is_active = true
@@ -112,9 +118,9 @@ export async function dispatchDocumentWebhook(
 
   for (const conn of connections) {
     if (conn.base_url) {
-      const creds = typeof conn.auth_credentials === 'string' ? JSON.parse(conn.auth_credentials) : conn.auth_credentials || {};
+      const creds = (typeof conn.auth_credentials === 'string' ? JSON.parse(conn.auth_credentials) : conn.auth_credentials || {}) as { webhookSecret?: string; apiKey?: string };
       const secret = creds.webhookSecret || creds.apiKey || webhookSecret;
-      const headers = typeof conn.headers === 'string' ? JSON.parse(conn.headers) : conn.headers || {};
+      const headers = (typeof conn.headers === 'string' ? JSON.parse(conn.headers) : conn.headers || {}) as Record<string, string>;
       targets.push({
         connectionId: conn.id,
         systemType: conn.system_type || 'EXTERNAL_ERP',
@@ -204,9 +210,9 @@ export async function dispatchDocumentWebhook(
         durationMs,
         errorMessage: ok ? undefined : `HTTP ${httpStatus}`,
       });
-    } catch (fetchErr: any) {
+    } catch (fetchErr) {
       const durationMs = Date.now() - startTime;
-      const errMsg = fetchErr?.message || 'Network dispatch error';
+      const errMsg = fetchErr instanceof Error ? fetchErr.message : 'Network dispatch error';
 
       try {
         await prisma.$queryRawUnsafe(`
@@ -226,7 +232,7 @@ export async function dispatchDocumentWebhook(
           durationMs,
           errMsg
         );
-      } catch (logErr) {
+      } catch {
         // ignore
       }
 

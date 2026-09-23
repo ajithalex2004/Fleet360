@@ -6,6 +6,11 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 import { prisma } from '@/lib/prisma';
 import { pricingRuleUpdateSet, rowToCamel } from '@/lib/pricing-rule-helpers';
 
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error ? e.message : fallback;
+}
+
+
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
 
@@ -55,7 +60,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
         );
         return NextResponse.json(rowToCamel(rows[0]));
       } catch (e) {
-        return NextResponse.json({ error: e.message ?? 'Failed to update rule' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(e, 'Failed to update rule') }, { status: 500 });
       }
   });
 }

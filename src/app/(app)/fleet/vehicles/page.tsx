@@ -323,7 +323,13 @@ export default function VehiclesPage() {
             <thead className="bg-[var(--bg-surface-hover)]/50 border-b border-[var(--border-subtle)]">
               <tr>
                 {['Vehicle Code', 'Make / Model', 'Segment', 'Plate No.', 'Type', 'Usage', 'Lifecycle', 'Status', 'Odometer', 'Fuel', 'Actions'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider whitespace-nowrap">{h}</th>
+                  <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider whitespace-nowrap">
+                    {h === 'Odometer' ? (
+                      <span className="flex items-center gap-1"><Gauge className="w-3 h-3" />{h}</span>
+                    ) : h === 'Fuel' ? (
+                      <span className="flex items-center gap-1"><Fuel className="w-3 h-3" />{h}</span>
+                    ) : h}
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -361,7 +367,10 @@ export default function VehiclesPage() {
                     <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-muted)]">{v.lifecycleStage || '—'}</span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${statusColor[v.status] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'}`}>{v.status}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border inline-flex items-center gap-1 ${statusColor[v.status] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'}`}>
+                      {v.status === 'MAINTENANCE' && <Wrench className="w-3 h-3" />}
+                      {v.status}
+                    </span>
                   </td>
                   <td className="px-4 py-3 text-[var(--text-main)] text-xs font-mono">{v.odometerReading?.toLocaleString() ?? 0} km</td>
                   <td className="px-4 py-3">
@@ -428,13 +437,13 @@ export default function VehiclesPage() {
                   </div>
                 </div>
                 <div>
-                  <div className="text-[11px] text-[var(--text-muted)] uppercase font-semibold">Odometer</div>
+                  <div className="text-[11px] text-[var(--text-muted)] uppercase font-semibold flex items-center gap-1"><Gauge className="w-3 h-3" />Odometer</div>
                   <div className="text-sm font-bold text-[var(--text-main)] mt-0.5">
                     {inspectingVehicle.odometerReading?.toLocaleString() ?? 0} km
                   </div>
                 </div>
                 <div>
-                  <div className="text-[11px] text-[var(--text-muted)] uppercase font-semibold">Fuel Level</div>
+                  <div className="text-[11px] text-[var(--text-muted)] uppercase font-semibold flex items-center gap-1"><Fuel className="w-3 h-3" />Fuel Level</div>
                   <div className="text-sm font-bold text-emerald-500 mt-0.5">
                     {inspectingVehicle.fuelLevel ?? 0}%
                   </div>
@@ -513,11 +522,11 @@ export default function VehiclesPage() {
                   <span className="text-xs font-mono font-semibold text-[var(--text-main)]">{inspectingVehicle.simCardNo || '—'}</span>
                 </div>
                 <div className="p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex justify-between items-center">
-                  <span className="text-xs text-[var(--text-muted)]">Assigned Driver</span>
+                  <span className="text-xs text-[var(--text-muted)] flex items-center gap-1.5"><UserCheck className="w-3.5 h-3.5" />Assigned Driver</span>
                   <span className="text-xs font-semibold text-[var(--text-main)]">{inspectingVehicle.assignedDriverId || 'Unassigned / Customer Rented'}</span>
                 </div>
                 <div className="p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] flex justify-between items-center">
-                  <span className="text-xs text-[var(--text-muted)]">Operational Zone</span>
+                  <span className="text-xs text-[var(--text-muted)] flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />Operational Zone</span>
                   <span className="text-xs font-semibold text-[var(--text-main)]">{inspectingVehicle.zoneName || 'All UAE Zones'}</span>
                 </div>
               </div>
@@ -548,7 +557,7 @@ export default function VehiclesPage() {
               <div className="p-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="text-base">🛡️</span>
+                    <Shield className="w-4 h-4 text-blue-400" />
                     <span className="text-xs font-bold text-[var(--text-main)]">Insurance Policy</span>
                   </div>
                   {inspectingVehicle.insuranceExpiryDate && (
@@ -740,6 +749,31 @@ export default function VehiclesPage() {
                       </div>
                     </div>
                   </div>
+
+                  <div>
+                    <h3 className="text-xs font-bold text-orange-500 uppercase tracking-wider mb-4">Acquisition</h3>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Acquisition Type</label>
+                        <select value={form.acquisitionType ?? 'PURCHASE'} onChange={e => f('acquisitionType', e.target.value)}
+                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50">
+                          {ACQUISITION_TYPES.map(a => <option key={a} value={a}>{a.replace(/_/g, ' ')}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5 flex items-center gap-1"><Calendar className="w-3 h-3" />Purchase Date</label>
+                        <input type="date" value={form.purchaseDate ? form.purchaseDate.slice(0, 10) : ''}
+                          onChange={e => f('purchaseDate', e.target.value)}
+                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs focus:outline-none focus:border-orange-500/50" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Purchase Price (AED)</label>
+                        <input type="number" min={0} value={form.purchasePrice ?? 0}
+                          onChange={e => f('purchasePrice', Number(e.target.value))}
+                          className="w-full bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] rounded-xl px-3.5 py-2 text-[var(--text-main)] text-xs font-mono focus:outline-none focus:border-orange-500/50" />
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -818,7 +852,7 @@ export default function VehiclesPage() {
                       </div>
                       <div className="bg-[var(--bg-surface-hover)]/50 border border-[var(--border-subtle)] rounded-xl p-4">
                         <div className="flex items-center gap-2 mb-3">
-                          <span className="text-base">🛡️</span>
+                          <Shield className="w-4 h-4 text-blue-400" />
                           <h4 className="text-xs font-bold text-[var(--text-main)]">Insurance Policy</h4>
                         </div>
                         <label className="block text-xs text-[var(--text-muted)] mb-1.5">Expiry Date</label>

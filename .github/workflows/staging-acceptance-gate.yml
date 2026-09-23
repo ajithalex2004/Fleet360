@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: staging-acceptance-${{ github.ref }}
+  group: staging-acceptance-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: true
 
 jobs:

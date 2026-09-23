@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, KeyboardEvent, ClipboardEvent } from 'react';
+import { use, useState, useEffect, useRef, useCallback, KeyboardEvent, ClipboardEvent } from 'react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface SigningInfo {
@@ -144,8 +144,8 @@ function Spinner({ size = 'md', color = 'blue' }: { size?: 'sm' | 'md' | 'lg'; c
 }
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
-export default function SignPage({ params }: { params: { token: string } }) {
-  const { token } = params;
+export default function SignPage({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = use(params);
 
   // State
   const [loading, setLoading]           = useState(true);

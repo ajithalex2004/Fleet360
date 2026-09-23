@@ -266,16 +266,25 @@ export async function getTenantCostAllocation(
     });
     const totalFuelCost = fuelLogs.reduce((sum, f) => sum + Number(f.totalCost || 0), 0);
 
-    // 4. Fetch maintenance costs in the period
+    // 4. Fetch maintenance costs in the period.
+    // WorkOrder has no createdAt/totalCost/laborCost/partsCost columns —
+    // it only tracks dates and labor hours. The real cost figure lives on
+    // PartUsage (parts totalCost per work order); there's no dollar rate
+    // for labor hours anywhere in the schema, so maintenance cost here is
+    // parts cost only (consistent with the trips.length*25 fallback below
+    // being used whenever this comes back at/near zero).
     const workOrders = await tx.workOrder.findMany({
       where: {
         tenantId,
-        createdAt: { gte: startDate, lte: endDate },
+        actualCompletionDate: { gte: startDate, lte: endDate },
         status: 'COMPLETED',
       },
-      select: { totalCost: true, laborCost: true, partsCost: true },
+      select: { PartUsage: { select: { totalCost: true } } },
     });
-    const totalMaintenanceCost = workOrders.reduce((sum, w) => sum + Number(w.totalCost || 0), 0);
+    const totalMaintenanceCost = workOrders.reduce(
+      (sum, w) => sum + w.PartUsage.reduce((s, p) => s + Number(p.totalCost || 0), 0),
+      0,
+    );
 
     // 5. Driver cost estimate (e.g. AED 4,500 monthly salary per active driver assigned)
     const distinctDrivers = new Set(trips.map(t => t.driverId).filter(Boolean));
@@ -301,59 +310,56 @@ export async function getTenantCostAllocation(
 export async function postRechargeJournalBatch(
   tenantId: string,
   summary: CostAllocationSummary,
-): Promise<{ journalEntryId?: string; totalDebited: number }> {
+): Promise<{ journalEntryId?: string; journalEntryIds: string[]; totalDebited: number }> {
+  // `createDraftJournalEntry` posts exactly one balanced debit/credit pair
+  // (single `amount`, single `debit`/`credit` account, one `costCentre`)
+  // per call — there is no multi-line batch-posting API in
+  // `@/lib/finance/journal-service`. A departmental recharge with N
+  // departments therefore posts as N separate journal entries, one per
+  // cost centre, each debiting Bus Operations Expense and crediting Bus
+  // Operations Recovery for that department's amount — this is also the
+  // more correct GL representation, since each entry then carries its own
+  // department's cost centre rather than mixing many cost centres under
+  // one entry.
   let totalRecharge = 0;
-  const lineItems: Array<{
-    accountNumber: string;
-    costCenterCode: string;
-    description: string;
-    debitAmount: number;
-    creditAmount: number;
-  }> = [];
+  const journalEntryIds: string[] = [];
 
   for (const dept of summary.departments) {
     if (dept.totalRechargeAmount <= 0) continue;
     totalRecharge += dept.totalRechargeAmount;
 
-    // Debit: Department Transport Expense
-    lineItems.push({
-      accountNumber: '5145', // Bus Operations Expense
-      costCenterCode: dept.costCenterCode,
-      description: `Staff Transport Recharge ${summary.period} - ${dept.departmentName} (${dept.totalBoardings} trips, ${dept.paxKm} pax-km)`,
-      debitAmount: dept.totalRechargeAmount,
-      creditAmount: 0,
+    const entry = await createDraftJournalEntry({
+      tenantId,
+      narration: `Staff Transport Recharge ${summary.period} - ${dept.departmentName} (${dept.totalBoardings} trips, ${dept.paxKm} pax-km)`,
+      reference: `RECHARGE-${summary.period}-${dept.costCenterCode}`,
+      sourceType: 'BUS_OPS_RECHARGE',
+      sourceId: `${summary.period}-${dept.costCenterCode}`,
+      amount: dept.totalRechargeAmount,
+      currency: 'AED',
+      costCentre: dept.costCenterCode,
+      debit: {
+        code: '5145',
+        name: 'Staff Transport Expense',
+        description: `Bus Operations Expense - ${dept.departmentName}`,
+      },
+      credit: {
+        code: '4500',
+        name: 'Bus Ops Cost Recovery',
+        description: `Staff Transport Internal Recharge Recovery ${summary.period}`,
+      },
     });
+    journalEntryIds.push(entry.id);
   }
 
   if (totalRecharge <= 0) {
-    return { totalDebited: 0 };
+    return { journalEntryIds: [], totalDebited: 0 };
   }
 
-  // Credit: Fleet Central Recovery
-  lineItems.push({
-    accountNumber: '4500', // Bus Operations Recovery / Revenue
-    costCenterCode: 'PC-BUS',
-    description: `Staff Transport Internal Recharge Recovery ${summary.period}`,
-    debitAmount: 0,
-    creditAmount: totalRecharge,
-  });
-
-  const entry = await createDraftJournalEntry(tenantId, {
-    entryDate: new Date().toISOString(),
-    reference: `RECHARGE-${summary.period}`,
-    description: `Monthly Staff Transport Departmental Recharge ${summary.period}`,
-    lines: lineItems.map(l => ({
-      accountCode: l.accountNumber,
-      accountName: l.accountNumber === '5145' ? 'Staff Transport Expense' : 'Bus Ops Cost Recovery',
-      costCenter: l.costCenterCode,
-      debit: l.debitAmount,
-      credit: l.creditAmount,
-      description: l.description,
-    })),
-  });
-
   return {
-    journalEntryId: entry.id,
+    // Kept for existing callers that only look at a single id; the first
+    // entry of the batch. `journalEntryIds` carries the full set.
+    journalEntryId: journalEntryIds[0],
+    journalEntryIds,
     totalDebited: totalRecharge,
   };
 }

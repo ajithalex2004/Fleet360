@@ -1371,8 +1371,9 @@ function defaultShipmentNoPrefix(date = new Date()) {
 }
 
 export async function nextShipmentNo(tenantId: string, client?: DbClient) {
-  const yy = String(new Date().getFullYear()).slice(-2);
-  const prefix = `SHP-LOG-${yy}`;
+  const now = new Date();
+  const yy = String(now.getFullYear()).slice(-2);
+  const prefix = defaultShipmentNoPrefix(now);
   const seq = await nextDocumentSequence({
     tenantId,
     docType: 'SHIPMENT',
@@ -5223,8 +5224,8 @@ export async function postFreightSettlementToFinance(args: {
           shipmentNo:      shipment.shipment_no,
           chargeId:        customerCharge.id,
           route: {
-            origin:      (shipment as any).origin_name      ?? (shipment as any).origin_address      ?? null,
-            destination: (shipment as any).destination_name ?? (shipment as any).destination_address ?? null,
+            origin:      shipment.origin_name      ?? shipment.origin_address      ?? null,
+            destination: shipment.destination_name ?? shipment.destination_address ?? null,
           },
         },
       });
@@ -7690,6 +7691,7 @@ export async function issueCarrierAppDevice(_input: {
   metadata?: JsonRecord | null;
   actorUserId?: string | null;
 }): Promise<{ id: string; token: string; expiresAt: string }> {
+  void _input;
   throw new LogisticsValidationError(['issueCarrierAppDevice is not yet implemented — track Layer 2.5 follow-up.']);
 }
 
@@ -7722,6 +7724,7 @@ export interface CarrierPresenceInput {
 }
 
 export async function upsertCarrierPresence(_input: CarrierPresenceInput): Promise<{ ok: true }> {
+  void _input;
   throw new LogisticsValidationError(['upsertCarrierPresence is not yet implemented — track Layer 2.5 follow-up.']);
 }
 
@@ -7757,6 +7760,7 @@ interface LoadBroadcastInput {
 }
 
 export async function createLoadBroadcast(_input: LoadBroadcastInput): Promise<{ id: string }> {
+  void _input;
   throw new LogisticsValidationError(['createLoadBroadcast is not yet implemented — track Layer 2.5 follow-up.']);
 }
 
@@ -7764,6 +7768,8 @@ export async function getActiveLoadBroadcast(
   _tenantId: string,
   _shipmentOrderId: string,
 ): Promise<{ id: string } | null> {
+  void _tenantId;
+  void _shipmentOrderId;
   throw new LogisticsValidationError(['getActiveLoadBroadcast is not yet implemented — track Layer 2.5 follow-up.']);
 }
 
@@ -7784,6 +7790,7 @@ export interface BroadcastAssignInput {
 }
 
 export async function assignBroadcast(_input: BroadcastAssignInput): Promise<{ assignmentId: string }> {
+  void _input;
   throw new LogisticsValidationError(['assignBroadcast is not yet implemented — track Layer 2.5 follow-up.']);
 }
 
@@ -7798,6 +7805,7 @@ export async function findNearestIdleCarriers(_args: {
   maxStaleSeconds?: number | null;
   enableComplianceFilter?: boolean;
 }): Promise<Array<{ carrierId: string; carrierName?: string; distanceKm: number; effectiveDistanceKm?: number | null }>> {
+  void _args;
   throw new LogisticsValidationError(['findNearestIdleCarriers is not yet implemented — track Layer 2.5 follow-up.']);
 }
 
@@ -7810,6 +7818,8 @@ export async function respondToBroadcastOffer(
   _token: string,
   _action: 'accept' | 'decline',
 ): Promise<{ ok: true }> {
+  void _token;
+  void _action;
   throw new LogisticsValidationError(['respondToBroadcastOffer is not yet implemented — track Layer 2.5 follow-up.']);
 }
 
@@ -7817,6 +7827,8 @@ export async function resolveShipmentPickupGeo(
   _tenantId: string,
   _shipmentOrderId: string,
 ): Promise<{ lat: number; lng: number } | null> {
+  void _tenantId;
+  void _shipmentOrderId;
   throw new LogisticsValidationError(['resolveShipmentPickupGeo is not yet implemented — track Layer 2.5 follow-up.']);
 }
 
@@ -7831,12 +7843,14 @@ export interface ShipperOnboardingListFilter {
 export async function listShipperOnboarding(
   _filter: ShipperOnboardingListFilter,
 ): Promise<{ data: unknown[] }> {
+  void _filter;
   throw new LogisticsValidationError(['listShipperOnboarding is not yet implemented — track Layer 2.5 follow-up.']);
 }
 
 export async function getShipperOnboarding(
   _args: { tenantId: string; customerId: string },
 ): Promise<JsonRecord | null> {
+  void _args;
   throw new LogisticsValidationError(['getShipperOnboarding is not yet implemented — track Layer 2.5 follow-up.']);
 }
 
@@ -7856,6 +7870,7 @@ export async function onboardShipperCustomer(_input: {
   metadata?: JsonRecord | null;
   actorUserId?: string | null;
 }): Promise<{ customerId: string }> {
+  void _input;
   throw new LogisticsValidationError(['onboardShipperCustomer is not yet implemented — track Layer 2.5 follow-up.']);
 }
 
@@ -7871,6 +7886,7 @@ export async function updateShipperOnboarding(_args: {
   metadata?: JsonRecord | null;
   actorUserId?: string | null;
 }): Promise<{ ok: true }> {
+  void _args;
   throw new LogisticsValidationError(['updateShipperOnboarding is not yet implemented — track Layer 2.5 follow-up.']);
 }
 

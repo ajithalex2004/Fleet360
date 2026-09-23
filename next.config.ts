@@ -49,20 +49,22 @@ const nextConfig: NextConfig = {
       : false,
   },
 
-  // Skip ESLint + TypeScript checks during `next build`. The codebase has
-  // ~100 pre-existing TS errors and a long tail of ESLint warnings that
-  // the CI workflow already accepts as known (the Lint / Typecheck CI
-  // steps are configured `continue-on-error: true` with a TODO to
-  // re-enforce after the cleanup PR lands). Without this, `next build`
-  // re-runs both internally and fails on the same warnings — making
-  // production builds impossible until every legacy warning is fixed.
+  // TypeScript: RE-ENFORCED (KNOWN-TS-001 cleanup landed — the typecheck
+  // ratchet baseline is genuinely 0 errors / 0 files as of the cleanup
+  // pass; `next build` now fails on any real TS error, same as `tsc
+  // --noEmit`). See scripts/typecheck-baseline.json / check-typecheck-ratchet.mjs.
   //
-  // Re-enable both once the KNOWN-TS-001 cleanup pass lands.
+  // ESLint: still skipped during `next build`. The separate lint ratchet
+  // baseline (scripts/lint-baseline.json) is NOT yet at 0 — ~3,014
+  // pre-existing errors across 976 files remain untouched by the
+  // KNOWN-TS-001 pass. Flipping this before that cleanup lands would
+  // break production builds immediately. Re-enable once the lint ratchet
+  // is driven to 0 the same way the typecheck ratchet was.
   eslint: {
     ignoreDuringBuilds: true,
   },
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
 
   // Build performance & memory optimizations for large page sets

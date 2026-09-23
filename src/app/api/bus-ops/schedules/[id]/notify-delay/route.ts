@@ -81,12 +81,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         action: 'BROADCAST_SHIFT_DELAY',
         entityType: 'TripSchedule',
         entityId: trip.id,
-        details: {
-          delayMinutes,
-          newEta,
-          staffCount,
-          noticeTitle,
-        },
+        // AuditPayload.details is a human-readable string, not a structured
+        // object — this was passing the raw object straight through.
+        details: `${noticeTitle}: ${delayMinutes}min delay${newEta ? `, new ETA ${newEta}` : ''}, broadcast to ${staffCount} passenger(s).`,
       });
 
       return NextResponse.json({

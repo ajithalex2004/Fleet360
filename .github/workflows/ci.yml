@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: true
 
 jobs:
@@ -120,6 +120,18 @@ jobs:
         run: npm run lint
         continue-on-error: true   # TODO(KNOWN-TS-001): re-enforce after pre-existing
                                    # ESLint warnings are cleaned up.
+
+      # ── Lint ratchet ────────────────────────────────────────────────
+      # Same pattern as the typecheck ratchet below: the codebase has ~3,014
+      # pre-existing ESLint errors (mostly no-unused-vars / no-explicit-any),
+      # which is why the raw Lint step above is advisory. This blocks on any
+      # NEW error or any existing file's error count going UP, per rule, vs
+      # scripts/lint-baseline.json — pre-existing errors are grandfathered,
+      # the total can only shrink. Run `node scripts/check-lint-ratchet.mjs
+      # --update-baseline` after actually fixing errors to lock in the lower
+      # count.
+      - name: Lint ratchet (blocks new errors only)
+        run: node scripts/check-lint-ratchet.mjs
 
       - name: Typecheck (advisory)
         run: npm run typecheck

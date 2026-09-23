@@ -27,6 +27,11 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 import { prisma } from '@/lib/prisma';
 import { calculateRate, type RateRequest } from '@/lib/rental-rate-engine';
 
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error ? e.message : fallback;
+}
+
+
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
 
@@ -241,7 +246,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         });
         } catch (e) {
         console.error('Agreement close error:', e);
-        return NextResponse.json({ error: e.message ?? 'Failed to close agreement' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(e, 'Failed to close agreement') }, { status: 500 });
       }
   });
 }

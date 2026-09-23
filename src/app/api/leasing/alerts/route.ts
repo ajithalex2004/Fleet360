@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
+import type { Prisma } from '@prisma/client';
 
 export async function GET(req: NextRequest) {
 
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
     const bodyRaw = await req.json();
   const body = stripTenantOwnershipFields(bodyRaw);
     const alert = await withTenantRls(prisma, tenantId, async (tx) =>
-      tx.leaseAlert.create({ data: { ...body, tenantId } }),
+      tx.leaseAlert.create({ data: { ...body, tenantId } as Prisma.LeaseAlertUncheckedCreateInput }),
     );
     return NextResponse.json(alert, { status: 201 });
     } catch (e) {

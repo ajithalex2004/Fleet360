@@ -21,7 +21,7 @@ import { assignBroadcast } from '@/lib/logistics/domain';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
-export async function POST(req: NextRequest, { params: _params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params: _params }: { params: Promise<{ id: string }> }) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {

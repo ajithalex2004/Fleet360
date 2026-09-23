@@ -126,6 +126,47 @@ export function extractContractObligations(
   };
 }
 
+// Row shape for the `contract_clauses_index` SELECT below (camelCase via SQL
+// aliases).
+interface ContractClauseIndexRow {
+  id: string | number;
+  documentId: string | number;
+  clauseNumber: string;
+  title: string;
+  content: string;
+  pageNumber: number | string | null;
+  obligationType: string;
+  penaltyAed: number | string | null;
+}
+
+// Row shape for the `document_intelligence_extractions` fallback SELECT below.
+interface ContractDocRow {
+  id: string | number;
+  file_name: string;
+  extracted_data: unknown;
+}
+
+// Shape of the fields this fallback path reads back out of a persisted
+// extraction's `extracted_data`. `contractObligations` is a real field on
+// DocumentExtractionResult; `contractClauses` is NOT — grep across the
+// codebase confirms nothing ever writes it, so that branch is currently
+// always empty in practice (see the shipping note flagging this gap).
+// Typed here (rather than as DocumentExtractionResult) so the still-dead
+// `contractClauses` read keeps compiling without inventing a real field for
+// a value that's never actually populated.
+interface StoredExtractionClauseData {
+  contractObligations?: ContractObligationItem[];
+  contractClauses?: Array<{
+    id?: string;
+    clauseNumber?: string;
+    title?: string;
+    content?: string;
+    pageNumber?: number;
+    obligationType?: string;
+    penaltyAed?: number;
+  }>;
+}
+
 export interface SearchContractClausesOptions {
   query?: string;
   documentId?: string;
@@ -169,7 +210,7 @@ export async function searchContractClauses(
       FROM contract_clauses_index
       WHERE tenant_id = $1
     `;
-    const params: any[] = [tenantId];
+    const params: Array<string | number> = [tenantId];
 
     if (documentId) {
       params.push(documentId);
@@ -184,7 +225,7 @@ export async function searchContractClauses(
     sql += ` ORDER BY page_number ASC LIMIT $${params.length + 1}`;
     params.push(limit);
 
-    const indexedRows = await prisma.$queryRawUnsafe<any[]>(sql, ...params);
+    const indexedRows = await prisma.$queryRawUnsafe<ContractClauseIndexRow[]>(sql, ...params);
     if (indexedRows && indexedRows.length > 0) {
       for (const r of indexedRows) {
         results.push({
@@ -201,7 +242,7 @@ export async function searchContractClauses(
     }
 
     // Also inspect document_intelligence_extractions for CONTRACT documents with obligations
-    const contractDocs = await prisma.$queryRawUnsafe<any[]>(`
+    const contractDocs = await prisma.$queryRawUnsafe<ContractDocRow[]>(`
       SELECT id, file_name, extracted_data
       FROM document_intelligence_extractions
       WHERE tenant_id = $1
@@ -212,9 +253,9 @@ export async function searchContractClauses(
 
     if (contractDocs && contractDocs.length > 0) {
       for (const doc of contractDocs) {
-        const ext = typeof doc.extracted_data === 'string' ? JSON.parse(doc.extracted_data) : doc.extracted_data;
-        const clauses: any[] = ext?.contractClauses || [];
-        const obligations: any[] = ext?.contractObligations || [];
+        const ext = (typeof doc.extracted_data === 'string' ? JSON.parse(doc.extracted_data) : doc.extracted_data) as StoredExtractionClauseData | undefined;
+        const clauses = ext?.contractClauses || [];
+        const obligations = ext?.contractObligations || [];
 
         for (const c of clauses) {
           if (!results.some((r) => r.id === c.id || (r.documentId === doc.id && r.clauseNumber === c.clauseNumber))) {

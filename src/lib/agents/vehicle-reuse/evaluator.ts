@@ -21,8 +21,29 @@ import {
   ReuseEvaluationRequest,
   ReuseEvaluationResult,
   VehicleCategoryTier,
+  LatLng,
 } from '../types';
 import { routingIntelligence } from '@/lib/routing/intelligence-service';
+
+/**
+ * Normalize the several location-shape variants TripScheduleItem allows
+ * (CanonicalLocation | LatLng | the loose { lat?, lng?, latitude?, longitude?, ... }
+ * shorthand many external feeds use) down to a strict LatLng, or null when
+ * neither `latitude`/`longitude` nor `lat`/`lng` are actually present.
+ * Mirrors the same latitude/longitude normalization RoutingIntelligenceService
+ * already applies internally (src/lib/routing/intelligence-service.ts).
+ */
+function toLatLng(point: TripScheduleItem['destination']): LatLng | null {
+  if (!point) return null;
+  const latitude = 'latitude' in point && typeof point.latitude === 'number'
+    ? point.latitude
+    : ('lat' in point && typeof point.lat === 'number' ? point.lat : undefined);
+  const longitude = 'longitude' in point && typeof point.longitude === 'number'
+    ? point.longitude
+    : ('lng' in point && typeof point.lng === 'number' ? point.lng : undefined);
+  if (typeof latitude !== 'number' || typeof longitude !== 'number') return null;
+  return { latitude, longitude };
+}
 
 export const DEFAULT_TURNAROUND_MINUTES: Record<VehicleCategoryTier | string, number> = {
   SEDAN: 8,
@@ -93,15 +114,15 @@ export async function evaluateVehicleReuse(
   }
 
   // ── 2. Deadhead Spatial Routing (via Cached RoutingIntelligenceService) ───
-  const destA = tripA.destination ?? tripA.endLocation;
-  const origB = tripB.origin ?? tripB.startLocation;
+  const destA = toLatLng(tripA.destination ?? tripA.endLocation);
+  const origB = toLatLng(tripB.origin ?? tripB.startLocation);
 
   let deadheadKm = 0;
   let deadheadMin = 0;
 
   try {
     if (destA && origB) {
-      const travelTime = await routingIntelligence.getTravelTime(destA as any, origB as any, {
+      const travelTime = await routingIntelligence.getTravelTime(destA, origB, {
         tier: 'HISTORICAL_TRAVEL_TIME',
       });
       deadheadKm = travelTime.distanceKm;

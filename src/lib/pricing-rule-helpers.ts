@@ -52,8 +52,8 @@ export const PRICING_FIELD_MAP: Record<string, string> = {
 };
 
 // ── snake_case DB row → camelCase response object ─────────────────────────────
-export function rowToCamel(row: Record<string, any>): Record<string, any> {
-  const out: Record<string, any> = {};
+export function rowToCamel(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
   for (const [key, val] of Object.entries(row)) {
     const camel = key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
     out[camel] = val;
@@ -63,19 +63,17 @@ export function rowToCamel(row: Record<string, any>): Record<string, any> {
 
 // ── camelCase body → INSERT columns/params/values ────────────────────────────
 export function pricingRuleToRow(
-  body: Record<string, any>,
+  body: Record<string, unknown>,
   id: string,
   now: string,
-): { cols: string; params: string; values: any[] } {
+): { cols: string; params: string; values: unknown[] } {
   const colList: string[]  = ['id', 'created_at', 'updated_at'];
-  const values: any[]      = [id, now, now];
-  let idx = 4;
+  const values: unknown[]  = [id, now, now];
 
   for (const [camel, snake] of Object.entries(PRICING_FIELD_MAP)) {
     if (body[camel] !== undefined && body[camel] !== null) {
       colList.push(snake);
       values.push(body[camel]);
-      idx++;
     }
   }
 
@@ -86,11 +84,11 @@ export function pricingRuleToRow(
 
 // ── camelCase body → UPDATE SET clause ───────────────────────────────────────
 export function pricingRuleUpdateSet(
-  body: Record<string, any>,
+  body: Record<string, unknown>,
   now: string,
-): { setClauses: string; values: any[]; nextIdx: number } {
+): { setClauses: string; values: unknown[]; nextIdx: number } {
   const setClauses: string[] = ['updated_at = $1'];
-  const values: any[]        = [now];
+  const values: unknown[]    = [now];
   let idx = 2;
 
   for (const [camel, snake] of Object.entries(PRICING_FIELD_MAP)) {

@@ -36,7 +36,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import * as crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
-import { allowedTripTransitions, type TripScheduleStatus } from '@/lib/bus-ops/state-machines';
+import { canTransitionTrip, type TripScheduleStatus } from '@/lib/bus-ops/state-machines';
 import { TRIP_COMPLETED } from '@/events/registry';
 import {
   seedTestTenantFull,
@@ -80,7 +80,7 @@ function statusThatCanComplete(): TripScheduleStatus {
   ] as unknown as TripScheduleStatus[];
   for (const s of candidates) {
     try {
-      if (allowedTripTransitions(s)?.includes('COMPLETED' as TripScheduleStatus)) return s;
+      if (canTransitionTrip(s, 'COMPLETED' as TripScheduleStatus)) return s;
     } catch {
       /* status not in this build's vocabulary — try the next */
     }

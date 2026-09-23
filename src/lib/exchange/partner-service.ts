@@ -13,6 +13,7 @@ import {
   PartnerOperationalStatus,
   PartnerServiceDomain,
 } from '@prisma/client';
+import type { AlertSubjectType } from '@/events/contracts/alert.events';
 
 export interface CreatePartnerInput {
   legalName: string;
@@ -153,7 +154,10 @@ export class PartnerService {
       tenantId: 'PLATFORM',
       code: 'PARTNER_APPLICATION_SUBMITTED',
       sourceModule: 'exchange',
-      subjectType: 'TransportPartner' as any,
+      // AlertSubjectType (@/events/contracts/alert.events) only covers the
+      // bus-ops/fleet domain — see the identical gap documented in
+      // marketplace-service.ts. Same typed bypass, not a guessed fallback.
+      subjectType: 'TransportPartner' as unknown as AlertSubjectType,
       subjectId: partnerId,
       title: `📋 New Transport Partner Application: ${partner.legalName}`,
       description: `Partner ${partner.legalName} (${partner.partnerCode}) submitted onboarding application for review.`,
@@ -182,7 +186,10 @@ export class PartnerService {
       tenantId: 'PLATFORM',
       code: 'PARTNER_APPROVED',
       sourceModule: 'exchange',
-      subjectType: 'TransportPartner' as any,
+      // AlertSubjectType (@/events/contracts/alert.events) only covers the
+      // bus-ops/fleet domain — see the identical gap documented in
+      // marketplace-service.ts. Same typed bypass, not a guessed fallback.
+      subjectType: 'TransportPartner' as unknown as AlertSubjectType,
       subjectId: partnerId,
       title: `✅ Transport Partner Approved: ${partner.legalName}`,
       description: `Partner ${partner.legalName} was approved for operational outsourcing.`,

@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { cacheRead, publicCacheControl, revalidateCache } from '@/lib/server-cache';
@@ -67,7 +68,7 @@ export async function POST(req: NextRequest) {
           permissions: permissionIds.length
             ? { create: permissionIds.map((pid: string) => ({ permissionId: pid })) }
             : undefined,
-        },
+        } as Prisma.RoleUncheckedCreateInput,
         include: { _count: { select: { permissions: true } } },
       })
     );

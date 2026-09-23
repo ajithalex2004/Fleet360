@@ -13,6 +13,7 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { lockSerialSeries } from '@/lib/leasing/serial-lock';
+import type { Prisma } from '@prisma/client';
 
 export async function GET(req: NextRequest) {
 
@@ -77,7 +78,7 @@ export async function POST(req: NextRequest) {
       const count = await tx.leaseEarlyTermination.count({ where: { tenantId } });
       const terminationNo = `ET-${String(count + 1).padStart(5, '0')}`;
       return tx.leaseEarlyTermination.create({
-        data: { ...body, requestDate, effectiveDate, terminationNo, penaltyAmount, totalSettlement, tenantId },
+        data: { ...body, requestDate, effectiveDate, terminationNo, penaltyAmount, totalSettlement, tenantId } as Prisma.LeaseEarlyTerminationUncheckedCreateInput,
       });
     });
     return NextResponse.json(et, { status: 201 });

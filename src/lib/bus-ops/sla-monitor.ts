@@ -330,7 +330,7 @@ export async function evaluateTenantSla(tenantId: string, options: {
           where: { id: trip.driverId, tenantId },
           select: { firstName: true, lastName: true },
         });
-        if (d) driver = d;
+        if (d) driver = { firstName: d.firstName || undefined, lastName: d.lastName || undefined };
       }
 
       // Fetch vehicle info if assigned
@@ -340,7 +340,7 @@ export async function evaluateTenantSla(tenantId: string, options: {
           where: { id: trip.vehicleId, tenantId },
           select: { vehicleCode: true, licensePlate: true },
         });
-        if (v) vehicle = { vehicleCode: v.vehicleCode, licensePlate: v.licensePlate || undefined };
+        if (v) vehicle = { vehicleCode: v.vehicleCode || undefined, licensePlate: v.licensePlate || undefined };
       }
 
       const evaluation = evaluateTripSlaSync({

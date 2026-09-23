@@ -6,6 +6,11 @@ import { prisma } from '@/lib/prisma';
 import { randomUUID } from 'crypto';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+
+function errorMessage(e: unknown, fallback: string): string {
+  return e instanceof Error && e.message ? e.message : fallback;
+}
+
 export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
 
@@ -22,7 +27,7 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
         );
         return NextResponse.json(docs);
       } catch (e) {
-        return NextResponse.json({ error: e?.message ?? 'Failed' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(e, 'Failed') }, { status: 500 });
       }
   });
 }
@@ -59,7 +64,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         const rows = await tx.$queryRawUnsafe(`SELECT * FROM customer_documents WHERE id = '${id}'`);
         return NextResponse.json((rows as any[])[0], { status: 201 });
         } catch (e) {
-        return NextResponse.json({ error: e?.message ?? 'Failed to add document' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(e, 'Failed to add document') }, { status: 500 });
       }
   });
 }
@@ -82,7 +87,7 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
         await tx.$executeRawUnsafe(`DELETE FROM customer_documents WHERE id = '${docId}' AND customer_id = '${params.id}'`);
         return NextResponse.json({ success: true });
         } catch (e) {
-        return NextResponse.json({ error: e?.message ?? 'Failed' }, { status: 500 });
+        return NextResponse.json({ error: errorMessage(e, 'Failed') }, { status: 500 });
       }
   });
 }

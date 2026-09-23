@@ -80,8 +80,11 @@ export async function POST(req: NextRequest) {
           identifier = token;
           // Caller may pass either staffMemberId OR staffEmployeeId.
           if (!staffMemberId && body?.staffEmployeeId) {
-            const m = await tx.staffMember.findUnique({
-              where: { employeeId: String(body.staffEmployeeId) },
+            // StaffMember.employeeId has no unique constraint (it's a plain
+            // nullable column), so findUnique() on it alone was never valid
+            // — findFirst, scoped to this tenant, is the real equivalent.
+            const m = await tx.staffMember.findFirst({
+              where: { employeeId: String(body.staffEmployeeId), tenantId },
               select: { id: true },
             });
             staffMemberId = m?.id ?? null;

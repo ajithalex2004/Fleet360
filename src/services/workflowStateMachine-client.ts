@@ -6,6 +6,8 @@ import { MaintenanceStatus } from '@/types/maintenance';
  */
 
 // Define valid status transitions
+// Kept in sync with the authoritative server-side map in workflowStateMachine.ts
+// (this file is the client-safe subset — no event bus / side effects).
 const STATUS_TRANSITIONS: Record<MaintenanceStatus, MaintenanceStatus[]> = {
     [MaintenanceStatus.SUBMITTED]: [
         MaintenanceStatus.REQUESTED,
@@ -35,18 +37,28 @@ const STATUS_TRANSITIONS: Record<MaintenanceStatus, MaintenanceStatus[]> = {
     ],
     [MaintenanceStatus.PENDING_MAINTENANCE_APPROVAL]: [
         MaintenanceStatus.UNDER_MAINTENANCE,
-        MaintenanceStatus.PENDING_OPERATIONS_ACK // Back if rejected
+        MaintenanceStatus.REJECTED_BY_MAINTENANCE
     ],
-    [MaintenanceStatus.UNDER_MAINTENANCE]: [
-        MaintenanceStatus.UNDER_QC,
-        MaintenanceStatus.COMPLETED // Skip QC if not required
+    [MaintenanceStatus.REJECTED_BY_MAINTENANCE]: [
+        MaintenanceStatus.ACCEPTED // Retry path
     ],
-    [MaintenanceStatus.UNDER_QC]: [
-        MaintenanceStatus.READY,
-        MaintenanceStatus.UNDER_MAINTENANCE // If QC fails
+    [MaintenanceStatus.UNDER_MAINTENANCE]: [MaintenanceStatus.REPAIR_COMPLETED],
+    [MaintenanceStatus.REPAIR_COMPLETED]: [MaintenanceStatus.QUALITY_INSPECTION],
+    [MaintenanceStatus.QUALITY_INSPECTION]: [
+        MaintenanceStatus.READY_FOR_SERVICE,   // QC passed
+        MaintenanceStatus.INSPECTION_FAILED    // QC failed — return to garage
     ],
-    [MaintenanceStatus.READY]: [MaintenanceStatus.COMPLETED],
-    [MaintenanceStatus.COMPLETED]: [], // Terminal state
+    [MaintenanceStatus.INSPECTION_FAILED]: [
+        MaintenanceStatus.UNDER_MAINTENANCE    // Garage re-opens the repair
+    ],
+    [MaintenanceStatus.READY_FOR_SERVICE]: [MaintenanceStatus.MAINTENANCE_COMPLETED],
+    [MaintenanceStatus.MAINTENANCE_COMPLETED]: [
+        MaintenanceStatus.COMPLETED,
+        MaintenanceStatus.PENDING_INVOICE
+    ],
+    [MaintenanceStatus.COMPLETED]: [MaintenanceStatus.PENDING_INVOICE],
+    [MaintenanceStatus.PENDING_INVOICE]: [MaintenanceStatus.INVOICE_SUBMITTED],
+    [MaintenanceStatus.INVOICE_SUBMITTED]: [MaintenanceStatus.CLOSED],
     [MaintenanceStatus.CLOSED]: [], // Terminal state
 };
 
@@ -88,10 +100,20 @@ export function getStatusColor(status: MaintenanceStatus): string {
             return 'bg-yellow-100 text-yellow-700 border-yellow-300';
         case MaintenanceStatus.UNDER_MAINTENANCE:
             return 'bg-indigo-100 text-indigo-700 border-indigo-300';
-        case MaintenanceStatus.UNDER_QC:
+        case MaintenanceStatus.REJECTED_BY_MAINTENANCE:
+            return 'bg-red-100 text-red-700 border-red-300';
+        case MaintenanceStatus.REPAIR_COMPLETED:
+            return 'bg-amber-100 text-amber-700 border-amber-300';
+        case MaintenanceStatus.QUALITY_INSPECTION:
             return 'bg-purple-100 text-purple-700 border-purple-300';
-        case MaintenanceStatus.READY:
+        case MaintenanceStatus.INSPECTION_FAILED:
+            return 'bg-red-100 text-red-700 border-red-300';
+        case MaintenanceStatus.READY_FOR_SERVICE:
             return 'bg-teal-100 text-teal-700 border-teal-300';
+        case MaintenanceStatus.MAINTENANCE_COMPLETED:
+        case MaintenanceStatus.PENDING_INVOICE:
+        case MaintenanceStatus.INVOICE_SUBMITTED:
+            return 'bg-indigo-100 text-indigo-700 border-indigo-300';
         case MaintenanceStatus.COMPLETED:
             return 'bg-green-100 text-green-700 border-green-300';
         case MaintenanceStatus.CLOSED:

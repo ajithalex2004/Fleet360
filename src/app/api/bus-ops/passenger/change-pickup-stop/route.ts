@@ -30,8 +30,6 @@ export async function POST(req: NextRequest) {
         staffMemberId,
         employeeId,
         newLocationAddress,
-        latitude,
-        longitude,
         markAsPermanentNewStop = false,
         tripPassengerId,
         reason,
@@ -60,20 +58,22 @@ export async function POST(req: NextRequest) {
 
       const oldStopName = staff.defaultStopName;
 
-      // 2. If marked as permanent new stop, update the employee record
+      // 2. If marked as permanent new stop, update the employee record.
+      // StaffMember has no home-address or lat/lng columns — the only
+      // real field for "the passenger's permanent stop" is defaultStopName.
       if (markAsPermanentNewStop) {
         await tx.staffMember.update({
           where: { id: staff.id },
           data: {
             defaultStopName: newLocationAddress.trim(),
-            homeAddress: newLocationAddress.trim(),
-            ...(typeof latitude === 'number' ? { homeLatitude: latitude } : {}),
-            ...(typeof longitude === 'number' ? { homeLongitude: longitude } : {}),
           },
         });
       }
 
-      // 3. If a specific trip passenger ID was provided or for today's pending trips, update the boarding stop
+      // 3. If a specific trip passenger ID was provided or for today's pending trips, update the boarding stop.
+      // TripPassenger has no `boardingStop` column — `boardingStopId` holds a
+      // stop's id, while the free-text address entered here belongs in the
+      // display-name column, `boardingStopName`.
       if (tripPassengerId) {
         await tx.tripPassenger.updateMany({
           where: {
@@ -81,28 +81,24 @@ export async function POST(req: NextRequest) {
             staffMemberId: staff.id,
           },
           data: {
-            boardingStop: newLocationAddress.trim(),
+            boardingStopName: newLocationAddress.trim(),
           },
         });
       }
 
-      // 4. Log audit trail
-      await logAudit(
-        prisma,
+      // 4. Log audit trail — logAudit takes a single AuditPayload object
+      // (see src/lib/audit.ts), not the positional-args form used here before.
+      await logAudit({
         tenantId,
-        'StaffMember',
-        staff.id,
-        'UPDATE',
-        {
-          action: 'PICKUP_STOP_CHANGED',
-          oldStopName,
-          newLocationAddress,
-          markAsPermanentNewStop,
-          reason: reason || 'Passenger self-service request',
-          requestedBy: userId || staff.name,
-        },
-        userId || staff.name
-      );
+        userId: userId || staff.name,
+        entityType: 'StaffMember',
+        entityId: staff.id,
+        entityName: staff.name,
+        action: 'UPDATE',
+        details: `Pickup stop changed from "${oldStopName ?? 'none'}" to "${newLocationAddress}"` +
+          `${markAsPermanentNewStop ? ' (set as permanent default stop)' : ''}. ` +
+          `Reason: ${reason || 'Passenger self-service request'}`,
+      });
 
       return NextResponse.json({
         ok: true,

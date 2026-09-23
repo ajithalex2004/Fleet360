@@ -21,7 +21,7 @@ export async function POST(
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
 
-  const { tenantId, user } = authz;
+  const { tenantId } = authz;
   const { id: requestId } = await context.params;
 
   const rawBody = await req.json().catch(() => ({}));
@@ -34,7 +34,7 @@ export async function POST(
       tenantId,
       requestId,
       reason,
-      user?.name || user?.email || 'Dispatcher',
+      req.headers.get('x-user-name') || req.headers.get('x-user-email') || 'Dispatcher',
     );
 
     return NextResponse.json({

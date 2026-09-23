@@ -187,7 +187,7 @@ describe('Executable Security Exemption & Boundary Assertion Suite', () => {
       );
 
       const res = await enterpriseWebhookPOST(req, {
-        params: { id: '00000000-0000-0000-0000-000000000099' },
+        params: Promise.resolve({ id: '00000000-0000-0000-0000-000000000099' }),
       });
       expect(res.status).toBe(404);
       const json = await res.json();
@@ -217,7 +217,7 @@ describe('Executable Security Exemption & Boundary Assertion Suite', () => {
           body: JSON.stringify({ entityType: 'PURCHASE_ORDER', orderId: 'PO-999' }),
         }
       );
-      const resNoSecret = await enterpriseWebhookPOST(reqNoSecret, { params: { id: validConnId } });
+      const resNoSecret = await enterpriseWebhookPOST(reqNoSecret, { params: Promise.resolve({ id: validConnId }) });
       expect(resNoSecret.status).toBe(401);
       const jsonNoSecret = await resNoSecret.json();
       expect(jsonNoSecret.error).toBe('Unauthorized enterprise webhook request');
@@ -234,7 +234,7 @@ describe('Executable Security Exemption & Boundary Assertion Suite', () => {
           body: JSON.stringify({ entityType: 'PURCHASE_ORDER', orderId: 'PO-999' }),
         }
       );
-      const resWrongSecret = await enterpriseWebhookPOST(reqWrongSecret, { params: { id: validConnId } });
+      const resWrongSecret = await enterpriseWebhookPOST(reqWrongSecret, { params: Promise.resolve({ id: validConnId }) });
       expect(resWrongSecret.status).toBe(401);
 
       // Shorter secret (5 chars vs 25 chars)
@@ -246,7 +246,7 @@ describe('Executable Security Exemption & Boundary Assertion Suite', () => {
           body: JSON.stringify({ entityType: 'PURCHASE_ORDER', orderId: 'PO-999' }),
         }
       );
-      expect((await enterpriseWebhookPOST(reqShortSecret, { params: { id: validConnId } })).status).toBe(401);
+      expect((await enterpriseWebhookPOST(reqShortSecret, { params: Promise.resolve({ id: validConnId }) })).status).toBe(401);
 
       // Empty secret
       const reqEmptySecret = new NextRequest(
@@ -257,7 +257,7 @@ describe('Executable Security Exemption & Boundary Assertion Suite', () => {
           body: JSON.stringify({ entityType: 'PURCHASE_ORDER', orderId: 'PO-999' }),
         }
       );
-      expect((await enterpriseWebhookPOST(reqEmptySecret, { params: { id: validConnId } })).status).toBe(401);
+      expect((await enterpriseWebhookPOST(reqEmptySecret, { params: Promise.resolve({ id: validConnId }) })).status).toBe(401);
 
       // Malformed secret
       const reqMalformedSecret = new NextRequest(
@@ -268,7 +268,7 @@ describe('Executable Security Exemption & Boundary Assertion Suite', () => {
           body: JSON.stringify({ entityType: 'PURCHASE_ORDER', orderId: 'PO-999' }),
         }
       );
-      expect((await enterpriseWebhookPOST(reqMalformedSecret, { params: { id: validConnId } })).status).toBe(401);
+      expect((await enterpriseWebhookPOST(reqMalformedSecret, { params: Promise.resolve({ id: validConnId }) })).status).toBe(401);
 
       // Longer secret (60+ chars)
       const reqLongSecret = new NextRequest(
@@ -282,7 +282,7 @@ describe('Executable Security Exemption & Boundary Assertion Suite', () => {
           body: JSON.stringify({ entityType: 'PURCHASE_ORDER', orderId: 'PO-999' }),
         }
       );
-      expect((await enterpriseWebhookPOST(reqLongSecret, { params: { id: validConnId } })).status).toBe(401);
+      expect((await enterpriseWebhookPOST(reqLongSecret, { params: Promise.resolve({ id: validConnId }) })).status).toBe(401);
 
       // 3. Valid secret accepts request
       const reqValidSecret = new NextRequest(
@@ -296,7 +296,7 @@ describe('Executable Security Exemption & Boundary Assertion Suite', () => {
           body: JSON.stringify({ entityType: 'PURCHASE_ORDER', orderId: 'PO-999' }),
         }
       );
-      const resValidSecret = await enterpriseWebhookPOST(reqValidSecret, { params: { id: validConnId } });
+      const resValidSecret = await enterpriseWebhookPOST(reqValidSecret, { params: Promise.resolve({ id: validConnId }) });
       expect(resValidSecret.status).toBe(200);
       const jsonValid = await resValidSecret.json();
       expect(jsonValid.success).toBe(true);

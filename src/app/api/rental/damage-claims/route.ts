@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import type { Prisma } from '@prisma/client';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls, runSequential } from '@/lib/rls';
@@ -74,8 +75,11 @@ export async function POST(req: NextRequest) {
   try {
     const bodyRaw = await req.json();
     const body = { ...stripTenantOwnershipFields((bodyRaw && typeof bodyRaw === 'object' ? bodyRaw : {}) as Record<string, unknown>), tenantId };
+    // body is untyped JSON plus an explicit tenantId, which sharpens the
+    // inferred literal shape enough that it stops matching Prisma's
+    // Checked/Unchecked create-input union.
     const damageClaim = await withTenantRls(prisma, tenantId, async (tx) =>
-      tx.damageClaim.create({ data: body }),
+      tx.damageClaim.create({ data: body as Prisma.DamageClaimUncheckedCreateInput }),
     );
     revalidateCache([CACHE_TAG]);
     return NextResponse.json(damageClaim, { status: 201 });

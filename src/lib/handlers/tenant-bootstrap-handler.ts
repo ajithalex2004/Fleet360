@@ -252,7 +252,7 @@ export async function tenantBootstrapHandler<T>(
     }
 
     return NextResponse.json(result, { status: 200 });
-  } catch (error: any) {
+  } catch (error) {
     if (error instanceof BootstrapAccessDeniedError) {
       console.error(`[Bootstrap Security Violation] ${error.message}`);
       return NextResponse.json(
@@ -262,13 +262,18 @@ export async function tenantBootstrapHandler<T>(
     }
 
     console.error(`[tenantBootstrapHandler:${operation}] execution failed:`, error);
+    const message = error instanceof Error ? error.message : 'An error occurred during tenant bootstrap.';
+    const status =
+      error && typeof error === 'object' && 'status' in error && typeof (error as { status: unknown }).status === 'number'
+        ? (error as { status: number }).status
+        : 500;
     return NextResponse.json(
       {
         error: 'Internal Server Error',
-        message: error.message || 'An error occurred during tenant bootstrap.',
+        message: message || 'An error occurred during tenant bootstrap.',
         correlationId,
       },
-      { status: error.status || 500 },
+      { status },
     );
   }
 }
