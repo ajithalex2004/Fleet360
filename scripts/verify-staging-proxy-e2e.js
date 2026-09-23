@@ -489,31 +489,58 @@ async function verifyCandidateBinding() {
   }
   console.log(`\nVerifying Deployed Cluster against Release Candidate SHA (${expectedSha})...`);
 
-  // 1. Verify frontend deployed release
-  const healthRes = await fetch(`${STAGING_APP_ORIGIN}/api/health`);
-  if (healthRes.status !== 200) {
-    throw new Error(`Failed to query /api/health for candidate validation (status ${healthRes.status})`);
-  }
-  const health = await healthRes.json();
-  const deployedFrontendSha = (health.release || '').trim().toLowerCase();
-  console.log(`  Frontend deployed release: ${deployedFrontendSha}`);
-
-  if (!deployedFrontendSha || deployedFrontendSha === 'unknown') {
-    throw new Error('Fatal: Frontend deployment reported missing or unknown revision SHA');
-  }
-
-  const frontendMatches = (expectedSha.length >= 7 && deployedFrontendSha.startsWith(expectedSha)) ||
-                          (deployedFrontendSha.length >= 7 && expectedSha.startsWith(deployedFrontendSha));
-  if (!frontendMatches) {
-    throw new Error(
-      `Fatal: Release Candidate Mismatch on frontend: deployed SHA (${deployedFrontendSha}) does not match expected candidate (${expectedSha})`
-    );
-  }
-  console.log(`  Frontend candidate binding verified: matches ${expectedSha.slice(0, 8)}`);
-
-  // 2. Verify backend deployed release via /api/readyz with bounded retries
   const MAX_RETRIES = 5;
   const RETRY_DELAY_MS = 2000;
+
+  const matchesCandidate = (deployedSha) =>
+    (expectedSha.length >= 7 && deployedSha.startsWith(expectedSha)) ||
+    (deployedSha.length >= 7 && expectedSha.startsWith(deployedSha));
+
+  // 1. Verify frontend deployed release via /api/health with bounded retries
+  // (Railway builds take minutes, not seconds -- a single immediate check
+  // here would spuriously fail against the previous release on every run.)
+  let deployedFrontendSha = '';
+  let lastFrontendError = null;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    lastFrontendError = null;
+    try {
+      const healthRes = await fetch(`${STAGING_APP_ORIGIN}/api/health`);
+      if (healthRes.status === 200) {
+        const health = await healthRes.json();
+        deployedFrontendSha = (health.release || '').trim().toLowerCase();
+        console.log(`  Frontend deployed release (attempt ${attempt}/${MAX_RETRIES}): ${deployedFrontendSha}`);
+
+        if (!deployedFrontendSha || deployedFrontendSha === 'unknown') {
+          throw new Error('Frontend deployment reported missing or unknown revision SHA');
+        }
+
+        if (matchesCandidate(deployedFrontendSha)) {
+          console.log(`  Frontend candidate binding verified: matches ${expectedSha.slice(0, 8)}`);
+          break;
+        }
+
+        lastFrontendError = new Error(
+          `Release Candidate Mismatch on frontend: deployed SHA (${deployedFrontendSha}) does not match expected candidate (${expectedSha})`
+        );
+      } else {
+        lastFrontendError = new Error(`Failed to query /api/health for candidate validation (status ${healthRes.status})`);
+      }
+    } catch (err) {
+      lastFrontendError = err;
+    }
+
+    if (attempt < MAX_RETRIES) {
+      console.log(`  Frontend binding attempt ${attempt}/${MAX_RETRIES} pending (${lastFrontendError.message}); retrying in ${RETRY_DELAY_MS}ms...`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+    }
+  }
+
+  if (lastFrontendError) {
+    throw new Error(`Fatal: Failed to establish frontend candidate binding after ${MAX_RETRIES} attempts: ${lastFrontendError.message}`);
+  }
+
+  // 2. Verify backend deployed release via /api/readyz with bounded retries
   let lastError = null;
   let deployedBackendSha = '';
 
