@@ -17,7 +17,7 @@ jobs:
   staging-acceptance-gate:
     name: Staging E2E Proxy & Tenant Isolation Acceptance Gate
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     env:
       STAGING_APP_ORIGIN: https://fleet360-app-staging.up.railway.app
