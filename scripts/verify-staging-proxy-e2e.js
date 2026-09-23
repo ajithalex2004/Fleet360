@@ -489,7 +489,7 @@ async function verifyCandidateBinding() {
   }
   console.log(`\nVerifying Deployed Cluster against Release Candidate SHA (${expectedSha})...`);
 
-  const MAX_RETRIES = 30;
+  const MAX_RETRIES = 55;
   const RETRY_DELAY_MS = 10000;
 
   const matchesCandidate = (deployedSha) =>
