@@ -88,6 +88,12 @@ async function getSessionCookie(tenantId) {
   return cookie;
 }
 
+// The staging database is reached through Neon's connection pooler, which
+// the Phase 0 jobs share. Prisma's default 2s wait for a transaction slot
+// failed this gate with P2028 ("Unable to start a transaction in the given
+// time") while those jobs held the pool; wait longer instead of failing.
+const STAGING_TX_OPTIONS = { maxWait: 20_000, timeout: 60_000 };
+
 async function seedStagingRecords() {
   console.log('[1/6] Seeding controlled tenant records into neondb_staging...');
 
@@ -197,7 +203,7 @@ async function seedStagingRecords() {
         ('${SHIPMENT_B_ID}', '${TENANT_B_ID}', 'SHP-STAGE-B-${RUN_ID}', 'ASSIGNED', '${DRIVER_B_ID}', '${VEHICLE_B_ID}', NOW())
       ON CONFLICT (id) DO NOTHING;
     `);
-  });
+  }, STAGING_TX_OPTIONS);
 
   console.log(`Seeded successfully:`);
   console.log(`  Tenant A: ${TENANT_A_ID} | Driver: Alice (${DRIVER_A_ID}) | Vehicle: Volvo (${VEHICLE_A_ID})`);
@@ -220,7 +226,7 @@ async function cleanupStagingRecords() {
     await tx.$executeRawUnsafe(`DELETE FROM roles WHERE tenant_id IN ('${TENANT_A_ID}', '${TENANT_B_ID}')`);
     await tx.$executeRawUnsafe(`DELETE FROM "User" WHERE id = '${LOGIN_USER_ID}'`);
     await tx.$executeRawUnsafe(`DELETE FROM tenants WHERE id IN ('${TENANT_A_ID}', '${TENANT_B_ID}')`);
-  });
+  }, STAGING_TX_OPTIONS);
   await prisma.$disconnect();
   console.log('Cleanup complete.');
 }
