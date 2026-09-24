@@ -133,8 +133,15 @@ jobs:
       - name: Lint ratchet (blocks new errors only)
         run: node scripts/check-lint-ratchet.mjs
 
+      # Private-repo GitHub runners have 7 GB of memory, and Node's default
+      # heap limit (~2 GB there) is too small for tsc and next build on this
+      # codebase: both died with "JavaScript heap out of memory" after the
+      # repository went private. 4 GB leaves room for the Postgres service;
+      # next build's worker processes each inherit this cap.
       - name: Typecheck (advisory)
         run: npm run typecheck
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         continue-on-error: true   # TODO(KNOWN-TS-001): the codebase has ~100 pre-existing
                                    # TS errors (prisma/seed.ts, scripts/, admin pages).
                                    # Re-enforce once cleanup PR lands.
@@ -148,6 +155,8 @@ jobs:
 
       - name: Typecheck ratchet (blocks new errors only)
         run: node scripts/check-typecheck-ratchet.mjs
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
 
       - name: Credential Leak Guard (Blocking)
         run: npm run check:credentials
@@ -164,6 +173,8 @@ jobs:
 
       - name: Build (Next.js)
         run: npm run build
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         continue-on-error: true
         # TODO(KNOWN-BUILD-001): pre-existing build failures from client
         # components that transitively import server-only modules
