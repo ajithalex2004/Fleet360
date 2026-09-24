@@ -48,6 +48,13 @@ export default defineConfig({
     // 30 seconds — DB queries and HTTP round-trips can be slow
     testTimeout: 30_000,
 
+    // Vitest's beforeAll/afterAll hooks have their own timeout, separate
+    // from testTimeout, defaulting to 10s -- too tight for integration
+    // suites whose beforeAll seeds many records in one withPlatformAdmin
+    // transaction against real Neon latency. Match withPlatformAdmin's own
+    // 60s transaction timeout so it stays the actual bottleneck.
+    hookTimeout: 60_000,
+
     coverage: {
       // Use V8 coverage (faster, no instrumentation)
       provider: 'v8',

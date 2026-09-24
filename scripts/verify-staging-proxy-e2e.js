@@ -91,103 +91,114 @@ async function getSessionCookie(tenantId) {
 async function seedStagingRecords() {
   console.log('[1/6] Seeding controlled tenant records into neondb_staging...');
 
-  // Seed Tenants
-  await prisma.$executeRawUnsafe(`
-    INSERT INTO tenants (id, name, code, plan, is_active, created_at, updated_at)
-    VALUES
-      ('${TENANT_A_ID}', 'Acceptance Tenant A', 'ACC-A-${RUN_ID}', 'ENTERPRISE', true, NOW(), NOW()),
-      ('${TENANT_B_ID}', 'Acceptance Tenant B', 'ACC-B-${RUN_ID}', 'ENTERPRISE', true, NOW(), NOW())
-    ON CONFLICT (id) DO NOTHING;
-  `);
+  await prisma.$transaction(async (tx) => {
+    // These tables are tenant-scoped by RLS, and this script seeds rows for
+    // TWO different tenants in one pass -- bypass RLS for this setup
+    // transaction rather than switching context per statement, mirroring
+    // src/lib/rls.ts's withPlatformAdmin (the '*' escape hatch).
+    const [setResult] = await tx.$queryRawUnsafe(`SELECT set_config('app.tenant_id', '*', true) AS v`);
+    if (setResult?.v !== '*') {
+      throw new Error(`Failed to set app.tenant_id session context (got '${setResult?.v}')`);
+    }
 
-  // Seed User for Ordinary Login via Prisma model
-  await prisma.user.create({
-    data: {
-      id: LOGIN_USER_ID,
-      email: LOGIN_EMAIL.toLowerCase(),
-      username: `accuser_${RUN_ID}`,
-      firstName: 'Acceptance',
-      lastName: 'User',
-      isActive: true,
-      updatedAt: new Date(),
-    },
-  });
+    // Seed Tenants
+    await tx.$executeRawUnsafe(`
+      INSERT INTO tenants (id, name, code, plan, is_active, created_at, updated_at)
+      VALUES
+        ('${TENANT_A_ID}', 'Acceptance Tenant A', 'ACC-A-${RUN_ID}', 'ENTERPRISE', true, NOW(), NOW()),
+        ('${TENANT_B_ID}', 'Acceptance Tenant B', 'ACC-B-${RUN_ID}', 'ENTERPRISE', true, NOW(), NOW())
+      ON CONFLICT (id) DO NOTHING;
+    `);
 
-  const passwordHash = hashPassword(LOGIN_PASSWORD);
-  await prisma.$executeRawUnsafe(
-    `UPDATE "User" SET password_hash = $1 WHERE id = $2`,
-    passwordHash,
-    LOGIN_USER_ID,
-  );
+    // Seed User for Ordinary Login via Prisma model
+    await tx.user.create({
+      data: {
+        id: LOGIN_USER_ID,
+        email: LOGIN_EMAIL.toLowerCase(),
+        username: `accuser_${RUN_ID}`,
+        firstName: 'Acceptance',
+        lastName: 'User',
+        isActive: true,
+        updatedAt: new Date(),
+      },
+    });
 
-  // Link User to Tenant A via UserTenant model
-  const roleAId = crypto.randomUUID();
-  await prisma.role.create({
-    data: {
-      id: roleAId,
-      tenantId: TENANT_A_ID,
-      name: 'Tenant Admin A',
-      code: 'TENANT_ADMIN',
-    },
-  });
+    const passwordHash = hashPassword(LOGIN_PASSWORD);
+    await tx.$executeRawUnsafe(
+      `UPDATE "User" SET password_hash = $1 WHERE id = $2`,
+      passwordHash,
+      LOGIN_USER_ID,
+    );
 
-  await prisma.userTenant.create({
-    data: {
-      id: crypto.randomUUID(),
-      userId: LOGIN_USER_ID,
-      tenantId: TENANT_A_ID,
-      roleId: roleAId,
-      isActive: true,
-    },
-  });
+    // Link User to Tenant A via UserTenant model
+    const roleAId = crypto.randomUUID();
+    await tx.role.create({
+      data: {
+        id: roleAId,
+        tenantId: TENANT_A_ID,
+        name: 'Tenant Admin A',
+        code: 'TENANT_ADMIN',
+      },
+    });
 
-  // Link User to Tenant B via UserTenant model
-  const roleBId = crypto.randomUUID();
-  await prisma.role.create({
-    data: {
-      id: roleBId,
-      tenantId: TENANT_B_ID,
-      name: 'Tenant Admin B',
-      code: 'TENANT_ADMIN',
-    },
-  });
+    await tx.userTenant.create({
+      data: {
+        id: crypto.randomUUID(),
+        userId: LOGIN_USER_ID,
+        tenantId: TENANT_A_ID,
+        roleId: roleAId,
+        isActive: true,
+      },
+    });
 
-  await prisma.userTenant.create({
-    data: {
-      id: crypto.randomUUID(),
-      userId: LOGIN_USER_ID,
-      tenantId: TENANT_B_ID,
-      roleId: roleBId,
-      isActive: true,
-    },
-  });
+    // Link User to Tenant B via UserTenant model
+    const roleBId = crypto.randomUUID();
+    await tx.role.create({
+      data: {
+        id: roleBId,
+        tenantId: TENANT_B_ID,
+        name: 'Tenant Admin B',
+        code: 'TENANT_ADMIN',
+      },
+    });
 
-  // Seed Vehicles
-  await prisma.$executeRawUnsafe(`
-    INSERT INTO vehicles (id, tenant_id, make, model, year, license_plate, vin, status, updated_at)
-    VALUES
-      ('${VEHICLE_A_ID}', '${TENANT_A_ID}', 'Volvo', 'FH16', 2026, 'VOLVO-ACC-${RUN_ID}', 'VIN-A-${RUN_ID}', 'AVAILABLE', NOW()),
-      ('${VEHICLE_B_ID}', '${TENANT_B_ID}', 'Scania', 'R500', 2026, 'SCANIA-ACC-${RUN_ID}', 'VIN-B-${RUN_ID}', 'AVAILABLE', NOW())
-    ON CONFLICT (id) DO NOTHING;
-  `);
+    await tx.userTenant.create({
+      data: {
+        id: crypto.randomUUID(),
+        userId: LOGIN_USER_ID,
+        tenantId: TENANT_B_ID,
+        roleId: roleBId,
+        isActive: true,
+      },
+    });
 
-  // Seed Drivers
-  await prisma.$executeRawUnsafe(`
-    INSERT INTO drivers (id, tenant_id, name, first_name, last_name, license_number, status, updated_at)
-    VALUES
-      ('${DRIVER_A_ID}', '${TENANT_A_ID}', 'Alice Alpha', 'Alice', 'Alpha', 'LIC-A-${RUN_ID}', 'ACTIVE', NOW()),
-      ('${DRIVER_B_ID}', '${TENANT_B_ID}', 'Bob Bravo', 'Bob', 'Bravo', 'LIC-B-${RUN_ID}', 'ACTIVE', NOW())
-    ON CONFLICT (id) DO NOTHING;
-  `);
+    // Seed Vehicles
+    await tx.$executeRawUnsafe(`
+      INSERT INTO vehicles (id, tenant_id, make, model, year, license_plate, vin, status, updated_at)
+      VALUES
+        ('${VEHICLE_A_ID}', '${TENANT_A_ID}', 'Volvo', 'FH16', 2026, 'VOLVO-ACC-${RUN_ID}', 'VIN-A-${RUN_ID}', 'AVAILABLE', NOW()),
+        ('${VEHICLE_B_ID}', '${TENANT_B_ID}', 'Scania', 'R500', 2026, 'SCANIA-ACC-${RUN_ID}', 'VIN-B-${RUN_ID}', 'AVAILABLE', NOW())
+      ON CONFLICT (id) DO NOTHING;
+    `);
 
-  // Seed Shipments
-  await prisma.$executeRawUnsafe(`
-    INSERT INTO logistics_shipment_orders (id, tenant_id, shipment_no, status, assigned_driver_id, assigned_vehicle_id, updated_at)
-    VALUES
-      ('${SHIPMENT_A_ID}', '${TENANT_A_ID}', 'SHP-STAGE-A-${RUN_ID}', 'ASSIGNED', '${DRIVER_A_ID}', '${VEHICLE_A_ID}', NOW()),
-      ('${SHIPMENT_B_ID}', '${TENANT_B_ID}', 'SHP-STAGE-B-${RUN_ID}', 'ASSIGNED', '${DRIVER_B_ID}', '${VEHICLE_B_ID}', NOW())
-    ON CONFLICT (id) DO NOTHING;
-  `);
+    // Seed Drivers
+    await tx.$executeRawUnsafe(`
+      INSERT INTO drivers (id, tenant_id, name, first_name, last_name, license_number, status, updated_at)
+      VALUES
+        ('${DRIVER_A_ID}', '${TENANT_A_ID}', 'Alice Alpha', 'Alice', 'Alpha', 'LIC-A-${RUN_ID}', 'ACTIVE', NOW()),
+        ('${DRIVER_B_ID}', '${TENANT_B_ID}', 'Bob Bravo', 'Bob', 'Bravo', 'LIC-B-${RUN_ID}', 'ACTIVE', NOW())
+      ON CONFLICT (id) DO NOTHING;
+    `);
+
+    // Seed Shipments
+    await tx.$executeRawUnsafe(`
+      INSERT INTO logistics_shipment_orders (id, tenant_id, shipment_no, status, assigned_driver_id, assigned_vehicle_id, updated_at)
+      VALUES
+        ('${SHIPMENT_A_ID}', '${TENANT_A_ID}', 'SHP-STAGE-A-${RUN_ID}', 'ASSIGNED', '${DRIVER_A_ID}', '${VEHICLE_A_ID}', NOW()),
+        ('${SHIPMENT_B_ID}', '${TENANT_B_ID}', 'SHP-STAGE-B-${RUN_ID}', 'ASSIGNED', '${DRIVER_B_ID}', '${VEHICLE_B_ID}', NOW())
+      ON CONFLICT (id) DO NOTHING;
+    `);
+  }, { timeout: 60_000, maxWait: 10_000 });
 
   console.log(`Seeded successfully:`);
   console.log(`  Tenant A: ${TENANT_A_ID} | Driver: Alice (${DRIVER_A_ID}) | Vehicle: Volvo (${VEHICLE_A_ID})`);
@@ -197,13 +208,16 @@ async function seedStagingRecords() {
 
 async function cleanupStagingRecords() {
   console.log('\nCleaning up test records from neondb_staging...');
-  await prisma.$executeRawUnsafe(`DELETE FROM logistics_shipment_orders WHERE id IN ('${SHIPMENT_A_ID}', '${SHIPMENT_B_ID}')`);
-  await prisma.$executeRawUnsafe(`DELETE FROM drivers WHERE id IN ('${DRIVER_A_ID}', '${DRIVER_B_ID}')`);
-  await prisma.$executeRawUnsafe(`DELETE FROM vehicles WHERE id IN ('${VEHICLE_A_ID}', '${VEHICLE_B_ID}')`);
-  await prisma.$executeRawUnsafe(`DELETE FROM user_tenants WHERE user_id = '${LOGIN_USER_ID}'`);
-  await prisma.$executeRawUnsafe(`DELETE FROM roles WHERE tenant_id IN ('${TENANT_A_ID}', '${TENANT_B_ID}')`);
-  await prisma.$executeRawUnsafe(`DELETE FROM "User" WHERE id = '${LOGIN_USER_ID}'`);
-  await prisma.$executeRawUnsafe(`DELETE FROM tenants WHERE id IN ('${TENANT_A_ID}', '${TENANT_B_ID}')`);
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', '*', true)`);
+    await tx.$executeRawUnsafe(`DELETE FROM logistics_shipment_orders WHERE id IN ('${SHIPMENT_A_ID}', '${SHIPMENT_B_ID}')`);
+    await tx.$executeRawUnsafe(`DELETE FROM drivers WHERE id IN ('${DRIVER_A_ID}', '${DRIVER_B_ID}')`);
+    await tx.$executeRawUnsafe(`DELETE FROM vehicles WHERE id IN ('${VEHICLE_A_ID}', '${VEHICLE_B_ID}')`);
+    await tx.$executeRawUnsafe(`DELETE FROM user_tenants WHERE user_id = '${LOGIN_USER_ID}'`);
+    await tx.$executeRawUnsafe(`DELETE FROM roles WHERE tenant_id IN ('${TENANT_A_ID}', '${TENANT_B_ID}')`);
+    await tx.$executeRawUnsafe(`DELETE FROM "User" WHERE id = '${LOGIN_USER_ID}'`);
+    await tx.$executeRawUnsafe(`DELETE FROM tenants WHERE id IN ('${TENANT_A_ID}', '${TENANT_B_ID}')`);
+  }, { timeout: 60_000, maxWait: 10_000 });
   await prisma.$disconnect();
   console.log('Cleanup complete.');
 }
@@ -489,31 +503,58 @@ async function verifyCandidateBinding() {
   }
   console.log(`\nVerifying Deployed Cluster against Release Candidate SHA (${expectedSha})...`);
 
-  // 1. Verify frontend deployed release
-  const healthRes = await fetch(`${STAGING_APP_ORIGIN}/api/health`);
-  if (healthRes.status !== 200) {
-    throw new Error(`Failed to query /api/health for candidate validation (status ${healthRes.status})`);
-  }
-  const health = await healthRes.json();
-  const deployedFrontendSha = (health.release || '').trim().toLowerCase();
-  console.log(`  Frontend deployed release: ${deployedFrontendSha}`);
+  const MAX_RETRIES = 55;
+  const RETRY_DELAY_MS = 10000;
 
-  if (!deployedFrontendSha || deployedFrontendSha === 'unknown') {
-    throw new Error('Fatal: Frontend deployment reported missing or unknown revision SHA');
+  const matchesCandidate = (deployedSha) =>
+    (expectedSha.length >= 7 && deployedSha.startsWith(expectedSha)) ||
+    (deployedSha.length >= 7 && expectedSha.startsWith(deployedSha));
+
+  // 1. Verify frontend deployed release via /api/health with bounded retries
+  // (Railway builds take minutes, not seconds -- a single immediate check
+  // here would spuriously fail against the previous release on every run.)
+  let deployedFrontendSha = '';
+  let lastFrontendError = null;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    lastFrontendError = null;
+    try {
+      const healthRes = await fetch(`${STAGING_APP_ORIGIN}/api/health`);
+      if (healthRes.status === 200) {
+        const health = await healthRes.json();
+        deployedFrontendSha = (health.release || '').trim().toLowerCase();
+        console.log(`  Frontend deployed release (attempt ${attempt}/${MAX_RETRIES}): ${deployedFrontendSha}`);
+
+        if (!deployedFrontendSha || deployedFrontendSha === 'unknown') {
+          throw new Error('Frontend deployment reported missing or unknown revision SHA');
+        }
+
+        if (matchesCandidate(deployedFrontendSha)) {
+          console.log(`  Frontend candidate binding verified: matches ${expectedSha.slice(0, 8)}`);
+          break;
+        }
+
+        lastFrontendError = new Error(
+          `Release Candidate Mismatch on frontend: deployed SHA (${deployedFrontendSha}) does not match expected candidate (${expectedSha})`
+        );
+      } else {
+        lastFrontendError = new Error(`Failed to query /api/health for candidate validation (status ${healthRes.status})`);
+      }
+    } catch (err) {
+      lastFrontendError = err;
+    }
+
+    if (attempt < MAX_RETRIES) {
+      console.log(`  Frontend binding attempt ${attempt}/${MAX_RETRIES} pending (${lastFrontendError.message}); retrying in ${RETRY_DELAY_MS}ms...`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+    }
   }
 
-  const frontendMatches = (expectedSha.length >= 7 && deployedFrontendSha.startsWith(expectedSha)) ||
-                          (deployedFrontendSha.length >= 7 && expectedSha.startsWith(deployedFrontendSha));
-  if (!frontendMatches) {
-    throw new Error(
-      `Fatal: Release Candidate Mismatch on frontend: deployed SHA (${deployedFrontendSha}) does not match expected candidate (${expectedSha})`
-    );
+  if (lastFrontendError) {
+    throw new Error(`Fatal: Failed to establish frontend candidate binding after ${MAX_RETRIES} attempts: ${lastFrontendError.message}`);
   }
-  console.log(`  Frontend candidate binding verified: matches ${expectedSha.slice(0, 8)}`);
 
   // 2. Verify backend deployed release via /api/readyz with bounded retries
-  const MAX_RETRIES = 5;
-  const RETRY_DELAY_MS = 2000;
   let lastError = null;
   let deployedBackendSha = '';
 

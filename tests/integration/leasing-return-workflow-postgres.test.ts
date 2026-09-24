@@ -436,5 +436,5 @@ describe.skipIf(!hasDb)('Leasing Return Workflow — PostgreSQL Integration', ()
       tx.leaseContract2.findFirst({ where: { id: contractHttpId } }),
     );
     expect(contractAfterClose?.status).toBe('COMPLETED');
-  });
+  }, 60_000);
 });
