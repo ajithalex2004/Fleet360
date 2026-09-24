@@ -2705,7 +2705,7 @@ model BusPreTripCheck {
 }
 
 model TripIncident {
-  id               String    @id @default(uuid())
+  id               String    @id @default(uuid()) @db.Uuid
   createdAt        DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   /// Tenant scope — added by Phase 0 backfill (column was created by the
@@ -4541,7 +4541,7 @@ model RolePermission {
 /// 20260625130000_multi_tenant_saas_layer2_5 (Layer 4 enterprise readiness).
 /// Distinct from RolePermission (which holds system-role grants).
 model CustomRolePermission {
-  id           String     @id @default(uuid())
+  id           String     @id @default(uuid()) @db.Uuid
   /// References roles(id). tenantId is implicit via roles.tenantId.
   roleId       String     @map("role_id")
   /// References permissions(id). No direct tenant_id column — the join
@@ -4855,7 +4855,7 @@ model FinanceExpense {
 
 // â”€â”€ Tax Categories â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 model FinanceTaxCategory {
-  id        String   @id @default(uuid())
+  id        String   @id @default(uuid()) @db.Uuid
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
@@ -4873,7 +4873,7 @@ model FinanceTaxCategory {
 
 // â”€â”€ VAT Audit Log â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 model FinanceVatAuditLog {
-  id        String   @id @default(uuid())
+  id        String   @id @default(uuid()) @db.Uuid
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   action      String // CALCULATE|SUBMIT|AMEND|PAY|REVERSE
@@ -5053,7 +5053,7 @@ model FinanceBankStatementLine {
 // --- Layer 2: Tenant lifecycle ---
 
 model TenantInvitation {
-  id             String    @id @default(uuid())
+  id             String    @id @default(uuid()) @db.Uuid
   createdAt      DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt      DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   tenantId       String    @map("tenant_id")
@@ -5076,7 +5076,7 @@ model TenantInvitation {
 }
 
 model TenantOffboarding {
-  id                 String    @id @default(uuid())
+  id                 String    @id @default(uuid()) @db.Uuid
   createdAt          DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt          DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   tenantId           String    @map("tenant_id")
@@ -5099,7 +5099,7 @@ model TenantOffboarding {
 // --- Layer 3: Per-tenant feature overrides ---
 
 model TenantFeatureOverride {
-  id           String    @id @default(uuid())
+  id           String    @id @default(uuid()) @db.Uuid
   createdAt    DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   tenantId     String    @map("tenant_id")
@@ -5119,7 +5119,7 @@ model TenantFeatureOverride {
 // --- Layer 4: Enterprise readiness ---
 
 model AuditEvent {
-  id             String   @id @default(uuid())
+  id             String   @id @default(uuid()) @db.Uuid
   occurredAt     DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
   tenantId       String  @map("tenant_id")
   actorUserId    String?  @map("actor_user_id")
@@ -5143,7 +5143,7 @@ model AuditEvent {
 }
 
 model SsoConfig {
-  id                        String    @id @default(uuid())
+  id                        String    @id @default(uuid()) @db.Uuid
   createdAt                 DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                 DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   tenantId                  String    @map("tenant_id")
@@ -5168,7 +5168,7 @@ model SsoConfig {
 }
 
 model ScimToken {
-  id         String    @id @default(uuid())
+  id         String    @id @default(uuid()) @db.Uuid
   createdAt  DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt  DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   tenantId   String    @map("tenant_id")
@@ -5185,7 +5185,7 @@ model ScimToken {
 }
 
 model IpAllowlist {
-  id        String    @id @default(uuid())
+  id        String    @id @default(uuid()) @db.Uuid
   createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   tenantId  String    @map("tenant_id")
@@ -5211,7 +5211,7 @@ model StripeEventProcessed {
 // --- Layer 5: SaaS operations ---
 
 model Subscription {
-  id                    String    @id @default(uuid())
+  id                    String    @id @default(uuid()) @db.Uuid
   createdAt             DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt             DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   tenantId              String    @unique @map("tenant_id")
@@ -5235,7 +5235,7 @@ model Subscription {
 }
 
 model UsageEvent {
-  id             String   @id @default(uuid())
+  id             String   @id @default(uuid()) @db.Uuid
   occurredAt     DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
   tenantId       String   @map("tenant_id")
   metric         String
@@ -5257,7 +5257,7 @@ model UsageEvent {
 // We keep a soft delete (`revokedAt`) so we can disable a single device
 // without losing the history.
 model PushSubscription {
-  id                String    @id @default(uuid())
+  id                String    @id @default(uuid()) @db.Uuid
   createdAt         DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   revokedAt         DateTime? @map("revoked_at") @db.Timestamptz(6)
@@ -5295,7 +5295,7 @@ model PushSubscription {
 // (prisma/migrations/20260809000000_adopt_finance_tables_with_rls/).
 // DO NOT recreate this table at runtime — it is migration-managed.
 model FinanceInvoice {
-  id        String    @id @default(uuid())
+  id        String    @id @default(uuid()) @db.Uuid
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
@@ -5740,7 +5740,7 @@ model FinancePaymentAllocation {
 /// severity and photo evidence. Owned by the Fleet domain.
 /// Closes gap 1 of the mobile-sync doc.
 model DvirDefect {
-  id        String    @id @default(uuid())
+  id        String    @id @default(uuid()) @db.Uuid
   createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
@@ -5771,7 +5771,7 @@ model DvirDefect {
 /// mid-shift that doesn't fit the DVIR or trip-incident flows.
 /// Owned by the Fleet domain. Closes gap 3 of the mobile-sync doc.
 model VehicleIssueReport {
-  id        String    @id @default(uuid())
+  id        String    @id @default(uuid()) @db.Uuid
   createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
@@ -5803,7 +5803,7 @@ model VehicleIssueReport {
 /// (which is trip-scoped). Owned by the Customer domain.
 /// Closes gap 2 of the mobile-sync doc.
 model CustomerInteraction {
-  id        String    @id @default(uuid())
+  id        String    @id @default(uuid()) @db.Uuid
   createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
