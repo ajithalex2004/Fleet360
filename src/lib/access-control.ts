@@ -137,7 +137,8 @@ export function assertCanWrite(
   module: AppModule,
 ): NextResponse | null {
   const plan = request.headers.get('x-tenant-plan') ?? 'TRIAL';
-  const role = request.headers.get('x-user-role')   ?? 'TENANT_ADMIN';
+  // No role header means no verified session role: grant nothing extra.
+  const role = request.headers.get('x-user-role')   ?? '';
 
   if (canWrite(plan, role, module)) return null; // allowed
 

@@ -43,7 +43,7 @@ describe('proxyToGoBackend — fail-closed JWT signing', () => {
     process.env.JWT_SECRET = 'short';
 
     const result = await proxyToGoBackend(
-      migratedRequest({ 'x-user-id': 'user-1', 'x-tenant-id': 'tenant-1' }),
+      migratedRequest({ 'x-user-id': 'user-1', 'x-tenant-id': 'tenant-1', 'x-user-role': 'DISPATCHER' }),
     );
 
     expect(result.proxied).toBe(true);
@@ -55,7 +55,7 @@ describe('proxyToGoBackend — fail-closed JWT signing', () => {
     process.env.JWT_SECRET = 'a-valid-secret-that-is-long-enough';
 
     const result = await proxyToGoBackend(
-      migratedRequest({ 'x-user-id': 'user-1', 'x-tenant-id': 'tenant-1' }),
+      migratedRequest({ 'x-user-id': 'user-1', 'x-tenant-id': 'tenant-1', 'x-user-role': 'DISPATCHER' }),
     );
 
     expect(result.proxied).toBe(true);
@@ -64,6 +64,20 @@ describe('proxyToGoBackend — fail-closed JWT signing', () => {
     const [, init] = fetchSpy.mock.calls[0] as [URL | string, RequestInit];
     const headers = new Headers(init.headers);
     expect(headers.get('authorization')).toMatch(/^Bearer /);
+  });
+
+  it('refuses with 401 and never calls fetch when the session identity has no role', async () => {
+    process.env.JWT_SECRET = 'a-valid-secret-that-is-long-enough';
+
+    const result = await proxyToGoBackend(
+      migratedRequest({ 'x-user-id': 'user-1', 'x-tenant-id': 'tenant-1' }),
+    );
+
+    // Previously a missing role was signed into the backend JWT as
+    // TENANT_ADMIN, granting admin rights on the Go API.
+    expect(result.proxied).toBe(true);
+    expect(result.response?.status).toBe(401);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('does not attempt to sign (and is unaffected by JWT_SECRET) when the request carries no operator session — e.g. carrier-portal/driver-app', async () => {
@@ -130,7 +144,7 @@ describe('proxyToGoBackend — routes with a confirmed, live Go handler are prox
     const result = await proxyToGoBackend(
       new NextRequest(`http://localhost:3000${path}`, {
         method,
-        headers: { 'x-user-id': 'user-1', 'x-tenant-id': 'tenant-1' },
+        headers: { 'x-user-id': 'user-1', 'x-tenant-id': 'tenant-1', 'x-user-role': 'DISPATCHER' },
       }),
     );
 
@@ -143,7 +157,7 @@ describe('proxyToGoBackend — routes with a confirmed, live Go handler are prox
     const result = await proxyToGoBackend(
       new NextRequest('http://localhost:3000/api/logistics/rate-contracts', {
         method: 'GET',
-        headers: { 'x-user-id': 'user-1', 'x-tenant-id': 'tenant-1' },
+        headers: { 'x-user-id': 'user-1', 'x-tenant-id': 'tenant-1', 'x-user-role': 'DISPATCHER' },
       }),
     );
 
@@ -179,7 +193,7 @@ describe('proxyToGoBackend — kill switch & canary tenant controls', () => {
     const result = await proxyToGoBackend(
       new NextRequest('http://localhost:3000/api/logistics/shipments', {
         method: 'GET',
-        headers: { 'x-user-id': 'user-1', 'x-tenant-id': 'tenant-1' },
+        headers: { 'x-user-id': 'user-1', 'x-tenant-id': 'tenant-1', 'x-user-role': 'DISPATCHER' },
       }),
     );
 
@@ -194,7 +208,7 @@ describe('proxyToGoBackend — kill switch & canary tenant controls', () => {
     const canaryResult = await proxyToGoBackend(
       new NextRequest('http://localhost:3000/api/logistics/shipments', {
         method: 'GET',
-        headers: { 'x-user-id': 'user-1', 'x-tenant-id': 'canary-tenant-1' },
+        headers: { 'x-user-id': 'user-1', 'x-tenant-id': 'canary-tenant-1', 'x-user-role': 'DISPATCHER' },
       }),
     );
     expect(canaryResult.proxied).toBe(true);
@@ -207,7 +221,7 @@ describe('proxyToGoBackend — kill switch & canary tenant controls', () => {
     const nonCanaryResult = await proxyToGoBackend(
       new NextRequest('http://localhost:3000/api/logistics/shipments', {
         method: 'GET',
-        headers: { 'x-user-id': 'user-2', 'x-tenant-id': 'general-prod-tenant' },
+        headers: { 'x-user-id': 'user-2', 'x-tenant-id': 'general-prod-tenant', 'x-user-role': 'DISPATCHER' },
       }),
     );
     expect(nonCanaryResult.proxied).toBe(false);
@@ -232,6 +246,7 @@ describe('proxyToGoBackend — kill switch & canary tenant controls', () => {
     const overrideHeaders = new Headers();
     overrideHeaders.set('x-tenant-id', 'canary-override-tenant');
     overrideHeaders.set('x-user-id', 'user-1');
+    overrideHeaders.set('x-user-role', 'DISPATCHER');
 
     const result = await proxyToGoBackend(
       new NextRequest('http://localhost:3000/api/logistics/shipments', { method: 'GET' }),
@@ -247,7 +262,7 @@ describe('proxyToGoBackend — kill switch & canary tenant controls', () => {
     const result = await proxyToGoBackend(
       new NextRequest('http://localhost:3000/api/logistics/shipments', {
         method: 'GET',
-        headers: { 'x-user-id': 'user-1', 'x-tenant-id': 'any-tenant' },
+        headers: { 'x-user-id': 'user-1', 'x-tenant-id': 'any-tenant', 'x-user-role': 'DISPATCHER' },
       }),
     );
     expect(result.proxied).toBe(true);
@@ -260,7 +275,7 @@ describe('proxyToGoBackend — kill switch & canary tenant controls', () => {
     const result = await proxyToGoBackend(
       new NextRequest('http://localhost:3000/api/logistics/shipments', {
         method: 'POST',
-        headers: { 'x-user-id': 'user-1', 'x-tenant-id': 'tenant-1' },
+        headers: { 'x-user-id': 'user-1', 'x-tenant-id': 'tenant-1', 'x-user-role': 'DISPATCHER' },
         body: JSON.stringify({ action: 'CREATE' }),
       }),
     );

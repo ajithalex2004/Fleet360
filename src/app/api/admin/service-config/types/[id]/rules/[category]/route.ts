@@ -143,7 +143,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     await saveRules(id, category, merged, auth.userId, scopeId);
 
     void logAudit({
-      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || 'TENANT_ADMIN',
+      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || undefined,
       entityType: 'ServiceRules', entityId: id, entityName: `${owner.key}:${category}`,
       action: 'UPDATE',
       details: `Updated ${category} rules for service type ${owner.key} at scope ${scopeId.slice(0, 8)}`,

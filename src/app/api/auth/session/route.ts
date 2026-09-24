@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { residencyClaimForTenant } from '@/lib/db-router';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { signSession } from '@/lib/tenant-session';
@@ -107,7 +108,10 @@ export async function POST(request: NextRequest) {
     const plan = userTenant.tenant.plan ?? 'TRIAL';
 
     // Sign the session token (include role)
-    const token = await signSession({ userId, tenantId, plan, role: userTenant.role.code });
+    const token = await signSession({
+      userId, tenantId, plan, role: userTenant.role.code,
+      ...(await residencyClaimForTenant(tenantId)),
+    });
 
     // Build response payload
     const enabledModules = userTenant.tenant.modules

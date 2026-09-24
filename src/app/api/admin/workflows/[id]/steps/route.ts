@@ -5,6 +5,7 @@ import { withTenantRls } from '@/lib/rls';
 import { listSteps, createStep } from '@/lib/workflow-db';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { checkWorkflowAccess } from '@/lib/admin-scope';
 export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const authz = requireAuthorizedTenant({ headers: _req.headers, nextUrl: _req.nextUrl });
@@ -12,6 +13,9 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+
+  const denied = await checkWorkflowAccess(_req.headers, tenantId, params.id, 'read');
+  if (denied) return denied;
 
   try {
     const steps = await listSteps(params.id);
@@ -28,6 +32,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+
+  const denied = await checkWorkflowAccess(req.headers, tenantId, params.id, 'write');
+  if (denied) return denied;
 
   try {
     const body = await req.json();

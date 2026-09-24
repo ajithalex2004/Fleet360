@@ -93,6 +93,7 @@ next-env.d.ts
 
 # Uploaded customer files (handled by storage adapter, not version control)
 /public/uploads
+/backend/uploads/
 
 # Accidental terminal-redirect outputs (0-byte files)
 /npm
