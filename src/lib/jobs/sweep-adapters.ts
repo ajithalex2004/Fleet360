@@ -78,5 +78,14 @@ export async function runAttendanceSweepNoShow(ctx: JobContext): Promise<JobResu
 }
 
 export async function runPushScheduler(ctx: JobContext): Promise<JobResult> {
+  // Middleware strips x-tenant-id from requests that don't carry CRON_SECRET
+  // (see src/lib/identity-headers.ts), and this route is called with
+  // PUSH_CRON_SECRET, so pass the tenant scope as ?tenantId= instead. The
+  // route reads it only after its own secret check passes.
+  if (ctx.tenantId) {
+    const searchParams = new URLSearchParams(ctx.searchParams);
+    searchParams.set('tenantId', ctx.tenantId);
+    ctx = { ...ctx, searchParams };
+  }
   return forwardToRoute('/api/push/run-scheduler', ctx, { secretEnvVar: 'PUSH_CRON_SECRET' });
 }

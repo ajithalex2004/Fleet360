@@ -94,3 +94,25 @@ export async function requireDriverSession(
   }
   return ctx;
 }
+
+/**
+ * requireDriverSession() plus a check that the verified session belongs to
+ * `tenantId` — the tenant a handler got from requireAuthorizedTenant().
+ * Driver-app routes are public, so the handler must not rely on middleware
+ * alone to prove who the caller is. Returns 401 without a valid session and
+ * 403 when the session's tenant differs.
+ */
+export async function requireDriverSessionForTenant(
+  req: HasCookies,
+  tenantId: string,
+): Promise<DriverTenantContext | NextResponse> {
+  const ctx = await requireDriverSession(req);
+  if (ctx instanceof NextResponse) return ctx;
+  if (ctx.tenantId !== tenantId) {
+    return NextResponse.json(
+      { error: 'session does not match tenant' },
+      { status: 403 },
+    );
+  }
+  return ctx;
+}

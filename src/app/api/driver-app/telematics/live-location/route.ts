@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireDriverSessionForTenant } from '@/lib/driver-session';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
@@ -19,6 +20,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  const driver = await requireDriverSessionForTenant(req, tenantId);
+  if (driver instanceof NextResponse) return driver;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {

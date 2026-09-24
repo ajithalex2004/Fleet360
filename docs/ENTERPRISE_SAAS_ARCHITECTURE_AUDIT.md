@@ -79,6 +79,8 @@ Severity: **P0** means fix before any additional tenant goes live. **P1** means 
 
 #### 🔴 P0-1: Unauthenticated cross-tenant writes on driver-app endpoints (confirmed)
 
+> **Status (2026-09-24): fixed in code, not yet deployed.** Middleware now strips client-sent identity headers on every path except CRON_SECRET scheduler calls (`src/lib/identity-headers.ts`). Driver-app routes get their tenant from a verified session cookie, and the three write endpoints also check the driver session themselves (`requireDriverSessionForTenant`). Regression tests: `tests/unit/middleware-identity-headers.test.ts`. The same flaw also let a forged header skip the secret check on `/api/push/run-scheduler` and `/api/cron/outbox-publish`; that is closed by the same change.
+
 - `src/lib/auth-route-policies.ts` lists `/api/driver-app/` as a **public prefix**. It relies on "device-token auth" that each handler must implement itself.
 - For public routes, `src/middleware.ts` returns `NextResponse.next()` **without stripping client-supplied `x-tenant-id`, `x-user-id` or `x-user-role` headers**. The same happens in the `CRON_SECRET` branch.
 - `resolveAuthorizedTenant()` in `src/lib/tenant-context.ts` trusts `x-tenant-id` as though the middleware had injected it.
