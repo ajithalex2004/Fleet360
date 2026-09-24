@@ -35,7 +35,10 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 function isAuthorized(request: NextRequest): boolean {
-  // Operator session — middleware has already validated the token.
+  // This is a public route, so middleware injects no session here. It
+  // strips any client-sent x-tenant-id and only lets the header through
+  // from a CRON_SECRET caller (src/lib/identity-headers.ts), so its
+  // presence means the platform scheduler.
   if (request.headers.get('x-tenant-id')) return true;
   const expected = process.env.CRON_SECRET;
   if (!expected) {

@@ -11,6 +11,7 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { residencyClaimForTenant } from '@/lib/db-router';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { hashInvitationToken } from '@/lib/invitations';
@@ -144,6 +145,7 @@ export async function POST(req: NextRequest) {
         tenantId: tenant.id,
         plan:     tenant.plan ?? 'TRIAL',
         role:     role.code,
+        ...(await residencyClaimForTenant(tenant.id)),
       });
       const res = NextResponse.json({
         ok: true,
@@ -213,6 +215,7 @@ export async function POST(req: NextRequest) {
       tenantId: tenant.id,
       plan:     tenant.plan ?? 'TRIAL',
       role:     role.code,
+      ...(await residencyClaimForTenant(tenant.id)),
     });
     const res = NextResponse.json({
       ok: true,

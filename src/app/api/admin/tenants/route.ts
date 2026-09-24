@@ -4,9 +4,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { MODULES } from '@/lib/permissions';
-import { cacheRead, publicCacheControl, revalidateCache } from '@/lib/server-cache';
+import { cacheRead, revalidateCache } from '@/lib/server-cache';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { isSuperAdmin } from '@/lib/admin-access';
 const CACHE_TAG = 'tenants:list';
 
 const getTenants = cacheRead(
@@ -47,9 +48,17 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get('search')?.trim() ?? '';
     const limit  = Math.min(parseInt(searchParams.get('limit') ?? '200'), 200);
 
-    const tenants = await getTenants(search, limit);
+    // Non-super-admins (e.g. finance branch P&L, tenant pickers) only see
+    // their own tenant.
+    const tenants = isSuperAdmin(req.headers)
+      ? await getTenants(search, limit)
+      : await withPlatformAdmin(prisma, (tx) => tx.tenant.findMany({
+          where: { id: tenantId },
+          include: { modules: true, _count: { select: { userTenants: true, roles: true } } },
+        }));
     return NextResponse.json(tenants, {
-      headers: { 'Cache-Control': publicCacheControl(30) },
+      // private: the list depends on the caller, so shared caches must not reuse it.
+      headers: { 'Cache-Control': 'private, max-age=30' },
     });
     } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }

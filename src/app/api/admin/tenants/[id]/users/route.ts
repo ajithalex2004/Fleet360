@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls, withPlatformAdmin } from '@/lib/rls';
 
 import { requireAuthorizedTenant, requireSuperAdminForTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { checkGrantableRole } from '@/lib/admin-scope';
 
 function errorMessage(e: unknown, fallback: string): string {
   return e instanceof Error && e.message ? e.message : fallback;
@@ -95,11 +96,13 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       if (!tenant) return { error: `Tenant not found: ${params.id}`, status: 404 as const };
       const role   = await tx.role.findUnique({ where: { id: roleId } });
       if (!role)   return { error: `Role not found: ${roleId}`, status: 404 as const };
-      return { ok: true as const };
+      return { ok: true as const, role };
     });
     if ('error' in validations) {
       return NextResponse.json({ error: validations.error }, { status: validations.status });
     }
+    const roleDenied = checkGrantableRole(req.headers, params.id, validations.role);
+    if (roleDenied) return roleDenied;
 
     // Upsert membership inside the tenant-scoped transaction.
     return await withTenantRls(prisma, params.id, async (tx) => {

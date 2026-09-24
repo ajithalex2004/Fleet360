@@ -13,6 +13,7 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { residencyClaimForTenant } from '@/lib/db-router';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { verifyAuthenticationResponse } from '@simplewebauthn/server';
@@ -117,6 +118,7 @@ export async function POST(req: NextRequest) {
         plan: 'DRIVER',
         role: 'DRIVER',
         ttlMs: 24 * 60 * 60 * 1000,
+        ...(await residencyClaimForTenant(cred.tenant_id)),
       });
 
       const res = NextResponse.json({

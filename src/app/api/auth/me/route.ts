@@ -27,10 +27,10 @@ export async function GET(request: NextRequest) {
   const userId        = request.headers.get('x-user-id')        ?? '';
   const tenantId      = request.headers.get('x-tenant-id')      ?? '';
   const plan          = request.headers.get('x-tenant-plan')    ?? 'TRIAL';
-  const role          = request.headers.get('x-user-role')      ?? 'TENANT_ADMIN';
+  const role          = request.headers.get('x-user-role')      ?? '';
   const impersonatedBy = request.headers.get('x-impersonated-by') ?? '';
 
-  if (!userId || !tenantId) {
+  if (!userId || !tenantId || !role) {
     return NextResponse.json(
       { error: 'Not authenticated' },
       { status: 401, headers: { 'Cache-Control': 'private, no-store' } },

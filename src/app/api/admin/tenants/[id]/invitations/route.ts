@@ -24,6 +24,7 @@ import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { checkGrantableRole } from '@/lib/admin-scope';
 export const runtime = 'nodejs';
 
 interface RouteParams { params: Promise<{ id: string }>; }
@@ -120,9 +121,11 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     // Verify the role belongs to this tenant (or is global with tenant_id NULL).
     const role = await tx.role.findFirst({
       where: { id: roleId, OR: [{ tenantId }, { tenantId: null }] },
-      select: { id: true, name: true, code: true },
+      select: { id: true, name: true, code: true, tenantId: true },
     });
     if (!role) return NextResponse.json({ ok: false, error: 'Role not found for this tenant.' }, { status: 400 });
+    const roleDenied = checkGrantableRole(req.headers, tenantId, role);
+    if (roleDenied) return roleDenied;
 
     const tenant = await tx.tenant.findUnique({
       where: { id: tenantId },

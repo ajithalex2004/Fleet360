@@ -19,6 +19,7 @@ import { cacheRead, publicCacheControl, revalidateCache } from '@/lib/server-cac
 import type { PlanCode } from '@/lib/billing';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { isSuperAdmin } from '@/lib/admin-access';
 const CACHE_TAG = 'users:list';
 
 // Platform admin dashboard's stat card calls this on every page load.
@@ -70,7 +71,12 @@ export async function GET(req: NextRequest) {
 
   try {
     const { searchParams } = new URL(req.url);
-    const tenantId   = searchParams.get('tenantId');
+    // Non-super-admins (user switcher, session bar) only see their own
+    // tenant's members; without a tenant filter this lists every user on
+    // the platform.
+    const tenantId   = isSuperAdmin(req.headers)
+      ? searchParams.get('tenantId')
+      : authz.tenantId;
     const isActive   = searchParams.get('isActive');
     const module     = searchParams.get('module') as ModuleName | null;
     const search     = searchParams.get('search');

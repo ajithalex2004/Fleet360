@@ -103,7 +103,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     if (!result.ok) return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
 
     void logAudit({
-      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || 'TENANT_ADMIN',
+      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || undefined,
       entityType: 'ServiceRules', entityId: id, entityName: `${owner.key}:${category}`,
       action: 'UPDATE',
       details: `Rolled back ${category} rules for ${owner.key} (scope ${scopeId.slice(0, 8)}) to version ${body.versionId.slice(0, 8)}`,

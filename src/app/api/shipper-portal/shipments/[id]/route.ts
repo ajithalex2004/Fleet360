@@ -18,7 +18,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireShipperPortal } from '@/lib/shipper-portal/auth';
 import { withTenantRls } from '@/lib/rls';
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import {
   resolveTrackingLevel,
   filterShipmentForTracking,
@@ -70,18 +69,12 @@ interface TrackingRow {
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
-  if (!authz.ok) {
-    return NextResponse.json({ error: authz.error }, { status: authz.status });
-  }
-  const { tenantId } = authz;
-
   const auth = await requireShipperPortal(req);
   if (auth instanceof NextResponse) return auth;
 
   const { id } = await params;
 
-  return await withTenantRls(prisma, tenantId, async (tx) => {
+  return await withTenantRls(prisma, auth.tenantId, async (tx) => {
     // Load the shipment + joined identity bits. JOINs are LEFT so missing
     // carrier/driver/vehicle data just leaves nulls — doesn't break the row.
     let row: ShipmentRow | undefined;

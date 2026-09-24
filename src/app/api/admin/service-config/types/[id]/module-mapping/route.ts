@@ -161,7 +161,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     );
 
     void logAudit({
-      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || 'TENANT_ADMIN',
+      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || undefined,
       entityType: 'ServiceModuleMapping', entityId: id,
       action: 'UPDATE',
       details: `Module mapping → ${linkedModule}${subModule ? ` / ${subModule}` : ''}`,

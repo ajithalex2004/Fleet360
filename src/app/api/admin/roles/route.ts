@@ -4,9 +4,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
-import { cacheRead, publicCacheControl, revalidateCache } from '@/lib/server-cache';
+import { cacheRead, revalidateCache } from '@/lib/server-cache';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { isSuperAdmin } from '@/lib/admin-access';
 const CACHE_TAG = 'roles:all';
 
 /**
@@ -40,12 +41,17 @@ export async function GET(req: NextRequest) {
 
   try {
     const { searchParams } = new URL(req.url);
-    const tenantId = searchParams.get('tenantId');
+    // Non-super-admins get their own tenant's roles plus the platform
+    // system roles; without a tenant filter this lists every tenant's roles.
+    const tenantId = isSuperAdmin(req.headers)
+      ? searchParams.get('tenantId')
+      : authz.tenantId;
     const lite = searchParams.get('lite') === 'true';
 
     const roles = await getRoles(tenantId, lite);
     return NextResponse.json(roles, {
-      headers: { 'Cache-Control': publicCacheControl() },
+      // private: the list depends on the caller, so shared caches must not reuse it.
+      headers: { 'Cache-Control': 'private, max-age=30' },
     });
     } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }

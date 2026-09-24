@@ -5,6 +5,7 @@ import { withTenantRls } from '@/lib/rls';
 import { updateStep, deleteStep } from '@/lib/workflow-db';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { checkWorkflowStepAccess } from '@/lib/admin-scope';
 export async function PUT(req: NextRequest, props: { params: Promise<{ stepId: string }> }) {
   const params = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -12,6 +13,9 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ stepId: s
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+
+  const denied = await checkWorkflowStepAccess(req.headers, tenantId, params.stepId);
+  if (denied) return denied;
 
   try {
     const body = await req.json();
@@ -29,6 +33,9 @@ export async function DELETE(_req: NextRequest, props: { params: Promise<{ stepI
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+
+  const denied = await checkWorkflowStepAccess(_req.headers, tenantId, params.stepId);
+  if (denied) return denied;
 
   try {
     await deleteStep(params.stepId);

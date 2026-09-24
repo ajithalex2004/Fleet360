@@ -42,7 +42,10 @@ import { runTripReminders } from '@/lib/push/scheduler';
 type AuthResult = { ok: true } | { ok: false; status: number; error: string };
 
 function authorize(req: NextRequest): AuthResult {
-  // Operator session — middleware has already validated the token.
+  // This is a public route, so middleware injects no session here. It
+  // strips any client-sent x-tenant-id and only lets the header through
+  // from a CRON_SECRET caller (src/lib/identity-headers.ts), so its
+  // presence means the platform scheduler.
   if (req.headers.get('x-tenant-id')) return { ok: true };
 
   const expected = process.env.PUSH_CRON_SECRET;

@@ -172,6 +172,29 @@ describe('verifySession()', () => {
 
 // ── Round-trip ────────────────────────────────────────────────────────────────
 
+describe('verifySession() — sessions without a role', () => {
+  // Every login flow signs a role. A validly signed token without one used
+  // to be returned with role TENANT_ADMIN, i.e. full tenant-admin rights.
+  it('returns null for a signed token with no role', async () => {
+    const noRole: Partial<typeof SAMPLE_PAYLOAD> = { ...SAMPLE_PAYLOAD };
+    delete noRole.role;
+    const token = await signSession(noRole as typeof SAMPLE_PAYLOAD);
+    expect(await verifySession(token)).toBeNull();
+  });
+
+  it('returns null for a signed token with an empty or blank role', async () => {
+    for (const role of ['', '   ']) {
+      const token = await signSession({ ...SAMPLE_PAYLOAD, role });
+      expect(await verifySession(token)).toBeNull();
+    }
+  });
+
+  it('keeps a non-admin role as signed', async () => {
+    const token = await signSession({ ...SAMPLE_PAYLOAD, role: 'DRIVER' });
+    expect((await verifySession(token))?.role).toBe('DRIVER');
+  });
+});
+
 describe('signSession → verifySession round-trip', () => {
   const testCases = [
     {

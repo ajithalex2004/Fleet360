@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { residencySessionClaim } from '@/lib/data-residency';
 import crypto from 'crypto';
 import { isDbConnectionError, prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
@@ -228,12 +229,9 @@ export async function POST(request: NextRequest) {
       tenantId: userTenant.tenantId,
       plan,
       role:     userTenant.role.code,
-      // Only ENTERPRISE tenants with a non-GLOBAL residency need the header.
-      ...(plan === 'ENTERPRISE' &&
-          userTenant.tenant.dataResidency &&
-          userTenant.tenant.dataResidency !== 'GLOBAL'
-        ? { dataResidency: userTenant.tenant.dataResidency }
-        : {}),
+      // Residency claim from the tenant record, whatever the plan: middleware
+      // refuses tenants whose region this deployment does not serve.
+      ...residencySessionClaim(userTenant.tenant.dataResidency),
     });
 
     // 4b. Sign a JWT for the Go backend (Authorization: Bearer <token>).

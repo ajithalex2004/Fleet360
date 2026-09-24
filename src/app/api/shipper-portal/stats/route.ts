@@ -13,7 +13,6 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { requireShipperPortal } from '@/lib/shipper-portal/auth';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface StatsRow { c: bigint }
@@ -33,19 +32,12 @@ async function safeCount(
 }
 
 export async function GET(req: NextRequest) {
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
-  if (!authz.ok) {
-    return NextResponse.json({ error: authz.error }, { status: authz.status });
-  }
-  const { tenantId } = authz;
-
   const auth = await requireShipperPortal(req);
   if (auth instanceof NextResponse) return auth;
 
   // Active = not delivered/closed/cancelled. Done = delivered or closed.
   // Counts last 30 days for "this month" card.
-  // Scoped to auth.tenantId — the shipper token's tenant — NOT the tenantId
-  // from requireAuthorizedTenant above, which is unused here. Every query
+  // Scoped to auth.tenantId — the shipper token's tenant. Every query
   // below already filters on auth.tenantId, so the RLS scope must match it or
   // the counts come back empty. logistics_shipment_orders is RLS-protected,
   // and safeCount swallows errors into 0, so unscoped this would silently

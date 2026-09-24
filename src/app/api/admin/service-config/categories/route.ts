@@ -177,7 +177,7 @@ export async function POST(req: NextRequest) {
     if (!cat) return NextResponse.json({ ok: false, error: 'Insert returned no row' }, { status: 500 });
 
     void logAudit({
-      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || 'TENANT_ADMIN',
+      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || undefined,
       entityType: 'ServiceCategory', entityId: cat.id, entityName: name,
       action: 'CREATE', details: `Created service category ${name} (${key})`,
     });
