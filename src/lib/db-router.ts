@@ -1,32 +1,50 @@
 /**
- * Enterprise data-residency DB router.
+ * Data-residency DB router.
  *
- * Maps a tenant's `dataResidency` value to the correct Prisma client.
- * ENTERPRISE tenants with a region set to EU / UAE / US are served from
- * a dedicated regional Neon project whose DATABASE_URL is supplied via a
- * per-region env var. All other tenants (GLOBAL or unset) use the shared
- * primary Prisma singleton from src/lib/prisma.ts.
+ * Maps a tenant's `data_residency` (GLOBAL | EU | UAE | US) to the Prisma
+ * client whose database satisfies it, and FAILS CLOSED: a tenant whose region
+ * cannot be satisfied gets a DataResidencyUnavailableError, never the global
+ * primary. (It used to fall back to the global primary with a warning, which
+ * for a residency-bound customer is a breach, not a degraded mode.)
  *
- * Regional clients are created lazily on first use and cached for the
- * lifetime of the process (same behaviour as the primary singleton).
+ * Resolution for a non-GLOBAL tenant:
+ *   1. This deployment serves the region (DATA_RESIDENCY_SERVED_REGIONS, see
+ *      src/lib/data-residency.ts): its primary DATABASE_URL is in-region, so
+ *      the primary client is correct.
+ *   2. Otherwise a regional DATABASE_URL_<REGION> client, if configured.
+ *   3. Otherwise throw.
+ *
+ * NOTE: route handlers do not call this router today; they use the primary
+ * client directly. Middleware therefore refuses tenants whose region this
+ * deployment does not serve (canServeResidency), and a DATABASE_URL_<REGION>
+ * alone does not make a region servable. This router is the building block
+ * for per-request regional routing; anything that adopts it gets the
+ * fail-closed behaviour above.
  *
  * Usage:
  *   import { getPrismaForTenant } from '@/lib/db-router';
- *   const db = await getPrismaForTenant(tenantId, plan);
+ *   const db = await getPrismaForTenant(tenantId);
  *   await withTenantRls(db, tenantId, async (tx) => { ... });
- *
- * If a regional DATABASE_URL_* env var is absent the router falls back to
- * the global primary — this is intentional: it lets you onboard the feature
- * incrementally without breaking existing ENTERPRISE tenants before you
- * provision their regional DB.
  */
 
 import { PrismaClient } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import {
+  normalizeResidency,
+  residencySessionClaim,
+  servedResidencies,
+  type DataResidency,
+} from '@/lib/data-residency';
 
-// ── Supported residency regions ──────────────────────────────────────────────
+export type { DataResidency } from '@/lib/data-residency';
 
-export type DataResidency = 'GLOBAL' | 'EU' | 'UAE' | 'US';
+/** Thrown when a tenant's data cannot be kept in its required region. */
+export class DataResidencyUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DataResidencyUnavailableError';
+  }
+}
 
 /** Map region → DATABASE_URL env-var name. */
 const REGION_ENV_VARS: Record<Exclude<DataResidency, 'GLOBAL'>, string> = {
@@ -42,16 +60,8 @@ const REGION_ENV_VARS: Record<Exclude<DataResidency, 'GLOBAL'>, string> = {
 const _regionalClients = new Map<string, PrismaClient>();
 
 function getOrCreateRegionalClient(region: Exclude<DataResidency, 'GLOBAL'>): PrismaClient | null {
-  const envVar = REGION_ENV_VARS[region];
-  const url    = process.env[envVar];
-
-  if (!url) {
-    console.warn(
-      `[db-router] ${envVar} is not set — ENTERPRISE tenant in region "${region}" ` +
-      'will fall back to the global primary DB. Set the env var to enable regional isolation.',
-    );
-    return null;
-  }
+  const url = process.env[REGION_ENV_VARS[region]];
+  if (!url) return null;
 
   if (!_regionalClients.has(region)) {
     const client = new PrismaClient({
@@ -66,82 +76,84 @@ function getOrCreateRegionalClient(region: Exclude<DataResidency, 'GLOBAL'>): Pr
 
 // ── Tenant residency lookup ──────────────────────────────────────────────────
 
-// LRU-style in-process cache to avoid a DB round-trip on every request.
-// TTL is intentionally short (5 min) so residency changes at onboarding
-// propagate quickly without a full deploy.
+// In-process cache to avoid a DB round-trip on every request. TTL is short
+// (5 min) so residency changes propagate quickly without a deploy.
 const CACHE_TTL_MS = 5 * 60 * 1_000;
 
 interface CacheEntry {
-  residency: DataResidency;
+  residency: unknown;
   expiry:    number;
 }
 
 const _residencyCache = new Map<string, CacheEntry>();
 
 /**
- * Look up a tenant's `data_residency` from the primary DB (once per TTL).
- * Falls back to 'GLOBAL' on any error — never throws.
+ * Reads a tenant's stored `data_residency` from the primary DB (cached).
+ * Throws on lookup failure: an unknown residency must not be treated as
+ * GLOBAL. A tenant that does not exist reads as GLOBAL.
  */
-async function getTenantResidency(tenantId: string): Promise<DataResidency> {
+async function readTenantResidency(tenantId: string): Promise<unknown> {
   const cached = _residencyCache.get(tenantId);
-  if (cached && cached.expiry > Date.now()) {
-    return cached.residency;
-  }
+  if (cached && cached.expiry > Date.now()) return cached.residency;
 
+  type Row = { data_residency: string | null };
+  let rows: Row[];
   try {
-    // Raw SQL to avoid Prisma client cache staleness when the column was
-    // just added and the generated client hasn't been regenerated yet.
-    type Row = { data_residency: string };
-    const rows = await prisma.$queryRaw<Row[]>`
+    // tenants has no RLS; raw SQL avoids generated-client staleness.
+    rows = await prisma.$queryRaw<Row[]>`
       SELECT data_residency FROM tenants WHERE id = ${tenantId} LIMIT 1
     `;
-    const raw      = rows[0]?.data_residency ?? 'GLOBAL';
-    const residency = (['GLOBAL', 'EU', 'UAE', 'US'] as const).includes(raw as DataResidency)
-      ? (raw as DataResidency)
-      : 'GLOBAL';
-
-    _residencyCache.set(tenantId, { residency, expiry: Date.now() + CACHE_TTL_MS });
-    return residency;
   } catch (err) {
-    console.error('[db-router] Failed to read tenant residency:', err instanceof Error ? err.message : err);
-    return 'GLOBAL';
+    throw new DataResidencyUnavailableError(
+      `Could not read data residency for tenant ${tenantId}: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
+  const residency = rows[0]?.data_residency ?? 'GLOBAL';
+  _residencyCache.set(tenantId, { residency, expiry: Date.now() + CACHE_TTL_MS });
+  return residency;
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Return the correct Prisma client for a given tenant.
- *
- * For ENTERPRISE tenants with a configured regional DB, returns the
- * regional client. For everyone else, returns the global primary.
- *
- * Pass `plan` (from the session token) so non-ENTERPRISE tenants skip
- * the residency DB lookup entirely — saves a round-trip on every request.
+ * Prisma client for a residency region. GLOBAL and regions this deployment
+ * serves use the primary; other regions need DATABASE_URL_<REGION>.
+ * Throws DataResidencyUnavailableError when the region cannot be satisfied.
  */
-export async function getPrismaForTenant(
-  tenantId: string,
-  plan: string,
-): Promise<PrismaClient> {
-  // Only ENTERPRISE tenants can have a regional residency assignment.
-  if (plan !== 'ENTERPRISE') return prisma;
+export function getPrismaForRegion(raw: unknown): PrismaClient {
+  const region = normalizeResidency(raw);
+  if (region === null) {
+    throw new DataResidencyUnavailableError(`Unknown data residency value: ${String(raw)}`);
+  }
+  if (servedResidencies().has(region)) return prisma;
 
-  const residency = await getTenantResidency(tenantId);
-  if (residency === 'GLOBAL') return prisma;
-
-  const regional = getOrCreateRegionalClient(residency);
-  return regional ?? prisma; // fall back if env var absent
+  const regional = getOrCreateRegionalClient(region as Exclude<DataResidency, 'GLOBAL'>);
+  if (!regional) {
+    throw new DataResidencyUnavailableError(
+      `No database is configured for data residency region ${region}. Set ${REGION_ENV_VARS[region as Exclude<DataResidency, 'GLOBAL'>]} ` +
+      'or serve this region from an in-region deployment (DATA_RESIDENCY_SERVED_REGIONS).',
+    );
+  }
+  return regional;
 }
 
 /**
- * Return a Prisma client for a given residency region directly.
- * Useful for system jobs that already know the region without a tenant lookup.
- * Returns the global primary for GLOBAL or unconfigured regions.
+ * Prisma client for a tenant, based on its stored residency (whatever its
+ * plan). Throws DataResidencyUnavailableError when the residency cannot be
+ * determined or satisfied.
  */
-export function getPrismaForRegion(residency: DataResidency): PrismaClient {
-  if (residency === 'GLOBAL') return prisma;
-  const client = getOrCreateRegionalClient(residency);
-  return client ?? prisma;
+export async function getPrismaForTenant(tenantId: string): Promise<PrismaClient> {
+  return getPrismaForRegion(await readTenantResidency(tenantId));
+}
+
+/**
+ * The `dataResidency` claim to sign into a new session for this tenant.
+ * Every session issuer must spread this into signSession() so middleware can
+ * refuse tenants whose region this deployment does not serve. Throws when
+ * the residency cannot be read, so sign-in fails closed.
+ */
+export async function residencyClaimForTenant(tenantId: string): Promise<{ dataResidency?: string }> {
+  return residencySessionClaim(await readTenantResidency(tenantId));
 }
 
 /**

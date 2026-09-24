@@ -15,6 +15,7 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { residencyClaimForTenant } from '@/lib/db-router';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { signSession } from '@/lib/tenant-session';
@@ -98,6 +99,7 @@ export async function POST(req: NextRequest) {
         role:           target.role.code,
         impersonatedBy: impersonatorId,
         ttlMs:          IMPERSONATION_TTL_MS,
+        ...(await residencyClaimForTenant(tenant.id)),
       });
 
       void logAudit({

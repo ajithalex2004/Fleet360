@@ -22,6 +22,7 @@ import {
 import { computeRateLimit, getRateLimiter } from '@/lib/rate-limit-scope';
 import { stripIdentityHeaders, withVerifiedIdentity } from '@/lib/identity-headers';
 import { isAdminApiPath, requiredAdminLevel, roleSatisfies } from '@/lib/admin-access';
+import { canServeResidency } from '@/lib/data-residency';
 
 // ── Rate limiter singleton (shared with driver-app telemetry handlers) ───────
 // Owned by @/lib/rate-limit-scope so both middleware and the route-handler
@@ -115,6 +116,26 @@ async function verifyDriverAppSession(request: NextRequest) {
   return null;
 }
 
+/**
+ * Refuses a session whose tenant's data must stay in a region this deployment
+ * does not serve (see src/lib/data-residency.ts). Route handlers read and
+ * write the primary database, so serving such a tenant here would put its
+ * data in the wrong region. Fail closed with 503 instead.
+ */
+function residencyRefusal(pathname: string, dataResidency: string | undefined): NextResponse | null {
+  if (canServeResidency(dataResidency)) return null;
+  const message =
+    `This organisation's data must be kept in the ${dataResidency} region, which this ` +
+    'deployment does not serve. Please use your region-specific address or contact support.';
+  if (pathname.startsWith('/api/')) {
+    return NextResponse.json(
+      { error: 'Data residency region unavailable', code: 'DATA_RESIDENCY_UNAVAILABLE', message },
+      { status: 503 },
+    );
+  }
+  return new NextResponse(message, { status: 503, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+}
+
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
 
@@ -143,6 +164,8 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     if (pathname.startsWith('/api/driver-app/')) {
       const driverSession = await verifyDriverAppSession(request);
       if (driverSession) {
+        const refusal = residencyRefusal(pathname, driverSession.dataResidency);
+        if (refusal) return refusal;
         return NextResponse.next({
           request: { headers: withVerifiedIdentity(request.headers, driverSession) },
         });
@@ -176,6 +199,11 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     // Unknown route — allow through (handles static paths, _next, etc.)
     return NextResponse.next({ request: { headers: sanitizedHeaders } });
   }
+
+  // 3b. Data residency — refuse tenants whose region this deployment does
+  // not serve, before anything touches the database on their behalf.
+  const residencyBlock = residencyRefusal(pathname, session.dataResidency);
+  if (residencyBlock) return residencyBlock;
 
   // 4. Rate limiting — routed to per-tenant/path OR per-driver-telemetry
   //    bucket depending on the path. See TELEMETRY_CATEGORIES above.
@@ -226,8 +254,8 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // 5. Inject tenant headers for downstream route handlers. Built on top of
   // the stripped headers so optional ones (x-impersonated-by,
   // x-data-residency) can't be supplied by the client when the session
-  // doesn't set them. dataResidency (ENTERPRISE) lets route handlers call
-  // getPrismaForTenant() without an extra DB lookup per request.
+  // doesn't set them. Only sessions whose residency this deployment serves
+  // get here (step 3b).
   const requestHeaders = withVerifiedIdentity(request.headers, session);
 
   // 5b. Backwards-compat shim — proxy /api/<migrated-module>/* to the

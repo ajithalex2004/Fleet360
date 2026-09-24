@@ -14,6 +14,7 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { residencyClaimForTenant } from '@/lib/db-router';
 import crypto from 'crypto';
 import * as oidc from 'openid-client';
 import { prisma } from '@/lib/prisma';
@@ -176,6 +177,7 @@ export async function GET(req: NextRequest) {
       tenantId: tenant.id,
       plan:     tenant.plan ?? 'TRIAL',
       role:     sessionRoleCode,
+      ...(await residencyClaimForTenant(tenant.id)),
     });
 
     const r = NextResponse.redirect(new URL(state.returnTo || '/platform', new URL(req.url).origin));

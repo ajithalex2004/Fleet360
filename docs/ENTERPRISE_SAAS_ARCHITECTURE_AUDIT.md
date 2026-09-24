@@ -125,6 +125,8 @@ Enterprise customers expect **tenant-defined roles, field-level and branch-level
 
 `src/lib/db-router.ts` routes ENTERPRISE tenants to `DATABASE_URL_{EU,UAE,US}`. If that variable is unset, it *logs a warning and falls back to the global database*. For UAE government and regulated customers (PDPL, NESA/ADHICS), that is a contractual breach, not a warning. The router must **fail closed** for any tenant whose residency is not `GLOBAL`. The Go backend, jobs, outbox, file storage, backups, logs and LLM calls also need residency awareness. Today only the Next.js Prisma path has it.
 
+> **Status (2026-09-24): fixed in code (fail closed), not yet deployed.** Found while fixing: no route called the router, so every tenant's data already went to the global database whatever its residency. `src/lib/db-router.ts` now throws `DataResidencyUnavailableError` instead of falling back, for every plan. Every session issuer signs the tenant's residency into the session, and middleware answers **503** for a tenant whose region this deployment does not serve (`DATA_RESIDENCY_SERVED_REGIONS`, GLOBAL always served). Provisioning refuses an ENTERPRISE region the deployment cannot honour. This stops new data landing in the wrong region; it does not move data or add regional routing. Serving EU/UAE/US customers needs an in-region deployment (cell) with `DATA_RESIDENCY_SERVED_REGIONS` set. Background jobs, the Go backend, file storage, logs and LLM calls are still not residency-aware. Tests: `tests/unit/data-residency.test.ts`.
+
 #### 🟠 P1-6: Secrets, PII and repository hygiene
 
 - `backend/uploads/` contains a committed PDF whose name suggests a vehicle registration card. That is likely **personal data in git history**. Remove it, purge it from history, and add `backend/uploads/` to `.gitignore`.
@@ -214,7 +216,7 @@ This is the biggest structural product gap. Every enterprise SaaS has a **contro
 | Requirement | Status |
 |---|---|
 | UAE PDPL / DIFC DP / ADGM: data inventory, DSR (access / erase), consent, DPO | Partial: no DSR workflow or data map |
-| Data residency (UAE in-country for government and semi-government) | Router exists but fails open (P1-5) |
+| Data residency (UAE in-country for government and semi-government) | Fails closed now (P1-5); needs an in-region deployment to serve |
 | ISO 27001 / SOC 2 Type II evidence | CI gates are good evidence sources. Formal control mapping is missing |
 | NESA/IAS, ADHICS (health data for ambulance) | Not addressed. Ambulance PHI needs field-level encryption and access logging |
 | School transport (child data, parent consent, RTA/ITC school bus rules) | Module exists. Child-data protections are not explicit |

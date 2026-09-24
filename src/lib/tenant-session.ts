@@ -163,9 +163,9 @@ export async function signSession(payload: {
   role: string;
   impersonatedBy?: string;
   /**
-   * ENTERPRISE data-residency region. Omit for non-ENTERPRISE tenants.
-   * When present it is embedded in the token so the middleware can attach
-   * an x-data-residency header without an extra DB lookup per request.
+   * The tenant's data-residency region; omit for GLOBAL. Every issuer sets
+   * it (residencyClaimForTenant / residencySessionClaim) so middleware can
+   * refuse tenants whose region this deployment does not serve.
    */
   dataResidency?: string;
   /** Override TTL in ms (default 24 h). Impersonation uses a shorter TTL. */
