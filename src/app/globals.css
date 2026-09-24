@@ -226,3 +226,68 @@ html.light .modern-card, html.light .obsidian-glass, html.light .glass-panel-obs
 
 
 
+
+/* ── Light theme: readable tinted buttons ─────────────────────────────────────
+   Many screens were styled for the dark theme with translucent tinted pill
+   buttons, e.g. `bg-violet-600/20 text-violet-200`. On the light theme that
+   renders as pale text on a pale background and is unreadable. In light mode
+   only, a button, link or tab that pairs a translucent violet, purple,
+   fuchsia, pink, indigo or rose background with a pale (100-300) text shade
+   of the same hue gets a solid dark background of that hue and white text.
+   Unlayered, so it wins over Tailwind utilities (including hover:*) without
+   !important. The dark theme is untouched.
+   ─────────────────────────────────────────────────────────────────────────── */
+html.light :is(button, a, [role="button"], [role="tab"]):is([class*="bg-violet-400/"], [class*="bg-violet-500/"], [class*="bg-violet-600/"], [class*="bg-violet-700/"], [class*="bg-violet-800/"], [class*="bg-violet-900/"], [class*="bg-violet-950/"]):is([class*="text-violet-100"], [class*="text-violet-200"], [class*="text-violet-300"]) {
+  background-color: #5b21b6;
+  border-color: #5b21b6;
+  color: #ffffff;
+}
+html.light :is(button, a, [role="button"], [role="tab"]):is([class*="bg-violet-400/"], [class*="bg-violet-500/"], [class*="bg-violet-600/"], [class*="bg-violet-700/"], [class*="bg-violet-800/"], [class*="bg-violet-900/"], [class*="bg-violet-950/"]):is([class*="text-violet-100"], [class*="text-violet-200"], [class*="text-violet-300"]):hover:not(:disabled) {
+  background-color: #4c1d95;
+  border-color: #4c1d95;
+}
+html.light :is(button, a, [role="button"], [role="tab"]):is([class*="bg-purple-400/"], [class*="bg-purple-500/"], [class*="bg-purple-600/"], [class*="bg-purple-700/"], [class*="bg-purple-800/"], [class*="bg-purple-900/"], [class*="bg-purple-950/"]):is([class*="text-purple-100"], [class*="text-purple-200"], [class*="text-purple-300"]) {
+  background-color: #6b21a8;
+  border-color: #6b21a8;
+  color: #ffffff;
+}
+html.light :is(button, a, [role="button"], [role="tab"]):is([class*="bg-purple-400/"], [class*="bg-purple-500/"], [class*="bg-purple-600/"], [class*="bg-purple-700/"], [class*="bg-purple-800/"], [class*="bg-purple-900/"], [class*="bg-purple-950/"]):is([class*="text-purple-100"], [class*="text-purple-200"], [class*="text-purple-300"]):hover:not(:disabled) {
+  background-color: #581c87;
+  border-color: #581c87;
+}
+html.light :is(button, a, [role="button"], [role="tab"]):is([class*="bg-fuchsia-400/"], [class*="bg-fuchsia-500/"], [class*="bg-fuchsia-600/"], [class*="bg-fuchsia-700/"], [class*="bg-fuchsia-800/"], [class*="bg-fuchsia-900/"], [class*="bg-fuchsia-950/"]):is([class*="text-fuchsia-100"], [class*="text-fuchsia-200"], [class*="text-fuchsia-300"]) {
+  background-color: #86198f;
+  border-color: #86198f;
+  color: #ffffff;
+}
+html.light :is(button, a, [role="button"], [role="tab"]):is([class*="bg-fuchsia-400/"], [class*="bg-fuchsia-500/"], [class*="bg-fuchsia-600/"], [class*="bg-fuchsia-700/"], [class*="bg-fuchsia-800/"], [class*="bg-fuchsia-900/"], [class*="bg-fuchsia-950/"]):is([class*="text-fuchsia-100"], [class*="text-fuchsia-200"], [class*="text-fuchsia-300"]):hover:not(:disabled) {
+  background-color: #701a75;
+  border-color: #701a75;
+}
+html.light :is(button, a, [role="button"], [role="tab"]):is([class*="bg-pink-400/"], [class*="bg-pink-500/"], [class*="bg-pink-600/"], [class*="bg-pink-700/"], [class*="bg-pink-800/"], [class*="bg-pink-900/"], [class*="bg-pink-950/"]):is([class*="text-pink-100"], [class*="text-pink-200"], [class*="text-pink-300"]) {
+  background-color: #9d174d;
+  border-color: #9d174d;
+  color: #ffffff;
+}
+html.light :is(button, a, [role="button"], [role="tab"]):is([class*="bg-pink-400/"], [class*="bg-pink-500/"], [class*="bg-pink-600/"], [class*="bg-pink-700/"], [class*="bg-pink-800/"], [class*="bg-pink-900/"], [class*="bg-pink-950/"]):is([class*="text-pink-100"], [class*="text-pink-200"], [class*="text-pink-300"]):hover:not(:disabled) {
+  background-color: #831843;
+  border-color: #831843;
+}
+html.light :is(button, a, [role="button"], [role="tab"]):is([class*="bg-indigo-400/"], [class*="bg-indigo-500/"], [class*="bg-indigo-600/"], [class*="bg-indigo-700/"], [class*="bg-indigo-800/"], [class*="bg-indigo-900/"], [class*="bg-indigo-950/"]):is([class*="text-indigo-100"], [class*="text-indigo-200"], [class*="text-indigo-300"]) {
+  background-color: #3730a3;
+  border-color: #3730a3;
+  color: #ffffff;
+}
+html.light :is(button, a, [role="button"], [role="tab"]):is([class*="bg-indigo-400/"], [class*="bg-indigo-500/"], [class*="bg-indigo-600/"], [class*="bg-indigo-700/"], [class*="bg-indigo-800/"], [class*="bg-indigo-900/"], [class*="bg-indigo-950/"]):is([class*="text-indigo-100"], [class*="text-indigo-200"], [class*="text-indigo-300"]):hover:not(:disabled) {
+  background-color: #312e81;
+  border-color: #312e81;
+}
+html.light :is(button, a, [role="button"], [role="tab"]):is([class*="bg-rose-400/"], [class*="bg-rose-500/"], [class*="bg-rose-600/"], [class*="bg-rose-700/"], [class*="bg-rose-800/"], [class*="bg-rose-900/"], [class*="bg-rose-950/"]):is([class*="text-rose-100"], [class*="text-rose-200"], [class*="text-rose-300"]) {
+  background-color: #9f1239;
+  border-color: #9f1239;
+  color: #ffffff;
+}
+html.light :is(button, a, [role="button"], [role="tab"]):is([class*="bg-rose-400/"], [class*="bg-rose-500/"], [class*="bg-rose-600/"], [class*="bg-rose-700/"], [class*="bg-rose-800/"], [class*="bg-rose-900/"], [class*="bg-rose-950/"]):is([class*="text-rose-100"], [class*="text-rose-200"], [class*="text-rose-300"]):hover:not(:disabled) {
+  background-color: #881337;
+  border-color: #881337;
+}
