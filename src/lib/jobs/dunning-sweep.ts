@@ -27,6 +27,21 @@ import {
 
 const TERMINAL_STAGES = new Set(['SETTLED', 'FROZEN_DISPUTE', 'FROZEN_SUPPRESSED']);
 
+/**
+ * Per-tenant transaction budget for the sweep. One transaction covers every
+ * open invoice of the tenant, each with several round trips (balance,
+ * transition, notice, outbox), so withSystemJob's generic 30s default is too
+ * tight on a remote database: when it expires Prisma closes the transaction
+ * and the next statement fails with P2028 "Transaction not found".
+ * Override with DUNNING_SWEEP_TENANT_TIMEOUT_MS (milliseconds).
+ */
+export const DEFAULT_DUNNING_SWEEP_TENANT_TIMEOUT_MS = 120_000;
+
+export function dunningSweepTenantTimeoutMs(): number {
+  const raw = Number(process.env.DUNNING_SWEEP_TENANT_TIMEOUT_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_DUNNING_SWEEP_TENANT_TIMEOUT_MS;
+}
+
 export async function runDunningSweep(ctx: JobContext): Promise<JobResult> {
   const dryRun = ctx.searchParams.get('dryRun') === '1';
   const lesseeFilter = ctx.searchParams.get('lesseeId') ?? undefined;
@@ -249,7 +264,7 @@ export async function runDunningSweep(ctx: JobContext): Promise<JobResult> {
     }
 
     return result;
-  }, { tenantHeader: ctx.tenantId ?? undefined });
+  }, { tenantHeader: ctx.tenantId ?? undefined, timeoutMs: dunningSweepTenantTimeoutMs() });
 
   const total = perTenant.reduce((acc, r) => {
     acc.scanned += r.result.scanned;
