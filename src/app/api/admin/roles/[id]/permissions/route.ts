@@ -6,6 +6,7 @@ import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { revalidateCache } from '@/lib/server-cache';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { checkRoleAccess } from '@/lib/admin-scope';
 const ROLES_TAG = 'roles:all';
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -16,13 +17,17 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   }
   const { tenantId } = authz;
 
+  const access = await checkRoleAccess(req.headers, tenantId, params.id, 'read');
+  if (access.denied) return access.denied;
+
   return withPlatformAdmin(prisma, async (tx) => {
     const rps = await tx.rolePermission.findMany({
       where: { roleId: params.id },
       include: { permission: true },
     });
     return NextResponse.json(rps.map(rp => rp.permission), {
-      headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60' },
+      // private: access depends on the caller, so shared caches must not reuse it.
+      headers: { 'Cache-Control': 'private, max-age=30' },
     });
   });
 }
@@ -35,6 +40,9 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+
+  const access = await checkRoleAccess(req.headers, tenantId, params.id, 'write');
+  if (access.denied) return access.denied;
 
   try {
     const bodyRaw = await req.json();

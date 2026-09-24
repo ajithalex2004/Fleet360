@@ -25,6 +25,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { isSuperAdmin } from '@/lib/admin-access';
 type Row = Record<string, unknown>;
 const n = (v: unknown) => parseFloat(String(v ?? 0)) || 0;
 const s = (v: unknown) => String(v ?? '');
@@ -39,7 +40,8 @@ export async function GET(req: NextRequest) {
   try {
     return await withPlatformAdmin(prisma, async (tx) => {
       const sp       = new URL(req.url).searchParams;
-      const filterTenantId = sp.get('tenantId') ?? '';
+      // Only a platform admin may look across tenants.
+      const filterTenantId = isSuperAdmin(req.headers) ? (sp.get('tenantId') ?? '') : tenantId;
       const days     = Math.min(30, Math.max(1, parseInt(sp.get('days') ?? '7')));
 
       // Build parameterized tenant filters for defense-in-depth

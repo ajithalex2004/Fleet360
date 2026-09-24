@@ -7,6 +7,8 @@ import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { revalidateCache } from '@/lib/server-cache';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { checkRoleAccess } from '@/lib/admin-scope';
+import { isSuperAdmin } from '@/lib/admin-access';
 const CACHE_TAG = 'roles:all';
 
 // `catch (e)` is typed `unknown` under strict mode — `e?.message` doesn't
@@ -23,6 +25,9 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   }
   const { tenantId } = authz;
 
+  const access = await checkRoleAccess(req.headers, tenantId, params.id, 'read');
+  if (access.denied) return access.denied;
+
   // Roles are tenant-scoped (tenantId column with RLS). Super admin can see
   // any role by id, so we use the '*' wildcard.
   return withPlatformAdmin(prisma, async (tx) => {
@@ -31,7 +36,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
       include: { permissions: { include: { permission: true } } },
     });
     if (!role) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    return NextResponse.json(role, { headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60' } });
+    // private: access depends on the caller, so shared caches must not reuse it.
+    return NextResponse.json(role, { headers: { 'Cache-Control': 'private, max-age=30' } });
   });
 }
 
@@ -43,10 +49,25 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   }
   const { tenantId } = authz;
 
+  const access = await checkRoleAccess(req.headers, tenantId, params.id, 'write');
+  if (access.denied) return access.denied;
+
   try {
     const bodyRaw = await req.json();
     const body = stripTenantOwnershipFields(bodyRaw);
     const { permissions, ...data } = body;
+    if (!isSuperAdmin(req.headers)) {
+      // A role's code is what gets signed into its holders' sessions, and
+      // a tenant copy must keep its platform role's code. Tenant admins
+      // may edit names, descriptions and permissions only.
+      delete data.code;
+      delete data.isSystem;
+    } else if (data.code === 'SUPER_ADMIN' && access.owner !== null) {
+      return NextResponse.json(
+        { error: 'A tenant role cannot use the SUPER_ADMIN code.' },
+        { status: 400 },
+      );
+    }
     // Super Admin can update any role including system roles
     // This allows editing name, description, isSystem flag etc.
     const role = await withPlatformAdmin(prisma, (tx) =>
@@ -70,6 +91,9 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+
+  const access = await checkRoleAccess(req.headers, tenantId, params.id, 'write');
+  if (access.denied) return access.denied;
 
   try {
     // Super Admin can delete any role including system roles

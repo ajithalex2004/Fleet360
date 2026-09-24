@@ -115,6 +115,8 @@ A session or header with no role therefore receives **admin** rights. The defaul
 
 #### 🟠 P1-4: Three overlapping authorization models
 
+> **Admin API role checks (2026-09-24): fixed in code, not yet deployed.** Most `/api/admin/*` routes had no role check. Any signed-in user of any tenant could reset any user's password (`users/set-password`), edit or list every user and tenant, and assign the platform `SUPER_ADMIN` role (`tenants/[id]/users`, invitations, SSO default role, or a tenant copy via `roles/override` or a role-code edit). Middleware now enforces one policy table (`src/lib/admin-access.ts`): every admin route method is classified as platform, tenant-admin or member, and anything unlisted requires `SUPER_ADMIN`. A CI test fails if a route is missing from the table. Handlers reachable by tenant admins or members are kept to the caller's tenant (`src/lib/admin-scope.ts`). Nobody but a platform admin can grant `SUPER_ADMIN`, and no tenant-owned role can carry that code. The broader consolidation into one policy engine below is still open.
+
 `src/services/rbac.ts` (a hard-coded `Permission` enum), `src/lib/permissions*` / `access-control.ts`, and the database tables `Role`, `Permission`, `TenantModule` and `TenantFeatureOverride` all make authorization decisions.
 
 Enterprise customers expect **tenant-defined roles, field-level and branch-level scoping, approval delegation and an access review export**. Consolidate into one policy engine: RBAC with ABAC attributes for tenant, branch, module and cost-centre. Cerbos or OpenFGA are candidates, or an in-house engine with the same shape. Make every decision auditable.

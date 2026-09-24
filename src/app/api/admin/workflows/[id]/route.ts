@@ -5,6 +5,7 @@ import { withTenantRls } from '@/lib/rls';
 import { getWorkflowWithSteps, updateWorkflow, deleteWorkflow } from '@/lib/workflow-db';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { checkWorkflowAccess } from '@/lib/admin-scope';
 
 function errorMessage(e: unknown, fallback: string): string {
   return e instanceof Error && e.message ? e.message : fallback;
@@ -17,6 +18,9 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+
+  const denied = await checkWorkflowAccess(_req.headers, tenantId, params.id, 'read');
+  if (denied) return denied;
 
   try {
     const wf = await getWorkflowWithSteps(params.id);
@@ -35,6 +39,9 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
   }
   const { tenantId } = authz;
 
+  const denied = await checkWorkflowAccess(req.headers, tenantId, params.id, 'write');
+  if (denied) return denied;
+
   try {
     const body = await req.json();
     await updateWorkflow(params.id, body);
@@ -51,6 +58,9 @@ export async function DELETE(_req: NextRequest, props: { params: Promise<{ id: s
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+
+  const denied = await checkWorkflowAccess(_req.headers, tenantId, params.id, 'write');
+  if (denied) return denied;
 
   try {
     await deleteWorkflow(params.id);

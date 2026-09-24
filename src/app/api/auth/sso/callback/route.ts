@@ -173,7 +173,9 @@ export async function GET(req: NextRequest) {
 async function pickProvisioningRole(tenantId: string, preferredRoleId: string | null) {
   if (preferredRoleId) {
     const r = await withPlatformAdmin(prisma, (tx) => tx.role.findFirst({
-      where: { id: preferredRoleId, OR: [{ tenantId }, { tenantId: null }] },
+      // Never provision a platform SUPER_ADMIN through a tenant's SSO, even
+      // if a config saved before the role-grant check points at that role.
+      where: { id: preferredRoleId, code: { not: 'SUPER_ADMIN' }, OR: [{ tenantId }, { tenantId: null }] },
       select: { id: true, code: true },
     }));
     if (r) return r;

@@ -21,6 +21,7 @@ import {
 } from '@/lib/auth-route-policies';
 import { computeRateLimit, getRateLimiter } from '@/lib/rate-limit-scope';
 import { stripIdentityHeaders, withVerifiedIdentity } from '@/lib/identity-headers';
+import { isAdminApiPath, requiredAdminLevel, roleSatisfies } from '@/lib/admin-access';
 
 // ── Rate limiter singleton (shared with driver-app telemetry handlers) ───────
 // Owned by @/lib/rate-limit-scope so both middleware and the route-handler
@@ -202,6 +203,24 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         },
       }
     );
+  }
+
+  // 4b. Admin API role policy — see src/lib/admin-access.ts. Checked here so
+  // an admin handler that forgets its own role check is still protected;
+  // unlisted admin routes require SUPER_ADMIN.
+  if (isAdminApiPath(pathname)) {
+    const level = requiredAdminLevel(pathname, request.method);
+    if (level && !roleSatisfies(session.role, level)) {
+      return NextResponse.json(
+        {
+          error: 'Forbidden',
+          message: level === 'platform'
+            ? 'This action requires a platform administrator.'
+            : 'This action requires a tenant administrator.',
+        },
+        { status: 403 },
+      );
+    }
   }
 
   // 5. Inject tenant headers for downstream route handlers. Built on top of

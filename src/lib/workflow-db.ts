@@ -223,6 +223,26 @@ export async function getWorkflowWithSteps(id: string) {
   return { ...rows[0], steps };
 }
 
+/**
+ * Tenant that owns a workflow definition: the tenant id, `null` for a
+ * platform template (tenantId NULL), or `undefined` when it doesn't exist.
+ */
+export async function getWorkflowOwner(id: string): Promise<string | null | undefined> {
+  const rows = await prisma.$queryRawUnsafe<Array<{ tenantId: string | null }>>(
+    `SELECT "tenantId" FROM "WorkflowDefinition" WHERE id = $1`, id);
+  return rows.length ? rows[0].tenantId : undefined;
+}
+
+/** Owner (see getWorkflowOwner) of the workflow a step belongs to. */
+export async function getStepWorkflowOwner(stepId: string): Promise<string | null | undefined> {
+  const rows = await prisma.$queryRawUnsafe<Array<{ tenantId: string | null }>>(
+    `SELECT d."tenantId"
+       FROM "WorkflowStep" s
+       JOIN "WorkflowDefinition" d ON d.id = s."workflowId"
+      WHERE s.id = $1`, stepId);
+  return rows.length ? rows[0].tenantId : undefined;
+}
+
 export async function createWorkflow(data: {
   name: string; module: string; procedure: string; description?: string;
   // Phase 2 — canonical service-type / tenant linkage. Optional during the
@@ -278,14 +298,19 @@ export async function deleteWorkflow(id: string) {
   await prisma.$executeRawUnsafe(`DELETE FROM "WorkflowDefinition" WHERE id = $1`, id);
 }
 
-export async function duplicateWorkflow(id: string) {
+/**
+ * Copies a workflow and its steps. `tenantId` sets the owner of the copy;
+ * omit it (platform admins) to create a platform template.
+ */
+export async function duplicateWorkflow(id: string, tenantId: string | null = null) {
   const original = await getWorkflowWithSteps(id);
   if (!original) throw new Error('Workflow not found');
   const newId = randomUUID();
   await prisma.$executeRawUnsafe(
-    `INSERT INTO "WorkflowDefinition" (id, name, module, procedure, description, "isActive")
-     VALUES ($1,$2,$3,$4,$5,false)`,
-    newId, `${original.name} (Copy)`, original.module, original.procedure, original.description ?? null);
+    `INSERT INTO "WorkflowDefinition" (id, name, module, procedure, description, "isActive", "tenantId")
+     VALUES ($1,$2,$3,$4,$5,false,$6)`,
+    newId, `${original.name} (Copy)`, original.module, original.procedure, original.description ?? null,
+    tenantId);
   for (const step of (original.steps ?? [])) {
     await prisma.$executeRawUnsafe(
       `INSERT INTO "WorkflowStep"
