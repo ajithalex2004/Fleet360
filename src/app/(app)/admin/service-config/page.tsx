@@ -691,7 +691,7 @@ function ScopePicker({
           ))}
         </select>
         {active && !active.isRoot && (
-          <span className="text-[11px] text-blue-300 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/30">
+          <span className="text-[11px] text-blue-700 dark:text-blue-300 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/30">
             Editing at {SCOPE_LEVEL_LABEL[active.level]}
           </span>
         )}
