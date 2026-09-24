@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { fetchShipmentById, resolveCarrierAppDevice } from '@/lib/logistics/domain';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { withTenantRls } from '@/lib/rls';
 export const runtime = 'nodejs';
 
@@ -38,12 +38,6 @@ async function requireAssignedShipment(req: NextRequest, shipmentOrderId: string
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
-  if (!authz.ok) {
-    return NextResponse.json({ error: authz.error }, { status: authz.status });
-  }
-  const { tenantId } = authz;
-
   const auth = await requireAssignedShipment(req, params.id);
   if ('error' in auth) return auth.error;
 
@@ -64,7 +58,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   }
 
   try {
-    return await withTenantRls(prisma, tenantId, async (tx) => {
+    return await withTenantRls(prisma, auth.device.tenantId, async (tx) => {
       const rows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
         `INSERT INTO logistics_shipment_documents
            (tenant_id, shipment_order_id, doc_type, doc_name, file_url, file_data, mime_type, file_size, uploaded_by, notes, metadata)

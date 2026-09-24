@@ -12,20 +12,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireShipperPortal } from '@/lib/shipper-portal/auth';
 import { withTenantRls } from '@/lib/rls';
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
-  if (!authz.ok) {
-    return NextResponse.json({ error: authz.error }, { status: authz.status });
-  }
-  const { tenantId } = authz;
-
   const auth = await requireShipperPortal(req);
   if (auth instanceof NextResponse) return auth;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  return withTenantRls(prisma, auth.tenantId, async (tx) => {
     // Hydrate the customer record so the portal header can show the shipper's
     // company name without an extra fetch. Soft-fail on customer not found
     // (operator deleted it) — we still return the user so the UI can show a
