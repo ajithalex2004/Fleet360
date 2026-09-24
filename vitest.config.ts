@@ -48,6 +48,12 @@ export default defineConfig({
     // 30 seconds — DB queries and HTTP round-trips can be slow
     testTimeout: 30_000,
 
+    // beforeAll/afterAll in the Postgres integration suites seed and clean
+    // up many rows over the network (e.g. leasing-return-workflow creates ~17
+    // records in one transaction). Vitest's 10s default hook timeout fails
+    // them on slower CI runners. Matches vitest.config.mjs.
+    hookTimeout: 60_000,
+
     coverage: {
       // Use V8 coverage (faster, no instrumentation)
       provider: 'v8',

@@ -354,6 +354,9 @@ describe.skipIf(!hasDb)('Leasing Return Workflow — PostgreSQL Integration', ()
     });
   });
 
+  // Sequential HTTP round trips through the real route handlers against the
+  // shared Phase 0 database: well over the 30s default on 7 GB private-repo
+  // runners, so give this test its own budget.
   it('full HTTP round trip: handover POST/PATCH → returns PATCH actions → close POST', async () => {
     const headers = { 'content-type': 'application/json', 'x-tenant-id': tenantA, 'x-user-id': 'http-test-user' };
 
@@ -436,5 +439,5 @@ describe.skipIf(!hasDb)('Leasing Return Workflow — PostgreSQL Integration', ()
       tx.leaseContract2.findFirst({ where: { id: contractHttpId } }),
     );
     expect(contractAfterClose?.status).toBe('COMPLETED');
-  });
+  }, 120_000);
 });

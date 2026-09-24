@@ -43,5 +43,9 @@ jobs:
     - name: Generate Prisma client
       run: npx prisma generate
       
+    # Private-repo runners have 7 GB of memory; Node's default heap limit
+    # (~2 GB there) is too small for next build on this codebase.
     - name: Run build
       run: npm run build
+      env:
+        NODE_OPTIONS: --max-old-space-size=4096

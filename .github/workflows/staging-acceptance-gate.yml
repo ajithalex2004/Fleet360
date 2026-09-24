@@ -61,7 +61,13 @@ jobs:
           # Leaving it unset here makes verifyCandidateBinding() skip the
           # SHA check (see scripts/verify-staging-proxy-e2e.js) while still
           # running the rest of the acceptance/isolation suite.
-          EXPECTED_CANDIDATE_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
+          #
+          # Also unset on push to main: staging is deployed from develop,
+          # so after a main push staging still runs develop's commit and
+          # the SHA check could never match (it failed on every main push,
+          # e.g. 0fd58e8 against deployed 380a513). The isolation suite
+          # still runs against staging.
+          EXPECTED_CANDIDATE_SHA: ${{ github.event_name == 'push' && github.ref != 'refs/heads/main' && github.sha || '' }}
         run: |
           echo "Executing Staging Acceptance & E2E Isolation Gate against $STAGING_APP_ORIGIN${EXPECTED_CANDIDATE_SHA:+ for candidate $EXPECTED_CANDIDATE_SHA}..."
           npm run test:staging-acceptance
