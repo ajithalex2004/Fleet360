@@ -6,6 +6,8 @@
  *  2. Apply per-tenant sliding-window rate limiting
  *  3. Guard API routes (return 401 JSON) and UI routes (redirect to /login)
  *  4. Allow public routes to pass through without verification
+ *  5. Remove client-sent identity headers from every request that isn't
+ *     from the platform's own scheduler (src/lib/identity-headers.ts)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -18,6 +20,9 @@ import {
   PROTECTED_UI_PREFIXES,
 } from '@/lib/auth-route-policies';
 import { computeRateLimit, getRateLimiter } from '@/lib/rate-limit-scope';
+import { stripIdentityHeaders, withVerifiedIdentity } from '@/lib/identity-headers';
+import { isAdminApiPath, requiredAdminLevel, roleSatisfies } from '@/lib/admin-access';
+import { canServeResidency } from '@/lib/data-residency';
 
 // ── Rate limiter singleton (shared with driver-app telemetry handlers) ───────
 // Owned by @/lib/rate-limit-scope so both middleware and the route-handler
@@ -59,6 +64,22 @@ function isPublicRoute(pathname: string): boolean {
 // applyDriverTelemetryLimit() from rate-limit-scope, using the SAME
 // TELEMETRY_CATEGORIES table so the two accounting paths never drift.
 
+/**
+ * True when the request carries `Authorization: Bearer <CRON_SECRET>`.
+ * Such a request bypasses the session requirement on API routes: the job
+ * scheduler (/api/jobs/run → sweep-adapters.ts forwardToRoute()) calls
+ * routes like /api/leasing/documents/sweep-expiry with an internal fetch()
+ * that carries no session cookie, so without this they would be 401'd
+ * before the route's own CRON_SECRET check ran. Never matches when
+ * CRON_SECRET is unset, so there is no bypass-by-absence.
+ */
+function hasValidCronSecret(request: NextRequest): boolean {
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) return false;
+  const got = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+  return got === cronSecret;
+}
+
 function isProtectedUiRoute(pathname: string): boolean {
   return PROTECTED_UI_PREFIXES.some(prefix => pathname.startsWith(prefix));
 }
@@ -77,38 +98,80 @@ function isDocumentNavigation(request: NextRequest): boolean {
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 
+/**
+ * Driver-app routes are public (device and biometric login flows run before
+ * any session exists), so middleware does not require a session for them.
+ * When the request does carry a valid driver or operator session cookie,
+ * inject that verified identity so requireAuthorizedTenant() in the handler
+ * resolves the caller's real tenant. Same cookie precedence as
+ * getDriverTenantContext() in src/lib/driver-session.ts.
+ */
+async function verifyDriverAppSession(request: NextRequest) {
+  for (const name of ['xl-driver-session', 'xl-session']) {
+    const token = request.cookies.get(name)?.value;
+    if (!token) continue;
+    const session = await verifySession(token).catch(() => null);
+    if (session) return session;
+  }
+  return null;
+}
+
+/**
+ * Refuses a session whose tenant's data must stay in a region this deployment
+ * does not serve (see src/lib/data-residency.ts). Route handlers read and
+ * write the primary database, so serving such a tenant here would put its
+ * data in the wrong region. Fail closed with 503 instead.
+ */
+function residencyRefusal(pathname: string, dataResidency: string | undefined): NextResponse | null {
+  if (canServeResidency(dataResidency)) return null;
+  const message =
+    `This organisation's data must be kept in the ${dataResidency} region, which this ` +
+    'deployment does not serve. Please use your region-specific address or contact support.';
+  if (pathname.startsWith('/api/')) {
+    return NextResponse.json(
+      { error: 'Data residency region unavailable', code: 'DATA_RESIDENCY_UNAVAILABLE', message },
+      { status: 503 },
+    );
+  }
+  return new NextResponse(message, { status: 503, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+}
+
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
 
-  // 1. Public routes — pass through without any checks
-  if (isPublicRoute(pathname)) {
+  // Identity headers (x-tenant-id, x-user-id, x-user-role, …) are only
+  // trustworthy when middleware sets them from a verified credential. Every
+  // branch below forwards either these sanitized headers or headers rebuilt
+  // from a verified session, never the client's copies. See
+  // src/lib/identity-headers.ts.
+  const sanitizedHeaders = stripIdentityHeaders(request.headers);
+
+  // 0. System cron — a caller holding CRON_SECRET is the platform itself
+  // (the job scheduler forwards x-tenant-id to scope a run to one tenant,
+  // see src/lib/jobs/sweep-adapters.ts), so its headers pass unchanged.
+  // Checked before the public-route branch so that trust also applies to
+  // public cron/job routes. Scoped to /api/ and to an exact match against
+  // the server's own CRON_SECRET; if that env var is unset this never
+  // matches.
+  if (pathname.startsWith('/api/') && hasValidCronSecret(request)) {
     return NextResponse.next();
   }
 
-  // 1b. System cron — a valid CRON_SECRET bearer bypasses the session
-  // requirement on API routes, same as the individual sweep routes' own
-  // internal `cronSecret && !tenantHeader` checks already assume.
-  //
-  // Those internal checks were unreachable: /api/jobs/run forwards to
-  // routes like /api/leasing/documents/sweep-expiry via an internal
-  // fetch(), which is a fresh incoming request that hits this middleware
-  // exactly like an external call. Since those routes aren't in
-  // PUBLIC_PREFIXES and the forwarded request carries no xl-session
-  // cookie, step 3 below 401'd it before the route's own CRON_SECRET
-  // check ever ran — meaning every job registered through
-  // sweep-adapters.ts's forwardToRoute() silently never worked.
-  //
-  // Scoped to /api/ (no UI path ever needs this) and to an exact match
-  // against the server's own CRON_SECRET — if that env var isn't set,
-  // this branch never matches, so there's no bypass-by-absence.
-  if (pathname.startsWith('/api/')) {
-    const cronSecret = process.env.CRON_SECRET;
-    if (cronSecret) {
-      const got = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
-      if (got === cronSecret) {
-        return NextResponse.next();
+  // 1. Public routes — no session required. Client-sent identity headers
+  // are removed; driver-app requests get the identity of their verified
+  // session cookie, if they have one.
+  if (isPublicRoute(pathname)) {
+    if (pathname.startsWith('/api/driver-app/')) {
+      const driverSession = await verifyDriverAppSession(request);
+      if (driverSession) {
+        const refusal = residencyRefusal(pathname, driverSession.dataResidency);
+        if (refusal) return refusal;
+        return NextResponse.next({
+          request: { headers: withVerifiedIdentity(request.headers, driverSession) },
+        });
       }
     }
+    return NextResponse.next({ request: { headers: sanitizedHeaders } });
   }
 
   // 2. Verify session cookie
@@ -134,8 +197,13 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     }
 
     // Unknown route — allow through (handles static paths, _next, etc.)
-    return NextResponse.next();
+    return NextResponse.next({ request: { headers: sanitizedHeaders } });
   }
+
+  // 3b. Data residency — refuse tenants whose region this deployment does
+  // not serve, before anything touches the database on their behalf.
+  const residencyBlock = residencyRefusal(pathname, session.dataResidency);
+  if (residencyBlock) return residencyBlock;
 
   // 4. Rate limiting — routed to per-tenant/path OR per-driver-telemetry
   //    bucket depending on the path. See TELEMETRY_CATEGORIES above.
@@ -165,20 +233,30 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // 5. Inject tenant headers for downstream route handlers
-  const requestHeaders = new Headers(request.headers);
-  requestHeaders.set('x-tenant-id',   session.tenantId);
-  requestHeaders.set('x-user-id',     session.userId);
-  requestHeaders.set('x-tenant-plan', session.plan);
-  requestHeaders.set('x-user-role',   session.role ?? 'TENANT_ADMIN');
-  if (session.impersonatedBy) {
-    requestHeaders.set('x-impersonated-by', session.impersonatedBy);
+  // 4b. Admin API role policy — see src/lib/admin-access.ts. Checked here so
+  // an admin handler that forgets its own role check is still protected;
+  // unlisted admin routes require SUPER_ADMIN.
+  if (isAdminApiPath(pathname)) {
+    const level = requiredAdminLevel(pathname, request.method);
+    if (level && !roleSatisfies(session.role, level)) {
+      return NextResponse.json(
+        {
+          error: 'Forbidden',
+          message: level === 'platform'
+            ? 'This action requires a platform administrator.'
+            : 'This action requires a tenant administrator.',
+        },
+        { status: 403 },
+      );
+    }
   }
-  // ENTERPRISE data residency — propagate to route handlers so they can
-  // call getPrismaForTenant() without an extra DB lookup per request.
-  if (session.dataResidency) {
-    requestHeaders.set('x-data-residency', session.dataResidency);
-  }
+
+  // 5. Inject tenant headers for downstream route handlers. Built on top of
+  // the stripped headers so optional ones (x-impersonated-by,
+  // x-data-residency) can't be supplied by the client when the session
+  // doesn't set them. Only sessions whose residency this deployment serves
+  // get here (step 3b).
+  const requestHeaders = withVerifiedIdentity(request.headers, session);
 
   // 5b. Backwards-compat shim — proxy /api/<migrated-module>/* to the
   // Go backend (/api/v1/<migrated-module>/*). See src/lib/api-shim.ts

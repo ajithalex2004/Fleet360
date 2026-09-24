@@ -88,23 +88,18 @@ async function getSessionCookie(tenantId) {
   return cookie;
 }
 
-// The staging database is reached through Neon's connection pooler, which
-// the Phase 0 jobs share. Prisma's default 2s wait for a transaction slot
-// failed this gate with P2028 ("Unable to start a transaction in the given
-// time") while those jobs held the pool; wait longer instead of failing.
-const STAGING_TX_OPTIONS = { maxWait: 20_000, timeout: 60_000 };
-
 async function seedStagingRecords() {
   console.log('[1/6] Seeding controlled tenant records into neondb_staging...');
 
-  // This seeds records across two distinct tenants in one session, which
-  // RLS's tenant_isolation policy (USING/WITH CHECK tenant_id = current
-  // app.tenant_id, or '*' for the platform-admin escape) cannot satisfy for
-  // a single ordinary tenant context. SET LOCAL scopes the platform-admin
-  // bypass to this one transaction only; it never leaks into the isolation
-  // assertions later in the suite, which run their own real tenant sessions.
   await prisma.$transaction(async (tx) => {
-    await tx.$executeRawUnsafe(`SET LOCAL app.tenant_id = '*'`);
+    // These tables are tenant-scoped by RLS, and this script seeds rows for
+    // TWO different tenants in one pass -- bypass RLS for this setup
+    // transaction rather than switching context per statement, mirroring
+    // src/lib/rls.ts's withPlatformAdmin (the '*' escape hatch).
+    const [setResult] = await tx.$queryRawUnsafe(`SELECT set_config('app.tenant_id', '*', true) AS v`);
+    if (setResult?.v !== '*') {
+      throw new Error(`Failed to set app.tenant_id session context (got '${setResult?.v}')`);
+    }
 
     // Seed Tenants
     await tx.$executeRawUnsafe(`
@@ -203,7 +198,7 @@ async function seedStagingRecords() {
         ('${SHIPMENT_B_ID}', '${TENANT_B_ID}', 'SHP-STAGE-B-${RUN_ID}', 'ASSIGNED', '${DRIVER_B_ID}', '${VEHICLE_B_ID}', NOW())
       ON CONFLICT (id) DO NOTHING;
     `);
-  }, STAGING_TX_OPTIONS);
+  }, { timeout: 60_000, maxWait: 10_000 });
 
   console.log(`Seeded successfully:`);
   console.log(`  Tenant A: ${TENANT_A_ID} | Driver: Alice (${DRIVER_A_ID}) | Vehicle: Volvo (${VEHICLE_A_ID})`);
@@ -213,12 +208,8 @@ async function seedStagingRecords() {
 
 async function cleanupStagingRecords() {
   console.log('\nCleaning up test records from neondb_staging...');
-  // Same platform-admin bypass as seedStagingRecords: without it, RLS's
-  // USING clause silently filters every row out of the DELETE (no error,
-  // just zero rows affected), leaving stale cross-tenant records behind on
-  // every run instead of actually cleaning them up.
   await prisma.$transaction(async (tx) => {
-    await tx.$executeRawUnsafe(`SET LOCAL app.tenant_id = '*'`);
+    await tx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', '*', true)`);
     await tx.$executeRawUnsafe(`DELETE FROM logistics_shipment_orders WHERE id IN ('${SHIPMENT_A_ID}', '${SHIPMENT_B_ID}')`);
     await tx.$executeRawUnsafe(`DELETE FROM drivers WHERE id IN ('${DRIVER_A_ID}', '${DRIVER_B_ID}')`);
     await tx.$executeRawUnsafe(`DELETE FROM vehicles WHERE id IN ('${VEHICLE_A_ID}', '${VEHICLE_B_ID}')`);
@@ -226,7 +217,7 @@ async function cleanupStagingRecords() {
     await tx.$executeRawUnsafe(`DELETE FROM roles WHERE tenant_id IN ('${TENANT_A_ID}', '${TENANT_B_ID}')`);
     await tx.$executeRawUnsafe(`DELETE FROM "User" WHERE id = '${LOGIN_USER_ID}'`);
     await tx.$executeRawUnsafe(`DELETE FROM tenants WHERE id IN ('${TENANT_A_ID}', '${TENANT_B_ID}')`);
-  }, STAGING_TX_OPTIONS);
+  }, { timeout: 60_000, maxWait: 10_000 });
   await prisma.$disconnect();
   console.log('Cleanup complete.');
 }
@@ -512,31 +503,58 @@ async function verifyCandidateBinding() {
   }
   console.log(`\nVerifying Deployed Cluster against Release Candidate SHA (${expectedSha})...`);
 
-  // 1. Verify frontend deployed release
-  const healthRes = await fetch(`${STAGING_APP_ORIGIN}/api/health`);
-  if (healthRes.status !== 200) {
-    throw new Error(`Failed to query /api/health for candidate validation (status ${healthRes.status})`);
-  }
-  const health = await healthRes.json();
-  const deployedFrontendSha = (health.release || '').trim().toLowerCase();
-  console.log(`  Frontend deployed release: ${deployedFrontendSha}`);
+  const MAX_RETRIES = 55;
+  const RETRY_DELAY_MS = 10000;
 
-  if (!deployedFrontendSha || deployedFrontendSha === 'unknown') {
-    throw new Error('Fatal: Frontend deployment reported missing or unknown revision SHA');
+  const matchesCandidate = (deployedSha) =>
+    (expectedSha.length >= 7 && deployedSha.startsWith(expectedSha)) ||
+    (deployedSha.length >= 7 && expectedSha.startsWith(deployedSha));
+
+  // 1. Verify frontend deployed release via /api/health with bounded retries
+  // (Railway builds take minutes, not seconds -- a single immediate check
+  // here would spuriously fail against the previous release on every run.)
+  let deployedFrontendSha = '';
+  let lastFrontendError = null;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    lastFrontendError = null;
+    try {
+      const healthRes = await fetch(`${STAGING_APP_ORIGIN}/api/health`);
+      if (healthRes.status === 200) {
+        const health = await healthRes.json();
+        deployedFrontendSha = (health.release || '').trim().toLowerCase();
+        console.log(`  Frontend deployed release (attempt ${attempt}/${MAX_RETRIES}): ${deployedFrontendSha}`);
+
+        if (!deployedFrontendSha || deployedFrontendSha === 'unknown') {
+          throw new Error('Frontend deployment reported missing or unknown revision SHA');
+        }
+
+        if (matchesCandidate(deployedFrontendSha)) {
+          console.log(`  Frontend candidate binding verified: matches ${expectedSha.slice(0, 8)}`);
+          break;
+        }
+
+        lastFrontendError = new Error(
+          `Release Candidate Mismatch on frontend: deployed SHA (${deployedFrontendSha}) does not match expected candidate (${expectedSha})`
+        );
+      } else {
+        lastFrontendError = new Error(`Failed to query /api/health for candidate validation (status ${healthRes.status})`);
+      }
+    } catch (err) {
+      lastFrontendError = err;
+    }
+
+    if (attempt < MAX_RETRIES) {
+      console.log(`  Frontend binding attempt ${attempt}/${MAX_RETRIES} pending (${lastFrontendError.message}); retrying in ${RETRY_DELAY_MS}ms...`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+    }
   }
 
-  const frontendMatches = (expectedSha.length >= 7 && deployedFrontendSha.startsWith(expectedSha)) ||
-                          (deployedFrontendSha.length >= 7 && expectedSha.startsWith(deployedFrontendSha));
-  if (!frontendMatches) {
-    throw new Error(
-      `Fatal: Release Candidate Mismatch on frontend: deployed SHA (${deployedFrontendSha}) does not match expected candidate (${expectedSha})`
-    );
+  if (lastFrontendError) {
+    throw new Error(`Fatal: Failed to establish frontend candidate binding after ${MAX_RETRIES} attempts: ${lastFrontendError.message}`);
   }
-  console.log(`  Frontend candidate binding verified: matches ${expectedSha.slice(0, 8)}`);
 
   // 2. Verify backend deployed release via /api/readyz with bounded retries
-  const MAX_RETRIES = 5;
-  const RETRY_DELAY_MS = 2000;
   let lastError = null;
   let deployedBackendSha = '';
 

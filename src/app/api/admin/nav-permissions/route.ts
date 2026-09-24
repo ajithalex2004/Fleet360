@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
   }
   const { tenantId } = authz;
 
-  const role     = request.headers.get('x-user-role') ?? 'TENANT_ADMIN';
+  const role     = request.headers.get('x-user-role') ?? '';
   const myTenant = request.headers.get('x-tenant-id') ?? '';
 
   // Super admin can query any tenant via ?tenantId=xxx

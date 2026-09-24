@@ -264,6 +264,19 @@ export async function POST(req: NextRequest) {
         }
 
         const yyyymm = new Date().toISOString().slice(0, 7).replace('-', '');
+
+        // Serialize handover_no generation for this tenant+month within
+        // this transaction only (auto-released at commit/rollback) --
+        // without this, two concurrent requests for the same tenant can
+        // both read the same COUNT() before either commits their INSERT
+        // and compute the same seq. Composite (tenant_id, handover_no)
+        // uniqueness (20260923000000_leasing_handovers_tenant_scoped_handover_no)
+        // catches the collision either way; this avoids it needing to.
+        await tx.$executeRawUnsafe(
+          `SELECT pg_advisory_xact_lock(hashtext($1)::bigint)`,
+          `leasing_handovers:${tenantId}:${yyyymm}`
+        );
+
         const [seqRow] = await tx.$queryRawUnsafe<SeqRow[]>(
           `SELECT COUNT(*) + 1 AS seq FROM leasing_handovers WHERE tenant_id = $1 AND handover_no LIKE $2`,
           tenantId, `LHO-${yyyymm}-%`

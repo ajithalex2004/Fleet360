@@ -24,6 +24,7 @@ import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { checkGrantableRole } from '@/lib/admin-scope';
 export const runtime = 'nodejs';
 
 interface RouteParams { params: Promise<{ id: string }>; }
@@ -107,9 +108,12 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     if (defaultRoleId) {
       const role = await tx.role.findFirst({
         where: { id: defaultRoleId, OR: [{ tenantId }, { tenantId: null }] },
-        select: { id: true },
+        select: { id: true, code: true, tenantId: true },
       });
       if (!role) return NextResponse.json({ ok: false, error: 'defaultRoleId not found for this tenant.' }, { status: 400 });
+      // Every user who signs in through SSO gets this role.
+      const roleDenied = checkGrantableRole(req.headers, tenantId, role);
+      if (roleDenied) return roleDenied;
     }
 
     // Block another tenant from claiming a domain we don't own.

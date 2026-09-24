@@ -48,10 +48,11 @@ export default defineConfig({
     // 30 seconds — DB queries and HTTP round-trips can be slow
     testTimeout: 30_000,
 
-    // beforeAll/afterAll in the Postgres integration suites seed and clean
-    // up many rows over the network (e.g. leasing-return-workflow creates ~17
-    // records in one transaction). Vitest's 10s default hook timeout fails
-    // them on slower CI runners. Matches vitest.config.mjs.
+    // Vitest's beforeAll/afterAll hooks have their own timeout, separate
+    // from testTimeout, defaulting to 10s -- too tight for integration
+    // suites whose beforeAll seeds many records in one withPlatformAdmin
+    // transaction against real Neon latency. Match withPlatformAdmin's own
+    // 60s transaction timeout so it stays the actual bottleneck.
     hookTimeout: 60_000,
 
     coverage: {

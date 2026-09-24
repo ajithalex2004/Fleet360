@@ -58,7 +58,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     if (!updated) return NextResponse.json({ ok: false, error: 'Scope not found' }, { status: 404 });
 
     void logAudit({
-      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || 'TENANT_ADMIN',
+      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || undefined,
       entityType: 'ServiceScope', entityId: id, entityName: updated.name,
       action: 'UPDATE', details: `Updated scope ${updated.name}`,
     });
@@ -90,7 +90,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
   if (!result.ok) return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
 
   void logAudit({
-    tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || 'TENANT_ADMIN',
+    tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || undefined,
     entityType: 'ServiceScope', entityId: id, entityName: target.name,
     action: 'DELETE', details: `Soft-deleted scope ${target.name}`,
   });

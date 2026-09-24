@@ -2,6 +2,8 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { rejectForeignIdentifiers, requireDriverActor } from '@/lib/driver-app-actor';
+import { requireDriverSessionForTenant } from '@/lib/driver-session';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { raiseAlert } from '@/lib/alerts/raise';
@@ -14,15 +16,27 @@ export const runtime = 'nodejs';
  *
  * Allows drivers to toggle Non-Revenue Movement (NRM / Deadhead Run)
  * with an operational reason and dispatches a notification to the Operations Team.
+ *
+ * Only an active driver of the session's tenant may toggle it, and only for
+ * their own vehicle: the one on their IN_PROGRESS trip, else their ACTIVE
+ * shift (src/lib/driver-app-actor.ts). 409 when they have neither; 403 when
+ * the body names a different driver or vehicle.
  */
 export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId, userId } = authz;
+  const { tenantId } = authz;
+  // Verify the credential before opening a transaction, so requests without
+  // a valid driver session never touch the database.
+  const session = await requireDriverSessionForTenant(req, tenantId);
+  if (session instanceof NextResponse) return session;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
+    const actor = await requireDriverActor(tx, session);
+    if (actor instanceof NextResponse) return actor;
+
     try {
       const rawBody = await req.json().catch(() => ({}));
       const body = stripTenantOwnershipFields(rawBody);
@@ -32,10 +46,6 @@ export async function POST(req: NextRequest) {
         reason = 'Depot Repositioning / Deadhead Run',
         startLocation = 'Current Location',
         destination = 'Depot / Garage',
-        vehiclePlate,
-        vehicleId,
-        driverId,
-        driverName = 'Driver',
         odometer,
         notes,
       } = body;
@@ -47,8 +57,21 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      const vehicle = actor.activeTrip?.vehicle ?? actor.shiftVehicle;
+      const foreign = rejectForeignIdentifiers(actor, body, vehicle);
+      if (foreign) return foreign;
+      if (!vehicle) {
+        return NextResponse.json(
+          { error: 'No vehicle is assigned to your current trip or shift' },
+          { status: 409 },
+        );
+      }
+
+      const vehiclePlate = vehicle.plate;
+      const driverName = actor.driverName;
+      const userId = actor.driverId;
       const now = new Date();
-      const subjectId = vehicleId || driverId || userId || 'NRM_RUN';
+      const subjectId = vehicle.id;
 
       // 1. Raise Operational Notification / Alert to Control Tower
       await raiseAlert({
@@ -66,9 +89,12 @@ export async function POST(req: NextRequest) {
             ? `Driver ${driverName} initiated Non-Revenue Movement (${reason}). Route: ${startLocation} → ${destination}.`
             : `Driver ${driverName} completed Non-Revenue Movement run for vehicle ${vehiclePlate || 'Vehicle'}.`,
         severity: 'LOW',
-        actor: userId || driverName,
+        actor: userId,
         context: {
           action,
+          driverId: actor.driverId,
+          vehicleId: vehicle.id,
+          tripId: actor.activeTrip?.id ?? null,
           reason,
           startLocation,
           destination,
@@ -89,8 +115,8 @@ export async function POST(req: NextRequest) {
         entityType: 'Vehicle',
         entityId: subjectId,
         action: action === 'START' ? 'NRM_STARTED' : 'NRM_ENDED',
-        userId: userId || undefined,
-        userName: userId ? undefined : driverName,
+        userId,
+        userName: driverName,
         details: `Driver ${driverName} ${action === 'START' ? 'started' : 'ended'} Non-Revenue Movement (${reason}). Route: ${startLocation} → ${destination}. Vehicle: ${vehiclePlate || 'unknown'}.${odometer ? ` Odometer: ${odometer}.` : ''}`,
       });
 

@@ -20,7 +20,6 @@ import { prisma } from '@/lib/prisma';
 import { requireShipperPortal } from '@/lib/shipper-portal/auth';
 import { createShipmentOrder, createShippingRequest, LogisticsValidationError } from '@/lib/logistics/domain';
 import { withTenantRls } from '@/lib/rls';
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 // ── GET — list converted job orders ────────────────────────────────────────
@@ -39,12 +38,6 @@ interface ListRow {
 }
 
 export async function GET(req: NextRequest) {
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
-  if (!authz.ok) {
-    return NextResponse.json({ error: authz.error }, { status: authz.status });
-  }
-  const { tenantId } = authz;
-
   const auth = await requireShipperPortal(req);
   if (auth instanceof NextResponse) return auth;
 
@@ -58,7 +51,7 @@ export async function GET(req: NextRequest) {
   if (status) { args.push(status); where.push(`status = $${args.length}`); }
 
   try {
-    return await withTenantRls(prisma, tenantId, async (tx) => {
+    return await withTenantRls(prisma, auth.tenantId, async (tx) => {
       const rows = await tx.$queryRawUnsafe<ListRow[]>(
         `SELECT id::text, shipment_no, status,
                 origin_name, destination_name,
@@ -180,12 +173,6 @@ interface IncomingBody {
 }
 
 export async function POST(req: NextRequest) {
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
-  if (!authz.ok) {
-    return NextResponse.json({ error: authz.error }, { status: authz.status });
-  }
-  const { tenantId } = authz;
-
   const auth = await requireShipperPortal(req);
   if (auth instanceof NextResponse) return auth;
 
@@ -216,7 +203,7 @@ export async function POST(req: NextRequest) {
     .slice(0, 500) || null;
 
   try {
-    return await withTenantRls(prisma, tenantId, async (tx) => {
+    return await withTenantRls(prisma, auth.tenantId, async (tx) => {
       if (body.bookingMode === 'book') {
         const shipment = await createShipmentOrder({
           tenantId: auth.tenantId,

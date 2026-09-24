@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
     });
 
     void logAudit({
-      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || 'TENANT_ADMIN',
+      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || undefined,
       entityType: 'ServiceScope', entityId: scope.id, entityName: name,
       action: 'CREATE', details: `Created ${level.toLowerCase()} scope ${name} (${key})`,
     });

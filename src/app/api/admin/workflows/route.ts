@@ -5,6 +5,7 @@ import { withTenantRls } from '@/lib/rls';
 import { listWorkflows, createWorkflow } from '@/lib/workflow-db';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { isSuperAdmin } from '@/lib/admin-access';
 
 function errorMessage(e: unknown, fallback: string): string {
   return e instanceof Error ? e.message : fallback;
@@ -26,7 +27,10 @@ export async function GET(req: NextRequest) {
       // service. Legacy (NULL serviceTypeId) rows are filtered client-side
       // by the tab via a procedure-key fallback.
       serviceTypeId: searchParams.get('serviceTypeId') ?? undefined,
-      tenantId:      searchParams.get('tenantId')      ?? undefined,
+      // Tenant admins only see their own tenant's workflows.
+      tenantId:      isSuperAdmin(req.headers)
+        ? searchParams.get('tenantId') ?? undefined
+        : tenantId,
     });
     return NextResponse.json(workflows);
   } catch (e) {
@@ -43,14 +47,19 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { name, module, procedure, description, serviceTypeId, tenantId, scopeId } = body;
+    const { name, module, procedure, description, serviceTypeId, scopeId } = body;
+    // A tenant admin's workflow always belongs to their tenant; only a
+    // platform admin may choose the tenant or create a platform template.
+    const ownerTenantId: string | null = isSuperAdmin(req.headers)
+      ? (body.tenantId ?? null)
+      : tenantId;
     if (!name || !module || !procedure) {
       return NextResponse.json({ error: 'name, module and procedure are required' }, { status: 400 });
     }
     const id = await createWorkflow({
       name, module, procedure, description,
       serviceTypeId: serviceTypeId ?? null,
-      tenantId:      tenantId ?? null,
+      tenantId:      ownerTenantId,
       scopeId:       scopeId ?? null,
     });
     return NextResponse.json({ id }, { status: 201 });

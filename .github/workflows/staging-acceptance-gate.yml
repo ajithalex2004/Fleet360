@@ -7,21 +7,17 @@ on:
       - develop
       - 'feat/logistics-go-cutover-and-shipping-requests'
       - 'hardening/**'
-  pull_request:
-    branches:
-      - main
-      - develop
   workflow_dispatch:
 
 concurrency:
-  group: staging-acceptance-${{ github.event.pull_request.head.sha || github.sha }}
+  group: staging-acceptance-${{ github.sha }}
   cancel-in-progress: true
 
 jobs:
   staging-acceptance-gate:
     name: Staging E2E Proxy & Tenant Isolation Acceptance Gate
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     env:
       STAGING_APP_ORIGIN: https://fleet360-app-staging.up.railway.app

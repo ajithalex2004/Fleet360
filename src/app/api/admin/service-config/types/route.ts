@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
     );
 
     void logAudit({
-      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || 'TENANT_ADMIN',
+      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || undefined,
       entityType: 'ServiceType', entityId: t.id, entityName: name,
       action: 'CREATE', details: `Created service type ${name} (${key})`,
     });

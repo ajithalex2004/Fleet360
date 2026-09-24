@@ -14,6 +14,7 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { residencyClaimForTenant } from '@/lib/db-router';
 import crypto from 'crypto';
 import * as oidc from 'openid-client';
 import { prisma } from '@/lib/prisma';
@@ -21,6 +22,7 @@ import { findSsoConfigByTenant } from '@/lib/sso';
 import { verifySsoState } from '@/lib/sso-state';
 import { signSession } from '@/lib/tenant-session';
 import { withPlatformAdmin } from '@/lib/rls';
+import { pickProvisioningRole } from '@/lib/sso-provisioning';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
@@ -76,9 +78,21 @@ export async function GET(req: NextRequest) {
     });
     if (!tenant || !tenant.isActive) return redirectAndClear(req, '/login?sso=tenant-inactive');
 
-    // Resolve role: explicit defaultRoleId, else TENANT_ADMIN for this tenant, else any tenant role.
-    const role = await pickProvisioningRole(cfg.tenantId, cfg.defaultRoleId);
-    if (!role) return redirectAndClear(req, '/login?sso=no-role');
+    // Role for a membership this sign-in creates: the tenant's SSO default
+    // role, else read-only VIEWER — never TENANT_ADMIN by default. See
+    // src/lib/sso-provisioning.ts.
+    const provisioningRole = await pickProvisioningRole(
+      cfg.tenantId,
+      cfg.defaultRoleId,
+      (where) => withPlatformAdmin(prisma, (tx) =>
+        tx.role.findFirst({ where, select: { id: true, code: true } })),
+    );
+
+    // The role signed into the session: the user's own membership role. It
+    // was previously always the provisioning role, so every SSO sign-in —
+    // existing members included — got the SSO default (TENANT_ADMIN when
+    // none was configured) instead of the role the tenant assigned them.
+    let sessionRoleCode: string;
 
     // Match or JIT-create user.
     let user = await prisma.user.findUnique({ where: { email } });
@@ -87,6 +101,8 @@ export async function GET(req: NextRequest) {
       if (!cfg.jitEnabled) {
         return redirectAndClear(req, '/login?sso=user-not-provisioned');
       }
+      if (!provisioningRole) return redirectAndClear(req, '/login?sso=no-role');
+      const role = provisioningRole;
       // First/last name fallbacks.
       const first = givenN || (fullName.split(' ')[0]  ?? email.split('@')[0]);
       const last  = familyN || (fullName.split(' ').slice(1).join(' ') || '—');
@@ -115,6 +131,7 @@ export async function GET(req: NextRequest) {
         action: 'CREATE',
         details: `JIT-provisioned via OIDC SSO (sub=${sub}, issuer=${cfg.issuer}).`,
       });
+      sessionRoleCode = role.code;
     } else {
       if (!user.isActive) return redirectAndClear(req, '/login?sso=account-disabled');
       // Bound to a const so the non-null narrowing survives into the closure
@@ -125,26 +142,32 @@ export async function GET(req: NextRequest) {
       // and there is no tenant session yet, so this reads and writes under
       // platform scope. The membership-missing redirect is computed inside and
       // returned out, so the early exit still works.
-      const missingMembership = await withPlatformAdmin(prisma, async (tx) => {
+      type MembershipOutcome = { redirect: string } | { roleCode: string };
+      const outcome = await withPlatformAdmin(prisma, async (tx): Promise<MembershipOutcome> => {
         const membership = await tx.userTenant.findUnique({
           where: { userId_tenantId: { userId: existingUser.id, tenantId: cfg.tenantId } },
+          include: { role: { select: { code: true } } },
         }).catch(() => null);
         if (!membership) {
-          if (!cfg.jitEnabled) return true;
+          if (!cfg.jitEnabled) return { redirect: '/login?sso-membership-missing' };
+          if (!provisioningRole) return { redirect: '/login?sso=no-role' };
           await tx.userTenant.create({
-            data: { id: crypto.randomUUID(), userId: existingUser.id, tenantId: cfg.tenantId, roleId: role.id, isActive: true },
+            data: { id: crypto.randomUUID(), userId: existingUser.id, tenantId: cfg.tenantId, roleId: provisioningRole.id, isActive: true },
           });
-        } else if (!membership.isActive) {
+          return { roleCode: provisioningRole.code };
+        }
+        if (!membership.isActive) {
           await tx.userTenant.update({ where: { id: membership.id }, data: { isActive: true } });
         }
-        return false;
+        return { roleCode: membership.role.code };
       });
-      if (missingMembership) return redirectAndClear(req, '/login?sso-membership-missing');
+      if ('redirect' in outcome) return redirectAndClear(req, outcome.redirect);
+      sessionRoleCode = outcome.roleCode;
     }
 
     void logAudit({
       tenantId: tenant.id, tenantName: tenant.name,
-      userId: user.id, userRole: role.code, userEmail: email,
+      userId: user.id, userRole: sessionRoleCode, userEmail: email,
       entityType: 'Login', action: 'LOGIN',
       details: `OIDC SSO login (issuer=${cfg.issuer}, sub=${sub}).`,
     });
@@ -153,7 +176,8 @@ export async function GET(req: NextRequest) {
       userId:   user.id,
       tenantId: tenant.id,
       plan:     tenant.plan ?? 'TRIAL',
-      role:     role.code,
+      role:     sessionRoleCode,
+      ...(await residencyClaimForTenant(tenant.id)),
     });
 
     const r = NextResponse.redirect(new URL(state.returnTo || '/platform', new URL(req.url).origin));
@@ -168,21 +192,6 @@ export async function GET(req: NextRequest) {
     captureException(err, { context: 'auth.sso.callback', tags: { tenantId: state.tenantId } });
     return redirectAndClear(req, '/login?sso=callback-failed');
   }
-}
-
-async function pickProvisioningRole(tenantId: string, preferredRoleId: string | null) {
-  if (preferredRoleId) {
-    const r = await withPlatformAdmin(prisma, (tx) => tx.role.findFirst({
-      where: { id: preferredRoleId, OR: [{ tenantId }, { tenantId: null }] },
-      select: { id: true, code: true },
-    }));
-    if (r) return r;
-  }
-  const tenantAdmin = await withPlatformAdmin(prisma, (tx) => tx.role.findFirst({
-    where: { tenantId, code: 'TENANT_ADMIN' }, select: { id: true, code: true },
-  }));
-  if (tenantAdmin) return tenantAdmin;
-  return withPlatformAdmin(prisma, (tx) => tx.role.findFirst({ where: { tenantId }, select: { id: true, code: true } }));
 }
 
 function redirect(req: NextRequest, path: string): NextResponse {

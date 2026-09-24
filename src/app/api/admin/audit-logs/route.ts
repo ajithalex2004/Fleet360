@@ -6,6 +6,7 @@ import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { logAudit, AuditPayload } from '@/lib/audit';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { isSuperAdmin } from '@/lib/admin-access';
 // ---------------------------------------------------------------------------
 // GET /api/admin/audit-logs
 // Query params:
@@ -29,7 +30,8 @@ export async function GET(req: NextRequest) {
   try {
     return await withPlatformAdmin(prisma, async (tx) => {
       const sp        = new URL(req.url).searchParams;
-      const tenantId  = sp.get('tenantId')  ?? '';
+      // Tenant admins only see their own tenant's audit trail.
+      const tenantId  = isSuperAdmin(req.headers) ? (sp.get('tenantId') ?? '') : authz.tenantId;
       const branchId  = sp.get('branchId')  ?? '';
       const entityType= sp.get('entityType')?? '';
       const userId    = sp.get('userId')    ?? '';
@@ -116,6 +118,13 @@ export async function POST(req: NextRequest) {
     const body: AuditPayload = await req.json();
     if (!body.entityType || !body.action) {
       return NextResponse.json({ error: 'entityType and action are required' }, { status: 400 });
+    }
+    // Any signed-in user may record audit events, but only as themselves
+    // and in their own tenant.
+    if (!isSuperAdmin(req.headers)) {
+      body.tenantId = tenantId;
+      body.userId   = req.headers.get('x-user-id') ?? undefined;
+      body.userRole = req.headers.get('x-user-role') ?? undefined;
     }
     // Capture IP from headers
     body.ipAddress = body.ipAddress

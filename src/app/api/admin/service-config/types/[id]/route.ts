@@ -84,7 +84,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     if (!t) return NextResponse.json({ ok: false, error: 'Service type not found' }, { status: 404 });
 
     void logAudit({
-      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || 'TENANT_ADMIN',
+      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || undefined,
       entityType: 'ServiceType', entityId: t.id, entityName: t.name,
       action: 'UPDATE', details: `Updated service type ${t.name}`,
     });
@@ -129,7 +129,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
   );
 
   void logAudit({
-    tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || 'TENANT_ADMIN',
+    tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || undefined,
     entityType: 'ServiceType', entityId: id, entityName: found.name,
     action: 'DELETE', details: `Soft-deleted service type ${found.name}`,
   });

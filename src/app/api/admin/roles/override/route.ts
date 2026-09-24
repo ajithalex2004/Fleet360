@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
     // pass an explicit `tenantId` in the body to override a specific
     // tenant (used by the platform admin "Edit tenant X" flow).
     const headerTenantId = req.headers.get('x-tenant-id') ?? '';
-    const role = req.headers.get('x-user-role') ?? 'TENANT_ADMIN';
+    const role = req.headers.get('x-user-role') ?? '';
     const isSuperAdmin = role === 'SUPER_ADMIN';
 
     const bodyRaw = await req.json();
@@ -90,6 +90,12 @@ export async function POST(req: NextRequest) {
         include: { permissions: { select: { permissionId: true } } },
       });
       if (!source) return { error: 'Source role not found', status: 404 as const };
+
+      // A tenant-owned role coded SUPER_ADMIN would sign its holders in as
+      // platform super admins. Never create one, whoever asks.
+      if (source.code === 'SUPER_ADMIN') {
+        return { error: 'The SUPER_ADMIN role cannot be customised per tenant.', status: 400 as const };
+      }
 
       // Cannot override a tenant override — overrides only target platform
       // roles. A chain of overrides would complicate the runtime resolution.
