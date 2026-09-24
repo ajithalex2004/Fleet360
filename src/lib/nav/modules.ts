@@ -639,6 +639,8 @@ export const MODULES: ModuleDef[] = [
       { label: 'Service configuration',   href: '/admin/service-config',        icon: Sliders },
       { label: 'Audit log',               href: '/admin/audit-logs',            icon: FileSearch },
       { label: 'Platform settings',       href: '/admin/settings',              icon: Settings },
+      { label: 'Notifications (Email/SMS)', href: '/admin/settings/notifications', icon: Bell },
+      { label: 'Integrations',            href: '/admin/settings/integrations', icon: Sliders },
       { label: 'Alert engine',            href: '/admin/alerts',                icon: Bell },
       { label: 'WhatsApp console',        href: '/admin/whatsapp',              icon: MessageCircle },
       { label: 'Dispatch monitor',        href: '/admin/dispatch',              icon: Radio },
