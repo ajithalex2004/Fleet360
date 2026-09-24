@@ -46,9 +46,9 @@ const TONE_BG: Record<ServiceTone, string> = {
   violet: 'bg-violet-500/10', cyan: 'bg-cyan-500/10',
 };
 const TONE_FG: Record<ServiceTone, string> = {
-  gold: 'text-amber-300', blue: 'text-blue-300', emerald: 'text-emerald-300',
-  amber: 'text-amber-300', rose: 'text-rose-300', slate: 'text-[var(--text-muted)]',
-  violet: 'text-violet-300', cyan: 'text-cyan-300',
+  gold: 'text-yellow-700 dark:text-amber-300', blue: 'text-blue-700 dark:text-blue-300', emerald: 'text-emerald-700 dark:text-emerald-300',
+  amber: 'text-amber-700 dark:text-amber-300', rose: 'text-rose-700 dark:text-rose-300', slate: 'text-[var(--text-muted)]',
+  violet: 'text-violet-700 dark:text-violet-300', cyan: 'text-cyan-700 dark:text-cyan-300',
 };
 
 type TabKey = 'basic' | 'mapping' | 'sla' | 'approval' | 'workflow' | 'vehicle' | 'trip' | 'finance' | 'ticketing' | 'epod' | 'automation' | 'formFields';
@@ -691,7 +691,7 @@ function ScopePicker({
           ))}
         </select>
         {active && !active.isRoot && (
-          <span className="text-[11px] text-blue-300 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/30">
+          <span className="text-[11px] text-blue-700 dark:text-blue-300 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/30">
             Editing at {SCOPE_LEVEL_LABEL[active.level]}
           </span>
         )}
