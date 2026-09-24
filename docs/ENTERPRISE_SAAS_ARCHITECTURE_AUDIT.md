@@ -129,7 +129,7 @@ Enterprise customers expect **tenant-defined roles, field-level and branch-level
 
 #### 🟠 P1-6: Secrets, PII and repository hygiene
 
-- `backend/uploads/` contains a committed PDF whose name suggests a vehicle registration card. That is likely **personal data in git history**. Remove it, purge it from history, and add `backend/uploads/` to `.gitignore`.
+- `backend/uploads/` contains a committed PDF whose name suggests a vehicle registration card. That is likely **personal data in git history**. Remove it, purge it from history, and add `backend/uploads/` to `.gitignore`. **Status (2026-09-24): removed from the tree and `backend/uploads/` ignored; still in git history (added in 7a723d05 and db6eeb6d) until a history purge is done.**
 - Per-tenant integration credentials (Twilio, SMTP, telematics) appear to be stored without envelope encryption. The only cipher usage found is in `src/lib/sso.ts`. Use KMS-backed envelope encryption with per-tenant data keys.
 - `docs/KNOWN_GAPS.md` SEC-002: treat the Neon credentials as compromised until the rotation is evidenced.
 - The repo root contains `errors.txt`, `tsc-out.txt`, `tsc-errors.txt`, empty files `node` and `TENANT-001`, `Dockerfile.unused`, several `.docx` files and a README that is still the Thesys template. None of this is a vulnerability on its own. It does fail an enterprise customer's code-escrow or due-diligence review.
