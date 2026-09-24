@@ -32,6 +32,7 @@ import { IDENTITY_HEADERS, stripIdentityHeaders } from '@/lib/identity-headers';
 import { POST as emergencySos } from '@/app/api/driver-app/emergency-sos/route';
 import { POST as liveLocation } from '@/app/api/driver-app/telematics/live-location/route';
 import { POST as nrmToggle } from '@/app/api/driver-app/nrm-toggle/route';
+import { GET as authMe } from '@/app/api/auth/me/route';
 
 const TENANT_A = '11111111-1111-4111-8111-111111111111';
 const TENANT_B = '22222222-2222-4222-8222-222222222222';
@@ -216,4 +217,43 @@ describe('driver-app write endpoints reject forged tenants', () => {
       expect(res.status).toBe(403);
     });
   }
+});
+
+describe('middleware — sessions without a role', () => {
+  it('rejects a signed operator session that has no role instead of treating it as TENANT_ADMIN', async () => {
+    const noRole = await signSession({
+      userId: 'operator-a',
+      tenantId: TENANT_A,
+      plan: 'STANDARD',
+      role: undefined as unknown as string,
+    });
+    const res = await middleware(req('/api/bus-ops/schedules', {
+      cookie: `xl-session=${noRole}`,
+    }, 'GET'));
+    expect(res.status).toBe(401);
+  });
+
+  it('does not inject driver identity from a role-less driver session', async () => {
+    const noRole = await signSession({
+      userId: 'driver-a',
+      tenantId: TENANT_A,
+      plan: 'STANDARD',
+      role: undefined as unknown as string,
+    });
+    const res = await middleware(req('/api/driver-app/emergency-sos', {
+      cookie: `xl-driver-session=${noRole}`,
+    }));
+    expect(forwarded(res, 'x-tenant-id')).toBeNull();
+    expect(forwarded(res, 'x-user-role')).toBeNull();
+  });
+});
+
+describe('/api/auth/me — no role, no identity', () => {
+  it('returns 401 when the request has user and tenant but no role', async () => {
+    const res = await authMe(req('/api/auth/me', {
+      'x-user-id': 'operator-a',
+      'x-tenant-id': TENANT_A,
+    }, 'GET'));
+    expect(res.status).toBe(401);
+  });
 });

@@ -204,6 +204,14 @@ export async function verifySession(
       return null;
     }
 
+    // Every login flow signs a role into the token. A token without one is
+    // legacy or malformed, so treat it as no session rather than guessing a
+    // role. (This used to default to TENANT_ADMIN, which gave a role-less
+    // session full tenant-admin rights.)
+    if (typeof payload.role !== 'string' || payload.role.trim() === '') {
+      return null;
+    }
+
     // Check revocation blocklist (Redis-backed; no-op when Redis not configured).
     if (await isSessionRevoked(token)) {
       return null;
@@ -213,7 +221,7 @@ export async function verifySession(
       userId:        payload.userId,
       tenantId:      payload.tenantId,
       plan:          payload.plan,
-      role:          payload.role ?? 'TENANT_ADMIN',
+      role:          payload.role,
       ...(payload.impersonatedBy ? { impersonatedBy: payload.impersonatedBy } : {}),
       ...(payload.dataResidency  ? { dataResidency:  payload.dataResidency  } : {}),
     };

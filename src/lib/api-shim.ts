@@ -106,12 +106,22 @@ export async function proxyToGoBackend(request: NextRequest, headersOverride?: H
       const userId = source.get('x-user-id');
       const tenantId = source.get('x-tenant-id');
       if (userId && tenantId) {
+        // Middleware only injects identity from a verified session, and
+        // verifySession() rejects sessions without a role, so a missing role
+        // here means something upstream is wrong. Refuse rather than mint a
+        // backend token with a guessed (and previously admin) role.
+        const role = source.get('x-user-role');
+        if (!role) {
+          return {
+            proxied: true,
+            response: NextResponse.json(
+              { error: 'Unauthorized', message: 'Session has no role' },
+              { status: 401 },
+            ),
+          };
+        }
         try {
-          const token = await signJwtForBackend({
-            userId,
-            tenantId,
-            role: source.get('x-user-role') ?? 'TENANT_ADMIN',
-          });
+          const token = await signJwtForBackend({ userId, tenantId, role });
           headers.set('Authorization', `Bearer ${token}`);
         } catch (err) {
           // JWT_SECRET unset/too-short (or any other signing failure) is a

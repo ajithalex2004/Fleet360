@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
     // pass an explicit `tenantId` in the body to override a specific
     // tenant (used by the platform admin "Edit tenant X" flow).
     const headerTenantId = req.headers.get('x-tenant-id') ?? '';
-    const role = req.headers.get('x-user-role') ?? 'TENANT_ADMIN';
+    const role = req.headers.get('x-user-role') ?? '';
     const isSuperAdmin = role === 'SUPER_ADMIN';
 
     const bodyRaw = await req.json();

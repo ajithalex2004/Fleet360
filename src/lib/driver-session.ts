@@ -68,7 +68,7 @@ export async function getDriverTenantContext(
         userId: session.userId,
         tenantId: session.tenantId,
         plan: session.plan,
-        role: session.role ?? 'TENANT_ADMIN',
+        role: session.role,
       };
     }
   }

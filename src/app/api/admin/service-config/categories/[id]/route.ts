@@ -79,7 +79,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     if (!cat) return NextResponse.json({ ok: false, error: 'Category not found' }, { status: 404 });
 
     void logAudit({
-      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || 'TENANT_ADMIN',
+      tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || undefined,
       entityType: 'ServiceCategory', entityId: cat.id, entityName: cat.name,
       action: 'UPDATE', details: `Updated service category ${cat.name}`,
     });
@@ -131,7 +131,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
   );
 
   void logAudit({
-    tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || 'TENANT_ADMIN',
+    tenantId: auth.tenantId, userId: auth.userId, userRole: auth.role || undefined,
     entityType: 'ServiceCategory', entityId: id,
     action: 'DELETE', details: 'Soft-deleted service category',
   });

@@ -100,7 +100,7 @@ export async function PUT(req: NextRequest) {
       audit = {
         tenantId,
         userId: userId ?? undefined,
-        userRole: req.headers.get('x-user-role') ?? 'TENANT_ADMIN',
+        userRole: req.headers.get('x-user-role') ?? undefined,
         entityType: 'TenantSettings',
         entityId: tenantId,
         entityName: 'Portal tracking default',

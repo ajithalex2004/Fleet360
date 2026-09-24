@@ -209,10 +209,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // x-data-residency) can't be supplied by the client when the session
   // doesn't set them. dataResidency (ENTERPRISE) lets route handlers call
   // getPrismaForTenant() without an extra DB lookup per request.
-  const requestHeaders = withVerifiedIdentity(request.headers, {
-    ...session,
-    role: session.role ?? 'TENANT_ADMIN',
-  });
+  const requestHeaders = withVerifiedIdentity(request.headers, session);
 
   // 5b. Backwards-compat shim — proxy /api/<migrated-module>/* to the
   // Go backend (/api/v1/<migrated-module>/*). See src/lib/api-shim.ts

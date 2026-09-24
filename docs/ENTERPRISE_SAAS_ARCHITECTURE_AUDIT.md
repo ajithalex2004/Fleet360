@@ -95,6 +95,8 @@ Severity: **P0** means fix before any additional tenant goes live. **P1** means 
 
 #### 🔴 P0-2: Privilege fallbacks fail open
 
+> **Status (2026-09-24): fixed in code, not yet deployed.** `verifySession()` now rejects a signed session with no role instead of treating it as `TENANT_ADMIN`. Every login flow already signs a role, so only legacy or malformed tokens are affected; those users are asked to sign in again. The admin defaults are removed from middleware, `driver-session.ts`, `access-control.ts`, `/api/auth/me` and two admin routes. The Go proxy (`api-shim.ts`) refuses with 401 rather than minting a backend token without a role. Twelve audit-log entries under `/api/admin/service-config` no longer label a missing role as `TENANT_ADMIN`. **Found while fixing:** only 9 of the 69 `/api/admin/*` routes check the caller's role (for example `/api/admin/roles/override` has no admin check), so any signed-in user of a tenant may be able to call them. That is tracked under P1-4.
+
 - `middleware.ts` sets `x-user-role` to `session.role ?? 'TENANT_ADMIN'`.
 - `src/lib/access-control.ts:140` and `src/lib/api-shim.ts:113` also default to `TENANT_ADMIN`. The Go JWT minted by the shim inherits that default.
 
