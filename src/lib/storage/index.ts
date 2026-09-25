@@ -1,9 +1,13 @@
 /**
  * File storage adapter — abstract over local fs vs S3 vs Vercel Blob.
  *
- * v1.0 implementation: local filesystem under public/uploads/{prefix}/{uuid}-{name}.
- * The file is reachable via URL `/uploads/{prefix}/{uuid}-{name}` because
- * Next.js serves anything under public/ statically.
+ * v1.0 implementation: local filesystem under {FILE_STORAGE_DIR}/{prefix}/{uuid}-{name}
+ * (default public/uploads, where earlier releases wrote). Stored URLs have the
+ * form `/uploads/{prefix}/{uuid}-{name}`, but they are never served as static
+ * files: middleware routes every /uploads/* request to /api/files/*, which
+ * checks the caller against the file's owning record before streaming it
+ * (src/lib/storage/file-access.ts). Files under public/ are otherwise served
+ * by Next.js to anyone, without any route's authorization check.
  *
  * Production swap path: implement S3FileStorage or VercelBlobStorage that
  * conforms to the same FileStorage interface. Pick via env var STORAGE_BACKEND.
@@ -41,8 +45,51 @@ export interface FileStorage {
 
 /* ── Local filesystem implementation ─────────────────────────────────────── */
 
-const PUBLIC_ROOT = path.join(process.cwd(), 'public');
-const UPLOADS_DIR = path.join(PUBLIC_ROOT, 'uploads');
+const UPLOADS_DIR = path.resolve(
+  process.env.FILE_STORAGE_DIR || path.join(process.cwd(), 'public', 'uploads'),
+);
+
+/** URL prefix of stored files; see the header comment. */
+export const UPLOAD_URL_PREFIX = '/uploads/';
+
+const KEY_SEGMENT = /^[A-Za-z0-9._-]+$/;
+
+/**
+ * Validates a storage key taken from a URL: relative, '/'-separated, every
+ * segment made of safe characters, no '.' or '..' segments. Returns null for
+ * anything else so a crafted path can never leave the storage directory.
+ */
+export function normalizeStorageKey(raw: string): string | null {
+  if (!raw || raw.length > 512) return null;
+  const segments = raw.split('/');
+  for (const seg of segments) {
+    if (!KEY_SEGMENT.test(seg) || seg === '.' || seg === '..') return null;
+  }
+  return segments.join('/');
+}
+
+/** Absolute path for a validated key, confined to the storage directory. */
+function absolutePathForKey(key: string): string | null {
+  const safe = normalizeStorageKey(key);
+  if (!safe) return null;
+  const abs = path.join(UPLOADS_DIR, ...safe.split('/'));
+  return abs.startsWith(UPLOADS_DIR + path.sep) ? abs : null;
+}
+
+/**
+ * Reads a stored file. Returns null when the key is invalid or the file does
+ * not exist. Callers must authorize the key first (file-access.ts).
+ */
+export async function readStoredFile(key: string): Promise<Buffer | null> {
+  const abs = absolutePathForKey(key);
+  if (!abs) return null;
+  try {
+    return await fs.readFile(abs);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw err;
+  }
+}
 
 class LocalFileStorage implements FileStorage {
   async upload({ buffer, originalName, mimeType, prefix }: {
@@ -61,7 +108,7 @@ class LocalFileStorage implements FileStorage {
     await fs.writeFile(absPath, buffer);
 
     return {
-      url: `/uploads/${key}`,
+      url: `${UPLOAD_URL_PREFIX}${key}`,
       key,
       size: buffer.length,
       mimeType,

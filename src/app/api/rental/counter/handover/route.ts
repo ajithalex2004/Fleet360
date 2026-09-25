@@ -82,7 +82,13 @@ export async function POST(req: NextRequest) {
         }
         const data = parsed.data;
 
-        // Save the signature image to storage if provided.
+        // Look up the booking — in this tenant explicitly, not only via RLS.
+        const booking = await tx.rentalBooking.findFirst({ where: { id: data.bookingId, tenantId } });
+        if (!booking) return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
+
+        // Save the signature image to storage if provided — only after the
+        // booking is confirmed to be this tenant's: the file is stored under
+        // the booking id, and file-access.ts authorizes reads by that booking.
         let signatureUrl: string | null = null;
         if (data.signatureDataUrl?.startsWith('data:image/')) {
           try {
@@ -101,10 +107,6 @@ export async function POST(req: NextRequest) {
             captureException(err, { context: 'rental.counter.handover.signature' });
           }
         }
-
-        // Look up the booking.
-        const booking = await tx.rentalBooking.findUnique({ where: { id: data.bookingId } });
-        if (!booking) return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
 
         const vehicleId = data.vehicleId ?? booking.vehicleId ?? null;
 
