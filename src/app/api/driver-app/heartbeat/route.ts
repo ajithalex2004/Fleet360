@@ -70,6 +70,11 @@ export async function POST(req: NextRequest) {
     if (!device) {
       return NextResponse.json({ error: 'Invalid or inactive device token' }, { status: 401 });
     }
+    // The device token proves which carrier device is calling and so which
+    // tenant it belongs to; the signed-in session must be the same tenant.
+    if (device.tenantId !== tenantId) {
+      return NextResponse.json({ error: 'Device does not belong to this tenant' }, { status: 403 });
+    }
 
     // R2: per-driver telemetry rate limit. Runs AFTER token resolution so we
     // have (tenantId, carrierId) for the bucket key — one flooding device

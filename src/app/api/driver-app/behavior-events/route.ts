@@ -23,7 +23,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { requireDriverSession } from '@/lib/driver-session';
+import { requireDriverSession, requireDriverSessionForTenant } from '@/lib/driver-session';
+import { authorizeDriverReferences, requireActiveDriver } from '@/lib/driver-app-actor';
 import { applyDriverTelemetryLimit } from '@/lib/rate-limit-scope';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
@@ -98,7 +99,7 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    const ctx = await requireDriverSession(req);
+    const ctx = await requireDriverSessionForTenant(req, tenantId);
       if (ctx instanceof NextResponse) return ctx;
 
       // R2: per-driver telemetry rate limit. See src/lib/rate-limit-scope.ts
@@ -117,6 +118,17 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'validation failed', issues: parsed.error.issues }, { status: 400 });
       }
       const body = parsed.data;
+
+      // The caller must be an active driver, and every shift and trip the
+      // batch names must be theirs (src/lib/driver-app-actor.ts).
+      const activeDenied = await requireActiveDriver(tx, ctx);
+      if (activeDenied) return activeDenied;
+      const refs = new Map<string, { shiftId?: string | null; tripId?: string | null }>();
+      for (const e of body.events) refs.set(`${e.shiftId ?? ''}|${e.tripId ?? ''}`, { shiftId: e.shiftId, tripId: e.tripId });
+      for (const ref of refs.values()) {
+        const denied = await authorizeDriverReferences(tx, ctx, ref);
+        if (denied) return denied;
+      }
 
       // Idempotency: skip events that already exist (same id).
       const ids = body.events.map((e) => e.id);

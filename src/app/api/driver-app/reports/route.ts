@@ -30,7 +30,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { requireDriverSession } from '@/lib/driver-session';
+import { requireDriverSession, requireDriverSessionForTenant } from '@/lib/driver-session';
+import { authorizeDriverReferences, requireActiveDriver } from '@/lib/driver-app-actor';
 import { privateCacheControl } from '@/lib/server-cache';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import {
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    const ctx = await requireDriverSession(req);
+    const ctx = await requireDriverSessionForTenant(req, tenantId);
       if (ctx instanceof NextResponse) return ctx;
 
       const bodyRaw = await req.json().catch(() => ({}));
@@ -82,6 +83,12 @@ export async function POST(req: NextRequest) {
         );
       }
       const input = parsed.data;
+
+      // The caller must be an active driver, and every shift, trip and
+      // vehicle the request names must be theirs (src/lib/driver-app-actor.ts).
+      const denied = (await requireActiveDriver(tx, ctx))
+        ?? (await authorizeDriverReferences(tx, ctx, { shiftId: input.shiftId, tripId: input.tripId }));
+      if (denied) return denied;
 
       // Cross-field validation: type must match kind
       if (input.kind === 'REQUEST' && !isRequestType(input.type)) {

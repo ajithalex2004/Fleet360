@@ -145,3 +145,98 @@ export function rejectForeignIdentifiers(
   }
   return null;
 }
+
+/** The parts of a Prisma transaction the reference checks use. */
+export type DriverRefTx = Pick<Prisma.TransactionClient, 'driver' | '$queryRawUnsafe'>;
+
+/**
+ * 403 unless `userId` is an active driver of `tenantId` (a `drivers` row, not
+ * deleted, status ACTIVE or unset). A valid session alone is not enough: an
+ * office user's session is accepted by the driver-app cookie helpers too.
+ * Must run inside the tenant's RLS transaction.
+ */
+export async function requireActiveDriver(
+  tx: Pick<DriverRefTx, 'driver'>,
+  session: { tenantId: string; userId: string },
+): Promise<NextResponse | null> {
+  const driver = await tx.driver.findFirst({
+    where: { id: session.userId, tenantId: session.tenantId, deletedAt: null },
+    select: { status: true },
+  });
+  if (!driver || (driver.status && driver.status !== 'ACTIVE')) {
+    return forbidden('An active driver account is required for this action');
+  }
+  return null;
+}
+
+export interface DriverReferences {
+  shiftId?: string | null;
+  tripId?: string | null;
+  vehicleId?: string | null;
+}
+
+/**
+ * Object-level check for identifiers a driver-app request names. Each one
+ * that is present must belong to the signed-in driver in their tenant:
+ *
+ *   shiftId    one of the driver's own shifts
+ *   tripId     one of the driver's own trips, not cancelled
+ *   vehicleId  the vehicle of that shift or trip, of the driver's active
+ *              shift or scheduled / in-progress trip, or a vehicle assigned
+ *              to the driver (vehicles.assigned_driver_id)
+ *
+ * Absent identifiers are not checked. Returns a 403 response for the first
+ * identifier that fails, else null. Must run inside the tenant's RLS
+ * transaction; the queries also filter by tenant explicitly.
+ */
+export async function authorizeDriverReferences(
+  tx: Pick<DriverRefTx, '$queryRawUnsafe'>,
+  session: { tenantId: string; userId: string },
+  refs: DriverReferences,
+): Promise<NextResponse | null> {
+  const { tenantId, userId } = session;
+  const namedVehicles: string[] = [];
+
+  if (refs.shiftId) {
+    const rows = await tx.$queryRawUnsafe<Array<{ vehicle_id: string | null }>>(
+      `SELECT vehicle_id::text AS vehicle_id FROM shifts
+        WHERE id::text = $1 AND tenant_id::text = $2 AND driver_id::text = $3
+        LIMIT 1`,
+      refs.shiftId, tenantId, userId,
+    );
+    if (!rows[0]) return forbidden('shiftId is not a shift of the signed-in driver');
+    if (rows[0].vehicle_id) namedVehicles.push(rows[0].vehicle_id);
+  }
+
+  if (refs.tripId) {
+    const rows = await tx.$queryRawUnsafe<Array<{ vehicle_id: string | null }>>(
+      `SELECT vehicle_id::text AS vehicle_id FROM trip_schedules
+        WHERE id::text = $1 AND tenant_id::text = $2 AND driver_id::text = $3
+          AND status IS DISTINCT FROM 'CANCELLED'
+        LIMIT 1`,
+      refs.tripId, tenantId, userId,
+    );
+    if (!rows[0]) return forbidden('tripId is not a trip of the signed-in driver');
+    if (rows[0].vehicle_id) namedVehicles.push(rows[0].vehicle_id);
+  }
+
+  if (refs.vehicleId && !namedVehicles.includes(refs.vehicleId)) {
+    const rows = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT v.id::text AS id FROM vehicles v
+        WHERE v.id::text = $1 AND v.tenant_id::text = $2
+          AND (
+            v.assigned_driver_id::text = $3
+            OR EXISTS (SELECT 1 FROM shifts s
+                        WHERE s.vehicle_id::text = v.id::text AND s.tenant_id::text = $2
+                          AND s.driver_id::text = $3 AND s.status = 'ACTIVE')
+            OR EXISTS (SELECT 1 FROM trip_schedules t
+                        WHERE t.vehicle_id::text = v.id::text AND t.tenant_id::text = $2
+                          AND t.driver_id::text = $3 AND t.status IN ('SCHEDULED', 'IN_PROGRESS'))
+          )
+        LIMIT 1`,
+      refs.vehicleId, tenantId, userId,
+    );
+    if (!rows[0]) return forbidden('vehicleId is not a vehicle assigned to the signed-in driver');
+  }
+  return null;
+}
