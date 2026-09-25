@@ -45,17 +45,23 @@ async function requestedTenant(request: NextRequest): Promise<string | undefined
   return header && header !== 'ALL' ? header : undefined;
 }
 
-async function handle(request: NextRequest) {
+/**
+ * `authz` is the operator session's tenant check, or null for the platform
+ * scheduler (CRON_SECRET), which is resolved in the exported handlers.
+ */
+async function handle(
+  request: NextRequest,
+  authz: ReturnType<typeof requireAuthorizedTenant> | null,
+) {
   // Tenant scope:
   //  - the platform scheduler (CRON_SECRET) may name one tenant or sweep all;
   //  - a signed-in operator only ever sweeps their own session tenant, which
   //    middleware set in x-tenant-id. A tenant named in the query or body is
   //    ignored for them: it previously let any user sweep another tenant.
   let tenantId: string | undefined;
-  if (isCronCaller(request)) {
+  if (!authz) {
     tenantId = await requestedTenant(request);
   } else {
-    const authz = requireAuthorizedTenant(request);
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
     }
@@ -80,9 +86,11 @@ async function handle(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  return handle(request);
+  const authz = isCronCaller(request) ? null : requireAuthorizedTenant(request);
+  return handle(request, authz);
 }
 
 export async function POST(request: NextRequest) {
-  return handle(request);
+  const authz = isCronCaller(request) ? null : requireAuthorizedTenant(request);
+  return handle(request, authz);
 }
