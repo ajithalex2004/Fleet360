@@ -21,6 +21,7 @@ import {
 } from '@/lib/auth-route-policies';
 import { computeRateLimit, getRateLimiter } from '@/lib/rate-limit-scope';
 import { stripIdentityHeaders, withVerifiedIdentity } from '@/lib/identity-headers';
+import { storedFileKey } from '@/lib/storage/stored-file-path';
 import { isAdminApiPath, requiredAdminLevel, roleSatisfies } from '@/lib/admin-access';
 import { canServeResidency } from '@/lib/data-residency';
 
@@ -155,6 +156,30 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // matches.
   if (pathname.startsWith('/api/') && hasValidCronSecret(request)) {
     return NextResponse.next();
+  }
+
+  // 0b. Stored files. /uploads/* used to be served straight from public/,
+  // skipping every authorization check. Both URL forms now go to the
+  // /api/files handler, which authorizes the caller against the file's
+  // owning record (src/lib/storage/file-access.ts). A staff session is
+  // optional here because logos are shown before sign-in and leasing-portal
+  // users carry their own session; when there is one, its verified identity
+  // is forwarded, never the client's headers.
+  const fileKey = storedFileKey(pathname);
+  if (fileKey !== null) {
+    const token = request.cookies.get('xl-session')?.value;
+    const staffSession = token ? await verifySession(token).catch(() => null) : null;
+    if (staffSession) {
+      const refusal = residencyRefusal(pathname, staffSession.dataResidency);
+      if (refusal) return refusal;
+    }
+    const url = request.nextUrl.clone();
+    url.pathname = `/api/files/${fileKey}`;
+    return NextResponse.rewrite(url, {
+      request: {
+        headers: staffSession ? withVerifiedIdentity(request.headers, staffSession) : sanitizedHeaders,
+      },
+    });
   }
 
   // 1. Public routes — no session required. Client-sent identity headers

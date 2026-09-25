@@ -17,7 +17,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
-import { requireDriverSession } from '@/lib/driver-session';
+import { requireDriverSessionForTenant } from '@/lib/driver-session';
+import { requireActiveDriver } from '@/lib/driver-app-actor';
 import { evaluateReportTransition } from '@/lib/driver-reports';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
@@ -34,8 +35,12 @@ export async function POST(
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    const ctx = await requireDriverSession(req);
+    const ctx = await requireDriverSessionForTenant(req, tenantId);
       if (ctx instanceof NextResponse) return ctx;
+      // Only an active driver of this tenant may act (driver-app-actor.ts);
+      // the record itself is checked against the driver below.
+      const notDriver = await requireActiveDriver(tx, ctx);
+      if (notDriver) return notDriver;
 
       // 1) Load the report (no body needed)
       const rows = await tx.$queryRaw<Array<{

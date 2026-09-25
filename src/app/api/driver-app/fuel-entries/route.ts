@@ -20,7 +20,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { requireDriverSession } from '@/lib/driver-session';
+import { requireDriverSession, requireDriverSessionForTenant } from '@/lib/driver-session';
+import { authorizeDriverReferences, requireActiveDriver } from '@/lib/driver-app-actor';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 const PostBodySchema = z.object({
@@ -133,7 +134,7 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    const ctx = (await requireDriverSession(req));
+    const ctx = (await requireDriverSessionForTenant(req, tenantId));
       if (ctx instanceof NextResponse) return ctx;
 
       const jsonRaw = await req.json().catch(() => null);
@@ -143,6 +144,12 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'validation failed', issues: parsed.error.issues }, { status: 400 });
       }
       const body = parsed.data;
+
+      // The caller must be an active driver, and every shift, trip and
+      // vehicle the request names must be theirs (src/lib/driver-app-actor.ts).
+      const denied = (await requireActiveDriver(tx, ctx))
+        ?? (await authorizeDriverReferences(tx, ctx, { shiftId: body.shiftId, tripId: body.tripId, vehicleId: body.vehicleId }));
+      if (denied) return denied;
 
       // Idempotency — same id twice is a no-op.
       const existing = await tx.$queryRaw<Array<{ id: string }>>`

@@ -35,6 +35,7 @@ import { getTenantContextOrNull } from '@/lib/tenant-session';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { nextReadableId } from '@/lib/service-tickets/schema';
+import { requireActiveDriver } from '@/lib/driver-app-actor';
 const ItemSchema = z.object({
   ok: z.boolean(),
   note: z.string().max(500).optional(),
@@ -88,6 +89,13 @@ export async function POST(req: NextRequest) {
       if (!ctx) {
         return NextResponse.json({ error: 'session required' }, { status: 401 });
       }
+      if (ctx.tenantId !== tenantId) {
+        return NextResponse.json({ error: 'session does not match tenant' }, { status: 403 });
+      }
+      // Only an active driver of this tenant may file a DVIR; the trip is
+      // checked against the driver below (src/lib/driver-app-actor.ts).
+      const notDriver = await requireActiveDriver(tx, ctx);
+      if (notDriver) return notDriver;
 
       const jsonRaw = await req.json().catch(() => null);
     const json = jsonRaw ? stripTenantOwnershipFields(jsonRaw) : null;

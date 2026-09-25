@@ -16,7 +16,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
-import { requireDriverSession } from '@/lib/driver-session';
+import { requireDriverSessionForTenant } from '@/lib/driver-session';
+import { requireActiveDriver } from '@/lib/driver-app-actor';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function POST(req: NextRequest, ctx2: { params: Promise<{ id: string }> }) {
@@ -29,8 +30,12 @@ export async function POST(req: NextRequest, ctx2: { params: Promise<{ id: strin
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     const { id: shiftId } = await ctx2.params;
-      const ctx = await requireDriverSession(req);
+      const ctx = await requireDriverSessionForTenant(req, tenantId);
       if (ctx instanceof NextResponse) return ctx;
+      // Only an active driver of this tenant may act (driver-app-actor.ts);
+      // the record itself is checked against the driver below.
+      const notDriver = await requireActiveDriver(tx, ctx);
+      if (notDriver) return notDriver;
 
       // Ownership + status check
       const existing = await tx.$queryRaw<Array<{ id: string; status: string }>>`
