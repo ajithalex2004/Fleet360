@@ -1,6 +1,6 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { MirrorCircuitBreaker } from '@/lib/mirror-circuit-breaker';
-import { activeRlsScope, runWithRlsScope } from '@/lib/rls-scope';
+import { activeRlsScope, backgroundTenantId, runWithRlsScope } from '@/lib/rls-scope';
 
 // `next/headers` is Server-Component-only. A static top-level import of it
 // contaminates every transitive importer — any 'use client' page that
@@ -223,15 +223,18 @@ function isValidTenantId(value: string | null): value is string {
 }
 
 /**
- * Resolve only middleware-injected request context. This intentionally does
- * not accept query/body tenant IDs and returns null for jobs, migrations and
- * other non-request code, which must use the explicit RLS helpers instead.
+ * Resolve the tenant for automatic RLS scoping: the middleware-injected
+ * request context first, else a tenant established with runWithTenantContext
+ * (event consumers, token-authenticated public flows). This intentionally
+ * does not accept query/body tenant IDs and returns null for jobs, migrations
+ * and other code with neither, which must use the explicit RLS helpers.
  */
 async function requestTenantId(): Promise<string | null> {
   const requestHeaders = await readRequestHeaders();
-  if (!requestHeaders) return null;
-  const tenantId = requestHeaders.get('x-tenant-id');
-  return isValidTenantId(tenantId) ? tenantId : null;
+  const fromRequest = requestHeaders?.get('x-tenant-id') ?? null;
+  if (isValidTenantId(fromRequest)) return fromRequest;
+  const background = backgroundTenantId() ?? null;
+  return isValidTenantId(background) ? background : null;
 }
 
 async function withPrimaryConnectionRetry<T>(run: () => Promise<T>): Promise<T> {

@@ -7,6 +7,7 @@
 
 import { prisma } from '@/lib/prisma';
 import { raiseAlert } from '@/lib/alerts/raise';
+import { withPlatformAdmin } from '@/lib/rls';
 
 export interface WhatsAppStatusInput {
   messageId: string;
@@ -73,10 +74,15 @@ export class WebhookReceiptService {
 
         // If delivery failed -> alert Operations Dispatch
         if (input.status === 'failed') {
-          const assignment = await prisma.partnerAssignment.findUnique({
-            where: { id: assignmentId },
-            include: { award: { include: { request: true } } },
-          });
+          // Webhooks have no session or tenant, and the award/request tables
+          // are tenant-isolated by RLS: read this one assignment's award in
+          // platform context; the alert is raised in the award's tenant.
+          const assignment = await withPlatformAdmin(prisma, (tx) =>
+            tx.partnerAssignment.findUnique({
+              where: { id: assignmentId! },
+              include: { award: { include: { request: true } } },
+            }),
+          );
 
           if (assignment) {
             await raiseAlert({
@@ -148,10 +154,15 @@ export class WebhookReceiptService {
         });
 
         if (input.messageStatus === 'failed' || input.messageStatus === 'undelivered') {
-          const assignment = await prisma.partnerAssignment.findUnique({
-            where: { id: assignmentId },
-            include: { award: { include: { request: true } } },
-          });
+          // Webhooks have no session or tenant, and the award/request tables
+          // are tenant-isolated by RLS: read this one assignment's award in
+          // platform context; the alert is raised in the award's tenant.
+          const assignment = await withPlatformAdmin(prisma, (tx) =>
+            tx.partnerAssignment.findUnique({
+              where: { id: assignmentId! },
+              include: { award: { include: { request: true } } },
+            }),
+          );
 
           if (assignment) {
             await raiseAlert({

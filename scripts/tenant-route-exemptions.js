@@ -136,26 +136,6 @@ const RULE_EXEMPTIONS = [
     owner: 'Platform Operations / Scheduler',
     test: 'tests/jobs/run.test.ts',
   },
-  {
-    file: 'src/app/api/documents/intelligence/cron/lifecycle-sweep/route.ts',
-    method: 'GET',
-    type: 'missing_auth',
-    reason: 'Document expiry sweep endpoint triggerable via GET cron. Authenticated via CRON_SECRET Bearer header or operator session.',
-    authMechanism: 'CRON_SECRET Bearer header or operator session',
-    dataScope: 'Document lifecycle status transitions across active tenants',
-    owner: 'Document Intelligence Team',
-    test: 'tests/documents/cron-sweep.test.ts',
-  },
-  {
-    file: 'src/app/api/documents/intelligence/cron/lifecycle-sweep/route.ts',
-    method: 'POST',
-    type: 'missing_auth',
-    reason: 'Scheduled document expiry sweep job transitioning documents past expiry to EXPIRED. Authenticated via CRON_SECRET Bearer header.',
-    authMechanism: 'CRON_SECRET Bearer header or operator session',
-    dataScope: 'Document lifecycle status transitions across active tenants',
-    owner: 'Document Intelligence Team',
-    test: 'tests/documents/cron-sweep.test.ts',
-  },
 
   // ── Webhooks & Inbound Ingestion ───────────────────────────────────────────
   {

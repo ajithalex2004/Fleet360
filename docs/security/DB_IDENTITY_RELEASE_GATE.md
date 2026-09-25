@@ -44,9 +44,11 @@ For each connection it reports:
 - superuser, `BYPASSRLS`, `CREATEROLE` and `CREATEDB` status;
 - the tables owned, and whether RLS is forced on them;
 - `CREATE` rights on schemas and the database;
-- tenant tables without RLS enabled.
+- tenant tables without RLS enabled, listed by name.
 
-It exits with code 1 if any runtime connection fails, or if a migration connection shares an identity with a runtime one.
+It exits with code 1 if any runtime connection fails a check, including when any tenant table has RLS disabled, or if a migration connection shares an identity with a runtime one.
+
+The first production run (2026-09-25) found 22 tenant tables without RLS (10 on staging). Migration `20260925130000_rls_for_unprotected_tenant_tables` enables and forces it on them.
 
 The script was tested against PostgreSQL 16 with four set-ups:
 - an owner connection (fails, and lists the owned tables);

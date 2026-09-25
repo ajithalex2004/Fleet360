@@ -87,10 +87,13 @@ export async function POST(req: NextRequest) {
         // Store outbound message
         const fromNumber = WHATSAPP_FROM_NUMBER;
         await tx.$executeRawUnsafe(
+          // tenant_id: the message belongs to the sending tenant. It was
+          // missing, so every tenant's messages were stored unattributed and
+          // listed to every other tenant.
           `INSERT INTO whatsapp_messages
              (direction, from_number, to_number, message_body, message_sid, status,
-              message_type, template_name, module, intent, auto_replied, raw_payload)
-           VALUES ('OUTBOUND', $1, $2, $3, $4, $5, $6, $7, $8, $9, false, $10::jsonb)`,
+              message_type, template_name, module, intent, auto_replied, raw_payload, tenant_id)
+           VALUES ('OUTBOUND', $1, $2, $3, $4, $5, $6, $7, $8, $9, false, $10::jsonb, $11)`,
           fromNumber,
           normalizedTo,
           messageBody,
@@ -100,7 +103,8 @@ export async function POST(req: NextRequest) {
           resolvedTemplate,
           module,
           intent,
-          JSON.stringify({ to, templateName, templateVars, module, intent })
+          JSON.stringify({ to, templateName, templateVars, module, intent }),
+          tenantId,
         ).catch(() => {});
 
         return NextResponse.json({ success: true, messageSid, status });

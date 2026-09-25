@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
  * POST /api/agents/run
  * --------------------
  * Manual trigger endpoint — used by "Run Analysis" buttons in the UI.
- * Body: { agent_id: AgentId, entity_id?: string, tenant_id?: string }
+ * Body: { agent_id: AgentId, entity_id?: string } — always runs for the caller's tenant
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
@@ -22,13 +22,16 @@ export async function POST(req: NextRequest) {
 
   await ensureAgentSchema();
   try {
-    const { agent_id, tenant_id } = await req.json() as { agent_id: AgentId; tenant_id?: string };
+    // A tenant_id in the body is ignored: the scan always runs for the
+    // caller's own session tenant. It used to take precedence, letting any
+    // user start an agent scan against another tenant.
+    const { agent_id } = await req.json() as { agent_id: AgentId };
 
     if (!agent_id) {
       return NextResponse.json({ error: 'agent_id is required' }, { status: 400 });
     }
 
-    const result = await triggerFullScan(agent_id, tenant_id ?? tenantId);
+    const result = await triggerFullScan(agent_id, tenantId);
     return NextResponse.json(result, { status: result.status === 'FAILED' ? 500 : 200 });
     } catch (err) {
     console.error('[agents/run]', err);

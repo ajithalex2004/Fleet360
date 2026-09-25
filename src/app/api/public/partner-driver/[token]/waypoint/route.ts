@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { WaypointService } from '@/lib/exchange/waypoint-service';
+import { withPartnerTokenTenant } from '@/lib/exchange/partner-token-tenant';
 
 export const runtime = 'nodejs';
 
@@ -9,7 +10,7 @@ export const runtime = 'nodejs';
  * GET /api/public/partner-driver/[token]/waypoint
  * Retrieve waypoints and progression for a driver's outsourced trip
  */
-export async function GET(
+async function handleGET(
   req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
@@ -29,7 +30,7 @@ export async function GET(
  * POST /api/public/partner-driver/[token]/waypoint
  * Record milestone at a specific waypoint sequence
  */
-export async function POST(
+async function handlePOST(
   req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
@@ -56,4 +57,19 @@ export async function POST(
       { status: 500 }
     );
   }
+}
+
+// Runs each handler in the tenant of the link's award (src/lib/exchange/partner-token-tenant.ts):
+// the award and request tables are tenant-isolated by RLS and this route has no session.
+export async function GET(
+  req: Parameters<typeof handleGET>[0],
+  ctx: { params: Promise<{ token: string }> },
+) {
+  return withPartnerTokenTenant((await ctx.params).token, () => handleGET(req, ctx));
+}
+export async function POST(
+  req: Parameters<typeof handlePOST>[0],
+  ctx: { params: Promise<{ token: string }> },
+) {
+  return withPartnerTokenTenant((await ctx.params).token, () => handlePOST(req, ctx));
 }

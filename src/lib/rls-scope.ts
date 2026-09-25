@@ -60,3 +60,32 @@ export function runOutsideRlsScope<T>(fn: () => Promise<T>): Promise<T> {
     });
   });
 }
+
+/**
+ * Tenant context for code that runs outside an authenticated request but has
+ * already established, from a verified source, which tenant it acts for:
+ * outbox event consumers (the envelope's tenant) and token-authenticated
+ * public flows (the tenant of the record the token resolves to).
+ *
+ * Inside `fn`, the Prisma client treats this tenant exactly like the tenant
+ * of an authenticated request (src/lib/prisma.ts, requestTenantId): each
+ * query or model operation not already inside withTenantRls /
+ * withPlatformAdmin runs in its own transaction with app.tenant_id set, so
+ * RLS scopes it. It never overrides a request's own verified tenant.
+ *
+ * Only pass a tenant id derived from a verified credential or record, never
+ * one taken from request input.
+ */
+const backgroundTenant = new AsyncLocalStorage<string>();
+
+export function runWithTenantContext<T>(tenantId: string, fn: () => Promise<T>): Promise<T> {
+  if (!/^[a-zA-Z0-9_-]+$/.test(tenantId)) {
+    return Promise.reject(new Error('runWithTenantContext: invalid tenantId'));
+  }
+  return backgroundTenant.run(tenantId, fn);
+}
+
+/** The tenant set by runWithTenantContext, if any. */
+export function backgroundTenantId(): string | undefined {
+  return backgroundTenant.getStore();
+}
