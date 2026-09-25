@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { OutsourceEngine, hashDriverToken } from '@/lib/exchange/outsource-engine';
 import { BusOpsOutsourcingAdapter } from '@/lib/exchange/bus-ops-adapter';
+import { withPartnerTokenTenant } from '@/lib/exchange/partner-token-tenant';
 
 export const runtime = 'nodejs';
 
@@ -13,7 +14,7 @@ export const runtime = 'nodejs';
  * Public endpoint for external partner driver to load trip details without login.
  * Queries assignment via SHA-256 hash of the opaque URL token.
  */
-export async function GET(
+async function handleGET(
   _req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
@@ -78,7 +79,7 @@ export async function GET(
  *
  * Milestone action: REACHED | STARTED | COMPLETED + POD submission
  */
-export async function POST(
+async function handlePOST(
   req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
@@ -127,4 +128,19 @@ export async function POST(
     const status = msg.includes('finalized') || msg.includes('already') || msg.includes('cancelled') ? 409 : 400;
     return NextResponse.json({ error: msg }, { status });
   }
+}
+
+// Runs each handler in the tenant of the link's award (src/lib/exchange/partner-token-tenant.ts):
+// the award and request tables are tenant-isolated by RLS and this route has no session.
+export async function GET(
+  req: Parameters<typeof handleGET>[0],
+  ctx: { params: Promise<{ token: string }> },
+) {
+  return withPartnerTokenTenant((await ctx.params).token, () => handleGET(req, ctx));
+}
+export async function POST(
+  req: Parameters<typeof handlePOST>[0],
+  ctx: { params: Promise<{ token: string }> },
+) {
+  return withPartnerTokenTenant((await ctx.params).token, () => handlePOST(req, ctx));
 }

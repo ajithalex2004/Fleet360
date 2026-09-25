@@ -10,57 +10,71 @@ export const runtime = 'nodejs';
  *  - Transitions documents expiring within 30 days to EXPIRING
  * 
  * Auth:
- *  - CRON_SECRET Bearer token
- *  - OR x-tenant-id header (authenticated operator)
+ *  - CRON_SECRET Bearer token: any single tenant (?tenantId= / body) or all tenants
+ *  - OR an authenticated operator session: that operator's own tenant only
  *  - Allowed in dev/test when no CRON_SECRET is configured
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { sweepDocumentExpiries } from '@/lib/agents/document-intelligence/pipeline/lifecycle-manager';
 import { ensureAgentSchema } from '@/lib/agents/schema';
+import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 
-function isAuthorized(request: NextRequest): boolean {
-  if (request.headers.get('x-tenant-id')) return true;
+/** True for the platform scheduler: a valid CRON_SECRET, or no secret configured outside production. */
+function isCronCaller(request: NextRequest): boolean {
   const expected = process.env.CRON_SECRET;
-  if (!expected) {
-    return process.env.NODE_ENV !== 'production';
-  }
-  const got = request.headers
-    .get('authorization')
-    ?.replace(/^Bearer\s+/i, '');
+  if (!expected) return process.env.NODE_ENV !== 'production';
+  const got = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
   return got === expected;
 }
 
-async function handle(request: NextRequest) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  await ensureAgentSchema();
-
-  let tenantId: string | undefined;
-  const searchParamTenant = request.nextUrl.searchParams.get('tenantId');
-  if (searchParamTenant) {
-    tenantId = searchParamTenant;
-  } else {
-    const headerTenant = request.headers.get('x-tenant-id');
-    if (headerTenant && headerTenant !== 'ALL') {
-      tenantId = headerTenant;
-    }
-  }
-
+async function requestedTenant(request: NextRequest): Promise<string | undefined> {
+  const fromQuery = request.nextUrl.searchParams.get('tenantId');
+  if (fromQuery) return fromQuery;
   if (request.method === 'POST') {
     try {
       const body = await request.json();
-      if (body?.tenantId) {
-        tenantId = body.tenantId;
-      }
+      if (typeof body?.tenantId === 'string' && body.tenantId) return body.tenantId;
     } catch {
       // Body may be empty on cron trigger, ignore parse error
     }
   }
+  const header = request.headers.get('x-tenant-id');
+  return header && header !== 'ALL' ? header : undefined;
+}
 
-  const result = await sweepDocumentExpiries(tenantId);
+/**
+ * `authz` is the operator session's tenant check, or null for the platform
+ * scheduler (CRON_SECRET), which is resolved in the exported handlers.
+ */
+async function handle(
+  request: NextRequest,
+  authz: ReturnType<typeof requireAuthorizedTenant> | null,
+) {
+  // Tenant scope:
+  //  - the platform scheduler (CRON_SECRET) may name one tenant or sweep all;
+  //  - a signed-in operator only ever sweeps their own session tenant, which
+  //    middleware set in x-tenant-id. A tenant named in the query or body is
+  //    ignored for them: it previously let any user sweep another tenant.
+  let tenantId: string | undefined;
+  if (!authz) {
+    tenantId = await requestedTenant(request);
+  } else {
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+    tenantId = authz.tenantId;
+  }
+
+  await ensureAgentSchema();
+
+  // The documents are RLS-protected: run a single-tenant sweep in that
+  // tenant's context and the all-tenant sweep in platform context.
+  const result = tenantId
+    ? await withTenantRls(prisma, tenantId, () => sweepDocumentExpiries(tenantId))
+    : await withPlatformAdmin(prisma, () => sweepDocumentExpiries());
 
   return NextResponse.json({
     success: true,
@@ -72,9 +86,11 @@ async function handle(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  return handle(request);
+  const authz = isCronCaller(request) ? null : requireAuthorizedTenant(request);
+  return handle(request, authz);
 }
 
 export async function POST(request: NextRequest) {
-  return handle(request);
+  const authz = isCronCaller(request) ? null : requireAuthorizedTenant(request);
+  return handle(request, authz);
 }

@@ -3,7 +3,8 @@
  * Database identity release gate (read-only).
  *
  * RLS protects nothing when the connection is a superuser, holds BYPASSRLS,
- * or owns the tables (owners skip RLS unless FORCE ROW LEVEL SECURITY is set).
+ * or owns the tables (owners skip RLS unless FORCE ROW LEVEL SECURITY is set),
+ * and it can't protect a tenant table on which RLS is disabled.
  * It also can't help when the runtime role can create or alter tables. This
  * reports, for each connection a deployed process uses, who it really
  * connects as and whether any of that applies, and fails if it does.
@@ -80,14 +81,17 @@ async function inspect(url) {
        ORDER BY 1, 2`);
 
     // Tenant tables where RLS is not even enabled (visible to this identity).
-    const [noRls] = await q(`
-      SELECT count(*)::int AS n
+    // A tenant table without RLS is readable and writable across tenants by
+    // the runtime role; only each query's own filter stands in the way.
+    const noRls = await q(`
+      SELECT n.nspname::text AS schema, c.relname::text AS table
         FROM information_schema.columns col
         JOIN pg_namespace n ON n.nspname = col.table_schema
         JOIN pg_class c ON c.relnamespace = n.oid AND c.relname = col.table_name
-       WHERE col.column_name = 'tenant_id' AND c.relkind IN ('r', 'p') AND NOT c.relrowsecurity`);
+       WHERE col.column_name = 'tenant_id' AND c.relkind IN ('r', 'p') AND NOT c.relrowsecurity
+       ORDER BY 1, 2`);
 
-    return { who, memberOf, createSchemas, db, owned, noRls: noRls.n };
+    return { who, memberOf, createSchemas, db, owned, noRls };
   } finally {
     await prisma.$disconnect();
   }
@@ -130,11 +134,12 @@ for (const t of targets) {
       `${r.owned.length} owned, ${r.owned.filter((o) => o.rls_enabled && !o.rls_forced).length} with RLS not forced`],
     ['no CREATE on any schema', r.createSchemas.length === 0, r.createSchemas.map((s) => s.schema).join(', ') || 'none'],
     ['cannot create schemas', !r.db.can_create_schema, String(r.db.can_create_schema)],
+    ['every tenant table has RLS enabled', r.noRls.length === 0,
+      r.noRls.length ? r.noRls.map((t) => `${t.schema}.${t.table}`).join(', ') : 'all enabled'],
   ];
 
   console.log(`   session_user=${who.session_user} current_user=${who.current_user} database=${who.database}`);
   console.log(`   member of: ${r.memberOf.map((m) => m.role).join(', ') || 'none'}`);
-  console.log(`   tenant tables without RLS enabled: ${r.noRls}`);
   for (const [name, ok, detail] of checks) {
     const mark = ok ? '✅' : isMigration ? 'ℹ️ ' : '❌';
     console.log(`   ${mark} ${name} — ${detail}`);

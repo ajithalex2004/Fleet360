@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { WebhookReceiptService } from '@/lib/exchange/webhook-receipt-service';
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
 import { ensureAgentSchema } from '@/lib/agents/schema';
 import { logInteraction } from '@/lib/agents/whatsapp-agent/agent';
 import { classifyIntent, WhatsAppIntent } from '@/lib/whatsapp/intent';
@@ -40,6 +41,26 @@ async function getReplyBody(intent: WhatsAppIntent): Promise<string> {
 }
 
 /**
+ * Tenant an inbound message belongs to: the tenant that most recently sent a
+ * message to this number. 'default' (platform-only) when no tenant has.
+ */
+async function attributeInboundTenant(fromNumber: string): Promise<string> {
+  if (!fromNumber) return 'default';
+  try {
+    const rows = await withPlatformAdmin(prisma, (tx) => tx.$queryRawUnsafe<Array<{ tenant_id: string }>>(
+      `SELECT tenant_id FROM whatsapp_messages
+        WHERE direction = 'OUTBOUND' AND to_number = $1 AND tenant_id <> 'default'
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      fromNumber,
+    ));
+    return rows[0]?.tenant_id ?? 'default';
+  } catch {
+    return 'default';
+  }
+}
+
+/**
  * Twilio's inbound-message webhook posts x-www-form-urlencoded with
  * MessageSid + From + Body, and critically no MessageStatus (that field
  * only appears on delivery-status callbacks for outbound messages).
@@ -55,31 +76,41 @@ async function handleInboundTwilioMessage(form: URLSearchParams) {
 
   const intent = classifyIntent(body);
 
+  // The shared number carries every tenant's conversations and the webhook
+  // has no session. Attribute the message to the tenant that last messaged
+  // this sender; with none, keep it platform-only ('default', the column
+  // default, which no tenant can read under RLS). Stored in platform context
+  // because whatsapp_messages is tenant-isolated by RLS.
+  const tenantId = await attributeInboundTenant(from);
+
   // Log the inbound message first, independent of whether the reply succeeds.
-  await prisma.$executeRawUnsafe(
+  await withPlatformAdmin(prisma, (tx) => tx.$executeRawUnsafe(
     `INSERT INTO whatsapp_messages
        (direction, from_number, to_number, message_body, message_sid, status,
-        message_type, module, intent, auto_replied, raw_payload)
-     VALUES ('INBOUND', $1, $2, $3, $4, 'RECEIVED', 'TEXT', 'WHATSAPP', $5, false, $6::jsonb)`,
+        message_type, module, intent, auto_replied, raw_payload, tenant_id)
+     VALUES ('INBOUND', $1, $2, $3, $4, 'RECEIVED', 'TEXT', 'WHATSAPP', $5, false, $6::jsonb, $7)`,
     from, to, body, messageSid, intent,
     JSON.stringify(Object.fromEntries(form.entries())),
-  ).catch((e) => console.error('[whatsapp webhook] failed to log inbound message:', e));
+    tenantId,
+  )).catch((e) => console.error('[whatsapp webhook] failed to log inbound message:', e));
 
   const replyBody = await getReplyBody(intent);
   const sendResult = await sendWhatsAppMessage(from, replyBody);
   const resolved = sendResult !== null;
 
-  await prisma.$executeRawUnsafe(
+  await withPlatformAdmin(prisma, (tx) => tx.$executeRawUnsafe(
     `INSERT INTO whatsapp_messages
        (direction, from_number, to_number, message_body, message_sid, status,
-        message_type, template_name, module, intent, auto_replied, raw_payload)
-     VALUES ('OUTBOUND', $1, $2, $3, $4, $5, 'TEMPLATE', $6, 'WHATSAPP', $7, true, $8::jsonb)`,
+        message_type, template_name, module, intent, auto_replied, raw_payload, tenant_id)
+     VALUES ('OUTBOUND', $1, $2, $3, $4, $5, 'TEMPLATE', $6, 'WHATSAPP', $7, true, $8::jsonb, $9)`,
     to, from, replyBody, sendResult?.sid ?? null, resolved ? 'SENT' : 'FAILED',
     TEMPLATE_BY_INTENT[intent], intent,
     JSON.stringify({ inReplyTo: messageSid }),
-  ).catch((e) => console.error('[whatsapp webhook] failed to log outbound reply:', e));
+    tenantId,
+  )).catch((e) => console.error('[whatsapp webhook] failed to log outbound reply:', e));
 
   await logInteraction({
+    tenantId,
     messageId:  messageSid,
     intent,
     from,

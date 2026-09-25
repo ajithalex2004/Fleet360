@@ -9,6 +9,7 @@
  */
 
 import { prisma }              from '@/lib/prisma';
+import { runWithTenantContext } from '@/lib/rls-scope';
 import type { DomainEventEnvelope } from '@/events/event-envelope';
 
 export abstract class BaseEventConsumer<T = unknown> {
@@ -28,6 +29,16 @@ export abstract class BaseEventConsumer<T = unknown> {
    * Returns true on success/skip (already-processed), false on failure.
    */
   async process(envelope: DomainEventEnvelope<T>): Promise<boolean> {
+    // Consumers run in the outbox job, outside any request, so the Prisma
+    // client has no tenant to scope queries with and RLS-protected tables
+    // return nothing. Every envelope carries exactly one tenant (see
+    // outbox-publisher.ts); run the whole delivery in that tenant's context.
+    const tenantId = envelope.tenantId;
+    if (!tenantId || !/^[a-zA-Z0-9_-]+$/.test(tenantId)) return this.processInTenant(envelope);
+    return runWithTenantContext(tenantId, () => this.processInTenant(envelope));
+  }
+
+  private async processInTenant(envelope: DomainEventEnvelope<T>): Promise<boolean> {
     // ── Idempotency check ─────────────────────────────────────────────────
     const [existing] = await prisma.$queryRawUnsafe<Array<{ status: string }>>(
       `SELECT status FROM event_consumer_inbox
