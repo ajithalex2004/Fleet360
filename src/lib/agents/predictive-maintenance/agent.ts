@@ -307,9 +307,13 @@ async function upsertRiskScore(score: VehicleRiskScore, runId: string, woId?: st
 // ── Agent Runner Implementation ────────────────────────────────────────────────
 async function run(event: AgentEvent): Promise<AgentRunResult> {
   const started = Date.now();
-  const runId = crypto.randomUUID();
+  // Under the orchestrator, which owns the agent_runs row, run_id is set and
+  // this agent leaves the row alone. Called directly (e.g. the eval runner),
+  // it logs its own.
+  const runId = event.run_id ?? crypto.randomUUID();
+  const ownsRunRow = !event.run_id;
 
-  await prisma.$executeRawUnsafe(
+  if (ownsRunRow) await prisma.$executeRawUnsafe(
     `INSERT INTO agent_runs (id, agent_id, tenant_id, event_type, entity_id, status, created_at)
      VALUES ($1::uuid,'predictive-maintenance',$2,$3,$4,'RUNNING',NOW())`,
     runId,
@@ -430,7 +434,7 @@ async function run(event: AgentEvent): Promise<AgentRunResult> {
 
   const durationMs = Date.now() - started;
 
-  await prisma.$executeRawUnsafe(
+  if (ownsRunRow) await prisma.$executeRawUnsafe(
     `UPDATE agent_runs SET
        status='COMPLETED', items_processed=$1, actions_created=$2,
        duration_ms=$3, output=$4::jsonb

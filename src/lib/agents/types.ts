@@ -236,6 +236,7 @@ export interface AgentEvent {
   callback_url?: string;       // optional webhook for async response
   api_key?: string;            // external platform auth
   idempotency_key?: string;    // prevent duplicate runs
+  run_id?: string;             // agent_runs.id — always set by the orchestrator (any caller value is replaced)
 }
 
 // ── Agent Identifiers ──────────────────────────────────────────────────────────

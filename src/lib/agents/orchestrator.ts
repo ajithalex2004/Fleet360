@@ -15,15 +15,36 @@ import { calculateTokenCost, updateDailyRoiMetrics, USD_TO_AED_RATE } from './te
 import { policyService } from './governance';
 
 export async function dispatch(event: AgentEvent): Promise<AgentRunResult> {
+  const run = await startRun(event);
+  return run.result;
+}
+
+/**
+ * `started`: the run passed the governance checks and is executing.
+ * `result` resolves when the agent finishes; `settled` resolves once the
+ * agent_runs row also holds the final result (what GET /api/agents/run
+ * reads). `rejected`: governance refused the run; nothing was recorded.
+ */
+export type StartedRun =
+  | { kind: 'started'; runId: string; result: Promise<AgentRunResult>; settled: Promise<void> }
+  | { kind: 'rejected'; result: AgentRunResult };
+
+/**
+ * Runs the governance checks, records the run as RUNNING in agent_runs and
+ * starts the agent without waiting for it to finish.
+ *
+ * The orchestrator owns the run row. Agents that log their own row
+ * (finance-anomaly, predictive-maintenance, staff-transport-planner) reuse
+ * `event.run_id` and leave the row to the orchestrator; before, every run
+ * of those agents was logged twice.
+ */
+export async function startRun(event: AgentEvent): Promise<StartedRun> {
   await ensureAgentSchema();
 
   const started = Date.now();
-  let result: AgentRunResult;
-
-  // 1. Governance & Budget Circuit Breaker Check
-  const quota = await policyService.checkBudgetQuota(event.tenant_id);
-  if (!quota.allowed) {
-    return {
+  const rejected = (error: string): StartedRun => ({
+    kind: 'rejected',
+    result: {
       agentId:         event.agent_id,
       tenantId:        event.tenant_id,
       eventType:       event.event_type,
@@ -33,33 +54,54 @@ export async function dispatch(event: AgentEvent): Promise<AgentRunResult> {
       itemsProcessed:  0,
       actionsCreated:  0,
       output:          null,
-      error:           quota.reason ?? 'Tenant AI budget exceeded.',
-    };
+      error,
+    },
+  });
+
+  // 1. Governance & Budget Circuit Breaker Check
+  const quota = await policyService.checkBudgetQuota(event.tenant_id);
+  if (!quota.allowed) {
+    return rejected(quota.reason ?? 'Tenant AI budget exceeded.');
   }
 
   // 2. Disabled Agent Check
   const policy = await policyService.getTenantPolicy(event.tenant_id);
   if (policy.disabledAgents.includes(event.agent_id)) {
-    return {
-      agentId:         event.agent_id,
-      tenantId:        event.tenant_id,
-      eventType:       event.event_type,
-      entityId:        event.entity_id,
-      status:          'FAILED',
-      durationMs:      Date.now() - started,
-      itemsProcessed:  0,
-      actionsCreated:  0,
-      output:          null,
-      error:           `Agent '${event.agent_id}' is disabled by tenant policy.`,
-    };
+    return rejected(`Agent '${event.agent_id}' is disabled by tenant policy.`);
   }
 
+  // Always a fresh id: events can arrive from outside (/api/agents/ingest
+  // passes its request body through), and a caller-chosen id would let the
+  // final upsert overwrite an existing run.
+  const runId = crypto.randomUUID();
+  const runEvent: AgentEvent = { ...event, run_id: runId };
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO agent_runs (id, agent_id, tenant_id, event_type, entity_id, status, created_at)
+     VALUES ($1::uuid, $2, $3, $4, $5, 'RUNNING', NOW())
+     ON CONFLICT (id) DO NOTHING`,
+    runId,
+    runEvent.agent_id,
+    runEvent.tenant_id,
+    runEvent.event_type,
+    runEvent.entity_id ?? null,
+  ).catch((e) => console.error('[orchestrator] Failed to record agent run start:', e));
+
+  const result = executeAgent(runEvent, started);
+  const settled = result.then((r) => persistRun(runEvent, runId, r)).catch((e) =>
+    console.error('[orchestrator] Failed to persist agent run:', e),
+  );
+
+  return { kind: 'started', runId, result, settled };
+}
+
+async function executeAgent(event: AgentEvent, started: number): Promise<AgentRunResult> {
   try {
     const agent = await getAgent(event.agent_id);
-    result = await agent.run(event);
+    return await agent.run(event);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    result = {
+    return {
       agentId:         event.agent_id,
       tenantId:        event.tenant_id,
       eventType:       event.event_type,
@@ -72,16 +114,9 @@ export async function dispatch(event: AgentEvent): Promise<AgentRunResult> {
       error:           message,
     };
   }
-
-  // Persist run and update ROI metrics — fire and forget
-  persistRun(event, result).catch((e) =>
-    console.error('[orchestrator] Failed to persist agent run:', e),
-  );
-
-  return result;
 }
 
-async function persistRun(event: AgentEvent, result: AgentRunResult): Promise<void> {
+async function persistRun(event: AgentEvent, runId: string, result: AgentRunResult): Promise<void> {
   // Infer / extract telemetry
   const t = result.telemetry ?? {};
   let modelAlias: ModelCapabilityAlias = t.modelAlias ?? 'DETERMINISTIC_RULES';
@@ -125,6 +160,7 @@ async function persistRun(event: AgentEvent, result: AgentRunResult): Promise<vo
 
   await prisma.$executeRawUnsafe(
     `INSERT INTO agent_runs (
+       id,
        agent_id, tenant_id, event_type, entity_id,
        input, output, items_processed, actions_created,
        duration_ms, status, error_text,
@@ -133,6 +169,7 @@ async function persistRun(event: AgentEvent, result: AgentRunResult): Promise<vo
        cost_usd, cost_aed, estimated_savings_aed, actual_savings_aed,
        business_outcome, decision_quality_score, human_feedback
      ) VALUES (
+       $28::uuid,
        $1,$2,$3,$4,
        $5::jsonb,$6::jsonb,$7,$8,
        $9,$10,$11,
@@ -140,7 +177,35 @@ async function persistRun(event: AgentEvent, result: AgentRunResult): Promise<vo
        $17,$18,$19,$20,
        $21,$22,$23,$24,
        $25,$26,$27
-     )`,
+     )
+     ON CONFLICT (id) DO UPDATE SET
+       agent_id = EXCLUDED.agent_id,
+       tenant_id = EXCLUDED.tenant_id,
+       event_type = EXCLUDED.event_type,
+       entity_id = EXCLUDED.entity_id,
+       input = EXCLUDED.input,
+       output = EXCLUDED.output,
+       items_processed = EXCLUDED.items_processed,
+       actions_created = EXCLUDED.actions_created,
+       duration_ms = EXCLUDED.duration_ms,
+       status = EXCLUDED.status,
+       error_text = EXCLUDED.error_text,
+       model_alias = EXCLUDED.model_alias,
+       model_provider = EXCLUDED.model_provider,
+       input_tokens = EXCLUDED.input_tokens,
+       output_tokens = EXCLUDED.output_tokens,
+       cached_tokens = EXCLUDED.cached_tokens,
+       tool_calls_count = EXCLUDED.tool_calls_count,
+       agent_hops_count = EXCLUDED.agent_hops_count,
+       matrix_elements_queried = EXCLUDED.matrix_elements_queried,
+       solver_duration_ms = EXCLUDED.solver_duration_ms,
+       cost_usd = EXCLUDED.cost_usd,
+       cost_aed = EXCLUDED.cost_aed,
+       estimated_savings_aed = EXCLUDED.estimated_savings_aed,
+       actual_savings_aed = EXCLUDED.actual_savings_aed,
+       business_outcome = EXCLUDED.business_outcome,
+       decision_quality_score = EXCLUDED.decision_quality_score,
+       human_feedback = EXCLUDED.human_feedback`,
     result.agentId,
     result.tenantId,
     result.eventType,
@@ -168,6 +233,7 @@ async function persistRun(event: AgentEvent, result: AgentRunResult): Promise<vo
     businessOutcome,
     t.decisionQualityScore ?? null,
     t.humanFeedback ?? null,
+    runId,
   );
 
   // Update aggregated daily ROI
@@ -190,6 +256,21 @@ export async function triggerFullScan(
   tenantId = 'default',
 ): Promise<AgentRunResult> {
   return dispatch({
+    tenant_id:  tenantId,
+    agent_id:   agentId,
+    event_type: 'manual.trigger',
+  });
+}
+
+/**
+ * Same as triggerFullScan, but returns as soon as the run is recorded as
+ * RUNNING instead of waiting for the agent to finish.
+ */
+export async function startFullScan(
+  agentId: AgentEvent['agent_id'],
+  tenantId = 'default',
+): Promise<StartedRun> {
+  return startRun({
     tenant_id:  tenantId,
     agent_id:   agentId,
     event_type: 'manual.trigger',

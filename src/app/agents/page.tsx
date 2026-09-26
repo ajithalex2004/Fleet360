@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Bot, RefreshCw } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
+import { runAgentAndWait } from '@/lib/agents/run-client';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface LastRun {
@@ -520,21 +521,19 @@ export default function AgentsPage() {
   const handleRun = async (agentId: string) => {
     setRunningId(agentId);
     try {
-      const res = await fetch('/api/agents/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          agent_id: agentId,
-          event_type: 'manual.trigger',
-        }),
+      const { ok, timedOut, result } = await runAgentAndWait({
+        agent_id: agentId,
+        event_type: 'manual.trigger',
       });
-      const result = await res.json();
-      if (res.ok) {
-        const summary = (result?.output as { summary?: string })?.summary ?? `${agentId} completed`;
-        showToast(`✓ ${summary}`, 'ok');
+      if (ok) {
+        const summary = (result?.output as { summary?: unknown })?.summary;
+        showToast(`✓ ${typeof summary === 'string' ? summary : `${agentId} completed`}`, 'ok');
+        await loadData();
+      } else if (timedOut) {
+        showToast(`${agentId} is still running — results will appear when it finishes`, 'ok');
         await loadData();
       } else {
-        showToast(`Failed to run ${agentId}`, 'err');
+        showToast(result?.error ? `Failed to run ${agentId}: ${result.error}` : `Failed to run ${agentId}`, 'err');
       }
     } catch {
       showToast(`Error running ${agentId}`, 'err');

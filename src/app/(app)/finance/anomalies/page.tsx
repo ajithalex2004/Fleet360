@@ -1,6 +1,7 @@
 'use client';
 import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { runAgentAndWait } from '@/lib/agents/run-client';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
@@ -140,11 +141,8 @@ export default function FinanceAnomaliesPage() {
   async function handleRunAudit() {
     setRunning(true);
     try {
-      await fetch('/api/agents/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agent_id: 'finance-anomaly', event_type: 'manual.trigger' }),
-      });
+      const { ok, timedOut, result } = await runAgentAndWait({ agent_id: 'finance-anomaly', event_type: 'manual.trigger' });
+      if (!ok && !timedOut) setError(result?.error ?? 'Finance anomaly scan failed');
       await load();
     } catch (e) {
       setError(String(e));

@@ -616,13 +616,17 @@ async function persistFlags(flags: AnomalyFlag[], runId: string, tenantId: strin
 
 async function run(event: AgentEvent): Promise<AgentRunResult> {
   const started = Date.now();
-  const runId = crypto.randomUUID();
+  // Under the orchestrator, which owns the agent_runs row, run_id is set and
+  // this agent leaves the row alone. Called directly (e.g. the eval runner),
+  // it logs its own.
+  const runId = event.run_id ?? crypto.randomUUID();
+  const ownsRunRow = !event.run_id;
   const tenantId = event.tenant_id;
 
   await ensureAgentSchema();
 
   // Log execution start
-  await prisma.$executeRawUnsafe(
+  if (ownsRunRow) await prisma.$executeRawUnsafe(
     `INSERT INTO agent_runs (id, agent_id, tenant_id, event_type, status, created_at)
      VALUES ($1::uuid, 'finance-anomaly', $2, $3, 'RUNNING', NOW())`,
     runId,
@@ -727,7 +731,7 @@ async function run(event: AgentEvent): Promise<AgentRunResult> {
   const durationMs = Date.now() - started;
 
   // Update agent run record
-  await prisma.$executeRawUnsafe(
+  if (ownsRunRow) await prisma.$executeRawUnsafe(
     `UPDATE agent_runs SET
        status          = 'COMPLETED',
        items_processed = $1,
