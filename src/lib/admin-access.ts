@@ -50,6 +50,8 @@ export const ADMIN_ROUTE_POLICY: Record<string, Partial<Record<Method, AdminLeve
   'customers/portal-status':                     { GET: 'admin' },
   'dispatch-stats':                              { GET: 'admin' },
   'events/outbox':                               { GET: 'platform' },
+  // Which users act for which Exchange transport partner (partner_users).
+  'exchange/partner-users':                      { GET: 'platform', POST: 'platform', DELETE: 'platform' },
   'events/outbox/replay':                        { POST: 'platform' },
   'impersonate':                                 { POST: 'platform' },
   // Called while impersonating, when the session carries the target's role.

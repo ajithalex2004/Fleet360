@@ -6,6 +6,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
 import { logAudit } from '@/lib/audit';
 import { raiseAlert } from '@/lib/alerts/raise';
 import { OutsourceVisibility } from '@prisma/client';
@@ -112,60 +113,88 @@ export class MarketplaceService {
   }
 
   /**
-   * Discover Open Opportunities for an Exchange Partner based on domain capability & tenant relationship
+   * Discover Open Opportunities for an Exchange Partner based on domain capability & tenant relationship.
+   *
+   * Reads across tenants (every buyer's opportunities), so it runs in platform
+   * context. Callers must pass a partner resolved from the signed-in user
+   * (requirePartnerContext), never one taken from the request. Visibility
+   * follows checkQuoteEligibility (@/lib/exchange/partner-auth):
+   * EXCHANGE_NETWORK is open to every partner, TENANT_NETWORK to partners with
+   * a relationship to the buyer, DIRECT only to invited partners; buyers that
+   * BLOCKED the partner are excluded.
    */
   static async listOpportunitiesForPartner(partnerId: string) {
-    const partner = await prisma.transportPartner.findUnique({
-      where: { id: partnerId, deletedAt: null },
-      include: {
-        capabilities: { where: { isApproved: true } },
-        serviceAreas: true,
-        tenantRelationships: true,
-      },
-    });
+    return withPlatformAdmin(prisma, async (tx) => {
+      const partner = await tx.transportPartner.findUnique({
+        where: { id: partnerId, deletedAt: null },
+        include: {
+          capabilities: { where: { isApproved: true } },
+          serviceAreas: true,
+          tenantRelationships: true,
+        },
+      });
 
-    if (!partner) throw new Error('Partner not found');
-    if (partner.marketplaceStatus !== 'APPROVED') {
-      return { opportunities: [], reason: `Marketplace status is ${partner.marketplaceStatus}` };
-    }
-    if (partner.operationalStatus !== 'ACTIVE') {
-      return { opportunities: [], reason: `Operational status is ${partner.operationalStatus}` };
-    }
+      if (!partner) throw new Error('Partner not found');
+      if (partner.marketplaceStatus !== 'APPROVED') {
+        return { opportunities: [], reason: `Marketplace status is ${partner.marketplaceStatus}` };
+      }
+      if (partner.operationalStatus !== 'ACTIVE') {
+        return { opportunities: [], reason: `Operational status is ${partner.operationalStatus}` };
+      }
 
-    const partnerDomains = partner.capabilities.map((c) => c.domain);
-    const blockedTenantIds = new Set(
-      partner.tenantRelationships
+      const partnerDomains = partner.capabilities.map((c) => c.domain);
+      const blockedTenantIds = partner.tenantRelationships
         .filter((r) => r.status === 'BLOCKED')
-        .map((r) => r.tenantId)
-    );
+        .map((r) => r.tenantId);
+      const networkTenantIds = partner.tenantRelationships
+        .filter((r) => r.status !== 'BLOCKED')
+        .map((r) => r.tenantId);
 
-    const now = new Date();
-    const opportunities = await prisma.marketplaceOpportunity.findMany({
-      where: {
-        status: 'OPEN',
-        closesAt: { gt: now },
-        domain: { in: partnerDomains },
-        tenantId: { notIn: Array.from(blockedTenantIds) },
-        visibility: { in: [OutsourceVisibility.EXCHANGE_NETWORK, OutsourceVisibility.TENANT_NETWORK] },
-      },
-      include: {
-        request: {
-          select: {
-            requestNumber: true,
-            serviceDate: true,
-            pickupTime: true,
-            pricingMethod: true,
-            quotes: {
-              where: { partnerId },
-              select: { id: true, revisionNo: true, amount: true, totalAmount: true, status: true },
+      const now = new Date();
+      const opportunities = await tx.marketplaceOpportunity.findMany({
+        where: {
+          status: 'OPEN',
+          closesAt: { gt: now },
+          domain: { in: partnerDomains },
+          tenantId: { notIn: blockedTenantIds },
+          OR: [
+            { visibility: OutsourceVisibility.EXCHANGE_NETWORK },
+            { visibility: OutsourceVisibility.TENANT_NETWORK, tenantId: { in: networkTenantIds } },
+            { request: { invitedPartners: { some: { partnerId } } } },
+          ],
+        },
+        // Pre-award view: the sanitized disclosure payload and scheduling
+        // fields only. Not tenant_id or created_by — the buyer's identity is
+        // concealed until award (DisclosurePolicyService).
+        select: {
+          id: true,
+          outsourceRequestId: true,
+          domain: true,
+          visibility: true,
+          status: true,
+          publishedAt: true,
+          closesAt: true,
+          disclosurePayload: true,
+          requirementsVersion: true,
+          createdAt: true,
+          request: {
+            select: {
+              requestNumber: true,
+              serviceDate: true,
+              pickupTime: true,
+              pricingMethod: true,
+              quotes: {
+                where: { partnerId },
+                select: { id: true, revisionNo: true, amount: true, totalAmount: true, status: true },
+              },
             },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        orderBy: { createdAt: 'desc' },
+      });
 
-    return { opportunities, partnerDomains };
+      return { opportunities, partnerDomains };
+    });
   }
 
   /**
