@@ -232,6 +232,17 @@ export async function verifySession(
 
 // ── Request context helpers ───────────────────────────────────────────────────
 
+/** Verify credentials directly on routes that bypass operator middleware. */
+export async function getVerifiedRequestSession(request: { headers: Headers }) {
+  const cookies = (request.headers.get('cookie') ?? '').split(';')
+    .map(value => value.trim()).filter(value => value.startsWith('xl-session='));
+  if (cookies.length !== 1) return null;
+  const session = await verifySession(cookies[0].slice('xl-session='.length));
+  if (!session || typeof session.userId !== 'string' || !session.userId ||
+      typeof session.tenantId !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(session.tenantId)) return null;
+  return session;
+}
+
 export interface TenantContext {
   tenantId: string;
   userId: string;

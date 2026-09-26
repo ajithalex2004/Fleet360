@@ -133,16 +133,15 @@ describe('middleware — public routes', () => {
 });
 
 describe('middleware — CRON_SECRET callers', () => {
-  it('keeps the scheduler’s tenant header when the bearer matches CRON_SECRET', async () => {
+  it('preserves only an untrusted target on public scheduler routes', async () => {
     process.env.CRON_SECRET = 'cron-secret-for-tests-0123456789abcdef';
     const res = await middleware(req('/api/cron/outbox-publish', {
       authorization: 'Bearer cron-secret-for-tests-0123456789abcdef',
       'x-tenant-id': TENANT_A,
     }));
     expect(res.status).toBe(200);
-    // Plain NextResponse.next(): the original request headers go upstream
-    // unchanged, so no override list is emitted.
-    expect(res.headers.get('x-middleware-override-headers')).toBeNull();
+    expect(forwarded(res, 'x-tenant-id')).toBeNull();
+    expect(forwarded(res, 'x-requested-tenant-id')).toBe(TENANT_A);
   });
 
   it('strips headers when the bearer does not match', async () => {

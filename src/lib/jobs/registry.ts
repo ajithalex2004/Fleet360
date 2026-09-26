@@ -16,7 +16,7 @@
  */
 
 import type { NextRequest } from 'next/server';
-import { verifySession } from '@/lib/tenant-session';
+import { getVerifiedRequestSession } from '@/lib/tenant-session';
 
 // ── Job definition ────────────────────────────────────────────────────────────
 
@@ -182,7 +182,7 @@ export const JOB_REGISTRY: JobDef[] = [
     description:    'Domain event outbox publisher — polls event_outbox and fans out to consumers',
     handler:        runOutboxPublisher,
     maxDurationSec: 60,
-    allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN'],
+    allowedRoles:   ['SUPER_ADMIN'],
   },
   {
     name:           'bus-ops-generate-schedule-templates',
@@ -228,7 +228,11 @@ export async function verifyJobAuthorization(
 
   // 1. System Scheduler Auth via CRON_SECRET
   if (cronSecret && authHeader === cronSecret) {
-    const requestedTenant = request.headers.get('x-tenant-id') || request.nextUrl.searchParams.get('tenantId');
+    const requestedTenant = request.nextUrl.searchParams.get('tenantId')
+      || request.headers.get('x-requested-tenant-id') || request.headers.get('x-tenant-id');
+    if (requestedTenant && !/^[a-zA-Z0-9_-]+$/.test(requestedTenant)) {
+      return { authorized: false, isCron: false, tenantId: null, userId: 'anonymous', status: 400, error: 'Invalid tenant selector' };
+    }
     return {
       authorized: true,
       isCron: true,
@@ -237,19 +241,8 @@ export async function verifyJobAuthorization(
     };
   }
 
-  // Allow dev bypass only if explicitly outside production and secret not configured
-  if (!cronSecret && process.env.NODE_ENV !== 'production' && !request.cookies.get('xl-session')) {
-    return {
-      authorized: true,
-      isCron: true,
-      tenantId: null,
-      userId: 'dev:unauthenticated',
-    };
-  }
-
   // 2. Operator Session Auth — Cryptographic verification of session cookie
-  const sessionToken = request.cookies.get('xl-session')?.value;
-  const session = sessionToken ? await verifySession(sessionToken) : null;
+  const session = await getVerifiedRequestSession(request);
 
   // Unauthenticated requests carrying arbitrary forged headers are strictly rejected
   if (!session) {

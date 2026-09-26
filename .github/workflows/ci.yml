@@ -162,6 +162,11 @@ jobs:
         run: npm run test:unit
         continue-on-error: true   # TODO(KNOWN-TS-001): re-enforce after typecheck does.
 
+      - name: Public Endpoint Identity Boundary (Blocking)
+        run: |
+          npx tsc --noEmit -p tsconfig.c1.json
+          npx vitest run tests/unit/public-endpoint-auth.test.ts tests/unit/middleware-identity-boundary.test.ts tests/unit/middleware-identity-headers.test.ts tests/unit/push-run-scheduler-auth.test.ts
+
       - name: Build (Next.js)
         run: npm run build
         continue-on-error: true

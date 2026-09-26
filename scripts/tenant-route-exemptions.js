@@ -11,6 +11,34 @@
  */
 
 const RULE_EXEMPTIONS = [
+  {
+    file: 'src/app/api/push/subscribe/route.ts', method: 'POST', type: 'missing_auth',
+    reason: 'Verifies xl-session and resolves active tenant membership and account-linked staff under RLS.',
+    authMechanism: 'getVerifiedRequestSession + resolvePushStaff',
+    dataScope: 'Own staff subscriptions in verified tenant', owner: 'Identity & Security Engineering',
+    test: 'tests/unit/public-endpoint-auth.test.ts',
+  },
+  {
+    file: 'src/app/api/push/subscribe/route.ts', method: 'DELETE', type: 'missing_auth',
+    reason: 'Verifies xl-session and active staff membership; revocation filters tenant and staff owner.',
+    authMechanism: 'getVerifiedRequestSession + resolvePushStaff',
+    dataScope: 'Own staff subscriptions in verified tenant', owner: 'Identity & Security Engineering',
+    test: 'tests/unit/public-endpoint-auth.test.ts',
+  },
+  {
+    file: 'src/app/api/push/test/route.ts', method: 'POST', type: 'missing_auth',
+    reason: 'Verifies xl-session and sends only to account-linked active staff under RLS.',
+    authMechanism: 'getVerifiedRequestSession + resolvePushStaff',
+    dataScope: 'Own staff subscriptions in verified tenant', owner: 'Identity & Security Engineering',
+    test: 'tests/unit/public-endpoint-auth.test.ts',
+  },
+  {
+    file: 'src/app/api/push/public-key/route.ts', method: 'GET', type: 'missing_auth',
+    reason: 'Returns only the public VAPID key; no database or tenant data access.',
+    authMechanism: 'Intentionally anonymous public key',
+    dataScope: 'Public VAPID key only', owner: 'Identity & Security Engineering',
+    test: 'tests/unit/public-endpoint-auth.test.ts',
+  },
   // ── Session & Platform Bootstrap ───────────────────────────────────────────
   {
     file: 'src/app/api/admin/session/route.ts',
