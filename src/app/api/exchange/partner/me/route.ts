@@ -2,7 +2,11 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
-import { partnerMembershipsForUser } from '@/lib/exchange/partner-auth';
+import {
+  exchangeNotProvisionedResponse,
+  isExchangeNotProvisioned,
+  partnerMembershipsForUser,
+} from '@/lib/exchange/partner-auth';
 
 export const runtime = 'nodejs';
 
@@ -18,6 +22,11 @@ export async function GET(req: NextRequest) {
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
   const userId = req.headers.get('x-user-id') as string;
 
-  const partners = await partnerMembershipsForUser(userId);
-  return NextResponse.json({ userId, partners });
+  try {
+    const partners = await partnerMembershipsForUser(userId);
+    return NextResponse.json({ userId, partners });
+  } catch (err) {
+    if (isExchangeNotProvisioned(err)) return exchangeNotProvisionedResponse();
+    throw err;
+  }
 }

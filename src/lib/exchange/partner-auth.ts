@@ -14,6 +14,7 @@
  * memberships, but only one it is a member of.
  */
 import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 
@@ -46,7 +47,40 @@ export interface PartnerContext extends PartnerMembership {
 
 export type PartnerAuthResult =
   | { ok: true; ctx: PartnerContext; memberships: PartnerMembership[] }
-  | { ok: false; status: 400 | 401 | 403; error: string; memberships?: PartnerMembership[] };
+  | { ok: false; status: 400 | 401 | 403 | 503; error: string; code?: string; memberships?: PartnerMembership[] };
+
+/**
+ * Prisma P2021: "The table ... does not exist in the current database".
+ * The Exchange tables come from
+ * 20260926120000_add_remaining_exchange_partner_tables; where that migration
+ * has not been applied yet, every Exchange route answers with a clear 503
+ * instead of an unhandled 500 with an empty body.
+ */
+export function isExchangeNotProvisioned(err: unknown): boolean {
+  return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2021';
+}
+
+export const EXCHANGE_NOT_PROVISIONED = {
+  status: 503 as const,
+  error: 'The partner exchange is not set up in this environment yet.',
+  code: 'EXCHANGE_NOT_PROVISIONED',
+};
+
+/** The 503 JSON response for a missing Exchange table. */
+export function exchangeNotProvisionedResponse(): NextResponse {
+  const { status, error, code } = EXCHANGE_NOT_PROVISIONED;
+  return NextResponse.json({ error, code }, { status });
+}
+
+/** Runs `fn`; a missing Exchange table becomes a not-provisioned auth failure. */
+async function orNotProvisioned<T>(fn: () => Promise<T>): Promise<T | { ok: false; status: 503; error: string; code: string }> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (isExchangeNotProvisioned(err)) return { ok: false, ...EXCHANGE_NOT_PROVISIONED };
+    throw err;
+  }
+}
 
 /** The transport partners the user is a member of (deleted partners excluded). */
 export async function partnerMembershipsForUser(userId: string): Promise<PartnerMembership[]> {
@@ -82,6 +116,13 @@ export async function requirePartnerContext(
   req: { headers: Headers; nextUrl?: { searchParams: URLSearchParams } },
   opts: { roles?: readonly PartnerRole[]; requested?: string | null } = {},
 ): Promise<PartnerAuthResult> {
+  return orNotProvisioned(() => resolvePartnerContext(req, opts));
+}
+
+async function resolvePartnerContext(
+  req: { headers: Headers; nextUrl?: { searchParams: URLSearchParams } },
+  opts: { roles?: readonly PartnerRole[]; requested?: string | null },
+): Promise<PartnerAuthResult> {
   const userId = req.headers.get('x-user-id');
   if (!userId) return { ok: false, status: 401, error: 'Sign in to use the partner marketplace.' };
 
@@ -115,6 +156,7 @@ export function partnerAuthFailure(result: Extract<PartnerAuthResult, { ok: fals
   return NextResponse.json(
     {
       error: result.error,
+      ...(result.code ? { code: result.code } : {}),
       ...(result.memberships ? { partners: result.memberships.map(({ partnerId, legalName }) => ({ partnerId, legalName })) } : {}),
     },
     { status: result.status },
@@ -194,7 +236,7 @@ export async function checkQuoteEligibility(partnerId: string, requestId: string
 export type PartnerViewer =
   | { ok: true; viewer: 'partner'; partnerId: string; ctx: PartnerContext }
   | { ok: true; viewer: 'buyer'; partnerId: string | null; tenantId: string }
-  | { ok: false; status: 400 | 401 | 403; error: string; memberships?: PartnerMembership[] };
+  | { ok: false; status: 400 | 401 | 403 | 503; error: string; code?: string; memberships?: PartnerMembership[] };
 
 /**
  * Who may read a partner's profile or scorecard: the partner's own members,
@@ -209,6 +251,14 @@ export async function resolvePartnerViewer(
   req: { headers: Headers; nextUrl?: { searchParams: URLSearchParams } },
   tenantId: string,
   opts: { requested?: string | null } = {},
+): Promise<PartnerViewer> {
+  return orNotProvisioned(() => resolveViewer(req, tenantId, opts));
+}
+
+async function resolveViewer(
+  req: { headers: Headers; nextUrl?: { searchParams: URLSearchParams } },
+  tenantId: string,
+  opts: { requested?: string | null },
 ): Promise<PartnerViewer> {
   const userId = req.headers.get('x-user-id');
   if (!userId) return { ok: false, status: 401, error: 'Sign in to view transport partners.' };

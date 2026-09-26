@@ -1,13 +1,14 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { Prisma } from '@prisma/client';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { runAsTenant } from '@/lib/rls-scope';
 import { PartnerService } from '@/lib/exchange/partner-service';
 import {
+  exchangeNotProvisionedResponse,
+  isExchangeNotProvisioned,
   partnerAuthFailure,
   PROFILE_ROLES,
   requirePartnerContext,
@@ -29,14 +30,6 @@ export const runtime = 'nodejs';
  * partner.
  */
 
-// Prisma P2021: "The table ... does not exist in the current database". Most
-// Exchange tables were never migrated before
-// 20260926120000_add_remaining_exchange_partner_tables; answer with a clear
-// error rather than an unhandled 500 with an empty body.
-function isMissingTable(err: unknown): boolean {
-  return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2021';
-}
-
 export async function GET(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers });
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -52,12 +45,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ partner });
   } catch (err) {
-    if (isMissingTable(err)) {
-      return NextResponse.json(
-        { error: 'The partner exchange is not set up in this environment yet.', code: 'EXCHANGE_NOT_PROVISIONED' },
-        { status: 503 },
-      );
-    }
+    if (isExchangeNotProvisioned(err)) return exchangeNotProvisionedResponse();
     console.error('[exchange/partner/profile GET]', err);
     return NextResponse.json({ error: 'Failed to load partner profile' }, { status: 500 });
   }
