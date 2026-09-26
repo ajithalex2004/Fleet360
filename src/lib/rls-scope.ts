@@ -89,3 +89,39 @@ export function runWithTenantContext<T>(tenantId: string, fn: () => Promise<T>):
 export function backgroundTenantId(): string | undefined {
   return backgroundTenant.getStore();
 }
+
+/**
+ * Tenant a request acts for after the server has authorized it to act for a
+ * tenant other than its session's — the Exchange partner flows, where a
+ * partner user (session tenant: the partner's) quotes on, invoices or staffs
+ * a buyer tenant's job.
+ *
+ * Inside `fn`, the Prisma client scopes every query or model operation not
+ * already inside withTenantRls / withPlatformAdmin to this tenant, taking
+ * precedence over the request's own x-tenant-id (src/lib/prisma.ts,
+ * requestTenantId). '*' is the platform context, for reads that span tenants.
+ *
+ * withTenantRls(prisma, tenantId, () => service()) is not a substitute: its
+ * scope covers raw queries and the transaction client, but model operations
+ * a service makes on the global client (prisma.x.findUnique) run outside that
+ * transaction with no tenant set, so under RLS they see nothing.
+ *
+ * Only for tenant ids the server derived from a verified record after an
+ * authorization check (e.g. the award or request a verified partner may act
+ * on), never from request input.
+ */
+const actingTenant = new AsyncLocalStorage<string>();
+
+export function runAsTenant<T>(tenantId: string, fn: () => Promise<T>): Promise<T> {
+  if (tenantId !== '*' && !/^[a-zA-Z0-9_-]+$/.test(tenantId)) {
+    return Promise.reject(new Error('runAsTenant: invalid tenantId'));
+  }
+  // Awaited inside the context: Prisma operations are lazy and only run when
+  // awaited, which must happen while the context is set.
+  return actingTenant.run(tenantId, async () => await fn());
+}
+
+/** The tenant set by runAsTenant, if any. */
+export function actingTenantId(): string | undefined {
+  return actingTenant.getStore();
+}

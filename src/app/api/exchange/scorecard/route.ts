@@ -1,30 +1,35 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { runAsTenant } from '@/lib/rls-scope';
 import { ScorecardService } from '@/lib/exchange/scorecard-service';
+import { partnerAuthFailure, resolvePartnerViewer } from '@/lib/exchange/partner-auth';
 
 export const runtime = 'nodejs';
 
 /**
- * GET /api/exchange/scorecard?partnerId=...
- * POST /api/exchange/scorecard
+ * GET  /api/exchange/scorecard?partnerId=... — a partner's performance scorecard
+ * POST /api/exchange/scorecard { partnerId? } — recalculate it
+ *
+ * A partner member sees its own partner; buyer staff see partners in their
+ * tenant's partner network (the first one when none is named). The partner
+ * used to come from the request, with a fallback to the first active partner.
+ *
+ * A scorecard aggregates a partner's awards, quotes, exceptions and disputes
+ * across every buyer, so it is read and computed in platform context once
+ * access is decided; it holds aggregates only.
  */
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers });
+  if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
+
   try {
-    let partnerId = req.headers.get('x-partner-id') || req.nextUrl.searchParams.get('partnerId');
+    const viewer = await resolvePartnerViewer(req, authz.tenantId);
+    if (!viewer.ok) return partnerAuthFailure(viewer);
+    if (!viewer.partnerId) return NextResponse.json({ scorecard: null });
 
-    if (!partnerId) {
-      const defaultPartner = await prisma.transportPartner.findFirst({
-        where: { operationalStatus: 'ACTIVE', deletedAt: null },
-      });
-      if (!defaultPartner) {
-        return NextResponse.json({ scorecard: null });
-      }
-      partnerId = defaultPartner.id;
-    }
-
-    const scorecard = await ScorecardService.getPartnerScorecard(partnerId);
+    const scorecard = await runAsTenant('*', () => ScorecardService.getPartnerScorecard(viewer.partnerId as string));
     return NextResponse.json({ scorecard });
   } catch (err) {
     return NextResponse.json(
@@ -35,15 +40,20 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers });
+  if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
+
   try {
     const rawBody = await req.json().catch(() => ({}));
-    const { partnerId } = rawBody;
+    const requested = typeof rawBody.partnerId === 'string' ? rawBody.partnerId : null;
 
-    if (!partnerId) {
-      return NextResponse.json({ error: 'partnerId is required' }, { status: 400 });
-    }
+    const viewer = await resolvePartnerViewer(req, authz.tenantId, { requested });
+    if (!viewer.ok) return partnerAuthFailure(viewer);
+    if (!viewer.partnerId) return NextResponse.json({ error: 'No transport partner to evaluate' }, { status: 404 });
 
-    const evaluation = await ScorecardService.evaluatePartnerScorecard(partnerId);
+    const evaluation = await runAsTenant('*', () =>
+      ScorecardService.evaluatePartnerScorecard(viewer.partnerId as string),
+    );
     return NextResponse.json({ ok: true, evaluation });
   } catch (err) {
     return NextResponse.json(

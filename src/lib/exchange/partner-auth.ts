@@ -15,13 +15,22 @@
  */
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 
 export const PARTNER_ROLES = ['PARTNER_ADMIN', 'PARTNER_OPERATIONS', 'PARTNER_FINANCE', 'PARTNER_VIEWER'] as const;
 export type PartnerRole = (typeof PARTNER_ROLES)[number];
 
 /** Roles that may submit or revise quotes. */
 export const QUOTING_ROLES: readonly PartnerRole[] = ['PARTNER_ADMIN', 'PARTNER_OPERATIONS'];
+
+/** Roles that run the partner's operations: fleet, drivers, compliance documents, job assignment. */
+export const OPERATIONS_ROLES: readonly PartnerRole[] = ['PARTNER_ADMIN', 'PARTNER_OPERATIONS'];
+
+/** Roles that may submit invoices for awarded jobs. */
+export const FINANCE_ROLES: readonly PartnerRole[] = ['PARTNER_ADMIN', 'PARTNER_FINANCE'];
+
+/** Roles that may change the partner's own company profile. */
+export const PROFILE_ROLES: readonly PartnerRole[] = ['PARTNER_ADMIN'];
 
 export interface PartnerMembership {
   partnerId: string;
@@ -65,10 +74,13 @@ export async function partnerMembershipsForUser(userId: string): Promise<Partner
  * - 403 when the user is not a member of any partner, is not a member of the
  *   partner it names, or its role is not in `opts.roles`.
  * - 400 when the user belongs to several partners and names none.
+ *
+ * `opts.requested` names a partner from the request body; otherwise the
+ * x-partner-id header or ?partnerId= query does.
  */
 export async function requirePartnerContext(
   req: { headers: Headers; nextUrl?: { searchParams: URLSearchParams } },
-  opts: { roles?: readonly PartnerRole[] } = {},
+  opts: { roles?: readonly PartnerRole[]; requested?: string | null } = {},
 ): Promise<PartnerAuthResult> {
   const userId = req.headers.get('x-user-id');
   if (!userId) return { ok: false, status: 401, error: 'Sign in to use the partner marketplace.' };
@@ -78,7 +90,7 @@ export async function requirePartnerContext(
     return { ok: false, status: 403, error: 'Your account is not linked to a transport partner.' };
   }
 
-  const requested = req.headers.get('x-partner-id') || req.nextUrl?.searchParams.get('partnerId') || null;
+  const requested = opts.requested || req.headers.get('x-partner-id') || req.nextUrl?.searchParams.get('partnerId') || null;
   let membership: PartnerMembership | undefined;
   if (requested) {
     membership = memberships.find((m) => m.partnerId === requested);
@@ -177,4 +189,81 @@ export async function checkQuoteEligibility(partnerId: string, requestId: string
     }
     return { ok: true, tenantId: request.tenantId };
   });
+}
+
+export type PartnerViewer =
+  | { ok: true; viewer: 'partner'; partnerId: string; ctx: PartnerContext }
+  | { ok: true; viewer: 'buyer'; partnerId: string | null; tenantId: string }
+  | { ok: false; status: 400 | 401 | 403; error: string; memberships?: PartnerMembership[] };
+
+/**
+ * Who may read a partner's profile or scorecard: the partner's own members,
+ * or staff of a buying tenant that has a relationship with the partner.
+ *
+ * A partner member gets its own partner (a named partner chooses among its
+ * memberships). Anyone else is treated as buyer staff of `tenantId`: a named
+ * partner must have a tenant_partner_relationships row with that tenant, and
+ * with none named the first related partner is used (null if there is none).
+ */
+export async function resolvePartnerViewer(
+  req: { headers: Headers; nextUrl?: { searchParams: URLSearchParams } },
+  tenantId: string,
+  opts: { requested?: string | null } = {},
+): Promise<PartnerViewer> {
+  const userId = req.headers.get('x-user-id');
+  if (!userId) return { ok: false, status: 401, error: 'Sign in to view transport partners.' };
+
+  const requested = opts.requested || req.headers.get('x-partner-id') || req.nextUrl?.searchParams.get('partnerId') || null;
+  const memberships = await partnerMembershipsForUser(userId);
+  const ownRequested = requested ? memberships.some((m) => m.partnerId === requested) : false;
+
+  if (memberships.length > 0 && (!requested || ownRequested)) {
+    const auth = await requirePartnerContext(req, { requested });
+    if (!auth.ok) return auth;
+    return { ok: true, viewer: 'partner', partnerId: auth.ctx.partnerId, ctx: auth.ctx };
+  }
+
+  // Buyer staff: only partners related to the caller's own tenant.
+  const related = await withTenantRls(prisma, tenantId, (tx) =>
+    tx.tenantPartnerRelationship.findMany({
+      where: { tenantId, partner: { deletedAt: null } },
+      select: { partnerId: true },
+      orderBy: { createdAt: 'asc' },
+    }),
+  );
+  if (requested) {
+    if (!related.some((r) => r.partnerId === requested)) {
+      return { ok: false, status: 403, error: 'This transport partner is not in your partner network.' };
+    }
+    return { ok: true, viewer: 'buyer', partnerId: requested, tenantId };
+  }
+  return { ok: true, viewer: 'buyer', partnerId: related[0]?.partnerId ?? null, tenantId };
+}
+
+/**
+ * The tenant (buyer) of an award that belongs to `partnerId`, or null when the
+ * award does not exist or is another partner's. Platform context: the award
+ * lives in the buyer's tenant, not the partner user's.
+ */
+export async function awardTenantForPartner(partnerId: string, awardId: string): Promise<string | null> {
+  const award = await withPlatformAdmin(prisma, (tx) =>
+    tx.outsourceAward.findFirst({ where: { id: awardId, partnerId }, select: { tenantId: true } }),
+  );
+  return award?.tenantId ?? null;
+}
+
+/**
+ * Whether the caller may see a record that belongs to partner `partnerId` and
+ * buying tenant `tenantId` (a settlement statement, a proof of delivery): a
+ * member of that partner, or staff of that tenant. `caller` comes from
+ * requireAuthorizedTenant() (the session's user and tenant).
+ */
+export async function canSeePartnerRecord(
+  caller: { userId: string; tenantId: string },
+  record: { partnerId: string; tenantId: string },
+): Promise<boolean> {
+  if (caller.tenantId === record.tenantId) return true;
+  const { userId } = caller;
+  const memberships = await partnerMembershipsForUser(userId);
+  return memberships.some((m) => m.partnerId === record.partnerId);
 }

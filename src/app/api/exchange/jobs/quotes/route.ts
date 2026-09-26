@@ -3,7 +3,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
+import { withPlatformAdmin } from '@/lib/rls';
+import { runAsTenant } from '@/lib/rls-scope';
 import { OutsourceEngine } from '@/lib/exchange/outsource-engine';
 import {
   checkQuoteEligibility,
@@ -68,8 +69,9 @@ export async function POST(req: NextRequest) {
     }
 
     // The request, its invite and the buyer's alert live in the buyer's
-    // tenant; run the engine there so RLS lets it read and update them.
-    const quote = await withTenantRls(prisma, eligibility.tenantId, () =>
+    // tenant; run the engine as that tenant so RLS lets it read and update
+    // them (runAsTenant, not withTenantRls: the engine uses the global client).
+    const quote = await runAsTenant(eligibility.tenantId, () =>
       OutsourceEngine.submitOrReviseQuote({
         requestId: String(requestId),
         partnerId,

@@ -35,6 +35,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { prisma as basePrisma } from '@/lib/prisma';
 import { withTenantRls, withPlatformAdmin, withSystemJob, withWebhookTenant } from '@/lib/rls';
+import { runAsTenant } from '@/lib/rls-scope';
 
 interface RoleVerificationRow {
   current_user: string;
@@ -385,6 +386,32 @@ describe('withPlatformAdmin: cross-tenant reads', () => {
     expect(ids).toContain(vehicleA1);
     expect(ids).toContain(vehicleA2);
     expect(ids).toContain(vehicleB1);
+  });
+});
+
+describe('runAsTenant: model calls on the global client', () => {
+  // Services (e.g. the Exchange OutsourceEngine) call prisma.x.findMany on the
+  // global client. withTenantRls's scope does not reach those calls; an
+  // explicit runAsTenant does (src/lib/rls-scope.ts).
+  it('scopes global-client model reads to the acting tenant', async () => {
+    const ids = await runAsTenant(tenantA, () =>
+      basePrisma.vehicle.findMany({ where: { id: { in: [vehicleA1, vehicleA2, vehicleB1] } }, select: { id: true } }),
+    );
+    expect(ids.map((v) => v.id).sort()).toEqual([vehicleA1, vehicleA2].sort());
+  });
+
+  it('refuses a global-client update of another tenant\'s row', async () => {
+    const res = await runAsTenant(tenantA, () =>
+      basePrisma.vehicle.updateMany({ where: { id: vehicleB1 }, data: { make: 'Hijacked' } }),
+    );
+    expect(res.count).toBe(0);
+  });
+
+  it("'*' is the platform context", async () => {
+    const ids = await runAsTenant('*', () =>
+      basePrisma.vehicle.findMany({ where: { id: { in: [vehicleA1, vehicleB1] } }, select: { id: true } }),
+    );
+    expect(ids).toHaveLength(2);
   });
 });
 

@@ -33,6 +33,9 @@ vi.mock('@/lib/rls', async () => {
     withTenantRls: vi.fn(async (_p: unknown, tenantId: string, fn: (tx: unknown) => unknown) => { db.scope.push(tenantId); return fn(prisma); }),
   };
 });
+vi.mock('@/lib/rls-scope', () => ({
+  runAsTenant: vi.fn(async (tenantId: string, fn: () => unknown) => { db.scope.push(`as:${tenantId}`); return fn(); }),
+}));
 const submit = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/exchange/outsource-engine', () => ({ OutsourceEngine: { submitOrReviseQuote: submit } }));
 const listOpps = vi.hoisted(() => vi.fn(async () => ({ opportunities: [], partnerDomains: [] })));
@@ -179,7 +182,8 @@ describe('/api/exchange/jobs/quotes', () => {
     const res = await quotesPost(req('/api/exchange/jobs/quotes', signedIn, { requestId: 'r1', partnerId: 'someone-else', amount: 100 }));
     expect(res.status).toBe(200);
     expect(submit).toHaveBeenCalledWith(expect.objectContaining({ partnerId: 'p1', actorUserId: 'user-1', requestId: 'r1' }));
-    expect(db.scope).toEqual(['*', 'tenant-buyer']);
+    // Eligibility in platform context, then the engine runs as the buyer tenant.
+    expect(db.scope).toEqual(['*', 'as:tenant-buyer']);
     const body = await res.json();
     expect(body.quote).toMatchObject({ id: 'q1', totalAmount: 105 });
     expect(JSON.stringify(body)).not.toContain('secret');
