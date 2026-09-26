@@ -8,20 +8,24 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { logAudit } from '@/lib/audit';
 import { notProvisionedAware } from '@/lib/exchange/partner-auth';
+import { findActiveTenant, setOnboardingTenant } from '@/lib/exchange/partner-onboarding';
 
 export const runtime = 'nodejs';
 
 /**
  * Transport partners of the Exchange marketplace, for the platform admin
- * screen (/admin/exchange-partners). Partners are platform-level records, not
- * owned by a tenant. Platform administrators only (ADMIN_ROUTE_POLICY).
+ * screen (/admin/exchange-partners). Partners are platform-level records,
+ * each onboarded by a tenant whose users its staff are
+ * (see src/lib/exchange/partner-onboarding.ts). Platform administrators only
+ * (ADMIN_ROUTE_POLICY).
  *
  * GET  /api/admin/exchange/partners   every partner with its member count,
- *                                     approved service areas (approvedDomains) and
+ *                                     approved service areas (approvedDomains),
  *                                     compliance documents awaiting review (pendingDocuments)
- * POST /api/admin/exchange/partners   { legalName, partnerCode, tradeName?, city?,
- *                                       primaryContactName?, primaryContactEmail?,
- *                                       primaryContactPhone? }
+ *                                     and onboarding tenant (onboardedByTenantId/-Name)
+ * POST /api/admin/exchange/partners   { legalName, partnerCode, onboardedByTenantId,
+ *                                       tradeName?, city?, primaryContactName?,
+ *                                       primaryContactEmail?, primaryContactPhone? }
  */
 
 const PARTNER_CODE_RE = /^[A-Z0-9][A-Z0-9-]{1,23}$/;
@@ -47,6 +51,7 @@ export async function GET(req: NextRequest) {
         onboardingStatus: true,
         operationalStatus: true,
         marketplaceStatus: true,
+        onboardedByTenantId: true,
         createdAt: true,
         _count: { select: { users: true } },
         capabilities: { where: { isApproved: true }, select: { domain: true } },
@@ -57,8 +62,15 @@ export async function GET(req: NextRequest) {
   ));
   if ('response' in run) return run.response;
 
+  const tenantIds = [...new Set(run.value.map((p) => p.onboardedByTenantId).filter((id): id is string => !!id))];
+  const tenants = tenantIds.length
+    ? await withPlatformAdmin(prisma, (tx) => tx.tenant.findMany({ where: { id: { in: tenantIds } }, select: { id: true, name: true } }))
+    : [];
+  const tenantName = new Map(tenants.map((t) => [t.id, t.name]));
+
   const partners = run.value.map(({ _count, capabilities, complianceDocuments, ...p }) => ({
     ...p,
+    onboardedByTenantName: p.onboardedByTenantId ? tenantName.get(p.onboardedByTenantId) ?? null : null,
     memberCount: _count.users,
     approvedDomains: [...new Set(capabilities.map((c) => c.domain))],
     pendingDocuments: complianceDocuments.length,
@@ -75,6 +87,8 @@ export async function POST(req: NextRequest) {
   const legalName = optionalText(body.legalName);
   const partnerCode = typeof body.partnerCode === 'string' ? body.partnerCode.trim().toUpperCase() : '';
   const primaryContactEmail = optionalText(body.primaryContactEmail)?.toLowerCase();
+  // Not tenantId: stripTenantOwnershipFields drops that from every body.
+  const onboardedByTenantId = typeof body.onboardedByTenantId === 'string' ? body.onboardedByTenantId.trim() : '';
 
   if (!legalName) return NextResponse.json({ error: 'legalName is required' }, { status: 400 });
   if (!PARTNER_CODE_RE.test(partnerCode)) {
@@ -86,11 +100,16 @@ export async function POST(req: NextRequest) {
   if (primaryContactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(primaryContactEmail)) {
     return NextResponse.json({ error: 'primaryContactEmail is not a valid email address' }, { status: 400 });
   }
+  if (!onboardedByTenantId) {
+    return NextResponse.json({ error: 'onboardedByTenantId is required: the tenant onboarding this partner' }, { status: 400 });
+  }
 
   let run;
   try {
-    run = await notProvisionedAware(() => withPlatformAdmin(prisma, (tx) =>
-      tx.transportPartner.create({
+    run = await notProvisionedAware(() => withPlatformAdmin(prisma, async (tx) => {
+      const tenant = await findActiveTenant(tx, onboardedByTenantId);
+      if (!tenant) return null;
+      const created = await tx.transportPartner.create({
         data: {
           legalName,
           partnerCode,
@@ -101,8 +120,10 @@ export async function POST(req: NextRequest) {
           primaryContactPhone: optionalText(body.primaryContactPhone, 40),
         },
         select: { id: true, legalName: true, partnerCode: true },
-      }),
-    ));
+      });
+      await setOnboardingTenant(tx, created.id, tenant.id);
+      return { ...created, onboardedByTenantId: tenant.id, onboardedByTenantName: tenant.name };
+    }));
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
       return NextResponse.json({ error: `Partner code ${partnerCode} is already in use` }, { status: 409 });
@@ -111,12 +132,13 @@ export async function POST(req: NextRequest) {
   }
   if ('response' in run) return run.response;
   const partner = run.value;
+  if (!partner) return NextResponse.json({ error: 'Onboarding tenant not found or inactive' }, { status: 400 });
 
   await logAudit({
     entityType: 'TransportPartner',
     entityId: partner.id,
     action: 'CREATE',
-    details: `Created transport partner ${partner.legalName} (${partner.partnerCode})`,
+    details: `Created transport partner ${partner.legalName} (${partner.partnerCode}), onboarded by ${partner.onboardedByTenantName}`,
     userId: req.headers.get('x-user-id') ?? undefined,
   });
 

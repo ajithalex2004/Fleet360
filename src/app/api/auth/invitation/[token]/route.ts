@@ -36,17 +36,20 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     id: string; tenant_id: string; email: string; role_id: string; role_name: string;
     tenant_name: string; tenant_active: boolean;
     expires_at: string; used_at: string | null; revoked: boolean;
-    existing_user_id: string | null;
+    existing_user_id: string | null; partner_name: string | null;
   }>>(
     `SELECT i.id::text, i.tenant_id, i.email, i.role_id,
             r.name AS role_name,
             t.name AS tenant_name, t.is_active AS tenant_active,
             i.expires_at::text, i.used_at::text, i.revoked,
-            u.id AS existing_user_id
+            u.id AS existing_user_id,
+            p.legal_name AS partner_name
      FROM tenant_invitations i
      LEFT JOIN roles   r ON r.id = i.role_id
      LEFT JOIN tenants t ON t.id = i.tenant_id
      LEFT JOIN "User"  u ON LOWER(u.email) = LOWER(i.email)
+     -- to_jsonb: works before migration 20260927090000 adds partner_id.
+     LEFT JOIN transport_partners p ON p.id = to_jsonb(i) ->> 'partner_id'
      WHERE i.token_hash = $1
      LIMIT 1`,
     tokenHash,
@@ -72,6 +75,8 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
       email:      r.email,
       roleName:   r.role_name,
       expiresAt:  r.expires_at,
+      // Set when the invitation also makes the user a transport partner's user.
+      partnerName: r.partner_name,
     },
     existingUser: !!r.existing_user_id,
   });

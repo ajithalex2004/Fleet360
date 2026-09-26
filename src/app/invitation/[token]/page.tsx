@@ -8,6 +8,8 @@ interface InvitationInfo {
   email: string;
   roleName: string;
   expiresAt: string;
+  /** Set when the invitation also makes the user a transport partner's user. */
+  partnerName?: string | null;
 }
 
 const RULES = [
@@ -86,7 +88,8 @@ export default function InvitationAcceptPage() {
         return;
       }
       localStorage.setItem('xl_mobility_session', JSON.stringify({ userId: data.user.id, tenantId: data.tenant.id }));
-      window.location.href = '/platform';
+      // A partner user starts in the partner portal.
+      window.location.href = info?.partnerName ? '/exchange/dashboard' : '/platform';
     } catch {
       setError('Network error — try again.');
     } finally {
@@ -105,6 +108,11 @@ export default function InvitationAcceptPage() {
         <p className="text-slate-400 text-sm mt-1">
           As <strong className="text-blue-300">{info.roleName}</strong>. Sent to <code className="text-emerald-300">{info.email}</code>.
         </p>
+        {info.partnerName && (
+          <p className="text-slate-400 text-sm mt-1">
+            You&rsquo;ll use the Fleet360 Exchange partner portal for <strong className="text-blue-300">{info.partnerName}</strong>.
+          </p>
+        )}
       </div>
 
       {error && (

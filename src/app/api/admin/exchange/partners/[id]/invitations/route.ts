@@ -1,0 +1,237 @@
+export const dynamic = 'force-dynamic';
+
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { isSuperAdmin } from '@/lib/admin-access';
+import { checkGrantableRole } from '@/lib/admin-scope';
+import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
+import { logAudit } from '@/lib/audit';
+import { sendEmail } from '@/lib/email';
+import { requireUnderQuota } from '@/lib/plan-limits';
+import { generateInvitationToken, INVITATION_TTL_DAYS } from '@/lib/invitations';
+import { notProvisionedAware, PARTNER_ROLES } from '@/lib/exchange/partner-auth';
+import {
+  findActiveTenant, isPartnerRole, NON_GRANTABLE_PARTNER_TENANT_ROLES,
+} from '@/lib/exchange/partner-onboarding';
+
+export const runtime = 'nodejs';
+
+/**
+ * Invitations that create a transport partner's users.
+ *
+ * GET    /api/admin/exchange/partners/:id/invitations          the partner's invitations
+ * POST   /api/admin/exchange/partners/:id/invitations          { email, partnerRole, roleId }
+ * DELETE /api/admin/exchange/partners/:id/invitations?id=…     revoke a pending invitation
+ *
+ * POST emails an invitation into the partner's onboarding tenant with tenant
+ * role `roleId`. Accepting it creates the user in that tenant's User Master
+ * and links them to the partner as `partnerRole`
+ * (see src/lib/exchange/partner-onboarding.ts). Someone who already has a
+ * Fleet360 account is linked with /api/admin/exchange/partner-users instead.
+ * Platform administrators only (ADMIN_ROUTE_POLICY).
+ */
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+type Params = { params: Promise<{ id: string }> };
+
+// Middleware already requires SUPER_ADMIN for these platform admin routes;
+// checked again so each handler is safe on its own.
+function notPlatformAdmin(req: NextRequest): NextResponse | null {
+  return isSuperAdmin(req.headers) ? null : NextResponse.json({ error: 'Platform administrators only' }, { status: 403 });
+}
+
+export async function GET(req: NextRequest, props: Params) {
+  const { id: partnerId } = await props.params;
+  const authz = requireAuthorizedTenant({ headers: req.headers });
+  if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
+  const deny = notPlatformAdmin(req);
+  if (deny) return deny;
+
+  const rows = await withPlatformAdmin(prisma, (tx) => tx.$queryRawUnsafe<Array<{
+    id: string; email: string; partner_role: string | null; role_name: string | null; tenant_name: string | null;
+    expires_at: string; used_at: string | null; revoked: boolean; created_at: string;
+  }>>(
+    `SELECT i.id::text, i.email, i.partner_role, r.name AS role_name, t.name AS tenant_name,
+            i.expires_at::text, i.used_at::text, i.revoked, i.created_at::text
+       FROM tenant_invitations i
+       LEFT JOIN roles r   ON r.id = i.role_id
+       LEFT JOIN tenants t ON t.id = i.tenant_id
+      WHERE i.partner_id = $1
+      ORDER BY i.created_at DESC
+      LIMIT 100`,
+    partnerId,
+  ));
+
+  const now = Date.now();
+  return NextResponse.json({
+    invitations: rows.map((r) => ({
+      id: r.id,
+      email: r.email,
+      partnerRole: r.partner_role,
+      tenantRoleName: r.role_name,
+      tenantName: r.tenant_name,
+      expiresAt: r.expires_at,
+      createdAt: r.created_at,
+      status: r.used_at ? 'accepted' : r.revoked ? 'revoked' : new Date(r.expires_at).getTime() < now ? 'expired' : 'pending',
+    })),
+  });
+}
+
+export async function POST(req: NextRequest, props: Params) {
+  const { id: partnerId } = await props.params;
+  const authz = requireAuthorizedTenant({ headers: req.headers });
+  if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
+  const deny = notPlatformAdmin(req);
+  if (deny) return deny;
+  const inviterId = req.headers.get('x-user-id');
+
+  const body = stripTenantOwnershipFields(await req.json().catch(() => ({}))) as Record<string, unknown>;
+  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+  const partnerRole = body.partnerRole;
+  const roleId = typeof body.roleId === 'string' ? body.roleId.trim() : '';
+
+  if (!EMAIL_RE.test(email)) return NextResponse.json({ error: 'A valid email is required' }, { status: 400 });
+  if (!isPartnerRole(partnerRole)) {
+    return NextResponse.json({ error: `partnerRole must be one of ${PARTNER_ROLES.join(', ')}` }, { status: 400 });
+  }
+  if (!roleId) return NextResponse.json({ error: 'roleId (the user\'s role in the onboarding tenant) is required' }, { status: 400 });
+
+  const run = await notProvisionedAware(() => withPlatformAdmin(prisma, async (tx) => {
+    const partner = await tx.transportPartner.findFirst({
+      where: { id: partnerId, deletedAt: null },
+      select: { id: true, legalName: true, onboardedByTenantId: true },
+    });
+    if (!partner) return { status: 404 as const, error: 'Transport partner not found' };
+    if (!partner.onboardedByTenantId) {
+      return { status: 409 as const, error: 'Set the tenant that onboarded this partner before inviting its users' };
+    }
+    const tenant = await findActiveTenant(tx, partner.onboardedByTenantId);
+    if (!tenant) return { status: 409 as const, error: 'The onboarding tenant is not active' };
+
+    const role = await tx.role.findFirst({
+      where: { id: roleId, OR: [{ tenantId: tenant.id }, { tenantId: null }] },
+      select: { id: true, name: true, code: true, tenantId: true },
+    });
+    if (!role) return { status: 400 as const, error: `Role not found in ${tenant.name}` };
+    if ((NON_GRANTABLE_PARTNER_TENANT_ROLES as readonly string[]).includes(role.code)) {
+      return { status: 400 as const, error: `A partner user cannot be given the ${role.name} role` };
+    }
+    const grant = checkGrantableRole(req.headers, tenant.id, role);
+    if (grant) return { status: 400 as const, error: 'Role belongs to another tenant' };
+
+    const existingUser = await tx.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      select: { id: true },
+    });
+    if (existingUser) {
+      return { status: 409 as const, error: `${email} already has a Fleet360 account. Use Link user instead.` };
+    }
+
+    // Quota: the tenant's active members plus its outstanding invitations.
+    const [active, pending] = await Promise.all([
+      tx.userTenant.count({ where: { tenantId: tenant.id, isActive: true } }),
+      tx.$queryRawUnsafe<Array<{ c: bigint }>>(
+        `SELECT COUNT(*)::bigint AS c FROM tenant_invitations
+          WHERE tenant_id = $1 AND used_at IS NULL AND revoked = FALSE AND expires_at > NOW()
+            AND LOWER(email) <> $2`,
+        tenant.id, email,
+      ),
+    ]);
+    const quota = requireUnderQuota({
+      plan: tenant.plan ?? 'STANDARD', resource: 'maxUsers', current: active + Number(pending[0]?.c ?? 0),
+    });
+    if (quota) return { status: 402 as const, error: `${tenant.name} has reached its user limit`, quota };
+
+    // One live invitation per email and tenant.
+    await tx.$executeRawUnsafe(
+      `UPDATE tenant_invitations SET revoked = TRUE
+        WHERE tenant_id = $1 AND LOWER(email) = $2
+          AND used_at IS NULL AND revoked = FALSE AND expires_at > NOW()`,
+      tenant.id, email,
+    );
+    const { token, hash } = generateInvitationToken();
+    const expiresAt = new Date(Date.now() + INVITATION_TTL_DAYS * 86_400_000);
+    await tx.$executeRawUnsafe(
+      `INSERT INTO tenant_invitations
+         (tenant_id, email, role_id, token_hash, invited_by_user_id, expires_at, partner_id, partner_role)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      tenant.id, email, role.id, hash, inviterId, expiresAt, partner.id, partnerRole,
+    );
+    return { status: 200 as const, partner, tenant, role, token };
+  }));
+  if ('response' in run) return run.response;
+  const result = run.value;
+  if ('quota' in result && result.quota) return result.quota;
+  if ('error' in result) return NextResponse.json({ error: result.error }, { status: result.status });
+
+  const { partner, tenant, role, token } = result;
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+  const acceptUrl = `${baseUrl}/invitation/${encodeURIComponent(token)}`;
+  const send = await sendEmail({
+    to: email,
+    subject: `You've been invited to act for ${partner.legalName} on Fleet360`,
+    text: [
+      `You've been invited to use the Fleet360 Exchange partner portal for ${partner.legalName}.`,
+      `Your account will be created under ${tenant.name}.`,
+      '',
+      `Accept the invitation and set your password (valid for ${INVITATION_TTL_DAYS} days):`,
+      acceptUrl,
+      '',
+      'If you didn\'t expect this, you can ignore the email.',
+    ].join('\n'),
+    html:
+      `<p>You&rsquo;ve been invited to use the Fleet360 Exchange partner portal for <strong>${escapeHtml(partner.legalName)}</strong>.</p>` +
+      `<p>Your account will be created under ${escapeHtml(tenant.name)}.</p>` +
+      `<p><a href="${acceptUrl}" style="display:inline-block;padding:10px 18px;background:#0891b2;color:white;border-radius:8px;text-decoration:none">Accept invitation</a></p>` +
+      `<p style="color:#666;font-size:12px">Valid for ${INVITATION_TTL_DAYS} days. If you didn&rsquo;t expect this, ignore the email.</p>`,
+  });
+
+  await logAudit({
+    tenantId: tenant.id, tenantName: tenant.name,
+    entityType: 'PartnerUser',
+    entityName: email,
+    action: 'CREATE',
+    details: `Invited ${email} to ${partner.legalName} as ${partnerRole} (${role.name} in ${tenant.name}). Email send: ${send.sent ? 'OK' : `failed (${send.reason ?? 'unknown'})`}.`,
+    userId: inviterId ?? undefined,
+  });
+
+  return NextResponse.json({
+    ok: true,
+    emailed: send.sent,
+    reason: send.sent ? undefined : send.reason,
+    // When email isn't configured the administrator can pass the link on.
+    acceptUrl: send.sent ? undefined : acceptUrl,
+  });
+}
+
+export async function DELETE(req: NextRequest, props: Params) {
+  const { id: partnerId } = await props.params;
+  const authz = requireAuthorizedTenant({ headers: req.headers });
+  if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
+  const deny = notPlatformAdmin(req);
+  if (deny) return deny;
+  const id = req.nextUrl.searchParams.get('id') ?? '';
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+
+  const revoked = await withPlatformAdmin(prisma, (tx) => tx.$executeRawUnsafe(
+    `UPDATE tenant_invitations SET revoked = TRUE
+      WHERE id = $1::uuid AND partner_id = $2 AND used_at IS NULL AND revoked = FALSE`,
+    id, partnerId,
+  ));
+  if (!revoked) return NextResponse.json({ error: 'No pending invitation with that id' }, { status: 404 });
+
+  await logAudit({
+    entityType: 'PartnerUser',
+    entityId: id,
+    action: 'DELETE',
+    details: `Revoked partner invitation ${id} for partner ${partnerId}`,
+    userId: req.headers.get('x-user-id') ?? undefined,
+  });
+  return NextResponse.json({ ok: true });
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+}
