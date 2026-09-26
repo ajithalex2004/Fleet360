@@ -11,6 +11,7 @@ import { createElement } from 'react';
 import { withTenantRls } from '@/lib/rls';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { scheduledDepartureSql } from '@/lib/school-bus-trip-sql';
 import { renderPdf } from '@/lib/pdf/render';
 import {
   SchoolBusManifestPdf,
@@ -21,7 +22,7 @@ import type { Lang } from '@/lib/pdf/theme';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 const VENDOR = {
@@ -34,7 +35,7 @@ interface TripRow {
   id: string;
   trip_number: string | null;
   session_type: string | null;
-  scheduled_departure: string;
+  scheduled_departure: string | null;
   vehicle_id: string | null;
   driver_name: string | null;
   driver_id: string | null;
@@ -72,10 +73,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
       try {
         const tripRows = await tx.$queryRawUnsafe<TripRow[]>(
-          `SELECT t.id::text, t.trip_number, t.session_type,
-                  t.scheduled_departure::text, t.vehicle_id::text,
+          `SELECT t.id::text, t.trip_code AS trip_number, t.session AS session_type,
+                  ${scheduledDepartureSql('t')} AS scheduled_departure, t.vehicle_id::text,
                   t.driver_name, t.driver_id::text,
-                  t.route_id::text, r.route_name
+                  t.route_id::text, COALESCE(r.route_name, t.route_name) AS route_name
            FROM school_bus_trips t
            LEFT JOIN school_bus_routes r ON r.id = t.route_id
            WHERE t.id = $1::uuid`,

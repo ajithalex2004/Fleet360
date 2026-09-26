@@ -15,8 +15,9 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { tripScheduleColumnsSql } from '@/lib/school-bus-trip-sql';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface TripRow {
@@ -25,7 +26,7 @@ interface TripRow {
   route_name: string | null;
   status: string;
   session_type: string | null;
-  scheduled_departure: string;
+  scheduled_departure: string | null;
   actual_departure: string | null;
   actual_arrival: string | null;
   vehicle_id: string | null;
@@ -69,17 +70,16 @@ export async function GET(req: NextRequest) {
       // Trips assigned to this driver today (try driver_id first, fall back to driver_name)
       const trips = await tx.$queryRawUnsafe<TripRow[]>(
         `SELECT t.id::text, t.route_id::text,
-                r.route_name AS route_name,
-                t.status, t.session_type,
-                t.scheduled_departure::text, t.actual_departure::text, t.actual_arrival::text,
+                COALESCE(r.route_name, t.route_name) AS route_name,
+                t.status, ${tripScheduleColumnsSql('t')},
                 t.vehicle_id::text, t.driver_name,
                 COALESCE(t.students_boarded, 0) AS students_boarded,
                 COALESCE(t.students_dropped, 0) AS students_dropped
          FROM school_bus_trips t
          LEFT JOIN school_bus_routes r ON r.id = t.route_id
-         WHERE DATE(t.scheduled_departure) = $1::date
+         WHERE t.scheduled_date = $1::date
            AND (t.driver_id::text = $2 OR t.driver_name = $2)
-         ORDER BY t.scheduled_departure ASC`,
+         ORDER BY t.scheduled_start ASC NULLS LAST, t.created_at ASC`,
         todayDate, driverCode,
       ).catch(() => [] as TripRow[]);
 
