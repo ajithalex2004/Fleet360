@@ -20,21 +20,35 @@ import {
   DollarSign,
   AlertCircle,
 } from 'lucide-react';
+import { usePartnerMembership } from '@/components/exchange/PartnerMembershipContext';
 
 export default function ExchangeDashboardPage() {
   const [requests, setRequests] = useState<any[]>([]);
   const [awards, setAwards] = useState<any[]>([]);
+  const [vehicleCount, setVehicleCount] = useState<number | null>(null);
+  const [driverCount, setDriverCount] = useState<number | null>(null);
+  const [invoices, setInvoices] = useState<Array<{ totalAmount: string | number; status: string }> | null>(null);
   const [loading, setLoading] = useState(true);
+  const membership = usePartnerMembership();
+  const partnerName = membership.status === 'ok' ? membership.partner.legalName : null;
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [resReq, resAward] = await Promise.all([
-          fetch('/api/exchange/jobs/requests').then((r) => r.json()),
-          fetch('/api/exchange/jobs/awards').then((r) => r.json()),
+        // A failed call (e.g. no partner linked) leaves its card showing "—".
+        const get = (url: string) => fetch(url).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+        const [resReq, resAward, resFleet, resDrivers, resInvoices] = await Promise.all([
+          get('/api/exchange/jobs/requests'),
+          get('/api/exchange/jobs/awards'),
+          get('/api/exchange/partner/fleet'),
+          get('/api/exchange/partner/drivers'),
+          get('/api/exchange/invoices'),
         ]);
-        setRequests(resReq.requests || []);
-        setAwards(resAward.awards || []);
+        setRequests(resReq?.requests || []);
+        setAwards(resAward?.awards || []);
+        if (resFleet) setVehicleCount((resFleet.vehicles || []).length);
+        if (resDrivers) setDriverCount((resDrivers.drivers || []).length);
+        if (resInvoices) setInvoices(resInvoices.invoices || []);
       } catch {
         // Fallback
       } finally {
@@ -44,13 +58,18 @@ export default function ExchangeDashboardPage() {
     void loadData();
   }, []);
 
+  // Everything invoiced except rejected invoices.
+  const invoicedTotal = invoices === null
+    ? null
+    : invoices.filter((i) => i.status !== 'REJECTED').reduce((sum, i) => sum + Number(i.totalAmount || 0), 0);
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Welcome Banner */}
       <div className="p-6 rounded-3xl bg-gradient-to-r from-cyan-950/60 via-slate-900 to-slate-900 border border-cyan-500/20 flex items-center justify-between">
         <div>
           <span className="text-xs font-bold text-cyan-400 uppercase tracking-wider">Transport Partner Dashboard</span>
-          <h1 className="text-2xl font-black text-white mt-1">Welcome back, ABC Transport</h1>
+          <h1 className="text-2xl font-black text-white mt-1">{partnerName ? `Welcome back, ${partnerName}` : 'Welcome back'}</h1>
           <p className="text-xs text-slate-400 mt-1">
             Manage your outsourced trips, submit commercial quotes, dispatch vehicles & drivers, and track invoices.
           </p>
@@ -97,8 +116,12 @@ export default function ExchangeDashboardPage() {
               <Truck className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-black text-white">12 Buses</div>
-          <div className="text-[11px] text-purple-400">14 Active drivers ready</div>
+          <div className="text-2xl font-black text-white">
+            {vehicleCount === null ? '—' : `${vehicleCount} ${vehicleCount === 1 ? 'vehicle' : 'vehicles'}`}
+          </div>
+          <div className="text-[11px] text-purple-400">
+            {driverCount === null ? 'Drivers unavailable' : `${driverCount} active ${driverCount === 1 ? 'driver' : 'drivers'}`}
+          </div>
         </div>
 
         <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-2">
@@ -108,8 +131,14 @@ export default function ExchangeDashboardPage() {
               <DollarSign className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-black text-white">AED 42,800</div>
-          <div className="text-[11px] text-amber-400">Net 30 settlement cycle</div>
+          <div className="text-2xl font-black text-white">
+            {invoicedTotal === null ? '—' : `AED ${invoicedTotal.toLocaleString(undefined, { maximumFractionDigits: 2 })}`}
+          </div>
+          <div className="text-[11px] text-amber-400">
+            {invoices === null
+              ? 'Invoices unavailable'
+              : `${invoices.length} ${invoices.length === 1 ? 'invoice' : 'invoices'} · ${invoices.filter((i) => i.status === 'PAID').length} paid`}
+          </div>
         </div>
       </div>
 

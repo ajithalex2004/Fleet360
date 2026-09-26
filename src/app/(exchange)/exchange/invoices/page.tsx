@@ -8,6 +8,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { FileText, Plus, CheckCircle2, DollarSign, X } from 'lucide-react';
+import { usePartnerMembership } from '@/components/exchange/PartnerMembershipContext';
 
 export default function ExchangeInvoicesPage() {
   const [invoices, setInvoices] = useState<any[]>([]);
@@ -142,9 +143,11 @@ function CreateInvoiceModal({
   onCreated: () => void;
 }) {
   const [awardId, setAwardId] = useState(awards[0]?.id || '');
-  const [invoiceNumber, setInvoiceNumber] = useState(`INV-ABC-${new Date().getFullYear()}-001`);
+  const membership = usePartnerMembership();
+  const codePrefix = membership.status === 'ok' ? membership.partner.partnerCode : 'PARTNER';
+  const [invoiceNumber, setInvoiceNumber] = useState(`INV-${codePrefix}-${new Date().getFullYear()}-001`);
   const [subtotalAmount, setSubtotalAmount] = useState(
-    awards[0]?.awardedPrice ? String(awards[0].awardedPrice) : '4800'
+    awards[0]?.awardedPrice ? String(awards[0].awardedPrice) : ''
   );
   const [submitting, setSubmitting] = useState(false);
 

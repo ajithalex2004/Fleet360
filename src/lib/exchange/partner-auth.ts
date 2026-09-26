@@ -37,6 +37,8 @@ export interface PartnerMembership {
   partnerId: string;
   role: PartnerRole;
   legalName: string;
+  partnerCode: string;
+  city: string | null;
   marketplaceStatus: string;
   operationalStatus: string;
 }
@@ -98,7 +100,7 @@ export async function partnerMembershipsForUser(userId: string): Promise<Partner
     where: { userId, partner: { deletedAt: null } },
     select: {
       role: true,
-      partner: { select: { id: true, legalName: true, marketplaceStatus: true, operationalStatus: true } },
+      partner: { select: { id: true, legalName: true, partnerCode: true, city: true, marketplaceStatus: true, operationalStatus: true } },
     },
     orderBy: { createdAt: 'asc' },
   });
@@ -106,6 +108,8 @@ export async function partnerMembershipsForUser(userId: string): Promise<Partner
     partnerId: r.partner.id,
     role: (PARTNER_ROLES as readonly string[]).includes(r.role) ? (r.role as PartnerRole) : 'PARTNER_VIEWER',
     legalName: r.partner.legalName,
+    partnerCode: r.partner.partnerCode,
+    city: r.partner.city,
     marketplaceStatus: r.partner.marketplaceStatus,
     operationalStatus: r.partner.operationalStatus,
   }));
