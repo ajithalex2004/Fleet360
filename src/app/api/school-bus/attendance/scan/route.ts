@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
 
         // Lookup trip + verify it's on the right route
         const tripRows = await tx.$queryRawUnsafe<TripRow[]>(
-          `SELECT id::text, route_id::text, session_type, status, tenant_id FROM school_bus_trips WHERE id = $1::uuid`,
+          `SELECT id::text, route_id::text, session AS session_type, status, tenant_id FROM school_bus_trips WHERE id = $1::uuid`,
           tripId,
         ).catch(() => []);
         if (tripRows.length === 0) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });

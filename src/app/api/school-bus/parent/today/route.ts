@@ -14,8 +14,9 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { tripScheduleColumnsSql } from '@/lib/school-bus-trip-sql';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 interface StudentRow {
@@ -70,9 +71,7 @@ export async function GET(req: NextRequest) {
       }
 
       const studentIds = students.map(s => s.id);
-      const today = new Date();
-      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
-      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1).toISOString();
+      const todayDate = new Date().toISOString().slice(0, 10);
 
       // Pull today's attendance per student
       const attendance = await tx.$queryRawUnsafe<Array<{
@@ -96,16 +95,15 @@ export async function GET(req: NextRequest) {
       const trips = routeIds.length > 0
         ? await tx.$queryRawUnsafe<Array<{
             id: string; route_id: string; status: string; session_type: string;
-            scheduled_departure: string; actual_departure: string | null;
+            scheduled_departure: string | null; actual_departure: string | null;
             actual_arrival: string | null;
           }>>(
-            `SELECT id, route_id, status, session_type,
-                    scheduled_departure::text, actual_departure::text, actual_arrival::text
-             FROM school_bus_trips
-             WHERE route_id = ANY($1::uuid[])
-               AND scheduled_departure >= $2::timestamptz
-               AND scheduled_departure < $3::timestamptz`,
-            routeIds, startOfDay, endOfDay,
+            `SELECT t.id::text, t.route_id::text, t.status, ${tripScheduleColumnsSql('t')}
+             FROM school_bus_trips t
+             WHERE t.route_id = ANY($1::uuid[])
+               AND t.scheduled_date = $2::date
+             ORDER BY t.scheduled_start ASC NULLS LAST`,
+            routeIds, todayDate,
           ).catch(() => [])
         : [];
       const tripsByRoute = new Map<string, typeof trips>();

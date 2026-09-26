@@ -25,6 +25,7 @@ import { loadStudentForNotify, notifyGuardians } from '@/lib/school-bus-notify';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 import { runSweep } from '@/lib/prisma-sweep';
+import { tripScheduleColumnsSql } from '@/lib/school-bus-trip-sql';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
@@ -32,7 +33,7 @@ export const runtime = 'nodejs';
 interface TripRow {
   id: string;
   route_id: string;
-  scheduled_departure: string;
+  scheduled_departure: string | null;
   actual_departure: string | null;
   session_type: string | null;
   status: string;
@@ -79,14 +80,13 @@ export async function POST(req: NextRequest) {
     const perTenant = await runSweep(async ({ tx, tenantId }) => {
       // 1. Find IN_PROGRESS morning trips where we're past the threshold.
       const trips = await tx.$queryRawUnsafe<TripRow[]>(
-        `SELECT id::text, route_id::text, scheduled_departure::text,
-                actual_departure::text, session_type, status
-         FROM school_bus_trips
-         WHERE status IN ('IN_PROGRESS', 'COMPLETED')
-           AND DATE(scheduled_departure) = $1::date
-           AND session_type = 'MORNING'
-           AND actual_departure IS NOT NULL
-           AND actual_departure <= NOW() - ($2 || ' minutes')::interval`,
+        `SELECT t.id::text, t.route_id::text, ${tripScheduleColumnsSql('t')}, t.status
+         FROM school_bus_trips t
+         WHERE t.status IN ('IN_PROGRESS', 'COMPLETED')
+           AND t.scheduled_date = $1::date
+           AND t.session = 'MORNING'
+           AND t.actual_start IS NOT NULL
+           AND t.actual_start <= NOW() - ($2 || ' minutes')::interval`,
         todayDate, String(minAfterDepartureMins),
       ).catch(() => [] as TripRow[]);
 
