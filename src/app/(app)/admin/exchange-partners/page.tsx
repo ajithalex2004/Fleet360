@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeftRight, Plus, Search, Trash2, UserPlus, X } from 'lucide-react';
+import { ArrowLeftRight, ExternalLink, Plus, Search, Trash2, UserPlus, X } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 
 /**
@@ -40,6 +40,43 @@ interface Partner {
   marketplaceStatus: string;
   memberCount: number;
   approvedDomains: string[];
+  pendingDocuments: number;
+}
+
+interface ComplianceDoc {
+  id: string;
+  docType: string;
+  docNumber: string | null;
+  fileUrl: string;
+  expiryDate: string | null;
+  status: string;
+  reviewNote: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+}
+
+const DOC_TYPE_LABELS: Record<string, string> = {
+  TRADE_LICENSE: 'Trade licence',
+  TAX_CERTIFICATE: 'Tax certificate (TRN)',
+  COMMERCIAL_INSURANCE: 'Commercial insurance',
+  RTA_OPERATOR_PERMIT: 'RTA operator permit',
+  RTA_PERMIT: 'RTA operator permit',
+};
+
+const DOC_STATUS_STYLES: Record<string, string> = {
+  PENDING: 'bg-amber-500/15 text-amber-400',
+  VALID: 'bg-emerald-500/15 text-emerald-400',
+  REJECTED: 'bg-rose-500/15 text-rose-400',
+};
+
+/** Only http(s) links are opened, never javascript: or data: URLs from a partner upload. */
+function safeHref(url: string): string | null {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' || u.protocol === 'http:' ? u.href : null;
+  } catch {
+    return null;
+  }
 }
 
 interface Member {
@@ -91,6 +128,10 @@ export default function ExchangePartnersAdminPage() {
   const [busy, setBusy] = useState(false);
   const [serviceBusy, setServiceBusy] = useState<string | null>(null);
   const [serviceError, setServiceError] = useState<string | null>(null);
+  const [docs, setDocs] = useState<ComplianceDoc[]>([]);
+  const [docsLoading, setDocsLoading] = useState(false);
+  const [docsError, setDocsError] = useState<string | null>(null);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
 
   const loadPartners = useCallback(async () => {
     setLoading(true); setPageError(null);
@@ -124,6 +165,22 @@ export default function ExchangePartnersAdminPage() {
 
   useEffect(() => { void loadPartners(); }, [loadPartners]);
   useEffect(() => { setServiceError(null); }, [selectedId]);
+
+  const loadDocs = useCallback(async (partnerId: string) => {
+    setDocsLoading(true); setDocsError(null);
+    try {
+      const r = await fetch(`/api/admin/exchange/partners/${encodeURIComponent(partnerId)}/compliance`);
+      const d = await readJson(r);
+      if (!r.ok) { setDocsError(errorOf(d, r.status)); setDocs([]); return; }
+      setDocs((d.documents ?? []) as ComplianceDoc[]);
+    } catch (e) {
+      setDocsError(e instanceof Error ? e.message : 'Network error');
+    } finally {
+      setDocsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { if (selectedId) void loadDocs(selectedId); else setDocs([]); }, [selectedId, loadDocs]);
   useEffect(() => { if (selectedId) void loadMembers(selectedId); else setMembers([]); }, [selectedId, loadMembers]);
 
   const filtered = useMemo(() => {
@@ -141,6 +198,32 @@ export default function ExchangePartnersAdminPage() {
     await loadMembers(partnerId);
     const r = await fetch('/api/admin/exchange/partners');
     if (r.ok) setPartners(((await readJson(r)).partners ?? []) as Partner[]);
+  };
+
+  const reviewDoc = async (doc: ComplianceDoc, decision: 'APPROVE' | 'REJECT') => {
+    if (!selected) return;
+    const partnerId = selected.id;
+    let note: string | null = null;
+    if (decision === 'REJECT') {
+      note = window.prompt(`Why is this ${DOC_TYPE_LABELS[doc.docType] ?? doc.docType} rejected? The partner will see this note.`);
+      if (!note?.trim()) return;
+    }
+    setReviewingId(doc.id); setDocsError(null);
+    try {
+      const r = await fetch(
+        `/api/admin/exchange/partners/${encodeURIComponent(partnerId)}/compliance/${encodeURIComponent(doc.id)}`,
+        { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision, note }) },
+      );
+      const d = await readJson(r);
+      if (!r.ok) { setDocsError(errorOf(d, r.status)); return; }
+      await loadDocs(partnerId);
+      const pending = docs.filter((x) => x.status === 'PENDING' && x.id !== doc.id).length;
+      setPartners((list) => list.map((p) => (p.id === partnerId ? { ...p, pendingDocuments: pending } : p)));
+    } catch (err) {
+      setDocsError(err instanceof Error ? err.message : 'Network error');
+    } finally {
+      setReviewingId(null);
+    }
   };
 
   const setServiceArea = async (domain: string, approved: boolean) => {
@@ -324,6 +407,9 @@ export default function ExchangePartnersAdminPage() {
                       <div className="mt-0.5 text-xs text-[var(--text-muted)]">
                         {p.partnerCode}{p.city ? ` · ${p.city}` : ''}
                         {p.approvedDomains.length === 0 && <span className="text-amber-400"> · no approved services</span>}
+                        {p.pendingDocuments > 0 && (
+                          <span className="text-amber-400"> · {p.pendingDocuments} {p.pendingDocuments === 1 ? 'document' : 'documents'} to review</span>
+                        )}
                       </div>
                     </button>
                   </li>
@@ -385,6 +471,67 @@ export default function ExchangePartnersAdminPage() {
                   })}
                 </div>
                 {serviceError && <p className="text-sm text-rose-400">{serviceError}</p>}
+              </div>
+
+              <div className="space-y-2 border-t border-[var(--border-subtle)] pt-5">
+                <h3 className="text-sm font-semibold">Compliance documents</h3>
+                <p className="text-xs text-[var(--text-muted)]">
+                  Documents the partner uploads stay pending until you approve them. Rejecting one asks for a note the partner sees.
+                </p>
+                {docsError && <p className="text-sm text-rose-400">{docsError}</p>}
+                {docsLoading ? (
+                  <p className="py-3 text-xs text-[var(--text-muted)]">Loading documents…</p>
+                ) : docs.length === 0 ? (
+                  <p className="py-3 text-xs text-[var(--text-muted)]">No documents uploaded yet.</p>
+                ) : (
+                  <ul className="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)]">
+                    {docs.map((doc) => {
+                      const href = safeHref(doc.fileUrl);
+                      return (
+                        <li key={doc.id} className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-medium">{DOC_TYPE_LABELS[doc.docType] ?? doc.docType}</span>
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${DOC_STATUS_STYLES[doc.status] ?? 'bg-slate-500/15 text-[var(--text-muted)]'}`}>
+                                {doc.status}
+                              </span>
+                            </div>
+                            <div className="text-xs text-[var(--text-muted)]">
+                              {doc.docNumber ? `No. ${doc.docNumber}` : 'No number'}
+                              {doc.expiryDate ? ` · expires ${new Date(doc.expiryDate).toLocaleDateString()}` : ' · no expiry'}
+                              {` · uploaded ${new Date(doc.createdAt).toLocaleDateString()}`}
+                            </div>
+                            {doc.reviewNote && <div className="text-xs text-rose-300">Note: {doc.reviewNote}</div>}
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            {href ? (
+                              <a href={href} target="_blank" rel="noopener noreferrer" className={ghostBtn}>
+                                <ExternalLink className="h-4 w-4" /> View
+                              </a>
+                            ) : (
+                              <span className="text-xs text-[var(--text-muted)]">No viewable file</span>
+                            )}
+                            {doc.status !== 'VALID' && (
+                              <button type="button" className={primaryBtn} disabled={reviewingId !== null} onClick={() => void reviewDoc(doc, 'APPROVE')}>
+                                {reviewingId === doc.id ? 'Saving…' : 'Approve'}
+                              </button>
+                            )}
+                            {doc.status !== 'REJECTED' && (
+                              <button
+                                type="button"
+                                className={`${ghostBtn} hover:text-rose-400`}
+                                disabled={reviewingId !== null}
+                                onClick={() => void reviewDoc(doc, 'REJECT')}
+                              >
+                                Reject
+                              </button>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </div>
 
               <div className="border-t border-[var(--border-subtle)] pt-5">

@@ -255,7 +255,8 @@ export class PartnerService {
   }
 
   /**
-   * Upload or update a compliance document
+   * Upload a compliance document. It starts as PENDING until a platform
+   * administrator approves (VALID) or rejects it (/admin/exchange-partners).
    */
   static async uploadComplianceDoc(input: UploadComplianceDocInput) {
     return prisma.partnerComplianceDoc.create({
@@ -265,7 +266,7 @@ export class PartnerService {
         docNumber: input.docNumber,
         fileUrl: input.fileUrl,
         expiryDate: input.expiryDate ? new Date(input.expiryDate) : null,
-        status: 'VALID',
+        status: 'PENDING',
       },
     });
   }

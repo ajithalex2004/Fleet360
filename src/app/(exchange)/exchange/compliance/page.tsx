@@ -17,7 +17,7 @@ const REQUIRED_DOCS = [
 
 const EXPIRING_WITHIN_MS = 30 * 24 * 60 * 60 * 1000;
 
-interface ComplianceDoc { docType: string; docNumber?: string | null; expiryDate?: string | null; status?: string | null }
+interface ComplianceDoc { docType: string; docNumber?: string | null; expiryDate?: string | null; status?: string | null; reviewNote?: string | null }
 
 /** The document's stored status, overridden by its expiry date when that has passed or is near. */
 function effectiveStatus(doc: ComplianceDoc): string {
@@ -29,10 +29,17 @@ function effectiveStatus(doc: ComplianceDoc): string {
   return stored;
 }
 
-/** The document of a type that stays valid longest (no expiry counts as longest). */
+/**
+ * The document that decides a requirement: an approved one before a pending
+ * one before a rejected one, then the one that stays valid longest (no expiry
+ * counts as longest).
+ */
 function latestDoc(docs: ComplianceDoc[], docType: string): ComplianceDoc | undefined {
+  const rank = (d: ComplianceDoc) => (d.status === 'REJECTED' ? 2 : d.status === 'PENDING' ? 1 : 0);
   const expiry = (d: ComplianceDoc) => (d.expiryDate ? new Date(d.expiryDate).getTime() : Number.POSITIVE_INFINITY);
-  return docs.filter((d) => d.docType === docType).sort((a, b) => expiry(b) - expiry(a))[0];
+  return docs
+    .filter((d) => d.docType === docType)
+    .sort((a, b) => rank(a) - rank(b) || expiry(b) - expiry(a))[0];
 }
 
 function statusStyle(status: string): string {
@@ -126,6 +133,9 @@ export default function ExchangeCompliancePage() {
                     ? `${doc.docNumber ? `No. ${doc.docNumber}` : 'Uploaded'}${doc.expiryDate ? ` · expires ${new Date(doc.expiryDate).toLocaleDateString()}` : ''}`
                     : 'Not uploaded yet.'}
               </p>
+              {!loading && doc?.status === 'REJECTED' && doc.reviewNote && (
+                <p className="text-[11px] text-rose-300">Rejected: {doc.reviewNote}</p>
+              )}
             </div>
           );
         })}
@@ -157,8 +167,11 @@ export default function ExchangeCompliancePage() {
                   </td>
                   <td className="p-4">
                     <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold ${statusStyle(effectiveStatus(d))}`}>
-                      {effectiveStatus(d)}
+                      {effectiveStatus(d) === 'PENDING' ? 'PENDING REVIEW' : effectiveStatus(d)}
                     </span>
+                    {d.status === 'REJECTED' && d.reviewNote && (
+                      <div className="mt-1 text-[10px] text-rose-300">{d.reviewNote}</div>
+                    )}
                   </td>
                 </tr>
               ))
@@ -179,7 +192,7 @@ export default function ExchangeCompliancePage() {
           onClose={() => setShowUploadModal(false)}
           onUploaded={() => {
             setShowUploadModal(false);
-            showToast('✓ Compliance document uploaded successfully!');
+            showToast('✓ Document uploaded. The Fleet360 team will review it; until then it shows as PENDING.');
             void loadDocs();
           }}
         />

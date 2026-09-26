@@ -26,6 +26,11 @@ export async function GET(req: NextRequest) {
   const documents = await withPlatformAdmin(prisma, (tx) =>
     tx.partnerComplianceDoc.findMany({
       where: { partnerId: auth.ctx.partnerId },
+      // Not reviewed_by: the reviewing administrator's user id stays internal.
+      select: {
+        id: true, createdAt: true, updatedAt: true, partnerId: true, docType: true, docNumber: true,
+        fileUrl: true, expiryDate: true, status: true, reviewNote: true, reviewedAt: true,
+      },
       orderBy: { createdAt: 'desc' },
     }),
   );

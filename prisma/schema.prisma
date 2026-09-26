@@ -6848,7 +6848,10 @@ model PartnerComplianceDoc {
   docNumber       String?          @map("doc_number")
   fileUrl         String           @map("file_url")
   expiryDate      DateTime?        @map("expiry_date") @db.Date
-  status          String           @default("VALID") // PENDING, VALID, EXPIRING, EXPIRED, REJECTED
+  status          String           @default("PENDING") // PENDING (awaiting review), VALID, EXPIRING, EXPIRED, REJECTED
+  reviewNote      String?          @map("review_note") // shown to the partner, e.g. why a document was rejected
+  reviewedAt      DateTime?        @map("reviewed_at") @db.Timestamptz(6)
+  reviewedBy      String?          @map("reviewed_by") // user id of the reviewing platform administrator
 
   partner         TransportPartner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
 
