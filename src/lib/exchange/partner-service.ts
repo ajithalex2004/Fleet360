@@ -132,7 +132,15 @@ export class PartnerService {
         serviceAreas: true,
         vehicles: { where: { isActive: true } },
         drivers: { where: { isActive: true } },
-        complianceDocuments: true,
+        // Every field but reviewedBy: the reviewing administrator's user id
+        // stays internal (same rule as /api/exchange/partner/compliance).
+        complianceDocuments: {
+          select: {
+            id: true, createdAt: true, updatedAt: true, partnerId: true,
+            docType: true, docNumber: true, fileUrl: true, expiryDate: true,
+            status: true, reviewNote: true, reviewedAt: true,
+          },
+        },
         platformLink: true,
       },
     });

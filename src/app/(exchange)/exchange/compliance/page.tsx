@@ -8,39 +8,13 @@
 
 import React, { useEffect, useState } from 'react';
 import { ShieldCheck, Plus, CheckCircle2, AlertTriangle, FileText, X } from 'lucide-react';
+import { effectiveStatus, latestDoc } from '@/lib/exchange/compliance-requirement';
 
 const REQUIRED_DOCS = [
   { docType: 'TRADE_LICENSE',        label: 'Trade License' },
   { docType: 'TAX_CERTIFICATE',      label: 'Tax Certificate (TRN)' },
   { docType: 'COMMERCIAL_INSURANCE', label: 'Commercial Insurance' },
 ];
-
-const EXPIRING_WITHIN_MS = 30 * 24 * 60 * 60 * 1000;
-
-interface ComplianceDoc { docType: string; docNumber?: string | null; expiryDate?: string | null; status?: string | null; reviewNote?: string | null }
-
-/** The document's stored status, overridden by its expiry date when that has passed or is near. */
-function effectiveStatus(doc: ComplianceDoc): string {
-  const stored = doc.status || 'PENDING';
-  if (stored === 'REJECTED' || stored === 'PENDING' || !doc.expiryDate) return stored;
-  const left = new Date(doc.expiryDate).getTime() - Date.now();
-  if (left < 0) return 'EXPIRED';
-  if (left < EXPIRING_WITHIN_MS) return 'EXPIRING';
-  return stored;
-}
-
-/**
- * The document that decides a requirement: an approved one before a pending
- * one before a rejected one, then the one that stays valid longest (no expiry
- * counts as longest).
- */
-function latestDoc(docs: ComplianceDoc[], docType: string): ComplianceDoc | undefined {
-  const rank = (d: ComplianceDoc) => (d.status === 'REJECTED' ? 2 : d.status === 'PENDING' ? 1 : 0);
-  const expiry = (d: ComplianceDoc) => (d.expiryDate ? new Date(d.expiryDate).getTime() : Number.POSITIVE_INFINITY);
-  return docs
-    .filter((d) => d.docType === docType)
-    .sort((a, b) => rank(a) - rank(b) || expiry(b) - expiry(a))[0];
-}
 
 function statusStyle(status: string): string {
   if (status === 'VALID') return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
