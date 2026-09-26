@@ -7,7 +7,8 @@ import { PageHeader } from '@/components/ui/page-theme';
 /**
  * Exchange partners — platform admin screen.
  *
- * Creates the Exchange's transport partners and links users to them
+ * Creates the Exchange's transport partners, approves the service areas
+ * they may be offered work in (partner_capabilities) and links users to them
  * (partner_users), which is what lets a user into the partner portal and
  * marketplace. Platform administrators only: /api/admin/exchange/partners
  * and /api/admin/exchange/partner-users return 403 for anyone else.
@@ -18,6 +19,13 @@ const ROLES = [
   { value: 'PARTNER_OPERATIONS', label: 'Operations', hint: 'Quotes, jobs, fleet and drivers' },
   { value: 'PARTNER_FINANCE',    label: 'Finance',    hint: 'Invoices and statements' },
   { value: 'PARTNER_VIEWER',     label: 'Viewer',     hint: 'Read only' },
+] as const;
+
+const SERVICE_AREAS = [
+  { value: 'PASSENGER_TRANSPORT', label: 'Passenger transport', hint: 'Staff buses, shuttles, coaches' },
+  { value: 'LIMOUSINE',           label: 'Limousine',           hint: 'Chauffeured cars' },
+  { value: 'FREIGHT',             label: 'Freight',             hint: 'Goods and cargo' },
+  { value: 'RECOVERY',            label: 'Recovery',            hint: 'Breakdown and towing' },
 ] as const;
 
 interface Partner {
@@ -31,6 +39,7 @@ interface Partner {
   operationalStatus: string;
   marketplaceStatus: string;
   memberCount: number;
+  approvedDomains: string[];
 }
 
 interface Member {
@@ -80,6 +89,8 @@ export default function ExchangePartnersAdminPage() {
   const [linkEmail, setLinkEmail] = useState('');
   const [linkRole, setLinkRole] = useState<string>('PARTNER_OPERATIONS');
   const [busy, setBusy] = useState(false);
+  const [serviceBusy, setServiceBusy] = useState<string | null>(null);
+  const [serviceError, setServiceError] = useState<string | null>(null);
 
   const loadPartners = useCallback(async () => {
     setLoading(true); setPageError(null);
@@ -112,6 +123,7 @@ export default function ExchangePartnersAdminPage() {
   }, []);
 
   useEffect(() => { void loadPartners(); }, [loadPartners]);
+  useEffect(() => { setServiceError(null); }, [selectedId]);
   useEffect(() => { if (selectedId) void loadMembers(selectedId); else setMembers([]); }, [selectedId, loadMembers]);
 
   const filtered = useMemo(() => {
@@ -129,6 +141,27 @@ export default function ExchangePartnersAdminPage() {
     await loadMembers(partnerId);
     const r = await fetch('/api/admin/exchange/partners');
     if (r.ok) setPartners(((await readJson(r)).partners ?? []) as Partner[]);
+  };
+
+  const setServiceArea = async (domain: string, approved: boolean) => {
+    if (!selected) return;
+    const partnerId = selected.id;
+    setServiceBusy(domain); setServiceError(null);
+    try {
+      const r = await fetch(`/api/admin/exchange/partners/${encodeURIComponent(partnerId)}/services`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain, approved }),
+      });
+      const d = await readJson(r);
+      if (!r.ok) { setServiceError(errorOf(d, r.status)); return; }
+      const approvedDomains = (d.approvedDomains ?? []) as string[];
+      setPartners((list) => list.map((p) => (p.id === partnerId ? { ...p, approvedDomains } : p)));
+    } catch (err) {
+      setServiceError(err instanceof Error ? err.message : 'Network error');
+    } finally {
+      setServiceBusy(null);
+    }
   };
 
   const createPartner = async (e: React.FormEvent) => {
@@ -202,7 +235,7 @@ export default function ExchangePartnersAdminPage() {
     <div className="space-y-6">
       <PageHeader
         title="Exchange partners"
-        subtitle="Transport partners of the Fleet360 Exchange and the users who act for them"
+        subtitle="Transport partners of the Fleet360 Exchange, their approved services and the users who act for them"
         icon={ArrowLeftRight}
         accent="cyan"
         actions={
@@ -290,6 +323,7 @@ export default function ExchangePartnersAdminPage() {
                       </div>
                       <div className="mt-0.5 text-xs text-[var(--text-muted)]">
                         {p.partnerCode}{p.city ? ` · ${p.city}` : ''}
+                        {p.approvedDomains.length === 0 && <span className="text-amber-400"> · no approved services</span>}
                       </div>
                     </button>
                   </li>
@@ -317,6 +351,44 @@ export default function ExchangePartnersAdminPage() {
                   <StatusPill label={`Operations: ${selected.operationalStatus}`} ok={selected.operationalStatus === 'ACTIVE'} />
                   <StatusPill label={`Onboarding: ${selected.onboardingStatus}`} ok={selected.onboardingStatus === 'APPROVED'} />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold">Approved services</h3>
+                <p className="text-xs text-[var(--text-muted)]">
+                  The marketplace only shows a partner opportunities in the service areas it is approved for. Without
+                  any, it sees only jobs a buyer invites it to directly.
+                </p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {SERVICE_AREAS.map((area) => {
+                    const on = selected.approvedDomains.includes(area.value);
+                    return (
+                      <label
+                        key={area.value}
+                        className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${on ? 'border-cyan-500/50 bg-cyan-500/10' : 'border-[var(--border-subtle)]'}`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-0.5 h-4 w-4 accent-cyan-500"
+                          checked={on}
+                          disabled={serviceBusy !== null}
+                          onChange={(e) => void setServiceArea(area.value, e.target.checked)}
+                        />
+                        <span>
+                          <span className="block text-sm font-medium">
+                            {area.label}{serviceBusy === area.value ? ' · saving…' : ''}
+                          </span>
+                          <span className="block text-xs text-[var(--text-muted)]">{area.hint}</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {serviceError && <p className="text-sm text-rose-400">{serviceError}</p>}
+              </div>
+
+              <div className="border-t border-[var(--border-subtle)] pt-5">
+                <h3 className="text-sm font-semibold">Users</h3>
               </div>
 
               <form onSubmit={linkUser} className="flex flex-col gap-2 sm:flex-row">

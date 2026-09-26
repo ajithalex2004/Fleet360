@@ -16,7 +16,8 @@ export const runtime = 'nodejs';
  * screen (/admin/exchange-partners). Partners are platform-level records, not
  * owned by a tenant. Platform administrators only (ADMIN_ROUTE_POLICY).
  *
- * GET  /api/admin/exchange/partners   every partner with its member count
+ * GET  /api/admin/exchange/partners   every partner with its member count and
+ *                                     approved service areas (approvedDomains)
  * POST /api/admin/exchange/partners   { legalName, partnerCode, tradeName?, city?,
  *                                       primaryContactName?, primaryContactEmail?,
  *                                       primaryContactPhone? }
@@ -47,13 +48,18 @@ export async function GET(req: NextRequest) {
         marketplaceStatus: true,
         createdAt: true,
         _count: { select: { users: true } },
+        capabilities: { where: { isApproved: true }, select: { domain: true } },
       },
       orderBy: { legalName: 'asc' },
     }),
   ));
   if ('response' in run) return run.response;
 
-  const partners = run.value.map(({ _count, ...p }) => ({ ...p, memberCount: _count.users }));
+  const partners = run.value.map(({ _count, capabilities, ...p }) => ({
+    ...p,
+    memberCount: _count.users,
+    approvedDomains: [...new Set(capabilities.map((c) => c.domain))],
+  }));
   return NextResponse.json({ partners });
 }
 
