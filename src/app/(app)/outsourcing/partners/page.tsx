@@ -29,12 +29,17 @@ export default function EnterprisePartnerDirectoryPage() {
   const [activeTab, setActiveTab] = useState<'ALL' | 'APPROVED' | 'PREFERRED' | 'BLOCKED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPartner, setSelectedPartner] = useState<any | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadPartners() {
       try {
         const res = await fetch('/api/exchange/partner/profile');
-        const json = await res.json();
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setLoadError(json.error ?? 'Could not load transport partners.');
+          return;
+        }
         // Placeholder or actual directory list
         if (json.partner) setPartners([json.partner]);
       } catch {
@@ -103,6 +108,12 @@ export default function EnterprisePartnerDirectoryPage() {
           />
         </div>
       </div>
+
+      {loadError && (
+        <div className="rounded-2xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-xs text-amber-800 dark:text-amber-300">
+          {loadError}
+        </div>
+      )}
 
       {/* Partners Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

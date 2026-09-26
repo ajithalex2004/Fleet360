@@ -7,6 +7,7 @@
  *   2. Single-Route Stop Sequencing (TSP Nearest Neighbour + 2-opt)
  */
 import { useState, useEffect, useCallback } from 'react';
+import { runAgentAndWait } from '@/lib/agents/run-client';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ConsolidationItem {
@@ -138,15 +139,17 @@ export default function SchoolBusIntelligencePage() {
   const runAgent = async () => {
     setRunning(true);
     try {
-      const res = await fetch('/api/agents/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agent_id: 'route-optimiser' }),
-      });
-      const data = await res.json();
+      const { ok, timedOut, result: data } = await runAgentAndWait({ agent_id: 'route-optimiser' });
+      if (!ok) {
+        showToast(timedOut ? 'Route analysis is still running — refresh shortly' : 'Agent execution failed');
+        return;
+      }
       setLastRun(new Date().toLocaleString());
 
-      const out = data?.output;
+      const out = data.output as
+        | { networkDesign?: NetworkDesign; consolidations?: ConsolidationItem[]; summary?: string }
+        | null
+        | undefined;
       if (out?.networkDesign) {
         setNetworkDesign(out.networkDesign);
       }

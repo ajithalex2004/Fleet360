@@ -14,31 +14,48 @@ import { ensureAgentSchema } from '@/lib/agents/schema';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 // ── Helpers ────────────────────────────────────────────────────────────────────
-async function agentLastRun(agentId: string, tenantId: string) {
-  const rows = await prisma.$queryRawUnsafe<{
-    status: string; created_at: string; duration_ms: number;
-    items_processed: number; actions_created: number;
-  }[]>(
-    `SELECT status, created_at::text, duration_ms, items_processed, actions_created
-     FROM agent_runs WHERE agent_id = $1 AND tenant_id = $2 ORDER BY created_at DESC LIMIT 1`,
-    agentId, tenantId,
+// One query each for every agent's last run and 7-day totals. These used
+// to be two queries per agent, run one after another, which made this
+// endpoint take 10-17 s and occasionally time out behind the proxy.
+type LastRun = {
+  status: string; created_at: string; duration_ms: number;
+  items_processed: number; actions_created: number;
+};
+type Stats7d = {
+  runs: number; items_processed: number; actions_created: number; avg_ms: number;
+};
+
+async function agentLastRuns(agentIds: string[], tenantId: string): Promise<Map<string, LastRun>> {
+  const rows = await prisma.$queryRawUnsafe<(LastRun & { agent_id: string })[]>(
+    `SELECT a.agent_id, r.status, r.created_at::text, r.duration_ms, r.items_processed, r.actions_created
+     FROM unnest($1::text[]) AS a(agent_id)
+     JOIN LATERAL (
+       SELECT status, created_at, duration_ms, items_processed, actions_created
+       FROM agent_runs
+       WHERE agent_id = a.agent_id AND tenant_id = $2
+       ORDER BY created_at DESC LIMIT 1
+     ) r ON true`,
+    agentIds, tenantId,
   ).catch(() => []);
-  return rows[0] ?? null;
+  return new Map(rows.map(({ agent_id, ...run }) => [agent_id, run]));
 }
 
-async function agent7dStats(agentId: string, tenantId: string) {
-  const rows = await prisma.$queryRawUnsafe<{
-    runs: number; items_processed: number; actions_created: number;
-  }[]>(
-    `SELECT COUNT(*)::int AS runs,
+async function agent7dStats(agentIds: string[], tenantId: string): Promise<Map<string, Stats7d>> {
+  const rows = await prisma.$queryRawUnsafe<(Stats7d & { agent_id: string })[]>(
+    `SELECT agent_id,
+            COUNT(*)::int AS runs,
             COALESCE(SUM(items_processed),0)::int AS items_processed,
-            COALESCE(SUM(actions_created),0)::int AS actions_created
+            COALESCE(SUM(actions_created),0)::int AS actions_created,
+            COALESCE(AVG(duration_ms),0)::int AS avg_ms
      FROM agent_runs
-     WHERE agent_id = $1 AND tenant_id = $2 AND created_at >= NOW() - INTERVAL '7 days'`,
-    agentId, tenantId,
-  ).catch(() => [{ runs: 0, items_processed: 0, actions_created: 0 }]);
-  return rows[0] ?? { runs: 0, items_processed: 0, actions_created: 0 };
+     WHERE agent_id = ANY($1::text[]) AND tenant_id = $2 AND created_at >= NOW() - INTERVAL '7 days'
+     GROUP BY agent_id`,
+    agentIds, tenantId,
+  ).catch(() => []);
+  return new Map(rows.map(({ agent_id, ...stats }) => [agent_id, stats]));
 }
+
+const NO_STATS: Stats7d = { runs: 0, items_processed: 0, actions_created: 0, avg_ms: 0 };
 
 // ── Pending items per agent ────────────────────────────────────────────────────
 // route_optimisation_results / driver_coaching_plans / demand_forecasts have no
@@ -74,46 +91,25 @@ function forecastPendingCount(): number {
 }
 
 // ── Conversational stats ───────────────────────────────────────────────────────
-async function whatsAppStats(tenantId: string) {
-  // agent_runs schema: actions_created = resolved ? 1 : 0, items_processed = 1 per message
-  // There is NO `direction` or `resolved` column — derive from what logInteraction() writes.
-  const rows = await prisma.$queryRawUnsafe<{
-    total: number; resolved: number; avg_ms: number;
-  }[]>(
-    `SELECT
-       COUNT(*)::int                             AS total,
-       COALESCE(SUM(actions_created),0)::int     AS resolved,
-       COALESCE(AVG(duration_ms),0)::int         AS avg_ms
-     FROM agent_runs
-     WHERE agent_id = 'whatsapp-agent' AND tenant_id = $1
-       AND created_at >= NOW() - INTERVAL '7 days'`,
-    tenantId,
-  ).catch(() => [{ total: 0, resolved: 0, avg_ms: 0 }]);
-  const s = rows[0] ?? { total: 0, resolved: 0, avg_ms: 0 };
-  // Every logged row is an inbound interaction (logInteraction is called per inbound message)
+// agent_runs schema for whatsapp-agent: one row per inbound message
+// (logInteraction), actions_created = resolved ? 1 : 0. There is NO
+// `direction` or `resolved` column — derive from what logInteraction() writes.
+function whatsAppStats(s: Stats7d) {
   return {
-    sessions: s.total,
-    resolved: s.resolved,
-    resolvedRate: s.total > 0 ? Math.round((s.resolved / s.total) * 100) : 0,
+    sessions: s.runs,
+    resolved: s.actions_created,
+    resolvedRate: s.runs > 0 ? Math.round((s.actions_created / s.runs) * 100) : 0,
     avgResponseMs: s.avg_ms,
   };
 }
 
-async function opsAssistantStats(tenantId: string) {
-  const rows = await prisma.$queryRawUnsafe<{
-    sessions: number; total_queries: number; tools_invoked: number; avg_ms: number;
-  }[]>(
-    `SELECT
-       COUNT(*)::int AS sessions,
-       COALESCE(SUM(items_processed),0)::int AS total_queries,
-       COALESCE(SUM(actions_created),0)::int AS tools_invoked,
-       COALESCE(AVG(duration_ms),0)::int AS avg_ms
-     FROM agent_runs
-     WHERE agent_id = 'ops-assistant' AND tenant_id = $1
-       AND created_at >= NOW() - INTERVAL '7 days'`,
-    tenantId,
-  ).catch(() => [{ sessions: 0, total_queries: 0, tools_invoked: 0, avg_ms: 0 }]);
-  return rows[0] ?? { sessions: 0, total_queries: 0, tools_invoked: 0, avg_ms: 0 };
+function opsAssistantStats(s: Stats7d) {
+  return {
+    sessions: s.runs,
+    total_queries: s.items_processed,
+    tools_invoked: s.actions_created,
+    avg_ms: s.avg_ms,
+  };
 }
 
 // ── Command strip KPIs — single query to reduce pool pressure ─────────────────
@@ -236,23 +232,23 @@ export async function GET(req: NextRequest) {
         anomaliesFlagged7d: 0,
         pendingApprovals: 0,
       }));
-      const waStats = await whatsAppStats(tenantId).catch(() => ({ sessions: 0, resolved: 0, resolvedRate: 0, avgResponseMs: 0 }));
-      const opsStats = await opsAssistantStats(tenantId).catch(() => ({ sessions: 0, total_queries: 0, tools_invoked: 0, avg_ms: 0 }));
+      const lastRuns = await agentLastRuns(BATCH_IDS, tenantId);
+      const stats = await agent7dStats([...BATCH_IDS, 'whatsapp-agent', 'ops-assistant'], tenantId);
+      const waStats = whatsAppStats(stats.get('whatsapp-agent') ?? NO_STATS);
+      const opsStats = opsAssistantStats(stats.get('ops-assistant') ?? NO_STATS);
 
-      const batchAgents = [];
-      for (const id of BATCH_IDS) {
-        const lastRun = await agentLastRun(id, tenantId).catch(() => null);
-        const stats7d = await agent7dStats(id, tenantId).catch(() => ({ runs: 0, items_processed: 0, actions_created: 0 }));
+      const batchAgents = BATCH_IDS.map((id) => {
+        const { runs, items_processed, actions_created } = stats.get(id) ?? NO_STATS;
         const pendingItems = id === 'route-optimiser' ? pendingRoutes : [];
-        batchAgents.push({
+        return {
           id,
           ...BATCH_META[id],
-          lastRun,
-          stats7d,
+          lastRun: lastRuns.get(id) ?? null,
+          stats7d: { runs, items_processed, actions_created },
           pendingCount: pendingItems.length,
           pendingItems,
-        });
-      }
+        };
+      });
 
       return NextResponse.json({
         commandStrip: {

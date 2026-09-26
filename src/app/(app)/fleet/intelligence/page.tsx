@@ -1,5 +1,6 @@
 'use client';
 import React, { useCallback, useEffect, useState } from 'react';
+import { runAgentAndWait } from '@/lib/agents/run-client';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface RiskScore {
@@ -157,16 +158,12 @@ export default function FleetIntelligencePage() {
     setRunResult(null);
     setError(null);
     try {
-      const res = await fetch('/api/agents/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          agent_id: 'predictive-maintenance',
-          event_type: 'manual.trigger',
-        }),
+      const { ok, timedOut, result: json } = await runAgentAndWait({
+        agent_id: 'predictive-maintenance',
+        event_type: 'manual.trigger',
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Agent run failed');
+      if (timedOut) throw new Error('Analysis is still running — refresh in a minute to see the results');
+      if (!ok) throw new Error(json.error || 'Agent run failed');
       setRunResult({
         itemsProcessed: json.itemsProcessed ?? 0,
         actionsCreated: json.actionsCreated ?? 0,
