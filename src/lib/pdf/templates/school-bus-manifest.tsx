@@ -34,7 +34,7 @@ export interface SchoolBusManifestPdfData {
   trip: {
     tripNumber: string;
     sessionType: string | null;
-    scheduledDeparture: string | Date;
+    scheduledDeparture: string | Date | null;
     routeName: string;
     schoolName: string | null;
   };
