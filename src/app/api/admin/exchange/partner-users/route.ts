@@ -7,8 +7,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { logAudit } from '@/lib/audit';
 import {
-  exchangeNotProvisionedResponse,
-  isExchangeNotProvisioned,
+  notProvisionedAware,
   PARTNER_ROLES,
   type PartnerRole,
 } from '@/lib/exchange/partner-auth';
@@ -17,25 +16,15 @@ export const runtime = 'nodejs';
 
 /**
  * Partner memberships: which users act for which transport partner in the
- * Exchange marketplace (partner_users). Platform administrators only — this
- * route is not in ADMIN_ROUTE_POLICY, so middleware requires SUPER_ADMIN.
+ * Exchange marketplace (partner_users). Platform administrators only
+ * (ADMIN_ROUTE_POLICY). Managed from /admin/exchange-partners.
  *
  * GET    /api/admin/exchange/partner-users?partnerId=…   list a partner's members
  * POST   /api/admin/exchange/partner-users               { partnerId, email, role? }
  * DELETE /api/admin/exchange/partner-users?id=…          remove a membership
  */
-/** Runs `fn`; a missing Exchange table becomes the 503 not-provisioned response. */
-async function notProvisionedAware<T>(fn: () => Promise<T>): Promise<{ value: T } | { response: NextResponse }> {
-  try {
-    return { value: await fn() };
-  } catch (err) {
-    if (isExchangeNotProvisioned(err)) return { response: exchangeNotProvisionedResponse() };
-    throw err;
-  }
-}
-
 export async function GET(req: NextRequest) {
-  // Middleware already requires SUPER_ADMIN for this unlisted admin route;
+  // Middleware already requires SUPER_ADMIN for this platform admin route;
   // checked again here so the handler is safe on its own.
   const authz = requireAuthorizedTenant({ headers: req.headers });
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -61,7 +50,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  // Middleware already requires SUPER_ADMIN for this unlisted admin route;
+  // Middleware already requires SUPER_ADMIN for this platform admin route;
   // checked again here so the handler is safe on its own.
   const authz = requireAuthorizedTenant({ headers: req.headers });
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -110,7 +99,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  // Middleware already requires SUPER_ADMIN for this unlisted admin route;
+  // Middleware already requires SUPER_ADMIN for this platform admin route;
   // checked again here so the handler is safe on its own.
   const authz = requireAuthorizedTenant({ headers: req.headers });
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });

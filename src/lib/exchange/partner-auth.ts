@@ -72,6 +72,16 @@ export function exchangeNotProvisionedResponse(): NextResponse {
   return NextResponse.json({ error, code }, { status });
 }
 
+/** Runs `fn`; a missing Exchange table becomes the 503 not-provisioned response. */
+export async function notProvisionedAware<T>(fn: () => Promise<T>): Promise<{ value: T } | { response: NextResponse }> {
+  try {
+    return { value: await fn() };
+  } catch (err) {
+    if (isExchangeNotProvisioned(err)) return { response: exchangeNotProvisionedResponse() };
+    throw err;
+  }
+}
+
 /** Runs `fn`; a missing Exchange table becomes a not-provisioned auth failure. */
 async function orNotProvisioned<T>(fn: () => Promise<T>): Promise<T | { ok: false; status: 503; error: string; code: string }> {
   try {

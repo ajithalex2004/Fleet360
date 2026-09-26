@@ -52,6 +52,9 @@ export const ADMIN_ROUTE_POLICY: Record<string, Partial<Record<Method, AdminLeve
   'events/outbox':                               { GET: 'platform' },
   // Which users act for which Exchange transport partner (partner_users).
   'exchange/partner-users':                      { GET: 'platform', POST: 'platform', DELETE: 'platform' },
+  // The Exchange's transport partners (platform-level records).
+  'exchange/partners':                           { GET: 'platform', POST: 'platform' },
+  'exchange/partners/[id]/services':             { PUT: 'platform' },
   'events/outbox/replay':                        { POST: 'platform' },
   'impersonate':                                 { POST: 'platform' },
   // Called while impersonating, when the session carries the target's role.
