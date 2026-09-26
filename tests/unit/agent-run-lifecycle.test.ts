@@ -19,6 +19,10 @@ vi.mock('@/lib/prisma', () => ({
   },
 }));
 vi.mock('@/lib/agents/schema', () => ({ ensureAgentSchema: vi.fn(async () => undefined) }));
+const rlsTenants = vi.hoisted(() => [] as string[]);
+vi.mock('@/lib/rls', () => ({
+  withTenantRls: vi.fn(async (_p: unknown, tenantId: string, fn: () => Promise<unknown>) => { rlsTenants.push(tenantId); return fn(); }),
+}));
 vi.mock('@/lib/agents/telemetry', async (orig) => ({
   ...(await orig<typeof import('@/lib/agents/telemetry')>()),
   updateDailyRoiMetrics: vi.fn(async () => undefined),
@@ -40,7 +44,7 @@ const headers = { 'content-type': 'application/json', 'x-tenant-id': TENANT, 'x-
 const event: AgentEvent = { tenant_id: TENANT, agent_id: 'finance-anomaly', event_type: 'manual.trigger' };
 
 beforeEach(() => {
-  sql.exec = []; sql.rows = [];
+  sql.exec = []; sql.rows = []; rlsTenants.length = 0;
   agentRun.mockReset();
   afterFn.mockReset();
   vi.spyOn(policyService, 'checkBudgetQuota').mockResolvedValue({ allowed: true } as never);
@@ -144,5 +148,6 @@ describe('GET /api/agents/run?run_id=', () => {
     });
     const { prisma } = await import('@/lib/prisma');
     expect(vi.mocked(prisma.$queryRawUnsafe).mock.calls.at(-1)?.slice(1)).toEqual([RUN_ID, TENANT]);
+    expect(rlsTenants).toEqual([TENANT]);
   });
 });

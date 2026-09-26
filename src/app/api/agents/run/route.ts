@@ -15,6 +15,7 @@ export const dynamic = 'force-dynamic';
  */
 import { after, NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { runWithTenantContext } from '@/lib/rls-scope';
 import { startFullScan, triggerFullScan } from '@/lib/agents/orchestrator';
 import { AgentId } from '@/lib/agents/types';
@@ -82,7 +83,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const rows = await prisma.$queryRawUnsafe<{
+    const rows = await withTenantRls(prisma, tenantId, () => prisma.$queryRawUnsafe<{
       id: string; agent_id: string; tenant_id: string; event_type: string; entity_id: string | null;
       status: string; duration_ms: number | null; items_processed: number | null;
       actions_created: number | null; output: unknown; error_text: string | null;
@@ -92,7 +93,7 @@ export async function GET(req: NextRequest) {
        FROM agent_runs WHERE id = $1::uuid AND tenant_id = $2`,
       runId,
       tenantId,
-    );
+    ));
     const row = rows[0];
     if (!row) {
       return NextResponse.json({ error: 'Run not found' }, { status: 404 });
