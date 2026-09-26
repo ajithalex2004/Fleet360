@@ -1,37 +1,32 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { MarketplaceService } from '@/lib/exchange/marketplace-service';
+import { partnerAuthFailure, requirePartnerContext } from '@/lib/exchange/partner-auth';
 
 export const runtime = 'nodejs';
 
 /**
  * GET /api/exchange/marketplace
- * Discovers open marketplace opportunities for the current partner session
+ * Open marketplace opportunities for the signed-in partner user's partner.
+ *
+ * The partner comes from the caller's partner_users membership. A partnerId
+ * in the header or query only chooses among the caller's own memberships.
+ * (It used to be trusted as given, with a fallback to the first approved
+ * partner, so anyone signed in could browse as any partner.)
  */
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers });
+  if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
+  const auth = await requirePartnerContext(req);
+  if (!auth.ok) return partnerAuthFailure(auth);
+
   try {
-    const partnerId = req.headers.get('x-partner-id') || req.nextUrl.searchParams.get('partnerId');
-
-    if (!partnerId) {
-      // Find default active marketplace partner for fallback
-      const defaultPartner = await prisma.transportPartner.findFirst({
-        where: { marketplaceStatus: 'APPROVED', operationalStatus: 'ACTIVE', deletedAt: null },
-      });
-      if (!defaultPartner) {
-        return NextResponse.json({ opportunities: [] });
-      }
-      const res = await MarketplaceService.listOpportunitiesForPartner(defaultPartner.id);
-      return NextResponse.json(res);
-    }
-
-    const res = await MarketplaceService.listOpportunitiesForPartner(partnerId);
-    return NextResponse.json(res);
+    const res = await MarketplaceService.listOpportunitiesForPartner(auth.ctx.partnerId);
+    return NextResponse.json({ ...res, partner: { partnerId: auth.ctx.partnerId, legalName: auth.ctx.legalName } });
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Failed to fetch marketplace opportunities' },
-      { status: 500 }
-    );
+    console.error('[exchange/marketplace GET]', err);
+    return NextResponse.json({ error: 'Failed to fetch marketplace opportunities' }, { status: 500 });
   }
 }

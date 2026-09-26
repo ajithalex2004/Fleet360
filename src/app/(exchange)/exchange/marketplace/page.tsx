@@ -27,12 +27,17 @@ export default function MarketplaceOpportunityFeedPage() {
   const [quoteAmount, setQuoteAmount] = useState('');
   const [quoteNotes, setQuoteNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchOpportunities() {
       try {
         const res = await fetch('/api/exchange/marketplace');
-        const json = await res.json();
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setLoadError(json.error ?? 'Could not load the marketplace.');
+          return;
+        }
         if (json.opportunities) setOpportunities(json.opportunities);
       } catch {
         // Fallback
@@ -54,11 +59,10 @@ export default function MarketplaceOpportunityFeedPage() {
 
     setSubmitting(true);
     try {
-      const res = await fetch('/api/exchange/jobs', {
+      const res = await fetch('/api/exchange/jobs/quotes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'SUBMIT_QUOTE',
           requestId: selectedOpp.outsourceRequestId,
           amount: parseFloat(quoteAmount),
           notes: quoteNotes,
@@ -119,6 +123,12 @@ export default function MarketplaceOpportunityFeedPage() {
           ))}
         </div>
       </div>
+
+      {loadError && (
+        <div className="rounded-2xl border border-amber-700 bg-amber-950/40 px-4 py-3 text-xs text-amber-300">
+          {loadError}
+        </div>
+      )}
 
       {/* Opportunities Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

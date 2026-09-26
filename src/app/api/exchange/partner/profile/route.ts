@@ -4,27 +4,53 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
+import { runAsTenant } from '@/lib/rls-scope';
 import { PartnerService } from '@/lib/exchange/partner-service';
+import {
+  partnerAuthFailure,
+  PROFILE_ROLES,
+  requirePartnerContext,
+  resolvePartnerViewer,
+} from '@/lib/exchange/partner-auth';
 
 export const runtime = 'nodejs';
 
 /**
  * GET /api/exchange/partner/profile?partnerId=...
+ *   A partner member gets its own partner's profile. Buyer staff (the
+ *   outsourcing partner directory) get a partner in their tenant's partner
+ *   network, the first one when none is named.
  * PUT /api/exchange/partner/profile
+ *   A PARTNER_ADMIN updates its own partner's company details.
+ *
+ * Both used to take partnerId from the request (GET fell back to the first
+ * partner in the database), so anyone signed in could read or edit any
+ * partner.
  */
-// Prisma P2021: "The table ... does not exist in the current database".
-// Most Fleet360 Exchange tables (partner capabilities, service areas,
-// vehicles, drivers, compliance documents, scorecards, ...) are modeled in
-// schema.prisma but were never migrated — see migration
-// 20260910000035_add_exchange_partner_settlement_tables. Until they are,
-// answer with a clear error instead of an unhandled 500 with an empty body.
+
+// Prisma P2021: "The table ... does not exist in the current database". Most
+// Exchange tables were never migrated before
+// 20260926120000_add_remaining_exchange_partner_tables; answer with a clear
+// error rather than an unhandled 500 with an empty body.
 function isMissingTable(err: unknown): boolean {
   return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2021';
 }
 
 export async function GET(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers });
+  if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
+
   try {
-    return await getProfile(req);
+    const viewer = await resolvePartnerViewer(req, authz.tenantId);
+    if (!viewer.ok) return partnerAuthFailure(viewer);
+    if (!viewer.partnerId) return NextResponse.json({ partner: null });
+
+    // Partner master data is platform-level; access was decided above.
+    const partner = await runAsTenant('*', () => PartnerService.getPartnerProfile(viewer.partnerId as string));
+    if (!partner) return NextResponse.json({ error: 'Partner not found' }, { status: 404 });
+
+    return NextResponse.json({ partner });
   } catch (err) {
     if (isMissingTable(err)) {
       return NextResponse.json(
@@ -37,56 +63,32 @@ export async function GET(req: NextRequest) {
   }
 }
 
-async function getProfile(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const partnerId = searchParams.get('partnerId');
-
-  if (!partnerId) {
-    // Fetch first available partner or return placeholder for testing
-    const partner = await prisma.transportPartner.findFirst({
-      where: { deletedAt: null },
-      include: {
-        capabilities: true,
-        serviceAreas: true,
-        vehicles: true,
-        drivers: true,
-        complianceDocuments: true,
-      },
-    });
-    return NextResponse.json({ partner });
-  }
-
-  const partner = await PartnerService.getPartnerProfile(partnerId);
-  if (!partner) {
-    return NextResponse.json({ error: 'Partner not found' }, { status: 404 });
-  }
-
-  return NextResponse.json({ partner });
-}
-
 export async function PUT(req: NextRequest) {
+  const authz = requireAuthorizedTenant({ headers: req.headers });
+  if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
+  const auth = await requirePartnerContext(req, { roles: PROFILE_ROLES });
+  if (!auth.ok) return partnerAuthFailure(auth);
+
   try {
     const rawBody = await req.json().catch(() => ({}));
     const body = stripTenantOwnershipFields(rawBody);
-    const { partnerId, legalName, tradeName, address, city, primaryContactName, primaryContactEmail, primaryContactPhone } = body;
+    const { legalName, tradeName, address, city, primaryContactName, primaryContactEmail, primaryContactPhone } = body;
 
-    if (!partnerId) {
-      return NextResponse.json({ error: 'partnerId is required' }, { status: 400 });
-    }
-
-    const updated = await prisma.transportPartner.update({
-      where: { id: partnerId },
-      data: {
-        legalName,
-        tradeName,
-        address,
-        city,
-        primaryContactName,
-        primaryContactEmail,
-        primaryContactPhone,
-        updatedAt: new Date(),
-      },
-    });
+    const updated = await withPlatformAdmin(prisma, (tx) =>
+      tx.transportPartner.update({
+        where: { id: auth.ctx.partnerId },
+        data: {
+          legalName,
+          tradeName,
+          address,
+          city,
+          primaryContactName,
+          primaryContactEmail,
+          primaryContactPhone,
+          updatedAt: new Date(),
+        },
+      }),
+    );
 
     return NextResponse.json({ ok: true, partner: updated });
   } catch (err) {

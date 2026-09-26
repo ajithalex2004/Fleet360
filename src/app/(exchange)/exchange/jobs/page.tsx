@@ -452,14 +452,16 @@ function SubmitQuoteModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           requestId: request.id,
-          partnerId: 'dummy-partner-id', // Handled by API resolver or session
           amount: subtotal,
           vatAmount: vat,
           notes,
         }),
       });
 
-      if (!res.ok) throw new Error('Failed to submit quote');
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Failed to submit quote');
+      }
       onSubmitted();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Error submitting quote');
