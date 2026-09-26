@@ -22,6 +22,12 @@ import {
   ChevronRight,
   Radio,
 } from 'lucide-react';
+import {
+  PartnerMembershipProvider,
+  partnerInitials,
+  partnerRoleLabel,
+  usePartnerMembership,
+} from '@/components/exchange/PartnerMembershipContext';
 
 const NAV_ITEMS = [
   { href: '/exchange/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -34,7 +40,89 @@ const NAV_ITEMS = [
   { href: '/exchange/profile', label: 'Company Profile', icon: Building2 },
 ];
 
+const STATUS_STYLES: Record<string, { dot: string; pill: string }> = {
+  ACTIVE:      { dot: 'bg-emerald-400 animate-pulse', pill: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' },
+  SUSPENDED:   { dot: 'bg-amber-400',                 pill: 'bg-amber-500/15 text-amber-400 border-amber-500/30' },
+  BLACKLISTED: { dot: 'bg-rose-400',                  pill: 'bg-rose-500/15 text-rose-400 border-rose-500/30' },
+};
+
+/** Who the signed-in user acts for, from their partner membership. */
+function PartnerStatus() {
+  const state = usePartnerMembership();
+  const box = 'px-4 py-3 border-b border-slate-800/50 bg-slate-950/40';
+
+  if (state.status === 'loading') {
+    return (
+      <div className={box} aria-busy="true">
+        <div className="h-3 w-32 rounded bg-slate-800 animate-pulse" />
+        <div className="mt-1.5 h-2.5 w-24 rounded bg-slate-800/70 animate-pulse" />
+      </div>
+    );
+  }
+  if (state.status !== 'ok') {
+    const message =
+      state.status === 'none' ? 'Your account is not linked to a transport partner.'
+      : state.status === 'multiple' ? `You belong to ${state.partners.length} transport partners: ${state.partners.map((p) => p.legalName).join(', ')}.`
+      : state.message;
+    return (
+      <div className={box}>
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-amber-400" />
+          <span className="text-xs font-semibold text-amber-300">
+            {state.status === 'multiple' ? 'Several partners' : 'No partner'}
+          </span>
+        </div>
+        <div className="text-[10px] text-slate-500 mt-0.5">{message}</div>
+      </div>
+    );
+  }
+
+  const { partner } = state;
+  const style = STATUS_STYLES[partner.operationalStatus] ?? STATUS_STYLES.SUSPENDED;
+  return (
+    <div className={box}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className={`w-2 h-2 shrink-0 rounded-full ${style.dot}`} />
+          <span className="truncate text-xs font-semibold text-slate-300" title={partner.legalName}>{partner.legalName}</span>
+        </div>
+        <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full border ${style.pill}`}>
+          {partner.operationalStatus}
+        </span>
+      </div>
+      <div className="text-[10px] text-slate-500 mt-0.5">
+        Code: {partner.partnerCode}{partner.city ? ` · ${partner.city}` : ''} · {partnerRoleLabel(partner.role)}
+      </div>
+      {partner.marketplaceStatus !== 'APPROVED' && (
+        <div className="text-[10px] text-amber-400 mt-0.5">Marketplace: {partner.marketplaceStatus.replace(/_/g, ' ').toLowerCase()}</div>
+      )}
+    </div>
+  );
+}
+
+function PartnerAvatar() {
+  const state = usePartnerMembership();
+  const label = state.status === 'ok' ? partnerInitials(state.partner.legalName) : '–';
+  const title = state.status === 'ok' ? `${state.partner.legalName} · ${partnerRoleLabel(state.partner.role)}` : undefined;
+  return (
+    <div
+      title={title}
+      className="w-8 h-8 rounded-full bg-cyan-600/20 border border-cyan-500/40 text-cyan-300 font-bold flex items-center justify-center"
+    >
+      {label}
+    </div>
+  );
+}
+
 export default function ExchangeLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <PartnerMembershipProvider>
+      <ExchangeShell>{children}</ExchangeShell>
+    </PartnerMembershipProvider>
+  );
+}
+
+function ExchangeShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   return (
@@ -58,18 +146,7 @@ export default function ExchangeLayout({ children }: { children: React.ReactNode
           </div>
 
           {/* Partner Status Pill */}
-          <div className="px-4 py-3 border-b border-slate-800/50 bg-slate-950/40">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-xs font-semibold text-slate-300">ABC Transport LLC</span>
-              </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                ACTIVE
-              </span>
-            </div>
-            <div className="text-[10px] text-slate-500 mt-0.5">Code: ABC-DXB · Dubai, UAE</div>
-          </div>
+          <PartnerStatus />
 
           {/* Navigation Links */}
           <nav className="p-3 space-y-1">
@@ -120,9 +197,7 @@ export default function ExchangeLayout({ children }: { children: React.ReactNode
             <span className="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-mono">
               🇦🇪 UAE Dirham (AED)
             </span>
-            <div className="w-8 h-8 rounded-full bg-cyan-600/20 border border-cyan-500/40 text-cyan-300 font-bold flex items-center justify-center">
-              P1
-            </div>
+            <PartnerAvatar />
           </div>
         </header>
 

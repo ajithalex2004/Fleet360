@@ -9,19 +9,58 @@
 import React, { useEffect, useState } from 'react';
 import { ShieldCheck, Plus, CheckCircle2, AlertTriangle, FileText, X } from 'lucide-react';
 
+const REQUIRED_DOCS = [
+  { docType: 'TRADE_LICENSE',        label: 'Trade License' },
+  { docType: 'TAX_CERTIFICATE',      label: 'Tax Certificate (TRN)' },
+  { docType: 'COMMERCIAL_INSURANCE', label: 'Commercial Insurance' },
+];
+
+const EXPIRING_WITHIN_MS = 30 * 24 * 60 * 60 * 1000;
+
+interface ComplianceDoc { docType: string; docNumber?: string | null; expiryDate?: string | null; status?: string | null }
+
+/** The document's stored status, overridden by its expiry date when that has passed or is near. */
+function effectiveStatus(doc: ComplianceDoc): string {
+  const stored = doc.status || 'PENDING';
+  if (stored === 'REJECTED' || stored === 'PENDING' || !doc.expiryDate) return stored;
+  const left = new Date(doc.expiryDate).getTime() - Date.now();
+  if (left < 0) return 'EXPIRED';
+  if (left < EXPIRING_WITHIN_MS) return 'EXPIRING';
+  return stored;
+}
+
+/** The document of a type that stays valid longest (no expiry counts as longest). */
+function latestDoc(docs: ComplianceDoc[], docType: string): ComplianceDoc | undefined {
+  const expiry = (d: ComplianceDoc) => (d.expiryDate ? new Date(d.expiryDate).getTime() : Number.POSITIVE_INFINITY);
+  return docs.filter((d) => d.docType === docType).sort((a, b) => expiry(b) - expiry(a))[0];
+}
+
+function statusStyle(status: string): string {
+  if (status === 'VALID') return 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30';
+  if (status === 'EXPIRING' || status === 'PENDING') return 'bg-amber-500/15 text-amber-400 border-amber-500/30';
+  return 'bg-rose-500/15 text-rose-400 border-rose-500/30';
+}
+
 export default function ExchangeCompliancePage() {
   const [docs, setDocs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadDocs = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/exchange/partner/compliance').then((r) => r.json());
+      const r = await fetch('/api/exchange/partner/compliance');
+      const res = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setLoadError(res.error ?? 'Could not load your compliance documents.');
+        return;
+      }
+      setLoadError(null);
       setDocs(res.documents || []);
     } catch {
-      // Fallback
+      setLoadError('Could not load your compliance documents.');
     } finally {
       setLoading(false);
     }
@@ -62,38 +101,36 @@ export default function ExchangeCompliancePage() {
         </div>
       )}
 
-      {/* Mandatory Requirements Status Cards */}
+      {loadError && (
+        <div className="rounded-2xl border border-amber-700 bg-amber-950/40 px-4 py-3 text-xs text-amber-300">{loadError}</div>
+      )}
+
+      {/* Mandatory Requirements Status Cards — derived from the uploaded documents */}
+      {!loadError && (
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-1.5">
-          <div className="flex items-center justify-between">
-            <span className="font-bold text-white">UAE Trade License</span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/30">
-              VERIFIED
-            </span>
-          </div>
-          <p className="text-[11px] text-slate-400">Commercial transport license issued by DED Dubai.</p>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-1.5">
-          <div className="flex items-center justify-between">
-            <span className="font-bold text-white">Tax Certificate (TRN)</span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/30">
-              VERIFIED
-            </span>
-          </div>
-          <p className="text-[11px] text-slate-400">Federal Tax Authority TRN: 100-2938-4491-003.</p>
-        </div>
-
-        <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-1.5">
-          <div className="flex items-center justify-between">
-            <span className="font-bold text-white">Commercial Insurance</span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-bold border border-emerald-500/30">
-              VALID
-            </span>
-          </div>
-          <p className="text-[11px] text-slate-400">Fleet Passenger Comprehensive Liability Policy.</p>
-        </div>
+        {REQUIRED_DOCS.map((req) => {
+          const doc = latestDoc(docs, req.docType);
+          const status = doc ? effectiveStatus(doc) : 'MISSING';
+          return (
+            <div key={req.docType} className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-white">{req.label}</span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${statusStyle(status)}`}>
+                  {loading ? '…' : status}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                {loading
+                  ? 'Checking your documents…'
+                  : doc
+                    ? `${doc.docNumber ? `No. ${doc.docNumber}` : 'Uploaded'}${doc.expiryDate ? ` · expires ${new Date(doc.expiryDate).toLocaleDateString()}` : ''}`
+                    : 'Not uploaded yet.'}
+              </p>
+            </div>
+          );
+        })}
       </div>
+      )}
 
       {/* Documents List */}
       <div className="rounded-3xl bg-slate-900/60 border border-slate-800 overflow-hidden">
@@ -114,13 +151,13 @@ export default function ExchangeCompliancePage() {
                     <FileText className="w-4 h-4 text-cyan-400" />
                     <span>{d.docType}</span>
                   </td>
-                  <td className="p-4 text-slate-300 font-mono">{d.docNumber || 'CN-8849102'}</td>
+                  <td className="p-4 text-slate-300 font-mono">{d.docNumber || '—'}</td>
                   <td className="p-4 text-slate-400">
-                    {d.expiryDate ? new Date(d.expiryDate).toLocaleDateString() : 'Valid'}
+                    {d.expiryDate ? new Date(d.expiryDate).toLocaleDateString() : 'No expiry'}
                   </td>
                   <td className="p-4">
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
-                      {d.status || 'VALID'}
+                    <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold ${statusStyle(effectiveStatus(d))}`}>
+                      {effectiveStatus(d)}
                     </span>
                   </td>
                 </tr>
