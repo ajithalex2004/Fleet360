@@ -32,7 +32,8 @@ beforeEach(() => {
   create.mockImplementation(async (args: { data: Record<string, unknown> }) => ({ id: 'p1', legalName: args.data.legalName, partnerCode: args.data.partnerCode }));
   findMany.mockResolvedValue([
     { id: 'p1', legalName: 'Gulf Coaches LLC', partnerCode: 'GULF-DXB', _count: { users: 2 },
-      capabilities: [{ domain: 'PASSENGER_TRANSPORT' }, { domain: 'PASSENGER_TRANSPORT' }, { domain: 'LIMOUSINE' }] },
+      capabilities: [{ domain: 'PASSENGER_TRANSPORT' }, { domain: 'PASSENGER_TRANSPORT' }, { domain: 'LIMOUSINE' }],
+      complianceDocuments: [{ id: 'd1' }] },
   ]);
 });
 
@@ -42,12 +43,12 @@ describe('GET /api/admin/exchange/partners', () => {
     expect(findMany).not.toHaveBeenCalled();
   });
 
-  it('lists live partners with their member count and approved service areas', async () => {
+  it('lists live partners with their member count, approved service areas and documents to review', async () => {
     const res = await get('SUPER_ADMIN');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ partners: [{
       id: 'p1', legalName: 'Gulf Coaches LLC', partnerCode: 'GULF-DXB', memberCount: 2,
-      approvedDomains: ['PASSENGER_TRANSPORT', 'LIMOUSINE'],
+      approvedDomains: ['PASSENGER_TRANSPORT', 'LIMOUSINE'], pendingDocuments: 1,
     }] });
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { deletedAt: null } }));
   });

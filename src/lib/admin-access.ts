@@ -55,6 +55,8 @@ export const ADMIN_ROUTE_POLICY: Record<string, Partial<Record<Method, AdminLeve
   // The Exchange's transport partners (platform-level records).
   'exchange/partners':                           { GET: 'platform', POST: 'platform' },
   'exchange/partners/[id]/services':             { PUT: 'platform' },
+  'exchange/partners/[id]/compliance':           { GET: 'platform' },
+  'exchange/partners/[id]/compliance/[id]':      { PATCH: 'platform' },
   'events/outbox/replay':                        { POST: 'platform' },
   'impersonate':                                 { POST: 'platform' },
   // Called while impersonating, when the session carries the target's role.
