@@ -6,7 +6,11 @@ import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { PdfDocumentService } from '@/lib/exchange/pdf-service';
-import { canSeePartnerRecord } from '@/lib/exchange/partner-auth';
+import {
+  canSeePartnerRecord,
+  exchangeNotProvisionedResponse,
+  isExchangeNotProvisioned,
+} from '@/lib/exchange/partner-auth';
 
 export const runtime = 'nodejs';
 
@@ -80,6 +84,7 @@ export async function GET(
       },
     });
   } catch (err) {
+    if (isExchangeNotProvisioned(err)) return exchangeNotProvisionedResponse();
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Failed to generate POD PDF' },
       { status: 500 }

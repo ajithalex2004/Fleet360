@@ -3,7 +3,12 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { MarketplaceService } from '@/lib/exchange/marketplace-service';
-import { partnerAuthFailure, requirePartnerContext } from '@/lib/exchange/partner-auth';
+import {
+  exchangeNotProvisionedResponse,
+  isExchangeNotProvisioned,
+  partnerAuthFailure,
+  requirePartnerContext,
+} from '@/lib/exchange/partner-auth';
 
 export const runtime = 'nodejs';
 
@@ -26,6 +31,7 @@ export async function GET(req: NextRequest) {
     const res = await MarketplaceService.listOpportunitiesForPartner(auth.ctx.partnerId);
     return NextResponse.json({ ...res, partner: { partnerId: auth.ctx.partnerId, legalName: auth.ctx.legalName } });
   } catch (err) {
+    if (isExchangeNotProvisioned(err)) return exchangeNotProvisionedResponse();
     console.error('[exchange/marketplace GET]', err);
     return NextResponse.json({ error: 'Failed to fetch marketplace opportunities' }, { status: 500 });
   }

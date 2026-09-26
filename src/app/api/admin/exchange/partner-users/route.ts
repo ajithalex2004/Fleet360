@@ -6,7 +6,12 @@ import { isSuperAdmin } from '@/lib/admin-access';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { logAudit } from '@/lib/audit';
-import { PARTNER_ROLES, type PartnerRole } from '@/lib/exchange/partner-auth';
+import {
+  exchangeNotProvisionedResponse,
+  isExchangeNotProvisioned,
+  PARTNER_ROLES,
+  type PartnerRole,
+} from '@/lib/exchange/partner-auth';
 
 export const runtime = 'nodejs';
 
@@ -19,6 +24,16 @@ export const runtime = 'nodejs';
  * POST   /api/admin/exchange/partner-users               { partnerId, email, role? }
  * DELETE /api/admin/exchange/partner-users?id=…          remove a membership
  */
+/** Runs `fn`; a missing Exchange table becomes the 503 not-provisioned response. */
+async function notProvisionedAware<T>(fn: () => Promise<T>): Promise<{ value: T } | { response: NextResponse }> {
+  try {
+    return { value: await fn() };
+  } catch (err) {
+    if (isExchangeNotProvisioned(err)) return { response: exchangeNotProvisionedResponse() };
+    throw err;
+  }
+}
+
 export async function GET(req: NextRequest) {
   // Middleware already requires SUPER_ADMIN for this unlisted admin route;
   // checked again here so the handler is safe on its own.
@@ -28,7 +43,7 @@ export async function GET(req: NextRequest) {
   const partnerId = req.nextUrl.searchParams.get('partnerId');
   if (!partnerId) return NextResponse.json({ error: 'partnerId is required' }, { status: 400 });
 
-  const members = await withPlatformAdmin(prisma, (tx) =>
+  const membersRun = await notProvisionedAware(() => withPlatformAdmin(prisma, (tx) =>
     tx.partnerUser.findMany({
       where: { partnerId },
       select: {
@@ -39,7 +54,9 @@ export async function GET(req: NextRequest) {
       },
       orderBy: { createdAt: 'asc' },
     }),
-  );
+  ));
+  if ('response' in membersRun) return membersRun.response;
+  const members = membersRun.value;
   return NextResponse.json({ members });
 }
 
@@ -61,7 +78,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `role must be one of ${PARTNER_ROLES.join(', ')}` }, { status: 400 });
   }
 
-  const result = await withPlatformAdmin(prisma, async (tx) => {
+  const resultRun = await notProvisionedAware(() => withPlatformAdmin(prisma, async (tx) => {
     const partner = await tx.transportPartner.findFirst({ where: { id: partnerId, deletedAt: null }, select: { id: true, legalName: true } });
     if (!partner) return { status: 404 as const, error: 'Transport partner not found' };
     const user = await tx.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' } }, select: { id: true, email: true, isActive: true } });
@@ -75,7 +92,9 @@ export async function POST(req: NextRequest) {
       select: { id: true, partnerId: true, userId: true, role: true },
     });
     return { status: 200 as const, membership, partner, user };
-  });
+  }));
+  if ('response' in resultRun) return resultRun.response;
+  const result = resultRun.value;
 
   if ('error' in result) return NextResponse.json({ error: result.error }, { status: result.status });
 
@@ -99,9 +118,13 @@ export async function DELETE(req: NextRequest) {
   const id = req.nextUrl.searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
 
-  const removed = await withPlatformAdmin(prisma, (tx) =>
-    tx.partnerUser.delete({ where: { id }, select: { id: true, partnerId: true, userId: true } }).catch(() => null),
-  );
+  const removedRun = await notProvisionedAware(() => withPlatformAdmin(prisma, async (tx) => {
+    const membership = await tx.partnerUser.findUnique({ where: { id }, select: { id: true, partnerId: true, userId: true } });
+    if (membership) await tx.partnerUser.delete({ where: { id } });
+    return membership;
+  }));
+  if ('response' in removedRun) return removedRun.response;
+  const removed = removedRun.value;
   if (!removed) return NextResponse.json({ error: 'Membership not found' }, { status: 404 });
 
   await logAudit({
