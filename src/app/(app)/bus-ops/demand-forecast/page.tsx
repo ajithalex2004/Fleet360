@@ -16,6 +16,7 @@ import {
   Bus,
 } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
+import { runAgentAndWait } from '@/lib/agents/run-client';
 
 const SESSION_DEFAULT_TIME: Record<string, string> = {
   MORNING: '07:00',
@@ -115,14 +116,9 @@ export default function DemandForecastPage() {
     setAgentRunning(true);
     setError(null);
     try {
-      const res = await fetch('/api/agents/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agent_id: 'staff-transport-demand' }),
-      });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.error ?? 'Agent execution failed');
+      const { ok, timedOut, result } = await runAgentAndWait({ agent_id: 'staff-transport-demand' });
+      if (!ok && !timedOut) {
+        throw new Error(result?.error ?? 'Agent execution failed');
       }
       await load();
     } catch (e) {

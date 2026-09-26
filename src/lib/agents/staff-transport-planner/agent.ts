@@ -284,12 +284,16 @@ async function fetchAvailableVehicles(tenantId: string): Promise<FleetVehicleSpe
 async function runStaffTransportPlanner(event: AgentEvent): Promise<AgentRunResult> {
   const t0 = Date.now();
   const tenantId = event.tenant_id;
-  const runId = crypto.randomUUID();
+  // Under the orchestrator, which owns the agent_runs row, run_id is set and
+  // this agent leaves the row alone. Called directly (e.g. the eval runner),
+  // it logs its own.
+  const runId = event.run_id ?? crypto.randomUUID();
+  const ownsRunRow = !event.run_id;
 
   await ensureAgentSchema();
 
   // Log execution start
-  await prisma.$executeRawUnsafe(
+  if (ownsRunRow) await prisma.$executeRawUnsafe(
     `INSERT INTO agent_runs (id, agent_id, tenant_id, event_type, status, created_at)
      VALUES ($1::uuid, 'staff-transport-planner', $2, $3, 'RUNNING', NOW())`,
     runId,
@@ -340,7 +344,7 @@ async function runStaffTransportPlanner(event: AgentEvent): Promise<AgentRunResu
   const durationMs = Date.now() - t0;
 
   // Finalize agent run record
-  await prisma.$executeRawUnsafe(
+  if (ownsRunRow) await prisma.$executeRawUnsafe(
     `UPDATE agent_runs SET
        status          = 'COMPLETED',
        items_processed = $1,

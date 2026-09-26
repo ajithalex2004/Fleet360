@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { PartnerService } from '@/lib/exchange/partner-service';
@@ -11,7 +12,32 @@ export const runtime = 'nodejs';
  * GET /api/exchange/partner/profile?partnerId=...
  * PUT /api/exchange/partner/profile
  */
+// Prisma P2021: "The table ... does not exist in the current database".
+// Most Fleet360 Exchange tables (partner capabilities, service areas,
+// vehicles, drivers, compliance documents, scorecards, ...) are modeled in
+// schema.prisma but were never migrated — see migration
+// 20260910000035_add_exchange_partner_settlement_tables. Until they are,
+// answer with a clear error instead of an unhandled 500 with an empty body.
+function isMissingTable(err: unknown): boolean {
+  return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2021';
+}
+
 export async function GET(req: NextRequest) {
+  try {
+    return await getProfile(req);
+  } catch (err) {
+    if (isMissingTable(err)) {
+      return NextResponse.json(
+        { error: 'The partner exchange is not set up in this environment yet.', code: 'EXCHANGE_NOT_PROVISIONED' },
+        { status: 503 },
+      );
+    }
+    console.error('[exchange/partner/profile GET]', err);
+    return NextResponse.json({ error: 'Failed to load partner profile' }, { status: 500 });
+  }
+}
+
+async function getProfile(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const partnerId = searchParams.get('partnerId');
 
