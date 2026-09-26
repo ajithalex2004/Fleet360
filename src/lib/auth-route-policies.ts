@@ -92,11 +92,9 @@ export const PUBLIC_PREFIXES: readonly string[] = [
   // exists for — every gateway POST was 401'd by the middleware before
   // reaching the signature check.
   '/api/bus-ops/gateway/',
-  // Staff PWA push — the public-key endpoint is unauthenticated (the key
-  // is meant to be public), the subscribe endpoint identifies the staff
-  // member by employeeId (no admin session needed for the rider app),
-  // and the test/scheduler endpoints are protected by PUSH_CRON_SECRET
-  // rather than the operator session.
+  // Push handlers authenticate themselves: signed operator session linked
+  // to staff for subscriptions/tests, scheduler secret or admin session for
+  // scheduling. Only the VAPID public key is anonymous.
   '/api/push/',
   // System cron jobs (auto-close stale trips, etc.) — protected by
   // CRON_SECRET inside the handler (Vercel Cron sends it as a
@@ -201,3 +199,21 @@ export function topLevelSegment(pathname: string): string {
   const slash = trimmed.indexOf('/');
   return slash === -1 ? `/${trimmed}` : `/${trimmed.slice(0, slash)}`;
 }
+
+/** Exact POST-only scheduler targets. A cron credential is not an API session. */
+export const CRON_SESSION_BYPASS_PATHS: readonly string[] = [
+  '/api/leasing/fuel/sweep-bill',
+  '/api/leasing/traffic-fines/sweep-bill',
+  '/api/leasing/documents/sweep-expiry',
+  '/api/leasing/insurance/sweep-expiry',
+  '/api/leasing/mileage-readings/sweep-stale',
+  '/api/leasing/inquiries/sweep-followups',
+  '/api/leasing/returns/sweep-orphaned-handovers',
+  '/api/rental/bookings/sweep-penalties',
+  '/api/school-bus/attendance/sweep-no-show',
+  '/api/bus-ops/driver-performance/recompute',
+  '/api/bus-ops/schedules/sweep-waitlist',
+  '/api/bus-ops/schedules/sweep-sla',
+  '/api/documents/intelligence/cron/lifecycle-sweep',
+  '/api/service-tickets/sla/sweep',
+];

@@ -43,29 +43,27 @@ describe('run-scheduler auth', () => {
   it('refuses to run in production when the secret is unset', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     const res = await callRoute(post());
-    expect(res.status).toBe(503);
-    // 503, not 401/403 — the deployment is misconfigured, not the caller.
-    expect(await res.json()).toMatchObject({ error: expect.stringContaining('PUSH_CRON_SECRET') });
+    expect(res.status).toBe(401);
     expect(runTripReminders).not.toHaveBeenCalled();
   });
 
-  it('still allows an unset secret outside production', async () => {
+  it('also rejects an unset secret outside production', async () => {
     const res = await callRoute(post());
-    expect(res.status).toBe(200);
-    expect(runTripReminders).toHaveBeenCalledOnce();
+    expect(res.status).toBe(401);
+    expect(runTripReminders).not.toHaveBeenCalled();
   });
 
   it('rejects a wrong secret even outside production', async () => {
     vi.stubEnv('PUSH_CRON_SECRET', 'right');
     const res = await callRoute(post({ authorization: 'Bearer wrong' }));
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(401);
     expect(runTripReminders).not.toHaveBeenCalled();
   });
 
   it('rejects a missing secret when one is configured', async () => {
     vi.stubEnv('PUSH_CRON_SECRET', 'right');
     const res = await callRoute(post());
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(401);
     expect(runTripReminders).not.toHaveBeenCalled();
   });
 
@@ -87,12 +85,11 @@ describe('run-scheduler auth', () => {
     expect(res.status).toBe(200);
   });
 
-  it('lets an operator session through without the secret', async () => {
+  it('does not mistake a caller tenant header for an operator session', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     const res = await callRoute(post({ 'x-tenant-id': 'tenant-1' }));
-    expect(res.status).toBe(200);
-    // Scoped to that tenant, not an all-tenant sweep.
-    expect(runTripReminders).toHaveBeenCalledWith('tenant-1');
+    expect(res.status).toBe(401);
+    expect(runTripReminders).not.toHaveBeenCalled();
   });
 
   it('passes null tenantId for an all-tenant sweep when authorised by secret', async () => {

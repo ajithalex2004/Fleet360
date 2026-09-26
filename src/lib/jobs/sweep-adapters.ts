@@ -14,7 +14,10 @@ import type { JobContext, JobResult } from '@/lib/jobs/registry';
 
 async function forwardToRoute(path: string, ctx: JobContext, opts: { secretEnvVar?: string } = {}): Promise<JobResult> {
   const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-  const qs   = ctx.searchParams.toString();
+  const params = new URLSearchParams(ctx.searchParams);
+  if (ctx.tenantId) params.set('tenantId', ctx.tenantId);
+  else params.delete('tenantId');
+  const qs   = params.toString();
   const url  = `${base}${path}${qs ? '?' + qs : ''}`;
 
   const headers: Record<string, string> = {

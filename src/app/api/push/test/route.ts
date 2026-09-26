@@ -15,31 +15,23 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { sendPush } from '@/lib/push/server';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { getVerifiedRequestSession } from '@/lib/tenant-session';
+import { resolvePushStaff } from '@/lib/push/auth';
 export async function POST(req: NextRequest) {
 
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
-  if (!authz.ok) {
-    return NextResponse.json({ error: authz.error }, { status: authz.status });
-  }
-  const { tenantId } = authz;
+  const session = await getVerifiedRequestSession(req);
+  if (!session) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  const { tenantId } = session;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     let body: { employeeId?: string };
       try { const bodyRaw = await req.json(); body = stripTenantOwnershipFields(bodyRaw); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
 
-      if (!body.employeeId) return NextResponse.json({ error: 'employeeId required' }, { status: 400 });
-
-      // The PWA identifies the staff member by employeeId (no admin session).
-      // /api/push/ is in PUBLIC_PREFIXES so the middleware skips auth and doesn't
-      // set x-tenant-id — we have to look up the tenant from the staff record.
-      const staff = await tx.staffMember.findFirst({
-        where: { employeeId: body.employeeId, deletedAt: null },
-        select: { id: true, tenantId: true },
-      });
-      if (!staff) return NextResponse.json({ error: 'Staff member not found' }, { status: 404 });
-      const tenantId = staff.tenantId;
-      if (!tenantId) return NextResponse.json({ error: 'Cannot determine tenant' }, { status: 400 });
+      const staff = await resolvePushStaff(tx, session);
+      if (!staff || (body.employeeId && body.employeeId !== staff.employeeId)) {
+        return NextResponse.json({ error: 'Staff identity not authorized' }, { status: 403 });
+      }
 
       const subs = await tx.pushSubscription.findMany({
         where: { tenantId, staffMemberId: staff.id, revokedAt: null },
@@ -77,4 +69,3 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ sent, pruned, total: subs.length, results });
   });
 }
-

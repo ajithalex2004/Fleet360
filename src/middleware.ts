@@ -6,8 +6,8 @@
  *  2. Apply per-tenant sliding-window rate limiting
  *  3. Guard API routes (return 401 JSON) and UI routes (redirect to /login)
  *  4. Allow public routes to pass through without verification
- *  5. Remove client-sent identity headers from every request that isn't
- *     from the platform's own scheduler (src/lib/identity-headers.ts)
+ *  5. Remove client-sent identity headers from every request; only verified
+ *     sessions or narrowly scoped scheduler requests may inject identity.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -18,6 +18,7 @@ import {
   PUBLIC_EXACT,
   PUBLIC_PREFIXES,
   PROTECTED_UI_PREFIXES,
+  CRON_SESSION_BYPASS_PATHS,
 } from '@/lib/auth-route-policies';
 import { computeRateLimit, getRateLimiter } from '@/lib/rate-limit-scope';
 import { stripIdentityHeaders, withVerifiedIdentity } from '@/lib/identity-headers';
@@ -67,7 +68,7 @@ function isPublicRoute(pathname: string): boolean {
 
 /**
  * True when the request carries `Authorization: Bearer <CRON_SECRET>`.
- * Such a request bypasses the session requirement on API routes: the job
+ * Such a request may bypass the session requirement on allowlisted POST routes: the job
  * scheduler (/api/jobs/run → sweep-adapters.ts forwardToRoute()) calls
  * routes like /api/leasing/documents/sweep-expiry with an internal fetch()
  * that carries no session cookie, so without this they would be 401'd
@@ -147,15 +148,19 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // src/lib/identity-headers.ts.
   const sanitizedHeaders = stripIdentityHeaders(request.headers);
 
-  // 0. System cron — a caller holding CRON_SECRET is the platform itself
-  // (the job scheduler forwards x-tenant-id to scope a run to one tenant,
-  // see src/lib/jobs/sweep-adapters.ts), so its headers pass unchanged.
-  // Checked before the public-route branch so that trust also applies to
-  // public cron/job routes. Scoped to /api/ and to an exact match against
-  // the server's own CRON_SECRET; if that env var is unset this never
-  // matches.
-  if (pathname.startsWith('/api/') && hasValidCronSecret(request)) {
-    return NextResponse.next();
+  // Scheduler credentials authorize only exact POST sweep targets, never
+  // arbitrary APIs or caller-controlled user/role impersonation.
+  if (request.method === 'POST' && CRON_SESSION_BYPASS_PATHS.includes(pathname) && hasValidCronSecret(request)) {
+    const target = request.headers.get('x-tenant-id') ?? request.nextUrl.searchParams.get('tenantId');
+    if (target) {
+      if (!/^[a-zA-Z0-9_-]+$/.test(target)) {
+        return NextResponse.json({ error: 'Invalid tenant selector' }, { status: 400 });
+      }
+      sanitizedHeaders.set('x-tenant-id', target);
+      sanitizedHeaders.set('x-user-id', 'system:cron');
+      sanitizedHeaders.set('x-user-role', 'SYSTEM_JOB');
+    }
+    return NextResponse.next({ request: { headers: sanitizedHeaders } });
   }
 
   // 0b. Stored files. /uploads/* used to be served straight from public/,
@@ -186,6 +191,15 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // are removed; driver-app requests get the identity of their verified
   // session cookie, if they have one.
   if (isPublicRoute(pathname)) {
+    // Preserve legacy targeting as an untrusted selector. Public job handlers
+    // must authenticate independently before honoring it.
+    if (pathname.startsWith('/api/jobs/') || pathname.startsWith('/api/cron/') ||
+        pathname === '/api/push/run-scheduler') {
+      const target = request.headers.get('x-tenant-id');
+      if (target && !sanitizedHeaders.has('x-requested-tenant-id')) {
+        sanitizedHeaders.set('x-requested-tenant-id', target);
+      }
+    }
     if (pathname.startsWith('/api/driver-app/')) {
       const driverSession = await verifyDriverAppSession(request);
       if (driverSession) {

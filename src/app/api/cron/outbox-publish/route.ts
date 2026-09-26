@@ -8,7 +8,7 @@
  * Intended for external schedulers (Vercel cron, k8s CronJob, etc).
  * For a long-lived dev worker, see scripts/outbox-publisher-dev.ts.
  *
- * Auth: CRON_SECRET Bearer OR authenticated operator session
+ * Auth: CRON_SECRET Bearer OR verified SUPER_ADMIN session (global drain).
  *       (see isJobAuthorized in @/lib/jobs/registry).
  *
  * Query params:
@@ -26,7 +26,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { tick } from '@/lib/outbox/publisher';
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { authorizeJobRequest } from '@/lib/jobs/request-auth';
 // Side-effect import: registers all in-process consumers with the
 // outbox registry. Must be present for tick() to find handlers.
 import '@/lib/finance/consumers';
@@ -34,26 +34,10 @@ import '@/lib/finance/consumers';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-function isAuthorized(request: NextRequest): boolean {
-  // This is a public route, so middleware injects no session here. It
-  // strips any client-sent x-tenant-id and only lets the header through
-  // from a CRON_SECRET caller (src/lib/identity-headers.ts), so its
-  // presence means the platform scheduler.
-  if (request.headers.get('x-tenant-id')) return true;
-  const expected = process.env.CRON_SECRET;
-  if (!expected) {
-    // In dev, allow unauthenticated when no secret is set.
-    return process.env.NODE_ENV !== 'production';
-  }
-  const got = request.headers
-    .get('authorization')
-    ?.replace(/^Bearer\s+/i, '');
-  return got === expected;
-}
-
 async function handle(request: NextRequest) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = await authorizeJobRequest(request, { secretName: 'CRON_SECRET', global: true });
+  if (!auth.ok) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
   const sp = request.nextUrl.searchParams;

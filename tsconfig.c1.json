@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "incremental": false },
+  "include": [
+    "src/middleware.ts",
+    "src/lib/auth-route-policies.ts",
+    "src/lib/tenant-session.ts",
+    "src/lib/jobs/registry.ts",
+    "src/lib/jobs/request-auth.ts",
+    "src/lib/jobs/sweep-adapters.ts",
+    "src/lib/push/auth.ts",
+    "src/app/api/push/**/*.ts",
+    "src/app/api/cron/outbox-publish/route.ts",
+    "tests/unit/public-endpoint-auth.test.ts",
+    "tests/unit/middleware-identity-boundary.test.ts",
+    "tests/unit/middleware-identity-headers.test.ts",
+    "tests/unit/push-run-scheduler-auth.test.ts"
+  ],
+  "exclude": ["node_modules", "mobile-app"]
+}
