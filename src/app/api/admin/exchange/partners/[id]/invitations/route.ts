@@ -3,7 +3,6 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { isSuperAdmin } from '@/lib/admin-access';
-import { checkGrantableRole } from '@/lib/admin-scope';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { logAudit } from '@/lib/audit';
@@ -11,24 +10,22 @@ import { sendEmail } from '@/lib/email';
 import { requireUnderQuota } from '@/lib/plan-limits';
 import { generateInvitationToken, INVITATION_TTL_DAYS } from '@/lib/invitations';
 import { notProvisionedAware, PARTNER_ROLES } from '@/lib/exchange/partner-auth';
-import {
-  findActiveTenant, isPartnerRole, NON_GRANTABLE_PARTNER_TENANT_ROLES,
-} from '@/lib/exchange/partner-onboarding';
+import { findActiveTenant, isPartnerRole } from '@/lib/exchange/partner-onboarding';
+import { PARTNER_TENANT_ROLE } from '@/lib/exchange/partner-role';
 
 export const runtime = 'nodejs';
 
 /**
  * Invitations that create a transport partner's users.
  *
- * GET    /api/admin/exchange/partners/:id/invitations          the partner's invitations, and the
- *                                                            onboarding tenant's roles a partner
- *                                                            user may be given (tenantRoles)
- * POST   /api/admin/exchange/partners/:id/invitations          { email, partnerRole, roleId }
+ * GET    /api/admin/exchange/partners/:id/invitations          the partner's invitations
+ * POST   /api/admin/exchange/partners/:id/invitations          { email, partnerRole }
  * DELETE /api/admin/exchange/partners/:id/invitations?id=…     revoke a pending invitation
  *
- * POST emails an invitation into the partner's onboarding tenant with tenant
- * role `roleId`. Accepting it creates the user in that tenant's User Master
- * and links them to the partner as `partnerRole`
+ * POST emails an invitation into the partner's onboarding tenant with the
+ * Partner tenant role (PARTNER: partner portal only, see
+ * src/lib/exchange/partner-role.ts). Accepting it creates the user in that
+ * tenant's User Master and links them to the partner as `partnerRole`
  * (see src/lib/exchange/partner-onboarding.ts). Someone who already has a
  * Fleet360 account is linked with /api/admin/exchange/partner-users instead.
  * Platform administrators only (ADMIN_ROUTE_POLICY).
@@ -66,28 +63,8 @@ export async function GET(req: NextRequest, props: Params) {
     partnerId,
   ));
 
-  // Roles offered in the invite form: the onboarding tenant's roles and the
-  // platform role templates, less the admin roles POST refuses. Loaded here
-  // because /api/admin/roles refuses a ?tenantId= other than the caller's own.
-  const tenantRoles = await withPlatformAdmin(prisma, async (tx) => {
-    const partner = await tx.transportPartner.findFirst({
-      where: { id: partnerId, deletedAt: null },
-      select: { onboardedByTenantId: true },
-    });
-    if (!partner?.onboardedByTenantId) return [];
-    return tx.role.findMany({
-      where: {
-        OR: [{ tenantId: partner.onboardedByTenantId }, { tenantId: null }],
-        code: { notIn: [...NON_GRANTABLE_PARTNER_TENANT_ROLES] },
-      },
-      select: { id: true, name: true, code: true },
-      orderBy: [{ tenantId: 'asc' }, { name: 'asc' }],
-    });
-  });
-
   const now = Date.now();
   return NextResponse.json({
-    tenantRoles,
     invitations: rows.map((r) => ({
       id: r.id,
       email: r.email,
@@ -112,13 +89,11 @@ export async function POST(req: NextRequest, props: Params) {
   const body = stripTenantOwnershipFields(await req.json().catch(() => ({}))) as Record<string, unknown>;
   const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
   const partnerRole = body.partnerRole;
-  const roleId = typeof body.roleId === 'string' ? body.roleId.trim() : '';
 
   if (!EMAIL_RE.test(email)) return NextResponse.json({ error: 'A valid email is required' }, { status: 400 });
   if (!isPartnerRole(partnerRole)) {
     return NextResponse.json({ error: `partnerRole must be one of ${PARTNER_ROLES.join(', ')}` }, { status: 400 });
   }
-  if (!roleId) return NextResponse.json({ error: 'roleId (the user\'s role in the onboarding tenant) is required' }, { status: 400 });
 
   const run = await notProvisionedAware(() => withPlatformAdmin(prisma, async (tx) => {
     const partner = await tx.transportPartner.findFirst({
@@ -132,16 +107,16 @@ export async function POST(req: NextRequest, props: Params) {
     const tenant = await findActiveTenant(tx, partner.onboardedByTenantId);
     if (!tenant) return { status: 409 as const, error: 'The onboarding tenant is not active' };
 
-    const role = await tx.role.findFirst({
-      where: { id: roleId, OR: [{ tenantId: tenant.id }, { tenantId: null }] },
+    // The Partner role: the tenant's own copy if it has one, else the
+    // platform template (migration 20260927140000_partner_tenant_role).
+    const partnerRoles = await tx.role.findMany({
+      where: { code: PARTNER_TENANT_ROLE, OR: [{ tenantId: tenant.id }, { tenantId: null }] },
       select: { id: true, name: true, code: true, tenantId: true },
     });
-    if (!role) return { status: 400 as const, error: `Role not found in ${tenant.name}` };
-    if ((NON_GRANTABLE_PARTNER_TENANT_ROLES as readonly string[]).includes(role.code)) {
-      return { status: 400 as const, error: `A partner user cannot be given the ${role.name} role` };
+    const role = partnerRoles.find((r) => r.tenantId === tenant.id) ?? partnerRoles.find((r) => r.tenantId === null);
+    if (!role) {
+      return { status: 409 as const, error: 'The Partner role is not set up yet (migration 20260927140000_partner_tenant_role)' };
     }
-    const grant = checkGrantableRole(req.headers, tenant.id, role);
-    if (grant) return { status: 400 as const, error: 'Role belongs to another tenant' };
 
     const existingUser = await tx.user.findFirst({
       where: { email: { equals: email, mode: 'insensitive' } },

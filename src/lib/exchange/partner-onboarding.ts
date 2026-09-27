@@ -9,8 +9,9 @@
  *
  * A platform administrator invites a partner user by email from
  * /admin/exchange-partners. The invitation is an ordinary tenant invitation
- * (tenant_invitations) for the onboarding tenant that also names the partner
- * and partner role; accepting it (/api/auth/invitation/accept) creates the
+ * (tenant_invitations) for the onboarding tenant, with the Partner tenant
+ * role (src/lib/exchange/partner-role.ts), that also names the partner and
+ * partner role; accepting it (/api/auth/invitation/accept) creates the
  * user, the tenant membership and the partner membership in one transaction.
  *
  * Callers run these inside withPlatformAdmin: partners are platform records,
@@ -21,9 +22,6 @@ import type { Prisma } from '@prisma/client';
 import { PARTNER_ROLES, type PartnerRole } from '@/lib/exchange/partner-auth';
 
 type Tx = Prisma.TransactionClient;
-
-/** Tenant roles a partner user may not be given in the onboarding tenant. */
-export const NON_GRANTABLE_PARTNER_TENANT_ROLES = ['SUPER_ADMIN', 'TENANT_ADMIN'] as const;
 
 export function isPartnerRole(v: unknown): v is PartnerRole {
   return typeof v === 'string' && (PARTNER_ROLES as readonly string[]).includes(v);
