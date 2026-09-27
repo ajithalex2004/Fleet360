@@ -21,6 +21,7 @@ const partnerUserUpsert = vi.hoisted(() => vi.fn(async () => ({})));
 const userTenantCreate = vi.hoisted(() => vi.fn(async () => ({})));
 const sendEmail = vi.hoisted(() => vi.fn(async () => ({ sent: true })));
 const audit = vi.hoisted(() => vi.fn());
+const roleFindMany = vi.hoisted(() => vi.fn(async () => [{ id: 'viewer-role', name: 'Viewer', code: 'VIEWER' }]));
 
 const TENANTS: Record<string, { id: string; name: string; plan: string; isActive: boolean }> = {
   'lease-a': { id: 'lease-a', name: 'Lease Tenant A', plan: 'STANDARD', isActive: true },
@@ -38,6 +39,7 @@ vi.mock('@/lib/prisma', () => {
     role: {
       findFirst: vi.fn(async () => db.role),
       findUnique: vi.fn(async () => db.role),
+      findMany: roleFindMany,
     },
     user: {
       findFirst: vi.fn(async () => db.existingUser),
@@ -79,7 +81,7 @@ vi.mock('@/lib/password-policy', () => ({
 
 import { NextRequest } from 'next/server';
 import { PUT as setTenant } from '@/app/api/admin/exchange/partners/[id]/onboarding-tenant/route';
-import { POST as invite, DELETE as revoke } from '@/app/api/admin/exchange/partners/[id]/invitations/route';
+import { GET as listInvites, POST as invite, DELETE as revoke } from '@/app/api/admin/exchange/partners/[id]/invitations/route';
 import { POST as accept } from '@/app/api/auth/invitation/accept/route';
 
 const headers = (role: string) => ({ 'content-type': 'application/json', 'x-user-id': 'admin-1', 'x-tenant-id': 'platform', 'x-user-role': role });
@@ -97,7 +99,7 @@ beforeEach(() => {
   db.existingUser = null;
   db.invitation = null;
   db.sql = [];
-  for (const f of [partnerUpdate, relationshipUpsert, partnerUserUpsert, userTenantCreate, sendEmail, audit]) f.mockClear();
+  for (const f of [partnerUpdate, relationshipUpsert, partnerUserUpsert, userTenantCreate, sendEmail, audit, roleFindMany]) f.mockClear();
 });
 
 describe('PUT onboarding-tenant', () => {
@@ -172,6 +174,32 @@ describe('POST invitations', () => {
     expect((await postInvite('SUPER_ADMIN', { ...validInvite, partnerRole: 'OWNER' })).status).toBe(400);
     expect((await postInvite('SUPER_ADMIN', { ...validInvite, email: 'nope' })).status).toBe(400);
     expect(inserts()).toHaveLength(0);
+  });
+});
+
+describe('GET invitations', () => {
+  const list = (role: string) =>
+    listInvites(new NextRequest('http://localhost/api/admin/exchange/partners/p1/invitations', { headers: headers(role) }), params);
+
+  it('is platform-admin only', async () => {
+    expect((await list('TENANT_ADMIN')).status).toBe(403);
+  });
+
+  it('offers the onboarding tenant\'s roles and platform templates, never the admin roles', async () => {
+    const body = await (await list('SUPER_ADMIN')).json();
+    expect(body.tenantRoles).toEqual([{ id: 'viewer-role', name: 'Viewer', code: 'VIEWER' }]);
+    expect(roleFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        OR: [{ tenantId: 'lease-a' }, { tenantId: null }],
+        code: { notIn: ['SUPER_ADMIN', 'TENANT_ADMIN'] },
+      },
+    }));
+  });
+
+  it('offers no roles until the partner has an onboarding tenant', async () => {
+    db.partner = { ...db.partner!, onboardedByTenantId: null };
+    expect((await (await list('SUPER_ADMIN')).json()).tenantRoles).toEqual([]);
+    expect(roleFindMany).not.toHaveBeenCalled();
   });
 });
 

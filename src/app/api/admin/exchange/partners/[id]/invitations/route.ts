@@ -20,7 +20,9 @@ export const runtime = 'nodejs';
 /**
  * Invitations that create a transport partner's users.
  *
- * GET    /api/admin/exchange/partners/:id/invitations          the partner's invitations
+ * GET    /api/admin/exchange/partners/:id/invitations          the partner's invitations, and the
+ *                                                            onboarding tenant's roles a partner
+ *                                                            user may be given (tenantRoles)
  * POST   /api/admin/exchange/partners/:id/invitations          { email, partnerRole, roleId }
  * DELETE /api/admin/exchange/partners/:id/invitations?id=…     revoke a pending invitation
  *
@@ -64,8 +66,28 @@ export async function GET(req: NextRequest, props: Params) {
     partnerId,
   ));
 
+  // Roles offered in the invite form: the onboarding tenant's roles and the
+  // platform role templates, less the admin roles POST refuses. Loaded here
+  // because /api/admin/roles refuses a ?tenantId= other than the caller's own.
+  const tenantRoles = await withPlatformAdmin(prisma, async (tx) => {
+    const partner = await tx.transportPartner.findFirst({
+      where: { id: partnerId, deletedAt: null },
+      select: { onboardedByTenantId: true },
+    });
+    if (!partner?.onboardedByTenantId) return [];
+    return tx.role.findMany({
+      where: {
+        OR: [{ tenantId: partner.onboardedByTenantId }, { tenantId: null }],
+        code: { notIn: [...NON_GRANTABLE_PARTNER_TENANT_ROLES] },
+      },
+      select: { id: true, name: true, code: true },
+      orderBy: [{ tenantId: 'asc' }, { name: 'asc' }],
+    });
+  });
+
   const now = Date.now();
   return NextResponse.json({
+    tenantRoles,
     invitations: rows.map((r) => ({
       id: r.id,
       email: r.email,

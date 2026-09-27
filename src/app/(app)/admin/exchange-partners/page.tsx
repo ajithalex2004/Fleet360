@@ -62,8 +62,6 @@ interface Invitation {
   createdAt: string;
 }
 
-/** Tenant roles a partner user may not be given (the API refuses them too). */
-const NON_GRANTABLE_TENANT_ROLES = ['SUPER_ADMIN', 'TENANT_ADMIN'];
 /** Preferred default tenant role for a partner user, in order. */
 const DEFAULT_TENANT_ROLE_CODES = ['VIEWER', 'STAFF', 'OPERATOR', 'DISPATCHER'];
 
@@ -219,12 +217,20 @@ export default function ExchangePartnersAdminPage() {
     })();
   }, []);
 
+  // Also loads the onboarding tenant's roles a partner user may be given.
   const loadInvites = useCallback(async (partnerId: string) => {
     const r = await fetch(`/api/admin/exchange/partners/${encodeURIComponent(partnerId)}/invitations`);
     const d = await readJson(r);
     setInvites(r.ok ? ((d.invitations ?? []) as Invitation[]) : []);
+    const roles = r.ok ? ((d.tenantRoles ?? []) as TenantRole[]) : [];
+    setTenantRoles(roles);
+    setInviteTenantRoleId((cur) => {
+      if (roles.some((x) => x.id === cur)) return cur;
+      const preferred = DEFAULT_TENANT_ROLE_CODES.map((c) => roles.find((x) => x.code === c)).find(Boolean);
+      return (preferred ?? roles[0])?.id ?? '';
+    });
   }, []);
-  useEffect(() => { if (selectedId) void loadInvites(selectedId); else setInvites([]); }, [selectedId, loadInvites]);
+  useEffect(() => { if (selectedId) void loadInvites(selectedId); else { setInvites([]); setTenantRoles([]); } }, [selectedId, loadInvites]);
 
   const loadDocs = useCallback(async (partnerId: string) => {
     setDocsLoading(true); setDocsError(null);
@@ -254,19 +260,7 @@ export default function ExchangePartnersAdminPage() {
   const selected = partners.find((p) => p.id === selectedId) ?? null;
   const onboardingTenantId = selected?.onboardedByTenantId ?? null;
 
-  // The onboarding tenant's roles a partner user may be given.
-  useEffect(() => {
-    setTenantChoice(onboardingTenantId ?? '');
-    if (!onboardingTenantId) { setTenantRoles([]); setInviteTenantRoleId(''); return; }
-    void (async () => {
-      const r = await fetch(`/api/admin/roles?tenantId=${encodeURIComponent(onboardingTenantId)}&lite=true`);
-      const list = r.ok ? ((await r.json().catch(() => [])) as TenantRole[]) : [];
-      const roles = (Array.isArray(list) ? list : []).filter((x) => !NON_GRANTABLE_TENANT_ROLES.includes(x.code));
-      setTenantRoles(roles);
-      const preferred = DEFAULT_TENANT_ROLE_CODES.map((c) => roles.find((x) => x.code === c)).find(Boolean);
-      setInviteTenantRoleId((preferred ?? roles[0])?.id ?? '');
-    })();
-  }, [onboardingTenantId]);
+  useEffect(() => { setTenantChoice(onboardingTenantId ?? ''); }, [onboardingTenantId]);
 
   const saveOnboardingTenant = async () => {
     if (!selected || !tenantChoice) return;
@@ -283,6 +277,7 @@ export default function ExchangePartnersAdminPage() {
       setPartners((list) => list.map((p) => (p.id === partnerId
         ? { ...p, onboardedByTenantId: d.onboardedByTenantId as string, onboardedByTenantName: d.onboardedByTenantName as string }
         : p)));
+      await loadInvites(partnerId);
     } catch (err) {
       setTenantError(err instanceof Error ? err.message : 'Network error');
     } finally {
