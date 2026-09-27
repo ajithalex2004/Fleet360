@@ -49,7 +49,6 @@ interface Partner {
 }
 
 interface TenantOption { id: string; name: string; isActive?: boolean | null }
-interface TenantRole { id: string; name: string; code: string }
 
 interface Invitation {
   id: string;
@@ -62,8 +61,6 @@ interface Invitation {
   createdAt: string;
 }
 
-/** Preferred default tenant role for a partner user, in order. */
-const DEFAULT_TENANT_ROLE_CODES = ['VIEWER', 'STAFF', 'OPERATOR', 'DISPATCHER'];
 
 const INVITE_STATUS_STYLES: Record<string, string> = {
   pending: 'bg-amber-500/15 text-amber-400',
@@ -168,11 +165,9 @@ export default function ExchangePartnersAdminPage() {
   const [tenantError, setTenantError] = useState<string | null>(null);
 
   const [userMode, setUserMode] = useState<'invite' | 'link'>('invite');
-  const [tenantRoles, setTenantRoles] = useState<TenantRole[]>([]);
   const [invites, setInvites] = useState<Invitation[]>([]);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<string>('PARTNER_OPERATIONS');
-  const [inviteTenantRoleId, setInviteTenantRoleId] = useState('');
   const [inviteNotice, setInviteNotice] = useState<{ text: string; link?: string } | null>(null);
 
   const loadPartners = useCallback(async () => {
@@ -217,20 +212,12 @@ export default function ExchangePartnersAdminPage() {
     })();
   }, []);
 
-  // Also loads the onboarding tenant's roles a partner user may be given.
   const loadInvites = useCallback(async (partnerId: string) => {
     const r = await fetch(`/api/admin/exchange/partners/${encodeURIComponent(partnerId)}/invitations`);
     const d = await readJson(r);
     setInvites(r.ok ? ((d.invitations ?? []) as Invitation[]) : []);
-    const roles = r.ok ? ((d.tenantRoles ?? []) as TenantRole[]) : [];
-    setTenantRoles(roles);
-    setInviteTenantRoleId((cur) => {
-      if (roles.some((x) => x.id === cur)) return cur;
-      const preferred = DEFAULT_TENANT_ROLE_CODES.map((c) => roles.find((x) => x.code === c)).find(Boolean);
-      return (preferred ?? roles[0])?.id ?? '';
-    });
   }, []);
-  useEffect(() => { if (selectedId) void loadInvites(selectedId); else { setInvites([]); setTenantRoles([]); } }, [selectedId, loadInvites]);
+  useEffect(() => { if (selectedId) void loadInvites(selectedId); else setInvites([]); }, [selectedId, loadInvites]);
 
   const loadDocs = useCallback(async (partnerId: string) => {
     setDocsLoading(true); setDocsError(null);
@@ -294,7 +281,7 @@ export default function ExchangePartnersAdminPage() {
       const r = await fetch(`/api/admin/exchange/partners/${encodeURIComponent(partnerId)}/invitations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: inviteEmail.trim(), partnerRole: inviteRole, roleId: inviteTenantRoleId }),
+        body: JSON.stringify({ email: inviteEmail.trim(), partnerRole: inviteRole }),
       });
       const d = await readJson(r);
       if (!r.ok) { setMemberError(errorOf(d, r.status)); return; }
@@ -740,24 +727,14 @@ export default function ExchangePartnersAdminPage() {
                       <select className={`${input} sm:w-40`} value={inviteRole} onChange={(e) => setInviteRole(e.target.value)} aria-label="Partner role">
                         {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
                       </select>
-                      <select
-                        className={`${input} sm:w-48`}
-                        required
-                        value={inviteTenantRoleId}
-                        onChange={(e) => setInviteTenantRoleId(e.target.value)}
-                        aria-label={`Role in ${selected.onboardedByTenantName ?? 'the tenant'}`}
-                      >
-                        {tenantRoles.length === 0 && <option value="">No roles available</option>}
-                        {tenantRoles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-                      </select>
-                      <button type="submit" className={`${primaryBtn} justify-center`} disabled={busy || !inviteTenantRoleId}>
+                      <button type="submit" className={`${primaryBtn} justify-center`} disabled={busy}>
                         <Mail className="h-4 w-4" /> Invite
                       </button>
                     </div>
                     <p className="text-xs text-[var(--text-muted)]">
-                      Partner role: {ROLES.find((r) => r.value === inviteRole)?.hint}. The second list is their role in{' '}
-                      {selected.onboardedByTenantName}. They get an email to set their password; accepting creates them in that
-                      tenant&rsquo;s user list and links them to {selected.legalName}.
+                      Partner role: {ROLES.find((r) => r.value === inviteRole)?.hint}. They get an email to set their password;
+                      accepting adds them to {selected.onboardedByTenantName}&rsquo;s user list with the <strong>Partner</strong> role,
+                      which opens only the partner portal, and links them to {selected.legalName}.
                     </p>
                     {inviteNotice && (
                       <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-[var(--text-main)]">

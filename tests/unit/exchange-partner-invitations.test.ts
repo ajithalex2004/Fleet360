@@ -1,7 +1,7 @@
 /**
  * Partner users are created from /admin/exchange-partners: a platform
  * administrator sets the tenant that onboarded the partner and invites a new
- * user by email into that tenant. Accepting the invitation creates the user in
+ * user by email into that tenant, always with the Partner tenant role. Accepting the invitation creates the user in
  * the tenant's User Master and links them to the partner.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -21,7 +21,8 @@ const partnerUserUpsert = vi.hoisted(() => vi.fn(async () => ({})));
 const userTenantCreate = vi.hoisted(() => vi.fn(async () => ({})));
 const sendEmail = vi.hoisted(() => vi.fn(async () => ({ sent: true })));
 const audit = vi.hoisted(() => vi.fn());
-const roleFindMany = vi.hoisted(() => vi.fn(async () => [{ id: 'viewer-role', name: 'Viewer', code: 'VIEWER' }]));
+const PARTNER_TEMPLATE = { id: 'partner-role', name: 'Partner', code: 'PARTNER', tenantId: null as string | null };
+const roleFindMany = vi.hoisted(() => vi.fn(async (): Promise<unknown[]> => []));
 
 const TENANTS: Record<string, { id: string; name: string; plan: string; isActive: boolean }> = {
   'lease-a': { id: 'lease-a', name: 'Lease Tenant A', plan: 'STANDARD', isActive: true },
@@ -91,15 +92,17 @@ const putTenant = (role: string, body: unknown) =>
 const postInvite = (role: string, body: unknown) =>
   invite(new NextRequest('http://localhost/api/admin/exchange/partners/p1/invitations', { method: 'POST', headers: headers(role), body: JSON.stringify(body) }), params);
 const inserts = () => db.sql.filter((q) => q.sql.includes('INSERT INTO tenant_invitations'));
-const validInvite = { email: 'Driver.Ops@GCoaches.ae', partnerRole: 'PARTNER_ADMIN', roleId: 'viewer-role' };
+const validInvite = { email: 'Driver.Ops@GCoaches.ae', partnerRole: 'PARTNER_ADMIN' };
 
 beforeEach(() => {
   db.partner = { id: 'p1', legalName: 'Gulf Coaches LLC', onboardedByTenantId: 'lease-a' };
-  db.role = { id: 'viewer-role', name: 'Viewer', code: 'VIEWER', tenantId: 'lease-a' };
+  db.role = { id: 'partner-role', name: 'Partner', code: 'PARTNER', tenantId: null };
   db.existingUser = null;
   db.invitation = null;
   db.sql = [];
-  for (const f of [partnerUpdate, relationshipUpsert, partnerUserUpsert, userTenantCreate, sendEmail, audit, roleFindMany]) f.mockClear();
+  for (const f of [partnerUpdate, relationshipUpsert, partnerUserUpsert, userTenantCreate, sendEmail, audit]) f.mockClear();
+  roleFindMany.mockReset();
+  roleFindMany.mockResolvedValue([PARTNER_TEMPLATE]);
 });
 
 describe('PUT onboarding-tenant', () => {
@@ -138,7 +141,10 @@ describe('POST invitations', () => {
     const [ins] = inserts();
     expect(ins.params[0]).toBe('lease-a');
     expect(ins.params[1]).toBe('driver.ops@gcoaches.ae');
-    expect(ins.params[2]).toBe('viewer-role');
+    expect(ins.params[2]).toBe('partner-role');
+    expect(roleFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { code: 'PARTNER', OR: [{ tenantId: 'lease-a' }, { tenantId: null }] },
+    }));
     expect(ins.params.slice(-2)).toEqual(['p1', 'PARTNER_ADMIN']);
     expect(sendEmail).toHaveBeenCalledWith(expect.objectContaining({ to: 'driver.ops@gcoaches.ae' }));
   });
@@ -164,13 +170,21 @@ describe('POST invitations', () => {
     expect(inserts()).toHaveLength(0);
   });
 
-  it('refuses admin tenant roles, another tenant\'s role and bad input', async () => {
-    db.role = { id: 'r', name: 'Tenant Admin', code: 'TENANT_ADMIN', tenantId: 'lease-a' };
-    expect((await postInvite('SUPER_ADMIN', validInvite)).status).toBe(400);
-    db.role = { id: 'r', name: 'Viewer', code: 'VIEWER', tenantId: 'other-tenant' };
-    expect((await postInvite('SUPER_ADMIN', validInvite)).status).toBe(400);
-    db.role = null;
-    expect((await postInvite('SUPER_ADMIN', validInvite)).status).toBe(400);
+  it('always uses the Partner role, the tenant\'s own copy first', async () => {
+    roleFindMany.mockResolvedValue([PARTNER_TEMPLATE, { id: 'lease-a-partner', name: 'Partner', code: 'PARTNER', tenantId: 'lease-a' }]);
+    await postInvite('SUPER_ADMIN', { ...validInvite, roleId: 'tenant-admin-role' });
+    expect(inserts()[0].params[2]).toBe('lease-a-partner');
+  });
+
+  it('refuses while the Partner role is not set up', async () => {
+    roleFindMany.mockResolvedValue([]);
+    const res = await postInvite('SUPER_ADMIN', validInvite);
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/Partner role/);
+    expect(inserts()).toHaveLength(0);
+  });
+
+  it('refuses bad input', async () => {
     expect((await postInvite('SUPER_ADMIN', { ...validInvite, partnerRole: 'OWNER' })).status).toBe(400);
     expect((await postInvite('SUPER_ADMIN', { ...validInvite, email: 'nope' })).status).toBe(400);
     expect(inserts()).toHaveLength(0);
@@ -185,21 +199,11 @@ describe('GET invitations', () => {
     expect((await list('TENANT_ADMIN')).status).toBe(403);
   });
 
-  it('offers the onboarding tenant\'s roles and platform templates, never the admin roles', async () => {
-    const body = await (await list('SUPER_ADMIN')).json();
-    expect(body.tenantRoles).toEqual([{ id: 'viewer-role', name: 'Viewer', code: 'VIEWER' }]);
-    expect(roleFindMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: {
-        OR: [{ tenantId: 'lease-a' }, { tenantId: null }],
-        code: { notIn: ['SUPER_ADMIN', 'TENANT_ADMIN'] },
-      },
-    }));
-  });
-
-  it('offers no roles until the partner has an onboarding tenant', async () => {
-    db.partner = { ...db.partner!, onboardedByTenantId: null };
-    expect((await (await list('SUPER_ADMIN')).json()).tenantRoles).toEqual([]);
-    expect(roleFindMany).not.toHaveBeenCalled();
+  it('lists the partner\'s invitations', async () => {
+    const res = await list('SUPER_ADMIN');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ invitations: [] });
+    expect(db.sql.some((q) => q.sql.includes('WHERE i.partner_id = $1') && q.params[0] === 'p1')).toBe(true);
   });
 });
 
@@ -218,7 +222,7 @@ describe('accepting an invitation', () => {
   const acceptWith = (body: Record<string, string>) =>
     accept(new NextRequest('http://localhost/api/auth/invitation/accept', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token: 'x'.repeat(64), ...body }) }));
   const invitation = (extra: Record<string, unknown> = {}) => ({
-    id: 'inv-1', tenant_id: 'lease-a', email: 'new@gcoaches.ae', role_id: 'viewer-role',
+    id: 'inv-1', tenant_id: 'lease-a', email: 'new@gcoaches.ae', role_id: 'partner-role',
     expires_at: new Date(Date.now() + 86_400_000).toISOString(), used_at: null, revoked: false,
     partner_id: 'p1', partner_role: 'PARTNER_ADMIN', ...extra,
   });
@@ -227,7 +231,7 @@ describe('accepting an invitation', () => {
     db.invitation = invitation();
     const res = await acceptWith({ password: 'Str0ng!Password', firstName: 'Sara', lastName: 'Ali' });
     expect(res.status).toBe(200);
-    expect(userTenantCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ tenantId: 'lease-a', roleId: 'viewer-role' }) });
+    expect(userTenantCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ tenantId: 'lease-a', roleId: 'partner-role' }) });
     expect(partnerUserUpsert).toHaveBeenCalledWith(expect.objectContaining({
       create: expect.objectContaining({ partnerId: 'p1', role: 'PARTNER_ADMIN' }),
     }));

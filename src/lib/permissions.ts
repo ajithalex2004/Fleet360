@@ -354,6 +354,17 @@ export const SYSTEM_ROLES: {
     description: 'View-only access to all modules, no create/edit/delete/approve',
     permissions: ALL_PERMISSIONS.filter(p => p.action === 'view').map(p => ({ module: p.module, action: p.action, resource: p.resource })),
   },
+  {
+    // Staff of a Fleet360 Exchange transport partner, in the tenant that
+    // onboarded the partner. No permissions in the tenant's own modules;
+    // the middleware confines the role to the partner portal
+    // (src/lib/exchange/partner-role.ts). Also created by migration
+    // 20260927140000_partner_tenant_role.
+    code: 'PARTNER',
+    name: 'Partner',
+    description: 'Transport partner staff: partner portal only, no access to the tenant\'s own modules',
+    permissions: [],
+  },
 ];
 
 // ── Client-side permission helpers ──────────────────────────────────────────

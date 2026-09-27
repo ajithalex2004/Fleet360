@@ -11,6 +11,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { PARTNER_HOME, PARTNER_TENANT_ROLE, partnerRoleAllows } from '@/lib/exchange/partner-role';
 import { verifySession } from '@/lib/tenant-session';
 import { proxyToGoBackend } from '@/lib/api-shim';
 import { API_VERSION_HEADER, CURRENT_API_VERSION } from '@/lib/api-version';
@@ -138,6 +139,22 @@ function residencyRefusal(pathname: string, dataResidency: string | undefined): 
   return new NextResponse(message, { status: 503, headers: { 'content-type': 'text/plain; charset=utf-8' } });
 }
 
+
+/** A PARTNER session asked for something outside the partner portal (see src/lib/exchange/partner-role.ts). */
+function partnerForbidden(): NextResponse {
+  return NextResponse.json(
+    { error: 'Forbidden', message: 'Partner accounts can only use the partner portal.' },
+    { status: 403 },
+  );
+}
+
+function partnerHomeRedirect(request: NextRequest): NextResponse {
+  const url = request.nextUrl.clone();
+  url.pathname = PARTNER_HOME;
+  url.search = '';
+  return NextResponse.redirect(url);
+}
+
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
 
@@ -177,6 +194,8 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     if (staffSession) {
       const refusal = residencyRefusal(pathname, staffSession.dataResidency);
       if (refusal) return refusal;
+      // Partner staff don't read the onboarding tenant's stored files.
+      if (staffSession.role === PARTNER_TENANT_ROLE) return partnerForbidden();
     }
     const url = request.nextUrl.clone();
     url.pathname = `/api/files/${fileKey}`;
@@ -185,6 +204,15 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         headers: staffSession ? withVerifiedIdentity(request.headers, staffSession) : sanitizedHeaders,
       },
     });
+  }
+
+  // 0b. Partner staff land in the partner portal. The launcher (/platform,
+  // where sign-in lands) and / are public, so the PARTNER gate in step 3c
+  // never sees them.
+  if (pathname === '/platform' || pathname === '/') {
+    const token = request.cookies.get('xl-session')?.value;
+    const landing = token ? await verifySession(token).catch(() => null) : null;
+    if (landing?.role === PARTNER_TENANT_ROLE) return partnerHomeRedirect(request);
   }
 
   // 1. Public routes — no session required. Client-sent identity headers
@@ -243,6 +271,13 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // not serve, before anything touches the database on their behalf.
   const residencyBlock = residencyRefusal(pathname, session.dataResidency);
   if (residencyBlock) return residencyBlock;
+
+  // 3c. Transport partner staff (tenant role PARTNER) reach only the partner
+  // portal and its APIs, not the onboarding tenant's own modules — tenant
+  // APIs are not gated by role permissions. See src/lib/exchange/partner-role.ts.
+  if (session.role === PARTNER_TENANT_ROLE && !partnerRoleAllows(pathname)) {
+    return pathname.startsWith('/api/') ? partnerForbidden() : partnerHomeRedirect(request);
+  }
 
   // 4. Rate limiting — routed to per-tenant/path OR per-driver-telemetry
   //    bucket depending on the path. See TELEMETRY_CATEGORIES above.
