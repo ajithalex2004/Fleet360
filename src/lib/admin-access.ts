@@ -59,6 +59,13 @@ export const ADMIN_ROUTE_POLICY: Record<string, Partial<Record<Method, AdminLeve
   'exchange/partners/[id]/invitations':          { GET: 'platform', POST: 'platform', DELETE: 'platform' },
   'exchange/partners/[id]/compliance':           { GET: 'platform' },
   'exchange/partners/[id]/compliance/[id]':      { PATCH: 'platform' },
+  // Partner activation review: the onboarding tenant's administrators; the
+  // handlers keep a tenant admin to partners its own tenant onboarded.
+  'exchange/onboarding':                         { GET: 'admin' },
+  'exchange/onboarding/[id]':                    { GET: 'admin' },
+  'exchange/onboarding/[id]/decision':           { POST: 'admin' },
+  'exchange/onboarding/[id]/documents/[id]':     { PATCH: 'admin' },
+  'exchange/onboarding/[id]/documents/[id]/file': { GET: 'admin' },
   'events/outbox/replay':                        { POST: 'platform' },
   'impersonate':                                 { POST: 'platform' },
   // Called while impersonating, when the session carries the target's role.

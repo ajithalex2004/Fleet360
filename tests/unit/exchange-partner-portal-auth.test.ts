@@ -55,7 +55,6 @@ vi.mock('@/lib/rls-scope', () => ({
 const svc = vi.hoisted(() => ({
   registerVehicle: vi.fn(async (i: unknown) => i),
   registerDriver: vi.fn(async (i: unknown) => i),
-  uploadComplianceDoc: vi.fn(async (i: unknown) => i),
   getPartnerProfile: vi.fn(async (id: string) => ({ id })),
   submitInvoice: vi.fn(async (i: unknown) => i),
   assign: vi.fn(async () => ({ assignmentId: 'a1' })),
@@ -67,7 +66,6 @@ vi.mock('@/lib/exchange/partner-service', () => ({
   PartnerService: {
     registerVehicle: svc.registerVehicle,
     registerDriver: svc.registerDriver,
-    uploadComplianceDoc: svc.uploadComplianceDoc,
     getPartnerProfile: svc.getPartnerProfile,
   },
 }));
@@ -93,7 +91,7 @@ import { GET as podPdf } from '@/app/api/exchange/pod/[assignmentId]/pdf/route';
 
 const member = (partnerId: string, role = 'PARTNER_ADMIN') => ({
   role,
-  partner: { id: partnerId, legalName: `Partner ${partnerId}`, marketplaceStatus: 'APPROVED', operationalStatus: 'ACTIVE' },
+  partner: { id: partnerId, legalName: `Partner ${partnerId}`, marketplaceStatus: 'APPROVED', operationalStatus: 'ACTIVE', onboardingStatus: 'APPROVED', emirate: null },
 });
 const headers = (tenant = 'tenant-partner') => ({ 'content-type': 'application/json', 'x-user-id': 'user-1', 'x-tenant-id': tenant });
 const get = (url: string, tenant?: string) => new NextRequest(`http://localhost${url}`, { headers: headers(tenant) });
@@ -129,10 +127,9 @@ describe('partner-only routes', () => {
     db.memberships = [member('p1', 'PARTNER_OPERATIONS')];
     await fleet.POST(send('POST', '/api/exchange/partner/fleet', { partnerId: 'p2', licensePlate: 'D 1', vehicleType: 'Bus', seatingCapacity: 30 }));
     await drivers.POST(send('POST', '/api/exchange/partner/drivers', { partnerId: 'p2', fullName: 'X', mobileNumber: '1' }));
-    await compliance.POST(send('POST', '/api/exchange/partner/compliance', { partnerId: 'p2', docType: 'TL', fileUrl: 'f' }));
     expect(svc.registerVehicle).toHaveBeenCalledWith(expect.objectContaining({ partnerId: 'p1' }));
     expect(svc.registerDriver).toHaveBeenCalledWith(expect.objectContaining({ partnerId: 'p1' }));
-    expect(svc.uploadComplianceDoc).toHaveBeenCalledWith(expect.objectContaining({ partnerId: 'p1' }));
+    // Compliance uploads: tests/unit/exchange-partner-activation.test.ts.
   });
 
   it('a viewer cannot register fleet', async () => {

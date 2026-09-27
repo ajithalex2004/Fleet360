@@ -17,6 +17,7 @@ import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
+import { EXCHANGE_OPEN_MARKET, isActivated, onboardingStatusLabel } from '@/lib/exchange/partner-activation';
 
 export const PARTNER_ROLES = ['PARTNER_ADMIN', 'PARTNER_OPERATIONS', 'PARTNER_FINANCE', 'PARTNER_VIEWER'] as const;
 export type PartnerRole = (typeof PARTNER_ROLES)[number];
@@ -41,6 +42,9 @@ export interface PartnerMembership {
   city: string | null;
   marketplaceStatus: string;
   operationalStatus: string;
+  /** DRAFT … APPROVED; anything but APPROVED is Pending Activation (partner-activation.ts). */
+  onboardingStatus: string;
+  emirate: string | null;
 }
 
 export interface PartnerContext extends PartnerMembership {
@@ -100,7 +104,12 @@ export async function partnerMembershipsForUser(userId: string): Promise<Partner
     where: { userId, partner: { deletedAt: null } },
     select: {
       role: true,
-      partner: { select: { id: true, legalName: true, partnerCode: true, city: true, marketplaceStatus: true, operationalStatus: true } },
+      partner: {
+        select: {
+          id: true, legalName: true, partnerCode: true, city: true, emirate: true,
+          marketplaceStatus: true, operationalStatus: true, onboardingStatus: true,
+        },
+      },
     },
     orderBy: { createdAt: 'asc' },
   });
@@ -112,6 +121,8 @@ export async function partnerMembershipsForUser(userId: string): Promise<Partner
     city: r.partner.city,
     marketplaceStatus: r.partner.marketplaceStatus,
     operationalStatus: r.partner.operationalStatus,
+    onboardingStatus: r.partner.onboardingStatus,
+    emirate: r.partner.emirate,
   }));
 }
 
@@ -122,20 +133,33 @@ export async function partnerMembershipsForUser(userId: string): Promise<Partner
  * - 403 when the user is not a member of any partner, is not a member of the
  *   partner it names, or its role is not in `opts.roles`.
  * - 400 when the user belongs to several partners and names none.
+ * - 403 PARTNER_PENDING_ACTIVATION when the partner has not been activated
+ *   by its onboarding tenant yet, unless `opts.allowPending`: routes a
+ *   partner needs to complete onboarding (profile, compliance documents,
+ *   fleet, drivers) pass it; the marketplace, quotes, jobs and invoices don't.
  *
  * `opts.requested` names a partner from the request body; otherwise the
  * x-partner-id header or ?partnerId= query does.
  */
 export async function requirePartnerContext(
   req: { headers: Headers; nextUrl?: { searchParams: URLSearchParams } },
-  opts: { roles?: readonly PartnerRole[]; requested?: string | null } = {},
+  opts: PartnerContextOptions = {},
 ): Promise<PartnerAuthResult> {
   return orNotProvisioned(() => resolvePartnerContext(req, opts));
 }
 
+export interface PartnerContextOptions {
+  roles?: readonly PartnerRole[];
+  requested?: string | null;
+  /** Also admit a partner that is not activated yet (onboarding routes). */
+  allowPending?: boolean;
+}
+
+export const PARTNER_PENDING_ACTIVATION = 'PARTNER_PENDING_ACTIVATION';
+
 async function resolvePartnerContext(
   req: { headers: Headers; nextUrl?: { searchParams: URLSearchParams } },
-  opts: { roles?: readonly PartnerRole[]; requested?: string | null },
+  opts: PartnerContextOptions,
 ): Promise<PartnerAuthResult> {
   const userId = req.headers.get('x-user-id');
   if (!userId) return { ok: false, status: 401, error: 'Sign in to use the partner marketplace.' };
@@ -162,6 +186,17 @@ async function resolvePartnerContext(
     return { ok: false, status: 403, error: `Your partner role (${membership.role}) cannot do this.`, memberships };
   }
 
+  if (!opts.allowPending && !isActivated(membership)) {
+    return {
+      ok: false,
+      status: 403,
+      code: PARTNER_PENDING_ACTIVATION,
+      error: `${membership.legalName} is not activated yet (${onboardingStatusLabel(membership.onboardingStatus).toLowerCase()}). `
+        + 'Upload your compliance documents and submit them for review; the marketplace opens once your onboarding company activates you.',
+      memberships,
+    };
+  }
+
   return { ok: true, ctx: { ...membership, userId }, memberships };
 }
 
@@ -186,13 +221,16 @@ export type QuoteEligibility =
  * request's tenant (the buyer) if so. Runs in platform context: the request
  * belongs to another tenant than the partner user's session.
  *
- * Allowed when the partner is marketplace-APPROVED and ACTIVE, the buyer has
- * not BLOCKED it, the request is still open (PUBLISHED or QUOTED) and either
+ * Allowed when the partner is activated (onboarding APPROVED), marketplace-
+ * APPROVED and ACTIVE, the buyer has not BLOCKED it, the request is still
+ * open (PUBLISHED or QUOTED) and either
  *   - the partner was invited to it, or
  *   - its marketplace opportunity is OPEN, not past closes_at, in a domain the
  *     partner has an approved capability for, and visible to the partner:
- *     EXCHANGE_NETWORK (any partner) or TENANT_NETWORK (partners with a
- *     relationship to the buyer). DIRECT opportunities are invitation-only.
+ *     TENANT_NETWORK (partners with a relationship to the buyer), or
+ *     EXCHANGE_NETWORK: any partner once EXCHANGE_OPEN_MARKET is on, until
+ *     then only partners with a relationship to the buyer.
+ *     DIRECT opportunities are invitation-only.
  * The same rules decide what listOpportunitiesForPartner shows.
  */
 export async function checkQuoteEligibility(partnerId: string, requestId: string): Promise<QuoteEligibility> {
@@ -213,11 +251,15 @@ export async function checkQuoteEligibility(partnerId: string, requestId: string
       select: {
         marketplaceStatus: true,
         operationalStatus: true,
+        onboardingStatus: true,
         capabilities: { where: { isApproved: true }, select: { domain: true } },
         tenantRelationships: { where: { tenantId: request.tenantId }, select: { status: true } },
       },
     });
     if (!partner) return { ok: false, status: 403, error: 'Transport partner not found' };
+    if (!isActivated(partner)) {
+      return { ok: false, status: 403, error: 'Your partner account is not activated yet.' };
+    }
     if (partner.marketplaceStatus !== 'APPROVED' || partner.operationalStatus !== 'ACTIVE') {
       return { ok: false, status: 403, error: 'Your partner account is not approved and active on the marketplace.' };
     }
@@ -239,7 +281,8 @@ export async function checkQuoteEligibility(partnerId: string, requestId: string
       opp.status === 'OPEN' &&
       opp.closesAt > new Date() &&
       domains.includes(opp.domain) &&
-      (opp.visibility === 'EXCHANGE_NETWORK' || (opp.visibility === 'TENANT_NETWORK' && !!relationship));
+      (opp.visibility === 'EXCHANGE_NETWORK' || opp.visibility === 'TENANT_NETWORK') &&
+      (!!relationship || (opp.visibility === 'EXCHANGE_NETWORK' && EXCHANGE_OPEN_MARKET));
     if (!visible) {
       return { ok: false, status: 403, error: 'This request is not open to your company.' };
     }
@@ -282,7 +325,8 @@ async function resolveViewer(
   const ownRequested = requested ? memberships.some((m) => m.partnerId === requested) : false;
 
   if (memberships.length > 0 && (!requested || ownRequested)) {
-    const auth = await requirePartnerContext(req, { requested });
+    // A partner still being onboarded may read its own profile and scorecard.
+    const auth = await requirePartnerContext(req, { requested, allowPending: true });
     if (!auth.ok) return auth;
     return { ok: true, viewer: 'partner', partnerId: auth.ctx.partnerId, ctx: auth.ctx };
   }

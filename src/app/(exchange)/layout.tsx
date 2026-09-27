@@ -21,7 +21,9 @@ import {
   ExternalLink,
   ChevronRight,
   Radio,
+  Lock,
 } from 'lucide-react';
+import { isActivated, onboardingStatusLabel } from '@/lib/exchange/partner-activation';
 import {
   PartnerMembershipProvider,
   partnerInitials,
@@ -29,16 +31,47 @@ import {
   usePartnerMembership,
 } from '@/components/exchange/PartnerMembershipContext';
 
+// `onboarding`: open while the partner is still Pending Activation.
 const NAV_ITEMS = [
-  { href: '/exchange/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/exchange/jobs', label: 'Jobs & Requests', icon: Briefcase },
-  { href: '/exchange/quotations', label: 'Quotations', icon: DollarSign },
-  { href: '/exchange/fleet', label: 'Fleet Register', icon: Truck },
-  { href: '/exchange/drivers', label: 'Driver Roster', icon: Users },
-  { href: '/exchange/compliance', label: 'Compliance Vault', icon: ShieldCheck },
-  { href: '/exchange/invoices', label: 'Invoices & Billing', icon: FileText },
-  { href: '/exchange/profile', label: 'Company Profile', icon: Building2 },
+  { href: '/exchange/dashboard', label: 'Dashboard', icon: LayoutDashboard, onboarding: false },
+  { href: '/exchange/jobs', label: 'Jobs & Requests', icon: Briefcase, onboarding: false },
+  { href: '/exchange/quotations', label: 'Quotations', icon: DollarSign, onboarding: false },
+  { href: '/exchange/fleet', label: 'Fleet Register', icon: Truck, onboarding: true },
+  { href: '/exchange/drivers', label: 'Driver Roster', icon: Users, onboarding: true },
+  { href: '/exchange/compliance', label: 'Compliance Vault', icon: ShieldCheck, onboarding: true },
+  { href: '/exchange/invoices', label: 'Invoices & Billing', icon: FileText, onboarding: false },
+  { href: '/exchange/profile', label: 'Company Profile', icon: Building2, onboarding: true },
 ];
+
+const ONBOARDING_PAGES = NAV_ITEMS.filter((i) => i.onboarding).map((i) => i.href);
+
+/** Whether the signed-in partner is still Pending Activation (false while loading). */
+function usePendingActivation(): { pending: boolean; status: string | null } {
+  const state = usePartnerMembership();
+  if (state.status !== 'ok') return { pending: false, status: null };
+  return { pending: !isActivated(state.partner), status: state.partner.onboardingStatus };
+}
+
+/** Shown instead of pages that need an activated partner. */
+function PendingActivationPanel({ status }: { status: string }) {
+  return (
+    <div className="max-w-xl mx-auto mt-16 rounded-3xl border border-amber-500/30 bg-amber-500/10 p-8 text-center space-y-3">
+      <Lock className="w-8 h-8 text-amber-400 mx-auto" />
+      <h2 className="text-lg font-black text-white">Your account is not activated yet</h2>
+      <p className="text-xs text-slate-300">
+        Status: <span className="font-bold text-amber-300">{onboardingStatusLabel(status)}</span>. Upload your mandatory
+        compliance documents and submit them for review. Jobs, quotations and invoices open once your onboarding
+        company activates you.
+      </p>
+      <Link
+        href="/exchange/compliance"
+        className="inline-block px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs"
+      >
+        Go to Compliance Vault
+      </Link>
+    </div>
+  );
+}
 
 const STATUS_STYLES: Record<string, { dot: string; pill: string }> = {
   ACTIVE:      { dot: 'bg-emerald-400 animate-pulse', pill: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' },
@@ -93,7 +126,9 @@ function PartnerStatus() {
       <div className="text-[10px] text-slate-500 mt-0.5">
         Code: {partner.partnerCode}{partner.city ? ` · ${partner.city}` : ''} · {partnerRoleLabel(partner.role)}
       </div>
-      {partner.marketplaceStatus !== 'APPROVED' && (
+      {!isActivated(partner) ? (
+        <div className="text-[10px] text-amber-400 mt-0.5">{onboardingStatusLabel(partner.onboardingStatus)}</div>
+      ) : partner.marketplaceStatus !== 'APPROVED' && (
         <div className="text-[10px] text-amber-400 mt-0.5">Marketplace: {partner.marketplaceStatus.replace(/_/g, ' ').toLowerCase()}</div>
       )}
     </div>
@@ -124,6 +159,8 @@ export default function ExchangeLayout({ children }: { children: React.ReactNode
 
 function ExchangeShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { pending, status } = usePendingActivation();
+  const locked = pending && !ONBOARDING_PAGES.some((href) => pathname?.startsWith(href));
 
   return (
     <div className="flex min-h-screen bg-slate-950 text-slate-100 font-sans">
@@ -153,6 +190,7 @@ function ExchangeShell({ children }: { children: React.ReactNode }) {
             {NAV_ITEMS.map((item) => {
               const active = pathname?.startsWith(item.href);
               const Icon = item.icon;
+              const itemLocked = pending && !item.onboarding;
               return (
                 <Link
                   key={item.href}
@@ -163,11 +201,11 @@ function ExchangeShell({ children }: { children: React.ReactNode }) {
                       : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
                   }`}
                 >
-                  <div className="flex items-center gap-2.5">
+                  <div className={`flex items-center gap-2.5 ${itemLocked && !active ? 'opacity-50' : ''}`}>
                     <Icon className={`w-4 h-4 ${active ? 'text-white' : 'text-slate-400'}`} />
                     <span>{item.label}</span>
                   </div>
-                  {active && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
+                  {itemLocked ? <Lock className="w-3 h-3 opacity-70" /> : active && <ChevronRight className="w-3.5 h-3.5 opacity-80" />}
                 </Link>
               );
             })}
@@ -202,7 +240,9 @@ function ExchangeShell({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Dynamic Page Content */}
-        <main className="flex-1 p-6 overflow-y-auto">{children}</main>
+        <main className="flex-1 p-6 overflow-y-auto">
+          {locked && status ? <PendingActivationPanel status={status} /> : children}
+        </main>
       </div>
     </div>
   );

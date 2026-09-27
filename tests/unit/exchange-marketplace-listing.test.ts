@@ -8,6 +8,7 @@ import { describe, it, expect, vi } from 'vitest';
 const findMany = vi.hoisted(() => vi.fn(async () => []));
 const partner = vi.hoisted(() => ({
   id: 'p1',
+  onboardingStatus: 'APPROVED',
   marketplaceStatus: 'APPROVED',
   operationalStatus: 'ACTIVE',
   capabilities: [{ domain: 'PASSENGER_TRANSPORT' }],
@@ -47,7 +48,8 @@ describe('listOpportunitiesForPartner', () => {
       domain: { in: ['PASSENGER_TRANSPORT'] },
       tenantId: { notIn: ['tenant-blocked'] },
       OR: [
-        { visibility: 'EXCHANGE_NETWORK' },
+        // Only the partner's network until the exchange opens up.
+        { visibility: 'EXCHANGE_NETWORK', tenantId: { in: ['tenant-network'] } },
         { visibility: 'TENANT_NETWORK', tenantId: { in: ['tenant-network'] } },
         { request: { invitedPartners: { some: { partnerId: 'p1' } } } },
       ],
@@ -55,5 +57,17 @@ describe('listOpportunitiesForPartner', () => {
     expect(args.select).toMatchObject({ id: true, outsourceRequestId: true, disclosurePayload: true });
     expect(args.select).not.toHaveProperty('tenantId');
     expect(args.select).not.toHaveProperty('createdBy');
+  });
+
+  it('lists nothing for a partner that is not activated yet', async () => {
+    findMany.mockClear();
+    partner.onboardingStatus = 'UNDER_REVIEW';
+    try {
+      const res = await MarketplaceService.listOpportunitiesForPartner('p1');
+      expect(res).toEqual({ opportunities: [], reason: 'Partner is not activated yet' });
+      expect(findMany).not.toHaveBeenCalled();
+    } finally {
+      partner.onboardingStatus = 'APPROVED';
+    }
   });
 });

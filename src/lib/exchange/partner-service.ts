@@ -53,14 +53,6 @@ export interface RegisterDriverInput {
   permitExpiry?: Date | string;
 }
 
-export interface UploadComplianceDocInput {
-  partnerId: string;
-  docType: string;
-  docNumber?: string;
-  fileUrl: string;
-  expiryDate?: Date | string;
-}
-
 export class PartnerService {
   /**
    * Register a new TransportPartner in DRAFT status
@@ -258,23 +250,6 @@ export class PartnerService {
         permitType: input.permitType || 'RTA Bus Driver Permit',
         permitExpiry: input.permitExpiry ? new Date(input.permitExpiry) : null,
         isActive: true,
-      },
-    });
-  }
-
-  /**
-   * Upload a compliance document. It starts as PENDING until a platform
-   * administrator approves (VALID) or rejects it (/admin/exchange-partners).
-   */
-  static async uploadComplianceDoc(input: UploadComplianceDocInput) {
-    return prisma.partnerComplianceDoc.create({
-      data: {
-        partnerId: input.partnerId,
-        docType: input.docType,
-        docNumber: input.docNumber,
-        fileUrl: input.fileUrl,
-        expiryDate: input.expiryDate ? new Date(input.expiryDate) : null,
-        status: 'PENDING',
       },
     });
   }

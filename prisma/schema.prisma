@@ -6437,6 +6437,7 @@ enum PartnerOperationalStatus {
 enum PartnerServiceDomain {
   PASSENGER_TRANSPORT
   LIMOUSINE
+  SCHOOL_TRANSPORT
   FREIGHT
   RECOVERY
 
@@ -6681,6 +6682,7 @@ model TransportPartner {
   partnerCode           String                    @unique @map("partner_code")
   country               String                    @default("AE")
   city                  String?
+  emirate               String?                   // DUBAI, ABU_DHABI, ... (src/lib/exchange/partner-activation.ts)
   address               String?
   tradeLicenseNumber    String?                   @map("trade_license_number")
   taxRegistrationNumber String?                   @map("tax_registration_number")
@@ -6690,7 +6692,7 @@ model TransportPartner {
 
   onboardingStatus      PartnerOnboardingStatus   @default(DRAFT) @map("onboarding_status")
   operationalStatus     PartnerOperationalStatus  @default(ACTIVE) @map("operational_status")
-  marketplaceStatus     MarketplacePartnerStatus  @default(APPROVED) @map("marketplace_status")
+  marketplaceStatus     MarketplacePartnerStatus  @default(NOT_APPLIED) @map("marketplace_status")
 
   approvedAt            DateTime?                 @map("approved_at") @db.Timestamptz(6)
   approvedBy            String?                   @map("approved_by")

@@ -14,6 +14,7 @@ const NOT_SET = '—';
 const SERVICE_AREAS = [
   { domain: 'PASSENGER_TRANSPORT', label: '🚌 Passenger transport' },
   { domain: 'LIMOUSINE',           label: '🚗 Limousine' },
+  { domain: 'SCHOOL_TRANSPORT',    label: '🚸 School transport' },
   { domain: 'FREIGHT',             label: '🚚 Freight & cargo' },
   { domain: 'RECOVERY',            label: '🚨 Breakdown & recovery' },
 ];
