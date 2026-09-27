@@ -1,7 +1,7 @@
 /**
  * /api/admin/exchange/partners — listing and creating Exchange transport
- * partners is platform-admin only, validates the partner code and reports a
- * duplicate code as 409.
+ * partners is platform-admin only, validates the partner code, reports a
+ * duplicate code as 409, and records the tenant that onboards the partner.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Prisma } from '@prisma/client';
@@ -9,9 +9,17 @@ import { Prisma } from '@prisma/client';
 const create = vi.hoisted(() => vi.fn());
 const findMany = vi.hoisted(() => vi.fn());
 const audit = vi.hoisted(() => vi.fn());
+const tenantFindUnique = vi.hoisted(() => vi.fn());
+const tenantFindMany = vi.hoisted(() => vi.fn(async () => [] as unknown[]));
+const partnerUpdate = vi.hoisted(() => vi.fn(async () => ({})));
+const relationshipUpsert = vi.hoisted(() => vi.fn(async () => ({})));
 
 vi.mock('@/lib/prisma', () => ({
-  prisma: { transportPartner: { create, findMany } },
+  prisma: {
+    transportPartner: { create, findMany, update: partnerUpdate },
+    tenant: { findUnique: tenantFindUnique, findMany: tenantFindMany },
+    tenantPartnerRelationship: { upsert: relationshipUpsert },
+  },
 }));
 vi.mock('@/lib/rls', async () => {
   const { prisma } = await import('@/lib/prisma');
@@ -29,6 +37,12 @@ const post = (role: string, body: unknown) =>
 
 beforeEach(() => {
   create.mockReset(); findMany.mockReset(); audit.mockClear();
+  partnerUpdate.mockClear(); relationshipUpsert.mockClear(); tenantFindMany.mockClear();
+  tenantFindUnique.mockReset();
+  tenantFindUnique.mockImplementation(async (args: { where: { id: string } }) =>
+    args.where.id === 'lease-a' ? { id: 'lease-a', name: 'Lease Tenant A', plan: 'STANDARD', isActive: true }
+    : args.where.id === 'closed' ? { id: 'closed', name: 'Closed', plan: 'STANDARD', isActive: false }
+    : null);
   create.mockImplementation(async (args: { data: Record<string, unknown> }) => ({ id: 'p1', legalName: args.data.legalName, partnerCode: args.data.partnerCode }));
   findMany.mockResolvedValue([
     { id: 'p1', legalName: 'Gulf Coaches LLC', partnerCode: 'GULF-DXB', _count: { users: 2 },
@@ -48,7 +62,7 @@ describe('GET /api/admin/exchange/partners', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ partners: [{
       id: 'p1', legalName: 'Gulf Coaches LLC', partnerCode: 'GULF-DXB', memberCount: 2,
-      approvedDomains: ['PASSENGER_TRANSPORT', 'LIMOUSINE'], pendingDocuments: 1,
+      approvedDomains: ['PASSENGER_TRANSPORT', 'LIMOUSINE'], pendingDocuments: 1, onboardedByTenantName: null,
     }] });
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { deletedAt: null } }));
   });
@@ -68,7 +82,7 @@ describe('POST /api/admin/exchange/partners', () => {
   });
 
   it('creates the partner with a normalised code and audits it', async () => {
-    const res = await post('SUPER_ADMIN', { legalName: ' Gulf Coaches LLC ', partnerCode: ' gulf-dxb ', city: 'Dubai', tenantId: 'someone-else' });
+    const res = await post('SUPER_ADMIN', { legalName: ' Gulf Coaches LLC ', partnerCode: ' gulf-dxb ', city: 'Dubai', tenantId: 'someone-else', onboardedByTenantId: 'lease-a' });
     expect(res.status).toBe(201);
     expect(create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ legalName: 'Gulf Coaches LLC', partnerCode: 'GULF-DXB', city: 'Dubai' }),
@@ -78,16 +92,35 @@ describe('POST /api/admin/exchange/partners', () => {
   });
 
   it('rejects a missing name, a bad code or a bad contact email', async () => {
-    expect((await post('SUPER_ADMIN', { partnerCode: 'GULF' })).status).toBe(400);
-    expect((await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'g u l f' })).status).toBe(400);
-    expect((await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'GULF', primaryContactEmail: 'nope' })).status).toBe(400);
+    expect((await post('SUPER_ADMIN', { partnerCode: 'GULF', onboardedByTenantId: 'lease-a' })).status).toBe(400);
+    expect((await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'g u l f', onboardedByTenantId: 'lease-a' })).status).toBe(400);
+    expect((await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'GULF', primaryContactEmail: 'nope', onboardedByTenantId: 'lease-a' })).status).toBe(400);
     expect(create).not.toHaveBeenCalled();
   });
 
   it('reports a partner code already in use as 409', async () => {
     create.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('unique', { code: 'P2002', clientVersion: 'test' }));
-    const res = await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'GULF' });
+    const res = await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'GULF', onboardedByTenantId: 'lease-a' });
     expect(res.status).toBe(409);
     expect(audit).not.toHaveBeenCalled();
+  });
+
+  it('records the onboarding tenant and puts the partner in its network', async () => {
+    const res = await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'GULF', onboardedByTenantId: 'lease-a' });
+    expect(res.status).toBe(201);
+    expect((await res.json()).partner).toMatchObject({ onboardedByTenantId: 'lease-a', onboardedByTenantName: 'Lease Tenant A' });
+    expect(partnerUpdate).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { onboardedByTenantId: 'lease-a' } });
+    expect(relationshipUpsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { tenantId_partnerId: { tenantId: 'lease-a', partnerId: 'p1' } },
+      create: { tenantId: 'lease-a', partnerId: 'p1', status: 'APPROVED' },
+      update: {},
+    }));
+  });
+
+  it('requires an active onboarding tenant', async () => {
+    expect((await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'GULF' })).status).toBe(400);
+    expect((await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'GULF', onboardedByTenantId: 'closed' })).status).toBe(400);
+    expect((await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'GULF', onboardedByTenantId: 'nope' })).status).toBe(400);
+    expect(create).not.toHaveBeenCalled();
   });
 });

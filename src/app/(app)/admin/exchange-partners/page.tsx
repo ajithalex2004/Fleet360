@@ -1,17 +1,20 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeftRight, ExternalLink, Plus, Search, Trash2, UserPlus, X } from 'lucide-react';
+import { ArrowLeftRight, Building2, ExternalLink, Mail, Plus, Search, Trash2, UserPlus, X } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
 
 /**
  * Exchange partners — platform admin screen.
  *
- * Creates the Exchange's transport partners, approves the service areas
- * they may be offered work in (partner_capabilities) and links users to them
- * (partner_users), which is what lets a user into the partner portal and
- * marketplace. Platform administrators only: /api/admin/exchange/partners
- * and /api/admin/exchange/partner-users return 403 for anyone else.
+ * Creates the Exchange's transport partners, records the tenant that
+ * onboarded each one, approves the service areas they may be offered work in
+ * (partner_capabilities) and gives them users (partner_users), which is what
+ * lets a user into the partner portal and marketplace. A new user is invited
+ * by email into the onboarding tenant's User Master and linked to the partner
+ * when they accept; an existing Fleet360 user is linked directly. Platform
+ * administrators only: the /api/admin/exchange/* routes return 403 for anyone
+ * else.
  */
 
 const ROLES = [
@@ -41,7 +44,35 @@ interface Partner {
   memberCount: number;
   approvedDomains: string[];
   pendingDocuments: number;
+  onboardedByTenantId: string | null;
+  onboardedByTenantName: string | null;
 }
+
+interface TenantOption { id: string; name: string; isActive?: boolean | null }
+interface TenantRole { id: string; name: string; code: string }
+
+interface Invitation {
+  id: string;
+  email: string;
+  partnerRole: string | null;
+  tenantRoleName: string | null;
+  tenantName: string | null;
+  status: 'pending' | 'accepted' | 'revoked' | 'expired';
+  expiresAt: string;
+  createdAt: string;
+}
+
+/** Tenant roles a partner user may not be given (the API refuses them too). */
+const NON_GRANTABLE_TENANT_ROLES = ['SUPER_ADMIN', 'TENANT_ADMIN'];
+/** Preferred default tenant role for a partner user, in order. */
+const DEFAULT_TENANT_ROLE_CODES = ['VIEWER', 'STAFF', 'OPERATOR', 'DISPATCHER'];
+
+const INVITE_STATUS_STYLES: Record<string, string> = {
+  pending: 'bg-amber-500/15 text-amber-400',
+  accepted: 'bg-emerald-500/15 text-emerald-400',
+  revoked: 'bg-slate-500/15 text-[var(--text-muted)]',
+  expired: 'bg-slate-500/15 text-[var(--text-muted)]',
+};
 
 interface ComplianceDoc {
   id: string;
@@ -86,7 +117,7 @@ interface Member {
   user: { id: string; email: string; username: string | null; isActive: boolean };
 }
 
-const EMPTY_PARTNER = { legalName: '', partnerCode: '', tradeName: '', city: '', primaryContactName: '', primaryContactEmail: '', primaryContactPhone: '' };
+const EMPTY_PARTNER = { legalName: '', partnerCode: '', tradeName: '', city: '', primaryContactName: '', primaryContactEmail: '', primaryContactPhone: '', onboardedByTenantId: '' };
 
 const input = 'w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 py-2 text-sm text-[var(--text-main)] placeholder:text-[var(--text-muted)] focus:border-cyan-500 focus:outline-none';
 const primaryBtn = 'inline-flex items-center gap-1.5 rounded-lg bg-cyan-600 px-3 py-2 text-sm font-semibold text-white hover:bg-cyan-500 disabled:opacity-50';
@@ -133,6 +164,19 @@ export default function ExchangePartnersAdminPage() {
   const [docsError, setDocsError] = useState<string | null>(null);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
 
+  const [tenants, setTenants] = useState<TenantOption[]>([]);
+  const [tenantChoice, setTenantChoice] = useState('');
+  const [tenantBusy, setTenantBusy] = useState(false);
+  const [tenantError, setTenantError] = useState<string | null>(null);
+
+  const [userMode, setUserMode] = useState<'invite' | 'link'>('invite');
+  const [tenantRoles, setTenantRoles] = useState<TenantRole[]>([]);
+  const [invites, setInvites] = useState<Invitation[]>([]);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<string>('PARTNER_OPERATIONS');
+  const [inviteTenantRoleId, setInviteTenantRoleId] = useState('');
+  const [inviteNotice, setInviteNotice] = useState<{ text: string; link?: string } | null>(null);
+
   const loadPartners = useCallback(async () => {
     setLoading(true); setPageError(null);
     try {
@@ -164,7 +208,23 @@ export default function ExchangePartnersAdminPage() {
   }, []);
 
   useEffect(() => { void loadPartners(); }, [loadPartners]);
-  useEffect(() => { setServiceError(null); }, [selectedId]);
+  useEffect(() => { setServiceError(null); setTenantError(null); setInviteNotice(null); }, [selectedId]);
+
+  useEffect(() => {
+    void (async () => {
+      const r = await fetch('/api/admin/tenants?limit=200');
+      if (!r.ok) return;
+      const list = (await r.json().catch(() => [])) as TenantOption[];
+      if (Array.isArray(list)) setTenants(list.filter((t) => t.isActive !== false).sort((a, b) => a.name.localeCompare(b.name)));
+    })();
+  }, []);
+
+  const loadInvites = useCallback(async (partnerId: string) => {
+    const r = await fetch(`/api/admin/exchange/partners/${encodeURIComponent(partnerId)}/invitations`);
+    const d = await readJson(r);
+    setInvites(r.ok ? ((d.invitations ?? []) as Invitation[]) : []);
+  }, []);
+  useEffect(() => { if (selectedId) void loadInvites(selectedId); else setInvites([]); }, [selectedId, loadInvites]);
 
   const loadDocs = useCallback(async (partnerId: string) => {
     setDocsLoading(true); setDocsError(null);
@@ -192,6 +252,85 @@ export default function ExchangePartnersAdminPage() {
   }, [partners, query]);
 
   const selected = partners.find((p) => p.id === selectedId) ?? null;
+  const onboardingTenantId = selected?.onboardedByTenantId ?? null;
+
+  // The onboarding tenant's roles a partner user may be given.
+  useEffect(() => {
+    setTenantChoice(onboardingTenantId ?? '');
+    if (!onboardingTenantId) { setTenantRoles([]); setInviteTenantRoleId(''); return; }
+    void (async () => {
+      const r = await fetch(`/api/admin/roles?tenantId=${encodeURIComponent(onboardingTenantId)}&lite=true`);
+      const list = r.ok ? ((await r.json().catch(() => [])) as TenantRole[]) : [];
+      const roles = (Array.isArray(list) ? list : []).filter((x) => !NON_GRANTABLE_TENANT_ROLES.includes(x.code));
+      setTenantRoles(roles);
+      const preferred = DEFAULT_TENANT_ROLE_CODES.map((c) => roles.find((x) => x.code === c)).find(Boolean);
+      setInviteTenantRoleId((preferred ?? roles[0])?.id ?? '');
+    })();
+  }, [onboardingTenantId]);
+
+  const saveOnboardingTenant = async () => {
+    if (!selected || !tenantChoice) return;
+    const partnerId = selected.id;
+    setTenantBusy(true); setTenantError(null);
+    try {
+      const r = await fetch(`/api/admin/exchange/partners/${encodeURIComponent(partnerId)}/onboarding-tenant`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ onboardedByTenantId: tenantChoice }),
+      });
+      const d = await readJson(r);
+      if (!r.ok) { setTenantError(errorOf(d, r.status)); return; }
+      setPartners((list) => list.map((p) => (p.id === partnerId
+        ? { ...p, onboardedByTenantId: d.onboardedByTenantId as string, onboardedByTenantName: d.onboardedByTenantName as string }
+        : p)));
+    } catch (err) {
+      setTenantError(err instanceof Error ? err.message : 'Network error');
+    } finally {
+      setTenantBusy(false);
+    }
+  };
+
+  const inviteUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selected || !inviteEmail.trim()) return;
+    const partnerId = selected.id;
+    setBusy(true); setMemberError(null); setInviteNotice(null);
+    try {
+      const r = await fetch(`/api/admin/exchange/partners/${encodeURIComponent(partnerId)}/invitations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: inviteEmail.trim(), partnerRole: inviteRole, roleId: inviteTenantRoleId }),
+      });
+      const d = await readJson(r);
+      if (!r.ok) { setMemberError(errorOf(d, r.status)); return; }
+      setInviteNotice(d.emailed
+        ? { text: `Invitation emailed to ${inviteEmail.trim()}. They appear under Users once they accept.` }
+        : { text: `The invitation was created but the email could not be sent. Send this link to ${inviteEmail.trim()} yourself:`, link: d.acceptUrl as string });
+      setInviteEmail('');
+      await loadInvites(partnerId);
+    } catch (err) {
+      setMemberError(err instanceof Error ? err.message : 'Network error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revokeInvite = async (inv: Invitation) => {
+    if (!selected) return;
+    if (!window.confirm(`Revoke the invitation for ${inv.email}? The link stops working.`)) return;
+    const partnerId = selected.id;
+    setBusy(true); setMemberError(null);
+    try {
+      const r = await fetch(`/api/admin/exchange/partners/${encodeURIComponent(partnerId)}/invitations?id=${encodeURIComponent(inv.id)}`, { method: 'DELETE' });
+      const d = await readJson(r);
+      if (!r.ok) { setMemberError(errorOf(d, r.status)); return; }
+      await loadInvites(partnerId);
+    } catch (err) {
+      setMemberError(err instanceof Error ? err.message : 'Network error');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   // Refreshes the member list and the partner's member count.
   const afterMembershipChange = async (partnerId: string) => {
@@ -362,8 +501,21 @@ export default function ExchangePartnersAdminPage() {
               </label>
             ))}
           </div>
+          <label className="block text-xs font-medium text-[var(--text-muted)] md:max-w-md">
+            Onboarded by tenant *
+            <select
+              className={`${input} mt-1`}
+              required
+              value={partnerForm.onboardedByTenantId}
+              onChange={(e) => setPartnerForm((f) => ({ ...f, onboardedByTenantId: e.target.value }))}
+            >
+              <option value="">Select the tenant onboarding this partner</option>
+              {tenants.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </label>
           <p className="text-xs text-[var(--text-muted)]">
-            The partner code is permanent and unique: 2–24 letters, digits or dashes.
+            The partner code is permanent and unique: 2–24 letters, digits or dashes. The partner&rsquo;s users are
+            created in the onboarding tenant&rsquo;s user list.
           </p>
           {partnerError && <p className="text-sm text-rose-400">{partnerError}</p>}
           <div className="flex justify-end gap-2">
@@ -437,6 +589,30 @@ export default function ExchangePartnersAdminPage() {
                   <StatusPill label={`Operations: ${selected.operationalStatus}`} ok={selected.operationalStatus === 'ACTIVE'} />
                   <StatusPill label={`Onboarding: ${selected.onboardingStatus}`} ok={selected.onboardingStatus === 'APPROVED'} />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <h3 className="flex items-center gap-1.5 text-sm font-semibold"><Building2 className="h-4 w-4" /> Onboarded by</h3>
+                <p className="text-xs text-[var(--text-muted)]">
+                  {selected.onboardedByTenantName
+                    ? <>The partner&rsquo;s users are created in <strong className="text-[var(--text-main)]">{selected.onboardedByTenantName}</strong>&rsquo;s user list.</>
+                    : 'No onboarding tenant yet. Choose one before inviting users.'}
+                </p>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <select className={input} value={tenantChoice} onChange={(e) => setTenantChoice(e.target.value)} aria-label="Onboarding tenant">
+                    <option value="">Select a tenant</option>
+                    {tenants.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                  <button
+                    type="button"
+                    className={`${primaryBtn} justify-center`}
+                    disabled={tenantBusy || !tenantChoice || tenantChoice === selected.onboardedByTenantId}
+                    onClick={() => void saveOnboardingTenant()}
+                  >
+                    {tenantBusy ? 'Saving…' : selected.onboardedByTenantId ? 'Change' : 'Set tenant'}
+                  </button>
+                </div>
+                {tenantError && <p className="text-sm text-rose-400">{tenantError}</p>}
               </div>
 
               <div className="space-y-2">
@@ -534,10 +710,70 @@ export default function ExchangePartnersAdminPage() {
                 )}
               </div>
 
-              <div className="border-t border-[var(--border-subtle)] pt-5">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border-subtle)] pt-5">
                 <h3 className="text-sm font-semibold">Users</h3>
+                <div className="inline-flex rounded-lg border border-[var(--border-subtle)] p-0.5 text-xs">
+                  {([['invite', 'Invite new user'], ['link', 'Link existing user']] as const).map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => { setUserMode(mode); setMemberError(null); setInviteNotice(null); }}
+                      className={`rounded-md px-2.5 py-1 ${userMode === mode ? 'bg-cyan-600 text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
+              {userMode === 'invite' ? (
+                !selected.onboardedByTenantId ? (
+                  <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-400">
+                    Set the tenant that onboarded this partner (above) before inviting its users.
+                  </p>
+                ) : (
+                  <form onSubmit={inviteUser} className="space-y-2">
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <input
+                        type="email"
+                        required
+                        className={input}
+                        placeholder="Email of the new user"
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                      />
+                      <select className={`${input} sm:w-40`} value={inviteRole} onChange={(e) => setInviteRole(e.target.value)} aria-label="Partner role">
+                        {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                      </select>
+                      <select
+                        className={`${input} sm:w-48`}
+                        required
+                        value={inviteTenantRoleId}
+                        onChange={(e) => setInviteTenantRoleId(e.target.value)}
+                        aria-label={`Role in ${selected.onboardedByTenantName ?? 'the tenant'}`}
+                      >
+                        {tenantRoles.length === 0 && <option value="">No roles available</option>}
+                        {tenantRoles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                      </select>
+                      <button type="submit" className={`${primaryBtn} justify-center`} disabled={busy || !inviteTenantRoleId}>
+                        <Mail className="h-4 w-4" /> Invite
+                      </button>
+                    </div>
+                    <p className="text-xs text-[var(--text-muted)]">
+                      Partner role: {ROLES.find((r) => r.value === inviteRole)?.hint}. The second list is their role in{' '}
+                      {selected.onboardedByTenantName}. They get an email to set their password; accepting creates them in that
+                      tenant&rsquo;s user list and links them to {selected.legalName}.
+                    </p>
+                    {inviteNotice && (
+                      <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs text-[var(--text-main)]">
+                        {inviteNotice.text}
+                        {inviteNotice.link && <code className="mt-1 block break-all text-cyan-300">{inviteNotice.link}</code>}
+                      </div>
+                    )}
+                  </form>
+                )
+              ) : (
+              <>
               <form onSubmit={linkUser} className="flex flex-col gap-2 sm:flex-row">
                 <input
                   type="email"
@@ -558,8 +794,42 @@ export default function ExchangePartnersAdminPage() {
                 {ROLES.find((r) => r.value === linkRole)?.hint}. The user must already have a Fleet360 account; linking
                 an already-linked user changes their role.
               </p>
+              </>
+              )}
 
               {memberError && <p className="text-sm text-rose-400">{memberError}</p>}
+
+              {invites.some((i) => i.status === 'pending') && (
+                <div className="space-y-1.5">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">Pending invitations</h4>
+                  <ul className="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)]">
+                    {invites.filter((i) => i.status === 'pending').map((inv) => (
+                      <li key={inv.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">{inv.email}</div>
+                          <div className="text-xs text-[var(--text-muted)]">
+                            {ROLES.find((r) => r.value === inv.partnerRole)?.label ?? inv.partnerRole}
+                            {inv.tenantRoleName ? ` · ${inv.tenantRoleName} in ${inv.tenantName ?? 'tenant'}` : ''}
+                            {` · expires ${new Date(inv.expiresAt).toLocaleDateString()}`}
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${INVITE_STATUS_STYLES[inv.status]}`}>{inv.status}</span>
+                          <button
+                            type="button"
+                            aria-label={`Revoke invitation for ${inv.email}`}
+                            onClick={() => void revokeInvite(inv)}
+                            disabled={busy}
+                            className="rounded-lg p-1.5 text-[var(--text-muted)] hover:bg-rose-500/10 hover:text-rose-400 disabled:opacity-50"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">

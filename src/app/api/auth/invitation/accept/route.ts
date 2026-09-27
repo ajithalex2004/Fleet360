@@ -7,7 +7,9 @@ export const dynamic = 'force-dynamic';
  * Body for existing user: { token, password }   (existing user verifies password)
  *
  * On success: marks invitation used, creates UserTenant (or User+UserTenant),
- * sets the xl-session cookie, returns user/tenant for the client redirect.
+ * links the user to a transport partner when the invitation names one
+ * (src/lib/exchange/partner-onboarding.ts), sets the xl-session cookie,
+ * returns user/tenant for the client redirect.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -22,6 +24,7 @@ import { signSession } from '@/lib/tenant-session';
 import { withPlatformAdmin } from '@/lib/rls';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { linkInvitedPartnerUser } from '@/lib/exchange/partner-onboarding';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
@@ -53,9 +56,13 @@ export async function POST(req: NextRequest) {
   const rows = await withPlatformAdmin(prisma, (tx) => tx.$queryRawUnsafe<Array<{
     id: string; tenant_id: string; email: string; role_id: string;
     expires_at: string; used_at: string | null; revoked: boolean;
+    partner_id: string | null; partner_role: string | null;
   }>>(
-    `SELECT id::text, tenant_id, email, role_id, expires_at::text, used_at::text, revoked
-     FROM tenant_invitations
+    // partner_id/partner_role read through to_jsonb so this still works
+    // before migration 20260927090000 has added those columns.
+    `SELECT id::text, tenant_id, email, role_id, expires_at::text, used_at::text, revoked,
+            to_jsonb(i) ->> 'partner_id' AS partner_id, to_jsonb(i) ->> 'partner_role' AS partner_role
+     FROM tenant_invitations i
      WHERE token_hash = $1
      LIMIT 1`,
     tokenHash,
@@ -125,6 +132,7 @@ export async function POST(req: NextRequest) {
             data: { id: crypto.randomUUID(), userId: existing.id, tenantId: tenant.id, roleId: role.id, isActive: true },
           });
         }
+        await linkInvitedPartnerUser(tx, inv, existing.id);
 
         await tx.$executeRawUnsafe(
           `UPDATE tenant_invitations SET used_at = NOW() WHERE id = $1::uuid`,
@@ -196,6 +204,7 @@ export async function POST(req: NextRequest) {
       await tx.userTenant.create({
         data: { id: crypto.randomUUID(), userId: newUserId, tenantId: tenant.id, roleId: role.id, isActive: true },
       });
+      await linkInvitedPartnerUser(tx, inv, newUserId);
       await tx.$executeRawUnsafe(
         `UPDATE tenant_invitations SET used_at = NOW() WHERE id = $1::uuid`,
         inv.id,

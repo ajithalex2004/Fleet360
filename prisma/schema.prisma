@@ -6695,6 +6695,8 @@ model TransportPartner {
   approvedAt            DateTime?                 @map("approved_at") @db.Timestamptz(6)
   approvedBy            String?                   @map("approved_by")
   rejectionReason       String?                   @map("rejection_reason")
+  // Tenant that onboarded the partner; the partner's staff are users of this tenant.
+  onboardedByTenantId   String?                   @map("onboarded_by_tenant_id")
 
   // Relationships
   users                 PartnerUser[]
@@ -6718,6 +6720,7 @@ model TransportPartner {
 
   @@index([onboardingStatus], map: "idx_partners_onboarding")
   @@index([operationalStatus], map: "idx_partners_operational")
+  @@index([onboardedByTenantId], map: "idx_partners_onboarded_by")
   @@map("transport_partners")
   @@schema("public")
 }

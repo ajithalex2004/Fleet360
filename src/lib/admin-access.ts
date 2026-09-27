@@ -55,6 +55,8 @@ export const ADMIN_ROUTE_POLICY: Record<string, Partial<Record<Method, AdminLeve
   // The Exchange's transport partners (platform-level records).
   'exchange/partners':                           { GET: 'platform', POST: 'platform' },
   'exchange/partners/[id]/services':             { PUT: 'platform' },
+  'exchange/partners/[id]/onboarding-tenant':    { PUT: 'platform' },
+  'exchange/partners/[id]/invitations':          { GET: 'platform', POST: 'platform', DELETE: 'platform' },
   'exchange/partners/[id]/compliance':           { GET: 'platform' },
   'exchange/partners/[id]/compliance/[id]':      { PATCH: 'platform' },
   'events/outbox/replay':                        { POST: 'platform' },

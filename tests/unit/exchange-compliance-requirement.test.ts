@@ -7,7 +7,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 
-const findUnique = vi.hoisted(() => vi.fn(async (_args: unknown) => null));
+const findUnique = vi.hoisted(() => vi.fn<[unknown], Promise<null>>(async () => null));
 vi.mock('@/lib/prisma', () => ({ prisma: { transportPartner: { findUnique } } }));
 vi.mock('@/lib/alerts/raise', () => ({ raiseAlert: vi.fn() }));
 
