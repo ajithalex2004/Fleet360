@@ -14,6 +14,7 @@ import { tenantBootstrapHandler } from '@/lib/handlers/tenant-bootstrap-handler'
 import { z } from 'zod';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
+import { addMissingColumns } from '@/lib/ensure-columns';
 import { signSession } from '@/lib/tenant-session';
 // ── Free email domains blocklist ─────────────────────────────────────────────
 const FREE_EMAIL_DOMAINS = new Set([
@@ -133,39 +134,37 @@ async function sendVerificationEmail(opts: {
 
 // ── Ensure schema columns exist (run BEFORE transactions — DDL can't be in tx) ─
 
+// Each adds only missing columns (src/lib/ensure-columns.ts): where the schema
+// is up to date they issue no DDL, so the runtime role, which cannot ALTER
+// tables, no longer fails here. A column that is genuinely missing needs the
+// table owner; that failure is logged and provisioning carries on.
+
 async function ensurePasswordHashColumn(): Promise<void> {
   // Table is "User" (capital U — no @@map on the Prisma model)
   try {
-    await prisma.$executeRawUnsafe(
-      `ALTER TABLE "User" ADD COLUMN IF NOT EXISTS password_hash TEXT`
-    );
-  } catch {
-    // Column likely already exists — safe to ignore
+    await addMissingColumns('User', { password_hash: 'TEXT' });
+  } catch (e) {
+    console.warn('[provision] ensurePasswordHashColumn could not add the column:', e);
   }
 }
 
 async function ensureTrnColumn(): Promise<void> {
   try {
-    await prisma.$executeRawUnsafe(
-      `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS trn TEXT`
-    );
-  } catch {
-    // Column already exists or DDL not permitted — safe to ignore
+    await addMissingColumns('tenants', { trn: 'TEXT' });
+  } catch (e) {
+    console.warn('[provision] ensureTrnColumn could not add the column:', e);
   }
 }
 
 async function ensureDomainVerificationColumns(): Promise<void> {
-  const alters = [
-    `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS domain_verification_token TEXT`,
-    `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS domain_verification_method TEXT`,
-    `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS domain_verified_at TIMESTAMPTZ`,
-  ];
-  for (const sql of alters) {
-    try {
-      await prisma.$executeRawUnsafe(sql);
-    } catch (e) {
-      console.warn('[provision] ensureDomainVerificationColumns skipped:', sql, e);
-    }
+  try {
+    await addMissingColumns('tenants', {
+      domain_verification_token: 'TEXT',
+      domain_verification_method: 'TEXT',
+      domain_verified_at: 'TIMESTAMPTZ',
+    });
+  } catch (e) {
+    console.warn('[provision] ensureDomainVerificationColumns could not add the columns:', e);
   }
 }
 
