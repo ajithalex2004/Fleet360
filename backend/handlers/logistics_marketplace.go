@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"fleet360-backend/auth"
-	"fleet360-backend/database"
 	"fleet360-backend/models"
 	"fleet360-backend/rateengine"
 
@@ -52,7 +51,7 @@ func GetLogisticsCarriers(c *gin.Context) {
 
 	limit, offset := pageParams(c, defaultCarrierPageSize, maxCarrierPageSize)
 
-	q := database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsCarrier{})
+	q := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsCarrier{})
 	if s := strings.TrimSpace(c.Query("status")); s != "" {
 		q = q.Where("status IN ?", splitCSV(s))
 	}
@@ -83,7 +82,7 @@ func GetLogisticsCarrier(c *gin.Context) {
 		return
 	}
 	var carrier models.LogisticsCarrier
-	err := database.DB.Scopes(auth.WithTenant(c)).Where("id = ?", c.Param("id")).First(&carrier).Error
+	err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Where("id = ?", c.Param("id")).First(&carrier).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, gin.H{"error": "carrier not found"})
@@ -127,7 +126,7 @@ func CreateLogisticsCarrier(c *gin.Context) {
 		input.ComplianceStatus = "PENDING"
 	}
 
-	if err := database.DB.Create(&input).Error; err != nil {
+	if err := auth.TenantDB(c).Create(&input).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -149,7 +148,7 @@ func GetLogisticsRateContracts(c *gin.Context) {
 
 	limit, offset := pageParams(c, defaultContractPageSize, maxContractPageSize)
 
-	q := database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsRateContract{})
+	q := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsRateContract{})
 	if v := strings.TrimSpace(c.Query("customerId")); v != "" {
 		q = q.Where("customer_id = ?", v)
 	}
@@ -219,7 +218,7 @@ func CreateLogisticsRateContract(c *gin.Context) {
 		input.Status = "ACTIVE"
 	}
 
-	if err := database.DB.Create(&input).Error; err != nil {
+	if err := auth.TenantDB(c).Create(&input).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -282,7 +281,7 @@ func PostLogisticsRateQuote(c *gin.Context) {
 	// all of them (no customer/carrier SQL filter) and let the engine scope,
 	// so a generic contract and a customer-specific one can compete.
 	var rows []models.LogisticsRateContract
-	q := database.DB.Scopes(auth.WithTenant(c)).
+	q := auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 		Where("status = ?", "ACTIVE").
 		Where("lane_origin ILIKE ?", "%"+req.Origin+"%").
 		Where("lane_destination ILIKE ?", "%"+req.Destination+"%").
@@ -443,7 +442,7 @@ func GetLogisticsRFQs(c *gin.Context) {
 
 	limit, offset := pageParams(c, defaultRFQPageSize, maxRFQPageSize)
 
-	q := database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsFreightRFQ{})
+	q := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsFreightRFQ{})
 	if v := strings.TrimSpace(c.Query("shipmentOrderId")); v != "" {
 		q = q.Where("shipment_order_id = ?", v)
 	}
@@ -537,15 +536,18 @@ func CreateLogisticsRFQ(c *gin.Context) {
 		input.Metadata["invitedCarrierIds"] = input.InvitedCarrierIDs
 	}
 
-	if err := database.DB.Create(&input.LogisticsFreightRFQ).Error; err != nil {
+	if err := auth.TenantDB(c).Create(&input.LogisticsFreightRFQ).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	_ = database.DB.Scopes(auth.WithTenant(c)).
-		Model(&models.LogisticsShipmentOrder{}).
-		Where("id = ?", input.ShipmentOrderID).
-		Updates(map[string]any{"marketplace_status": "OPEN", "updated_at": time.Now()}).
-		Error
+	// Best-effort: in a savepoint, so a failure leaves the request transaction usable.
+	_ = auth.Try(c, func(tx *gorm.DB) error {
+		return tx.Scopes(auth.WithTenant(c)).
+			Model(&models.LogisticsShipmentOrder{}).
+			Where("id = ?", input.ShipmentOrderID).
+			Updates(map[string]any{"marketplace_status": "OPEN", "updated_at": time.Now()}).
+			Error
+	})
 	c.JSON(http.StatusCreated, input.LogisticsFreightRFQ)
 }
 
@@ -573,7 +575,7 @@ func getLogisticsBids(c *gin.Context, forcedRFQID string) {
 
 	limit, offset := pageParams(c, defaultRFQPageSize, maxRFQPageSize)
 
-	q := database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsCarrierBid{})
+	q := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsCarrierBid{})
 	if v := strings.TrimSpace(c.Query("shipmentOrderId")); v != "" {
 		q = q.Where("shipment_order_id = ?", v)
 	}
@@ -665,7 +667,7 @@ func CreateLogisticsBid(c *gin.Context) {
 		input.Status = "SUBMITTED"
 	}
 
-	if err := database.DB.Create(&input).Error; err != nil {
+	if err := auth.TenantDB(c).Create(&input).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -694,7 +696,7 @@ func loadRFQShipmentSummaries(c *gin.Context, shipmentIDs []string) map[string]r
 		Customer    *string
 		VehicleType *string
 	}
-	err := database.DB.Scopes(auth.WithTenant(c)).
+	err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 		Table("logistics_shipment_orders").
 		Select("id, COALESCE(origin_name, origin_address) AS origin, COALESCE(destination_name, destination_address) AS destination, cargo_owner_name AS customer, requested_vehicle_type AS vehicle_type").
 		Where("id IN ?", shipmentIDs).
@@ -728,7 +730,7 @@ func loadRFQBidCounts(c *gin.Context, rfqs []models.LogisticsFreightRFQ) map[str
 		RFQID string
 		Total int64
 	}
-	err := database.DB.Scopes(auth.WithTenant(c)).
+	err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 		Table("logistics_carrier_bids").
 		Select("rfq_id, COUNT(*) AS total").
 		Where("rfq_id IN ?", ids).
@@ -753,7 +755,7 @@ func loadCarrierNames(c *gin.Context, carrierIDs []string) map[string]*string {
 		ID   string
 		Name *string
 	}
-	err := database.DB.Scopes(auth.WithTenant(c)).
+	err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 		Table("logistics_carriers").
 		Select("id, name").
 		Where("id IN ?", carrierIDs).
@@ -778,7 +780,7 @@ func GetLogisticsCarrierScorecards(c *gin.Context) {
 
 	limit, offset := pageParams(c, defaultCarrierPageSize, maxCarrierPageSize)
 
-	q := database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsCarrierScorecard{})
+	q := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsCarrierScorecard{})
 	if v := strings.TrimSpace(c.Query("carrierId")); v != "" {
 		q = q.Where("carrier_id = ?", v)
 	}
@@ -830,7 +832,7 @@ func CreateLogisticsCarrierScorecard(c *gin.Context) {
 		input.Status = "ACTIVE"
 	}
 
-	if err := database.DB.Create(&input).Error; err != nil {
+	if err := auth.TenantDB(c).Create(&input).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

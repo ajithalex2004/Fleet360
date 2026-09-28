@@ -16,13 +16,13 @@ package handlers
 // tenant-scoped catalog load and the freight-charge / tracking-event writes.
 
 import (
+	"gorm.io/gorm"
 	"log"
 	"math"
 	"strings"
 
 	"fleet360-backend/accessorial"
 	"fleet360-backend/auth"
-	"fleet360-backend/database"
 	"fleet360-backend/models"
 
 	"github.com/gin-gonic/gin"
@@ -55,7 +55,7 @@ func applyAutoAccessorials(c *gin.Context, order *models.LogisticsShipmentOrder)
 	applied := accessorial.ApplyAccessorialCatalog(catalog, ctx)
 
 	for _, a := range applied {
-		if err := writeAutoAccessorialCharge(order, actorUID, a); err != nil {
+		if err := writeAutoAccessorialCharge(c, order, actorUID, a); err != nil {
 			// One bad row shouldn't sink the booking or the other charges.
 			log.Printf("[logistics] auto-accessorial %s write failed for shipment %s: %v", a.Code, order.ID, err)
 			continue
@@ -69,7 +69,7 @@ func applyAutoAccessorials(c *gin.Context, order *models.LogisticsShipmentOrder)
 // slice (treated as "no rules", so create-time apply becomes a no-op).
 func loadAccessorialCatalog(c *gin.Context) []accessorial.CatalogEntry {
 	var rows []models.LogisticsAccessorialCatalog
-	if err := database.DB.Scopes(auth.WithTenant(c)).
+	if err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 		Where("status = ?", "ACTIVE").
 		Limit(accessorialCatalogLimit).
 		Find(&rows).Error; err != nil {
@@ -128,7 +128,7 @@ func buildShipmentAccessorialContext(o *models.LogisticsShipmentOrder) accessori
 // addShipmentAccessorialCharge: charge_side=CUSTOMER, billing_status=READY,
 // quantity=1, unit_rate=amount=the computed amount, tax at 5% when taxable,
 // total=amount+tax, and metadata tagged source/autoApplied/reason.
-func writeAutoAccessorialCharge(order *models.LogisticsShipmentOrder, actorUID string, a accessorial.AppliedAccessorial) error {
+func writeAutoAccessorialCharge(c *gin.Context, order *models.LogisticsShipmentOrder, actorUID string, a accessorial.AppliedAccessorial) error {
 	taxAmount := 0.0
 	if a.Taxable {
 		taxAmount = round2Money(a.Amount * accessorialVATRate)
@@ -176,11 +176,13 @@ func writeAutoAccessorialCharge(order *models.LogisticsShipmentOrder, actorUID s
 	// TenantID is stamped above, so an unscoped Create is correct (and matches
 	// CreateLogisticsShipment). The scope helper only injects read WHERE
 	// clauses, which Create ignores.
-	if err := database.DB.Create(&charge).Error; err != nil {
+	// Best-effort for the caller (it logs and carries on): a savepoint keeps
+	// the request transaction usable if it fails.
+	if err := auth.Try(c, func(tx *gorm.DB) error { return tx.Create(&charge).Error }); err != nil {
 		return err
 	}
 
-	writeAccessorialTrackingEvent(order, charge, desc)
+	writeAccessorialTrackingEvent(c, order, charge, desc)
 	return nil
 }
 
@@ -188,7 +190,7 @@ func writeAutoAccessorialCharge(order *models.LogisticsShipmentOrder, actorUID s
 // shipment timeline, matching the TS addTrackingEvent call. Strictly
 // best-effort — a failure here is logged and swallowed; the money row already
 // committed and is the source of truth.
-func writeAccessorialTrackingEvent(order *models.LogisticsShipmentOrder, charge models.LogisticsFreightCharge, desc string) {
+func writeAccessorialTrackingEvent(c *gin.Context, order *models.LogisticsShipmentOrder, charge models.LogisticsFreightCharge, desc string) {
 	status := order.Status
 	notes := desc + " accessorial added"
 	ev := models.LogisticsTrackingEvent{
@@ -207,7 +209,7 @@ func writeAccessorialTrackingEvent(order *models.LogisticsShipmentOrder, charge 
 			"totalAmount": charge.TotalAmount,
 		},
 	}
-	if err := database.DB.Create(&ev).Error; err != nil {
+	if err := auth.Try(c, func(tx *gorm.DB) error { return tx.Create(&ev).Error }); err != nil {
 		log.Printf("[logistics] accessorial tracking event failed for shipment %s: %v", order.ID, err)
 	}
 }

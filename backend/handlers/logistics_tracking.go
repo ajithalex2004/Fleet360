@@ -110,7 +110,7 @@ func GetLogisticsTracking(c *gin.Context) {
 
 	// ── 1. Active trips (legacy: bookings → logistics_shipment_orders) ───────
 	var shipments []models.LogisticsShipmentOrder
-	if err := database.DB.Scopes(auth.WithTenant(c)).
+	if err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 		Where("status IN ?", trackingActiveStatuses).
 		Order("pickup_window_from DESC NULLS LAST").
 		Order("created_at DESC").
@@ -151,7 +151,7 @@ func GetLogisticsTracking(c *gin.Context) {
 	pingByShip := make(map[string]gpsPing)
 	{
 		var pings []gpsPing
-		if err := database.DB.Raw(`
+		if err := auth.TenantDB(c).Raw(`
 			SELECT DISTINCT ON (shipment_order_id)
 			       shipment_order_id, latitude, longitude, occurred_at
 			  FROM logistics_tracking_events
@@ -185,7 +185,7 @@ func GetLogisticsTracking(c *gin.Context) {
 			CreatedAt       time.Time  `gorm:"column:created_at"`
 		}
 		var pods []podRow
-		if err := database.DB.Raw(`
+		if err := auth.TenantDB(c).Raw(`
 			SELECT DISTINCT ON (shipment_order_id)
 			       shipment_order_id, gps::text AS gps, delivered_at, created_at
 			  FROM logistics_pod_events

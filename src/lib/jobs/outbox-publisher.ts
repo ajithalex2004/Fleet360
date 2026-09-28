@@ -21,6 +21,7 @@
 
 import type { JobContext, JobResult } from '@/lib/jobs/registry';
 import { prisma }                     from '@/lib/prisma';
+import { withPlatformAdmin }          from '@/lib/rls';
 import { getEventBus }                from '@/events/event-bus';
 import type { DomainEventEnvelope }   from '@/events/event-envelope';
 
@@ -136,6 +137,9 @@ async function initEventConsumers(): Promise<void> {
 
 // ── Job handler ───────────────────────────────────────────────────────────────
 
+// The outbox is a queue across every tenant: its reads and status updates run
+// in platform context (event_outbox is under FORCE ROW LEVEL SECURITY). Event
+// handlers run outside it, each in its event's own tenant (consumer-base.ts).
 export async function runOutboxPublisher(ctx: JobContext): Promise<JobResult> {
   const dryRun = ctx.searchParams.get('dryRun') === 'true';
 
@@ -143,7 +147,7 @@ export async function runOutboxPublisher(ctx: JobContext): Promise<JobResult> {
   const bus = getEventBus();
 
   // ── Queue-health snapshot at the top of every run ─────────────────────────
-  const [healthRow] = await prisma.$queryRaw<Array<{
+  const [healthRow] = await withPlatformAdmin(prisma, (tx) => tx.$queryRaw<Array<{
     parked:  bigint | number;
     lag_ms:  number | null;
   }>>`
@@ -154,7 +158,7 @@ export async function runOutboxPublisher(ctx: JobContext): Promise<JobResult> {
       EXTRACT(EPOCH FROM (NOW() - MIN(occurred_at) FILTER (WHERE published_at IS NULL
                   AND (failed_at IS NULL OR retry_count < ${MAX_RETRIES})))) * 1000 AS lag_ms
     FROM event_outbox
-  `.catch(() => [{ parked: 0, lag_ms: null }]);
+  `).catch(() => [{ parked: 0, lag_ms: null }]);
 
   const parkedCount = Number(healthRow?.parked ?? 0);
   const lagMs       = healthRow?.lag_ms != null ? Math.round(Number(healthRow.lag_ms)) : null;
@@ -170,7 +174,7 @@ export async function runOutboxPublisher(ctx: JobContext): Promise<JobResult> {
   }
 
   // Fetch unpublished rows (skip permanently parked ones)
-  const rows = await prisma.$queryRaw<OutboxRow[]>`
+  const rows = await withPlatformAdmin(prisma, (tx) => tx.$queryRaw<OutboxRow[]>`
     SELECT id, event_id::text, event_type, event_version,
            aggregate_type, aggregate_id,
            source_module, tenant_id::text,
@@ -181,7 +185,7 @@ export async function runOutboxPublisher(ctx: JobContext): Promise<JobResult> {
        AND (failed_at IS NULL OR retry_count < ${MAX_RETRIES})
      ORDER BY created_at ASC
      LIMIT ${BATCH_SIZE}
-  `;
+  `);
 
   if (rows.length === 0) {
     return {
@@ -221,11 +225,11 @@ export async function runOutboxPublisher(ctx: JobContext): Promise<JobResult> {
     if (handlers.length === 0) {
       // No consumer registered — mark published so we don't re-poll it
       console.warn(`[outbox-publisher] no consumers for ${row.event_type} — marking published`);
-      await prisma.$executeRaw`
+      await withPlatformAdmin(prisma, (tx) => tx.$executeRaw`
         UPDATE event_outbox
            SET published_at = NOW()
          WHERE id = ${row.id}::uuid
-      `;
+      `);
       skipped++;
       continue;
     }
@@ -260,26 +264,26 @@ export async function runOutboxPublisher(ctx: JobContext): Promise<JobResult> {
         );
       }
 
-      await prisma.$executeRaw`
+      await withPlatformAdmin(prisma, (tx) => tx.$executeRaw`
         UPDATE event_outbox
            SET retry_count    = ${newCount},
                failed_at      = NOW(),
                failure_reason = ${reason}
          WHERE id = ${row.id}::uuid
-      `;
+      `);
       failed++;
     } else {
       console.info(
         `[outbox-publisher] published ${row.event_type} ${row.event_id} ` +
         `in ${eventDurationMs}ms (attempt ${row.retry_count + 1})`,
       );
-      await prisma.$executeRaw`
+      await withPlatformAdmin(prisma, (tx) => tx.$executeRaw`
         UPDATE event_outbox
            SET published_at   = NOW(),
                failed_at      = NULL,
                failure_reason = NULL
          WHERE id = ${row.id}::uuid
-      `;
+      `);
       published++;
     }
   }

@@ -37,7 +37,6 @@ import (
 	"time"
 
 	"fleet360-backend/auth"
-	"fleet360-backend/database"
 	"fleet360-backend/etapredict"
 	"fleet360-backend/geo"
 	"fleet360-backend/geofence"
@@ -75,7 +74,7 @@ func GetLogisticsStops(c *gin.Context) {
 	}
 	limit, offset := pageParams(c, defaultExecutionPageSize, maxExecutionPageSize)
 
-	q := database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentStop{})
+	q := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentStop{})
 	if v := strings.TrimSpace(c.Query("shipmentOrderId")); v != "" {
 		q = q.Where("shipment_order_id = ?", v)
 	}
@@ -115,7 +114,7 @@ func CreateLogisticsStop(c *gin.Context) {
 	if input.Status == "" {
 		input.Status = "PLANNED"
 	}
-	if err := database.DB.Create(&input).Error; err != nil {
+	if err := auth.TenantDB(c).Create(&input).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -131,7 +130,7 @@ func GetLogisticsRouteLegs(c *gin.Context) {
 	}
 	limit, offset := pageParams(c, defaultExecutionPageSize, maxExecutionPageSize)
 
-	q := database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsRouteLeg{})
+	q := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsRouteLeg{})
 	if v := strings.TrimSpace(c.Query("shipmentOrderId")); v != "" {
 		q = q.Where("shipment_order_id = ?", v)
 	}
@@ -170,7 +169,7 @@ func CreateLogisticsRouteLeg(c *gin.Context) {
 	if input.Status == "" {
 		input.Status = "PLANNED"
 	}
-	if err := database.DB.Create(&input).Error; err != nil {
+	if err := auth.TenantDB(c).Create(&input).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -188,7 +187,7 @@ func GetLogisticsAssignments(c *gin.Context) {
 	}
 	limit, offset := pageParams(c, defaultExecutionPageSize, maxExecutionPageSize)
 
-	q := database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsAssignment{})
+	q := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsAssignment{})
 	if v := strings.TrimSpace(c.Query("shipmentOrderId")); v != "" {
 		q = q.Where("shipment_order_id = ?", v)
 	}
@@ -239,7 +238,7 @@ func CreateLogisticsAssignment(c *gin.Context) {
 	if input.Currency == "" {
 		input.Currency = "AED"
 	}
-	if err := database.DB.Create(&input).Error; err != nil {
+	if err := auth.TenantDB(c).Create(&input).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -258,7 +257,7 @@ func GetLogisticsTrackingEvents(c *gin.Context) {
 	}
 	limit, offset := pageParams(c, defaultExecutionPageSize, maxExecutionPageSize)
 
-	q := database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsTrackingEvent{})
+	q := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsTrackingEvent{})
 	if v := strings.TrimSpace(c.Query("shipmentOrderId")); v != "" {
 		q = q.Where("shipment_order_id = ?", v)
 	}
@@ -303,7 +302,7 @@ func CreateLogisticsTrackingEvent(c *gin.Context) {
 	if input.Source == "" {
 		input.Source = "SYSTEM"
 	}
-	if err := database.DB.Create(&input).Error; err != nil {
+	if err := auth.TenantDB(c).Create(&input).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -319,7 +318,7 @@ func GetLogisticsPodEvents(c *gin.Context) {
 	}
 	limit, offset := pageParams(c, defaultExecutionPageSize, maxExecutionPageSize)
 
-	q := database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsPodEvent{})
+	q := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsPodEvent{})
 	if v := strings.TrimSpace(c.Query("shipmentOrderId")); v != "" {
 		q = q.Where("shipment_order_id = ?", v)
 	}
@@ -362,7 +361,7 @@ func CreateLogisticsPodEvent(c *gin.Context) {
 	if uid := auth.UserID(c); uid != "" {
 		input.CreatedBy = &uid
 	}
-	if err := database.DB.Create(&input).Error; err != nil {
+	if err := auth.TenantDB(c).Create(&input).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -379,7 +378,7 @@ func GetLogisticsTelematicsEvents(c *gin.Context) {
 	}
 	limit, offset := pageParams(c, defaultExecutionPageSize, maxExecutionPageSize)
 
-	q := database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsTelematicsEvent{})
+	q := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsTelematicsEvent{})
 	if v := strings.TrimSpace(c.Query("shipmentOrderId")); v != "" {
 		q = q.Where("shipment_order_id = ?", v)
 	}
@@ -418,7 +417,7 @@ func CreateLogisticsTelematicsEvent(c *gin.Context) {
 	}
 	input.ID = ""
 	input.TenantID = tid
-	if err := database.DB.Create(&input).Error; err != nil {
+	if err := auth.TenantDB(c).Create(&input).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -437,7 +436,7 @@ func GetLogisticsExceptions(c *gin.Context) {
 	}
 	limit, offset := pageParams(c, defaultExecutionPageSize, maxExecutionPageSize)
 
-	q := database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentException{})
+	q := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentException{})
 	if v := strings.TrimSpace(c.Query("shipmentOrderId")); v != "" {
 		q = q.Where("shipment_order_id = ?", v)
 	}
@@ -509,7 +508,7 @@ func IngestLogisticsTracking(c *gin.Context) {
 	// it. A row in another tenant is a 404 — same probe-resistance as the
 	// shipment GET endpoint.
 	var ship models.LogisticsShipmentOrder
-	if err := database.DB.Scopes(auth.WithTenant(c)).Where("id = ?", shipmentID).First(&ship).Error; err != nil {
+	if err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Where("id = ?", shipmentID).First(&ship).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, gin.H{"error": "shipment not found"})
 			return
@@ -541,7 +540,7 @@ func IngestLogisticsTracking(c *gin.Context) {
 			ev.OccurredAt = t // else BeforeCreate defaults to now
 		}
 	}
-	if err := database.DB.Create(&ev).Error; err != nil {
+	if err := auth.TenantDB(c).Create(&ev).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -579,7 +578,7 @@ func recomputeShipmentEta(c *gin.Context, tid, shipmentID string, ship *models.L
 	var destination *geo.LatLng
 	var plannedArrival *time.Time
 	var destStop models.LogisticsShipmentStop
-	if err := database.DB.Scopes(auth.WithTenant(c)).
+	if err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 		Where("shipment_order_id = ? AND stop_type = ? AND latitude IS NOT NULL AND longitude IS NOT NULL", shipmentID, "DELIVERY").
 		Order("sequence_no DESC").First(&destStop).Error; err == nil {
 		if destStop.Latitude != nil && destStop.Longitude != nil {
@@ -593,7 +592,7 @@ func recomputeShipmentEta(c *gin.Context, tid, shipmentID string, ship *models.L
 
 	// Recent GPS pings (most recent first, with coords).
 	var pings []models.LogisticsTrackingEvent
-	database.DB.Scopes(auth.WithTenant(c)).
+	auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 		Where("shipment_order_id = ? AND latitude IS NOT NULL AND longitude IS NOT NULL", shipmentID).
 		Order("occurred_at DESC").Limit(recentPingWindow).Find(&pings)
 
@@ -626,7 +625,10 @@ func recomputeShipmentEta(c *gin.Context, tid, shipmentID string, ship *models.L
 		latest.Metadata["etaAt"] = prediction.EtaAt.UTC().Format(time.RFC3339)
 		latest.Metadata["etaMethod"] = string(prediction.Method)
 		latest.Metadata["etaConfidence"] = string(prediction.Confidence)
-		database.DB.Scopes(auth.WithTenant(c)).Model(latest).Select("metadata").Updates(latest)
+		// Best-effort: in a savepoint, so a failure leaves the request transaction usable.
+		_ = auth.Try(c, func(tx *gorm.DB) error {
+			return tx.Scopes(auth.WithTenant(c)).Model(latest).Select("metadata").Updates(latest).Error
+		})
 	}
 	// (b) latest telematics eta_at/eta_confidence — what the customer-tracking
 	//     view actually reads. Map the confidence enum onto a 0–1 score.
@@ -639,13 +641,16 @@ func recomputeShipmentEta(c *gin.Context, tid, shipmentID string, ship *models.L
 			confScore = 0.6
 		}
 		var latestTel models.LogisticsTelematicsEvent
-		if err := database.DB.Scopes(auth.WithTenant(c)).
+		if err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 			Where("shipment_order_id = ?", shipmentID).
 			Order("event_time DESC").First(&latestTel).Error; err == nil {
 			latestTel.EtaAt = prediction.EtaAt
 			latestTel.EtaConfidence = &confScore
-			database.DB.Scopes(auth.WithTenant(c)).Model(&latestTel).
-				Select("eta_at", "eta_confidence").Updates(&latestTel)
+			// Best-effort: in a savepoint, so a failure leaves the request transaction usable.
+			_ = auth.Try(c, func(tx *gorm.DB) error {
+				return tx.Scopes(auth.WithTenant(c)).Model(&latestTel).
+					Select("eta_at", "eta_confidence").Updates(&latestTel).Error
+			})
 		}
 	}
 
@@ -685,7 +690,10 @@ func recomputeShipmentEta(c *gin.Context, tid, shipmentID string, ship *models.L
 		}
 		ship.Metadata["lastNotifiedEtaAt"] = prediction.EtaAt.UTC().Format(time.RFC3339)
 		ship.Metadata["lastNotifiedAt"] = now.UTC().Format(time.RFC3339)
-		database.DB.Scopes(auth.WithTenant(c)).Model(ship).Select("metadata").Updates(ship)
+		// Best-effort: in a savepoint, so a failure leaves the request transaction usable.
+		_ = auth.Try(c, func(tx *gorm.DB) error {
+			return tx.Scopes(auth.WithTenant(c)).Model(ship).Select("metadata").Updates(ship).Error
+		})
 	}
 
 	return prediction, decision, outcome
@@ -720,7 +728,7 @@ func notificationsDisabled() bool {
 func evaluateShipmentGeofences(c *gin.Context, tid, shipmentID string, ship *models.LogisticsShipmentOrder) ([]geofence.Event, int) {
 	// Stops with coordinates → circle fences, ordered by sequence_no.
 	var stops []models.LogisticsShipmentStop
-	database.DB.Scopes(auth.WithTenant(c)).
+	auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 		Where("shipment_order_id = ? AND latitude IS NOT NULL AND longitude IS NOT NULL", shipmentID).
 		Order("sequence_no ASC").Find(&stops)
 
@@ -758,7 +766,7 @@ func evaluateShipmentGeofences(c *gin.Context, tid, shipmentID string, ship *mod
 
 	// Last two pings: [0]=curr (just ingested), [1]=prev.
 	var pings []models.LogisticsTrackingEvent
-	database.DB.Scopes(auth.WithTenant(c)).
+	auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 		Where("shipment_order_id = ? AND latitude IS NOT NULL AND longitude IS NOT NULL", shipmentID).
 		Order("occurred_at DESC").Limit(2).Find(&pings)
 	if len(pings) == 0 || pings[0].Latitude == nil || pings[0].Longitude == nil {
@@ -789,7 +797,7 @@ func evaluateShipmentGeofences(c *gin.Context, tid, shipmentID string, ship *mod
 
 		// De-dup: skip if an OPEN exception of this type was raised recently.
 		var recent int64
-		database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentException{}).
+		auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentException{}).
 			Where("shipment_order_id = ? AND exception_type = ? AND status = ? AND raised_at > ?",
 				shipmentID, exType, "OPEN", cutoff).
 			Count(&recent)
@@ -808,7 +816,7 @@ func evaluateShipmentGeofences(c *gin.Context, tid, shipmentID string, ship *mod
 			Description:     &title,
 			Metadata:        map[string]any{"geofence": e},
 		}
-		if err := database.DB.Create(&ex).Error; err == nil {
+		if err := auth.Try(c, func(tx *gorm.DB) error { return tx.Create(&ex).Error }); err == nil {
 			raised++
 		}
 		// Note: a route-DEVIATION SMS/email is not wired here yet — the notify

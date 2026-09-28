@@ -1,7 +1,8 @@
 import { prisma } from '@/lib/prisma';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { logAuditInTx } from '@/lib/audit';
-import { runWithRlsScope } from '@/lib/rls-scope';
+import { runWithRlsScope, runWithTenantContext } from '@/lib/rls-scope';
+import { withPlatformAdmin } from '@/lib/rls';
 import { upsertFinanceInvoice } from '@/lib/finance/module-ledger';
 import { createDraftJournalEntry } from '@/lib/finance/journal-service';
 import { createHash, randomBytes } from 'crypto';
@@ -3898,6 +3899,33 @@ export async function revokeCarrierPortalInvite(args: {
     carrierId: rows[0].carrier_id,
     includeExpired: true,
   }).then(invites => invites.find(invite => invite.id === args.inviteId) ?? null);
+}
+
+/**
+ * Runs `fn` in the tenant of the active carrier-portal invite that `token`
+ * names, or returns null when there is none. The invite link is the only
+ * credential of the public carrier-portal flows, so the tenant is not known
+ * until the token is looked up: that one lookup, by token hash, runs in
+ * platform context (logistics_carrier_portal_invites is under FORCE ROW
+ * LEVEL SECURITY); everything after it is scoped to the invite's tenant.
+ */
+export async function withCarrierPortalInviteTenant<T>(
+  token: string,
+  fn: () => Promise<T>,
+): Promise<T | null> {
+  const tokenHash = hashPortalToken(token);
+  const rows = await withPlatformAdmin(prisma, (tx) => tx.$queryRawUnsafe<Array<{ tenant_id: string }>>(
+    `SELECT tenant_id::text AS tenant_id
+       FROM logistics_carrier_portal_invites
+      WHERE token_hash = $1
+        AND status = 'ACTIVE'
+        AND (expires_at IS NULL OR expires_at > NOW())
+      LIMIT 1`,
+    tokenHash,
+  ));
+  const tenantId = rows[0]?.tenant_id;
+  if (!tenantId) return null;
+  return runWithTenantContext(tenantId, fn);
 }
 
 export async function resolveCarrierPortalInvite(token: string) {

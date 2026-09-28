@@ -13,7 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveCarrierPortalInvite } from '@/lib/logistics/domain';
+import { resolveCarrierPortalInvite, withCarrierPortalInviteTenant } from '@/lib/logistics/domain';
 
 export const runtime = 'nodejs';
 
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const context = await resolveCarrierPortalInvite(token);
+    const context = await withCarrierPortalInviteTenant(token, () => resolveCarrierPortalInvite(token));
     if (!context) {
       return NextResponse.json(
         { error: 'This invite link is invalid or has expired. Ask the shipper for a new one.' },

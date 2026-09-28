@@ -272,7 +272,10 @@ func registerV1Routes(r *gin.Engine) {
 	// same auth.WithTenant scope as the rest of /api/v1. Phase L0 wires the
 	// shipment-orders slice + tenant-scoped stats; carriers, bids, RFQs,
 	// trips, tracking and finance attach to this group in later phases.
-	logistics := v1.Group("/logistics")
+	// TenantTx: one transaction per request with app.tenant_id set, so the
+	// logistics tables (FORCE ROW LEVEL SECURITY) return and accept only the
+	// caller's rows. Handlers use auth.TenantDB(c). See auth/tenant_tx.go.
+	logistics := v1.Group("/logistics", auth.TenantTx())
 	{
 		logistics.GET("/shipments", handlers.GetLogisticsShipments)
 		logistics.GET("/shipments/:id", handlers.GetLogisticsShipment)
@@ -440,8 +443,10 @@ func registerV1Routes(r *gin.Engine) {
 	// distmatrix integration) lands in a follow-up PR. All endpoints
 	// are behind the same auth.Middleware + ratelimit.PerTenant as the
 	// rest of /api/v1, so every dispatch query runs behind
-	// auth.WithTenant(c) — no unscoped reads possible.
-	dispatch := v1.Group("/dispatch")
+	// auth.WithTenant(c) — no unscoped reads possible. TenantTx: the
+	// dispatch tables are under FORCE ROW LEVEL SECURITY, so handlers use
+	// the request transaction (auth.TenantDB) with app.tenant_id set.
+	dispatch := v1.Group("/dispatch", auth.TenantTx())
 	{
 		// Trip schedules (the central dispatch entity)
 		dispatch.GET("/trips", handlers.ListTripSchedules)
@@ -488,6 +493,10 @@ func runSeed() {
 	switch env {
 	case "development", "test":
 		log.Info("seeding database", zap.String("go_env", env))
+		if err := database.UsePlatformSessionForSeed(); err != nil {
+			log.Error("could not enter the platform context for seeding", zap.Error(err))
+			os.Exit(1)
+		}
 		seed.Seed()
 		log.Info("seed done")
 	case "production":
@@ -505,6 +514,10 @@ func runMarketplaceSeed() {
 	switch env {
 	case "development", "test":
 		log.Info("seeding freight marketplace demo data", zap.String("go_env", env))
+		if err := database.UsePlatformSessionForSeed(); err != nil {
+			log.Error("could not enter the platform context for marketplace seed", zap.Error(err))
+			os.Exit(1)
+		}
 		seed.SeedMarketplaceDemo()
 		log.Info("marketplace seed done")
 	case "production":

@@ -12,7 +12,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveCarrierPortalInvite, submitCarrierBid } from '@/lib/logistics/domain';
+import { resolveCarrierPortalInvite, submitCarrierBid, withCarrierPortalInviteTenant } from '@/lib/logistics/domain';
 
 export const runtime = 'nodejs';
 
@@ -43,25 +43,29 @@ export async function POST(req: NextRequest) {
     : Number(body.transitTimeHours);
 
   try {
-    const context = await resolveCarrierPortalInvite(token);
-    if (!context) {
+    // Scoped to the invite's tenant: the token is the only credential.
+    const bid = await withCarrierPortalInviteTenant(token, async () => {
+      const context = await resolveCarrierPortalInvite(token);
+      if (!context) return null;
+      return submitCarrierBid({
+        tenantId: context.invite.tenantId,
+        shipmentOrderId: context.invite.shipmentOrderId,
+        rfqId: context.invite.rfqId,
+        carrierId: context.invite.carrierId,
+        amount,
+        currency: body.currency ?? null,
+        transitTimeHours: transit != null && Number.isFinite(transit) ? transit : null,
+        validityUntil: body.validityUntil ?? null,
+        notes: body.notes ?? null,
+        status: 'SUBMITTED',
+      });
+    });
+    if (!bid) {
       return NextResponse.json(
         { error: 'This invite link is invalid or has expired.' },
         { status: 404 },
       );
     }
-    const bid = await submitCarrierBid({
-      tenantId: context.invite.tenantId,
-      shipmentOrderId: context.invite.shipmentOrderId,
-      rfqId: context.invite.rfqId,
-      carrierId: context.invite.carrierId,
-      amount,
-      currency: body.currency ?? null,
-      transitTimeHours: transit != null && Number.isFinite(transit) ? transit : null,
-      validityUntil: body.validityUntil ?? null,
-      notes: body.notes ?? null,
-      status: 'SUBMITTED',
-    });
     return NextResponse.json(bid, { status: 201 });
     } catch (e) {
     // Governance / policy / closed-RFQ rejections are caller-fixable → 400.

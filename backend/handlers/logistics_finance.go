@@ -31,7 +31,6 @@ import (
 	"time"
 
 	"fleet360-backend/auth"
-	"fleet360-backend/database"
 	"fleet360-backend/models"
 
 	"github.com/gin-gonic/gin"
@@ -51,7 +50,7 @@ func GetLogisticsFreightCharges(c *gin.Context) {
 	}
 	limit, offset := pageParams(c, defaultExecutionPageSize, maxExecutionPageSize)
 
-	q := database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsFreightCharge{})
+	q := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsFreightCharge{})
 	if v := strings.TrimSpace(c.Query("shipmentOrderId")); v != "" {
 		q = q.Where("shipment_order_id = ?", v)
 	}
@@ -88,7 +87,7 @@ func GetLogisticsCarrierSettlements(c *gin.Context) {
 	}
 	limit, offset := pageParams(c, defaultExecutionPageSize, maxExecutionPageSize)
 
-	q := database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsCarrierSettlement{})
+	q := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsCarrierSettlement{})
 	if v := strings.TrimSpace(c.Query("carrierId")); v != "" {
 		q = q.Where("carrier_id = ?", v)
 	}
@@ -123,7 +122,7 @@ func GetLogisticsDriverPayouts(c *gin.Context) {
 	}
 	limit, offset := pageParams(c, defaultExecutionPageSize, maxExecutionPageSize)
 
-	q := database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsDriverPayout{})
+	q := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsDriverPayout{})
 	if v := strings.TrimSpace(c.Query("shipmentOrderId")); v != "" {
 		q = q.Where("shipment_order_id = ?", v)
 	}
@@ -161,7 +160,7 @@ func GetLogisticsFinancePostings(c *gin.Context) {
 	}
 	limit, offset := pageParams(c, defaultExecutionPageSize, maxExecutionPageSize)
 
-	q := database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsFinancePosting{})
+	q := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsFinancePosting{})
 	if v := strings.TrimSpace(c.Query("shipmentOrderId")); v != "" {
 		q = q.Where("shipment_order_id = ?", v)
 	}
@@ -290,7 +289,7 @@ SELECT so.id AS shipment_order_id,
  LIMIT ?`
 
 	var rows []financeReconRow
-	if err := database.DB.Raw(query, tid, limit).Scan(&rows).Error; err != nil {
+	if err := auth.TenantDB(c).Raw(query, tid, limit).Scan(&rows).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

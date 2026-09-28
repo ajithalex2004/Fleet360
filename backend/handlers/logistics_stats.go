@@ -92,7 +92,7 @@ func GetLogisticsStats(c *gin.Context) {
 	// Fresh query per call — chaining mutates the shared *gorm.DB. The embedded
 	// Model injects deleted_at IS NULL; auth.WithTenant injects tenant_id = ?.
 	shipments := func() *gorm.DB {
-		return database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentOrder{})
+		return auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentOrder{})
 	}
 
 	resp := logisticsStatsResponse{RecentTrips: make([]logisticsStatsRecentTrip, 0, 10)}
