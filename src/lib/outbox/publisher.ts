@@ -125,7 +125,17 @@ export async function tick(
       }
 
       try {
-        await consumer.handle(event, prisma);
+        // Consumers read and write tenant tables under row level security:
+        // run each in its event's tenant (see TickOptions.consumer).
+        const scope = options.consumer;
+        if (scope) {
+          if (!event.tenantId) {
+            throw new Error(`event ${event.eventId} has no tenant; consumers run per tenant`);
+          }
+          await scope.runForTenant(event.tenantId, () => consumer.handle(event, scope.client));
+        } else {
+          await consumer.handle(event, prisma);
+        }
 
         await tx.$executeRaw`
           INSERT INTO event_consumer_inbox

@@ -75,6 +75,17 @@ export interface TickOptions {
    * script) to clear retry_count and re-enable processing.
    */
   maxRetries?: number;
+  /**
+   * How consumers reach the database. Without it, each consumer gets the
+   * publisher's own client with no tenant set, which under row level
+   * security sees no tenant rows. With it, each consumer runs inside
+   * `runForTenant(event.tenantId, ...)` and gets `client`; an event without
+   * a tenant then fails (and is retried) instead of running unscoped.
+   */
+  consumer?: {
+    client: import('@prisma/client').PrismaClient;
+    runForTenant: <T>(tenantId: string, fn: () => Promise<T>) => Promise<T>;
+  };
 }
 
 export interface TickResult {
