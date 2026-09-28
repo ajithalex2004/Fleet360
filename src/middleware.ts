@@ -26,6 +26,8 @@ import { computeRateLimit, getRateLimiter } from '@/lib/rate-limit-scope';
 import { stripIdentityHeaders, withVerifiedIdentity } from '@/lib/identity-headers';
 import { storedFileKey } from '@/lib/storage/stored-file-path';
 import { isAdminApiPath, requiredAdminLevel, roleSatisfies } from '@/lib/admin-access';
+import { STEP_UP_COOKIE, STEP_UP_REQUIRED_BODY, stepUpMode, stepUpRouteFor } from '@/lib/auth/step-up-policy';
+import { verifyStepUp } from '@/lib/auth/step-up-token';
 import { authzMode, decide, POLICY_VERSION } from '@/lib/authz/policy';
 import { canServeResidency } from '@/lib/data-residency';
 
@@ -321,6 +323,31 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         },
         { status: 403 },
       );
+    }
+  }
+
+  // 4b'. Passkey step-up for high-impact admin actions (role and permission
+  // changes, user and tenant removal, credentials, platform operations; see
+  // src/lib/auth/step-up-policy.ts): a passkey check by the person behind
+  // this session within the last 5 minutes. STEP_UP_MODE=enforce (default)
+  // answers 403 step_up_required, which the app answers with a passkey
+  // prompt and a retry (src/components/auth/StepUpProvider.tsx).
+  const stepUpRoute = stepUpRouteFor(pathname, request.method);
+  if (stepUpRoute) {
+    const mode = stepUpMode();
+    if (mode !== 'off' && !(await verifyStepUp(request.cookies.get(STEP_UP_COOKIE)?.value, session))) {
+      console.warn(JSON.stringify({
+        stepUp: mode === 'enforce' ? 'required' : 'would-require',
+        method: request.method,
+        path: pathname,
+        route: stepUpRoute,
+        userId: session.userId,
+        tenantId: session.tenantId,
+        ...(session.impersonatedBy ? { impersonatedBy: session.impersonatedBy } : {}),
+      }));
+      if (mode === 'enforce') {
+        return NextResponse.json({ ...STEP_UP_REQUIRED_BODY, action: stepUpRoute }, { status: 403 });
+      }
     }
   }
 

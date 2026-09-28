@@ -10,13 +10,13 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 
 | Area (`/api/…`) | Routes | Reads (GET) | Writes (POST/PUT/PATCH/DELETE) |
 |---|---:|---|---|
-| `admin` | 82 | ADMIN_ROUTE_POLICY | ADMIN_ROUTE_POLICY |
+| `admin` | 83 | ADMIN_ROUTE_POLICY | ADMIN_ROUTE_POLICY |
 | `agents` | 17 | module `agents` | module `agents` |
 | `alert-configs` | 2 | tenant-admin | tenant-admin |
 | `alerts` | 3 | self | self |
 | `ambulance` | 2 | module `incidents` | module `incidents` |
 | `assets` | 34 | module `assets` | module `assets` |
-| `auth` | 16 | self | self |
+| `auth` | 22 | self | self |
 | `billing` | 2 | tenant-admin | tenant-admin |
 | `booking-portal` | 4 | module `booking-portal` | module `booking-portal` |
 | `bookings` | 2 | module `booking-portal` | module `booking-portal` |

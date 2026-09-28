@@ -126,6 +126,8 @@ export const ADMIN_ROUTE_POLICY: Record<string, Partial<Record<Method, AdminLeve
   // Ends a user's sessions within 60 s; a tenant admin only in their own tenant.
   'users/[id]/revoke-sessions':                  { POST: 'admin' },
   'users/[id]/hard-delete':                      { POST: 'platform' },
+  // Reset a user's passkeys after a lost device (step-up required).
+  'users/[id]/passkeys':                         { DELETE: 'platform' },
   'users/set-password':                          { POST: 'platform' },
   'workflow-instances':                          { GET: 'member' },   // approvals page
   // Workflows: tenant admins manage their own tenant's workflows (service

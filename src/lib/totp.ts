@@ -129,12 +129,20 @@ export function provisioningUri(opts: {
 
 // ── Recovery codes ───────────────────────────────────────────────────────────
 
+/**
+ * A recovery code as issued by generateRecoveryCodes (10 hex, dash, 5 hex).
+ * Also accepts 5 + 5, the format this used to (wrongly) require, which
+ * rejected every issued code.
+ */
+export const RECOVERY_CODE_FORMAT = /^(?:[a-f0-9]{10}|[a-f0-9]{5})-[a-f0-9]{5}$/i;
+
 /** Returns 10 recovery codes (plaintext) and their sha256 hashes. */
 export function generateRecoveryCodes(count = 10): { plaintext: string[]; hashed: string[] } {
   const plaintext: string[] = [];
   const hashed:    string[] = [];
   for (let i = 0; i < count; i++) {
-    // 10 chars: 5 hex + dash + 5 hex (e.g. "a3f9c-7e1b8")
+    // 10 hex + dash + 5 hex (e.g. "a3f9c07e1b-7e1b8"). The format is
+    // RECOVERY_CODE_FORMAT; codes already issued keep verifying.
     const raw = crypto.randomBytes(5).toString('hex') + '-' + crypto.randomBytes(5).toString('hex').slice(0, 5);
     plaintext.push(raw);
     hashed.push(crypto.createHash('sha256').update(raw).digest('hex'));
@@ -148,7 +156,7 @@ export function generateRecoveryCodes(count = 10): { plaintext: string[]; hashed
  */
 export function verifyRecoveryCode(code: string, storedHashes: string[]): string | null {
   const norm = code.trim().toLowerCase();
-  if (!/^[a-f0-9]{5}-[a-f0-9]{5}$/.test(norm)) return null;
+  if (!RECOVERY_CODE_FORMAT.test(norm)) return null;
   const hash = crypto.createHash('sha256').update(norm).digest('hex');
   return storedHashes.includes(hash) ? hash : null;
 }
