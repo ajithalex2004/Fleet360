@@ -148,12 +148,12 @@ describe('moduleFromPath()', () => {
   });
 
   describe('rental module paths', () => {
-    it('maps /api/rac to rental', () => {
-      expect(moduleFromPath('/api/rac')).toBe('rental');
+    it('maps /api/rental to rental', () => {
+      expect(moduleFromPath('/api/rental')).toBe('rental');
     });
 
-    it('maps /api/rac/bookings to rental', () => {
-      expect(moduleFromPath('/api/rac/bookings')).toBe('rental');
+    it('maps /api/rental/bookings to rental', () => {
+      expect(moduleFromPath('/api/rental/bookings')).toBe('rental');
     });
   });
 
@@ -176,8 +176,8 @@ describe('moduleFromPath()', () => {
       expect(moduleFromPath('/api/logistics/trips')).toBe('logistics');
     });
 
-    it('maps /api/trips to logistics', () => {
-      expect(moduleFromPath('/api/trips')).toBe('logistics');
+    it('maps /api/logistics/shipments to logistics', () => {
+      expect(moduleFromPath('/api/logistics/shipments')).toBe('logistics');
     });
   });
 
@@ -190,8 +190,8 @@ describe('moduleFromPath()', () => {
       expect(moduleFromPath('/api/finance/invoices')).toBe('finance');
     });
 
-    it('maps /api/invoice to finance', () => {
-      expect(moduleFromPath('/api/invoice')).toBe('finance');
+    it('maps /api/finance/journal-entries to finance', () => {
+      expect(moduleFromPath('/api/finance/journal-entries')).toBe('finance');
     });
   });
 
@@ -204,12 +204,12 @@ describe('moduleFromPath()', () => {
       expect(moduleFromPath('/api/school-bus/students')).toBe('school-bus');
     });
 
-    it('maps /api/students to school-bus', () => {
-      expect(moduleFromPath('/api/students')).toBe('school-bus');
+    it('maps /api/school-bus/routes to school-bus', () => {
+      expect(moduleFromPath('/api/school-bus/routes')).toBe('school-bus');
     });
 
-    it('maps /api/routes to school-bus', () => {
-      expect(moduleFromPath('/api/routes')).toBe('school-bus');
+    it('maps /api/school-bus/attendance to school-bus', () => {
+      expect(moduleFromPath('/api/school-bus/attendance')).toBe('school-bus');
     });
   });
 
@@ -238,9 +238,25 @@ describe('moduleFromPath()', () => {
   });
 
   describe('bus-ops module paths', () => {
-    it('maps /api/staff to bus-ops', () => {
-      expect(moduleFromPath('/api/staff')).toBe('bus-ops');
+    it('maps /api/bus-ops to bus-ops', () => {
+      expect(moduleFromPath('/api/bus-ops')).toBe('bus-ops');
     });
+
+    it('maps /api/bus-ops/staff to bus-ops', () => {
+      expect(moduleFromPath('/api/bus-ops/staff')).toBe('bus-ops');
+    });
+  });
+
+  // Short paths from before the APIs moved under their module prefix. No
+  // route serves them, and no module claims them: a module that did would
+  // gate a URL nothing answers, and hide a route added there later.
+  describe('retired short paths', () => {
+    it.each(['/api/rac', '/api/rac/bookings', '/api/trips', '/api/invoice', '/api/students', '/api/routes', '/api/staff'])(
+      'maps %s to no module',
+      (path) => {
+        expect(moduleFromPath(path)).toBeNull();
+      },
+    );
   });
 
   describe('admin module paths', () => {
