@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 
+import { holdersOfRole, revokeRoleHolders } from '@/lib/auth/session-revocation';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
@@ -48,6 +49,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
     const bodyRaw = await req.json();
     const body = stripTenantOwnershipFields(bodyRaw) as { permissionIds: string[] };
     const { permissionIds } = body;
+    const holders = await holdersOfRole(params.id);
     const perms = await withPlatformAdmin(prisma, async (tx) => {
       await tx.rolePermission.deleteMany({ where: { roleId: params.id } });
       if (permissionIds.length > 0) {
@@ -63,6 +65,8 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
         where: { roleId: params.id }, include: { permission: true },
       });
     });
+    // Sessions carry the old permission set: they end within 60 s.
+    await revokeRoleHolders(holders, 'role-permissions-changed', authz.userId);
     // The role's permission set changed, so the cached role list
     // (which embeds the permission count) is now stale.
     await revalidateCache(ROLES_TAG);

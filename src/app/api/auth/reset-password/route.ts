@@ -12,6 +12,7 @@ export const dynamic = 'force-dynamic';
  *  - audit log
  */
 
+import { revokeSessionsSafely } from '@/lib/auth/session-revocation';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import {
@@ -95,6 +96,10 @@ export async function POST(req: NextRequest) {
       action: 'UPDATE',
       details: `Password reset completed via reset link.`,
     });
+
+    // Sessions opened with the old password (possibly by whoever made the
+    // reset necessary) end within 60 s.
+    await revokeSessionsSafely({ userId: row.user_id, reason: 'password-reset', revokedBy: row.user_id });
 
     return NextResponse.json({ ok: true });
     } catch (err) {

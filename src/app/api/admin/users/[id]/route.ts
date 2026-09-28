@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic';
  * PATCH — update user identity, isActive, or moduleAccess
  */
 
+import { revokeSessionsSafely } from '@/lib/auth/session-revocation';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
@@ -101,6 +102,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const user = await withPlatformAdmin(prisma, (tx) =>
       tx.user.update({ where: { id }, data })
     );
+    // Deactivated, or module access changed: current sessions end within 60 s.
+    if (isActive === false || moduleAccess !== undefined) {
+      await revokeSessionsSafely({
+        userId: id,
+        reason: isActive === false ? 'user-deactivated' : 'module-access-changed',
+        revokedBy: authz.userId,
+      });
+    }
     // isActive changed → bust the cached user list so the dashboard
     // count and the user list both reflect the new state immediately.
     revalidateCache([CACHE_TAG]);
@@ -127,6 +136,7 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
         data:  { isActive: false, updatedAt: new Date() },
       })
     );
+    await revokeSessionsSafely({ userId: id, reason: 'user-deactivated', revokedBy: authz.userId });
     revalidateCache([CACHE_TAG]);
     return NextResponse.json({ success: true, message: 'User deactivated', user });
     } catch (e) {

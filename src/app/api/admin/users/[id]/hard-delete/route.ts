@@ -23,6 +23,7 @@ export const dynamic = 'force-dynamic';
  * SUPER_ADMIN only. PROTECTED_EMAILS whitelist enforced.
  */
 
+import { revokeSessionsSafely } from '@/lib/auth/session-revocation';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
@@ -125,6 +126,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     const u  = await tx.user.delete({ where: { id: userId } });
     return { membershipsDeleted: ut.count, userDeleted: 1, deletedEmail: u.email };
   });
+  await revokeSessionsSafely({ userId, reason: 'user-deleted', revokedBy: auth.userId });
 
   await logAudit({
     action: 'user.hard_delete',

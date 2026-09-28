@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 
+import { revokeSessionsSafely } from '@/lib/auth/session-revocation';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
@@ -49,19 +50,28 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   }
 
   try {
-    return await withTenantRls(prisma, params.id, async (tx) => {
-      const bodyRaw = await req.json();
+    const bodyRaw = await req.json();
     const body = stripTenantOwnershipFields(bodyRaw);
     const { modules, userTenants, roles, ...data } = body;
-      const tenant = await tx.tenant.update({
+    const tenant = await withTenantRls(prisma, params.id, (tx) =>
+      tx.tenant.update({
         where: { id: params.id },
         data: { ...data, updatedAt: new Date() },
+      }),
+    );
+    // Deactivated, or the plan (signed into sessions) changed: every session
+    // in the tenant ends within 60 s.
+    if (data.isActive === false || data.plan !== undefined) {
+      await revokeSessionsSafely({
+        tenantId: params.id,
+        reason: data.isActive === false ? 'tenant-deactivated' : 'tenant-plan-changed',
+        revokedBy: authz.userId,
       });
-      // Bust the list cache so the tenants page and the platform
-      // dashboard's stat card see the change on the next render.
-      revalidateCache([CACHE_TAG]);
-      return NextResponse.json(tenant);
-    });
+    }
+    // Bust the list cache so the tenants page and the platform
+    // dashboard's stat card see the change on the next render.
+    revalidateCache([CACHE_TAG]);
+    return NextResponse.json(tenant);
     } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }
 
@@ -77,10 +87,11 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
   }
 
   try {
-    return await withTenantRls(prisma, params.id, async (tx) => {
-      await tx.tenant.update({ where: { id: params.id }, data: { isActive: false } });
-      revalidateCache([CACHE_TAG]);
-      return NextResponse.json({ success: true });
-    });
+    await withTenantRls(prisma, params.id, (tx) =>
+      tx.tenant.update({ where: { id: params.id }, data: { isActive: false } }),
+    );
+    await revokeSessionsSafely({ tenantId: params.id, reason: 'tenant-deactivated', revokedBy: authz.userId });
+    revalidateCache([CACHE_TAG]);
+    return NextResponse.json({ success: true });
     } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }

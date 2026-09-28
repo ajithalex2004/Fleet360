@@ -10,6 +10,7 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { decodePermissionClaim, encodePermissionClaim, type PermissionClaim } from '@/lib/authz/permission-claim';
+import { isRevokedSince } from '@/lib/auth/revocation-check';
 import { isSessionRevoked } from '@/lib/session-blocklist';
 import { requireSessionSecret } from '@/lib/session-secret';
 
@@ -153,6 +154,8 @@ export interface SessionPayload {
   dataResidency?: string;
   /** Effective permissions (src/lib/authz/permission-claim.ts). */
   perms?: PermissionClaim;
+  /** Issued at (ms): a revocation invalidates sessions issued before it. */
+  iat?: number;
   exp: number;
 }
 
@@ -195,6 +198,7 @@ export async function signSession(payload: {
   const fullPayload: SessionPayload = {
     ...rest,
     ...(permissions ? { perms: encodePermissionClaim(permissions) } : {}),
+    iat: Date.now(),
     exp: Date.now() + (ttlMs ?? TOKEN_TTL_MS),
   };
   const encodedPayload = toBase64Url(JSON.stringify(fullPayload));
@@ -235,6 +239,15 @@ export async function verifySession(
 
     // Check revocation blocklist (Redis-backed; no-op when Redis not configured).
     if (await isSessionRevoked(token)) {
+      return null;
+    }
+
+    // Revoked for the user, the tenant or the user in the tenant (role or
+    // membership change, deactivation, password reset, sign out everywhere)
+    // since it was issued; re-checked at most every 60 s. Sessions from
+    // before iat existed count as issued a full lifetime before expiry.
+    const issuedAt = typeof payload.iat === 'number' ? payload.iat : payload.exp - TOKEN_TTL_MS;
+    if (await isRevokedSince(payload.userId, payload.tenantId, issuedAt)) {
       return null;
     }
 

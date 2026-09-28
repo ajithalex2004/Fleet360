@@ -110,6 +110,11 @@ func runServer() {
 	// — no recompile, no container restart, no .env edit. See backend/corsorigin
 	// for the merge semantics.
 	corsorigin.LoadBaseline()
+	// Tokens issued before a revocation (role or membership change,
+	// deactivation, password reset, sign out everywhere) are refused within
+	// auth.RevocationRecheck. See backend/auth/revocation.go.
+	auth.SetRevocationChecker(auth.NewDBRevocationChecker(database.DB))
+
 	if err := corsorigin.RefreshFromDB(database.DB); err != nil {
 		log.Warn("CORS initial DB load failed (serving with env baseline only)", zap.Error(err))
 	}

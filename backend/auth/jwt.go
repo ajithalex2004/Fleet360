@@ -187,6 +187,20 @@ func Middleware() gin.HandlerFunc {
 			c.AbortWithStatusJSON(401, gin.H{"error": "invalid or expired token"})
 			return
 		}
+		if checker := currentRevocationChecker(); checker != nil {
+			issuedAt := time.Time{}
+			if claims.IssuedAt != nil {
+				issuedAt = claims.IssuedAt.Time
+			}
+			revoked, rerr := checker.RevokedSince(c.Request.Context(), claims.Subject, claims.TenantID, issuedAt)
+			if rerr != nil {
+				_ = c.Error(fmt.Errorf("auth: revocation check failed (allowing): %w", rerr))
+			}
+			if revoked {
+				c.AbortWithStatusJSON(401, gin.H{"error": "invalid or expired token"})
+				return
+			}
+		}
 		c.Set(CtxClaims, claims)
 		c.Set(CtxUserID, claims.Subject)
 		c.Set(CtxTenantID, claims.TenantID)
