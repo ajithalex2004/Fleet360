@@ -60,6 +60,39 @@ func PublicPath(p string) string {
 	return p
 }
 
+// DryRunHeader asks for the decision without running the request
+// (src/lib/authz/dry-run.ts): answered 204 with the decision in headers.
+const DryRunHeader = "x-authz-dry-run"
+
+// writeDryRun answers a dry run with the same headers as Next.js. Go cannot
+// see the step-up cookie, so a step-up action is always "required" here.
+func writeDryRun(c *gin.Context, p *Policy, d Decision, m, sm Mode, stepUp bool) {
+	step := "none"
+	if stepUp {
+		step = "required"
+	}
+	outcome := "allowed"
+	if (!d.Allow && m == ModeEnforce) || (stepUp && sm == ModeEnforce) {
+		outcome = "refused"
+	}
+	decision := "deny"
+	if d.Allow {
+		decision = "allow"
+	}
+	h := c.Writer.Header()
+	h.Set("X-Authz-Backend", "go")
+	h.Set("X-Authz-Policy", p.PolicyVersion)
+	h.Set("X-Authz-Mode", string(m))
+	h.Set("X-Authz-Decision", decision)
+	h.Set("X-Authz-Reason", d.Reason)
+	h.Set("X-Authz-Area", d.Area)
+	h.Set("X-Authz-Required", d.Required)
+	h.Set("X-Authz-Outcome", outcome)
+	h.Set("X-Step-Up", step)
+	h.Set("X-Step-Up-Mode", string(sm))
+	c.AbortWithStatus(http.StatusNoContent)
+}
+
 // Action is one privileged request, for the audit log.
 type Action struct {
 	TenantID  string
@@ -123,7 +156,8 @@ func Middleware() gin.HandlerFunc {
 func MiddlewareWith(p *Policy, mode func() Mode, stepUpMode func() Mode) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		m := mode()
-		if m == ModeOff && stepUpMode() == ModeOff {
+		dryRun := c.GetHeader(DryRunHeader) == "1"
+		if m == ModeOff && stepUpMode() == ModeOff && !dryRun {
 			c.Next()
 			return
 		}
@@ -140,6 +174,11 @@ func MiddlewareWith(p *Policy, mode func() Mode, stepUpMode func() Mode) gin.Han
 		}
 		subject := Subject{Role: claims.Role, TenantID: claims.TenantID, Plan: claims.Plan, Permissions: p.DecodeClaim(claims.Perms)}
 		d := p.Decide(req, subject)
+
+		if dryRun {
+			writeDryRun(c, p, d, m, stepUpMode(), p.StepUpRequired(req.Pathname, req.Method))
+			return
+		}
 
 		// Tokens issued before the permission claim existed hold none until
 		// they roll over (24 h); in report mode that is expected, not signal.

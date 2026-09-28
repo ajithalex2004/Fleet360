@@ -15,8 +15,9 @@ import { SYSTEM_ROLES } from '@/lib/permissions';
 import { decide } from '@/lib/authz/policy';
 import { encodePermissionClaim, type PermissionClaim } from '@/lib/authz/permission-claim';
 import { goPolicyDocument } from '@/lib/authz/go-policy';
+import { GO_ROUTES as GO_ROUTE_LIST } from '@/lib/authz/go-routes';
 import { areaOf, GO_ONLY_AREAS } from '@/lib/authz/policy-matrix';
-import { GO_STEP_UP_ROUTES, stepUpRouteFor } from '@/lib/auth/step-up-policy';
+import { goStepUpRequired } from '@/lib/auth/step-up-policy';
 
 const BACKEND = path.resolve(__dirname, '../../backend/authz');
 const POLICY_FILE = path.join(BACKEND, 'policy.json');
@@ -24,36 +25,12 @@ const VECTORS_FILE = path.join(BACKEND, 'testdata/vectors.json');
 const TENANT = '11111111-1111-4111-8111-111111111111';
 const OTHER_TENANT = '22222222-2222-4222-8222-222222222222';
 
-/** Every route the Go backend serves under /api/v1 (as /api/…), with sample ids. */
+/** Go's routes, then other rule kinds and edge cases. */
 const GO_ROUTES: Array<[string, string]> = [
-  ['GET', '/api/fleet/vehicles'], ['GET', '/api/fleet/vehicles/v1'], ['POST', '/api/fleet/vehicles'],
-  ['PATCH', '/api/fleet/vehicles/v1'], ['DELETE', '/api/fleet/vehicles/v1'],
-  ['GET', '/api/fleet/drivers'], ['GET', '/api/fleet/drivers/d1'],
-  ['GET', '/api/fleet/garages'], ['POST', '/api/fleet/garages'], ['PUT', '/api/fleet/garages/g1'],
-  ['GET', '/api/maintenance/requests'], ['GET', '/api/maintenance/requests/m1'], ['POST', '/api/maintenance/requests'],
-  ['PATCH', '/api/maintenance/requests/m1'], ['GET', '/api/maintenance/predictive'],
-  ['GET', '/api/service/requests'], ['POST', '/api/service/requests'], ['PATCH', '/api/service/requests/s1'],
-  ['POST', '/api/quotations'], ['PUT', '/api/quotations/q1'], ['PATCH', '/api/quotations/q1'],
-  ['POST', '/api/alerts'], ['GET', '/api/alerts/configs'], ['POST', '/api/alerts/configs'],
-  ['PATCH', '/api/alerts/configs/c1'], ['DELETE', '/api/alerts/configs/c1'],
-  ['POST', '/api/files/upload'], ['GET', '/api/files/sign'], ['DELETE', '/api/files'],
-  ['GET', '/api/logistics/shipments'], ['GET', '/api/logistics/shipments/s1'], ['POST', '/api/logistics/shipments'],
-  ['GET', '/api/logistics/stats'], ['GET', '/api/logistics/analytics'], ['GET', '/api/logistics/sla'],
-  ['GET', '/api/logistics/carriers'], ['POST', '/api/logistics/carriers'], ['POST', '/api/logistics/rate-contracts'],
-  ['POST', '/api/logistics/rates/quote'], ['GET', '/api/logistics/rfqs'], ['POST', '/api/logistics/bids'],
-  ['POST', '/api/logistics/shipments/s1/tracking'], ['GET', '/api/logistics/finance/reconciliation'],
-  ['POST', '/api/logistics/planner/optimize'], ['POST', '/api/logistics/planner/plans/p1/commit'],
-  ['GET', '/api/logistics/export'], ['POST', '/api/logistics/shipments/s1/approve'],
-  ['POST', '/api/admin/tenants'], ['GET', `/api/admin/tenants/${TENANT}`], ['PATCH', `/api/admin/tenants/${TENANT}`],
-  ['POST', `/api/admin/tenants/${TENANT}/suspend`], ['POST', `/api/admin/tenants/${TENANT}/offboard`],
-  ['GET', `/api/admin/tenants/${TENANT}/audit`], ['GET', `/api/admin/tenants/${TENANT}/plan`],
-  ['POST', `/api/admin/tenants/${TENANT}/invitations`], ['POST', '/api/admin/audit/verify'],
-  ['HEAD', `/api/admin/tenants/${TENANT}`], ['OPTIONS', '/api/admin/tenants'],
-  ['GET', '/api/dispatch/trips'], ['POST', '/api/dispatch/trips'], ['DELETE', '/api/dispatch/trips/t1'],
-  ['GET', '/api/dispatch/incidents'], ['POST', '/api/dispatch/incidents'],
-  ['GET', '/api/dispatch/ambulance-calls'], ['POST', '/api/dispatch/ambulance-calls'], ['PATCH', '/api/dispatch/ambulance-calls/a1'],
-  ['GET', '/api/dispatch/routes'], ['GET', '/api/dispatch/trips/t1/passengers'],
+  ...GO_ROUTE_LIST.map(([m, p]) => [m, p.replace('{tenant}', TENANT)] as [string, string]),
   // Beyond Go's routes: other rule kinds and edge cases.
+  ['GET', '/api/logistics/export'], ['POST', '/api/logistics/shipments/s1/approve'],
+  ['HEAD', `/api/admin/tenants/${TENANT}`], ['OPTIONS', '/api/admin/tenants'],
   ['GET', '/api/leasing/contracts'], ['POST', '/api/rental/bookings'], ['GET', '/api/reports/export.csv'],
   ['PUT', '/api/billing/plan'], ['GET', '/api/debug/info'], ['GET', '/api/auth/me'], ['GET', '/api/exchange/jobs'],
   ['POST', '/api/webhooks/stripe'], ['GET', '/api/nothing-here'], ['GET', '/api/fleet/'], ['GET', '/api/users'],
@@ -94,12 +71,8 @@ function buildVectors() {
   }
   requests.push({ method: 'GET', pathname: '/api/fleet/vehicles', requestedTenantId: OTHER_TENANT });
   requests.push({ method: 'GET', pathname: '/api/fleet/vehicles', requestedTenantId: TENANT });
-  // Whether the request needs a passkey step-up: the Next.js list, and the
-  // Go-only admin actions.
-  const goOnlyStepUp = (pathname: string, method: string) => Object.entries(GO_STEP_UP_ROUTES).some(([t, ms]) =>
-    new RegExp(`^/api/admin/${t.split('/').map((seg) => (seg === '[id]' ? '[^/]+' : seg)).join('/')}/?$`).test(pathname)
-    && (ms as readonly string[]).includes(method.toUpperCase()));
-  const stepUp = requests.map((r) => stepUpRouteFor(r.pathname, r.method) !== null || goOnlyStepUp(r.pathname, r.method));
+  // Whether Go needs a passkey step-up: the Next.js list and the Go-only admin actions.
+  const stepUp = requests.map((r) => goStepUpRequired(r.pathname, r.method));
   const cases: Array<[number, number, boolean, string, string | null, string | null]> = [];
   requests.forEach((r, ri) => subjects.forEach((s, si) => {
     const d = decide(r, { role: s.role, tenantId: TENANT, plan: s.plan, permissions: s.permissions });

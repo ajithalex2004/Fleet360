@@ -29,6 +29,7 @@ import { isAdminApiPath, requiredAdminLevel, roleSatisfies } from '@/lib/admin-a
 import { STEP_UP_COOKIE, STEP_UP_REQUIRED_BODY, stepUpMode, stepUpRouteFor } from '@/lib/auth/step-up-policy';
 import { verifyStepUp } from '@/lib/auth/step-up-token';
 import { authzMode, decide, POLICY_VERSION } from '@/lib/authz/policy';
+import { DRY_RUN_HEADER, dryRunHeaders } from '@/lib/authz/dry-run';
 import { canServeResidency } from '@/lib/data-residency';
 
 // ── Rate limiter singleton (shared with driver-app telemetry handlers) ───────
@@ -306,6 +307,26 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         },
       }
     );
+  }
+
+  // 4a. Authorization dry run (src/lib/authz/dry-run.ts): answer the admin
+  // gate, step-up and policy decision in headers without running anything.
+  if (pathname.startsWith('/api/') && request.headers.get(DRY_RUN_HEADER) === '1') {
+    const level = isAdminApiPath(pathname) ? requiredAdminLevel(pathname, request.method) : null;
+    const route = stepUpRouteFor(pathname, request.method);
+    const headers = dryRunHeaders({
+      policyVersion: POLICY_VERSION,
+      mode: authzMode(),
+      decision: decide(
+        { pathname, method: request.method, requestedTenantId: request.nextUrl.searchParams.get('tenantId') },
+        { role: session.role, tenantId: session.tenantId, plan: session.plan, permissions: session.permissions },
+      ),
+      adminGateRefusal: level && !roleSatisfies(session.role, level) ? level : null,
+      stepUpRoute: route,
+      stepUpSatisfied: route ? await verifyStepUp(request.cookies.get(STEP_UP_COOKIE)?.value, session) : false,
+      stepUpMode: stepUpMode(),
+    });
+    return new NextResponse(null, { status: 204, headers });
   }
 
   // 4b. Admin API role policy — see src/lib/admin-access.ts. Checked here so

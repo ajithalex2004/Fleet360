@@ -121,3 +121,16 @@ export function stepUpMode(value: string | undefined = process.env.STEP_UP_MODE)
   const v = (value ?? '').trim().toLowerCase();
   return v === 'report' || v === 'off' ? v : 'enforce';
 }
+
+const GO_COMPILED = Object.entries({ ...STEP_UP_ROUTES, ...GO_STEP_UP_ROUTES }).map(([template, methods]) => ({
+  re: templateToRegExp(template),
+  methods: new Set<string>(methods),
+}));
+
+/** Whether the Go backend refuses this /api/admin action for a step-up (any matching template). */
+export function goStepUpRequired(pathname: string, method: string): boolean {
+  if (!pathname.startsWith(ADMIN_PREFIX)) return false;
+  const rel = pathname.slice(ADMIN_PREFIX.length);
+  const upper = method.toUpperCase();
+  return GO_COMPILED.some((e) => e.re.test(rel) && e.methods.has(upper));
+}

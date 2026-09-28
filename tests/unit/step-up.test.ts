@@ -59,7 +59,7 @@ vi.mock('@/lib/rls', () => {
       }
       if (sql.includes('FROM "User"')) {
         const u = db.users.get(args[0] as string);
-        return u ? [u] : [];
+        return u ? [{ row: u }] : [];
       }
       throw new Error(`unexpected SQL: ${sql}`);
     },

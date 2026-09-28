@@ -240,3 +240,36 @@ func TestAuthzOffStillRefusesStepUpActions(t *testing.T) {
 		t.Fatalf("suspend with AUTHZ_MODE=off, STEP_UP_MODE=enforce: %d", w.Code)
 	}
 }
+
+func TestDryRunAnswersTheDecisionWithoutRunningTheHandler(t *testing.T) {
+	ran := false
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	claims := staff("VIEWER", "viewer", t)
+	v1 := r.Group("/api/v1", func(c *gin.Context) { c.Set(auth.CtxClaims, claims); c.Next() },
+		MiddlewareWith(Default(), func() Mode { return ModeOff }, func() Mode { return ModeEnforce }))
+	v1.POST("/fleet/vehicles", func(c *gin.Context) { ran = true; c.JSON(200, gin.H{}) })
+	v1.POST("/admin/tenants/:tenantId/suspend", func(c *gin.Context) { ran = true; c.JSON(200, gin.H{}) })
+
+	dry := func(path string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", path, nil)
+		req.Header.Set("x-authz-dry-run", "1")
+		r.ServeHTTP(w, req)
+		return w
+	}
+	w := dry("/api/v1/fleet/vehicles")
+	if w.Code != 204 || ran {
+		t.Fatalf("dry run: %d, handler ran %v", w.Code, ran)
+	}
+	h := w.Header()
+	if h.Get("X-Authz-Decision") != "deny" || h.Get("X-Authz-Reason") != "missing-permission" || h.Get("X-Authz-Mode") != "off" ||
+		h.Get("X-Authz-Outcome") != "allowed" || h.Get("X-Authz-Backend") != "go" || h.Get("X-Authz-Policy") != Default().PolicyVersion ||
+		h.Get("X-Authz-Required") != "fleet:create:vehicles" || h.Get("X-Step-Up") != "none" {
+		t.Errorf("headers: %v", h)
+	}
+	w = dry("/api/v1/admin/tenants/" + tenant + "/suspend")
+	if w.Code != 204 || ran || w.Header().Get("X-Step-Up") != "required" || w.Header().Get("X-Authz-Outcome") != "refused" {
+		t.Errorf("step-up dry run: %d %v", w.Code, w.Header())
+	}
+}

@@ -1,0 +1,18 @@
+{
+  "tenants": {
+    "A": {
+      "id": "<tenant A id>",
+      "accounts": [
+        { "role": "TENANT_ADMIN", "email": "harness-a-admin@yourdomain.test", "passwordEnv": "HARNESS_A_ADMIN_PASSWORD" },
+        { "role": "FLEET_MANAGER", "email": "harness-a-fleet@yourdomain.test", "passwordEnv": "HARNESS_A_FLEET_PASSWORD" },
+        { "role": "VIEWER", "email": "harness-a-viewer@yourdomain.test", "passwordEnv": "HARNESS_A_VIEWER_PASSWORD", "totpSecretEnv": "HARNESS_A_VIEWER_TOTP" }
+      ]
+    },
+    "B": {
+      "id": "<tenant B id>",
+      "accounts": [
+        { "role": "TENANT_ADMIN", "email": "harness-b-admin@yourdomain.test", "passwordEnv": "HARNESS_B_ADMIN_PASSWORD" }
+      ]
+    }
+  }
+}

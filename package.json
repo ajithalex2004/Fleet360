@@ -4,6 +4,7 @@
     "private": true,
     "scripts": {
         "dev": "next dev",
+        "security:harness": "node scripts/security-harness/run.mjs",
         "predev": "node scripts/clean-next-cache.mjs",
         "dev:turbo": "next dev --turbopack",
         "clean:dev": "node scripts/clean-dev.mjs",
