@@ -10,6 +10,7 @@
 
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { addMissingColumns } from '@/lib/ensure-columns';
 
 let _ensured = false;
 
@@ -30,13 +31,17 @@ function isInsufficientPrivilege(e: unknown): boolean {
 
 export async function ensureBrandingColumns(): Promise<void> {
   if (_ensured) return;
+  // Only missing columns are added (no DDL, and no privilege error, where the
+  // schema is up to date: see src/lib/ensure-columns.ts).
   try {
-    await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS brand_product_name   TEXT`);
-    await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS brand_tagline        TEXT`);
-    await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS brand_logo_url       TEXT`);
-    await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS brand_favicon_url    TEXT`);
-    await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS brand_primary_color  TEXT`);
-    await prisma.$executeRawUnsafe(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS brand_accent_color   TEXT`);
+    await addMissingColumns('tenants', {
+      brand_product_name:  'TEXT',
+      brand_tagline:       'TEXT',
+      brand_logo_url:      'TEXT',
+      brand_favicon_url:   'TEXT',
+      brand_primary_color: 'TEXT',
+      brand_accent_color:  'TEXT',
+    });
   } catch (e) {
     if (!isInsufficientPrivilege(e)) throw e;
     console.warn('[ensureBrandingColumns] DDL skipped: runtime role lacks ALTER privilege on public schema (assuming columns already exist)');
