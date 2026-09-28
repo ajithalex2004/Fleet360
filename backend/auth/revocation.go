@@ -16,6 +16,7 @@ package auth
 
 import (
 	"context"
+	"database/sql"
 	"sync"
 	"time"
 
@@ -121,7 +122,9 @@ func NewDBRevocationChecker(db *gorm.DB) *CachingRevocationChecker {
 	return &CachingRevocationChecker{
 		Recheck: RevocationRecheck,
 		NotBefore: func(ctx context.Context, userID, tenantID string) (time.Time, error) {
-			var notBefore *time.Time
+			// max() is NULL when nothing was revoked, the usual case: scan into
+			// sql.NullTime, as a *time.Time target cannot take a NULL here.
+			var notBefore sql.NullTime
 			err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 				if err := tx.Exec(`SELECT set_config('app.tenant_id', ?, true)`, tenantID).Error; err != nil {
 					return err
@@ -131,12 +134,12 @@ func NewDBRevocationChecker(db *gorm.DB) *CachingRevocationChecker {
 					 WHERE (user_id = ? AND tenant_id IS NULL)
 					    OR (user_id IS NULL AND tenant_id = ?)
 					    OR (user_id = ? AND tenant_id = ?)`,
-					userID, tenantID, userID, tenantID).Scan(&notBefore).Error
+					userID, tenantID, userID, tenantID).Row().Scan(&notBefore)
 			})
-			if err != nil || notBefore == nil {
+			if err != nil || !notBefore.Valid {
 				return time.Time{}, err
 			}
-			return *notBefore, nil
+			return notBefore.Time, nil
 		},
 	}
 }
