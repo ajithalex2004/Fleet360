@@ -56,7 +56,6 @@ import (
 	"time"
 
 	"fleet360-backend/auth"
-	"fleet360-backend/database"
 	"fleet360-backend/models"
 
 	"github.com/gin-gonic/gin"
@@ -175,7 +174,7 @@ func GetLogisticsSla(c *gin.Context) {
 
 	// ── Source 1: active shipments with a delivery deadline ──────────────────
 	var shipments []models.LogisticsShipmentOrder
-	if err := database.DB.Scopes(auth.WithTenant(c)).
+	if err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 		Where("status IN ?", slaActiveStatuses).
 		Where("delivery_window_to IS NOT NULL").
 		Order("delivery_window_to ASC").
@@ -214,7 +213,7 @@ func GetLogisticsSla(c *gin.Context) {
 	// "Open" mirrors domain.ts listExceptions (status <> 'RESOLVED'); only rows
 	// with an sla_due_at have an SLA clock worth surfacing here.
 	var excs []models.LogisticsShipmentException
-	if err := database.DB.Scopes(auth.WithTenant(c)).
+	if err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 		Where("status <> ?", "RESOLVED").
 		Where("sla_due_at IS NOT NULL").
 		Find(&excs).Error; err != nil {
@@ -233,7 +232,7 @@ func GetLogisticsSla(c *gin.Context) {
 	}
 	if len(needIDs) > 0 {
 		var extra []models.LogisticsShipmentOrder
-		if err := database.DB.Scopes(auth.WithTenant(c)).
+		if err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 			Where("id IN ?", needIDs).Find(&extra).Error; err != nil {
 			fail(err)
 			return

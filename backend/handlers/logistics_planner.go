@@ -233,7 +233,7 @@ func GetLogisticsPlannerInputs(c *gin.Context) {
 			TotalWeightKg *float64 `gorm:"column:total_weight_kg"`
 		}
 		var rows []srow
-		database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentOrder{}).
+		auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentOrder{}).
 			Select("id, shipment_no, total_weight_kg").
 			Where("status IN ?", []string{"PENDING", "CONFIRMED"}).
 			Where("EXISTS (SELECT 1 FROM logistics_shipment_stops st WHERE st.shipment_order_id = logistics_shipment_orders.id AND st.stop_type = ?)", "PICKUP").
@@ -417,7 +417,7 @@ func loadAndGeocode(c *gin.Context, tid string, vehicleIDs, shipmentIDs []string
 	}
 
 	var shipments []plannerShipmentRow
-	if err := database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentOrder{}).
+	if err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentOrder{}).
 		Select("id, total_weight_kg, total_volume_cbm").
 		Where("id IN ?", shipmentIDs).
 		Find(&shipments).Error; err != nil {
@@ -425,7 +425,7 @@ func loadAndGeocode(c *gin.Context, tid string, vehicleIDs, shipmentIDs []string
 	}
 
 	var stops []plannerStopRow
-	if err := database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentStop{}).
+	if err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentStop{}).
 		Select("id, shipment_order_id, sequence_no, stop_type, address, location_name, latitude, longitude, planned_arrival_at, planned_depart_at, service_duration_minutes").
 		Where("shipment_order_id IN ?", shipmentIDs).
 		Order("shipment_order_id, sequence_no").
@@ -454,15 +454,18 @@ func loadAndGeocode(c *gin.Context, tid string, vehicleIDs, shipmentIDs []string
 		stops[i].Longitude = &lng
 		// Write the geocode back so the next plan skips the lookup. Best-effort —
 		// a failure here doesn't fail the optimize (matching the TS non-fatal catch).
-		database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentStop{}).
-			Where("id = ?", stops[i].ID).
-			Updates(map[string]any{
-				"latitude":           lat,
-				"longitude":          lng,
-				"geocode_confidence": res.confidence,
-				"geocoded_at":        gorm.Expr("NOW()"),
-				"updated_at":         gorm.Expr("NOW()"),
-			})
+		// Best-effort: in a savepoint, so a failure leaves the request transaction usable.
+		_ = auth.Try(c, func(tx *gorm.DB) error {
+			return tx.Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentStop{}).
+				Where("id = ?", stops[i].ID).
+				Updates(map[string]any{
+					"latitude":           lat,
+					"longitude":          lng,
+					"geocode_confidence": res.confidence,
+					"geocoded_at":        gorm.Expr("NOW()"),
+					"updated_at":         gorm.Expr("NOW()"),
+				}).Error
+		})
 	}
 
 	stopsByShipment := make(map[string][]plannerStopRow, len(shipments))
@@ -649,7 +652,7 @@ func persistPlan(c *gin.Context, tid string, req optimizeRequest, result routeop
 		VehiclesUsed:      &vehiclesUsed,
 		EstimatedCost:     &estCost,
 	}
-	if err := database.DB.Create(&plan).Error; err != nil {
+	if err := auth.TenantDB(c).Create(&plan).Error; err != nil {
 		return "", err
 	}
 	return plan.ID, nil
@@ -659,7 +662,7 @@ func persistPlan(c *gin.Context, tid string, req optimizeRequest, result routeop
 
 func commitPlan(c *gin.Context, tid, planID string) (int, error) {
 	var plan models.LogisticsRoutePlan
-	err := database.DB.Scopes(auth.WithTenant(c)).Where("id = ?", planID).First(&plan).Error
+	err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Where("id = ?", planID).First(&plan).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return 0, errors.New("Plan not found")
 	}
@@ -689,20 +692,23 @@ func commitPlan(c *gin.Context, tid, planID string) (int, error) {
 					RoutePlanID:     &planID,
 					SequenceInRoute: &seq,
 				}
-				if err := database.DB.Create(&asg).Error; err != nil {
+				if err := auth.TenantDB(c).Create(&asg).Error; err != nil {
 					return 0, err
 				}
 				// Best-effort: bump the shipment to ASSIGNED unless it's already
 				// in a terminal state.
-				database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentOrder{}).
-					Where("id = ? AND status NOT IN ?", shipmentID, []string{"DELIVERED", "CANCELLED", "CLOSED"}).
-					Updates(map[string]any{"status": "ASSIGNED", "updated_at": gorm.Expr("NOW()")})
+				// Best-effort: in a savepoint, so a failure leaves the request transaction usable.
+				_ = auth.Try(c, func(tx *gorm.DB) error {
+					return tx.Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentOrder{}).
+						Where("id = ? AND status NOT IN ?", shipmentID, []string{"DELIVERED", "CANCELLED", "CLOSED"}).
+						Updates(map[string]any{"status": "ASSIGNED", "updated_at": gorm.Expr("NOW()")}).Error
+				})
 				created++
 			}
 		}
 	}
 
-	if err := database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsRoutePlan{}).
+	if err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsRoutePlan{}).
 		Where("id = ?", planID).
 		Updates(map[string]any{
 			"status":       "COMMITTED",
@@ -715,7 +721,7 @@ func commitPlan(c *gin.Context, tid, planID string) (int, error) {
 }
 
 func discardPlan(c *gin.Context, planID string) error {
-	return database.DB.Scopes(auth.WithTenant(c)).Model(&models.LogisticsRoutePlan{}).
+	return auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsRoutePlan{}).
 		Where("id = ? AND status = ?", planID, "DRAFT").
 		Updates(map[string]any{
 			"status":     "DISCARDED",
@@ -729,7 +735,7 @@ func discardPlan(c *gin.Context, planID string) error {
 // deleted_at filter.
 func getPlan(c *gin.Context, planID string) (*planView, error) {
 	var plan models.LogisticsRoutePlan
-	if err := database.DB.Unscoped().Scopes(auth.WithTenant(c)).
+	if err := auth.TenantDB(c).Unscoped().Scopes(auth.WithTenant(c)).
 		Where("id = ?", planID).Limit(1).Find(&plan).Error; err != nil {
 		return nil, err
 	}
@@ -745,7 +751,7 @@ func getPlan(c *gin.Context, planID string) (*planView, error) {
 
 func listPlans(c *gin.Context, status string, limit, days int) ([]planListItem, error) {
 	from := time.Now().Add(-time.Duration(days) * 24 * time.Hour)
-	q := database.DB.Unscoped().Scopes(auth.WithTenant(c)).
+	q := auth.TenantDB(c).Unscoped().Scopes(auth.WithTenant(c)).
 		Model(&models.LogisticsRoutePlan{}).
 		Select("id, status, algorithm, created_at::text AS created_at, created_by, total_distance_km::text AS total_distance_km, total_duration_min, shipments_in, shipments_assigned, vehicles_used, estimated_cost::text AS estimated_cost").
 		Where("created_at >= ?", from)
@@ -868,7 +874,7 @@ func revalidatePlan(c *gin.Context, planID string, editedRoutes []editRoute, una
 	vu := summary.VehiclesUsed
 	upd := models.LogisticsRoutePlan{Result: &newResult, ShipmentsAssigned: &sa, VehiclesUsed: &vu}
 	upd.UpdatedAt = time.Now()
-	if err := database.DB.Unscoped().Scopes(auth.WithTenant(c)).
+	if err := auth.TenantDB(c).Unscoped().Scopes(auth.WithTenant(c)).
 		Model(&models.LogisticsRoutePlan{}).
 		Where("id = ?", planID).
 		Select("result", "shipments_assigned", "vehicles_used", "updated_at").

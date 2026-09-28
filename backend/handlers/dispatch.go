@@ -5,9 +5,10 @@ package handlers
 // This file establishes the routing surface and CRUD skeleton for the
 // bus/staff dispatch domain. It mirrors the logistics.go handler pattern:
 //   1. requireTenant(c) at the top — aborts 401 if no tenant context.
-//   2. Reads/updates/deletes go through database.DB.Scopes(auth.WithTenant(c))
+//   2. Reads/updates/deletes go through auth.TenantDB(c).Scopes(auth.WithTenant(c))
 //      so the WHERE tenant_id = ? clause is injected centrally and can't be
-//      forgotten per-query.
+//      forgotten per-query. TenantDB is the request transaction (auth.TenantTx,
+//      mounted on the group) with app.tenant_id set, as the tables are under RLS.
 //   3. Creates stamp input.TenantID = tid from the validated token before
 //      db.Create — never trusting a client-supplied tenantId.
 //
@@ -36,7 +37,6 @@ import (
 	"strings"
 
 	"fleet360-backend/auth"
-	"fleet360-backend/database"
 	"fleet360-backend/models"
 
 	"github.com/gin-gonic/gin"
@@ -60,7 +60,7 @@ func ListTripSchedules(c *gin.Context) {
 	}
 	limit, offset := paginationFromQuery(c)
 
-	q := database.DB.Scopes(auth.WithTenant(c)).Model(&models.TripSchedule{})
+	q := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.TripSchedule{})
 
 	if s := strings.TrimSpace(c.Query("status")); s != "" {
 		q = q.Where("status IN ?", splitCSV(s))
@@ -109,7 +109,7 @@ func CreateTripSchedule(c *gin.Context) {
 	}
 	in.TenantID = tid
 	in.ID = "" // let DB default / BeforeCreate hook mint the id
-	if err := database.DB.Create(&in).Error; err != nil {
+	if err := auth.TenantDB(c).Create(&in).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -122,7 +122,7 @@ func GetTripSchedule(c *gin.Context) {
 		return
 	}
 	var trip models.TripSchedule
-	err := database.DB.Scopes(auth.WithTenant(c)).
+	err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 		Preload("Passengers").
 		Preload("TripLogs").
 		Preload("Incidents").
@@ -154,7 +154,7 @@ func UpdateTripSchedule(c *gin.Context) {
 	delete(fields, "tenant_id")
 	delete(fields, "id")
 
-	res := database.DB.Scopes(auth.WithTenant(c)).
+	res := auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 		Model(&models.TripSchedule{}).
 		Where("id = ?", c.Param("id")).
 		Updates(fields)
@@ -174,7 +174,7 @@ func DeleteTripSchedule(c *gin.Context) {
 	if requireTenant(c) == "" {
 		return
 	}
-	res := database.DB.Scopes(auth.WithTenant(c)).
+	res := auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 		Delete(&models.TripSchedule{}, "id = ?", c.Param("id"))
 	if res.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": res.Error.Error()})
@@ -194,7 +194,7 @@ func ListTripIncidents(c *gin.Context) {
 		return
 	}
 	limit, offset := paginationFromQuery(c)
-	q := database.DB.Scopes(auth.WithTenant(c)).Model(&models.TripIncident{})
+	q := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.TripIncident{})
 	if s := strings.TrimSpace(c.Query("status")); s != "" {
 		q = q.Where("status IN ?", splitCSV(s))
 	}
@@ -225,7 +225,7 @@ func CreateTripIncident(c *gin.Context) {
 	}
 	in.TenantID = tid
 	in.ID = ""
-	if err := database.DB.Create(&in).Error; err != nil {
+	if err := auth.TenantDB(c).Create(&in).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -237,7 +237,7 @@ func GetTripIncident(c *gin.Context) {
 		return
 	}
 	var inc models.TripIncident
-	err := database.DB.Scopes(auth.WithTenant(c)).
+	err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 		First(&inc, "id = ?", c.Param("id")).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "incident not found"})
@@ -264,7 +264,7 @@ func UpdateTripIncident(c *gin.Context) {
 	delete(fields, "tenant_id")
 	delete(fields, "id")
 
-	res := database.DB.Scopes(auth.WithTenant(c)).
+	res := auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 		Model(&models.TripIncident{}).
 		Where("id = ?", c.Param("id")).
 		Updates(fields)
@@ -286,7 +286,7 @@ func ListAmbulanceCalls(c *gin.Context) {
 		return
 	}
 	limit, offset := paginationFromQuery(c)
-	q := database.DB.Scopes(auth.WithTenant(c)).Model(&models.AmbulanceCall{})
+	q := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.AmbulanceCall{})
 	if s := strings.TrimSpace(c.Query("status")); s != "" {
 		q = q.Where("status IN ?", splitCSV(s))
 	}
@@ -317,7 +317,7 @@ func CreateAmbulanceCall(c *gin.Context) {
 	}
 	in.TenantID = tid
 	in.ID = ""
-	if err := database.DB.Create(&in).Error; err != nil {
+	if err := auth.TenantDB(c).Create(&in).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -329,7 +329,7 @@ func GetAmbulanceCall(c *gin.Context) {
 		return
 	}
 	var call models.AmbulanceCall
-	err := database.DB.Scopes(auth.WithTenant(c)).
+	err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 		First(&call, "id = ?", c.Param("id")).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "call not found"})
@@ -356,7 +356,7 @@ func UpdateAmbulanceCall(c *gin.Context) {
 	delete(fields, "tenant_id")
 	delete(fields, "id")
 
-	res := database.DB.Scopes(auth.WithTenant(c)).
+	res := auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 		Model(&models.AmbulanceCall{}).
 		Where("id = ?", c.Param("id")).
 		Updates(fields)
@@ -378,7 +378,7 @@ func ListBusRoutes(c *gin.Context) {
 		return
 	}
 	limit, offset := paginationFromQuery(c)
-	q := database.DB.Scopes(auth.WithTenant(c)).Model(&models.BusRoute{})
+	q := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.BusRoute{})
 	if active := strings.TrimSpace(c.Query("active")); active == "true" {
 		q = q.Where("is_active = true")
 	}
@@ -399,7 +399,7 @@ func GetBusRoute(c *gin.Context) {
 		return
 	}
 	var route models.BusRoute
-	err := database.DB.Scopes(auth.WithTenant(c)).
+	err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 		Preload("Stops").
 		First(&route, "id = ?", c.Param("id")).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -425,7 +425,7 @@ func ListTripPassengers(c *gin.Context) {
 		return
 	}
 	var passengers []models.TripPassenger
-	err := database.DB.Scopes(auth.WithTenant(c)).
+	err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 		Where("trip_id = ?", tripID).
 		Order("employee_name ASC").
 		Find(&passengers).Error
@@ -446,7 +446,7 @@ func ListTripLogs(c *gin.Context) {
 		return
 	}
 	var logs []models.TripLog
-	err := database.DB.Scopes(auth.WithTenant(c)).
+	err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 		Where("schedule_id = ?", scheduleID).
 		Order("actual_departure_time ASC NULLS LAST").
 		Find(&logs).Error
@@ -468,7 +468,7 @@ func ListBoardingEvents(c *gin.Context) {
 	}
 	limit, offset := paginationFromQuery(c)
 	var events []models.BoardingEvent
-	err := database.DB.Scopes(auth.WithTenant(c)).
+	err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 		Where("schedule_id = ?", scheduleID).
 		Order("performed_at DESC").
 		Limit(limit).Offset(offset).

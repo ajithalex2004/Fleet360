@@ -200,10 +200,10 @@ func GetLogisticsAnalytics(c *gin.Context) {
 			AvailableVehicles:   availVeh,
 			MaintenanceVehicles: maintVeh,
 			FleetUtilization:    roundPct(totalVeh-availVeh, totalVeh),
-			DailyCompleted:     make([]analyticsDailyPoint, 0),
-			StatusDistribution: make([]analyticsStatusCount, 0),
-			TripsByDow:         make([]analyticsDowPoint, 0),
-			ShipmentTypes:      make([]analyticsTypeCount, 0),
+			DailyCompleted:      make([]analyticsDailyPoint, 0),
+			StatusDistribution:  make([]analyticsStatusCount, 0),
+			TripsByDow:          make([]analyticsDowPoint, 0),
+			ShipmentTypes:       make([]analyticsTypeCount, 0),
 		}
 		if deadlineCount > 0 {
 			r := roundPct(onTimeCount, deadlineCount)

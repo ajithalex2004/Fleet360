@@ -138,17 +138,25 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true }, { status: 201 });
       }
 
-      // Create or update tax category
+      // Create or update the tenant's own tax category. The shared UAE VAT
+      // categories (tenant_id NULL) are readable by every tenant but, under
+      // row level security, changed only in platform context: updating one
+      // from here is refused rather than changing it for every tenant.
       const [row] = await tx.$queryRawUnsafe<TaxRow[]>(
-        `INSERT INTO finance_tax_categories (code, name, rate, description, fta_code, is_default, is_active)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)
+        `INSERT INTO finance_tax_categories (code, name, rate, description, fta_code, is_default, is_active, tenant_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
          ON CONFLICT (code) DO UPDATE SET name=$2, rate=$3, description=$4, fta_code=$5, is_default=$6, is_active=$7, updated_at=NOW()
          RETURNING *`,
         body.code, body.name, body.rate ?? 0, body.description ?? null,
-        body.ftaCode ?? null, body.isDefault ?? false, body.isActive ?? true,
+        body.ftaCode ?? null, body.isDefault ?? false, body.isActive ?? true, tenantId,
       ).catch(() => []);
 
-      if (!row) return NextResponse.json({ error: 'Failed to save tax category' }, { status: 500 });
+      if (!row) {
+        return NextResponse.json(
+          { error: 'Failed to save tax category. Shared platform categories can only be changed by a platform admin.' },
+          { status: 500 },
+        );
+      }
       return NextResponse.json(row, { status: 201 });
   });
 }

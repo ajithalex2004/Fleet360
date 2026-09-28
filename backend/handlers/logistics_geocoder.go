@@ -27,7 +27,6 @@ import (
 	"strings"
 
 	"fleet360-backend/auth"
-	"fleet360-backend/database"
 	"fleet360-backend/models"
 
 	"github.com/gin-gonic/gin"
@@ -83,7 +82,7 @@ func normaliseAddress(raw string) string {
 // as a miss (returns ok=false) rather than failing the geocode.
 func readGeocodeCache(c *gin.Context, normalised string) (geocodeResult, bool) {
 	var row models.LogisticsGeocodeCache
-	if err := database.DB.Scopes(auth.WithTenant(c)).
+	if err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).
 		Where("normalised_address = ?", normalised).
 		Limit(1).Find(&row).Error; err != nil {
 		return geocodeResult{}, false
@@ -111,15 +110,18 @@ func writeGeocodeCache(c *gin.Context, tid, normalised string, res geocodeResult
 		Confidence:        &conf,
 		Source:            "mapbox",
 	}
-	database.DB.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "tenant_id"}, {Name: "normalised_address"}},
-		DoUpdates: clause.Assignments(map[string]any{
-			"latitude":     res.latitude,
-			"longitude":    res.longitude,
-			"confidence":   res.confidence,
-			"refreshed_at": gorm.Expr("NOW()"),
-		}),
-	}).Create(&row)
+	// Best-effort: in a savepoint, so a failure leaves the request transaction usable.
+	_ = auth.Try(c, func(tx *gorm.DB) error {
+		return tx.Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "tenant_id"}, {Name: "normalised_address"}},
+			DoUpdates: clause.Assignments(map[string]any{
+				"latitude":     res.latitude,
+				"longitude":    res.longitude,
+				"confidence":   res.confidence,
+				"refreshed_at": gorm.Expr("NOW()"),
+			}),
+		}).Create(&row).Error
+	})
 }
 
 // ── Mapbox forward geocode ───────────────────────────────────────────────────

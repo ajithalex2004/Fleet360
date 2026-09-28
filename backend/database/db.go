@@ -82,3 +82,19 @@ func envInt(key string, fallback int) int {
 	}
 	return parsed
 }
+
+// UsePlatformSessionForSeed pins the pool to one connection whose session
+// setting app.tenant_id is '*' (the platform context), so the demo seed
+// commands can write every tenant's rows into tables under FORCE ROW LEVEL
+// SECURITY. For the seed subcommands only, never for the server.
+func UsePlatformSessionForSeed() error {
+	sqlDB, err := DB.DB()
+	if err != nil {
+		return err
+	}
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
+	sqlDB.SetConnMaxLifetime(0)
+	sqlDB.SetConnMaxIdleTime(0)
+	return DB.Exec(`SELECT set_config('app.tenant_id', '*', false)`).Error
+}

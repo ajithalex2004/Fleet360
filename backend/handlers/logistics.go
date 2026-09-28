@@ -6,7 +6,8 @@ package handlers
 //
 //   1. requireTenant(c) at the top — aborts 401 if the request didn't carry
 //      a valid tenant context. Callers MUST `return` when it yields "".
-//   2. Reads/updates/deletes go through database.DB.Scopes(auth.WithTenant(c))
+//   2. Reads/updates/deletes go through auth.TenantDB(c).Scopes(auth.WithTenant(c))
+//      (the request's tenant transaction: RLS applies, see auth/tenant_tx.go)
 //      so the WHERE tenant_id = ? clause is injected centrally and can't be
 //      forgotten per-query (the failure mode that makes the current raw-SQL
 //      handlers leak across tenants when one query omits the filter).

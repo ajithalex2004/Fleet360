@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireShipperPortal } from '@/lib/shipper-portal/auth';
 import { listLogisticsMasterData } from '@/lib/logistics/domain';
+import { runWithTenantContext } from '@/lib/rls-scope';
 
 export const runtime = 'nodejs';
 
@@ -19,7 +20,9 @@ export async function GET(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const data = await listLogisticsMasterData({ tenantId: auth.tenantId, status: 'ACTIVE' });
+    // Scoped to the shipper token's tenant: logistics_master_data is under RLS.
+    const data = await runWithTenantContext(auth.tenantId, () =>
+      listLogisticsMasterData({ tenantId: auth.tenantId, status: 'ACTIVE' }));
     return NextResponse.json(
       { data },
       { headers: { 'Cache-Control': 'private, max-age=60' } },

@@ -5,6 +5,7 @@
 import type { JobContext, JobResult } from '@/lib/jobs/registry';
 import { prisma } from '@/lib/prisma';
 import { runSweep } from '@/lib/prisma-sweep';
+import { withTenantRls } from '@/lib/rls';
 
 
 const STALE_HOURS = 4;
@@ -45,7 +46,9 @@ export async function runAutoCloseTrips(ctx: JobContext): Promise<JobResult> {
     const durationMin = Math.max(0, Math.round((now.getTime() - new Date(startIso).getTime()) / 60_000));
     const overdueHours = Math.round((now.getTime() - t.arrival_time.getTime()) / 3_600_000);
     try {
-      await prisma.$transaction(async closeTx => {
+      // Each close runs in the trip's tenant: trip_schedules and
+      // trip_state_transitions are under FORCE ROW LEVEL SECURITY.
+      await withTenantRls(prisma, t.tenant_id, async closeTx => {
         await closeTx.$executeRaw`
           UPDATE trip_schedules
              SET status = 'AUTO_CLOSED',

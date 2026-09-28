@@ -51,6 +51,11 @@ export async function tick(
   // locks would be released after the SELECT and two publishers
   // could pick up the same event.
   return prisma.$transaction(async (tx) => {
+    // The outbox is a queue across every tenant, and event_outbox /
+    // event_consumer_inbox are under FORCE ROW LEVEL SECURITY: read and
+    // update it in platform context, for this transaction only.
+    await tx.$executeRaw`SELECT set_config('app.tenant_id', '*', true)`;
+
     // Alias snake_case columns to camelCase so the result matches
     // OutboxEvent's TypeScript shape. Without aliases, $queryRaw
     // returns the raw column names and the consumer lookup

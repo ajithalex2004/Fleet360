@@ -12,6 +12,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
+import { runAsTenant } from '@/lib/rls-scope';
 import { getTenantAccessMatrix, replaceTenantAccessMatrix } from '@/lib/service-tickets/access';
 import { loadServiceConfig } from '@/lib/service-config/load';
 import { TICKET_TYPES_ORDER } from '@/types/service-tickets';
@@ -51,9 +52,10 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   // Enrich each row with presentation metadata sourced from the Service
   // Configuration Engine. The matrix UI uses this to render the type
   // label, icon, tone, prefix and default SLA without depending on the
-  // legacy TICKET_TYPE_CONFIG file.
+  // legacy TICKET_TYPE_CONFIG file. Read as the authorized tenant: the
+  // service_* tables are under RLS and a SUPER_ADMIN's own tenant differs.
   const enriched = await Promise.all(matrix.map(async (row) => {
-    const cfg = await loadServiceConfig(tenantId, row.ticketType);
+    const cfg = await runAsTenant(tenantId, () => loadServiceConfig(tenantId, row.ticketType));
     const meta = cfg ? {
       label: cfg.type.name,
       description: cfg.type.description ?? '',

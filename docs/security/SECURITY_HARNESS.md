@@ -118,3 +118,8 @@ fixture tenants (four accounts) and the Go backend:
   application's queries filter by tenant, but the database backstop is
   missing. Run the database phase against staging to see whether
   production matches.
+  **Resolved** by migration `20261001090000_rls_remaining_tenant_tables`:
+  after it, the database phase passes all 1,337 checks on the 267 tables
+  (the skips are tables where tenant A has no row to try to move). The Go
+  `/logistics` and `/dispatch` groups now run each request in one tenant
+  transaction (`backend/auth/tenant_tx.go`).
