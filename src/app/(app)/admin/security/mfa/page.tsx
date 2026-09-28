@@ -86,7 +86,7 @@ export default function MfaSecurityPage() {
     e.preventDefault();
     setError(null);
     if (!disablePw) { setError('Enter your password.'); return; }
-    if (!/^\d{6}$/.test(disableCode) && !/^[a-f0-9]{5}-[a-f0-9]{5}$/i.test(disableCode)) {
+    if (!/^\d{6}$/.test(disableCode) && !/^(?:[a-f0-9]{10}|[a-f0-9]{5})-[a-f0-9]{5}$/i.test(disableCode)) {
       setError('Enter a 6-digit code or a recovery code.'); return;
     }
     setLoading(true);

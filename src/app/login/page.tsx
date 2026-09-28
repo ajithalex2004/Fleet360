@@ -178,8 +178,8 @@ export default function LoginPage() {
   const handleMfa = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (useRecovery) {
-      if (!/^[a-f0-9]{5}-[a-f0-9]{5}$/i.test(mfaCode.trim())) {
-        setError('Recovery code format is xxxxx-xxxxx.');
+      if (!/^(?:[a-f0-9]{10}|[a-f0-9]{5})-[a-f0-9]{5}$/i.test(mfaCode.trim())) {
+        setError('Recovery code format is xxxxxxxxxx-xxxxx.');
         return;
       }
       await submit({ recoveryCode: mfaCode.trim() });

@@ -6,6 +6,7 @@ import GlobalDeferredWidgets from "@/components/GlobalDeferredWidgets";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import CommandPalette from "@/components/navigation/CommandPalette";
 import ChunkErrorReloader from "@/components/ChunkErrorReloader";
+import StepUpProvider from "@/components/auth/StepUpProvider";
 
 export const metadata: Metadata = {
   title: "Fleet360",
@@ -60,9 +61,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider>
           <ClientProviders>
             <ToastProvider>
-              {children}
-              <CommandPalette />
-              <GlobalDeferredWidgets />
+              {/* Passkey prompt + retry for high-impact admin actions, on every page. */}
+              <StepUpProvider>
+                {children}
+                <CommandPalette />
+                <GlobalDeferredWidgets />
+              </StepUpProvider>
             </ToastProvider>
           </ClientProviders>
         </ThemeProvider>

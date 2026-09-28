@@ -7340,3 +7340,34 @@ model SessionRevocation {
   @@map("session_revocations")
   @@schema("public")
 }
+
+/// Staff passkey (WebAuthn) for step-up before high-impact admin actions.
+/// Platform context only (src/lib/auth/passkeys.ts).
+model StaffPasskey {
+  id          String    @id
+  userId      String    @map("user_id")
+  rpId        String    @map("rp_id")
+  publicKey   String    @map("public_key")
+  counter     BigInt    @default(0)
+  transports  String[]  @default([])
+  deviceName  String    @map("device_name")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastUsedAt  DateTime? @map("last_used_at") @db.Timestamptz(6)
+
+  @@index([userId], map: "idx_staff_passkeys_user")
+  @@map("staff_passkeys")
+  @@schema("public")
+}
+
+/// Single-use WebAuthn challenge for passkey registration or step-up.
+model StepUpChallenge {
+  challenge  String   @id
+  userId     String   @map("user_id")
+  kind       String
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId, kind], map: "idx_step_up_challenges_user")
+  @@map("step_up_challenges")
+  @@schema("public")
+}

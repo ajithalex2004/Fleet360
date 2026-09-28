@@ -168,6 +168,8 @@ export interface VerifiedSession {
   dataResidency?: string;
   /** Effective permissions from the signed claim; null when the session carries none. */
   permissions: string[] | null;
+  /** When the session was issued (ms); binds a passkey step-up to this session. */
+  issuedAt: number;
 }
 
 /**
@@ -260,6 +262,7 @@ export async function verifySession(
       ...(payload.dataResidency  ? { dataResidency:  payload.dataResidency  } : {}),
       // null: signed without a claim, or against another catalogue version.
       permissions:   decodePermissionClaim(payload.perms),
+      issuedAt,
     };
   } catch {
     return null;

@@ -20,7 +20,8 @@ vi.mock('next/server', async () => await import('next/server.js'));
 
 import { NextRequest } from 'next/server';
 import { middleware } from '@/middleware';
-import { signSession } from '@/lib/tenant-session';
+import { signSession, verifySession } from '@/lib/tenant-session';
+import { signStepUp } from '@/lib/auth/step-up-token';
 import {
   ADMIN_ROUTE_POLICY,
   requiredAdminLevel,
@@ -123,11 +124,15 @@ describe('roleSatisfies', () => {
   });
 });
 
+// Carries a passkey step-up for the session, so these tests exercise the
+// role policy alone (the step-up gate: tests/unit/step-up.test.ts).
 async function adminRequest(pathname: string, method: string, role: string) {
   const token = await signSession({ userId: 'user-1', tenantId: TENANT_A, plan: 'ENTERPRISE', role });
+  const session = await verifySession(token);
+  const stepUp = await signStepUp({ userId: 'user-1', tenantId: TENANT_A, issuedAt: session!.issuedAt });
   return middleware(new NextRequest(`http://localhost${pathname}`, {
     method,
-    headers: { cookie: `xl-session=${token}` },
+    headers: { cookie: `xl-session=${token}; xl-step-up=${stepUp}` },
   }));
 }
 

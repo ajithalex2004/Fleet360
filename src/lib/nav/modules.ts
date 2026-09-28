@@ -30,6 +30,7 @@ import {
   BusFront,
   UserCheck,
   FileCheck,
+  KeyRound,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -640,6 +641,7 @@ export const MODULES: ModuleDef[] = [
       { label: 'Partner onboarding',      href: '/admin/partner-onboarding',    icon: ShieldCheck },
       { label: 'Service configuration',   href: '/admin/service-config',        icon: Sliders },
       { label: 'Audit log',               href: '/admin/audit-logs',            icon: FileSearch },
+      { label: 'Passkeys',                href: '/admin/security/passkeys',     icon: KeyRound },
       { label: 'Platform settings',       href: '/admin/settings',              icon: Settings },
       { label: 'Notifications (Email/SMS)', href: '/admin/settings/notifications', icon: Bell },
       { label: 'Integrations',            href: '/admin/settings/integrations', icon: Sliders },

@@ -2,10 +2,11 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
+import { withPlatformAdmin } from '@/lib/rls';
 import { MODULES, MODULE_BY_KEY } from '@/lib/modules';
+import { redisStatus } from '@/lib/redis-status';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // Platform modules — derived from the canonical registry so the admin info
 // endpoint stays in sync with the platform home, the admin tenants matrix,
 // the access-control layer, and the RBAC permission matrix. Editing the
@@ -56,9 +57,10 @@ export async function GET(req: NextRequest) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
 
   try {
+    // Checked alongside the database counts (PING, 2 s timeout at most).
+    const redis = redisStatus();
     return await withPlatformAdmin(prisma, async (tx) => {
       // DB model counts from Prisma. The 'tx' client is the same
       // connection as `prisma` for the duration of the wrap, so
@@ -124,6 +126,7 @@ export async function GET(req: NextRequest) {
       dbModels: DB_MODELS,
       notificationChannels: NOTIFICATION_CHANNELS,
       dbStats,
+      redis: await redis,
     });
     });
     } catch (e) {

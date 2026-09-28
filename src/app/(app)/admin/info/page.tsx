@@ -12,6 +12,45 @@ interface InfoData {
   dbModels: DbGroup[];
   notificationChannels: Channel[];
   dbStats: Record<string, number>;
+  redis?: RedisStatus;
+}
+interface RedisStatus { configured: boolean; reachable: boolean; roundTripMs: number | null; host: string | null; error: string | null; checkedAt: string; }
+
+/** Upstash Redis: carries 60-second session revocation, the session blocklist and shared rate limits. */
+function RedisCard({ redis }: { redis: RedisStatus }) {
+  const state = !redis.configured ? 'Not configured' : redis.reachable ? 'Connected' : 'Unreachable';
+  const tone = !redis.configured || !redis.reachable
+    ? 'border-rose-500/40 bg-rose-500/10 text-rose-300'
+    : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300';
+  const rows: Array<[string, string]> = [
+    ['Configured', redis.configured ? 'Yes' : 'No'],
+    ['Reachable', redis.configured ? (redis.reachable ? 'Yes (PING → PONG)' : 'No') : '—'],
+    ['Round trip', redis.roundTripMs != null ? `${redis.roundTripMs} ms` : '—'],
+    ['Host', redis.host ?? '—'],
+  ];
+  return (
+    <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-5 space-y-3" data-testid="redis-status">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h2 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider">Redis (Upstash)</h2>
+        <span className={`px-3 py-1 rounded-full border text-xs font-semibold ${tone}`}>{state}</span>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {rows.map(([label, value]) => (
+          <div key={label} className="bg-[var(--bg-surface-hover)]/50 rounded-xl p-3">
+            <div className="text-xs text-[var(--text-muted)]">{label}</div>
+            <div className="text-sm font-semibold text-[var(--text-main)] mt-0.5 break-all">{value}</div>
+          </div>
+        ))}
+      </div>
+      {redis.error && <p className="text-xs text-rose-300">{redis.error}</p>}
+      <p className="text-xs text-[var(--text-muted)]">
+        {redis.configured && redis.reachable
+          ? 'Sign-outs and role changes reach every session within 60 seconds; rate limits are shared across instances.'
+          : 'Without Redis, role changes and sign-outs reach web sessions only when they expire (up to 24 hours), and rate limits are per instance. Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN on the Next.js service and redeploy.'}
+        {' '}Checked {new Date(redis.checkedAt).toLocaleTimeString()}; Refresh re-checks.
+      </p>
+    </div>
+  );
 }
 
 const TABS = ['overview', 'modules', 'api', 'db-models', 'notifications'] as const;
@@ -74,6 +113,8 @@ export default function AdminInfoPage() {
           </div>
         ))}
       </div>
+
+      {data.redis && <RedisCard redis={data.redis} />}
 
       {/* DB live stats */}
       <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-5">
