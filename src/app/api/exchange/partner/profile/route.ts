@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { runAsTenant } from '@/lib/rls-scope';
 import { PartnerService } from '@/lib/exchange/partner-service';
+import { EMIRATES, isActivated, isEmirate } from '@/lib/exchange/partner-activation';
 import {
   exchangeNotProvisionedResponse,
   isExchangeNotProvisioned,
@@ -54,13 +55,22 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers });
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
-  const auth = await requirePartnerContext(req, { roles: PROFILE_ROLES });
+  const auth = await requirePartnerContext(req, { roles: PROFILE_ROLES, allowPending: true });
   if (!auth.ok) return partnerAuthFailure(auth);
 
   try {
     const rawBody = await req.json().catch(() => ({}));
     const body = stripTenantOwnershipFields(rawBody);
     const { legalName, tradeName, address, city, primaryContactName, primaryContactEmail, primaryContactPhone } = body;
+    // The emirate decides which permits are mandatory, so it is fixed once
+    // the partner has been activated.
+    const { emirate } = body as { emirate?: unknown };
+    if (emirate !== undefined && emirate !== null && !isEmirate(emirate)) {
+      return NextResponse.json({ error: `emirate must be one of ${EMIRATES.join(', ')}` }, { status: 400 });
+    }
+    if (isEmirate(emirate) && isActivated(auth.ctx) && emirate !== auth.ctx.emirate) {
+      return NextResponse.json({ error: 'Your emirate can\'t be changed after activation; contact your onboarding company.' }, { status: 409 });
+    }
 
     const updated = await withPlatformAdmin(prisma, (tx) =>
       tx.transportPartner.update({
@@ -70,6 +80,7 @@ export async function PUT(req: NextRequest) {
           tradeName,
           address,
           city,
+          ...(isEmirate(emirate) ? { emirate } : {}),
           primaryContactName,
           primaryContactEmail,
           primaryContactPhone,

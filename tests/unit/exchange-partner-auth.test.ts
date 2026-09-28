@@ -48,7 +48,7 @@ import { GET as quotesGet, POST as quotesPost } from '@/app/api/exchange/jobs/qu
 
 const member = (partnerId: string, role = 'PARTNER_OPERATIONS') => ({
   role,
-  partner: { id: partnerId, legalName: `Partner ${partnerId}`, marketplaceStatus: 'APPROVED', operationalStatus: 'ACTIVE' },
+  partner: { id: partnerId, legalName: `Partner ${partnerId}`, marketplaceStatus: 'APPROVED', operationalStatus: 'ACTIVE', onboardingStatus: 'APPROVED', emirate: null },
 });
 const req = (url: string, headers: Record<string, string> = {}, body?: unknown) =>
   new NextRequest(`http://localhost${url}`, {
@@ -66,6 +66,7 @@ const openRequest = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 const approvedPartner = (over: Record<string, unknown> = {}) => ({
+  onboardingStatus: 'APPROVED',
   marketplaceStatus: 'APPROVED',
   operationalStatus: 'ACTIVE',
   capabilities: [{ domain: 'PASSENGER_TRANSPORT' }],
@@ -115,11 +116,23 @@ describe('requirePartnerContext', () => {
     const r = await requirePartnerContext(req('/x', signedIn), { roles: ['PARTNER_ADMIN', 'PARTNER_OPERATIONS'] });
     expect(r).toMatchObject({ ok: false, status: 403 });
   });
+
+  it('refuses a partner that is not activated yet, unless the route allows onboarding', async () => {
+    const pending = member('p1');
+    pending.partner = { ...pending.partner, onboardingStatus: 'UNDER_REVIEW' };
+    db.memberships = [pending];
+    expect(await requirePartnerContext(req('/x', signedIn))).toMatchObject({
+      ok: false, status: 403, code: 'PARTNER_PENDING_ACTIVATION',
+    });
+    expect(await requirePartnerContext(req('/x', signedIn), { allowPending: true })).toMatchObject({
+      ok: true, ctx: { partnerId: 'p1', onboardingStatus: 'UNDER_REVIEW' },
+    });
+  });
 });
 
 describe('checkQuoteEligibility', () => {
-  it('allows an open EXCHANGE_NETWORK opportunity in a capable domain, returning the buyer tenant', async () => {
-    db.request = openRequest(); db.partner = approvedPartner();
+  it('allows an open EXCHANGE_NETWORK opportunity in a capable domain from a buyer in its network, returning the buyer tenant', async () => {
+    db.request = openRequest(); db.partner = approvedPartner({ tenantRelationships: [{ status: 'APPROVED' }] });
     expect(await checkQuoteEligibility('p1', 'r1')).toEqual({ ok: true, tenantId: 'tenant-buyer' });
     expect(db.scope).toEqual(['*']);
   });
@@ -132,6 +145,8 @@ describe('checkQuoteEligibility', () => {
 
   it.each([
     ['unknown request', () => { db.request = null; db.partner = approvedPartner(); }, 404],
+    ['partner not activated', () => { db.request = openRequest({ invitedPartners: [{ status: 'INVITED' }] }); db.partner = approvedPartner({ onboardingStatus: 'UNDER_REVIEW' }); }, 403],
+    ['EXCHANGE_NETWORK from a buyer outside its network (exchange not open yet)', () => { db.request = openRequest(); db.partner = approvedPartner(); }, 403],
     ['partner not approved', () => { db.request = openRequest(); db.partner = approvedPartner({ marketplaceStatus: 'UNDER_REVIEW' }); }, 403],
     ['buyer blocked the partner', () => { db.request = openRequest({ invitedPartners: [{ status: 'INVITED' }] }); db.partner = approvedPartner({ tenantRelationships: [{ status: 'BLOCKED' }] }); }, 403],
     ['request already awarded', () => { db.request = openRequest({ status: 'AWARDED' }); db.partner = approvedPartner(); }, 409],
@@ -176,7 +191,7 @@ describe('GET /api/exchange/marketplace', () => {
 describe('/api/exchange/jobs/quotes', () => {
   it('POST quotes as the member partner, not the partnerId in the body, in the buyer tenant', async () => {
     db.memberships = [member('p1')];
-    db.request = openRequest(); db.partner = approvedPartner();
+    db.request = openRequest(); db.partner = approvedPartner({ tenantRelationships: [{ status: 'APPROVED' }] });
     submit.mockResolvedValue({ id: 'q1', revisionNo: 1, amount: 100, vatAmount: 5, totalAmount: 105, currency: 'AED', validUntil: new Date(), status: 'SUBMITTED', request: { tenantId: 'tenant-buyer', pickupLocation: 'secret' } });
 
     const res = await quotesPost(req('/api/exchange/jobs/quotes', signedIn, { requestId: 'r1', partnerId: 'someone-else', amount: 100 }));

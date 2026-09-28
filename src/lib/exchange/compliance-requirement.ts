@@ -9,7 +9,7 @@ export const EXPIRING_WITHIN_MS = 30 * 24 * 60 * 60 * 1000;
 export interface ComplianceDoc {
   docType: string;
   docNumber?: string | null;
-  expiryDate?: string | null;
+  expiryDate?: string | Date | null;
   status?: string | null;
   reviewNote?: string | null;
 }
@@ -36,13 +36,13 @@ export function effectiveStatus(doc: ComplianceDoc, now = Date.now()): string {
  *  3. then an expired or rejected one;
  * within each, the one that stays valid longest (no expiry counts as longest).
  */
-export function latestDoc(docs: ComplianceDoc[], docType: string, now = Date.now()): ComplianceDoc | undefined {
-  const rank = (d: ComplianceDoc) => {
+export function latestDoc<T extends ComplianceDoc>(docs: readonly T[], docType: string, now = Date.now()): T | undefined {
+  const rank = (d: T) => {
     if (d.status === 'PENDING') return 1;
     if (d.status === 'REJECTED' || d.status === 'EXPIRED' || isPastExpiry(d, now)) return 2;
     return 0;
   };
-  const expiry = (d: ComplianceDoc) => (d.expiryDate ? new Date(d.expiryDate).getTime() : Number.POSITIVE_INFINITY);
+  const expiry = (d: T) => (d.expiryDate ? new Date(d.expiryDate).getTime() : Number.POSITIVE_INFINITY);
   return docs
     .filter((d) => d.docType === docType)
     .sort((a, b) => rank(a) - rank(b) || expiry(b) - expiry(a))[0];

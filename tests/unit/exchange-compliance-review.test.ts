@@ -28,7 +28,6 @@ vi.mock('@/lib/audit', () => ({ logAudit: audit }));
 vi.mock('@/lib/alerts/raise', () => ({ raiseAlert: vi.fn() }));
 
 import { NextRequest } from 'next/server';
-import { PartnerService } from '@/lib/exchange/partner-service';
 import { GET } from '@/app/api/admin/exchange/partners/[id]/compliance/route';
 import { PATCH } from '@/app/api/admin/exchange/partners/[id]/compliance/[docId]/route';
 
@@ -47,12 +46,7 @@ beforeEach(() => {
   create.mockClear(); update.mockClear(); audit.mockClear();
 });
 
-describe('uploading a compliance document', () => {
-  it('stores it as PENDING, not VALID', async () => {
-    await PartnerService.uploadComplianceDoc({ partnerId: 'p1', docType: 'TRADE_LICENSE', fileUrl: 'https://x.test/tl.pdf' });
-    expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ status: 'PENDING' }) });
-  });
-});
+// Uploads are stored as PENDING: tests/unit/exchange-partner-activation.test.ts.
 
 describe('GET /api/admin/exchange/partners/:id/compliance', () => {
   it('refuses anyone but a super admin', async () => {

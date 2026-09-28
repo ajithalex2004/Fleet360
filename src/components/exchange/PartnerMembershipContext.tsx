@@ -17,6 +17,9 @@ export interface PortalPartner {
   city: string | null;
   marketplaceStatus: string;
   operationalStatus: string;
+  /** Anything but APPROVED is Pending Activation (src/lib/exchange/partner-activation.ts). */
+  onboardingStatus: string;
+  emirate: string | null;
 }
 
 export type PartnerMembershipState =

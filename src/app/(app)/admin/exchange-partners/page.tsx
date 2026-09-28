@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeftRight, Building2, ExternalLink, Mail, Plus, Search, Trash2, UserPlus, X } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-theme';
+import { COMPLIANCE_CATALOG, EMIRATE_LABELS, EMIRATES, onboardingStatusLabel } from '@/lib/exchange/partner-activation';
 
 /**
  * Exchange partners — platform admin screen.
@@ -27,6 +28,7 @@ const ROLES = [
 const SERVICE_AREAS = [
   { value: 'PASSENGER_TRANSPORT', label: 'Passenger transport', hint: 'Staff buses, shuttles, coaches' },
   { value: 'LIMOUSINE',           label: 'Limousine',           hint: 'Chauffeured cars' },
+  { value: 'SCHOOL_TRANSPORT',    label: 'School transport',    hint: 'School buses' },
   { value: 'FREIGHT',             label: 'Freight',             hint: 'Goods and cargo' },
   { value: 'RECOVERY',            label: 'Recovery',            hint: 'Breakdown and towing' },
 ] as const;
@@ -82,11 +84,8 @@ interface ComplianceDoc {
 }
 
 const DOC_TYPE_LABELS: Record<string, string> = {
-  TRADE_LICENSE: 'Trade licence',
-  TAX_CERTIFICATE: 'Tax certificate (TRN)',
-  COMMERCIAL_INSURANCE: 'Commercial insurance',
+  ...Object.fromEntries(Object.values(COMPLIANCE_CATALOG).map((t) => [t.docType, t.label])),
   RTA_OPERATOR_PERMIT: 'RTA operator permit',
-  RTA_PERMIT: 'RTA operator permit',
 };
 
 const DOC_STATUS_STYLES: Record<string, string> = {
@@ -95,10 +94,17 @@ const DOC_STATUS_STYLES: Record<string, string> = {
   REJECTED: 'bg-rose-500/15 text-rose-400',
 };
 
-/** Only http(s) links are opened, never javascript: or data: URLs from a partner upload. */
-function safeHref(url: string): string | null {
+/**
+ * Where a document's file opens: files uploaded through the partner portal are
+ * served by the onboarding review route after its access check; older
+ * documents may carry an external http(s) link. Never javascript: or data:.
+ */
+function docHref(partnerId: string, doc: { id: string; fileUrl: string }): string | null {
+  if (doc.fileUrl.startsWith('/uploads/exchange/partner-compliance/')) {
+    return `/api/admin/exchange/onboarding/${partnerId}/documents/${doc.id}/file`;
+  }
   try {
-    const u = new URL(url);
+    const u = new URL(doc.fileUrl);
     return u.protocol === 'https:' || u.protocol === 'http:' ? u.href : null;
   } catch {
     return null;
@@ -112,7 +118,10 @@ interface Member {
   user: { id: string; email: string; username: string | null; isActive: boolean };
 }
 
-const EMPTY_PARTNER = { legalName: '', partnerCode: '', tradeName: '', city: '', primaryContactName: '', primaryContactEmail: '', primaryContactPhone: '', onboardedByTenantId: '' };
+const EMPTY_PARTNER = {
+  legalName: '', partnerCode: '', tradeName: '', city: '', primaryContactName: '', primaryContactEmail: '', primaryContactPhone: '',
+  onboardedByTenantId: '', emirate: '', serviceDomains: [] as string[],
+};
 
 const input = 'w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)] px-3 py-2 text-sm text-[var(--text-main)] placeholder:text-[var(--text-muted)] focus:border-cyan-500 focus:outline-none';
 const primaryBtn = 'inline-flex items-center gap-1.5 rounded-lg bg-cyan-600 px-3 py-2 text-sm font-semibold text-white hover:bg-cyan-500 disabled:opacity-50';
@@ -495,9 +504,43 @@ export default function ExchangePartnersAdminPage() {
               {tenants.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </label>
+          <label className="block text-xs font-medium text-[var(--text-muted)] md:max-w-md">
+            Emirate *
+            <select
+              className={`${input} mt-1`}
+              required
+              value={partnerForm.emirate}
+              onChange={(e) => setPartnerForm((f) => ({ ...f, emirate: e.target.value }))}
+            >
+              <option value="">Where the partner operates from</option>
+              {EMIRATES.map((em) => <option key={em} value={em}>{EMIRATE_LABELS[em]}</option>)}
+            </select>
+          </label>
+          <fieldset className="text-xs">
+            <legend className="font-medium text-[var(--text-muted)]">Service areas</legend>
+            <div className="mt-1 flex flex-wrap gap-3">
+              {SERVICE_AREAS.map((area) => (
+                <label key={area.value} className="inline-flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={partnerForm.serviceDomains.includes(area.value)}
+                    onChange={(e) => setPartnerForm((f) => ({
+                      ...f,
+                      serviceDomains: e.target.checked
+                        ? [...f.serviceDomains, area.value]
+                        : f.serviceDomains.filter((d) => d !== area.value),
+                    }))}
+                  />
+                  {area.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
           <p className="text-xs text-[var(--text-muted)]">
             The partner code is permanent and unique: 2–24 letters, digits or dashes. The partner&rsquo;s users are
-            created in the onboarding tenant&rsquo;s user list.
+            created in the onboarding tenant&rsquo;s user list. The partner starts <strong>Pending activation</strong>:
+            the emirate and service areas decide its mandatory documents, and the onboarding tenant&rsquo;s administrators
+            activate it under Admin → Partner onboarding once they have approved them.
           </p>
           {partnerError && <p className="text-sm text-rose-400">{partnerError}</p>}
           <div className="flex justify-end gap-2">
@@ -569,7 +612,7 @@ export default function ExchangePartnersAdminPage() {
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   <StatusPill label={`Marketplace: ${selected.marketplaceStatus}`} ok={selected.marketplaceStatus === 'APPROVED'} />
                   <StatusPill label={`Operations: ${selected.operationalStatus}`} ok={selected.operationalStatus === 'ACTIVE'} />
-                  <StatusPill label={`Onboarding: ${selected.onboardingStatus}`} ok={selected.onboardingStatus === 'APPROVED'} />
+                  <StatusPill label={`Onboarding: ${onboardingStatusLabel(selected.onboardingStatus)}`} ok={selected.onboardingStatus === 'APPROVED'} />
                 </div>
               </div>
 
@@ -644,7 +687,7 @@ export default function ExchangePartnersAdminPage() {
                 ) : (
                   <ul className="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)]">
                     {docs.map((doc) => {
-                      const href = safeHref(doc.fileUrl);
+                      const href = selected ? docHref(selected.id, doc) : null;
                       return (
                         <li key={doc.id} className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
                           <div className="min-w-0">

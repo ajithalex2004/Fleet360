@@ -637,6 +637,7 @@ export const MODULES: ModuleDef[] = [
       { label: 'Billing & subscriptions', href: '/admin/billing',               icon: CreditCard },
       { label: 'Tenants',                 href: '/admin/tenants',               icon: Building2, superOnly: true },
       { label: 'Exchange partners',       href: '/admin/exchange-partners',     icon: ArrowLeftRight, superOnly: true },
+      { label: 'Partner onboarding',      href: '/admin/partner-onboarding',    icon: ShieldCheck },
       { label: 'Service configuration',   href: '/admin/service-config',        icon: Sliders },
       { label: 'Audit log',               href: '/admin/audit-logs',            icon: FileSearch },
       { label: 'Platform settings',       href: '/admin/settings',              icon: Settings },

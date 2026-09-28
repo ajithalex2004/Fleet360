@@ -9,6 +9,7 @@ import { withPlatformAdmin } from '@/lib/rls';
 import { logAudit } from '@/lib/audit';
 import { notProvisionedAware } from '@/lib/exchange/partner-auth';
 import { findActiveTenant, setOnboardingTenant } from '@/lib/exchange/partner-onboarding';
+import { isEmirate, SERVICE_DOMAINS, type ServiceDomain } from '@/lib/exchange/partner-activation';
 
 export const runtime = 'nodejs';
 
@@ -23,9 +24,14 @@ export const runtime = 'nodejs';
  *                                     approved service areas (approvedDomains),
  *                                     compliance documents awaiting review (pendingDocuments)
  *                                     and onboarding tenant (onboardedByTenantId/-Name)
- * POST /api/admin/exchange/partners   { legalName, partnerCode, onboardedByTenantId,
- *                                       tradeName?, city?, primaryContactName?,
+ * POST /api/admin/exchange/partners   { legalName, partnerCode, onboardedByTenantId, emirate,
+ *                                       serviceDomains?, tradeName?, city?, primaryContactName?,
  *                                       primaryContactEmail?, primaryContactPhone? }
+ *
+ * A new partner starts Pending Activation (onboarding DRAFT, marketplace
+ * NOT_APPLIED): its onboarding tenant's administrators activate it once they
+ * have approved its compliance documents (src/lib/exchange/partner-activation.ts).
+ * The emirate and service areas decide which documents are mandatory.
  */
 
 const PARTNER_CODE_RE = /^[A-Z0-9][A-Z0-9-]{1,23}$/;
@@ -47,6 +53,7 @@ export async function GET(req: NextRequest) {
         tradeName: true,
         partnerCode: true,
         city: true,
+        emirate: true,
         primaryContactEmail: true,
         onboardingStatus: true,
         operationalStatus: true,
@@ -103,6 +110,15 @@ export async function POST(req: NextRequest) {
   if (!onboardedByTenantId) {
     return NextResponse.json({ error: 'onboardedByTenantId is required: the tenant onboarding this partner' }, { status: 400 });
   }
+  const emirate = body.emirate;
+  if (!isEmirate(emirate)) {
+    return NextResponse.json({ error: 'emirate is required: where the partner operates from' }, { status: 400 });
+  }
+  const rawDomains = Array.isArray(body.serviceDomains) ? body.serviceDomains : [];
+  const serviceDomains = [...new Set(rawDomains)].filter((d): d is ServiceDomain => (SERVICE_DOMAINS as readonly unknown[]).includes(d));
+  if (serviceDomains.length !== rawDomains.length) {
+    return NextResponse.json({ error: `serviceDomains must be among ${SERVICE_DOMAINS.join(', ')}` }, { status: 400 });
+  }
 
   let run;
   try {
@@ -115,6 +131,10 @@ export async function POST(req: NextRequest) {
           partnerCode,
           tradeName: optionalText(body.tradeName),
           city: optionalText(body.city, 100),
+          emirate,
+          // Pending Activation until the onboarding tenant activates it.
+          onboardingStatus: 'DRAFT',
+          marketplaceStatus: 'NOT_APPLIED',
           primaryContactName: optionalText(body.primaryContactName),
           primaryContactEmail,
           primaryContactPhone: optionalText(body.primaryContactPhone, 40),
@@ -122,6 +142,10 @@ export async function POST(req: NextRequest) {
         select: { id: true, legalName: true, partnerCode: true },
       });
       await setOnboardingTenant(tx, created.id, tenant.id);
+      // Domain-wide capabilities, as the Services toggles create them.
+      for (const domain of serviceDomains) {
+        await tx.partnerCapability.create({ data: { partnerId: created.id, domain, serviceType: 'ALL', isApproved: true } });
+      }
       return { ...created, onboardedByTenantId: tenant.id, onboardedByTenantName: tenant.name };
     }));
   } catch (err) {

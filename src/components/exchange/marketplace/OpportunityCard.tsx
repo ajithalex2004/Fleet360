@@ -93,6 +93,8 @@ function DomainBadge({ domain }: { domain: string }) {
       return <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">Recovery & Towing</span>;
     case 'LIMOUSINE':
       return <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/15 text-purple-400 border border-purple-500/30">VIP Limousine</span>;
+    case 'SCHOOL_TRANSPORT':
+      return <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-yellow-500/15 text-yellow-400 border border-yellow-500/30">School Transport</span>;
     default:
       return <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">Passenger Transport</span>;
   }

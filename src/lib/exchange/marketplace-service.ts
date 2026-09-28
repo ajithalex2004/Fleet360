@@ -14,6 +14,7 @@ import type { Prisma } from '@prisma/client';
 import type { AlertSubjectType } from '@/events/contracts/alert.events';
 import { DisclosurePolicyService } from './disclosure-service';
 import { OutsourceEngine } from './outsource-engine';
+import { EXCHANGE_OPEN_MARKET, isActivated } from './partner-activation';
 
 export interface PublishOpportunityInput {
   tenantId: string;
@@ -135,6 +136,9 @@ export class MarketplaceService {
       });
 
       if (!partner) throw new Error('Partner not found');
+      if (!isActivated(partner)) {
+        return { opportunities: [], reason: 'Partner is not activated yet' };
+      }
       if (partner.marketplaceStatus !== 'APPROVED') {
         return { opportunities: [], reason: `Marketplace status is ${partner.marketplaceStatus}` };
       }
@@ -158,7 +162,11 @@ export class MarketplaceService {
           domain: { in: partnerDomains },
           tenantId: { notIn: blockedTenantIds },
           OR: [
-            { visibility: OutsourceVisibility.EXCHANGE_NETWORK },
+            // Until the exchange opens up, partners reach only the network of
+            // tenants they have a relationship with (partner-activation.ts).
+            EXCHANGE_OPEN_MARKET
+              ? { visibility: OutsourceVisibility.EXCHANGE_NETWORK }
+              : { visibility: OutsourceVisibility.EXCHANGE_NETWORK, tenantId: { in: networkTenantIds } },
             { visibility: OutsourceVisibility.TENANT_NETWORK, tenantId: { in: networkTenantIds } },
             { request: { invitedPartners: { some: { partnerId } } } },
           ],

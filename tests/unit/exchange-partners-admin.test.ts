@@ -13,12 +13,14 @@ const tenantFindUnique = vi.hoisted(() => vi.fn());
 const tenantFindMany = vi.hoisted(() => vi.fn(async () => [] as unknown[]));
 const partnerUpdate = vi.hoisted(() => vi.fn(async () => ({})));
 const relationshipUpsert = vi.hoisted(() => vi.fn(async () => ({})));
+const capabilityCreate = vi.hoisted(() => vi.fn(async () => ({})));
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     transportPartner: { create, findMany, update: partnerUpdate },
     tenant: { findUnique: tenantFindUnique, findMany: tenantFindMany },
     tenantPartnerRelationship: { upsert: relationshipUpsert },
+    partnerCapability: { create: capabilityCreate },
   },
 }));
 vi.mock('@/lib/rls', async () => {
@@ -37,7 +39,7 @@ const post = (role: string, body: unknown) =>
 
 beforeEach(() => {
   create.mockReset(); findMany.mockReset(); audit.mockClear();
-  partnerUpdate.mockClear(); relationshipUpsert.mockClear(); tenantFindMany.mockClear();
+  partnerUpdate.mockClear(); relationshipUpsert.mockClear(); tenantFindMany.mockClear(); capabilityCreate.mockClear();
   tenantFindUnique.mockReset();
   tenantFindUnique.mockImplementation(async (args: { where: { id: string } }) =>
     args.where.id === 'lease-a' ? { id: 'lease-a', name: 'Lease Tenant A', plan: 'STANDARD', isActive: true }
@@ -82,31 +84,31 @@ describe('POST /api/admin/exchange/partners', () => {
   });
 
   it('creates the partner with a normalised code and audits it', async () => {
-    const res = await post('SUPER_ADMIN', { legalName: ' Gulf Coaches LLC ', partnerCode: ' gulf-dxb ', city: 'Dubai', tenantId: 'someone-else', onboardedByTenantId: 'lease-a' });
+    const res = await post('SUPER_ADMIN', { legalName: ' Gulf Coaches LLC ', partnerCode: ' gulf-dxb ', city: 'Dubai', tenantId: 'someone-else', onboardedByTenantId: 'lease-a', emirate: 'DUBAI' });
     expect(res.status).toBe(201);
     expect(create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ legalName: 'Gulf Coaches LLC', partnerCode: 'GULF-DXB', city: 'Dubai' }),
+      data: expect.objectContaining({ legalName: 'Gulf Coaches LLC', partnerCode: 'GULF-DXB', city: 'Dubai', emirate: 'DUBAI' }),
     }));
     expect(create.mock.calls[0][0].data).not.toHaveProperty('tenantId');
     expect(audit).toHaveBeenCalledWith(expect.objectContaining({ entityType: 'TransportPartner', action: 'CREATE', userId: 'admin-1' }));
   });
 
   it('rejects a missing name, a bad code or a bad contact email', async () => {
-    expect((await post('SUPER_ADMIN', { partnerCode: 'GULF', onboardedByTenantId: 'lease-a' })).status).toBe(400);
-    expect((await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'g u l f', onboardedByTenantId: 'lease-a' })).status).toBe(400);
-    expect((await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'GULF', primaryContactEmail: 'nope', onboardedByTenantId: 'lease-a' })).status).toBe(400);
+    expect((await post('SUPER_ADMIN', { partnerCode: 'GULF', onboardedByTenantId: 'lease-a', emirate: 'DUBAI' })).status).toBe(400);
+    expect((await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'g u l f', onboardedByTenantId: 'lease-a', emirate: 'DUBAI' })).status).toBe(400);
+    expect((await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'GULF', primaryContactEmail: 'nope', onboardedByTenantId: 'lease-a', emirate: 'DUBAI' })).status).toBe(400);
     expect(create).not.toHaveBeenCalled();
   });
 
   it('reports a partner code already in use as 409', async () => {
     create.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('unique', { code: 'P2002', clientVersion: 'test' }));
-    const res = await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'GULF', onboardedByTenantId: 'lease-a' });
+    const res = await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'GULF', onboardedByTenantId: 'lease-a', emirate: 'DUBAI' });
     expect(res.status).toBe(409);
     expect(audit).not.toHaveBeenCalled();
   });
 
   it('records the onboarding tenant and puts the partner in its network', async () => {
-    const res = await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'GULF', onboardedByTenantId: 'lease-a' });
+    const res = await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'GULF', onboardedByTenantId: 'lease-a', emirate: 'DUBAI' });
     expect(res.status).toBe(201);
     expect((await res.json()).partner).toMatchObject({ onboardedByTenantId: 'lease-a', onboardedByTenantName: 'Lease Tenant A' });
     expect(partnerUpdate).toHaveBeenCalledWith({ where: { id: 'p1' }, data: { onboardedByTenantId: 'lease-a' } });
@@ -117,10 +119,36 @@ describe('POST /api/admin/exchange/partners', () => {
     }));
   });
 
+  it('starts the partner Pending Activation, outside the marketplace', async () => {
+    const res = await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'GULF', onboardedByTenantId: 'lease-a', emirate: 'DUBAI' });
+    expect(res.status).toBe(201);
+    expect(create.mock.calls[0][0].data).toMatchObject({ onboardingStatus: 'DRAFT', marketplaceStatus: 'NOT_APPLIED' });
+  });
+
+  it('requires the emirate, which decides the mandatory permits', async () => {
+    expect((await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'GULF', onboardedByTenantId: 'lease-a' })).status).toBe(400);
+    expect((await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'GULF', onboardedByTenantId: 'lease-a', emirate: 'Dubai' })).status).toBe(400);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('records the chosen service areas as domain-wide capabilities', async () => {
+    const res = await post('SUPER_ADMIN', {
+      legalName: 'Gulf', partnerCode: 'GULF', onboardedByTenantId: 'lease-a', emirate: 'SHARJAH',
+      serviceDomains: ['SCHOOL_TRANSPORT', 'FREIGHT'],
+    });
+    expect(res.status).toBe(201);
+    expect(capabilityCreate.mock.calls.map((c) => (c as unknown as [{ data: unknown }])[0].data)).toEqual([
+      { partnerId: 'p1', domain: 'SCHOOL_TRANSPORT', serviceType: 'ALL', isApproved: true },
+      { partnerId: 'p1', domain: 'FREIGHT', serviceType: 'ALL', isApproved: true },
+    ]);
+    const bad = await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'GULF', onboardedByTenantId: 'lease-a', emirate: 'DUBAI', serviceDomains: ['TAXI'] });
+    expect(bad.status).toBe(400);
+  });
+
   it('requires an active onboarding tenant', async () => {
     expect((await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'GULF' })).status).toBe(400);
-    expect((await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'GULF', onboardedByTenantId: 'closed' })).status).toBe(400);
-    expect((await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'GULF', onboardedByTenantId: 'nope' })).status).toBe(400);
+    expect((await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'GULF', onboardedByTenantId: 'closed', emirate: 'DUBAI' })).status).toBe(400);
+    expect((await post('SUPER_ADMIN', { legalName: 'Gulf', partnerCode: 'GULF', onboardedByTenantId: 'nope', emirate: 'DUBAI' })).status).toBe(400);
     expect(create).not.toHaveBeenCalled();
   });
 });

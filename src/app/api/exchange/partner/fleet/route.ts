@@ -20,7 +20,7 @@ export const runtime = 'nodejs';
 export async function GET(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers });
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
-  const auth = await requirePartnerContext(req);
+  const auth = await requirePartnerContext(req, { allowPending: true });
   if (!auth.ok) return partnerAuthFailure(auth);
 
   const vehicles = await withPlatformAdmin(prisma, (tx) =>
@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers });
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
-  const auth = await requirePartnerContext(req, { roles: OPERATIONS_ROLES });
+  const auth = await requirePartnerContext(req, { roles: OPERATIONS_ROLES, allowPending: true });
   if (!auth.ok) return partnerAuthFailure(auth);
   const { partnerId } = auth.ctx;
 
