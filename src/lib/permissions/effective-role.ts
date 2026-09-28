@@ -87,7 +87,8 @@ export async function getEffectiveRole(
   // Case 1: the assigned role is already tenant-scoped (override or
   // tenant-only role). Use it directly.
   if (assigned.tenantId === tenantId) {
-    return shapeRole(assigned, false, true);
+    // A tenant's own role is never a platform role, whatever its code.
+    return shapeRole(assigned, false, false);
   }
 
   // Case 2: the assigned role is a platform role. Look for an override.
@@ -109,9 +110,9 @@ export async function getEffectiveRole(
   }
 
   // Case 3: the assigned role belongs to a *different* tenant. That's a
-  // data integrity issue; we still return the role so the caller can
-  // handle it (and the RLS layer will block any actual data access).
-  return shapeRole(assigned, false, true);
+  // data integrity issue, and another tenant's role grants nothing here:
+  // treat the membership as having no role (no permissions).
+  return null;
 }
 
 /** Convenience: return just the permission strings for the effective role. */
@@ -195,12 +196,13 @@ export async function getEffectiveRolesForTenantUsers(
     const assigned = ut.role;
     let role: EffectiveRoleShape;
     if (assigned.tenantId === tenantId) {
-      role = shapeRole(assigned, false, true);
+      role = shapeRole(assigned, false, false);
     } else if (assigned.tenantId === null) {
       const ov = overrideByCode.get(assigned.code);
       role = ov ? shapeRole(ov, true, false) : shapeRole(assigned, false, true);
     } else {
-      role = shapeRole(assigned, false, true);
+      // Another tenant's role grants nothing in this tenant.
+      continue;
     }
     if (role.code === 'SUPER_ADMIN' && role.isPlatform) {
       role = { ...role, permissions: [...role.permissions, '*:*:*'] };

@@ -70,6 +70,9 @@ export const MODULES = [
   'leasing', 'rental', 'bus-ops', 'fleet',
   'maintenance', 'finance', 'driver-mgmt',
   'compliance', 'reports', 'admin',
+  // Modules the authorization policy maps API areas to (policy v1).
+  'school-bus', 'logistics', 'incidents', 'dispatch', 'service-tickets',
+  'customer-mgmt', 'booking-portal', 'assets', 'sustainability', 'agents',
 ] as const satisfies readonly Module[];
 
 export const ACTIONS = [
@@ -226,6 +229,82 @@ export const ALL_PERMISSIONS: readonly AppPermission[] = [
   { module: 'admin', action: 'create', resource: 'roles',   label: 'Create Roles' },
   { module: 'admin', action: 'edit',   resource: 'roles',   label: 'Edit Role Permissions' },
   { module: 'admin', action: 'delete', resource: 'roles',   label: 'Delete Roles' },
+
+  // ── Modules without resource-level permissions (policy v1) ─────────────
+  // Every module an API area maps to in src/lib/authz/policy-matrix.ts has
+  // its permissions here, so the authorization policy never needs a role
+  // outside this catalogue. Appended at the end: the session permission
+  // claim encodes catalogue positions (src/lib/authz/permission-claim.ts).
+  // School Bus
+  { module: 'school-bus', action: 'view', resource: '*', label: 'View School Bus' },
+  { module: 'school-bus', action: 'create', resource: '*', label: 'Create School Bus' },
+  { module: 'school-bus', action: 'edit', resource: '*', label: 'Edit School Bus' },
+  { module: 'school-bus', action: 'delete', resource: '*', label: 'Delete School Bus' },
+  { module: 'school-bus', action: 'approve', resource: '*', label: 'Approve School Bus' },
+  { module: 'school-bus', action: 'export', resource: '*', label: 'Export School Bus' },
+  // Logistics
+  { module: 'logistics', action: 'view', resource: '*', label: 'View Logistics' },
+  { module: 'logistics', action: 'create', resource: '*', label: 'Create Logistics' },
+  { module: 'logistics', action: 'edit', resource: '*', label: 'Edit Logistics' },
+  { module: 'logistics', action: 'delete', resource: '*', label: 'Delete Logistics' },
+  { module: 'logistics', action: 'approve', resource: '*', label: 'Approve Logistics' },
+  { module: 'logistics', action: 'export', resource: '*', label: 'Export Logistics' },
+  // Incidents & Ambulance
+  { module: 'incidents', action: 'view', resource: '*', label: 'View Incidents & Ambulance' },
+  { module: 'incidents', action: 'create', resource: '*', label: 'Create Incidents & Ambulance' },
+  { module: 'incidents', action: 'edit', resource: '*', label: 'Edit Incidents & Ambulance' },
+  { module: 'incidents', action: 'delete', resource: '*', label: 'Delete Incidents & Ambulance' },
+  { module: 'incidents', action: 'approve', resource: '*', label: 'Approve Incidents & Ambulance' },
+  { module: 'incidents', action: 'export', resource: '*', label: 'Export Incidents & Ambulance' },
+  // Dispatch
+  { module: 'dispatch', action: 'view', resource: '*', label: 'View Dispatch' },
+  { module: 'dispatch', action: 'create', resource: '*', label: 'Create Dispatch' },
+  { module: 'dispatch', action: 'edit', resource: '*', label: 'Edit Dispatch' },
+  { module: 'dispatch', action: 'delete', resource: '*', label: 'Delete Dispatch' },
+  { module: 'dispatch', action: 'approve', resource: '*', label: 'Approve Dispatch' },
+  { module: 'dispatch', action: 'export', resource: '*', label: 'Export Dispatch' },
+  // Service Tickets
+  { module: 'service-tickets', action: 'view', resource: '*', label: 'View Service Tickets' },
+  { module: 'service-tickets', action: 'create', resource: '*', label: 'Create Service Tickets' },
+  { module: 'service-tickets', action: 'edit', resource: '*', label: 'Edit Service Tickets' },
+  { module: 'service-tickets', action: 'delete', resource: '*', label: 'Delete Service Tickets' },
+  { module: 'service-tickets', action: 'approve', resource: '*', label: 'Approve Service Tickets' },
+  { module: 'service-tickets', action: 'export', resource: '*', label: 'Export Service Tickets' },
+  // Customers
+  { module: 'customer-mgmt', action: 'view', resource: '*', label: 'View Customers' },
+  { module: 'customer-mgmt', action: 'create', resource: '*', label: 'Create Customers' },
+  { module: 'customer-mgmt', action: 'edit', resource: '*', label: 'Edit Customers' },
+  { module: 'customer-mgmt', action: 'delete', resource: '*', label: 'Delete Customers' },
+  { module: 'customer-mgmt', action: 'approve', resource: '*', label: 'Approve Customers' },
+  { module: 'customer-mgmt', action: 'export', resource: '*', label: 'Export Customers' },
+  // Bookings
+  { module: 'booking-portal', action: 'view', resource: '*', label: 'View Bookings' },
+  { module: 'booking-portal', action: 'create', resource: '*', label: 'Create Bookings' },
+  { module: 'booking-portal', action: 'edit', resource: '*', label: 'Edit Bookings' },
+  { module: 'booking-portal', action: 'delete', resource: '*', label: 'Delete Bookings' },
+  { module: 'booking-portal', action: 'approve', resource: '*', label: 'Approve Bookings' },
+  { module: 'booking-portal', action: 'export', resource: '*', label: 'Export Bookings' },
+  // Assets
+  { module: 'assets', action: 'view', resource: '*', label: 'View Assets' },
+  { module: 'assets', action: 'create', resource: '*', label: 'Create Assets' },
+  { module: 'assets', action: 'edit', resource: '*', label: 'Edit Assets' },
+  { module: 'assets', action: 'delete', resource: '*', label: 'Delete Assets' },
+  { module: 'assets', action: 'approve', resource: '*', label: 'Approve Assets' },
+  { module: 'assets', action: 'export', resource: '*', label: 'Export Assets' },
+  // Sustainability
+  { module: 'sustainability', action: 'view', resource: '*', label: 'View Sustainability' },
+  { module: 'sustainability', action: 'create', resource: '*', label: 'Create Sustainability' },
+  { module: 'sustainability', action: 'edit', resource: '*', label: 'Edit Sustainability' },
+  { module: 'sustainability', action: 'delete', resource: '*', label: 'Delete Sustainability' },
+  { module: 'sustainability', action: 'approve', resource: '*', label: 'Approve Sustainability' },
+  { module: 'sustainability', action: 'export', resource: '*', label: 'Export Sustainability' },
+  // AI Agents
+  { module: 'agents', action: 'view', resource: '*', label: 'View AI Agents' },
+  { module: 'agents', action: 'create', resource: '*', label: 'Create AI Agents' },
+  { module: 'agents', action: 'edit', resource: '*', label: 'Edit AI Agents' },
+  { module: 'agents', action: 'delete', resource: '*', label: 'Delete AI Agents' },
+  { module: 'agents', action: 'approve', resource: '*', label: 'Approve AI Agents' },
+  { module: 'agents', action: 'export', resource: '*', label: 'Export AI Agents' },
 ];
 
 // Helper: all modules view only permissions

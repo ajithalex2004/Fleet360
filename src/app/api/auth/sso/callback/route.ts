@@ -13,6 +13,7 @@ export const dynamic = 'force-dynamic';
  * On failure: redirects to /login?sso=<reason>.
  */
 
+import { sessionPermissionsFor } from '@/lib/authz/session-permissions';
 import { NextRequest, NextResponse } from 'next/server';
 import { residencyClaimForTenant } from '@/lib/db-router';
 import crypto from 'crypto';
@@ -177,6 +178,7 @@ export async function GET(req: NextRequest) {
       tenantId: tenant.id,
       plan:     tenant.plan ?? 'TRIAL',
       role:     sessionRoleCode,
+      permissions: await sessionPermissionsFor(user.id, tenant.id),
       ...(await residencyClaimForTenant(tenant.id)),
     });
 

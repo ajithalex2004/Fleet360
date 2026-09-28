@@ -17,6 +17,7 @@ import { signJwtForBackend } from '@/lib/auth/jwt';
 import { ensureMfaColumns } from '@/lib/auth-mfa-schema';
 import { verifyTotp, verifyRecoveryCode } from '@/lib/totp';
 import { getEffectiveRole } from '@/lib/permissions/effective-role';
+import { permissionsForEffectiveRole } from '@/lib/authz/session-permissions';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 // ── Password verification (matches the PBKDF2 format used in /api/tenants/provision) ──
@@ -194,32 +195,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Resolve the effective role — if the assigned role is a platform
-    // role, swap in a tenant override of the same code (if one exists).
-    // We do this AFTER the userTenant lookup so we still have the
-    // UserTenant row for the session payload.
-    let effectiveRole: Awaited<ReturnType<typeof getEffectiveRole>> | null = null;
+    // The effective permissions (tenant override, custom role, or the code
+    // catalogue for a system role): signed into the session for the
+    // authorization policy and returned to the UI, so both see the same set.
+    // A failure grants nothing rather than falling back to a guess.
+    let effectiveRole: Awaited<ReturnType<typeof getEffectiveRole>> = null;
     try {
-      effectiveRole = await getEffectiveRole(prisma as never, user.id, userTenant.tenantId);
+      effectiveRole = await withPlatformAdmin(prisma, (tx) => getEffectiveRole(tx as never, user.id, userTenant.tenantId));
     } catch (e) {
-      // Diagnostic — write to disk so we can see in dev
-      try {
-        const fs = await import('fs');
-        const path = await import('path');
-        const log = path.join(process.cwd(), '.next', 'login-debug.log');
-        fs.appendFileSync(log, `${new Date().toISOString()} ${e instanceof Error ? e.stack : String(e)}\n`);
-      } catch {/* ignore */}
-      console.error('[auth/login] effective-role resolution failed (falling back to assigned role):', e);
+      console.error('[auth/login] effective-role resolution failed; signing in with no permissions:', e);
     }
-    const effectivePermissions = effectiveRole ? effectiveRole.permissions
-      : userTenant.role.permissions.map(rp =>
-          `${rp.permission.module}:${rp.permission.action}:${rp.permission.resource ?? '*'}`
-        );
-    // A platform SUPER_ADMIN gets the wildcard. A tenant override of
-    // SUPER_ADMIN does NOT — it's a tenant-scoped admin.
-    const permissions = (effectiveRole?.code === 'SUPER_ADMIN' && effectiveRole.isPlatform)
-      ? [...effectivePermissions, '*:*:*']
-      : effectivePermissions;
+    const permissions = permissionsForEffectiveRole(effectiveRole);
 
     // 4. Sign session cookie (include role + residency so middleware can inject
     //    x-user-role / x-data-residency without extra DB lookups per request)
@@ -229,6 +215,7 @@ export async function POST(request: NextRequest) {
       tenantId: userTenant.tenantId,
       plan,
       role:     userTenant.role.code,
+      permissions,
       // Residency claim from the tenant record, whatever the plan: middleware
       // refuses tenants whose region this deployment does not serve.
       ...residencySessionClaim(userTenant.tenant.dataResidency),

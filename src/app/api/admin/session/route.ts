@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 
+import { resolveSessionPermissions } from '@/lib/authz/session-permissions';
 import { NextRequest, NextResponse } from 'next/server';
 import { isDbConnectionError, prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
@@ -82,17 +83,11 @@ export async function GET(req: NextRequest) {
         return sessionResponse({ error: 'User has no active access to this tenant' }, 403);
       }
 
-      // Build permission strings
-      const permStrings: string[] = userTenant.role.permissions.map(rp =>
-        `${rp.permission.module}:${rp.permission.action}:${rp.permission.resource ?? '*'}`
-      );
-
-      // SUPER_ADMIN gets wildcard — but only when the role is system-wide.
-      // A per-tenant role with code=SUPER_ADMIN is a tenant-level admin and gets
-      // only the role's explicit permissions, scoped to that tenant by RLS.
-      if (userTenant.role.code === 'SUPER_ADMIN' && userTenant.role.tenantId === null) {
-        permStrings.push('*:*:*');
-      }
+      // The same effective permissions the session carries and the
+      // authorization policy decides with (src/lib/authz/session-permissions.ts):
+      // tenant overrides and custom roles from the database, system roles from
+      // the code catalogue, the wildcard only for the platform SUPER_ADMIN.
+      const permStrings = await resolveSessionPermissions(tx as never, userId, tenantId);
 
       return NextResponse.json(
         {

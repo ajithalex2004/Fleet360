@@ -9,6 +9,7 @@
 
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { decodePermissionClaim, encodePermissionClaim, type PermissionClaim } from '@/lib/authz/permission-claim';
 import { isSessionRevoked } from '@/lib/session-blocklist';
 import { requireSessionSecret } from '@/lib/session-secret';
 
@@ -150,7 +151,20 @@ export interface SessionPayload {
    * Absent for non-ENTERPRISE tenants (treated as 'GLOBAL' by the router).
    */
   dataResidency?: string;
+  /** Effective permissions (src/lib/authz/permission-claim.ts). */
+  perms?: PermissionClaim;
   exp: number;
+}
+
+export interface VerifiedSession {
+  userId: string;
+  tenantId: string;
+  plan: string;
+  role: string;
+  impersonatedBy?: string;
+  dataResidency?: string;
+  /** Effective permissions from the signed claim; null when the session carries none. */
+  permissions: string[] | null;
 }
 
 /**
@@ -168,12 +182,19 @@ export async function signSession(payload: {
    * refuse tenants whose region this deployment does not serve.
    */
   dataResidency?: string;
+  /**
+   * The user's effective permissions in this tenant
+   * (resolveSessionPermissions). Every staff session issuer passes them;
+   * the authorization policy treats a session without them as holding none.
+   */
+  permissions?: readonly string[];
   /** Override TTL in ms (default 24 h). Impersonation uses a shorter TTL. */
   ttlMs?: number;
 }): Promise<string> {
-  const { ttlMs, ...rest } = payload;
+  const { ttlMs, permissions, ...rest } = payload;
   const fullPayload: SessionPayload = {
     ...rest,
+    ...(permissions ? { perms: encodePermissionClaim(permissions) } : {}),
     exp: Date.now() + (ttlMs ?? TOKEN_TTL_MS),
   };
   const encodedPayload = toBase64Url(JSON.stringify(fullPayload));
@@ -187,7 +208,7 @@ export async function signSession(payload: {
  */
 export async function verifySession(
   token: string,
-): Promise<{ userId: string; tenantId: string; plan: string; role: string; impersonatedBy?: string; dataResidency?: string } | null> {
+): Promise<VerifiedSession | null> {
   try {
     const dotIndex = token.lastIndexOf('.');
     if (dotIndex === -1) return null;
@@ -224,6 +245,8 @@ export async function verifySession(
       role:          payload.role,
       ...(payload.impersonatedBy ? { impersonatedBy: payload.impersonatedBy } : {}),
       ...(payload.dataResidency  ? { dataResidency:  payload.dataResidency  } : {}),
+      // null: signed without a claim, or against another catalogue version.
+      permissions:   decodePermissionClaim(payload.perms),
     };
   } catch {
     return null;

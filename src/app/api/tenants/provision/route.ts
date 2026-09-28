@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic';
  * sends a domain verification email, and sets an xl-session cookie.
  */
 
+import { systemRolePermissions } from '@/lib/authz/session-permissions';
 import { NextRequest, NextResponse } from 'next/server';
 import { canServeResidency, residencySessionClaim } from '@/lib/data-residency';
 import { tenantBootstrapHandler } from '@/lib/handlers/tenant-bootstrap-handler';
@@ -506,6 +507,7 @@ export async function POST(request: NextRequest) {
           tenantId:      tenant.id,
           plan:          effectivePlan,
           role:          'TENANT_ADMIN',
+          permissions:   systemRolePermissions('TENANT_ADMIN'),
           // Embed residency in the token so middleware can refuse tenants whose
           // region this deployment does not serve, without a DB lookup.
           ...residencySessionClaim(tenant.dataResidency),

@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
  * DELETE /api/auth/session — Clear the xl-session cookie (sign out)
  */
 
+import { sessionPermissionsFor } from '@/lib/authz/session-permissions';
 import { NextRequest, NextResponse } from 'next/server';
 import { residencyClaimForTenant } from '@/lib/db-router';
 import { prisma } from '@/lib/prisma';
@@ -110,6 +111,7 @@ export async function POST(request: NextRequest) {
     // Sign the session token (include role)
     const token = await signSession({
       userId, tenantId, plan, role: userTenant.role.code,
+      permissions: await sessionPermissionsFor(userId, tenantId),
       ...(await residencyClaimForTenant(tenantId)),
     });
 

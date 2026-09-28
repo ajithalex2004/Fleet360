@@ -12,6 +12,7 @@ export const dynamic = 'force-dynamic';
  * returns user/tenant for the client redirect.
  */
 
+import { sessionPermissionsFor } from '@/lib/authz/session-permissions';
 import { NextRequest, NextResponse } from 'next/server';
 import { residencyClaimForTenant } from '@/lib/db-router';
 import crypto from 'crypto';
@@ -153,6 +154,7 @@ export async function POST(req: NextRequest) {
         tenantId: tenant.id,
         plan:     tenant.plan ?? 'TRIAL',
         role:     role.code,
+        permissions: await sessionPermissionsFor(existing.id, tenant.id),
         ...(await residencyClaimForTenant(tenant.id)),
       });
       const res = NextResponse.json({
@@ -224,6 +226,7 @@ export async function POST(req: NextRequest) {
       tenantId: tenant.id,
       plan:     tenant.plan ?? 'TRIAL',
       role:     role.code,
+      permissions: await sessionPermissionsFor(newUserId, tenant.id),
       ...(await residencyClaimForTenant(tenant.id)),
     });
     const res = NextResponse.json({
