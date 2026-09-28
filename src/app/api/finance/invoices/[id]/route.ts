@@ -23,28 +23,19 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-      // Enforce tenant isolation using the authorized tenantId
-      const queryValues: unknown[] = [params.id];
-      let tenantClause = '';
-      if (tenantId) {
-        queryValues.push(tenantId);
-        // Invoices without a tenant_id (created before isolation was added) are visible to any tenant
-        // Invoices with a tenant_id are only visible to their own tenant
-        tenantClause = ' AND (tenant_id IS NULL OR tenant_id = $2)';
-      }
-
+      // finance_invoices.tenant_id is NOT NULL: every invoice belongs to a tenant.
       type InvRow = Record<string, unknown>;
       const [invoice] = await tx.$queryRawUnsafe<InvRow[]>(
-        `SELECT * FROM finance_invoices WHERE id = $1::uuid AND deleted_at IS NULL${tenantClause} LIMIT 1`,
-        ...queryValues
+        `SELECT * FROM finance_invoices WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL LIMIT 1`,
+        params.id, tenantId
       );
       if (!invoice) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
       type PayRow = { id: string; amount: number; payment_date: string; payment_method: string; reference: string | null; notes: string | null; created_at: string };
       const payments = await tx.$queryRawUnsafe<PayRow[]>(
         `SELECT id, amount, payment_date, payment_method, reference, notes, created_at
-           FROM finance_payments WHERE invoice_id = $1::uuid ORDER BY payment_date ASC`,
-        params.id
+           FROM finance_payments WHERE invoice_id = $1::uuid AND tenant_id = $2 ORDER BY payment_date ASC`,
+        params.id, tenantId
       ).catch(() => [] as PayRow[]);
 
       const fmt = (d: unknown) => d ? (d as Date)?.toISOString?.() ?? d : null;
@@ -90,8 +81,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           // Get current invoice
           type InvRow = { total_amount: number; paid_amount: number; payment_status: string };
           const [inv] = await tx.$queryRawUnsafe<InvRow[]>(
-            `SELECT total_amount, paid_amount, payment_status FROM finance_invoices WHERE id = $1::uuid AND deleted_at IS NULL`,
-            params.id
+            `SELECT total_amount, paid_amount, payment_status FROM finance_invoices WHERE id = $1::uuid AND tenant_id = $2 AND deleted_at IS NULL`,
+            params.id, tenantId
           );
           if (!inv) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
 
@@ -107,8 +98,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           );
 
           await tx.$executeRawUnsafe(
-            `UPDATE finance_invoices SET paid_amount = $2, payment_status = $3, updated_at = NOW() WHERE id = $1::uuid`,
-            params.id, newPaid, newStatus
+            `UPDATE finance_invoices SET paid_amount = $2, payment_status = $3, updated_at = NOW() WHERE id = $1::uuid AND tenant_id = $4`,
+            params.id, newPaid, newStatus, tenantId
           );
 
           return NextResponse.json({ success: true, newPaidAmount: newPaid, newStatus });
@@ -121,8 +112,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
             return NextResponse.json({ error: `Invalid status. Allowed: ${VALID_STATUSES.join(', ')}` }, { status: 400 });
           }
           await tx.$executeRawUnsafe(
-            `UPDATE finance_invoices SET payment_status = $2, updated_at = NOW() WHERE id = $1::uuid`,
-            params.id, status
+            `UPDATE finance_invoices SET payment_status = $2, updated_at = NOW() WHERE id = $1::uuid AND tenant_id = $3`,
+            params.id, status, tenantId
           );
           return NextResponse.json({ success: true, status });
         }
@@ -145,8 +136,9 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
         if (setClauses.length === 1) return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
 
+        values.push(tenantId);
         await tx.$executeRawUnsafe(
-          `UPDATE finance_invoices SET ${setClauses.join(', ')} WHERE id = $1::uuid`,
+          `UPDATE finance_invoices SET ${setClauses.join(', ')} WHERE id = $1::uuid AND tenant_id = $${values.length}`,
           ...values
         );
         return NextResponse.json({ success: true });
@@ -170,8 +162,8 @@ export async function DELETE(_: NextRequest, props: { params: Promise<{ id: stri
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
         await tx.$executeRawUnsafe(
-          `UPDATE finance_invoices SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1::uuid`,
-          params.id
+          `UPDATE finance_invoices SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1::uuid AND tenant_id = $2`,
+          params.id, tenantId
         );
         return NextResponse.json({ success: true });
         } catch (err) {

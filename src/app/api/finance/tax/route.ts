@@ -28,7 +28,8 @@ export async function GET(req: NextRequest) {
 
       if (type === 'audit') {
         const rows = await tx.$queryRawUnsafe<TaxRow[]>(
-          `SELECT * FROM finance_vat_audit_logs ORDER BY created_at DESC LIMIT 100`
+          `SELECT * FROM finance_vat_audit_logs WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 100`,
+          tenantId,
         ).catch(() => []);
         return NextResponse.json({ data: rows });
       }
@@ -47,43 +48,43 @@ export async function GET(req: NextRequest) {
         // Output VAT (from finance_invoices)
         const [outputRow] = await tx.$queryRawUnsafe<{ total: string; count: string }[]>(
           `SELECT COALESCE(SUM(vat_amount),0)::text as total, COUNT(*)::text as count
-             FROM finance_invoices WHERE deleted_at IS NULL
+             FROM finance_invoices WHERE tenant_id = $3 AND deleted_at IS NULL
                AND payment_status NOT IN ('DRAFT','CANCELLED')
                AND issue_date BETWEEN $1 AND $2`,
-          startDate, endDate
+          startDate, endDate, tenantId
         ).catch(() => [{ total: '0', count: '0' }]);
 
         // Output VAT from logistics
         const [logRow] = await tx.$queryRawUnsafe<{ total: string }[]>(
           `SELECT COALESCE(SUM(customer_rate_amount * 0.05 / 1.05),0)::text as total
-             FROM logistics_shipment_orders WHERE deleted_at IS NULL
+             FROM logistics_shipment_orders WHERE tenant_id = $3 AND deleted_at IS NULL
                AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED')
                AND created_at::date BETWEEN $1 AND $2`,
-          startDate, endDate
+          startDate, endDate, tenantId
         ).catch(() => [{ total: '0' }]);
 
         // Output VAT from rental invoices
         const [racRow] = await tx.$queryRawUnsafe<{ total: string }[]>(
           `SELECT COALESCE(SUM(total_amount * 0.05 / 1.05),0)::text as total
-             FROM rental_invoices WHERE deleted_at IS NULL
+             FROM rental_invoices WHERE tenant_id = $3 AND deleted_at IS NULL
                AND created_at::date BETWEEN $1 AND $2`,
-          startDate, endDate
+          startDate, endDate, tenantId
         ).catch(() => [{ total: '0' }]);
 
         // Input VAT from fuel logs
         const [fuelRow] = await tx.$queryRawUnsafe<{ total: string }[]>(
           `SELECT COALESCE(SUM(total_cost * 0.05 / 1.05),0)::text as total
-             FROM fuel_logs WHERE created_at::date BETWEEN $1 AND $2`,
-          startDate, endDate
+             FROM fuel_logs WHERE tenant_id = $3 AND created_at::date BETWEEN $1 AND $2`,
+          startDate, endDate, tenantId
         ).catch(() => [{ total: '0' }]);
 
         // Input VAT from approved maintenance
         const [mainRow] = await tx.$queryRawUnsafe<{ total: string }[]>(
           `SELECT COALESCE(SUM(total_cost * 0.05 / 1.05),0)::text as total
-             FROM maintenance_requests WHERE deleted_at IS NULL
+             FROM maintenance_requests WHERE tenant_id = $3 AND deleted_at IS NULL
                AND status IN ('COMPLETED')
                AND created_at::date BETWEEN $1 AND $2`,
-          startDate, endDate
+          startDate, endDate, tenantId
         ).catch(() => [{ total: '0' }]);
 
         const outputVat = parseFloat(outputRow?.total ?? '0')
@@ -95,7 +96,9 @@ export async function GET(req: NextRequest) {
 
         // Category breakdown
         const breakdown = await tx.$queryRawUnsafe<{ code: string; name: string; rate: string }[]>(
-          `SELECT code, name, rate::text FROM finance_tax_categories WHERE is_active = TRUE ORDER BY rate DESC`
+          `SELECT code, name, rate::text FROM finance_tax_categories
+            WHERE (tenant_id = $1 OR tenant_id IS NULL) AND is_active = TRUE ORDER BY rate DESC`,
+          tenantId,
         ).catch(() => []);
 
         return NextResponse.json({
@@ -107,9 +110,11 @@ export async function GET(req: NextRequest) {
         });
       }
 
-      // Default: return categories
+      // Default: return categories — the tenant's own and the shared UAE ones
+      // (tenant_id NULL).
       const categories = await tx.$queryRawUnsafe<TaxRow[]>(
-        `SELECT * FROM finance_tax_categories ORDER BY rate DESC, code`
+        `SELECT * FROM finance_tax_categories WHERE tenant_id = $1 OR tenant_id IS NULL ORDER BY rate DESC, code`,
+        tenantId,
       ).catch(() => []);
       return NextResponse.json({ data: categories });
   });
@@ -130,10 +135,10 @@ export async function POST(req: NextRequest) {
 
       if (body.type === 'audit_log') {
         await tx.$executeRawUnsafe(
-          `INSERT INTO finance_vat_audit_logs (action, entity_type, entity_id, performed_by, details, notes)
-           VALUES ($1,$2,$3,$4,$5::jsonb,$6)`,
+          `INSERT INTO finance_vat_audit_logs (action, entity_type, entity_id, performed_by, details, notes, tenant_id)
+           VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7)`,
           body.action, body.entityType ?? null, body.entityId ?? null,
-          body.performedBy ?? null, JSON.stringify(body.details ?? {}), body.notes ?? null
+          body.performedBy ?? null, JSON.stringify(body.details ?? {}), body.notes ?? null, tenantId
         ).catch(() => {});
         return NextResponse.json({ ok: true }, { status: 201 });
       }

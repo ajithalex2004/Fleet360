@@ -32,9 +32,9 @@ export async function GET(req: NextRequest) {
       const search = sp.get('search');
       const flat   = sp.get('flat');    // flat list vs tree
 
-      let where = `WHERE deleted_at IS NULL`;
-      const params: unknown[] = [];
-      let pi = 1;
+      let where = `WHERE tenant_id = $1 AND deleted_at IS NULL`;
+      const params: unknown[] = [tenantId];
+      let pi = 2;
       if (type)   { where += ` AND account_type = $${pi++}`;                                     params.push(type); }
       if (search) { where += ` AND (account_code ILIKE $${pi} OR account_name ILIKE $${pi})`;   params.push(`%${search}%`); pi++; }
 

@@ -41,7 +41,7 @@ export async function GET(
     try {
         const { owned } = await guardTenant(tenantId, params.id);
         if (!owned) return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
-        const inquiry = await tx.leaseInquiry.findUnique({ where: { id: params.id } });
+        const inquiry = await tx.leaseInquiry.findFirst({ where: { id: params.id, tenantId } });
         if (!inquiry) return NextResponse.json({ error: 'Inquiry not found' }, { status: 404 });
         return NextResponse.json(inquiry);
       } catch (e) {
@@ -85,7 +85,7 @@ export async function PATCH(
 
     const inquiry = await withTenantRls(prisma, tenantId, async (tx) =>
       tx.leaseInquiry.update({
-      where: { id: params.id },
+      where: { id: params.id, tenantId },
       data: allowed,
     }),
     );
@@ -127,7 +127,7 @@ export async function DELETE(
 
     await withTenantRls(prisma, tenantId, async (tx) =>
       tx.leaseInquiry.update({
-      where: { id: params.id },
+      where: { id: params.id, tenantId },
       data: { deletedAt: new Date() },
     }),
     );

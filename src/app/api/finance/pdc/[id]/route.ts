@@ -22,7 +22,7 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     const [row] = await tx.$queryRawUnsafe<PdcRow[]>(
-        `SELECT * FROM finance_pdc_cheques WHERE id = $1 AND deleted_at IS NULL`, params.id
+        `SELECT * FROM finance_pdc_cheques WHERE id=$1 AND deleted_at IS NULL AND tenant_id=$2`, params.id, tenantId
       ).catch(() => [] as PdcRow[]);
       if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
       return NextResponse.json(row);
@@ -67,6 +67,12 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
       }
 
+      // Each statement above targets `WHERE id=$1`: narrow it to the tenant.
+
+      sqlParams.push(tenantId);
+
+      sql = sql.replace('WHERE id=$1', () => `WHERE id=$1 AND tenant_id=$${sqlParams.length}`);
+
       const [row] = await tx.$queryRawUnsafe<PdcRow[]>(sql, ...sqlParams).catch(() => [] as PdcRow[]);
       if (!row) return NextResponse.json({ error: 'Update failed' }, { status: 500 });
       return NextResponse.json(row);
@@ -85,7 +91,7 @@ export async function DELETE(_: NextRequest, props: { params: Promise<{ id: stri
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     await tx.$executeRawUnsafe(
-        `UPDATE finance_pdc_cheques SET deleted_at=NOW() WHERE id=$1`, params.id
+        `UPDATE finance_pdc_cheques SET deleted_at=NOW() WHERE id=$1 AND tenant_id=$2`, params.id, tenantId
       ).catch(() => {});
       return NextResponse.json({ ok: true });
   });

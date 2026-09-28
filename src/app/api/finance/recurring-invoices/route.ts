@@ -86,15 +86,15 @@ export async function GET(req: NextRequest) {
 
       if (schedule_id) {
         const logs = await tx.$queryRawUnsafe(
-          `SELECT * FROM finance_recurring_log WHERE schedule_id = $1::uuid ORDER BY created_at DESC`,
-          schedule_id
+          `SELECT * FROM finance_recurring_log WHERE schedule_id = $1::uuid AND tenant_id = $2 ORDER BY created_at DESC`,
+          schedule_id, tenantId
         ) as Record<string, unknown>[];
         return NextResponse.json({ logs: logs.map(logRow) });
       }
 
-      let where = 'WHERE 1=1';
-      const params: unknown[] = [];
-      let idx = 1;
+      let where = 'WHERE tenant_id = $1';
+      const params: unknown[] = [tenantId];
+      let idx = 2;
 
       if (status)        { where += ` AND status = $${idx++}`;         params.push(status); }
       if (billing_cycle) { where += ` AND billing_cycle = $${idx++}`;  params.push(billing_cycle); }
@@ -120,7 +120,8 @@ export async function GET(req: NextRequest) {
           COALESCE(SUM(grand_total) FILTER (WHERE status = 'ACTIVE'), 0) AS monthly_value,
           COALESCE(SUM(invoices_generated), 0)                 AS total_invoices_generated
         FROM finance_recurring_schedules
-      `) as Record<string, unknown>[];
+        WHERE tenant_id = $1
+      `, tenantId) as Record<string, unknown>[];
 
       return NextResponse.json({ schedules: rows.map(scheduleRow), kpi: kpi[0] });
   });
@@ -143,7 +144,7 @@ export async function POST(req: NextRequest) {
         // ── Generate Now ─────────────────────────────────────────────────────────
         const id = b.schedule_id;
         const schRows = await tx.$queryRawUnsafe(
-          `SELECT * FROM finance_recurring_schedules WHERE id = $1::uuid AND status = 'ACTIVE'`, id
+          `SELECT * FROM finance_recurring_schedules WHERE id = $1::uuid AND tenant_id = $2 AND status = 'ACTIVE'`, id, tenantId
         ) as Record<string, unknown>[];
         if (!schRows.length) return NextResponse.json({ error: 'schedule not found or not active' }, { status: 404 });
         const sch = schRows[0];
@@ -209,8 +210,8 @@ export async function POST(req: NextRequest) {
             next_invoice_date  = $3,
             invoices_generated = invoices_generated + 1,
             updated_at         = NOW()
-          WHERE id = $1::uuid
-        `, id, periodStart.toISOString().split('T')[0], nextDate.toISOString().split('T')[0]);
+          WHERE id = $1::uuid AND tenant_id = $4
+        `, id, periodStart.toISOString().split('T')[0], nextDate.toISOString().split('T')[0], tenantId);
 
         return NextResponse.json({ invoice_no, invoice_id, period_start: periodStart, period_end: periodEnd, status: draftStatus });
       }
@@ -273,19 +274,19 @@ export async function PATCH(req: NextRequest) {
 
       if (action === 'pause') {
         const rows = await tx.$queryRawUnsafe(
-          `UPDATE finance_recurring_schedules SET status='PAUSED', updated_at=NOW() WHERE id=$1::uuid RETURNING *`, id
+          `UPDATE finance_recurring_schedules SET status='PAUSED', updated_at=NOW() WHERE id=$1::uuid AND tenant_id=$2 RETURNING *`, id, tenantId
         ) as Record<string, unknown>[];
         return NextResponse.json(scheduleRow(rows[0]));
       }
       if (action === 'resume') {
         const rows = await tx.$queryRawUnsafe(
-          `UPDATE finance_recurring_schedules SET status='ACTIVE', updated_at=NOW() WHERE id=$1::uuid RETURNING *`, id
+          `UPDATE finance_recurring_schedules SET status='ACTIVE', updated_at=NOW() WHERE id=$1::uuid AND tenant_id=$2 RETURNING *`, id, tenantId
         ) as Record<string, unknown>[];
         return NextResponse.json(scheduleRow(rows[0]));
       }
       if (action === 'cancel') {
         const rows = await tx.$queryRawUnsafe(
-          `UPDATE finance_recurring_schedules SET status='CANCELLED', updated_at=NOW() WHERE id=$1::uuid RETURNING *`, id
+          `UPDATE finance_recurring_schedules SET status='CANCELLED', updated_at=NOW() WHERE id=$1::uuid AND tenant_id=$2 RETURNING *`, id, tenantId
         ) as Record<string, unknown>[];
         return NextResponse.json(scheduleRow(rows[0]));
       }
@@ -301,9 +302,10 @@ export async function PATCH(req: NextRequest) {
       }
       if (!updates.length) return NextResponse.json({ error: 'no fields' }, { status: 400 });
       updates.push('updated_at = NOW()');
+      vals.push(tenantId);
 
       const rows = await tx.$queryRawUnsafe(
-        `UPDATE finance_recurring_schedules SET ${updates.join(', ')} WHERE id = $1::uuid RETURNING *`,
+        `UPDATE finance_recurring_schedules SET ${updates.join(', ')} WHERE id = $1::uuid AND tenant_id = $${pi} RETURNING *`,
         ...vals
       ) as Record<string, unknown>[];
       if (!rows.length) return NextResponse.json({ error: 'not found' }, { status: 404 });

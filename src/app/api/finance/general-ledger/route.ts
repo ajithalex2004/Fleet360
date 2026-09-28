@@ -3,7 +3,9 @@ export const dynamic = 'force-dynamic';
 /**
  * General Ledger API — /api/finance/general-ledger
  * Account statement, Trial Balance, account balances from posted journal lines
- * Multi-tenant: pass ?tenantId= to scope journal entries to a single tenant
+ * Scoped to the caller's tenant, in every query as well as by row level
+ * security. (A ?tenantId= parameter never switched tenants here: the
+ * transaction runs as the caller's tenant.)
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
@@ -22,24 +24,23 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await ensureTenantChartOfAccounts(tx, authz.tenantId);
+    await ensureTenantChartOfAccounts(tx, tenantId);
     const sp   = req.nextUrl.searchParams;
       const type = sp.get('type'); // trial_balance | account_statement | account_balances
 
       // ── Tenant scoping ────────────────────────────────────────────────────────
-      const rawTenantId = sp.get('tenantId');
-      const tenantId    = rawTenantId ? rawTenantId.replace(/[^a-zA-Z0-9_-]/g, '') : null;
+      // Always the authorized tenant. This used to read ?tenantId= itself and
+      // shadow it, so without the parameter no query filtered by tenant.
 
-      /** Returns a tenant filter clause for finance_journal_entries aliased as `je` or standalone */
+      /** Tenant filter clause for finance_journal_entries aliased as `je` or standalone */
       function jeTenantClause(paramIndex: number, alias: 'je' | '' = 'je'): string {
-        if (!tenantId) return '';
         const col = alias ? `${alias}.tenant_id` : 'tenant_id';
         return ` AND ${col} = $${paramIndex}`;
       }
 
-      /** Appends tenantId to a params array if tenantId is set */
+      /** Appends the tenant to a params array: it is always the last parameter */
       function withTenant(base: unknown[]): unknown[] {
-        return tenantId ? [...base, tenantId] : base;
+        return [...base, tenantId];
       }
 
       // ── Trial Balance ─────────────────────────────────────────────────────────
@@ -70,7 +71,7 @@ export async function GET(req: NextRequest) {
                SELECT id::text FROM finance_journal_entries
                WHERE status = 'POSTED' AND entry_date BETWEEN $1 AND $2 AND deleted_at IS NULL${tenantFilter}
              )
-           WHERE c.deleted_at IS NULL AND c.is_active = TRUE AND c.is_header = FALSE
+           WHERE c.tenant_id = $${params.length} AND c.deleted_at IS NULL AND c.is_active = TRUE AND c.is_header = FALSE
            GROUP BY c.account_code, c.account_name, c.account_type, c.account_subtype,
                     c.normal_balance, c.is_header, c.parent_code, c.sort_order
            ORDER BY c.sort_order, c.account_code`,
@@ -85,7 +86,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({
           rows,
           period: { from, to },
-          tenantId: tenantId ?? null,
+          tenantId,
           totals: {
             totalDebit:  Math.round(totalDr * 100) / 100,
             totalCredit: Math.round(totalCr * 100) / 100,
@@ -119,7 +120,8 @@ export async function GET(req: NextRequest) {
         ).catch(() => [{ debit: '0', credit: '0' }]);
 
         const [accInfo] = await (tx.$queryRawUnsafe as (...a: unknown[]) => Promise<{account_name: string; account_type: string; normal_balance: string}[]>)(
-          `SELECT account_name, account_type, normal_balance FROM finance_chart_of_accounts WHERE account_code = $1`, accountCode
+          `SELECT account_name, account_type, normal_balance FROM finance_chart_of_accounts
+            WHERE account_code = $1 AND tenant_id = $2`, accountCode, tenantId
         ).catch(() => [] as {account_name: string; account_type: string; normal_balance: string}[]);
 
         const openingDebit  = parseFloat(obRow?.debit  ?? '0');
@@ -160,7 +162,7 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({
           account:        { code: accountCode, ...accInfo },
           period:         { from, to },
-          tenantId:       tenantId ?? null,
+          tenantId,
           openingBalance: Math.round(openingBal   * 100) / 100,
           closingBalance: Math.round(closingBal   * 100) / 100,
           totalDebit:     Math.round(totalDebit  * 100) / 100,
@@ -195,14 +197,14 @@ export async function GET(req: NextRequest) {
              SELECT id::text FROM finance_journal_entries
              WHERE status='POSTED' AND entry_date <= $1 AND deleted_at IS NULL${balTenantFilter}
            )
-         WHERE c.deleted_at IS NULL AND c.is_active=TRUE
+         WHERE c.tenant_id = $${balParams.length} AND c.deleted_at IS NULL AND c.is_active=TRUE
          GROUP BY c.account_code, c.account_name, c.account_type, c.account_subtype,
                   c.normal_balance, c.parent_code, c.sort_order
          ORDER BY c.sort_order, c.account_code`,
         ...balParams
       ).catch(() => []);
 
-      return NextResponse.json({ data: balances, asOf, tenantId: tenantId ?? null });
+      return NextResponse.json({ data: balances, asOf, tenantId });
   });
 }
 

@@ -64,9 +64,9 @@ export async function GET(req: NextRequest) {
       const limit = Math.min(100, parseInt(sp.get('limit') ?? '50'));
       const offset = (page - 1) * limit;
 
-      let where = `WHERE deleted_at IS NULL`;
-      const params: unknown[] = [];
-      let pi = 1;
+      let where = `WHERE tenant_id = $1 AND deleted_at IS NULL`;
+      const params: unknown[] = [tenantId];
+      let pi = 2;
       if (status)    { where += ` AND status = $${pi++}`;         params.push(status); }
       if (direction) { where += ` AND direction = $${pi++}`;      params.push(direction); }
       if (from)      { where += ` AND cheque_date >= $${pi++}`;   params.push(from); }
@@ -79,7 +79,8 @@ export async function GET(req: NextRequest) {
         ).catch(() => [] as PdcRow[]),
         tx.$queryRawUnsafe<{status: string; count: string; total: string}[]>(
           `SELECT status, COUNT(*) as count, COALESCE(SUM(amount),0)::text as total
-             FROM finance_pdc_cheques WHERE deleted_at IS NULL GROUP BY status`
+             FROM finance_pdc_cheques WHERE tenant_id = $1 AND deleted_at IS NULL GROUP BY status`,
+          tenantId,
         ).catch(() => []),
       ]);
 
@@ -111,14 +112,14 @@ export async function POST(req: NextRequest) {
       const [row] = await tx.$queryRawUnsafe<PdcRow[]>(
         `INSERT INTO finance_pdc_cheques
            (cheque_number, bank_name, account_name, cheque_date, amount, currency,
-            direction, client_name, client_ref, linked_invoice_id, notes, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+            direction, client_name, client_ref, linked_invoice_id, notes, created_by, tenant_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
          RETURNING *`,
         body.chequeNumber, body.bankName, body.accountName ?? null,
         body.chequeDate, body.amount, body.currency ?? 'AED',
         body.direction ?? 'INCOMING', body.clientName ?? null,
         body.clientRef ?? null, body.linkedInvoiceId ?? null,
-        body.notes ?? null, body.createdBy ?? null,
+        body.notes ?? null, body.createdBy ?? null, tenantId,
       ).catch(() => [] as PdcRow[]);
 
       if (!row) return NextResponse.json({ error: 'Failed to create cheque' }, { status: 500 });

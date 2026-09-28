@@ -218,6 +218,12 @@ function hasTenantFilter(handlerBody) {
     /tenant_id\s*=\s*\$\d+/,
     // AND tenant_id = (for conditional filters)
     /AND\s+\w+\.tenant_id\s*=/,
+    // where: { contract: { id }, tenantId } — tenantId after a nested object
+    /where:\s*\{(?:[^{}]|\{[^{}]*\})*\btenantId\b/,
+    // A write that stamps the row's tenant: data: { ...body, tenantId }
+    /data:\s*\{(?:[^{}]|\{[^{}]*\})*\btenantId\b/,
+    // Raw SQL insert naming the tenant column: INSERT INTO t (tenant_id, ...)
+    /INSERT\s+INTO\s+[\w."]+\s*\([^)]*\btenant_id\b/i,
   ];
 
   return filterPatterns.some(pattern => pattern.test(handlerBody));
@@ -575,4 +581,6 @@ function main() {
   process.exit(success ? 0 : 1);
 }
 
-main();
+if (require.main === module) main();
+
+module.exports = { hasTenantFilter };

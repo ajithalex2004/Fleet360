@@ -23,7 +23,7 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        const vatReturn = await tx.vatReturn.findUnique({ where: { id: params.id } });
+        const vatReturn = await tx.vatReturn.findFirst({ where: { id: params.id, tenantId } });
         if (!vatReturn) return NextResponse.json({ error: 'Not found' }, { status: 404 });
         return NextResponse.json(vatReturn);
       } catch (err) {
@@ -63,7 +63,9 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           data.paymentDate = paymentDate ? new Date(paymentDate) : new Date();
         }
 
-        const updated = await tx.vatReturn.update({ where: { id: params.id }, data });
+        const existing = await tx.vatReturn.findFirst({ where: { id: params.id, tenantId }, select: { id: true } });
+        if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+        const updated = await tx.vatReturn.update({ where: { id: params.id, tenantId }, data });
         return NextResponse.json({ success: true, ...updated });
         } catch (err) {
         console.error('[finance/vat PATCH/:id]', err);
