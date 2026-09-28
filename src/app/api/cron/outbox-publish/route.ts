@@ -26,6 +26,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { tick } from '@/lib/outbox/publisher';
+import { prisma as appPrisma } from '@/lib/prisma';
+import { runAsTenant } from '@/lib/rls-scope';
 import { authorizeJobRequest } from '@/lib/jobs/request-auth';
 // Side-effect import: registers all in-process consumers with the
 // outbox registry. Must be present for tick() to find handlers.
@@ -53,13 +55,24 @@ async function handle(request: NextRequest) {
     return NextResponse.json({ error: 'maxRetries must be a number' }, { status: 400 });
   }
 
-  // Fresh client — not the Next.js-coupled singleton. Safe to run
-  // inside the Vercel serverless process without pulling in
-  // next/headers.
+  // Fresh client for the queue itself: no tenant extension, so its batch
+  // transaction (platform context, row locks) is never mistaken for a
+  // consumer's tenant scope.
   const prisma = new PrismaClient();
   const start = Date.now();
   try {
-    const result = await tick(prisma, { batchSize, maxRetries });
+    // The queue itself is read and updated on the fresh client, in platform
+    // context (tick). Each consumer runs as its event's tenant, on the app
+    // client, which scopes every query to that tenant: the tables consumers
+    // touch are under row level security. runAsTenant, not
+    // runWithTenantContext: it takes precedence over the x-tenant-id of an
+    // admin who triggers this route. The tenant comes from the outbox row,
+    // written by the server with the event.
+    const result = await tick(prisma, {
+      batchSize,
+      maxRetries,
+      consumer: { client: appPrisma, runForTenant: runAsTenant },
+    });
     const durationMs = Date.now() - start;
     return NextResponse.json({
       ok: result.failed === 0,
