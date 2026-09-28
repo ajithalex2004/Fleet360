@@ -7,6 +7,7 @@ import { sendWhatsAppMessage, WHATSAPP_FROM_NUMBER } from '@/lib/whatsapp/twilio
 import { ensureAgentSchema } from '@/lib/agents/schema';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 const ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID ?? '';
 
 interface SendPayload {
@@ -42,7 +43,7 @@ async function getTemplateBody(templateName: string, vars: Record<string, string
 }
 
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -151,3 +152,6 @@ export async function GET(req: NextRequest) {
   });
 }
 
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 function errorMessage(e: unknown, fallback: string): string {
     return e instanceof Error && e.message ? e.message : fallback;
 }
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
     }
 }
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
     const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -66,7 +67,7 @@ export async function POST(request: NextRequest) {
     }
 }
 
-export async function PUT(request: NextRequest) {
+async function handlePUT(request: NextRequest) {
     const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -97,3 +98,7 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json({ error: `Failed to update rule: ${errorMessage(e, 'Unknown error')}` }, { status: 500 });
     }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);
+export const PUT = withAuditedAction(handlePUT);

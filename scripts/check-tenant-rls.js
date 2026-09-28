@@ -52,6 +52,7 @@ const EXEMPT_PATTERNS = [
 // a real violation it is reported as stale and fails the run — an exemption
 // that has quietly stopped applying is an exemption nobody is reviewing.
 const { RULE_EXEMPTIONS } = require('./tenant-route-exemptions');
+const { unwrapAuditedHandlers } = require('./route-handler-source');
 
 function ruleExemptionFor(relativePath, violation) {
   return RULE_EXEMPTIONS.find(
@@ -228,7 +229,8 @@ function hasBodySanitization(handlerBody) {
 }
 
 function analyzeRouteFile(filePath, opts = {}) {
-  const content = fs.readFileSync(filePath, 'utf8');
+  // Wrapped (audited) handlers are checked like plain exports.
+  const content = unwrapAuditedHandlers(fs.readFileSync(filePath, 'utf8'));
   const relativePath = path.relative(process.cwd(), filePath).replace(/\\/g, '/');
 
   if (isExempt(relativePath)) {

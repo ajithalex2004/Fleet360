@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { removeAllPasskeys } from '@/lib/auth/passkeys';
 import { logAudit } from '@/lib/audit';
+import { withAuditedAction } from '@/lib/audited-action';
 
 export const runtime = 'nodejs';
 
@@ -14,7 +15,7 @@ export const runtime = 'nodejs';
  * enforced in middleware). Removes every passkey of a user who lost their
  * device; the user then adds a new one with their password.
  */
-export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+async function handleDELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const { id: userId } = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers });
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -25,3 +26,6 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
   });
   return NextResponse.json({ ok: true, removed });
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const DELETE = withAuditedAction(handleDELETE);

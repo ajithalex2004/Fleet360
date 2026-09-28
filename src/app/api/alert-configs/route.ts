@@ -5,6 +5,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 export async function GET(req: NextRequest) {
 
     const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest) {
 }
 
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
 
     const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
     if (!authz.ok) {
@@ -64,3 +65,6 @@ export async function POST(request: NextRequest) {
   });
 }
 
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

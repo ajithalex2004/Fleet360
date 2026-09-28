@@ -5,6 +5,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 // ---------------------------------------------------------------------------
 // billing_runs and the finance_invoices columns this route uses are owned
 // by Prisma migrations:
@@ -229,7 +230,7 @@ export async function GET(_req: NextRequest) {
 // action=run_billing  → full billing run (creates invoices)
 // action=preview      → dry run, returns what would be billed
 // ---------------------------------------------------------------------------
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
 
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -437,3 +438,6 @@ export async function POST(req: NextRequest) {
   });
 }
 
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

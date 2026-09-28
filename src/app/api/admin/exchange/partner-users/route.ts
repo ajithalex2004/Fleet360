@@ -11,6 +11,7 @@ import {
   PARTNER_ROLES,
   type PartnerRole,
 } from '@/lib/exchange/partner-auth';
+import { withAuditedAction } from '@/lib/audited-action';
 
 export const runtime = 'nodejs';
 
@@ -49,7 +50,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ members });
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   // Middleware already requires SUPER_ADMIN for this platform admin route;
   // checked again here so the handler is safe on its own.
   const authz = requireAuthorizedTenant({ headers: req.headers });
@@ -98,7 +99,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ membership: result.membership });
 }
 
-export async function DELETE(req: NextRequest) {
+async function handleDELETE(req: NextRequest) {
   // Middleware already requires SUPER_ADMIN for this platform admin route;
   // checked again here so the handler is safe on its own.
   const authz = requireAuthorizedTenant({ headers: req.headers });
@@ -126,3 +127,7 @@ export async function DELETE(req: NextRequest) {
 
   return NextResponse.json({ ok: true });
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);
+export const DELETE = withAuditedAction(handleDELETE);

@@ -52,7 +52,7 @@ function templateFor(file: string): string {
 
 function exportedMethods(file: string): string[] {
   const src = fs.readFileSync(file, 'utf8');
-  return [...src.matchAll(/export\s+(?:async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE)\b/g)].map((m) => m[1]);
+  return [...src.matchAll(/export\s+(?:async\s+function|const|function)\s+(GET|POST|PUT|PATCH|DELETE)\b/g)].map((m) => m[1]);
 }
 
 describe('ADMIN_ROUTE_POLICY covers every admin route', () => {

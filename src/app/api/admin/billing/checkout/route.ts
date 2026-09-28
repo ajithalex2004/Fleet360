@@ -19,10 +19,11 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 import { getStripe, getOrCreateCustomer, getPriceId, isStripeConfigured } from '@/lib/billing';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { withAuditedAction } from '@/lib/audited-action';
 
 export const runtime = 'nodejs';
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   if (!isStripeConfigured()) {
     return NextResponse.json({ ok: false, error: 'Stripe is not configured. Set STRIPE_SECRET_KEY.' }, { status: 503 });
   }
@@ -89,3 +90,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'Failed to create checkout session.' }, { status: 500 });
   }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

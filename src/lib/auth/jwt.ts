@@ -16,9 +16,16 @@
  *
  * Token shape (must match backend/auth/jwt.go Claims):
  *   header   { "alg": "HS256", "typ": "JWT" }
- *   payload  { iss, sub, tenant_id, role, iat, exp }
+ *   payload  { iss, sub, tenant_id, role, iat, exp, perms?, plan? }
+ *
+ * perms is the same permission claim as the xl-session cookie
+ * (src/lib/authz/permission-claim.ts) and plan the tenant's plan: the Go
+ * backend makes the same authorization decision as Next.js from them
+ * (backend/authz). A token without perms holds no module permissions there.
  *   sig      HMAC-SHA256( header.payload )  (base64url, no padding)
  */
+
+import { encodePermissionClaim } from '@/lib/authz/permission-claim';
 
 const JWT_ISSUER = 'fleet360-nextjs';
 const JWT_TTL_SECONDS = 24 * 60 * 60; // 24h — matches the xl-session cookie
@@ -30,6 +37,10 @@ interface JwtPayload {
   tenantId: string;
   /** Role code (from Role.code), e.g. "SUPER_ADMIN", "FLEET_OPERATOR". */
   role: string;
+  /** Effective permissions in the tenant (as signed into the session); omit for non-staff tokens. */
+  permissions?: readonly string[] | null;
+  /** The tenant's plan (TRIAL is read-only outside trial-free modules). */
+  plan?: string | null;
 }
 
 /**
@@ -57,6 +68,8 @@ export async function signJwtForBackend(payload: JwtPayload): Promise<string> {
     role: payload.role,
     iat: now,
     exp: now + JWT_TTL_SECONDS,
+    ...(payload.permissions ? { perms: encodePermissionClaim(payload.permissions) } : {}),
+    ...(payload.plan ? { plan: payload.plan } : {}),
   };
 
   const encodedHeader = base64UrlEncodeString(JSON.stringify(header));

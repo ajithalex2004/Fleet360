@@ -6,7 +6,8 @@ import { updateStep, deleteStep } from '@/lib/workflow-db';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { checkWorkflowStepAccess } from '@/lib/admin-scope';
-export async function PUT(req: NextRequest, props: { params: Promise<{ stepId: string }> }) {
+import { withAuditedAction } from '@/lib/audited-action';
+async function handlePUT(req: NextRequest, props: { params: Promise<{ stepId: string }> }) {
   const params = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -26,7 +27,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ stepId: s
   }
 }
 
-export async function DELETE(_req: NextRequest, props: { params: Promise<{ stepId: string }> }) {
+async function handleDELETE(_req: NextRequest, props: { params: Promise<{ stepId: string }> }) {
   const params = await props.params;
   const authz = requireAuthorizedTenant({ headers: _req.headers, nextUrl: _req.nextUrl });
   if (!authz.ok) {
@@ -44,3 +45,7 @@ export async function DELETE(_req: NextRequest, props: { params: Promise<{ stepI
     return NextResponse.json({ error: e?.message }, { status: 500 });
   }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const PUT = withAuditedAction(handlePUT);
+export const DELETE = withAuditedAction(handleDELETE);

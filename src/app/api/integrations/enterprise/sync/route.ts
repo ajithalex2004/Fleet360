@@ -12,10 +12,11 @@ import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { ensureAgentSchema } from '@/lib/agents/schema';
 import { ENTERPRISE_BRIDGE_AGENT } from '@/lib/agents/enterprise-bridge/agent';
 import { CanonicalEntityType } from '@/lib/agents/types';
+import { withAuditedAction } from '@/lib/audited-action';
 
 export const runtime = 'nodejs';
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -53,3 +54,6 @@ export async function POST(req: NextRequest) {
     }
   });
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

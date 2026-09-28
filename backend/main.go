@@ -40,6 +40,7 @@ import (
 	"strings"
 
 	"fleet360-backend/auth"
+	"fleet360-backend/authz"
 	"fleet360-backend/billing"
 	"fleet360-backend/corsorigin"
 	"fleet360-backend/database"
@@ -114,6 +115,7 @@ func runServer() {
 	// deactivation, password reset, sign out everywhere) are refused within
 	// auth.RevocationRecheck. See backend/auth/revocation.go.
 	auth.SetRevocationChecker(auth.NewDBRevocationChecker(database.DB))
+	authz.SetRecorder(authz.NewDBRecorder(database.DB))
 
 	if err := corsorigin.RefreshFromDB(database.DB); err != nil {
 		log.Warn("CORS initial DB load failed (serving with env baseline only)", zap.Error(err))
@@ -207,7 +209,10 @@ func registerV1Routes(r *gin.Engine) {
 	// tokens), then rate limit (so authenticated bursts are capped).
 	//
 	// Unauthenticated requests get 401 with no handler invocation.
-	v1 := r.Group("/api/v1", auth.Middleware(), ratelimit.PerTenant())
+	// authz.Middleware: the same authorization policy as the Next.js
+	// middleware (AUTHZ_MODE report|enforce|off), and privileged requests
+	// recorded in the audit log.
+	v1 := r.Group("/api/v1", auth.Middleware(), authz.Middleware(), ratelimit.PerTenant())
 
 	fleet := v1.Group("/fleet")
 	{

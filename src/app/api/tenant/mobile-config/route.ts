@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveTenantByEmailOrCode } from '@/lib/tenant/mobile-config';
+import { withAuditedAction } from '@/lib/audited-action';
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
     const query = body?.email || body?.code || 'fatima@ein360.ae';
@@ -25,3 +26,6 @@ export async function GET(req: NextRequest) {
   const config = resolveTenantByEmailOrCode(query);
   return NextResponse.json({ success: true, query, config });
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

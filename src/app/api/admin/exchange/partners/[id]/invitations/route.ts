@@ -12,6 +12,7 @@ import { generateInvitationToken, INVITATION_TTL_DAYS } from '@/lib/invitations'
 import { notProvisionedAware, PARTNER_ROLES } from '@/lib/exchange/partner-auth';
 import { findActiveTenant, isPartnerRole } from '@/lib/exchange/partner-onboarding';
 import { PARTNER_TENANT_ROLE } from '@/lib/exchange/partner-role';
+import { withAuditedAction } from '@/lib/audited-action';
 
 export const runtime = 'nodejs';
 
@@ -78,7 +79,7 @@ export async function GET(req: NextRequest, props: Params) {
   });
 }
 
-export async function POST(req: NextRequest, props: Params) {
+async function handlePOST(req: NextRequest, props: Params) {
   const { id: partnerId } = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers });
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -203,7 +204,7 @@ export async function POST(req: NextRequest, props: Params) {
   });
 }
 
-export async function DELETE(req: NextRequest, props: Params) {
+async function handleDELETE(req: NextRequest, props: Params) {
   const { id: partnerId } = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers });
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -232,3 +233,7 @@ export async function DELETE(req: NextRequest, props: Params) {
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);
+export const DELETE = withAuditedAction(handleDELETE);

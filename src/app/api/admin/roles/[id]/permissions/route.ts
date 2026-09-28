@@ -8,6 +8,7 @@ import { revalidateCache } from '@/lib/server-cache';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { checkRoleAccess } from '@/lib/admin-scope';
+import { withAuditedAction } from '@/lib/audited-action';
 const ROLES_TAG = 'roles:all';
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -34,7 +35,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
 }
 
 // PUT: replace all permissions for a role
-export async function PUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+async function handlePUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -82,3 +83,6 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
     );
   }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const PUT = withAuditedAction(handlePUT);

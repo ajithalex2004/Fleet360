@@ -8,6 +8,7 @@ import { logAudit } from '@/lib/audit';
 import { notProvisionedAware } from '@/lib/exchange/partner-auth';
 import { loadOnboardingState } from '@/lib/exchange/onboarding-state';
 import { findReviewablePartner, notify, partnerMemberEmails, reviewerScope } from '@/lib/exchange/onboarding-review';
+import { withAuditedAction } from '@/lib/audited-action';
 
 export const runtime = 'nodejs';
 
@@ -29,7 +30,7 @@ export const runtime = 'nodejs';
 const DECISIONS = ['ACTIVATE', 'MORE_INFO', 'REJECT'] as const;
 type Decision = (typeof DECISIONS)[number];
 
-export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+async function handlePOST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const { id: partnerId } = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers });
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -126,3 +127,6 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
   return NextResponse.json({ ok: true, decision });
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

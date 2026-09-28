@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 function addMonths(d: Date, m: number) { const r = new Date(d); r.setMonth(r.getMonth() + m); return r; }
 function ago(days: number) { return new Date(Date.now() - days * 86400000); }
 
@@ -15,7 +16,7 @@ function errorStack(e: unknown): string | undefined {
   return e instanceof Error ? e.stack : undefined;
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -622,3 +623,6 @@ export async function POST(req: NextRequest) {
   }
   });
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

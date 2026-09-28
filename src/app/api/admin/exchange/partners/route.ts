@@ -10,6 +10,7 @@ import { logAudit } from '@/lib/audit';
 import { notProvisionedAware } from '@/lib/exchange/partner-auth';
 import { findActiveTenant, setOnboardingTenant } from '@/lib/exchange/partner-onboarding';
 import { isEmirate, SERVICE_DOMAINS, type ServiceDomain } from '@/lib/exchange/partner-activation';
+import { withAuditedAction } from '@/lib/audited-action';
 
 export const runtime = 'nodejs';
 
@@ -85,7 +86,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ partners });
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers });
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
   if (!isSuperAdmin(req.headers)) return NextResponse.json({ error: 'Platform administrators only' }, { status: 403 });
@@ -168,3 +169,6 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ partner }, { status: 201 });
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

@@ -34,6 +34,7 @@ import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 export const runtime = 'nodejs';
 
 interface RouteParams { params: Promise<{ id: string; category: string }>; }
@@ -107,7 +108,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   });
 }
 
-export async function PUT(req: NextRequest, { params }: RouteParams) {
+async function handlePUT(req: NextRequest, { params }: RouteParams) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -155,3 +156,6 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ ok: false, error: 'Save failed' }, { status: 500 });
   }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const PUT = withAuditedAction(handlePUT);

@@ -5,9 +5,10 @@ import { withTenantRls } from '@/lib/rls';
 import { PrismaClient } from '@prisma/client';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 const prisma = new PrismaClient();
 
-export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+async function handlePATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
     const params = await props.params;
 
     const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
@@ -37,7 +38,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
 }
 
 
-export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+async function handleDELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
     const params = await props.params;
 
     const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
@@ -59,3 +60,7 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ id
   });
 }
 
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const PATCH = withAuditedAction(handlePATCH);
+export const DELETE = withAuditedAction(handleDELETE);

@@ -24,12 +24,16 @@
  *
  * A rule may differ for reads (GET/HEAD) and writes: { read, write }.
  *
+ * The Go backend enforces the same matrix: backend/authz/policy.json is
+ * generated from it (src/lib/authz/go-policy.ts), with test vectors both
+ * sides must decide identically. Go serves /api/v1/<path> as /api/<path>.
+ *
  * Changing the matrix means bumping POLICY_VERSION (and saying why in the
  * commit): the version is logged with every decision.
  */
 import type { ModuleKey } from '@/lib/modules';
 
-export const POLICY_VERSION = '2026-09-28.1';
+export const POLICY_VERSION = '2026-09-29.1';
 
 export type Rule =
   | { kind: 'module'; module: ModuleKey; action?: 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'export' }
@@ -74,6 +78,7 @@ export const AREAS: Readonly<Record<string, AreaRule>> = {
   files: SELF,             // object-level check in src/lib/storage/file-access.ts
   realtime: SELF,
   alerts: SELF,
+  'alerts/configs': TENANT_ADMIN,   // Go /api/v1/alerts/configs (as /api/alert-configs)
   places: { read: SELF, write: m('dispatch') },
 
   // ── Partner portal ────────────────────────────────────────────────────
@@ -112,7 +117,11 @@ export const AREAS: Readonly<Record<string, AreaRule>> = {
   'route-optimizer': m('bus-ops'),
   'school-bus': m('school-bus'),
   logistics: m('logistics'),
+  // A price calculation for the caller's tenant, also asked by shipper-portal
+  // tokens (no staff permissions); the Go handler scopes to the tenant.
+  'logistics/rates/quote': SELF,
   dispatch: m('dispatch'),
+  'dispatch/ambulance-calls': m('incidents'),   // Go /api/v1/dispatch/ambulance-calls
   dispatcher: m('dispatch'),
   incidents: m('incidents'),
   ambulance: m('incidents'),
@@ -121,6 +130,7 @@ export const AREAS: Readonly<Record<string, AreaRule>> = {
   telematics: m('fleet'),
   drivers: m('driver-mgmt'),
   maintenance: m('maintenance'),
+  service: m('maintenance'),                    // Go /api/v1/service/requests
   'maintenance-requests': m('maintenance'),
   'work-orders': m('maintenance'),
   garages: m('maintenance'),
@@ -141,6 +151,13 @@ export const AREAS: Readonly<Record<string, AreaRule>> = {
   sustainability: m('sustainability'),
   agents: m('agents'),
 };
+
+/**
+ * Areas served only by the Go backend (/api/v1/<area>), with no Next.js
+ * route file: reached directly or through the shim (src/lib/api-shim.ts).
+ * tests/unit/authz-go-policy.test.ts checks each one has a Go route.
+ */
+export const GO_ONLY_AREAS: readonly string[] = ['alerts/configs', 'dispatch/ambulance-calls', 'logistics/rates/quote', 'service'];
 
 const SORTED_AREAS = Object.keys(AREAS).sort((a, b) => b.length - a.length);
 

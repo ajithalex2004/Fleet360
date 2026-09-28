@@ -17,15 +17,18 @@
 //     iat        issued-at unix seconds            — required, set by issuer
 //     exp        expiry unix seconds               — required, default 24h
 //     iss        "fleet360-nextjs"                 — required, locks issuer
+//     perms      permission claim                  — optional (staff tokens)
+//     plan       tenant plan                       — optional
 //
-// Permissions are NOT carried in the token — they're cached on the Next.js
-// side and can change mid-session. The role code is enough for Go-side
-// coarse-grained authorisation (admin-only endpoints) without re-fetching
-// permissions per request. Fine-grained gates remain in Next.js, where the
-// permission set is the source of truth.
+// perms is the same bitset claim as the Next.js session
+// (src/lib/authz/permission-claim.ts): package authz decodes it and makes
+// the same authorization decision as Next.js for every /api/v1 request. A
+// token without it holds no module permissions. Permission changes reach
+// Go through session revocation (revocation.go): the user signs in again.
 package auth
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -61,6 +64,10 @@ const (
 type Claims struct {
 	TenantID string `json:"tenant_id"`
 	Role     string `json:"role"`
+	// Perms is the permission claim, decoded by package authz.
+	Perms json.RawMessage `json:"perms,omitempty"`
+	// Plan is the tenant's plan (TRIAL is read-only outside trial-free modules).
+	Plan string `json:"plan,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -262,4 +269,14 @@ func RoleCode(c *gin.Context) string {
 		return s
 	}
 	return ""
+}
+
+// ClaimsFrom returns the validated claims Middleware stored, or nil.
+func ClaimsFrom(c *gin.Context) *Claims {
+	v, ok := c.Get(CtxClaims)
+	if !ok {
+		return nil
+	}
+	claims, _ := v.(*Claims)
+	return claims
 }

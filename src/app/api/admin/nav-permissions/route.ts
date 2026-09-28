@@ -18,6 +18,7 @@ import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import crypto from 'crypto';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 // Keys that the platform admin can enable/disable per tenant
 // Not exported: Next.js route.ts files may only export HTTP method handlers
 // and reserved config constants (dynamic, revalidate, runtime, ...) --
@@ -75,7 +76,7 @@ export async function GET(request: NextRequest) {
 
 // ── PUT — super admin updates permissions for a tenant ─────────────────────────
 
-export async function PUT(request: NextRequest) {
+async function handlePUT(request: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -113,3 +114,6 @@ export async function PUT(request: NextRequest) {
 
   return NextResponse.json({ ok: true, tenantId: targetTenantId });
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const PUT = withAuditedAction(handlePUT);

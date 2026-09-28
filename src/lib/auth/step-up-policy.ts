@@ -71,6 +71,17 @@ export const STEP_UP_ROUTES: Record<string, readonly Method[]> = {
   'events/outbox/replay':                 ['POST'],
 };
 
+/**
+ * Go backend admin actions (/api/v1/admin/<template>) with no Next.js
+ * route, that need the same step-up. Go cannot see the step-up cookie (it
+ * is called with a Bearer token), so it refuses every step-up action in
+ * enforce mode; the admin console performs them. See backend/authz.
+ */
+export const GO_STEP_UP_ROUTES: Record<string, readonly Method[]> = {
+  'tenants/[id]/suspend':                 ['POST'],
+  'tenants/[id]/offboard':                ['POST'],
+};
+
 const ADMIN_PREFIX = '/api/admin/';
 
 function templateToRegExp(template: string): RegExp {

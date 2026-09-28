@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 export async function GET(req: NextRequest) {
     const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
     if (!authz.ok) {
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
     }
 }
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
     const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
     }
 }
 
-export async function PUT(request: NextRequest) {
+async function handlePUT(request: NextRequest) {
     const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
     if (!authz.ok) {
       return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -74,3 +75,7 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json({ error: 'Failed to update template' }, { status: 500 });
     }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);
+export const PUT = withAuditedAction(handlePUT);
