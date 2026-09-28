@@ -21,6 +21,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireShipperPortal } from '@/lib/shipper-portal/auth';
 import { signJwtForBackend } from '@/lib/auth/jwt';
 
+
+/** Role of backend tokens minted for shipper-portal users (no staff rights). */
+const SHIPPER_PORTAL_BACKEND_ROLE = 'SHIPPER_PORTAL';
 export const runtime = 'nodejs';
 
 const GO_BACKEND_URL = process.env.GO_BACKEND_URL ?? 'http://localhost:8080';
@@ -60,13 +63,14 @@ export async function POST(req: NextRequest) {
 
   let token: string;
   try {
-    // Mint a JWT scoped to the shipper's tenant. The role is TENANT_ADMIN
-    // because the rate engine is a read-only operation gated by tenant_id;
-    // a finer-grained "SHIPPER" role isn't a thing Go validates on this path.
+    // Mint a JWT scoped to the shipper's tenant with the shipper portal's
+    // own role. The rate engine only needs the tenant; it never needs, and
+    // must not receive, tenant-admin rights (Go grants those to TENANT_ADMIN
+    // tokens, e.g. backend/handlers/admin_tenants.go).
     token = await signJwtForBackend({
       userId: auth.userId,
       tenantId: auth.tenantId,
-      role: 'TENANT_ADMIN',
+      role: SHIPPER_PORTAL_BACKEND_ROLE,
     });
     } catch (err) {
     console.warn('[shipper-portal/rates/quote] backend JWT sign failed:', err instanceof Error ? err.message : err);

@@ -30,8 +30,10 @@ export interface AccessState {
   loading:       boolean;
 }
 
+// Until the session is known — or when it can't be loaded — the UI assumes
+// no role and read-only access. It never assumes tenant-admin rights.
 const DEFAULT: AccessState = {
-  plan: 'TRIAL', role: 'TENANT_ADMIN',
+  plan: 'TRIAL', role: '',
   isSuperAdmin: false, isTrial: true,
   canWrite: false, isReadOnly: true, loading: true,
 };
@@ -49,7 +51,7 @@ async function fetchSession(): Promise<{ plan: string; role: string }> {
       .catch(() => {});
   }
   await _fetchPromise;
-  return _cached ?? { plan: 'TRIAL', role: 'TENANT_ADMIN' };
+  return _cached ?? { plan: 'TRIAL', role: '' };
 }
 
 export function useAccessControl(module: AppModule): AccessState {

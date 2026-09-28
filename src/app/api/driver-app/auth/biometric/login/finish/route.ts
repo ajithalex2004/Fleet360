@@ -108,15 +108,16 @@ export async function POST(req: NextRequest) {
         WHERE user_id = ${body.driverId}::uuid AND kind = 'login'
       `;
 
-      // Mint a session. We pass a high role so the driver can access the
-      // driver app's API surface without hitting the platform-admin perm
-      // check. The session cookie name is different from the admin's to
-      // keep the two audiences isolated.
+      // Mint a driver session (role DRIVER, no staff permissions). The
+      // session cookie name is different from the admin's to keep the two
+      // audiences isolated.
       const sessionToken = await signSession({
         userId: body.driverId,
         tenantId: cred.tenant_id,
         plan: 'DRIVER',
         role: 'DRIVER',
+        // No staff permissions: the driver app's own routes authorize drivers.
+        permissions: [],
         ttlMs: 24 * 60 * 60 * 1000,
         ...(await residencyClaimForTenant(cred.tenant_id)),
       });

@@ -26,6 +26,7 @@ import { computeRateLimit, getRateLimiter } from '@/lib/rate-limit-scope';
 import { stripIdentityHeaders, withVerifiedIdentity } from '@/lib/identity-headers';
 import { storedFileKey } from '@/lib/storage/stored-file-path';
 import { isAdminApiPath, requiredAdminLevel, roleSatisfies } from '@/lib/admin-access';
+import { authzMode, decide, POLICY_VERSION } from '@/lib/authz/policy';
 import { canServeResidency } from '@/lib/data-residency';
 
 // ── Rate limiter singleton (shared with driver-app telemetry handlers) ───────
@@ -320,6 +321,44 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
         },
         { status: 403 },
       );
+    }
+  }
+
+  // 4c. The authorization policy (src/lib/authz/policy.ts): one decision
+  // per staff API request from the versioned matrix and the session's
+  // permission claim. AUTHZ_MODE=report (default) logs would-be denials;
+  // enforce answers 403. Runs before the Go shim, so proxied routes are
+  // decided the same way.
+  if (pathname.startsWith('/api/')) {
+    const mode = authzMode();
+    if (mode !== 'off') {
+      const decision = decide(
+        { pathname, method: request.method, requestedTenantId: request.nextUrl.searchParams.get('tenantId') },
+        { role: session.role, tenantId: session.tenantId, plan: session.plan, permissions: session.permissions },
+      );
+      // Sessions issued before the permission claim existed hold none until
+      // they roll over (24 h); in report mode that is expected, not signal.
+      const quiet = mode === 'report' && decision.reason === 'no-permission-claim';
+      if (!decision.allow && !quiet) {
+        console.warn(JSON.stringify({
+          authz: mode === 'enforce' ? 'deny' : 'would-deny',
+          policy: POLICY_VERSION,
+          method: request.method,
+          path: pathname,
+          area: decision.area,
+          reason: decision.reason,
+          required: decision.required,
+          role: session.role,
+          tenantId: session.tenantId,
+          userId: session.userId,
+        }));
+      }
+      if (!decision.allow && mode === 'enforce') {
+        return NextResponse.json(
+          { error: 'Forbidden', message: 'Your role does not allow this action.', reason: decision.reason, required: decision.required },
+          { status: 403 },
+        );
+      }
     }
   }
 

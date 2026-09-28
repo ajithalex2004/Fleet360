@@ -14,6 +14,7 @@ export const dynamic = 'force-dynamic';
  * and audit logs can attribute actions to the real human.
  */
 
+import { resolveSessionPermissions } from '@/lib/authz/session-permissions';
 import { NextRequest, NextResponse } from 'next/server';
 import { residencyClaimForTenant } from '@/lib/db-router';
 import { prisma } from '@/lib/prisma';
@@ -97,6 +98,8 @@ export async function POST(req: NextRequest) {
         tenantId:       tenant.id,
         plan:           tenant.plan ?? 'TRIAL',
         role:           target.role.code,
+        // The target's own permissions: impersonation never widens them.
+        permissions:    await resolveSessionPermissions(tx as never, target.user.id, tenant.id),
         impersonatedBy: impersonatorId,
         ttlMs:          IMPERSONATION_TTL_MS,
         ...(await residencyClaimForTenant(tenant.id)),

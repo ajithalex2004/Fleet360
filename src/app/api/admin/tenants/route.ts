@@ -3,11 +3,20 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
-import { MODULES } from '@/lib/permissions';
 import { cacheRead, revalidateCache } from '@/lib/server-cache';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { isSuperAdmin } from '@/lib/admin-access';
+
+/**
+ * Modules a tenant created here gets when the request names none. Pinned:
+ * the permission module list (MODULES in @/lib/permissions) grew with the
+ * authorization policy, and that must not change what new tenants get.
+ */
+const DEFAULT_TENANT_MODULES = [
+  'leasing', 'rental', 'bus-ops', 'fleet', 'maintenance', 'finance',
+  'driver-mgmt', 'compliance', 'reports', 'admin',
+];
 const CACHE_TAG = 'tenants:list';
 
 const getTenants = cacheRead(
@@ -75,7 +84,7 @@ export async function POST(req: NextRequest) {
       const bodyRaw = await req.json();
   const body = stripTenantOwnershipFields(bodyRaw);
       const {
-        enabledModules = MODULES,
+        enabledModules = DEFAULT_TENANT_MODULES,
         localizedName, localizedDesc, bookingTypes,
         supportedLanguages, defaultLanguage,
         domain, address, contactName, contactEmail, contactPhone,
