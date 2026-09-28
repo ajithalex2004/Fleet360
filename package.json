@@ -54,6 +54,7 @@
         "tenant:audit": "npm run tenant:check-auth && npm run tenant:check-schema && npm run tenant:check-rls"
     },
     "dependencies": {
+        "@aws-sdk/client-s3": "3.948.0",
         "@capacitor-community/sqlite": "^6.0.2",
         "@capacitor/app": "^6.0.3",
         "@capacitor/camera": "^6.1.3",

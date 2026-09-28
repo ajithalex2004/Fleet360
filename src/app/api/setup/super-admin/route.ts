@@ -20,6 +20,7 @@ export const dynamic = 'force-dynamic';
  *  Returns whether a Super Admin account exists (safe — no credentials exposed).
  */
 
+import { secretsEqual } from '@/lib/secure-compare';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
@@ -73,7 +74,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const { secret, email, password, firstName = 'Platform', lastName = 'Admin' } = body as Record<string, string>;
 
-  if (!secret || secret !== setupSecret) {
+  if (!secretsEqual(secret, setupSecret)) {
     return NextResponse.json({ error: 'Invalid setup secret.' }, { status: 403 });
   }
   if (!email || !password) {

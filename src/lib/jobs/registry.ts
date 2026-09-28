@@ -15,6 +15,7 @@
  * via `runJob()` so they remain available for manual/ad-hoc invocation.
  */
 
+import { bearerToken, secretsEqual } from '@/lib/secure-compare';
 import type { NextRequest } from 'next/server';
 import { getVerifiedRequestSession } from '@/lib/tenant-session';
 
@@ -224,10 +225,8 @@ export async function verifyJobAuthorization(
   jobName?: string | null
 ): Promise<JobAuthResult> {
   const cronSecret = process.env.CRON_SECRET;
-  const authHeader = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
-
-  // 1. System Scheduler Auth via CRON_SECRET
-  if (cronSecret && authHeader === cronSecret) {
+  // 1. System Scheduler Auth via CRON_SECRET (constant-time comparison)
+  if (secretsEqual(bearerToken(request.headers), cronSecret)) {
     const requestedTenant = request.nextUrl.searchParams.get('tenantId')
       || request.headers.get('x-requested-tenant-id') || request.headers.get('x-tenant-id');
     if (requestedTenant && !/^[a-zA-Z0-9_-]+$/.test(requestedTenant)) {

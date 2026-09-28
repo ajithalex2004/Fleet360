@@ -10,6 +10,7 @@ export const dynamic = 'force-dynamic';
  *  3. Ingestion into Central Hopper: runs 2-tier NLP parser and provisions ticket into OPERATIONS_TRIAGE.
  */
 
+import { secretsEqual } from '@/lib/secure-compare';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
@@ -35,7 +36,7 @@ export async function GET(req: NextRequest) {
   const verifyToken =
     process.env.WHATSAPP_VERIFY_TOKEN || 'fleet360_whatsapp_verify_token';
 
-  if (mode === 'subscribe' && token === verifyToken) {
+  if (mode === 'subscribe' && secretsEqual(token, verifyToken)) {
     return new NextResponse(challenge, {
       status: 200,
       headers: { 'Content-Type': 'text/plain' },

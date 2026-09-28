@@ -169,7 +169,7 @@ export default function BrandingPage() {
               <label className={`shrink-0 px-3 py-2.5 rounded-lg text-sm inline-flex items-center gap-2 cursor-pointer ${uploading ? 'bg-[var(--bg-surface-hover)]/50 text-[var(--text-faint)]' : 'bg-pink-500/20 hover:bg-pink-500/30 border border-pink-500/40 text-pink-200'}`}>
                 <Upload className="w-4 h-4" />
                 {uploading ? 'Uploading…' : 'Upload'}
-                <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" className="hidden"
+                <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden"
                   disabled={uploading}
                   onChange={e => { const f = e.target.files?.[0]; if (f) void uploadLogo(f); e.target.value = ''; }} />
               </label>

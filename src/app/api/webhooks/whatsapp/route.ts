@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 
+import { secretsEqual } from '@/lib/secure-compare';
 import { NextRequest, NextResponse } from 'next/server';
 import { WebhookReceiptService } from '@/lib/exchange/webhook-receipt-service';
 import { prisma } from '@/lib/prisma';
@@ -138,7 +139,7 @@ export async function GET(req: NextRequest) {
 
   const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || 'fleet360_exchange_webhook_token';
 
-  if (mode === 'subscribe' && token === verifyToken) {
+  if (mode === 'subscribe' && secretsEqual(token, verifyToken)) {
     return new NextResponse(challenge, { status: 200 });
   }
 

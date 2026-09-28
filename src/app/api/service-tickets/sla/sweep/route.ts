@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 
+import { bearerToken, secretsEqual } from '@/lib/secure-compare';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { withTenantRls } from '@/lib/rls';
@@ -101,18 +102,16 @@ export async function GET(req: NextRequest) {
  * POST /api/service-tickets/sla/sweep
  * Executes the active SLA sweep, auto-escalates unacknowledged tickets, and returns sweep report.
  * Supports:
- *  1. Automated Cron Call: Authorization: Bearer <CRON_SECRET> or x-cron-secret header (?tenantId=all or ?tenantId=xyz)
+ *  1. Automated Cron Call: Authorization: Bearer <CRON_SECRET or SLA_SWEEP_SECRET>, or the x-cron-secret header (?tenantId=all or ?tenantId=xyz)
  *  2. Manual UI Call: User session cookie / x-tenant-id via requireAuthorizedTenant
  */
 export async function POST(req: NextRequest) {
-  const authHeader = req.headers.get('authorization') || '';
-  const cronHeader = req.headers.get('x-cron-secret') || '';
-  const configuredSecret = process.env.CRON_SECRET || process.env.SLA_SWEEP_SECRET || 'fleet360-sla-sweep-internal-secret';
-
+  // No built-in fallback secret and no ?secret= (URLs end up in logs): with
+  // neither variable set, only the signed-in path below works.
+  const configuredSecret = process.env.CRON_SECRET || process.env.SLA_SWEEP_SECRET;
   const isCronAuth =
-    authHeader === `Bearer ${configuredSecret}` ||
-    cronHeader === configuredSecret ||
-    (req.nextUrl.searchParams.get('secret') === configuredSecret && Boolean(configuredSecret));
+    secretsEqual(bearerToken(req.headers), configuredSecret) ||
+    secretsEqual(req.headers.get('x-cron-secret'), configuredSecret);
 
   if (isCronAuth) {
     try {

@@ -10,6 +10,7 @@
  *     sessions or narrowly scoped scheduler requests may inject identity.
  */
 
+import { bearerToken, secretsEqual } from '@/lib/secure-compare';
 import { NextRequest, NextResponse } from 'next/server';
 import { PARTNER_HOME, PARTNER_TENANT_ROLE, partnerRoleAllows } from '@/lib/exchange/partner-role';
 import { verifySession } from '@/lib/tenant-session';
@@ -79,8 +80,7 @@ function isPublicRoute(pathname: string): boolean {
 function hasValidCronSecret(request: NextRequest): boolean {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) return false;
-  const got = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
-  return got === cronSecret;
+  return secretsEqual(bearerToken(request.headers), cronSecret);
 }
 
 function isProtectedUiRoute(pathname: string): boolean {
@@ -223,10 +223,8 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     // must authenticate independently before honoring it.
     if (pathname.startsWith('/api/jobs/') || pathname.startsWith('/api/cron/') ||
         pathname === '/api/push/run-scheduler') {
-      const target = request.headers.get('x-tenant-id');
-      if (target && !sanitizedHeaders.has('x-requested-tenant-id')) {
-        sanitizedHeaders.set('x-requested-tenant-id', target);
-      }
+      const target = request.headers.get('x-requested-tenant-id') ?? request.headers.get('x-tenant-id');
+      if (target) sanitizedHeaders.set('x-requested-tenant-id', target);
     }
     if (pathname.startsWith('/api/driver-app/')) {
       const driverSession = await verifyDriverAppSession(request);

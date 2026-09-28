@@ -368,12 +368,10 @@ export default function TelematicsPage() {
         return;
       }
 
-      const res = await fetch('/api/telematics/webhook?secret=fleet360-telematics-live', {
+      // Signed in: the webhook records the ping for this session's tenant.
+      const res = await fetch('/api/telematics/webhook', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-webhook-secret': 'fleet360-telematics-live',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(parsedBody),
       });
 
@@ -1285,9 +1283,9 @@ export default function TelematicsPage() {
             </div>
 
             <div className="p-4 rounded-xl bg-[var(--bg-canvas)] border border-[var(--border-subtle)] space-y-2">
-              <p className="font-bold text-cyan-400 uppercase tracking-wider">2. Webhook Secret Header</p>
-              <div className="p-2 rounded bg-[var(--bg-surface)] font-mono text-[var(--text-main)] border border-[var(--border-subtle)]">
-                <span>x-webhook-secret: fleet360-telematics-live</span>
+              <p className="font-bold text-cyan-400 uppercase tracking-wider">2. Authentication</p>
+              <div className="p-2 rounded bg-[var(--bg-surface)] text-[var(--text-main)] border border-[var(--border-subtle)]">
+                <span>A signed-in Fleet360 session; pings are recorded for your own company. Direct gateway credentials are issued per tenant on request.</span>
               </div>
             </div>
           </div>
@@ -1299,7 +1297,7 @@ export default function TelematicsPage() {
             <div className="bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-xl p-4 font-mono text-xs text-emerald-400 overflow-x-auto">
               <code>{`curl -X POST https://your-domain.com/api/telematics/webhook \\
   -H "Content-Type: application/json" \\
-  -H "x-webhook-secret: fleet360-telematics-live" \\
+  -H "Cookie: xl-session=<your session>" \\
   -d '[
     {
       "ident": "864201047281920",

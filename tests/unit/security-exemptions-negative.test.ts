@@ -118,62 +118,26 @@ describe('Executable Security Exemption & Boundary Assertion Suite', () => {
   // A. Inbound Webhook Security
   // ───────────────────────────────────────────────────────────────────────────
   describe('Inbound Webhook Security', () => {
-    it('rejects telematics webhook with missing, empty, shorter, longer, and malformed secrets', async () => {
+    it('telematics webhook needs a verified session and records pings only for its own tenant', async () => {
+      const { processTelemetryBatch } = await import('@/lib/telematics/gateway-ingest');
       const payload = JSON.stringify([{ imei: '123456789012345', lat: 25.2, lng: 55.3 }]);
+      const post = (url: string, headers: Record<string, string>) =>
+        telematicsWebhookPOST(new NextRequest(`http://localhost:3000${url}`, {
+          method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: payload,
+        }));
+      const session = { 'x-tenant-id': 'tenant-a', 'x-user-id': 'user-a', 'x-user-role': 'FLEET_MANAGER' };
 
-      // 1. Missing secret
-      const reqMissing = new NextRequest('http://localhost:3000/api/telematics/webhook', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: payload,
-      });
-      expect((await telematicsWebhookPOST(reqMissing)).status).toBe(401);
+      // No session: refused, whatever secret is sent (the old built-in ones included).
+      for (const secret of ['', 'demo-secret', 'fleet360-telematics-live', 'super-secret-telematics-token']) {
+        expect((await post('/api/telematics/webhook', secret ? { 'x-webhook-secret': secret } : {})).status).toBe(401);
+      }
+      // Choosing another tenant is refused.
+      expect((await post('/api/telematics/webhook?tenantId=tenant-b', session)).status).toBe(403);
+      expect(processTelemetryBatch).not.toHaveBeenCalled();
 
-      // 2. Empty secret
-      const reqEmpty = new NextRequest('http://localhost:3000/api/telematics/webhook', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-webhook-secret': '' },
-        body: payload,
-      });
-      expect((await telematicsWebhookPOST(reqEmpty)).status).toBe(401);
-
-      // 3. Shorter secret (5 chars vs 31 chars configured)
-      const reqShort = new NextRequest('http://localhost:3000/api/telematics/webhook', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-webhook-secret': 'short' },
-        body: payload,
-      });
-      expect((await telematicsWebhookPOST(reqShort)).status).toBe(401);
-
-      // 4. Longer secret (60+ chars vs 31 chars configured)
-      const reqLong = new NextRequest('http://localhost:3000/api/telematics/webhook', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-webhook-secret': 'super-secret-telematics-token-with-extra-bytes-padding-and-overflow',
-        },
-        body: payload,
-      });
-      expect((await telematicsWebhookPOST(reqLong)).status).toBe(401);
-
-      // 5. Malformed characters / invalid secret
-      const reqMalformed = new NextRequest('http://localhost:3000/api/telematics/webhook', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-webhook-secret': '???malformed!secret@@@$$$' },
-        body: payload,
-      });
-      expect((await telematicsWebhookPOST(reqMalformed)).status).toBe(401);
-
-      // 6. Exactly matching secret succeeds
-      const reqValid = new NextRequest('http://localhost:3000/api/telematics/webhook', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-webhook-secret': 'super-secret-telematics-token',
-        },
-        body: payload,
-      });
-      expect((await telematicsWebhookPOST(reqValid)).status).toBe(200);
+      // Signed in: recorded for the session's tenant.
+      expect((await post('/api/telematics/webhook', session)).status).toBe(200);
+      expect(processTelemetryBatch).toHaveBeenCalledWith('tenant-a', expect.any(Array));
     });
 
     it('rejects enterprise webhook when connection ID does not exist in database', async () => {

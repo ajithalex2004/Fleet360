@@ -18,6 +18,7 @@ import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { normalizeStorageKey, readStoredFile } from '@/lib/storage';
 import { authorizeFileAccess, type FileCaller } from '@/lib/storage/file-access';
 import { requireLeasingPortal } from '@/lib/leasing-portal/auth';
+import { logAudit } from '@/lib/audit';
 
 const CONTENT_TYPES: Record<string, string> = {
   '.png': 'image/png',
@@ -73,6 +74,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ key:
 
   const body = await readStoredFile(key);
   if (!body) return notFound();
+
+  // Access audit for tenant documents (not public logos): who opened what.
+  if (decision.category !== 'branding' && caller.kind !== 'anonymous') {
+    await logAudit({
+      tenantId: caller.tenantId,
+      entityType: 'StoredFile',
+      entityName: key,
+      action: 'VIEW',
+      userId: caller.kind === 'staff' ? caller.userId : undefined,
+      details: caller.kind === 'staff'
+        ? `Opened ${decision.category} file ${key}`
+        : `Leasing portal (lessee ${caller.lesseeId}) opened ${decision.category} file ${key}`,
+    });
+  }
 
   const fileName = path.basename(key).replace(/^[0-9a-f-]{36}-/, '');
   const inline = contentType === 'application/pdf' || IMAGE_TYPES.has(contentType);

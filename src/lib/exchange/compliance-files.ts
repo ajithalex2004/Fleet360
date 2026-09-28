@@ -11,6 +11,8 @@
  */
 import path from 'node:path';
 import { NextResponse } from 'next/server';
+import { fileContentProblem } from '@/lib/storage/file-type';
+import { logAudit } from '@/lib/audit';
 import { getStorage, normalizeStorageKey, readStoredFile, UPLOAD_URL_PREFIX } from '@/lib/storage';
 
 export const MAX_COMPLIANCE_FILE_BYTES = 10 * 1024 * 1024;
@@ -26,6 +28,8 @@ const CONTENT_TYPES: Record<string, string> = {
 
 export const ACCEPTED_COMPLIANCE_FILES = Object.keys(CONTENT_TYPES).join(',');
 
+export class ComplianceFileRejected extends Error {}
+
 const prefixFor = (partnerId: string) => `exchange/partner-compliance/${partnerId}`;
 
 /** Why `file` can't be accepted, or null. */
@@ -36,11 +40,18 @@ export function complianceFileProblem(file: { name: string; size: number }): str
   return null;
 }
 
-/** Stores the file and returns the URL to record on the document. */
+/**
+ * Stores the file and returns the URL to record on the document, or throws
+ * ComplianceFileRejected when its contents aren't a PDF or image matching
+ * its extension.
+ */
 export async function storeComplianceFile(partnerId: string, file: File): Promise<string> {
   const ext = path.extname(file.name).toLowerCase();
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const problem = fileContentProblem(file.name, buffer, ['pdf', 'png', 'jpeg', 'webp']);
+  if (problem) throw new ComplianceFileRejected(problem);
   const stored = await getStorage().upload({
-    buffer: Buffer.from(await file.arrayBuffer()),
+    buffer,
     originalName: file.name,
     mimeType: CONTENT_TYPES[ext],
     prefix: prefixFor(partnerId),
@@ -51,9 +62,14 @@ export async function storeComplianceFile(partnerId: string, file: File): Promis
 /**
  * Streams the file of a compliance document of `partnerId`, or 404 when the
  * document has no stored file (older documents recorded a placeholder URL)
- * or its URL points anywhere but that partner's folder.
+ * or its URL points anywhere but that partner's folder. With `viewer`, the
+ * access is recorded in the audit log.
  */
-export async function complianceFileResponse(partnerId: string, fileUrl: string): Promise<NextResponse> {
+export async function complianceFileResponse(
+  partnerId: string,
+  fileUrl: string,
+  viewer?: { userId: string; tenantId?: string | null; docId: string; as: 'partner' | 'reviewer' },
+): Promise<NextResponse> {
   const notFound = () => NextResponse.json({ error: 'No file stored for this document' }, { status: 404 });
   if (!fileUrl.startsWith(UPLOAD_URL_PREFIX)) return notFound();
   const key = normalizeStorageKey(fileUrl.slice(UPLOAD_URL_PREFIX.length));
@@ -62,6 +78,16 @@ export async function complianceFileResponse(partnerId: string, fileUrl: string)
   if (!contentType) return notFound();
   const body = await readStoredFile(key);
   if (!body) return notFound();
+  if (viewer) {
+    await logAudit({
+      tenantId: viewer.tenantId ?? undefined,
+      entityType: 'PartnerComplianceDoc',
+      entityId: viewer.docId,
+      action: 'VIEW',
+      userId: viewer.userId,
+      details: `${viewer.as === 'partner' ? 'Partner member' : 'Reviewer'} opened compliance file of partner ${partnerId}`,
+    });
+  }
 
   const fileName = path.basename(key).replace(/^[0-9a-f-]{36}-/, '');
   return new NextResponse(new Uint8Array(body), {

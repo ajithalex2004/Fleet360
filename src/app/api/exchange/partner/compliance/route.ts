@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { logAudit } from '@/lib/audit';
 import { COMPLIANCE_CATALOG } from '@/lib/exchange/partner-activation';
-import { complianceFileProblem, storeComplianceFile } from '@/lib/exchange/compliance-files';
+import { complianceFileProblem, ComplianceFileRejected, storeComplianceFile } from '@/lib/exchange/compliance-files';
 import { OPERATIONS_ROLES, partnerAuthFailure, requirePartnerContext } from '@/lib/exchange/partner-auth';
 
 export const runtime = 'nodejs';
@@ -92,7 +92,13 @@ export async function POST(req: NextRequest) {
   const problem = complianceFileProblem(file);
   if (problem) return NextResponse.json({ error: problem }, { status: 400 });
 
-  const fileUrl = await storeComplianceFile(partnerId, file);
+  let fileUrl: string;
+  try {
+    fileUrl = await storeComplianceFile(partnerId, file);
+  } catch (err) {
+    if (err instanceof ComplianceFileRejected) return NextResponse.json({ error: err.message }, { status: 400 });
+    throw err;
+  }
   const document = await withPlatformAdmin(prisma, (tx) =>
     tx.partnerComplianceDoc.create({
       data: { partnerId, docType, docNumber: docNumber ?? null, fileUrl, expiryDate: expiry, status: 'PENDING' },

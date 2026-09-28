@@ -15,6 +15,7 @@ export const runtime = 'nodejs';
  *  - Allowed in dev/test when no CRON_SECRET is configured
  */
 
+import { bearerToken, secretsEqual } from '@/lib/secure-compare';
 import { NextRequest, NextResponse } from 'next/server';
 import { sweepDocumentExpiries } from '@/lib/agents/document-intelligence/pipeline/lifecycle-manager';
 import { ensureAgentSchema } from '@/lib/agents/schema';
@@ -26,8 +27,7 @@ import { requireAuthorizedTenant } from '@/lib/tenant-context';
 function isCronCaller(request: NextRequest): boolean {
   const expected = process.env.CRON_SECRET;
   if (!expected) return process.env.NODE_ENV !== 'production';
-  const got = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
-  return got === expected;
+  return secretsEqual(bearerToken(request.headers), expected);
 }
 
 async function requestedTenant(request: NextRequest): Promise<string | undefined> {

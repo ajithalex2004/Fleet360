@@ -16,6 +16,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { ensureBrandingColumns, getBranding } from '@/lib/branding';
 import { getStorage } from '@/lib/storage';
+import { fileContentProblem } from '@/lib/storage/file-type';
 import { requirePlan } from '@/lib/plan-limits';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
@@ -25,7 +26,8 @@ export const runtime = 'nodejs';
 
 interface RouteParams { params: Promise<{ id: string }>; }
 
-const ALLOWED_MIME = new Set(['image/png', 'image/jpeg', 'image/svg+xml', 'image/webp']);
+// Not SVG: an SVG can carry script, and /api/files serves only raster logos.
+const ALLOWED_MIME = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const MAX_BYTES    = 1_000_000; // 1 MB
 
 function authorize(req: NextRequest, tenantId: string): { ok: true; userId: string } | { ok: false; res: NextResponse } {
@@ -59,7 +61,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ ok: false, error: 'No file uploaded.' }, { status: 400 });
   }
   if (!ALLOWED_MIME.has(file.type)) {
-    return NextResponse.json({ ok: false, error: `Unsupported type ${file.type}. Use PNG, JPEG, SVG, or WebP.` }, { status: 400 });
+    return NextResponse.json({ ok: false, error: `Unsupported type ${file.type}. Use PNG, JPEG or WebP.` }, { status: 400 });
   }
   if (file.size > MAX_BYTES) {
     return NextResponse.json({ ok: false, error: `Max file size is ${(MAX_BYTES / 1_000_000).toFixed(1)} MB.` }, { status: 400 });
@@ -69,6 +71,8 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     await ensureBrandingColumns();
 
     const buffer = Buffer.from(await file.arrayBuffer());
+    const contentProblem = fileContentProblem(file.name, buffer, ['png', 'jpeg', 'webp']);
+    if (contentProblem) return NextResponse.json({ ok: false, error: contentProblem }, { status: 400 });
     const stored = await getStorage().upload({
       buffer,
       originalName: file.name,
