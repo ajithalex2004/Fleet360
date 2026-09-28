@@ -14,6 +14,7 @@
  * Protected by secret header `x-deployment-health-secret` or `Authorization: Bearer ...`.
  */
 
+import { secretsEqual } from '@/lib/secure-compare';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getVerifiedSweepPrisma } from '@/lib/prisma-sweep';
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest) {
     process.env.SESSION_SECRET;
 
   // Strict Authorization: Require secret if configured in environment
-  if (expectedSecret && secretHeader !== expectedSecret) {
+  if (expectedSecret && !secretsEqual(secretHeader, expectedSecret)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

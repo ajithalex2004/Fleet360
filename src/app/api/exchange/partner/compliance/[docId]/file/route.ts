@@ -25,5 +25,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ docId: st
     tx.partnerComplianceDoc.findFirst({ where: { id: docId, partnerId: auth.ctx.partnerId }, select: { fileUrl: true } }),
   );
   if (!doc) return NextResponse.json({ error: 'Compliance document not found' }, { status: 404 });
-  return complianceFileResponse(auth.ctx.partnerId, doc.fileUrl);
+  return complianceFileResponse(auth.ctx.partnerId, doc.fileUrl, {
+    userId: auth.ctx.userId, tenantId: authz.tenantId, docId, as: 'partner',
+  });
 }

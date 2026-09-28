@@ -23,6 +23,11 @@ export const IDENTITY_HEADERS: readonly string[] = [
   'x-data-residency',
   'x-user-email',      // never set by middleware; read by audit fields only
   'x-user-name',       // never set by middleware; read by audit fields only
+  // A tenant to act on instead of the session's. Honoured only for a
+  // SUPER_ADMIN or an authenticated scheduler, but still never taken from
+  // the client unchecked: middleware re-derives it for scheduler paths, and a
+  // platform admin switches with ?tenantId=.
+  'x-requested-tenant-id',
 ];
 
 /** Returns a copy of `headers` with every identity header removed. */

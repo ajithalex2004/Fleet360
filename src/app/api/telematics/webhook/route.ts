@@ -1,46 +1,31 @@
 export const dynamic = 'force-dynamic';
 
 /**
- * /api/telematics/webhook — High-throughput Telematics Gateway Ingestion Webhook (Pattern A).
+ * /api/telematics/webhook — Telematics ingestion (Pattern A).
  *
- * Receives telemetry packets from Flespi, Teltonika, Geotab, Traccar, or Generic IoT Gateways.
+ * Accepts telemetry packets in the Flespi, Teltonika, Geotab, Traccar or
+ * generic gateway formats and records them for the caller's tenant.
  *
- * Authentication:
- *   - `x-webhook-secret` header or `?secret=...` query param
- *   - `x-tenant-id` header or `?tenantId=...` query param (falls back to active session or default tenant)
+ * Authentication: a signed-in staff session. This route is not public
+ * (middleware answers 401 without one), and the tenant is the session's.
+ * It used to take the tenant from ?tenantId= or x-tenant-id and a shared
+ * secret with built-in fallbacks ('fleet360-telematics-live', 'demo-secret')
+ * that shipped in the browser bundle, so any signed-in user could write
+ * telemetry into another tenant. Gateways that post without a session need a
+ * per-tenant device credential; they are not supported here.
  */
 
-import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { normalizeTelemetryBatch, processTelemetryBatch } from '@/lib/telematics/gateway-ingest';
-import { getTenantId } from '@/lib/tenant-context';
-
-function safeCompare(a: string | null | undefined, b: string | null | undefined): boolean {
-  if (!a || !b) return false;
-  try {
-    const bufA = Buffer.from(a);
-    const bufB = Buffer.from(b);
-    if (bufA.length !== bufB.length) return false;
-    return crypto.timingSafeEqual(bufA, bufB);
-  } catch {
-    return false;
-  }
-}
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 
 export async function POST(req: NextRequest) {
   try {
-    const url = new URL(req.url);
-    const tenantParam = url.searchParams.get('tenantId') || req.headers.get('x-tenant-id');
-    const secretParam = url.searchParams.get('secret') || req.headers.get('x-webhook-secret') || req.headers.get('x-telematics-secret');
-
-    // Expected secret or fallback
-    const configuredSecret = process.env.TELEMATICS_WEBHOOK_SECRET || 'fleet360-telematics-live';
-    if (!secretParam || (!safeCompare(secretParam, configuredSecret) && !safeCompare(secretParam, 'demo-secret'))) {
-      return NextResponse.json({ error: 'Unauthorized webhook secret' }, { status: 401 });
-    }
-
-    // Resolve tenant ID
-    const tenantId = tenantParam || getTenantId(req) || 'default';
+    // ?tenantId= naming another tenant is refused (a platform admin may switch).
+    const authz = requireAuthorizedTenant(req, { allowPlatformSwitch: true });
+    if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
+    if (!authz.userId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+    const { tenantId } = authz;
 
     const rawBody = await req.json().catch(() => null);
     if (!rawBody) {

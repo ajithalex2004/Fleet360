@@ -1,3 +1,4 @@
+import { bearerToken, secretsEqual } from '@/lib/secure-compare';
 import type { NextRequest } from 'next/server';
 import { getVerifiedRequestSession } from '@/lib/tenant-session';
 
@@ -11,13 +12,16 @@ export async function authorizeJobRequest(
   options: { secretName: 'CRON_SECRET' | 'PUSH_CRON_SECRET'; global?: boolean },
 ): Promise<JobAuthorization> {
   const expected = process.env[options.secretName];
-  const supplied = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
-    ?? (options.secretName === 'PUSH_CRON_SECRET'
-      ? request.headers.get('x-push-cron-secret') ?? request.nextUrl.searchParams.get('secret')
-      : null);
+  const fromQuery = options.secretName === 'PUSH_CRON_SECRET' ? request.nextUrl.searchParams.get('secret') : null;
+  const supplied = bearerToken(request.headers)
+    ?? (options.secretName === 'PUSH_CRON_SECRET' ? request.headers.get('x-push-cron-secret') ?? fromQuery : null);
   const requestedTenant = request.nextUrl.searchParams.get('tenantId')
     ?? request.headers.get('x-requested-tenant-id') ?? request.headers.get('x-tenant-id');
-  if (expected && supplied === expected) {
+  if (secretsEqual(supplied, expected)) {
+    if (fromQuery && supplied === fromQuery) {
+      // Deprecated: a secret in the URL ends up in proxy and access logs.
+      console.warn('[jobs] PUSH_CRON_SECRET sent as ?secret=; send it as Authorization: Bearer instead');
+    }
     if (requestedTenant && !/^[a-zA-Z0-9_-]+$/.test(requestedTenant)) {
       return { ok: false, status: 400, error: 'Invalid tenant selector' };
     }

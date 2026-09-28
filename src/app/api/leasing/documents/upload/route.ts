@@ -26,6 +26,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { getStorage } from '@/lib/storage';
+import { fileContentProblem } from '@/lib/storage/file-type';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
@@ -136,6 +137,9 @@ export async function POST(req: NextRequest) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
+    // The browser-reported type is the uploader's claim; check the bytes.
+    const contentProblem = fileContentProblem(file.name, buffer, ['pdf', 'png', 'jpeg', 'gif', 'webp', 'ooxml', 'ole', 'text']);
+    if (contentProblem) return NextResponse.json({ error: contentProblem }, { status: 415 });
     const storage = getStorage();
     const stored = await storage.upload({
       buffer,

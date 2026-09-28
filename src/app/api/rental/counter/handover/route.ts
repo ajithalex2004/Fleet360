@@ -32,8 +32,12 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { getStorage } from '@/lib/storage';
+import { detectFileKind } from '@/lib/storage/file-type';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+
+/** A handover signature is a small drawing; anything larger is refused. */
+const MAX_SIGNATURE_BYTES = 2 * 1024 * 1024;
 
 export const runtime = 'nodejs';
 
@@ -93,12 +97,15 @@ export async function POST(req: NextRequest) {
         if (data.signatureDataUrl?.startsWith('data:image/')) {
           try {
             const match = data.signatureDataUrl.match(/^data:(image\/[a-zA-Z]+);base64,(.+)$/);
-            if (match) {
-              const buffer = Buffer.from(match[2], 'base64');
+            const buffer = match ? Buffer.from(match[2], 'base64') : null;
+            // Only a real PNG or JPEG of a sensible size is stored, named by
+            // what it actually is rather than the data URL's claim.
+            const kind = buffer && buffer.length <= MAX_SIGNATURE_BYTES ? detectFileKind(buffer) : null;
+            if (buffer && (kind === 'png' || kind === 'jpeg')) {
               const stored = await getStorage().upload({
                 buffer,
-                originalName: `sig-${data.bookingId.slice(0, 8)}.png`,
-                mimeType: match[1],
+                originalName: `sig-${data.bookingId.slice(0, 8)}.${kind === 'png' ? 'png' : 'jpg'}`,
+                mimeType: kind === 'png' ? 'image/png' : 'image/jpeg',
                 prefix: `rental/handover/${data.bookingId}`,
               });
               signatureUrl = stored.url;
