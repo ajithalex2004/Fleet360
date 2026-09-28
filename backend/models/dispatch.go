@@ -147,55 +147,69 @@ func (TripLog) TableName() string { return "trip_logs" }
 //
 // Incidents on ambulance_calls use a separate AmbulanceCall table; the
 // schema is similar but the workflow is different (emergency response).
+//
+// The table is operations.incidents (Prisma model TripIncident; the legacy
+// trip_incidents table was renamed and moved), shared by every module and
+// told apart by module_source. It has no deleted_at column.
 type TripIncident struct {
-	Model
-	TenantID         string  `gorm:"not null;index;column:tenant_id" json:"tenantId"`
-	IncidentNo       *string `gorm:"column:incident_no;uniqueIndex" json:"incidentNo,omitempty"`
-	ScheduleID       *string `gorm:"column:schedule_id;index" json:"scheduleId,omitempty"`
-	RouteID          *string `gorm:"column:route_id" json:"routeId,omitempty"`
-	VehicleID        *string `gorm:"column:vehicle_id" json:"vehicleId,omitempty"`
-	DriverID         *string `gorm:"column:driver_id" json:"driverId,omitempty"`
-	IncidentDate     time.Time `gorm:"column:incident_date;not null" json:"incidentDate"`
-	IncidentType     string  `gorm:"column:incident_type;not null" json:"incidentType"` // ACCIDENT|BREAKDOWN|DELAY|MEDICAL|PASSENGER_COMPLAINT|OTHER
-	Severity         *string `gorm:"default:LOW" json:"severity,omitempty"`            // LOW|MEDIUM|HIGH|CRITICAL
-	Location         *string `json:"location,omitempty"`
-	Description      *string `json:"description,omitempty"`
-	InjuriesReported *bool   `gorm:"column:injuries_reported;default:false" json:"injuriesReported,omitempty"`
-	PoliceReport     *bool   `gorm:"column:police_report;default:false" json:"policeReport,omitempty"`
-	PoliceReportNo   *string `gorm:"column:police_report_no" json:"policeReportNo,omitempty"`
-	ActionTaken      *string `gorm:"column:action_taken" json:"actionTaken,omitempty"`
-	Status           *string `gorm:"default:OPEN" json:"status,omitempty"` // OPEN|INVESTIGATING|RESOLVED|CLOSED
+	PlainModel
+	TenantID         string     `gorm:"not null;index;column:tenant_id" json:"tenantId"`
+	ModuleSource     string     `gorm:"column:module_source;default:BUS_OPS" json:"moduleSource"`
+	IncidentNo       *string    `gorm:"column:incident_no;uniqueIndex" json:"incidentNo,omitempty"`
+	ScheduleID       *string    `gorm:"column:schedule_id;index" json:"scheduleId,omitempty"`
+	RouteID          *string    `gorm:"column:route_id" json:"routeId,omitempty"`
+	VehicleID        *string    `gorm:"column:vehicle_id" json:"vehicleId,omitempty"`
+	DriverID         *string    `gorm:"column:driver_id" json:"driverId,omitempty"`
+	IncidentDate     time.Time  `gorm:"column:incident_date;not null" json:"incidentDate"`
+	IncidentType     string     `gorm:"column:incident_type;not null" json:"incidentType"` // ACCIDENT|BREAKDOWN|DELAY|MEDICAL|PASSENGER_COMPLAINT|OTHER
+	Severity         *string    `gorm:"default:LOW" json:"severity,omitempty"`             // LOW|MEDIUM|HIGH|CRITICAL
+	Location         *string    `json:"location,omitempty"`
+	Description      *string    `json:"description,omitempty"`
+	InjuriesReported *bool      `gorm:"column:injuries_reported;default:false" json:"injuriesReported,omitempty"`
+	PoliceReport     *bool      `gorm:"column:police_report;default:false" json:"policeReport,omitempty"`
+	PoliceReportNo   *string    `gorm:"column:police_report_no" json:"policeReportNo,omitempty"`
+	ActionTaken      *string    `gorm:"column:action_taken" json:"actionTaken,omitempty"`
+	Status           *string    `gorm:"default:OPEN" json:"status,omitempty"` // OPEN|INVESTIGATING|RESOLVED|CLOSED
 	ResolvedAt       *time.Time `gorm:"column:resolved_at" json:"resolvedAt,omitempty"`
-	ResolvedBy       *string `gorm:"column:resolved_by" json:"resolvedBy,omitempty"`
+	ResolvedBy       *string    `gorm:"column:resolved_by" json:"resolvedBy,omitempty"`
 }
 
-func (TripIncident) TableName() string { return "trip_incidents" }
+func (TripIncident) TableName() string { return "operations.incidents" }
 
 // AmbulanceCall is the dispatch record for an emergency call. Distinct
 // from TripIncident because the workflow is different (response time
 // SLA, dispatched unit assignment, hospital routing).
+//
+// Mirrors the ambulance_calls table (migration
+// 20260910000014_ambulance_branch_esign_tables_and_rls), the one the
+// Next.js /api/ambulance/calls routes use. It has no deleted_at column.
 type AmbulanceCall struct {
-	Model
-	TenantID         string  `gorm:"not null;index;column:tenant_id" json:"tenantId"`
-	CallNo           *string `gorm:"column:call_no;uniqueIndex" json:"callNo,omitempty"`
-	ReceivedAt       time.Time `gorm:"column:received_at;not null" json:"receivedAt"`
-	CallerName       *string `gorm:"column:caller_name" json:"callerName,omitempty"`
-	CallerPhone      *string `gorm:"column:caller_phone" json:"callerPhone,omitempty"`
-	PickupAddress    *string `gorm:"column:pickup_address" json:"pickupAddress,omitempty"`
-	PickupLat        *float64 `gorm:"column:pickup_lat" json:"pickupLat,omitempty"`
-	PickupLng        *float64 `gorm:"column:pickup_lng" json:"pickupLng,omitempty"`
-	PatientName      *string `gorm:"column:patient_name" json:"patientName,omitempty"`
-	PatientCondition *string `gorm:"column:patient_condition" json:"patientCondition,omitempty"`
-	Severity         *string `gorm:"default:MEDIUM" json:"severity,omitempty"` // LOW|MEDIUM|HIGH|CRITICAL
-	AssignedVehicleID *string `gorm:"column:assigned_vehicle_id;index" json:"assignedVehicleId,omitempty"`
-	AssignedDriverID  *string `gorm:"column:assigned_driver_id;index" json:"assignedDriverId,omitempty"`
-	DestinationHospital *string `gorm:"column:destination_hospital" json:"destinationHospital,omitempty"`
+	PlainModel
+	TenantID         string     `gorm:"not null;index;column:tenant_id" json:"tenantId"`
+	CallNo           string     `gorm:"column:call_no;not null" json:"callNo"`
+	Status           string     `gorm:"column:status;default:CALL_RECEIVED" json:"status"` // CALL_RECEIVED|DISPATCHED|ON_SCENE|TRANSPORTING|AT_HOSPITAL|CLEARED
+	Priority         string     `gorm:"column:priority;default:MEDIUM" json:"priority"`    // LOW|MEDIUM|HIGH|CRITICAL
+	CallerName       *string    `gorm:"column:caller_name" json:"callerName,omitempty"`
+	CallerPhone      *string    `gorm:"column:caller_phone" json:"callerPhone,omitempty"`
+	PatientName      *string    `gorm:"column:patient_name" json:"patientName,omitempty"`
+	PatientAge       *int       `gorm:"column:patient_age" json:"patientAge,omitempty"`
+	PatientGender    *string    `gorm:"column:patient_gender" json:"patientGender,omitempty"`
+	ChiefComplaint   *string    `gorm:"column:chief_complaint" json:"chiefComplaint,omitempty"`
+	PickupLocation   string     `gorm:"column:pickup_location;not null" json:"pickupLocation"`
+	Destination      *string    `gorm:"column:destination" json:"destination,omitempty"`
+	VehicleID        *string    `gorm:"column:vehicle_id" json:"vehicleId,omitempty"`
+	DriverID         *string    `gorm:"column:driver_id" json:"driverId,omitempty"`
+	ParamedicName    *string    `gorm:"column:paramedic_name" json:"paramedicName,omitempty"`
+	CallReceivedAt   *time.Time `gorm:"column:call_received_at;default:now()" json:"callReceivedAt,omitempty"`
 	DispatchedAt     *time.Time `gorm:"column:dispatched_at" json:"dispatchedAt,omitempty"`
 	OnSceneAt        *time.Time `gorm:"column:on_scene_at" json:"onSceneAt,omitempty"`
-	ArrivedHospitalAt *time.Time `gorm:"column:arrived_hospital_at" json:"arrivedHospitalAt,omitempty"`
-	ClosedAt         *time.Time `gorm:"column:closed_at" json:"closedAt,omitempty"`
-	Status           *string `gorm:"default:RECEIVED" json:"status,omitempty"` // RECEIVED|DISPATCHED|EN_ROUTE|ON_SCENE|TRANSPORTING|CLOSED|CANCELLED
-	Notes            *string `json:"notes,omitempty"`
+	TransportStartAt *time.Time `gorm:"column:transport_start_at" json:"transportStartAt,omitempty"`
+	AtHospitalAt     *time.Time `gorm:"column:at_hospital_at" json:"atHospitalAt,omitempty"`
+	ClearedAt        *time.Time `gorm:"column:cleared_at" json:"clearedAt,omitempty"`
+	ResponseTimeMin  *int       `gorm:"column:response_time_min" json:"responseTimeMin,omitempty"`
+	SceneTimeMin     *int       `gorm:"column:scene_time_min" json:"sceneTimeMin,omitempty"`
+	TransportTimeMin *int       `gorm:"column:transport_time_min" json:"transportTimeMin,omitempty"`
+	Notes            *string    `gorm:"column:notes" json:"notes,omitempty"`
 }
 
 func (AmbulanceCall) TableName() string { return "ambulance_calls" }
