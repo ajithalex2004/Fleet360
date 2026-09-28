@@ -708,11 +708,17 @@ func commitPlan(c *gin.Context, tid, planID string) (int, error) {
 		}
 	}
 
+	// committed_by records who committed, as route-optimizer-service.ts does.
+	var committedBy any
+	if uid := auth.UserID(c); uid != "" {
+		committedBy = uid
+	}
 	if err := auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsRoutePlan{}).
 		Where("id = ?", planID).
 		Updates(map[string]any{
 			"status":       "COMMITTED",
 			"committed_at": gorm.Expr("NOW()"),
+			"committed_by": committedBy,
 			"updated_at":   gorm.Expr("NOW()"),
 		}).Error; err != nil {
 		return 0, err

@@ -70,6 +70,34 @@ func (m *PlainModel) BeforeCreate(tx *gorm.DB) (err error) {
 	return
 }
 
+// CreatedModel is for append-only tables with created_at but no updated_at
+// or deleted_at (logs, checks).
+type CreatedModel struct {
+	ID        string    `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+// BeforeCreate hook to generate UUID if ID is empty
+func (m *CreatedModel) BeforeCreate(tx *gorm.DB) (err error) {
+	if m.ID == "" {
+		m.ID = uuid.New().String()
+	}
+	return
+}
+
+// IDModel is for tables with no timestamp columns at all.
+type IDModel struct {
+	ID string `gorm:"primaryKey" json:"id"`
+}
+
+// BeforeCreate hook to generate UUID if ID is empty
+func (m *IDModel) BeforeCreate(tx *gorm.DB) (err error) {
+	if m.ID == "" {
+		m.ID = uuid.New().String()
+	}
+	return
+}
+
 // Vehicle
 type Vehicle struct {
 	Model
