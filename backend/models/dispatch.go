@@ -56,7 +56,7 @@ func (BusRoute) TableName() string { return "bus_routes" }
 
 // RouteStop is a single waypoint on a BusRoute. Ordered by Sequence.
 type RouteStop struct {
-	Model
+	IDModel
 	TenantID               string  `gorm:"not null;index;column:tenant_id" json:"tenantId"`
 	RouteID                string  `gorm:"not null;column:route_id;index" json:"routeId"`
 	StopName               string  `gorm:"column:stop_name;not null" json:"stopName"`
@@ -124,7 +124,7 @@ func (TripPassenger) TableName() string { return "trip_passengers" }
 // completed (or in-progress) trip. One trip may have multiple logs if
 // it spans a shift change.
 type TripLog struct {
-	Model
+	CreatedModel
 	TenantID             string  `gorm:"not null;index;column:tenant_id" json:"tenantId"`
 	ScheduleID           string  `gorm:"not null;column:schedule_id;index" json:"scheduleId"`
 	LoggedBy             *string `gorm:"column:logged_by" json:"loggedBy,omitempty"`
@@ -214,34 +214,11 @@ type AmbulanceCall struct {
 
 func (AmbulanceCall) TableName() string { return "ambulance_calls" }
 
-// StaffMember is a person who uses fleet transport but is not necessarily
-// a Fleet360 system user (e.g. an employee whose payroll/HR lives in
-// another system). Linked to TripPassenger via StaffMemberID.
-type StaffMember struct {
-	Model
-	TenantID         string  `gorm:"not null;index;column:tenant_id" json:"tenantId"`
-	EmployeeID       *string `gorm:"column:employee_id;uniqueIndex" json:"employeeId,omitempty"`
-	Name             string  `gorm:"not null" json:"name"`
-	Department       *string `json:"department,omitempty"`
-	Designation      *string `json:"designation,omitempty"`
-	ContactNumber    *string `gorm:"column:contact_number" json:"contactNumber,omitempty"`
-	Email            *string `json:"email,omitempty"`
-	ResidenceArea    *string `gorm:"column:residence_area" json:"residenceArea,omitempty"`
-	DefaultRouteID   *string `gorm:"column:default_route_id" json:"defaultRouteId,omitempty"`
-	DefaultStopID    *string `gorm:"column:default_stop_id" json:"defaultStopId,omitempty"`
-	DefaultStopName  *string `gorm:"column:default_stop_name" json:"defaultStopName,omitempty"`
-	ShiftType        *string `gorm:"column:shift_type" json:"shiftType,omitempty"`    // MORNING|EVENING|BOTH
-	TransportType    *string `gorm:"column:transport_type;default:BUS" json:"transportType,omitempty"` // BUS|TAXI|SELF
-	IsActive         *bool   `gorm:"column:is_active;default:true" json:"isActive,omitempty"`
-}
-
-func (StaffMember) TableName() string { return "staff_members" }
-
 // StaffTransportRequest is an ad-hoc transport ask: "I need a ride to the
 // airport tomorrow morning" — outside the normal schedule. Drives a
 // trip_schedules row when approved.
 type StaffTransportRequest struct {
-	Model
+	PlainModel
 	TenantID        string  `gorm:"not null;index;column:tenant_id" json:"tenantId"`
 	RequestNo       *string `gorm:"column:request_no;uniqueIndex" json:"requestNo,omitempty"`
 	StaffMemberID   string  `gorm:"not null;column:staff_member_id;index" json:"staffMemberId"`
@@ -283,7 +260,7 @@ func (BoardingEvent) TableName() string { return "boarding_events" }
 // by driver — useful when an enterprise fleet operates across multiple
 // tenants under one platform.
 type BusPreTripCheck struct {
-	Model
+	CreatedModel
 	TenantID     string         `gorm:"not null;index;column:tenant_id" json:"tenantId"`
 	ScheduleID   string         `gorm:"not null;column:schedule_id;index" json:"scheduleId"`
 	VehicleID    *string        `gorm:"column:vehicle_id" json:"vehicleId,omitempty"`
@@ -303,7 +280,7 @@ func (BusPreTripCheck) TableName() string { return "bus_pretrip_checks" }
 // vehicle-mounted gateway. Used for unattended boarding + ETA refinement.
 // High write volume; tenant_id scopes per-fleet visibility.
 type BLEGatewayPresence struct {
-	Model
+	IDModel
 	TenantID     string  `gorm:"not null;index;column:tenant_id" json:"tenantId"`
 	GatewayID    string  `gorm:"not null;column:gateway_id" json:"gatewayId"`
 	VehicleID    string  `gorm:"not null;column:vehicle_id" json:"vehicleId"`
