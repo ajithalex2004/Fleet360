@@ -6,6 +6,7 @@ import { listWorkflows, createWorkflow } from '@/lib/workflow-db';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { isSuperAdmin } from '@/lib/admin-access';
+import { withAuditedAction } from '@/lib/audited-action';
 
 function errorMessage(e: unknown, fallback: string): string {
   return e instanceof Error ? e.message : fallback;
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -67,3 +68,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: errorMessage(e, 'Internal Error') }, { status: 500 });
   }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

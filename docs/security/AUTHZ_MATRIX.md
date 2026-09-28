@@ -3,7 +3,7 @@
 Generated from `src/lib/authz/policy-matrix.ts` and `SYSTEM_ROLES` by `tests/unit/authz-policy-matrix.test.ts`.
 Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-policy-matrix.test.ts`.
 
-- Policy version: `2026-09-28.1`
+- Policy version: `2026-09-29.1`
 - Permission catalogue version: `14e88206` (163 permissions)
 
 ## API areas
@@ -14,6 +14,7 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `agents` | 17 | module `agents` | module `agents` |
 | `alert-configs` | 2 | tenant-admin | tenant-admin |
 | `alerts` | 3 | self | self |
+| `alerts/configs` | 0 | tenant-admin | tenant-admin |
 | `ambulance` | 2 | module `incidents` | module `incidents` |
 | `assets` | 34 | module `assets` | module `assets` |
 | `auth` | 22 | self | self |
@@ -32,6 +33,7 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `customers` | 4 | module `customer-mgmt` | module `customer-mgmt` |
 | `debug` | 1 | platform | platform |
 | `dispatch` | 12 | module `dispatch` | module `dispatch` |
+| `dispatch/ambulance-calls` | 0 | module `incidents` | module `incidents` |
 | `dispatcher` | 2 | module `dispatch` | module `dispatch` |
 | `documents` | 8 | module `compliance` | module `compliance` |
 | `documents/intelligence/cron` | 1 | external | external |
@@ -53,6 +55,7 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `leasing` | 92 | module `leasing` | module `leasing` |
 | `leasing-portal` | 13 | external | external |
 | `logistics` | 63 | module `logistics` | module `logistics` |
+| `logistics/rates/quote` | 0 | self | self |
 | `maintenance` | 16 | module `maintenance` | module `maintenance` |
 | `maintenance-requests` | 2 | module `maintenance` | module `maintenance` |
 | `mobile` | 1 | external | external |
@@ -73,6 +76,7 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `route-optimizer` | 2 | module `bus-ops` | module `bus-ops` |
 | `school-bus` | 34 | module `school-bus` | module `school-bus` |
 | `search` | 1 | self | self |
+| `service` | 0 | module `maintenance` | module `maintenance` |
 | `service-requests` | 2 | module `service-tickets` | module `service-tickets` |
 | `service-tickets` | 14 | module `service-tickets` | module `service-tickets` |
 | `setup` | 1 | external | external |

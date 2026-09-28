@@ -20,6 +20,7 @@ import type { PlanCode } from '@/lib/billing';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { isSuperAdmin } from '@/lib/admin-access';
+import { withAuditedAction } from '@/lib/audited-action';
 const CACHE_TAG = 'users:list';
 
 // Platform admin dashboard's stat card calls this on every page load.
@@ -151,7 +152,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -261,3 +262,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to create user' }, { status: 500 });
   }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

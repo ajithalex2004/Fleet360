@@ -7,6 +7,7 @@ import { cacheRead, revalidateCache } from '@/lib/server-cache';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { isSuperAdmin } from '@/lib/admin-access';
+import { withAuditedAction } from '@/lib/audited-action';
 
 /**
  * Modules a tenant created here gets when the request names none. Pinned:
@@ -72,7 +73,7 @@ export async function GET(req: NextRequest) {
     } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -122,3 +123,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

@@ -27,6 +27,7 @@ const EXEMPT_PATTERNS = [
 ];
 
 const { RULE_EXEMPTIONS } = require('./tenant-route-exemptions');
+const { unwrapAuditedHandlers } = require('./route-handler-source');
 
 function ruleExemptionFor(relativePath, method) {
   return RULE_EXEMPTIONS.find(
@@ -76,7 +77,8 @@ function getAllRouteFiles() {
 }
 
 function analyzeRouteFile(filePath) {
-  const content = fs.readFileSync(filePath, 'utf8');
+  // Wrapped (audited) handlers are checked like plain exports.
+  const content = unwrapAuditedHandlers(fs.readFileSync(filePath, 'utf8'));
   const relativePath = path.relative(process.cwd(), filePath).replace(/\\/g, '/');
 
   if (isExempt(relativePath)) {

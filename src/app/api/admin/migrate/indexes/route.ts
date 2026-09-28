@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 const INDEXES = [
   // MaintenanceRequest
   'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_maintenance_requests_vehicle_id ON maintenance_requests(vehicle_id)',
@@ -54,7 +55,7 @@ const INDEXES = [
   'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_driver_shifts_shift_date ON driver_shifts(shift_date)',
 ];
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -99,3 +100,6 @@ export async function GET(req: NextRequest) {
   );
   return NextResponse.json({ count: rows.length, indexes: rows.map(r => r.indexname) });
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

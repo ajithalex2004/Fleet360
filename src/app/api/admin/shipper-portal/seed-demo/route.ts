@@ -25,9 +25,10 @@ import { createPortalUser } from '@/lib/shipper-portal/portal-users-store';
 import { createInvitation } from '@/lib/shipper-portal/invitations';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 export const runtime = 'nodejs';
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
@@ -128,3 +129,6 @@ export async function POST(req: NextRequest) {
     }, { status: 500 });
   }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

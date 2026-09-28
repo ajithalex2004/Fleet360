@@ -190,13 +190,91 @@ Configuration:
   and lets the request through. `off` is an emergency switch, for example
   when the only platform admin has lost every passkey.
 
-Not covered: the Go backend's own `/api/v1/admin/*` endpoints (tenant
-create, update, suspend, offboard, invitations) are reachable directly with
-a Go token and do not check a step-up. See the next steps below.
+The Go backend's own admin endpoints cannot see the step-up cookie: in
+enforce mode it refuses the step-up actions with `step_up_required`, and
+they are performed in the admin console. Those are the actions above plus
+the Go-only tenant suspend and offboard (`GO_STEP_UP_ROUTES`). See below.
+
+## The Go backend enforces the same policy
+
+`backend/authz` makes the same decision as the Next.js middleware for every
+`/api/v1/<path>` request, read as `/api/<path>`. It runs after the token
+and revocation checks (`auth.Middleware`).
+
+- **One policy.** `backend/authz/policy.json` is generated from the Next.js
+  policy by `src/lib/authz/go-policy.ts`, and embedded in Go. It carries:
+  - the matrix and the admin route levels;
+  - the permission catalogue and its version;
+  - module aliases and the trial rules;
+  - the step-up actions.
+
+  `Decide` is a port of `decide()`.
+- **Proof they agree.** `backend/authz/testdata/vectors.json` holds
+  requests with the decision Next.js makes. It covers every Go route,
+  thirteen subjects (system roles, custom and legacy permissions, no claim,
+  trial plan, the shipper portal, no role) and every decision reason. The
+  Go tests require the same decision, reason, area and required permission
+  for each one, and the same step-up answer.
+  `tests/unit/authz-go-policy.test.ts` fails when either file is out of
+  date. Regenerate them with
+  `UPDATE_AUTHZ_GO_POLICY=1 npx vitest run tests/unit/authz-go-policy.test.ts`.
+- **Same inputs.** The Go token now carries the session's permission claim
+  (`perms`, the same bitset) and the tenant's `plan`. Login and the proxy
+  sign both. A token issued before this change holds no module permissions
+  in Go: report mode stays quiet about those until the tokens roll over
+  (24 h), and enforce mode denies them.
+- **Same modes.** `AUTHZ_MODE`: `report` is the default and logs
+  `{"authz":"would-deny","backend":"go",…}`; `enforce` answers 403; `off`
+  does not evaluate. `STEP_UP_MODE` is the same as in Next.js, `enforce` by
+  default. Set both on the Go service too.
+- **Go-only paths** are part of the matrix (`GO_ONLY_AREAS`):
+  - `service` → maintenance;
+  - `alerts/configs` → tenant admin;
+  - `dispatch/ambulance-calls` → incidents;
+  - `logistics/rates/quote` → self, the shipper portal's price check.
+
+  A shipper-portal token reaches only that route.
+- **Behaviour changes in Go under enforce.**
+  - A tenant admin can no longer PATCH their own tenant's row (plan,
+    modules): that is platform-only, as in Next.js.
+  - Tenant audit, plan, suspend and offboard are platform-only.
+
+## Privileged actions are recorded in the audit log
+
+Every privileged request leaves a row in `audit_logs` (Admin → Audit log),
+from both backends, with the same shape:
+- entity type `AdminAction`;
+- entity name `<METHOD> <route template>`;
+- the target id;
+- the actor's user id and role, and any impersonator;
+- IP address and user agent;
+- the outcome in `details`.
+
+| Outcome | Action |
+|---|---|
+| Succeeded (2xx/3xx) | `CREATE` / `UPDATE` / `DELETE` by method |
+| Refused (401/403, including a step-up refusal in Go) | `DENIED` |
+| Server error, or the handler threw | `FAILED` |
+| Invalid request (other 4xx) | not recorded: nothing changed |
+
+- **Next.js.** Every write handler in an area whose writes need an
+  administrator is wrapped by `withAuditedAction`
+  (`src/lib/audited-action.ts`). That covers `/api/admin/*` and the
+  tenant-admin and platform areas: 105 handlers in 85 files.
+  - If the handler already wrote its own, more detailed row with
+    `logAudit`, no second row is added, except for refusals.
+  - `tests/unit/privileged-audit.test.ts` fails when a privileged write
+    handler is not wrapped.
+  - The tenant guards (`check-tenant-auth`, `check-tenant-rls`) inspect the
+    wrapped handlers exactly as before (`scripts/route-handler-source.js`).
+- **Go.** The authz middleware records writes to admin-level, tenant-admin
+  and platform areas, and every denial of one, in the actor's tenant
+  context. In report mode, a request the policy would deny is recorded with
+  "policy would deny <reason>".
 
 ## Not yet covered (next steps)
 
-- **Go handlers.** Requests proxied through Next.js (`/api/<module>` → Go)
-  are decided here first, but direct calls to Go check only the tenant.
-  That includes the Go admin endpoints, which also skip the passkey step-up.
-- **Audit coverage** of privileged admin routes.
+- **Enforce.** Both backends run in report mode until `AUTHZ_MODE=enforce`
+  is set: review the `would-deny` logs first.
+- **Go handlers** keep their own role checks as a second line; per-object
+  checks (row ownership) are still per handler.

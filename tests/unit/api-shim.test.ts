@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 import { proxyToGoBackend } from '@/lib/api-shim';
+import { decodePermissionClaim } from '@/lib/authz/permission-claim';
 
 const originalJwtSecret = process.env.JWT_SECRET;
 
@@ -64,6 +65,23 @@ describe('proxyToGoBackend — fail-closed JWT signing', () => {
     const [, init] = fetchSpy.mock.calls[0] as [URL | string, RequestInit];
     const headers = new Headers(init.headers);
     expect(headers.get('authorization')).toMatch(/^Bearer /);
+  });
+
+  it('signs the session\'s permissions and plan into the backend token (Go enforces the same policy)', async () => {
+    process.env.JWT_SECRET = 'a-valid-secret-that-is-long-enough';
+    const permissions = ['logistics:view:*', 'fleet:edit:vehicles', 'custom:thing:x'];
+
+    await proxyToGoBackend(
+      migratedRequest({ 'x-user-id': 'user-1', 'x-tenant-id': 'tenant-1', 'x-user-role': 'DISPATCHER', 'x-tenant-plan': 'TRIAL' }),
+      undefined,
+      permissions,
+    );
+
+    const [, init] = fetchSpy.mock.calls[0] as [URL | string, RequestInit];
+    const token = new Headers(init.headers).get('authorization')!.slice('Bearer '.length);
+    const claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+    expect(claims).toMatchObject({ iss: 'fleet360-nextjs', sub: 'user-1', tenant_id: 'tenant-1', role: 'DISPATCHER', plan: 'TRIAL' });
+    expect(decodePermissionClaim(claims.perms)?.sort()).toEqual([...permissions].sort());
   });
 
   it('refuses with 401 and never calls fetch when the session identity has no role', async () => {

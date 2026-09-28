@@ -7,6 +7,7 @@ import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { ALL_PERMISSIONS, SYSTEM_ROLES } from '@/lib/permissions';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 // ── GET: quick DB health check ────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -30,7 +31,7 @@ export async function GET(req: NextRequest) {
 }
 
 // ── POST: seed permissions + system roles ────────────────────────────────────
-export async function POST(_req: NextRequest) {
+async function handlePOST(_req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: _req.headers, nextUrl: _req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -116,3 +117,6 @@ export async function POST(_req: NextRequest) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

@@ -18,6 +18,7 @@ import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { invalidatePlanCache } from '@/lib/plans';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 interface RouteParams { params: Promise<{ code: string }>; }
 
 function requireSuperAdmin(req: NextRequest): { ok: true; userId: string } | { ok: false; res: NextResponse } {
@@ -77,7 +78,7 @@ const COL_MAP: Record<keyof UpdateBody, string> = {
   isActive:           'is_active',
 };
 
-export async function PATCH(req: NextRequest, { params }: RouteParams) {
+async function handlePATCH(req: NextRequest, { params }: RouteParams) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -141,7 +142,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 }
 
 // ── DELETE — soft delete ───────────────────────────────────────────────────
-export async function DELETE(req: NextRequest, { params }: RouteParams) {
+async function handleDELETE(req: NextRequest, { params }: RouteParams) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -176,3 +177,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
     );
   }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const PATCH = withAuditedAction(handlePATCH);
+export const DELETE = withAuditedAction(handleDELETE);

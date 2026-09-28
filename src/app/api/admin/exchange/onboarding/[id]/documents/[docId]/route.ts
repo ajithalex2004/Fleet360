@@ -8,6 +8,7 @@ import { logAudit } from '@/lib/audit';
 import { notProvisionedAware } from '@/lib/exchange/partner-auth';
 import { COMPLIANCE_CATALOG } from '@/lib/exchange/partner-activation';
 import { findReviewablePartner, reviewerScope } from '@/lib/exchange/onboarding-review';
+import { withAuditedAction } from '@/lib/audited-action';
 
 export const runtime = 'nodejs';
 
@@ -18,7 +19,7 @@ export const runtime = 'nodejs';
  * The onboarding tenant's administrator approves (VALID) or rejects
  * (REJECTED, with a note the partner sees) one compliance document.
  */
-export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string; docId: string }> }) {
+async function handlePATCH(req: NextRequest, props: { params: Promise<{ id: string; docId: string }> }) {
   const { id: partnerId, docId } = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers });
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -69,3 +70,6 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
   return NextResponse.json({ document });
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const PATCH = withAuditedAction(handlePATCH);

@@ -10,6 +10,7 @@ import { revalidateCache } from '@/lib/server-cache';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { checkRoleAccess } from '@/lib/admin-scope';
 import { isSuperAdmin } from '@/lib/admin-access';
+import { withAuditedAction } from '@/lib/audited-action';
 const CACHE_TAG = 'roles:all';
 
 // `catch (e)` is typed `unknown` under strict mode — `e?.message` doesn't
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   });
 }
 
-export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+async function handlePATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -88,7 +89,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   }
 }
 
-export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+async function handleDELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -123,3 +124,7 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
     return NextResponse.json({ error: errorMessage(e, 'Failed to delete role') }, { status: 500 });
   }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const PATCH = withAuditedAction(handlePATCH);
+export const DELETE = withAuditedAction(handleDELETE);

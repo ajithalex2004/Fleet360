@@ -402,7 +402,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // requests 401 here without a wasted upstream hop.
   //
   // Pass the rewritten headers so the upstream gets x-tenant-id / etc.
-  const shim = await proxyToGoBackend(request, requestHeaders);
+  const shim = await proxyToGoBackend(request, requestHeaders, session.permissions);
   if (shim.proxied && shim.response) {
     // Surface shim identity + rate-limit info on the response too.
     shim.response.headers.set('X-RateLimit-Limit',     String(effectiveLimit));

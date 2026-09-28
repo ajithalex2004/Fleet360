@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { logAudit } from '@/lib/audit';
 import { notProvisionedAware } from '@/lib/exchange/partner-auth';
+import { withAuditedAction } from '@/lib/audited-action';
 
 export const runtime = 'nodejs';
 
@@ -18,7 +19,7 @@ export const runtime = 'nodejs';
  * compliance document. A rejection needs a note, which the partner sees in
  * its Compliance Vault. Platform administrators only (ADMIN_ROUTE_POLICY).
  */
-export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string; docId: string }> }) {
+async function handlePATCH(req: NextRequest, props: { params: Promise<{ id: string; docId: string }> }) {
   const { id: partnerId, docId } = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers });
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -63,3 +64,6 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
   return NextResponse.json({ document: updated });
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const PATCH = withAuditedAction(handlePATCH);

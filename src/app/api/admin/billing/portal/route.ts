@@ -15,10 +15,11 @@ import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { getStripe, getTenantBilling, isStripeConfigured } from '@/lib/billing';
 import { captureException } from '@/lib/sentry';
+import { withAuditedAction } from '@/lib/audited-action';
 
 export const runtime = 'nodejs';
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   if (!isStripeConfigured()) {
     return NextResponse.json({ ok: false, error: 'Stripe is not configured.' }, { status: 503 });
   }
@@ -54,3 +55,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'Failed to open customer portal.' }, { status: 500 });
   }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

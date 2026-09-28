@@ -8,6 +8,7 @@ import { withPlatformAdmin } from '@/lib/rls';
 import { logAudit } from '@/lib/audit';
 import { notProvisionedAware } from '@/lib/exchange/partner-auth';
 import { findActiveTenant, setOnboardingTenant } from '@/lib/exchange/partner-onboarding';
+import { withAuditedAction } from '@/lib/audited-action';
 
 export const runtime = 'nodejs';
 
@@ -19,7 +20,7 @@ export const runtime = 'nodejs';
  * partner joins the tenant's network. Users already invited or linked keep
  * their tenant membership. Platform administrators only (ADMIN_ROUTE_POLICY).
  */
-export async function PUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+async function handlePUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const { id: partnerId } = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers });
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -54,3 +55,6 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
 
   return NextResponse.json({ onboardedByTenantId: result.tenant.id, onboardedByTenantName: result.tenant.name });
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const PUT = withAuditedAction(handlePUT);

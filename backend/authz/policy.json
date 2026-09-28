@@ -1,0 +1,1774 @@
+{
+ "policyVersion": "2026-09-29.1",
+ "catalogueVersion": "14e88206",
+ "catalogue": [
+  "leasing:view:*",
+  "leasing:create:inquiries",
+  "leasing:edit:inquiries",
+  "leasing:delete:inquiries",
+  "leasing:create:quotations",
+  "leasing:edit:quotations",
+  "leasing:approve:quotations",
+  "leasing:delete:quotations",
+  "leasing:create:contracts",
+  "leasing:edit:contracts",
+  "leasing:approve:contracts",
+  "leasing:delete:contracts",
+  "leasing:create:traffic_fines",
+  "leasing:edit:traffic_fines",
+  "leasing:create:fuel",
+  "leasing:edit:fuel",
+  "leasing:create:insurance",
+  "leasing:edit:insurance",
+  "leasing:create:mileage",
+  "leasing:approve:mileage",
+  "leasing:create:renewals",
+  "leasing:approve:renewals",
+  "leasing:create:terminations",
+  "leasing:approve:terminations",
+  "leasing:create:credit",
+  "leasing:approve:credit",
+  "leasing:create:documents",
+  "leasing:delete:documents",
+  "leasing:export:*",
+  "leasing:create:dunning_suppressions",
+  "leasing:delete:dunning_suppressions",
+  "leasing:approve:legal_referral",
+  "leasing:approve:dunning_delivery",
+  "rental:view:*",
+  "rental:create:bookings",
+  "rental:edit:bookings",
+  "rental:approve:bookings",
+  "rental:delete:bookings",
+  "rental:create:customers",
+  "rental:edit:customers",
+  "rental:create:damage",
+  "rental:approve:damage",
+  "rental:edit:pricing",
+  "rental:export:*",
+  "bus-ops:view:*",
+  "bus-ops:create:routes",
+  "bus-ops:edit:routes",
+  "bus-ops:delete:routes",
+  "bus-ops:create:trips",
+  "bus-ops:approve:trips",
+  "bus-ops:create:staff",
+  "bus-ops:edit:staff",
+  "bus-ops:create:incidents",
+  "bus-ops:approve:incidents",
+  "bus-ops:export:*",
+  "bus-ops:edit:route-consolidation-scoring-policy",
+  "bus-ops:admin:planning-core",
+  "bus-ops:admin:route-consolidation",
+  "bus-ops:admin:planning-constraints",
+  "bus-ops:admin:vehicle-resource-optimization",
+  "bus-ops:admin:cba-rules",
+  "bus-ops:admin:headway",
+  "fleet:view:*",
+  "fleet:create:vehicles",
+  "fleet:edit:vehicles",
+  "fleet:delete:vehicles",
+  "fleet:create:documents",
+  "fleet:export:*",
+  "maintenance:view:*",
+  "maintenance:create:requests",
+  "maintenance:edit:requests",
+  "maintenance:approve:requests",
+  "maintenance:create:work_orders",
+  "maintenance:approve:work_orders",
+  "maintenance:export:*",
+  "finance:view:*",
+  "finance:create:invoices",
+  "finance:approve:invoices",
+  "finance:view:reports",
+  "finance:export:*",
+  "driver-mgmt:view:*",
+  "driver-mgmt:create:profiles",
+  "driver-mgmt:edit:profiles",
+  "driver-mgmt:delete:profiles",
+  "driver-mgmt:export:*",
+  "compliance:view:*",
+  "compliance:create:*",
+  "compliance:approve:*",
+  "compliance:export:*",
+  "reports:view:*",
+  "reports:export:*",
+  "admin:view:tenants",
+  "admin:create:tenants",
+  "admin:edit:tenants",
+  "admin:delete:tenants",
+  "admin:view:users",
+  "admin:create:users",
+  "admin:edit:users",
+  "admin:delete:users",
+  "admin:view:roles",
+  "admin:create:roles",
+  "admin:edit:roles",
+  "admin:delete:roles",
+  "school-bus:view:*",
+  "school-bus:create:*",
+  "school-bus:edit:*",
+  "school-bus:delete:*",
+  "school-bus:approve:*",
+  "school-bus:export:*",
+  "logistics:view:*",
+  "logistics:create:*",
+  "logistics:edit:*",
+  "logistics:delete:*",
+  "logistics:approve:*",
+  "logistics:export:*",
+  "incidents:view:*",
+  "incidents:create:*",
+  "incidents:edit:*",
+  "incidents:delete:*",
+  "incidents:approve:*",
+  "incidents:export:*",
+  "dispatch:view:*",
+  "dispatch:create:*",
+  "dispatch:edit:*",
+  "dispatch:delete:*",
+  "dispatch:approve:*",
+  "dispatch:export:*",
+  "service-tickets:view:*",
+  "service-tickets:create:*",
+  "service-tickets:edit:*",
+  "service-tickets:delete:*",
+  "service-tickets:approve:*",
+  "service-tickets:export:*",
+  "customer-mgmt:view:*",
+  "customer-mgmt:create:*",
+  "customer-mgmt:edit:*",
+  "customer-mgmt:delete:*",
+  "customer-mgmt:approve:*",
+  "customer-mgmt:export:*",
+  "booking-portal:view:*",
+  "booking-portal:create:*",
+  "booking-portal:edit:*",
+  "booking-portal:delete:*",
+  "booking-portal:approve:*",
+  "booking-portal:export:*",
+  "assets:view:*",
+  "assets:create:*",
+  "assets:edit:*",
+  "assets:delete:*",
+  "assets:approve:*",
+  "assets:export:*",
+  "sustainability:view:*",
+  "sustainability:create:*",
+  "sustainability:edit:*",
+  "sustainability:delete:*",
+  "sustainability:approve:*",
+  "sustainability:export:*",
+  "agents:view:*",
+  "agents:create:*",
+  "agents:edit:*",
+  "agents:delete:*",
+  "agents:approve:*",
+  "agents:export:*"
+ ],
+ "moduleAliases": {
+  "rental": [
+   "rac"
+  ],
+  "bus-ops": [
+   "bus_ops",
+   "staff"
+  ],
+  "driver-mgmt": [
+   "drivers"
+  ],
+  "incidents": [
+   "ambulance"
+  ],
+  "school-bus": [
+   "school_bus"
+  ]
+ },
+ "trialFreeModules": [
+  "fleet"
+ ],
+ "superAdminRole": "SUPER_ADMIN",
+ "tenantAdminRole": "TENANT_ADMIN",
+ "areas": [
+  {
+   "prefix": "admin",
+   "read": {
+    "kind": "admin-level"
+   },
+   "write": {
+    "kind": "admin-level"
+   }
+  },
+  {
+   "prefix": "agents",
+   "read": {
+    "kind": "module",
+    "module": "agents"
+   },
+   "write": {
+    "kind": "module",
+    "module": "agents"
+   }
+  },
+  {
+   "prefix": "alert-configs",
+   "read": {
+    "kind": "tenant-admin"
+   },
+   "write": {
+    "kind": "tenant-admin"
+   }
+  },
+  {
+   "prefix": "alerts",
+   "read": {
+    "kind": "self"
+   },
+   "write": {
+    "kind": "self"
+   }
+  },
+  {
+   "prefix": "alerts/configs",
+   "read": {
+    "kind": "tenant-admin"
+   },
+   "write": {
+    "kind": "tenant-admin"
+   }
+  },
+  {
+   "prefix": "ambulance",
+   "read": {
+    "kind": "module",
+    "module": "incidents"
+   },
+   "write": {
+    "kind": "module",
+    "module": "incidents"
+   }
+  },
+  {
+   "prefix": "assets",
+   "read": {
+    "kind": "module",
+    "module": "assets"
+   },
+   "write": {
+    "kind": "module",
+    "module": "assets"
+   }
+  },
+  {
+   "prefix": "auth",
+   "read": {
+    "kind": "self"
+   },
+   "write": {
+    "kind": "self"
+   }
+  },
+  {
+   "prefix": "billing",
+   "read": {
+    "kind": "tenant-admin"
+   },
+   "write": {
+    "kind": "tenant-admin"
+   }
+  },
+  {
+   "prefix": "booking-portal",
+   "read": {
+    "kind": "module",
+    "module": "booking-portal"
+   },
+   "write": {
+    "kind": "module",
+    "module": "booking-portal"
+   }
+  },
+  {
+   "prefix": "bookings",
+   "read": {
+    "kind": "module",
+    "module": "booking-portal"
+   },
+   "write": {
+    "kind": "module",
+    "module": "booking-portal"
+   }
+  },
+  {
+   "prefix": "branch-staff",
+   "read": {
+    "kind": "module",
+    "module": "bus-ops"
+   },
+   "write": {
+    "kind": "module",
+    "module": "bus-ops"
+   }
+  },
+  {
+   "prefix": "branding",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
+   "prefix": "bus-ops",
+   "read": {
+    "kind": "module",
+    "module": "bus-ops"
+   },
+   "write": {
+    "kind": "module",
+    "module": "bus-ops"
+   }
+  },
+  {
+   "prefix": "bus-ops/gateway",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
+   "prefix": "carrier-portal",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
+   "prefix": "chat",
+   "read": {
+    "kind": "self"
+   },
+   "write": {
+    "kind": "self"
+   }
+  },
+  {
+   "prefix": "compliance",
+   "read": {
+    "kind": "module",
+    "module": "compliance"
+   },
+   "write": {
+    "kind": "module",
+    "module": "compliance"
+   }
+  },
+  {
+   "prefix": "cron",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
+   "prefix": "customer-hierarchy",
+   "read": {
+    "kind": "module",
+    "module": "customer-mgmt"
+   },
+   "write": {
+    "kind": "module",
+    "module": "customer-mgmt"
+   }
+  },
+  {
+   "prefix": "customers",
+   "read": {
+    "kind": "module",
+    "module": "customer-mgmt"
+   },
+   "write": {
+    "kind": "module",
+    "module": "customer-mgmt"
+   }
+  },
+  {
+   "prefix": "debug",
+   "read": {
+    "kind": "platform"
+   },
+   "write": {
+    "kind": "platform"
+   }
+  },
+  {
+   "prefix": "dispatch",
+   "read": {
+    "kind": "module",
+    "module": "dispatch"
+   },
+   "write": {
+    "kind": "module",
+    "module": "dispatch"
+   }
+  },
+  {
+   "prefix": "dispatch/ambulance-calls",
+   "read": {
+    "kind": "module",
+    "module": "incidents"
+   },
+   "write": {
+    "kind": "module",
+    "module": "incidents"
+   }
+  },
+  {
+   "prefix": "dispatcher",
+   "read": {
+    "kind": "module",
+    "module": "dispatch"
+   },
+   "write": {
+    "kind": "module",
+    "module": "dispatch"
+   }
+  },
+  {
+   "prefix": "documents",
+   "read": {
+    "kind": "module",
+    "module": "compliance"
+   },
+   "write": {
+    "kind": "module",
+    "module": "compliance"
+   }
+  },
+  {
+   "prefix": "documents/intelligence/cron",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
+   "prefix": "driver-app",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
+   "prefix": "drivers",
+   "read": {
+    "kind": "module",
+    "module": "driver-mgmt"
+   },
+   "write": {
+    "kind": "module",
+    "module": "driver-mgmt"
+   }
+  },
+  {
+   "prefix": "esign",
+   "read": {
+    "kind": "module",
+    "module": "leasing"
+   },
+   "write": {
+    "kind": "module",
+    "module": "leasing"
+   }
+  },
+  {
+   "prefix": "exchange",
+   "read": {
+    "kind": "partner"
+   },
+   "write": {
+    "kind": "partner"
+   }
+  },
+  {
+   "prefix": "files",
+   "read": {
+    "kind": "self"
+   },
+   "write": {
+    "kind": "self"
+   }
+  },
+  {
+   "prefix": "finance",
+   "read": {
+    "kind": "module",
+    "module": "finance"
+   },
+   "write": {
+    "kind": "module",
+    "module": "finance"
+   }
+  },
+  {
+   "prefix": "fleet",
+   "read": {
+    "kind": "module",
+    "module": "fleet"
+   },
+   "write": {
+    "kind": "module",
+    "module": "fleet"
+   }
+  },
+  {
+   "prefix": "garages",
+   "read": {
+    "kind": "module",
+    "module": "maintenance"
+   },
+   "write": {
+    "kind": "module",
+    "module": "maintenance"
+   }
+  },
+  {
+   "prefix": "health",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
+   "prefix": "incidents",
+   "read": {
+    "kind": "module",
+    "module": "incidents"
+   },
+   "write": {
+    "kind": "module",
+    "module": "incidents"
+   }
+  },
+  {
+   "prefix": "integration-configs",
+   "read": {
+    "kind": "tenant-admin"
+   },
+   "write": {
+    "kind": "tenant-admin"
+   }
+  },
+  {
+   "prefix": "integrations",
+   "read": {
+    "kind": "tenant-admin"
+   },
+   "write": {
+    "kind": "tenant-admin"
+   }
+  },
+  {
+   "prefix": "integrations/enterprise/webhook",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
+   "prefix": "jobs",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
+   "prefix": "kyc",
+   "read": {
+    "kind": "module",
+    "module": "customer-mgmt"
+   },
+   "write": {
+    "kind": "module",
+    "module": "customer-mgmt"
+   }
+  },
+  {
+   "prefix": "leasing",
+   "read": {
+    "kind": "module",
+    "module": "leasing"
+   },
+   "write": {
+    "kind": "module",
+    "module": "leasing"
+   }
+  },
+  {
+   "prefix": "leasing-portal",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
+   "prefix": "logistics",
+   "read": {
+    "kind": "module",
+    "module": "logistics"
+   },
+   "write": {
+    "kind": "module",
+    "module": "logistics"
+   }
+  },
+  {
+   "prefix": "logistics/rates/quote",
+   "read": {
+    "kind": "self"
+   },
+   "write": {
+    "kind": "self"
+   }
+  },
+  {
+   "prefix": "maintenance",
+   "read": {
+    "kind": "module",
+    "module": "maintenance"
+   },
+   "write": {
+    "kind": "module",
+    "module": "maintenance"
+   }
+  },
+  {
+   "prefix": "maintenance-requests",
+   "read": {
+    "kind": "module",
+    "module": "maintenance"
+   },
+   "write": {
+    "kind": "module",
+    "module": "maintenance"
+   }
+  },
+  {
+   "prefix": "mobile",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
+   "prefix": "my-approvals",
+   "read": {
+    "kind": "self"
+   },
+   "write": {
+    "kind": "self"
+   }
+  },
+  {
+   "prefix": "notifications",
+   "read": {
+    "kind": "self"
+   },
+   "write": {
+    "kind": "self"
+   }
+  },
+  {
+   "prefix": "operations",
+   "read": {
+    "kind": "self"
+   },
+   "write": {
+    "kind": "self"
+   }
+  },
+  {
+   "prefix": "places",
+   "read": {
+    "kind": "self"
+   },
+   "write": {
+    "kind": "module",
+    "module": "dispatch"
+   }
+  },
+  {
+   "prefix": "platform",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
+   "prefix": "powerbi",
+   "read": {
+    "kind": "module",
+    "module": "reports"
+   },
+   "write": {
+    "kind": "module",
+    "module": "reports"
+   }
+  },
+  {
+   "prefix": "public",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
+   "prefix": "push",
+   "read": {
+    "kind": "self"
+   },
+   "write": {
+    "kind": "self"
+   }
+  },
+  {
+   "prefix": "push/run-scheduler",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
+   "prefix": "quotations",
+   "read": {
+    "kind": "module",
+    "module": "booking-portal"
+   },
+   "write": {
+    "kind": "module",
+    "module": "booking-portal"
+   }
+  },
+  {
+   "prefix": "readyz",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
+   "prefix": "realtime",
+   "read": {
+    "kind": "self"
+   },
+   "write": {
+    "kind": "self"
+   }
+  },
+  {
+   "prefix": "rental",
+   "read": {
+    "kind": "module",
+    "module": "rental"
+   },
+   "write": {
+    "kind": "module",
+    "module": "rental"
+   }
+  },
+  {
+   "prefix": "reports",
+   "read": {
+    "kind": "module",
+    "module": "reports"
+   },
+   "write": {
+    "kind": "module",
+    "module": "reports"
+   }
+  },
+  {
+   "prefix": "route-optimizer",
+   "read": {
+    "kind": "module",
+    "module": "bus-ops"
+   },
+   "write": {
+    "kind": "module",
+    "module": "bus-ops"
+   }
+  },
+  {
+   "prefix": "school-bus",
+   "read": {
+    "kind": "module",
+    "module": "school-bus"
+   },
+   "write": {
+    "kind": "module",
+    "module": "school-bus"
+   }
+  },
+  {
+   "prefix": "search",
+   "read": {
+    "kind": "self"
+   },
+   "write": {
+    "kind": "self"
+   }
+  },
+  {
+   "prefix": "service",
+   "read": {
+    "kind": "module",
+    "module": "maintenance"
+   },
+   "write": {
+    "kind": "module",
+    "module": "maintenance"
+   }
+  },
+  {
+   "prefix": "service-requests",
+   "read": {
+    "kind": "module",
+    "module": "service-tickets"
+   },
+   "write": {
+    "kind": "module",
+    "module": "service-tickets"
+   }
+  },
+  {
+   "prefix": "service-tickets",
+   "read": {
+    "kind": "module",
+    "module": "service-tickets"
+   },
+   "write": {
+    "kind": "module",
+    "module": "service-tickets"
+   }
+  },
+  {
+   "prefix": "setup",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
+   "prefix": "shipper-portal",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
+   "prefix": "stripe",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
+   "prefix": "sustainability",
+   "read": {
+    "kind": "module",
+    "module": "sustainability"
+   },
+   "write": {
+    "kind": "module",
+    "module": "sustainability"
+   }
+  },
+  {
+   "prefix": "telematics",
+   "read": {
+    "kind": "module",
+    "module": "fleet"
+   },
+   "write": {
+    "kind": "module",
+    "module": "fleet"
+   }
+  },
+  {
+   "prefix": "tenant",
+   "read": {
+    "kind": "self"
+   },
+   "write": {
+    "kind": "tenant-admin"
+   }
+  },
+  {
+   "prefix": "tenant-branches",
+   "read": {
+    "kind": "self"
+   },
+   "write": {
+    "kind": "tenant-admin"
+   }
+  },
+  {
+   "prefix": "tenant-subscriptions",
+   "read": {
+    "kind": "tenant-admin"
+   },
+   "write": {
+    "kind": "tenant-admin"
+   }
+  },
+  {
+   "prefix": "tenants",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
+   "prefix": "track",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
+   "prefix": "users",
+   "read": {
+    "kind": "self"
+   },
+   "write": {
+    "kind": "tenant-admin"
+   }
+  },
+  {
+   "prefix": "vehicles",
+   "read": {
+    "kind": "module",
+    "module": "fleet"
+   },
+   "write": {
+    "kind": "module",
+    "module": "fleet"
+   }
+  },
+  {
+   "prefix": "version",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
+   "prefix": "webhooks",
+   "read": {
+    "kind": "external"
+   },
+   "write": {
+    "kind": "external"
+   }
+  },
+  {
+   "prefix": "whatsapp",
+   "read": {
+    "kind": "tenant-admin"
+   },
+   "write": {
+    "kind": "tenant-admin"
+   }
+  },
+  {
+   "prefix": "work-orders",
+   "read": {
+    "kind": "module",
+    "module": "maintenance"
+   },
+   "write": {
+    "kind": "module",
+    "module": "maintenance"
+   }
+  },
+  {
+   "prefix": "workflow",
+   "read": {
+    "kind": "tenant-admin"
+   },
+   "write": {
+    "kind": "tenant-admin"
+   }
+  }
+ ],
+ "adminRoutes": [
+  {
+   "template": "audit-logs",
+   "methods": {
+    "GET": "admin",
+    "POST": "member"
+   }
+  },
+  {
+   "template": "billing",
+   "methods": {
+    "GET": "member"
+   }
+  },
+  {
+   "template": "billing/checkout",
+   "methods": {
+    "POST": "admin"
+   }
+  },
+  {
+   "template": "billing/portal",
+   "methods": {
+    "POST": "admin"
+   }
+  },
+  {
+   "template": "change-password",
+   "methods": {
+    "POST": "member"
+   }
+  },
+  {
+   "template": "corporate-clients",
+   "methods": {
+    "GET": "admin",
+    "POST": "admin"
+   }
+  },
+  {
+   "template": "customers/[id]/portal-invitations",
+   "methods": {
+    "GET": "member",
+    "POST": "member"
+   }
+  },
+  {
+   "template": "customers/[id]/tracking-visibility",
+   "methods": {
+    "PATCH": "admin"
+   }
+  },
+  {
+   "template": "customers/portal-status",
+   "methods": {
+    "GET": "admin"
+   }
+  },
+  {
+   "template": "dispatch-stats",
+   "methods": {
+    "GET": "admin"
+   }
+  },
+  {
+   "template": "events/outbox",
+   "methods": {
+    "GET": "platform"
+   }
+  },
+  {
+   "template": "exchange/partner-users",
+   "methods": {
+    "GET": "platform",
+    "POST": "platform",
+    "DELETE": "platform"
+   }
+  },
+  {
+   "template": "exchange/partners",
+   "methods": {
+    "GET": "platform",
+    "POST": "platform"
+   }
+  },
+  {
+   "template": "exchange/partners/[id]/services",
+   "methods": {
+    "PUT": "platform"
+   }
+  },
+  {
+   "template": "exchange/partners/[id]/onboarding-tenant",
+   "methods": {
+    "PUT": "platform"
+   }
+  },
+  {
+   "template": "exchange/partners/[id]/invitations",
+   "methods": {
+    "GET": "platform",
+    "POST": "platform",
+    "DELETE": "platform"
+   }
+  },
+  {
+   "template": "exchange/partners/[id]/compliance",
+   "methods": {
+    "GET": "platform"
+   }
+  },
+  {
+   "template": "exchange/partners/[id]/compliance/[id]",
+   "methods": {
+    "PATCH": "platform"
+   }
+  },
+  {
+   "template": "exchange/onboarding",
+   "methods": {
+    "GET": "admin"
+   }
+  },
+  {
+   "template": "exchange/onboarding/[id]",
+   "methods": {
+    "GET": "admin"
+   }
+  },
+  {
+   "template": "exchange/onboarding/[id]/decision",
+   "methods": {
+    "POST": "admin"
+   }
+  },
+  {
+   "template": "exchange/onboarding/[id]/documents/[id]",
+   "methods": {
+    "PATCH": "admin"
+   }
+  },
+  {
+   "template": "exchange/onboarding/[id]/documents/[id]/file",
+   "methods": {
+    "GET": "admin"
+   }
+  },
+  {
+   "template": "events/outbox/replay",
+   "methods": {
+    "POST": "platform"
+   }
+  },
+  {
+   "template": "impersonate",
+   "methods": {
+    "POST": "platform"
+   }
+  },
+  {
+   "template": "impersonate/stop",
+   "methods": {
+    "POST": "member"
+   }
+  },
+  {
+   "template": "info",
+   "methods": {
+    "GET": "platform"
+   }
+  },
+  {
+   "template": "migrate/fleet-phase1",
+   "methods": {
+    "GET": "platform",
+    "POST": "platform"
+   }
+  },
+  {
+   "template": "migrate/indexes",
+   "methods": {
+    "GET": "platform",
+    "POST": "platform"
+   }
+  },
+  {
+   "template": "migrate/rac-phase1",
+   "methods": {
+    "POST": "platform"
+   }
+  },
+  {
+   "template": "nav-permissions",
+   "methods": {
+    "GET": "admin",
+    "PUT": "platform"
+   }
+  },
+  {
+   "template": "notification-rules",
+   "methods": {
+    "GET": "platform",
+    "POST": "platform",
+    "PUT": "platform"
+   }
+  },
+  {
+   "template": "notification-templates",
+   "methods": {
+    "GET": "platform",
+    "POST": "platform",
+    "PUT": "platform"
+   }
+  },
+  {
+   "template": "permissions",
+   "methods": {
+    "GET": "admin"
+   }
+  },
+  {
+   "template": "platform-settings",
+   "methods": {
+    "GET": "platform",
+    "PATCH": "platform"
+   }
+  },
+  {
+   "template": "platform/plans",
+   "methods": {
+    "GET": "platform",
+    "POST": "platform"
+   }
+  },
+  {
+   "template": "platform/plans/[id]",
+   "methods": {
+    "PATCH": "platform",
+    "DELETE": "platform"
+   }
+  },
+  {
+   "template": "roles",
+   "methods": {
+    "GET": "member",
+    "POST": "platform"
+   }
+  },
+  {
+   "template": "roles/[id]",
+   "methods": {
+    "GET": "admin",
+    "PATCH": "admin",
+    "DELETE": "admin"
+   }
+  },
+  {
+   "template": "roles/[id]/permissions",
+   "methods": {
+    "GET": "admin",
+    "PUT": "admin"
+   }
+  },
+  {
+   "template": "roles/override",
+   "methods": {
+    "POST": "admin"
+   }
+  },
+  {
+   "template": "seed",
+   "methods": {
+    "GET": "platform",
+    "POST": "platform"
+   }
+  },
+  {
+   "template": "seed/leasing",
+   "methods": {
+    "POST": "platform"
+   }
+  },
+  {
+   "template": "service-config/categories",
+   "methods": {
+    "GET": "member",
+    "POST": "admin"
+   }
+  },
+  {
+   "template": "service-config/categories/[id]",
+   "methods": {
+    "PATCH": "admin",
+    "DELETE": "admin"
+   }
+  },
+  {
+   "template": "service-config/scopes",
+   "methods": {
+    "GET": "member",
+    "POST": "admin"
+   }
+  },
+  {
+   "template": "service-config/scopes/[id]",
+   "methods": {
+    "PATCH": "admin",
+    "DELETE": "admin"
+   }
+  },
+  {
+   "template": "service-config/types",
+   "methods": {
+    "POST": "admin"
+   }
+  },
+  {
+   "template": "service-config/types/[id]",
+   "methods": {
+    "PATCH": "admin",
+    "DELETE": "admin"
+   }
+  },
+  {
+   "template": "service-config/types/[id]/module-mapping",
+   "methods": {
+    "GET": "member",
+    "PUT": "admin"
+   }
+  },
+  {
+   "template": "service-config/types/[id]/rules/[id]",
+   "methods": {
+    "GET": "member",
+    "PUT": "admin"
+   }
+  },
+  {
+   "template": "service-config/types/[id]/rules/[id]/history",
+   "methods": {
+    "GET": "member",
+    "POST": "admin"
+   }
+  },
+  {
+   "template": "shipper-portal/seed-demo",
+   "methods": {
+    "POST": "platform"
+   }
+  },
+  {
+   "template": "tenant-settings/tracking-visibility",
+   "methods": {
+    "GET": "admin",
+    "PUT": "admin"
+   }
+  },
+  {
+   "template": "tenants",
+   "methods": {
+    "GET": "member",
+    "POST": "platform"
+   }
+  },
+  {
+   "template": "tenants/[id]",
+   "methods": {
+    "GET": "member",
+    "PATCH": "platform",
+    "DELETE": "platform"
+   }
+  },
+  {
+   "template": "tenants/[id]/api-keys",
+   "methods": {
+    "GET": "admin",
+    "POST": "admin"
+   }
+  },
+  {
+   "template": "tenants/[id]/api-keys/[id]/revoke",
+   "methods": {
+    "POST": "admin"
+   }
+  },
+  {
+   "template": "tenants/[id]/branding",
+   "methods": {
+    "GET": "admin",
+    "PUT": "admin"
+   }
+  },
+  {
+   "template": "tenants/[id]/branding/logo",
+   "methods": {
+    "POST": "admin"
+   }
+  },
+  {
+   "template": "tenants/[id]/hard-delete",
+   "methods": {
+    "POST": "platform"
+   }
+  },
+  {
+   "template": "tenants/[id]/invitations",
+   "methods": {
+    "GET": "admin",
+    "POST": "admin"
+   }
+  },
+  {
+   "template": "tenants/[id]/invitations/[id]/revoke",
+   "methods": {
+    "POST": "admin"
+   }
+  },
+  {
+   "template": "tenants/[id]/modules",
+   "methods": {
+    "GET": "admin",
+    "PUT": "platform"
+   }
+  },
+  {
+   "template": "tenants/[id]/settings",
+   "methods": {
+    "GET": "admin",
+    "PUT": "admin"
+   }
+  },
+  {
+   "template": "tenants/[id]/sso",
+   "methods": {
+    "GET": "admin",
+    "PUT": "admin",
+    "DELETE": "admin"
+   }
+  },
+  {
+   "template": "tenants/[id]/ticket-types",
+   "methods": {
+    "GET": "member",
+    "PUT": "admin"
+   }
+  },
+  {
+   "template": "tenants/[id]/users",
+   "methods": {
+    "GET": "admin",
+    "POST": "admin",
+    "DELETE": "admin"
+   }
+  },
+  {
+   "template": "test-channel",
+   "methods": {
+    "POST": "platform"
+   }
+  },
+  {
+   "template": "users",
+   "methods": {
+    "GET": "member",
+    "POST": "platform"
+   }
+  },
+  {
+   "template": "users/[id]",
+   "methods": {
+    "GET": "platform",
+    "PATCH": "platform",
+    "DELETE": "platform"
+   }
+  },
+  {
+   "template": "users/[id]/revoke-sessions",
+   "methods": {
+    "POST": "admin"
+   }
+  },
+  {
+   "template": "users/[id]/hard-delete",
+   "methods": {
+    "POST": "platform"
+   }
+  },
+  {
+   "template": "users/[id]/passkeys",
+   "methods": {
+    "DELETE": "platform"
+   }
+  },
+  {
+   "template": "users/set-password",
+   "methods": {
+    "POST": "platform"
+   }
+  },
+  {
+   "template": "workflow-instances",
+   "methods": {
+    "GET": "member"
+   }
+  },
+  {
+   "template": "workflows",
+   "methods": {
+    "GET": "admin",
+    "POST": "admin"
+   }
+  },
+  {
+   "template": "workflows/[id]",
+   "methods": {
+    "GET": "admin",
+    "PUT": "admin",
+    "DELETE": "admin"
+   }
+  },
+  {
+   "template": "workflows/[id]/duplicate",
+   "methods": {
+    "POST": "admin"
+   }
+  },
+  {
+   "template": "workflows/[id]/steps",
+   "methods": {
+    "GET": "admin",
+    "POST": "admin"
+   }
+  },
+  {
+   "template": "workflows/[id]/steps/[id]",
+   "methods": {
+    "PUT": "admin",
+    "DELETE": "admin"
+   }
+  },
+  {
+   "template": "workflows/stats",
+   "methods": {
+    "GET": "platform"
+   }
+  }
+ ],
+ "stepUpRoutes": [
+  {
+   "template": "events/outbox/replay",
+   "methods": [
+    "POST"
+   ]
+  },
+  {
+   "template": "exchange/partner-users",
+   "methods": [
+    "POST",
+    "DELETE"
+   ]
+  },
+  {
+   "template": "impersonate",
+   "methods": [
+    "POST"
+   ]
+  },
+  {
+   "template": "migrate/fleet-phase1",
+   "methods": [
+    "POST"
+   ]
+  },
+  {
+   "template": "migrate/indexes",
+   "methods": [
+    "POST"
+   ]
+  },
+  {
+   "template": "migrate/rac-phase1",
+   "methods": [
+    "POST"
+   ]
+  },
+  {
+   "template": "nav-permissions",
+   "methods": [
+    "PUT"
+   ]
+  },
+  {
+   "template": "platform-settings",
+   "methods": [
+    "PATCH"
+   ]
+  },
+  {
+   "template": "roles",
+   "methods": [
+    "POST"
+   ]
+  },
+  {
+   "template": "roles/[id]",
+   "methods": [
+    "PATCH",
+    "DELETE"
+   ]
+  },
+  {
+   "template": "roles/[id]/permissions",
+   "methods": [
+    "PUT"
+   ]
+  },
+  {
+   "template": "roles/override",
+   "methods": [
+    "POST"
+   ]
+  },
+  {
+   "template": "seed",
+   "methods": [
+    "POST"
+   ]
+  },
+  {
+   "template": "seed/leasing",
+   "methods": [
+    "POST"
+   ]
+  },
+  {
+   "template": "tenants",
+   "methods": [
+    "POST"
+   ]
+  },
+  {
+   "template": "tenants/[id]",
+   "methods": [
+    "PATCH",
+    "DELETE"
+   ]
+  },
+  {
+   "template": "tenants/[id]/api-keys",
+   "methods": [
+    "POST"
+   ]
+  },
+  {
+   "template": "tenants/[id]/hard-delete",
+   "methods": [
+    "POST"
+   ]
+  },
+  {
+   "template": "tenants/[id]/invitations",
+   "methods": [
+    "POST"
+   ]
+  },
+  {
+   "template": "tenants/[id]/modules",
+   "methods": [
+    "PUT"
+   ]
+  },
+  {
+   "template": "tenants/[id]/offboard",
+   "methods": [
+    "POST"
+   ]
+  },
+  {
+   "template": "tenants/[id]/sso",
+   "methods": [
+    "PUT",
+    "DELETE"
+   ]
+  },
+  {
+   "template": "tenants/[id]/suspend",
+   "methods": [
+    "POST"
+   ]
+  },
+  {
+   "template": "tenants/[id]/users",
+   "methods": [
+    "POST",
+    "DELETE"
+   ]
+  },
+  {
+   "template": "users",
+   "methods": [
+    "POST"
+   ]
+  },
+  {
+   "template": "users/[id]",
+   "methods": [
+    "PATCH",
+    "DELETE"
+   ]
+  },
+  {
+   "template": "users/[id]/hard-delete",
+   "methods": [
+    "POST"
+   ]
+  },
+  {
+   "template": "users/[id]/passkeys",
+   "methods": [
+    "DELETE"
+   ]
+  },
+  {
+   "template": "users/set-password",
+   "methods": [
+    "POST"
+   ]
+  }
+ ]
+}

@@ -6,6 +6,7 @@ import { withTenantRls } from '@/lib/rls';
 import { randomUUID } from 'crypto';
 
 import { requireAuthorizedTenant, requireSuperAdminForTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 
 function errorMessage(e: unknown, fallback: string): string {
   return e instanceof Error ? e.message : fallback;
@@ -59,7 +60,7 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
   }
 }
 
-export async function PUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+async function handlePUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -88,3 +89,6 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
     return NextResponse.json({ error: errorMessage(e, 'Failed to save settings') }, { status: 500 });
   }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const PUT = withAuditedAction(handlePUT);

@@ -6,6 +6,7 @@ import { isSuperAdmin } from '@/lib/admin-access';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { revokeSessions } from '@/lib/auth/session-revocation';
+import { withAuditedAction } from '@/lib/audited-action';
 
 export const runtime = 'nodejs';
 
@@ -16,7 +17,7 @@ export const runtime = 'nodejs';
  * platform administrator revokes them everywhere; a tenant administrator
  * only in their own tenant, and only for a member of it.
  */
-export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+async function handlePOST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const { id: userId } = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers });
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -33,3 +34,6 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   await revokeSessions({ userId, tenantId: authz.tenantId, reason: 'revoked-by-tenant-admin', revokedBy: authz.userId });
   return NextResponse.json({ ok: true, scope: 'tenant' });
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

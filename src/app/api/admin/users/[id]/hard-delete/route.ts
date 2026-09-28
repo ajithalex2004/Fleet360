@@ -30,6 +30,7 @@ import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { logAudit } from '@/lib/platform-audit-log';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 interface RouteParams { params: Promise<{ id: string }>; }
 
 // Hardcoded whitelist — server-side enforcement, never trust the UI.
@@ -58,7 +59,7 @@ function requireSuperAdmin(req: NextRequest): { ok: true; userId: string; email:
   return { ok: true, userId, email };
 }
 
-export async function POST(req: NextRequest, { params }: RouteParams) {
+async function handlePOST(req: NextRequest, { params }: RouteParams) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -152,3 +153,6 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     },
   });
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

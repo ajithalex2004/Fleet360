@@ -21,7 +21,7 @@ import { NextRequest } from 'next/server';
 import { middleware } from '@/middleware';
 import { signSession } from '@/lib/tenant-session';
 import { ALL_PERMISSIONS, SYSTEM_ROLES } from '@/lib/permissions';
-import { AREAS, areaOf, POLICY_VERSION, type Rule } from '@/lib/authz/policy-matrix';
+import { AREAS, GO_ONLY_AREAS, areaOf, POLICY_VERSION, type Rule } from '@/lib/authz/policy-matrix';
 import { authzMode, decide } from '@/lib/authz/policy';
 import { CATALOGUE_VERSION, decodePermissionClaim, encodePermissionClaim } from '@/lib/authz/permission-claim';
 import { permissionsForEffectiveRole, systemRolePermissions } from '@/lib/authz/session-permissions';
@@ -69,9 +69,10 @@ describe('policy matrix coverage', () => {
     expect(unmapped).toEqual([]);
   });
 
-  it('has no area without a route', () => {
+  it('has no area without a route (Next.js, or the Go backend for GO_ONLY_AREAS)', () => {
     const used = new Set(ROUTES.map((r) => areaOf(r.path)));
-    expect(Object.keys(AREAS).filter((a) => !used.has(a))).toEqual([]);
+    expect(Object.keys(AREAS).filter((a) => !used.has(a) && !GO_ONLY_AREAS.includes(a))).toEqual([]);
+    expect(GO_ONLY_AREAS.filter((a) => used.has(a)), 'has a Next.js route: not Go-only').toEqual([]);
   });
 
   it('decides every route and method without an unmapped result', () => {

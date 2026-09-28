@@ -61,7 +61,15 @@ const MIGRATED_PREFIXES = [
   '/api/files',
 ];
 
-export async function proxyToGoBackend(request: NextRequest, headersOverride?: Headers): Promise<ProxyResult> {
+/**
+ * `permissions`: the verified session's permission claim, signed into the
+ * backend token so Go makes the same authorization decision (backend/authz).
+ */
+export async function proxyToGoBackend(
+  request: NextRequest,
+  headersOverride?: Headers,
+  permissions?: readonly string[] | null,
+): Promise<ProxyResult> {
   // 1. Kill switch: immediate toggle to fall through to existing Next.js handlers.
   if (process.env.LOGISTICS_GO_PROXY_ENABLED === 'false') {
     return { proxied: false };
@@ -121,7 +129,9 @@ export async function proxyToGoBackend(request: NextRequest, headersOverride?: H
           };
         }
         try {
-          const token = await signJwtForBackend({ userId, tenantId, role });
+          const token = await signJwtForBackend({
+            userId, tenantId, role, permissions, plan: source.get('x-tenant-plan'),
+          });
           headers.set('Authorization', `Bearer ${token}`);
         } catch (err) {
           // JWT_SECRET unset/too-short (or any other signing failure) is a

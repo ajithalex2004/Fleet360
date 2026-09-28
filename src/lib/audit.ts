@@ -25,6 +25,7 @@
 import { prisma } from '@/lib/prisma';
 import { withTenantRls, withPlatformAdmin } from '@/lib/rls';
 import { runOutsideRlsScope } from '@/lib/rls-scope';
+import { markAudited } from '@/lib/audited-action';
 
 export interface AuditPayload {
   tenantId?:    string;
@@ -87,6 +88,8 @@ function writeAuditRow(db: AuditDb, payload: AuditPayload) {
 }
 
 export async function logAudit(payload: AuditPayload): Promise<void> {
+  // A privileged handler that audits itself needs no generic row (audited-action.ts).
+  markAudited();
   try {
     // Own, independent transaction — never the caller's. audit_logs' RLS
     // policy requires app.tenant_id to either match the row's tenant_id or
@@ -113,6 +116,7 @@ export async function logAudit(payload: AuditPayload): Promise<void> {
  * forget scope here, that's exactly the bug #72 fixed in `logAudit`.
  */
 export async function logAuditInTx(payload: AuditPayload, tx: AuditDb): Promise<void> {
+  markAudited();
   try {
     await writeAuditRow(tx, payload);
   } catch (err) {

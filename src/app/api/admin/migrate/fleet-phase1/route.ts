@@ -5,7 +5,8 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-export async function POST(req: NextRequest) {
+import { withAuditedAction } from '@/lib/audited-action';
+async function handlePOST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -268,3 +269,6 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({ message: 'POST to this endpoint to run Fleet Phase 1 migration' });
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

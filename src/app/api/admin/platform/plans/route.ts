@@ -20,6 +20,7 @@ import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { listPlans, invalidatePlanCache } from '@/lib/plans';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 function requireSuperAdmin(req: NextRequest): { ok: true; userId: string } | { ok: false; res: NextResponse } {
   const role   = req.headers.get('x-user-role')   ?? '';
   const userId = req.headers.get('x-user-id')     ?? '';
@@ -76,7 +77,7 @@ interface CreateBody {
   brandingEnabled?: boolean;
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -167,3 +168,6 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { logAudit } from '@/lib/audit';
 import { notProvisionedAware } from '@/lib/exchange/partner-auth';
+import { withAuditedAction } from '@/lib/audited-action';
 
 export const runtime = 'nodejs';
 
@@ -29,7 +30,7 @@ const DOMAIN_WIDE_SERVICE_TYPE = 'ALL';
 
 const DOMAINS = Object.values(PartnerServiceDomain) as string[];
 
-export async function PUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+async function handlePUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const { id: partnerId } = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers });
   if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -86,3 +87,6 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
 
   return NextResponse.json({ partnerId: partner.id, approvedDomains });
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const PUT = withAuditedAction(handlePUT);

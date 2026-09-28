@@ -7,6 +7,7 @@ import {
   CorporateClientRecord,
   AuthorizedClientUser,
 } from '@/lib/corporate-clients-registry';
+import { withAuditedAction } from '@/lib/audited-action';
 
 export async function GET(req: NextRequest) {
   const auth = await requireAuthorizedTenant(req);
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const auth = await requireAuthorizedTenant(req);
   if (auth instanceof NextResponse) return auth;
 
@@ -130,3 +131,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Failed to process corporate client request' }, { status: 500 });
   }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

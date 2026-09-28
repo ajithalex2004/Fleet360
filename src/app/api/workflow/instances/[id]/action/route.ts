@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { advanceWorkflow, getWorkflowInstanceWithHistory } from '@/lib/workflow-db';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 
 function errorMessage(e: unknown, fallback: string): string {
   return e instanceof Error && e.message ? e.message : fallback;
 }
 
-export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+async function handlePOST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -57,3 +58,6 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
     return NextResponse.json({ error: errorMessage(e, 'Failed to fetch workflow instance') }, { status: 500 });
   }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

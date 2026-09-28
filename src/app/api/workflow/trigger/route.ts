@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { triggerWorkflow } from '@/lib/workflow-db';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 
 function errorMessage(e: unknown, fallback: string): string {
   return e instanceof Error ? e.message : fallback;
 }
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -60,3 +61,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: errorMessage(e, 'Failed to trigger workflow') }, { status: 500 });
   }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

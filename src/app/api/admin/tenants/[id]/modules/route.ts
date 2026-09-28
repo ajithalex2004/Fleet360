@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 
 import { requireAuthorizedTenant, requireSuperAdminForTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
 }
 
 // PUT: replace all module assignments
-export async function PUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+async function handlePUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -53,3 +54,6 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
     });
     } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const PUT = withAuditedAction(handlePUT);

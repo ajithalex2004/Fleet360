@@ -13,13 +13,14 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16).toString('hex');
   const hash = crypto.pbkdf2Sync(password, salt, 100_000, 64, 'sha512').toString('hex');
   return `${salt}:${hash}`;
 }
 
-export async function POST(request: NextRequest) {
+async function handlePOST(request: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -75,3 +76,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to set password' }, { status: 500 });
   }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

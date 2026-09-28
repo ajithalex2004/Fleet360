@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { logAudit } from '@/lib/audit';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 // ---------------------------------------------------------------------------
 // Schema note
 // ---------------------------------------------------------------------------
@@ -150,7 +151,7 @@ export async function GET(req: NextRequest) {
 // ---------------------------------------------------------------------------
 // POST /api/tenant-branches — create branch
 // ---------------------------------------------------------------------------
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -228,7 +229,7 @@ export async function POST(req: NextRequest) {
 // PATCH /api/tenant-branches — update branch
 // Body: { id, ...fields }
 // ---------------------------------------------------------------------------
-export async function PATCH(req: NextRequest) {
+async function handlePATCH(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -312,7 +313,7 @@ export async function PATCH(req: NextRequest) {
 // DELETE /api/tenant-branches  — soft delete
 // Body: { id }
 // ---------------------------------------------------------------------------
-export async function DELETE(req: NextRequest) {
+async function handleDELETE(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -354,3 +355,8 @@ export async function DELETE(req: NextRequest) {
   });
 }
 
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);
+export const PATCH = withAuditedAction(handlePATCH);
+export const DELETE = withAuditedAction(handleDELETE);

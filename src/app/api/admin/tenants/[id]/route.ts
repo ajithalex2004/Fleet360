@@ -7,6 +7,7 @@ import { withTenantRls } from '@/lib/rls';
 import { revalidateCache } from '@/lib/server-cache';
 
 import { requireAuthorizedTenant, requireSuperAdminForTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 const CACHE_TAG = 'tenants:list';
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }
 
-export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+async function handlePATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -75,7 +76,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }
 
-export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+async function handleDELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -95,3 +96,7 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
     return NextResponse.json({ success: true });
     } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const PATCH = withAuditedAction(handlePATCH);
+export const DELETE = withAuditedAction(handleDELETE);

@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 /* ── Seed defaults ────────────────────────────────────────── */
 async function seedDefaultSettings() {
   /* Seed defaults on first run */
@@ -90,7 +91,7 @@ export async function GET(req: NextRequest) {
 }
 
 /* ── PATCH — update one or many settings ─────────────────── */
-export async function PATCH(req: NextRequest) {
+async function handlePATCH(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -116,3 +117,6 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const PATCH = withAuditedAction(handlePATCH);

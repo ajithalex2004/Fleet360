@@ -5,6 +5,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -148,7 +149,7 @@ export async function GET(req: NextRequest) {
 // POST /api/tenant-subscriptions
 // Body actions: activate | suspend | cancel | (default = create)
 // ---------------------------------------------------------------------------
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -283,7 +284,7 @@ export async function POST(req: NextRequest) {
 // Update pricing/limits for an existing subscription
 // Body: { id, basePrice?, maxVehicles?, maxUsers?, maxStudents?, planTier?, billingCycle?, notes? }
 // ---------------------------------------------------------------------------
-export async function PATCH(req: NextRequest) {
+async function handlePATCH(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -354,3 +355,7 @@ export async function PATCH(req: NextRequest) {
   });
 }
 
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);
+export const PATCH = withAuditedAction(handlePATCH);

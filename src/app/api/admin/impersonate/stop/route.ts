@@ -16,12 +16,13 @@ import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { withAuditedAction } from '@/lib/audited-action';
 export const runtime = 'nodejs';
 
 const COOKIE_NAME              = 'xl-session';
 const IMPERSONATOR_COOKIE_NAME = 'xl-impersonator-session';
 
-export async function POST(req: NextRequest) {
+async function handlePOST(req: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -67,3 +68,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'Could not stop impersonation' }, { status: 500 });
   }
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

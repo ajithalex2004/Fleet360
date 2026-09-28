@@ -12,7 +12,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-export async function POST(request: NextRequest) {
+import { withAuditedAction } from '@/lib/audited-action';
+async function handlePOST(request: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -242,3 +243,6 @@ async function testSms(settings: Record<string, string>): Promise<NextResponse> 
     { status: 400 },
   );
 }
+
+// Privileged writes are always audited (src/lib/audited-action.ts).
+export const POST = withAuditedAction(handlePOST);

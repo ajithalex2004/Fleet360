@@ -235,6 +235,9 @@ export async function POST(request: NextRequest) {
         userId:   user.id,
         tenantId: userTenant.tenantId,
         role:     userTenant.role.code,
+        // Go enforces the same permissions (backend/authz).
+        permissions,
+        plan,
       });
     } catch (err) {
       console.warn('[auth/login] backend JWT sign failed (Go-backend features unavailable):', err);
