@@ -112,6 +112,9 @@ fixture tenants (four accounts) and the Go backend:
 - **Cross-tenant:** vehicles were isolated on every path. **Finding:** the
   chart of accounts (`finance.finance_chart_of_accounts`) has no tenant
   column, so every tenant sees, and can edit, the same accounts.
+  **Resolved** by migration `20261002090000_tenant_chart_of_accounts`: one
+  chart per tenant under row level security, seeded from the standard
+  transport chart (`finance.finance_coa_template`) on first use.
 - **Database:** 267 tenant tables. **Finding:** 55 have `tenant_id` but
   RLS is not enabled in a database built from the migrations, mostly
   logistics and service-configuration tables, among others. The

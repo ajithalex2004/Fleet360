@@ -5,12 +5,14 @@ export const dynamic = 'force-dynamic';
  * Transport-specific double-entry COA with 5 root types
  * Account codes: 1xxx=Asset, 2xxx=Liability, 3xxx=Equity, 4xxx=Income, 5xxx=Expense
  *
- * finance_chart_of_accounts is created and seeded by
- * migration 20260810000003_finance_reference_data_seed — no runtime DDL needed.
+ * finance_chart_of_accounts holds one chart per tenant, under row level
+ * security (migration 20261002090000_tenant_chart_of_accounts); a new
+ * tenant's chart is seeded from the standard template on first use.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { ensureTenantChartOfAccounts } from '@/lib/finance/chart-of-accounts';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type CoaRow = Record<string, unknown>;
@@ -24,6 +26,7 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
+    await ensureTenantChartOfAccounts(tx, tenantId);
     const sp     = req.nextUrl.searchParams;
       const type   = sp.get('type');    // filter by ASSET | LIABILITY | EQUITY | INCOME | EXPENSE
       const search = sp.get('search');
@@ -77,16 +80,26 @@ export async function POST(req: NextRequest) {
       const normalBalance = body.normalBalance ??
         (['LIABILITY', 'EQUITY', 'INCOME'].includes(body.accountType) ? 'CREDIT' : 'DEBIT');
 
+      await ensureTenantChartOfAccounts(tx, tenantId);
+      // Account codes are unique within the tenant's own chart.
+      const [taken] = await tx.$queryRawUnsafe<{ id: string }[]>(
+        `SELECT id::text AS id FROM finance_chart_of_accounts WHERE account_code = $1 LIMIT 1`,
+        body.accountCode,
+      );
+      if (taken) {
+        return NextResponse.json({ error: `Account code ${body.accountCode} already exists` }, { status: 409 });
+      }
+
       const [row] = await tx.$queryRawUnsafe<CoaRow[]>(
         `INSERT INTO finance_chart_of_accounts
            (account_code, account_name, account_type, account_subtype, parent_code,
-            description, is_header, is_active, normal_balance, sort_order)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+            description, is_header, is_active, normal_balance, sort_order, tenant_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
          RETURNING *`,
         body.accountCode, body.accountName, body.accountType,
         body.accountSubtype ?? null, body.parentCode ?? null,
         body.description ?? null, body.isHeader ?? false, true,
-        normalBalance, body.sortOrder ?? 999,
+        normalBalance, body.sortOrder ?? 999, tenantId,
       ).catch(() => []);
 
       if (!row) return NextResponse.json({ error: 'Failed to create account' }, { status: 500 });

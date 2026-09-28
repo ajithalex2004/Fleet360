@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { ensureTenantChartOfAccounts } from '@/lib/finance/chart-of-accounts';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type GlRow = Record<string, unknown>;
@@ -21,6 +22,7 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
+    await ensureTenantChartOfAccounts(tx, authz.tenantId);
     const sp   = req.nextUrl.searchParams;
       const type = sp.get('type'); // trial_balance | account_statement | account_balances
 

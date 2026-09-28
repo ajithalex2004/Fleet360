@@ -17,6 +17,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { ensureTenantChartOfAccounts } from '@/lib/finance/chart-of-accounts';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type JeRow   = Record<string, unknown>;
@@ -118,6 +119,7 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
+      await ensureTenantChartOfAccounts(tx, tenantId);
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
 

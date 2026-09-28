@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { ensureTenantChartOfAccounts } from '@/lib/finance/chart-of-accounts';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type CoaRow = Record<string, unknown>;
@@ -17,6 +18,7 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
+    await ensureTenantChartOfAccounts(tx, tenantId);
     const [row] = await tx.$queryRawUnsafe<CoaRow[]>(
         `SELECT c.*,
            (SELECT COALESCE(SUM(CASE WHEN jl.normal_balance='DEBIT' THEN jl.debit_amount - jl.credit_amount
@@ -87,8 +89,13 @@ export async function DELETE(_: NextRequest, props: { params: Promise<{ id: stri
       if (!acc) return NextResponse.json({ error: 'Not found' }, { status: 404 });
       if (acc.is_system) return NextResponse.json({ error: 'System accounts cannot be deleted' }, { status: 400 });
 
+      // Journal lines carry no tenant: count only lines of the tenant's own
+      // entries (finance_journal_entries is under row level security).
       const [{ count }] = await tx.$queryRawUnsafe<{count: string}[]>(
-        `SELECT COUNT(*)::text as count FROM finance_journal_lines WHERE account_code=$1`, acc.account_code
+        `SELECT COUNT(*)::text as count
+           FROM finance_journal_lines jl
+           JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id::text
+          WHERE jl.account_code=$1`, acc.account_code
       ).catch(() => [{ count: '0' }]);
       if (parseInt(count) > 0) return NextResponse.json({ error: 'Account has journal entries and cannot be deleted' }, { status: 400 });
 

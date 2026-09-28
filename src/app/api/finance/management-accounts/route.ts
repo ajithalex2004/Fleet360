@@ -16,6 +16,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { ensureTenantChartOfAccounts } from '@/lib/finance/chart-of-accounts';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 function toN(v: unknown): number { return parseFloat(String(v ?? 0)) || 0; }
@@ -218,6 +219,7 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
+    await ensureTenantChartOfAccounts(tx, authz.tenantId);
     const sp   = req.nextUrl.searchParams;
       const type = sp.get('type') ?? 'income_statement';
       const from = sp.get('from') ?? `${new Date().getFullYear()}-01-01`;
