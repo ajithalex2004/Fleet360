@@ -1,0 +1,3995 @@
+{
+ "policyVersion": "2026-09-29.1",
+ "probes": [
+  {
+   "id": "GET /api/agents",
+   "method": "GET",
+   "path": "/api/agents",
+   "backend": "next",
+   "label": "agents: view"
+  },
+  {
+   "id": "POST /api/agents",
+   "method": "POST",
+   "path": "/api/agents",
+   "backend": "next",
+   "label": "agents: create"
+  },
+  {
+   "id": "PATCH /api/agents/harness-probe",
+   "method": "PATCH",
+   "path": "/api/agents/harness-probe",
+   "backend": "next",
+   "label": "agents: edit"
+  },
+  {
+   "id": "DELETE /api/agents/harness-probe",
+   "method": "DELETE",
+   "path": "/api/agents/harness-probe",
+   "backend": "next",
+   "label": "agents: delete"
+  },
+  {
+   "id": "POST /api/agents/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/agents/harness-probe/approve",
+   "backend": "next",
+   "label": "agents: approve"
+  },
+  {
+   "id": "GET /api/agents/export",
+   "method": "GET",
+   "path": "/api/agents/export",
+   "backend": "next",
+   "label": "agents: export"
+  },
+  {
+   "id": "GET /api/alert-configs",
+   "method": "GET",
+   "path": "/api/alert-configs",
+   "backend": "next",
+   "label": "alert-configs: read (tenant-admin)"
+  },
+  {
+   "id": "POST /api/alert-configs",
+   "method": "POST",
+   "path": "/api/alert-configs",
+   "backend": "next",
+   "label": "alert-configs: write (tenant-admin)"
+  },
+  {
+   "id": "GET /api/alerts",
+   "method": "GET",
+   "path": "/api/alerts",
+   "backend": "next",
+   "label": "alerts: read (self)"
+  },
+  {
+   "id": "POST /api/alerts",
+   "method": "POST",
+   "path": "/api/alerts",
+   "backend": "next",
+   "label": "alerts: write (self)"
+  },
+  {
+   "id": "GET /api/ambulance",
+   "method": "GET",
+   "path": "/api/ambulance",
+   "backend": "next",
+   "label": "ambulance: view"
+  },
+  {
+   "id": "POST /api/ambulance",
+   "method": "POST",
+   "path": "/api/ambulance",
+   "backend": "next",
+   "label": "ambulance: create"
+  },
+  {
+   "id": "PATCH /api/ambulance/harness-probe",
+   "method": "PATCH",
+   "path": "/api/ambulance/harness-probe",
+   "backend": "next",
+   "label": "ambulance: edit"
+  },
+  {
+   "id": "DELETE /api/ambulance/harness-probe",
+   "method": "DELETE",
+   "path": "/api/ambulance/harness-probe",
+   "backend": "next",
+   "label": "ambulance: delete"
+  },
+  {
+   "id": "POST /api/ambulance/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/ambulance/harness-probe/approve",
+   "backend": "next",
+   "label": "ambulance: approve"
+  },
+  {
+   "id": "GET /api/ambulance/export",
+   "method": "GET",
+   "path": "/api/ambulance/export",
+   "backend": "next",
+   "label": "ambulance: export"
+  },
+  {
+   "id": "GET /api/assets",
+   "method": "GET",
+   "path": "/api/assets",
+   "backend": "next",
+   "label": "assets: view"
+  },
+  {
+   "id": "POST /api/assets",
+   "method": "POST",
+   "path": "/api/assets",
+   "backend": "next",
+   "label": "assets: create"
+  },
+  {
+   "id": "PATCH /api/assets/harness-probe",
+   "method": "PATCH",
+   "path": "/api/assets/harness-probe",
+   "backend": "next",
+   "label": "assets: edit"
+  },
+  {
+   "id": "DELETE /api/assets/harness-probe",
+   "method": "DELETE",
+   "path": "/api/assets/harness-probe",
+   "backend": "next",
+   "label": "assets: delete"
+  },
+  {
+   "id": "POST /api/assets/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/assets/harness-probe/approve",
+   "backend": "next",
+   "label": "assets: approve"
+  },
+  {
+   "id": "GET /api/assets/export",
+   "method": "GET",
+   "path": "/api/assets/export",
+   "backend": "next",
+   "label": "assets: export"
+  },
+  {
+   "id": "GET /api/auth",
+   "method": "GET",
+   "path": "/api/auth",
+   "backend": "next",
+   "label": "auth: read (self)"
+  },
+  {
+   "id": "POST /api/auth",
+   "method": "POST",
+   "path": "/api/auth",
+   "backend": "next",
+   "label": "auth: write (self)"
+  },
+  {
+   "id": "GET /api/billing",
+   "method": "GET",
+   "path": "/api/billing",
+   "backend": "next",
+   "label": "billing: read (tenant-admin)"
+  },
+  {
+   "id": "POST /api/billing",
+   "method": "POST",
+   "path": "/api/billing",
+   "backend": "next",
+   "label": "billing: write (tenant-admin)"
+  },
+  {
+   "id": "GET /api/booking-portal",
+   "method": "GET",
+   "path": "/api/booking-portal",
+   "backend": "next",
+   "label": "booking-portal: view"
+  },
+  {
+   "id": "POST /api/booking-portal",
+   "method": "POST",
+   "path": "/api/booking-portal",
+   "backend": "next",
+   "label": "booking-portal: create"
+  },
+  {
+   "id": "PATCH /api/booking-portal/harness-probe",
+   "method": "PATCH",
+   "path": "/api/booking-portal/harness-probe",
+   "backend": "next",
+   "label": "booking-portal: edit"
+  },
+  {
+   "id": "DELETE /api/booking-portal/harness-probe",
+   "method": "DELETE",
+   "path": "/api/booking-portal/harness-probe",
+   "backend": "next",
+   "label": "booking-portal: delete"
+  },
+  {
+   "id": "POST /api/booking-portal/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/booking-portal/harness-probe/approve",
+   "backend": "next",
+   "label": "booking-portal: approve"
+  },
+  {
+   "id": "GET /api/booking-portal/export",
+   "method": "GET",
+   "path": "/api/booking-portal/export",
+   "backend": "next",
+   "label": "booking-portal: export"
+  },
+  {
+   "id": "GET /api/bookings",
+   "method": "GET",
+   "path": "/api/bookings",
+   "backend": "next",
+   "label": "bookings: view"
+  },
+  {
+   "id": "POST /api/bookings",
+   "method": "POST",
+   "path": "/api/bookings",
+   "backend": "next",
+   "label": "bookings: create"
+  },
+  {
+   "id": "PATCH /api/bookings/harness-probe",
+   "method": "PATCH",
+   "path": "/api/bookings/harness-probe",
+   "backend": "next",
+   "label": "bookings: edit"
+  },
+  {
+   "id": "DELETE /api/bookings/harness-probe",
+   "method": "DELETE",
+   "path": "/api/bookings/harness-probe",
+   "backend": "next",
+   "label": "bookings: delete"
+  },
+  {
+   "id": "POST /api/bookings/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/bookings/harness-probe/approve",
+   "backend": "next",
+   "label": "bookings: approve"
+  },
+  {
+   "id": "GET /api/bookings/export",
+   "method": "GET",
+   "path": "/api/bookings/export",
+   "backend": "next",
+   "label": "bookings: export"
+  },
+  {
+   "id": "GET /api/branch-staff",
+   "method": "GET",
+   "path": "/api/branch-staff",
+   "backend": "next",
+   "label": "branch-staff: view"
+  },
+  {
+   "id": "POST /api/branch-staff",
+   "method": "POST",
+   "path": "/api/branch-staff",
+   "backend": "next",
+   "label": "branch-staff: create"
+  },
+  {
+   "id": "PATCH /api/branch-staff/harness-probe",
+   "method": "PATCH",
+   "path": "/api/branch-staff/harness-probe",
+   "backend": "next",
+   "label": "branch-staff: edit"
+  },
+  {
+   "id": "DELETE /api/branch-staff/harness-probe",
+   "method": "DELETE",
+   "path": "/api/branch-staff/harness-probe",
+   "backend": "next",
+   "label": "branch-staff: delete"
+  },
+  {
+   "id": "POST /api/branch-staff/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/branch-staff/harness-probe/approve",
+   "backend": "next",
+   "label": "branch-staff: approve"
+  },
+  {
+   "id": "GET /api/branch-staff/export",
+   "method": "GET",
+   "path": "/api/branch-staff/export",
+   "backend": "next",
+   "label": "branch-staff: export"
+  },
+  {
+   "id": "GET /api/bus-ops",
+   "method": "GET",
+   "path": "/api/bus-ops",
+   "backend": "next",
+   "label": "bus-ops: view"
+  },
+  {
+   "id": "POST /api/bus-ops",
+   "method": "POST",
+   "path": "/api/bus-ops",
+   "backend": "next",
+   "label": "bus-ops: create"
+  },
+  {
+   "id": "PATCH /api/bus-ops/harness-probe",
+   "method": "PATCH",
+   "path": "/api/bus-ops/harness-probe",
+   "backend": "next",
+   "label": "bus-ops: edit"
+  },
+  {
+   "id": "DELETE /api/bus-ops/harness-probe",
+   "method": "DELETE",
+   "path": "/api/bus-ops/harness-probe",
+   "backend": "next",
+   "label": "bus-ops: delete"
+  },
+  {
+   "id": "POST /api/bus-ops/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/bus-ops/harness-probe/approve",
+   "backend": "next",
+   "label": "bus-ops: approve"
+  },
+  {
+   "id": "GET /api/bus-ops/export",
+   "method": "GET",
+   "path": "/api/bus-ops/export",
+   "backend": "next",
+   "label": "bus-ops: export"
+  },
+  {
+   "id": "GET /api/chat",
+   "method": "GET",
+   "path": "/api/chat",
+   "backend": "next",
+   "label": "chat: read (self)"
+  },
+  {
+   "id": "POST /api/chat",
+   "method": "POST",
+   "path": "/api/chat",
+   "backend": "next",
+   "label": "chat: write (self)"
+  },
+  {
+   "id": "GET /api/compliance",
+   "method": "GET",
+   "path": "/api/compliance",
+   "backend": "next",
+   "label": "compliance: view"
+  },
+  {
+   "id": "POST /api/compliance",
+   "method": "POST",
+   "path": "/api/compliance",
+   "backend": "next",
+   "label": "compliance: create"
+  },
+  {
+   "id": "PATCH /api/compliance/harness-probe",
+   "method": "PATCH",
+   "path": "/api/compliance/harness-probe",
+   "backend": "next",
+   "label": "compliance: edit"
+  },
+  {
+   "id": "DELETE /api/compliance/harness-probe",
+   "method": "DELETE",
+   "path": "/api/compliance/harness-probe",
+   "backend": "next",
+   "label": "compliance: delete"
+  },
+  {
+   "id": "POST /api/compliance/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/compliance/harness-probe/approve",
+   "backend": "next",
+   "label": "compliance: approve"
+  },
+  {
+   "id": "GET /api/compliance/export",
+   "method": "GET",
+   "path": "/api/compliance/export",
+   "backend": "next",
+   "label": "compliance: export"
+  },
+  {
+   "id": "GET /api/customer-hierarchy",
+   "method": "GET",
+   "path": "/api/customer-hierarchy",
+   "backend": "next",
+   "label": "customer-hierarchy: view"
+  },
+  {
+   "id": "POST /api/customer-hierarchy",
+   "method": "POST",
+   "path": "/api/customer-hierarchy",
+   "backend": "next",
+   "label": "customer-hierarchy: create"
+  },
+  {
+   "id": "PATCH /api/customer-hierarchy/harness-probe",
+   "method": "PATCH",
+   "path": "/api/customer-hierarchy/harness-probe",
+   "backend": "next",
+   "label": "customer-hierarchy: edit"
+  },
+  {
+   "id": "DELETE /api/customer-hierarchy/harness-probe",
+   "method": "DELETE",
+   "path": "/api/customer-hierarchy/harness-probe",
+   "backend": "next",
+   "label": "customer-hierarchy: delete"
+  },
+  {
+   "id": "POST /api/customer-hierarchy/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/customer-hierarchy/harness-probe/approve",
+   "backend": "next",
+   "label": "customer-hierarchy: approve"
+  },
+  {
+   "id": "GET /api/customer-hierarchy/export",
+   "method": "GET",
+   "path": "/api/customer-hierarchy/export",
+   "backend": "next",
+   "label": "customer-hierarchy: export"
+  },
+  {
+   "id": "GET /api/customers",
+   "method": "GET",
+   "path": "/api/customers",
+   "backend": "next",
+   "label": "customers: view"
+  },
+  {
+   "id": "POST /api/customers",
+   "method": "POST",
+   "path": "/api/customers",
+   "backend": "next",
+   "label": "customers: create"
+  },
+  {
+   "id": "PATCH /api/customers/harness-probe",
+   "method": "PATCH",
+   "path": "/api/customers/harness-probe",
+   "backend": "next",
+   "label": "customers: edit"
+  },
+  {
+   "id": "DELETE /api/customers/harness-probe",
+   "method": "DELETE",
+   "path": "/api/customers/harness-probe",
+   "backend": "next",
+   "label": "customers: delete"
+  },
+  {
+   "id": "POST /api/customers/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/customers/harness-probe/approve",
+   "backend": "next",
+   "label": "customers: approve"
+  },
+  {
+   "id": "GET /api/customers/export",
+   "method": "GET",
+   "path": "/api/customers/export",
+   "backend": "next",
+   "label": "customers: export"
+  },
+  {
+   "id": "GET /api/debug",
+   "method": "GET",
+   "path": "/api/debug",
+   "backend": "next",
+   "label": "debug: read (platform)"
+  },
+  {
+   "id": "POST /api/debug",
+   "method": "POST",
+   "path": "/api/debug",
+   "backend": "next",
+   "label": "debug: write (platform)"
+  },
+  {
+   "id": "GET /api/dispatch",
+   "method": "GET",
+   "path": "/api/dispatch",
+   "backend": "next",
+   "label": "dispatch: view"
+  },
+  {
+   "id": "POST /api/dispatch",
+   "method": "POST",
+   "path": "/api/dispatch",
+   "backend": "next",
+   "label": "dispatch: create"
+  },
+  {
+   "id": "PATCH /api/dispatch/harness-probe",
+   "method": "PATCH",
+   "path": "/api/dispatch/harness-probe",
+   "backend": "next",
+   "label": "dispatch: edit"
+  },
+  {
+   "id": "DELETE /api/dispatch/harness-probe",
+   "method": "DELETE",
+   "path": "/api/dispatch/harness-probe",
+   "backend": "next",
+   "label": "dispatch: delete"
+  },
+  {
+   "id": "POST /api/dispatch/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/dispatch/harness-probe/approve",
+   "backend": "next",
+   "label": "dispatch: approve"
+  },
+  {
+   "id": "GET /api/dispatch/export",
+   "method": "GET",
+   "path": "/api/dispatch/export",
+   "backend": "next",
+   "label": "dispatch: export"
+  },
+  {
+   "id": "GET /api/dispatcher",
+   "method": "GET",
+   "path": "/api/dispatcher",
+   "backend": "next",
+   "label": "dispatcher: view"
+  },
+  {
+   "id": "POST /api/dispatcher",
+   "method": "POST",
+   "path": "/api/dispatcher",
+   "backend": "next",
+   "label": "dispatcher: create"
+  },
+  {
+   "id": "PATCH /api/dispatcher/harness-probe",
+   "method": "PATCH",
+   "path": "/api/dispatcher/harness-probe",
+   "backend": "next",
+   "label": "dispatcher: edit"
+  },
+  {
+   "id": "DELETE /api/dispatcher/harness-probe",
+   "method": "DELETE",
+   "path": "/api/dispatcher/harness-probe",
+   "backend": "next",
+   "label": "dispatcher: delete"
+  },
+  {
+   "id": "POST /api/dispatcher/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/dispatcher/harness-probe/approve",
+   "backend": "next",
+   "label": "dispatcher: approve"
+  },
+  {
+   "id": "GET /api/dispatcher/export",
+   "method": "GET",
+   "path": "/api/dispatcher/export",
+   "backend": "next",
+   "label": "dispatcher: export"
+  },
+  {
+   "id": "GET /api/documents",
+   "method": "GET",
+   "path": "/api/documents",
+   "backend": "next",
+   "label": "documents: view"
+  },
+  {
+   "id": "POST /api/documents",
+   "method": "POST",
+   "path": "/api/documents",
+   "backend": "next",
+   "label": "documents: create"
+  },
+  {
+   "id": "PATCH /api/documents/harness-probe",
+   "method": "PATCH",
+   "path": "/api/documents/harness-probe",
+   "backend": "next",
+   "label": "documents: edit"
+  },
+  {
+   "id": "DELETE /api/documents/harness-probe",
+   "method": "DELETE",
+   "path": "/api/documents/harness-probe",
+   "backend": "next",
+   "label": "documents: delete"
+  },
+  {
+   "id": "POST /api/documents/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/documents/harness-probe/approve",
+   "backend": "next",
+   "label": "documents: approve"
+  },
+  {
+   "id": "GET /api/documents/export",
+   "method": "GET",
+   "path": "/api/documents/export",
+   "backend": "next",
+   "label": "documents: export"
+  },
+  {
+   "id": "GET /api/drivers",
+   "method": "GET",
+   "path": "/api/drivers",
+   "backend": "next",
+   "label": "drivers: view"
+  },
+  {
+   "id": "POST /api/drivers",
+   "method": "POST",
+   "path": "/api/drivers",
+   "backend": "next",
+   "label": "drivers: create"
+  },
+  {
+   "id": "PATCH /api/drivers/harness-probe",
+   "method": "PATCH",
+   "path": "/api/drivers/harness-probe",
+   "backend": "next",
+   "label": "drivers: edit"
+  },
+  {
+   "id": "DELETE /api/drivers/harness-probe",
+   "method": "DELETE",
+   "path": "/api/drivers/harness-probe",
+   "backend": "next",
+   "label": "drivers: delete"
+  },
+  {
+   "id": "POST /api/drivers/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/drivers/harness-probe/approve",
+   "backend": "next",
+   "label": "drivers: approve"
+  },
+  {
+   "id": "GET /api/drivers/export",
+   "method": "GET",
+   "path": "/api/drivers/export",
+   "backend": "next",
+   "label": "drivers: export"
+  },
+  {
+   "id": "GET /api/esign",
+   "method": "GET",
+   "path": "/api/esign",
+   "backend": "next",
+   "label": "esign: view"
+  },
+  {
+   "id": "POST /api/esign",
+   "method": "POST",
+   "path": "/api/esign",
+   "backend": "next",
+   "label": "esign: create"
+  },
+  {
+   "id": "PATCH /api/esign/harness-probe",
+   "method": "PATCH",
+   "path": "/api/esign/harness-probe",
+   "backend": "next",
+   "label": "esign: edit"
+  },
+  {
+   "id": "DELETE /api/esign/harness-probe",
+   "method": "DELETE",
+   "path": "/api/esign/harness-probe",
+   "backend": "next",
+   "label": "esign: delete"
+  },
+  {
+   "id": "POST /api/esign/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/esign/harness-probe/approve",
+   "backend": "next",
+   "label": "esign: approve"
+  },
+  {
+   "id": "GET /api/esign/export",
+   "method": "GET",
+   "path": "/api/esign/export",
+   "backend": "next",
+   "label": "esign: export"
+  },
+  {
+   "id": "GET /api/files",
+   "method": "GET",
+   "path": "/api/files",
+   "backend": "next",
+   "label": "files: read (self)"
+  },
+  {
+   "id": "POST /api/files",
+   "method": "POST",
+   "path": "/api/files",
+   "backend": "next",
+   "label": "files: write (self)"
+  },
+  {
+   "id": "GET /api/finance",
+   "method": "GET",
+   "path": "/api/finance",
+   "backend": "next",
+   "label": "finance: view"
+  },
+  {
+   "id": "POST /api/finance",
+   "method": "POST",
+   "path": "/api/finance",
+   "backend": "next",
+   "label": "finance: create"
+  },
+  {
+   "id": "PATCH /api/finance/harness-probe",
+   "method": "PATCH",
+   "path": "/api/finance/harness-probe",
+   "backend": "next",
+   "label": "finance: edit"
+  },
+  {
+   "id": "DELETE /api/finance/harness-probe",
+   "method": "DELETE",
+   "path": "/api/finance/harness-probe",
+   "backend": "next",
+   "label": "finance: delete"
+  },
+  {
+   "id": "POST /api/finance/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/finance/harness-probe/approve",
+   "backend": "next",
+   "label": "finance: approve"
+  },
+  {
+   "id": "GET /api/finance/export",
+   "method": "GET",
+   "path": "/api/finance/export",
+   "backend": "next",
+   "label": "finance: export"
+  },
+  {
+   "id": "GET /api/fleet",
+   "method": "GET",
+   "path": "/api/fleet",
+   "backend": "next",
+   "label": "fleet: view"
+  },
+  {
+   "id": "POST /api/fleet",
+   "method": "POST",
+   "path": "/api/fleet",
+   "backend": "next",
+   "label": "fleet: create"
+  },
+  {
+   "id": "PATCH /api/fleet/harness-probe",
+   "method": "PATCH",
+   "path": "/api/fleet/harness-probe",
+   "backend": "next",
+   "label": "fleet: edit"
+  },
+  {
+   "id": "DELETE /api/fleet/harness-probe",
+   "method": "DELETE",
+   "path": "/api/fleet/harness-probe",
+   "backend": "next",
+   "label": "fleet: delete"
+  },
+  {
+   "id": "POST /api/fleet/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/fleet/harness-probe/approve",
+   "backend": "next",
+   "label": "fleet: approve"
+  },
+  {
+   "id": "GET /api/fleet/export",
+   "method": "GET",
+   "path": "/api/fleet/export",
+   "backend": "next",
+   "label": "fleet: export"
+  },
+  {
+   "id": "GET /api/garages",
+   "method": "GET",
+   "path": "/api/garages",
+   "backend": "next",
+   "label": "garages: view"
+  },
+  {
+   "id": "POST /api/garages",
+   "method": "POST",
+   "path": "/api/garages",
+   "backend": "next",
+   "label": "garages: create"
+  },
+  {
+   "id": "PATCH /api/garages/harness-probe",
+   "method": "PATCH",
+   "path": "/api/garages/harness-probe",
+   "backend": "next",
+   "label": "garages: edit"
+  },
+  {
+   "id": "DELETE /api/garages/harness-probe",
+   "method": "DELETE",
+   "path": "/api/garages/harness-probe",
+   "backend": "next",
+   "label": "garages: delete"
+  },
+  {
+   "id": "POST /api/garages/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/garages/harness-probe/approve",
+   "backend": "next",
+   "label": "garages: approve"
+  },
+  {
+   "id": "GET /api/garages/export",
+   "method": "GET",
+   "path": "/api/garages/export",
+   "backend": "next",
+   "label": "garages: export"
+  },
+  {
+   "id": "GET /api/incidents",
+   "method": "GET",
+   "path": "/api/incidents",
+   "backend": "next",
+   "label": "incidents: view"
+  },
+  {
+   "id": "POST /api/incidents",
+   "method": "POST",
+   "path": "/api/incidents",
+   "backend": "next",
+   "label": "incidents: create"
+  },
+  {
+   "id": "PATCH /api/incidents/harness-probe",
+   "method": "PATCH",
+   "path": "/api/incidents/harness-probe",
+   "backend": "next",
+   "label": "incidents: edit"
+  },
+  {
+   "id": "DELETE /api/incidents/harness-probe",
+   "method": "DELETE",
+   "path": "/api/incidents/harness-probe",
+   "backend": "next",
+   "label": "incidents: delete"
+  },
+  {
+   "id": "POST /api/incidents/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/incidents/harness-probe/approve",
+   "backend": "next",
+   "label": "incidents: approve"
+  },
+  {
+   "id": "GET /api/incidents/export",
+   "method": "GET",
+   "path": "/api/incidents/export",
+   "backend": "next",
+   "label": "incidents: export"
+  },
+  {
+   "id": "GET /api/integration-configs",
+   "method": "GET",
+   "path": "/api/integration-configs",
+   "backend": "next",
+   "label": "integration-configs: read (tenant-admin)"
+  },
+  {
+   "id": "POST /api/integration-configs",
+   "method": "POST",
+   "path": "/api/integration-configs",
+   "backend": "next",
+   "label": "integration-configs: write (tenant-admin)"
+  },
+  {
+   "id": "GET /api/integrations",
+   "method": "GET",
+   "path": "/api/integrations",
+   "backend": "next",
+   "label": "integrations: read (tenant-admin)"
+  },
+  {
+   "id": "POST /api/integrations",
+   "method": "POST",
+   "path": "/api/integrations",
+   "backend": "next",
+   "label": "integrations: write (tenant-admin)"
+  },
+  {
+   "id": "GET /api/kyc",
+   "method": "GET",
+   "path": "/api/kyc",
+   "backend": "next",
+   "label": "kyc: view"
+  },
+  {
+   "id": "POST /api/kyc",
+   "method": "POST",
+   "path": "/api/kyc",
+   "backend": "next",
+   "label": "kyc: create"
+  },
+  {
+   "id": "PATCH /api/kyc/harness-probe",
+   "method": "PATCH",
+   "path": "/api/kyc/harness-probe",
+   "backend": "next",
+   "label": "kyc: edit"
+  },
+  {
+   "id": "DELETE /api/kyc/harness-probe",
+   "method": "DELETE",
+   "path": "/api/kyc/harness-probe",
+   "backend": "next",
+   "label": "kyc: delete"
+  },
+  {
+   "id": "POST /api/kyc/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/kyc/harness-probe/approve",
+   "backend": "next",
+   "label": "kyc: approve"
+  },
+  {
+   "id": "GET /api/kyc/export",
+   "method": "GET",
+   "path": "/api/kyc/export",
+   "backend": "next",
+   "label": "kyc: export"
+  },
+  {
+   "id": "GET /api/leasing",
+   "method": "GET",
+   "path": "/api/leasing",
+   "backend": "next",
+   "label": "leasing: view"
+  },
+  {
+   "id": "POST /api/leasing",
+   "method": "POST",
+   "path": "/api/leasing",
+   "backend": "next",
+   "label": "leasing: create"
+  },
+  {
+   "id": "PATCH /api/leasing/harness-probe",
+   "method": "PATCH",
+   "path": "/api/leasing/harness-probe",
+   "backend": "next",
+   "label": "leasing: edit"
+  },
+  {
+   "id": "DELETE /api/leasing/harness-probe",
+   "method": "DELETE",
+   "path": "/api/leasing/harness-probe",
+   "backend": "next",
+   "label": "leasing: delete"
+  },
+  {
+   "id": "POST /api/leasing/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/leasing/harness-probe/approve",
+   "backend": "next",
+   "label": "leasing: approve"
+  },
+  {
+   "id": "GET /api/leasing/export",
+   "method": "GET",
+   "path": "/api/leasing/export",
+   "backend": "next",
+   "label": "leasing: export"
+  },
+  {
+   "id": "GET /api/logistics",
+   "method": "GET",
+   "path": "/api/logistics",
+   "backend": "next",
+   "label": "logistics: view"
+  },
+  {
+   "id": "POST /api/logistics",
+   "method": "POST",
+   "path": "/api/logistics",
+   "backend": "next",
+   "label": "logistics: create"
+  },
+  {
+   "id": "PATCH /api/logistics/harness-probe",
+   "method": "PATCH",
+   "path": "/api/logistics/harness-probe",
+   "backend": "next",
+   "label": "logistics: edit"
+  },
+  {
+   "id": "DELETE /api/logistics/harness-probe",
+   "method": "DELETE",
+   "path": "/api/logistics/harness-probe",
+   "backend": "next",
+   "label": "logistics: delete"
+  },
+  {
+   "id": "POST /api/logistics/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/logistics/harness-probe/approve",
+   "backend": "next",
+   "label": "logistics: approve"
+  },
+  {
+   "id": "GET /api/logistics/export",
+   "method": "GET",
+   "path": "/api/logistics/export",
+   "backend": "next",
+   "label": "logistics: export"
+  },
+  {
+   "id": "GET /api/maintenance",
+   "method": "GET",
+   "path": "/api/maintenance",
+   "backend": "next",
+   "label": "maintenance: view"
+  },
+  {
+   "id": "POST /api/maintenance",
+   "method": "POST",
+   "path": "/api/maintenance",
+   "backend": "next",
+   "label": "maintenance: create"
+  },
+  {
+   "id": "PATCH /api/maintenance/harness-probe",
+   "method": "PATCH",
+   "path": "/api/maintenance/harness-probe",
+   "backend": "next",
+   "label": "maintenance: edit"
+  },
+  {
+   "id": "DELETE /api/maintenance/harness-probe",
+   "method": "DELETE",
+   "path": "/api/maintenance/harness-probe",
+   "backend": "next",
+   "label": "maintenance: delete"
+  },
+  {
+   "id": "POST /api/maintenance/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/maintenance/harness-probe/approve",
+   "backend": "next",
+   "label": "maintenance: approve"
+  },
+  {
+   "id": "GET /api/maintenance/export",
+   "method": "GET",
+   "path": "/api/maintenance/export",
+   "backend": "next",
+   "label": "maintenance: export"
+  },
+  {
+   "id": "GET /api/maintenance-requests",
+   "method": "GET",
+   "path": "/api/maintenance-requests",
+   "backend": "next",
+   "label": "maintenance-requests: view"
+  },
+  {
+   "id": "POST /api/maintenance-requests",
+   "method": "POST",
+   "path": "/api/maintenance-requests",
+   "backend": "next",
+   "label": "maintenance-requests: create"
+  },
+  {
+   "id": "PATCH /api/maintenance-requests/harness-probe",
+   "method": "PATCH",
+   "path": "/api/maintenance-requests/harness-probe",
+   "backend": "next",
+   "label": "maintenance-requests: edit"
+  },
+  {
+   "id": "DELETE /api/maintenance-requests/harness-probe",
+   "method": "DELETE",
+   "path": "/api/maintenance-requests/harness-probe",
+   "backend": "next",
+   "label": "maintenance-requests: delete"
+  },
+  {
+   "id": "POST /api/maintenance-requests/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/maintenance-requests/harness-probe/approve",
+   "backend": "next",
+   "label": "maintenance-requests: approve"
+  },
+  {
+   "id": "GET /api/maintenance-requests/export",
+   "method": "GET",
+   "path": "/api/maintenance-requests/export",
+   "backend": "next",
+   "label": "maintenance-requests: export"
+  },
+  {
+   "id": "GET /api/my-approvals",
+   "method": "GET",
+   "path": "/api/my-approvals",
+   "backend": "next",
+   "label": "my-approvals: read (self)"
+  },
+  {
+   "id": "POST /api/my-approvals",
+   "method": "POST",
+   "path": "/api/my-approvals",
+   "backend": "next",
+   "label": "my-approvals: write (self)"
+  },
+  {
+   "id": "GET /api/notifications",
+   "method": "GET",
+   "path": "/api/notifications",
+   "backend": "next",
+   "label": "notifications: read (self)"
+  },
+  {
+   "id": "POST /api/notifications",
+   "method": "POST",
+   "path": "/api/notifications",
+   "backend": "next",
+   "label": "notifications: write (self)"
+  },
+  {
+   "id": "GET /api/operations",
+   "method": "GET",
+   "path": "/api/operations",
+   "backend": "next",
+   "label": "operations: read (self)"
+  },
+  {
+   "id": "POST /api/operations",
+   "method": "POST",
+   "path": "/api/operations",
+   "backend": "next",
+   "label": "operations: write (self)"
+  },
+  {
+   "id": "GET /api/places",
+   "method": "GET",
+   "path": "/api/places",
+   "backend": "next",
+   "label": "places: view"
+  },
+  {
+   "id": "POST /api/places",
+   "method": "POST",
+   "path": "/api/places",
+   "backend": "next",
+   "label": "places: create"
+  },
+  {
+   "id": "PATCH /api/places/harness-probe",
+   "method": "PATCH",
+   "path": "/api/places/harness-probe",
+   "backend": "next",
+   "label": "places: edit"
+  },
+  {
+   "id": "DELETE /api/places/harness-probe",
+   "method": "DELETE",
+   "path": "/api/places/harness-probe",
+   "backend": "next",
+   "label": "places: delete"
+  },
+  {
+   "id": "POST /api/places/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/places/harness-probe/approve",
+   "backend": "next",
+   "label": "places: approve"
+  },
+  {
+   "id": "GET /api/places/export",
+   "method": "GET",
+   "path": "/api/places/export",
+   "backend": "next",
+   "label": "places: export"
+  },
+  {
+   "id": "GET /api/powerbi",
+   "method": "GET",
+   "path": "/api/powerbi",
+   "backend": "next",
+   "label": "powerbi: view"
+  },
+  {
+   "id": "POST /api/powerbi",
+   "method": "POST",
+   "path": "/api/powerbi",
+   "backend": "next",
+   "label": "powerbi: create"
+  },
+  {
+   "id": "PATCH /api/powerbi/harness-probe",
+   "method": "PATCH",
+   "path": "/api/powerbi/harness-probe",
+   "backend": "next",
+   "label": "powerbi: edit"
+  },
+  {
+   "id": "DELETE /api/powerbi/harness-probe",
+   "method": "DELETE",
+   "path": "/api/powerbi/harness-probe",
+   "backend": "next",
+   "label": "powerbi: delete"
+  },
+  {
+   "id": "POST /api/powerbi/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/powerbi/harness-probe/approve",
+   "backend": "next",
+   "label": "powerbi: approve"
+  },
+  {
+   "id": "GET /api/powerbi/export",
+   "method": "GET",
+   "path": "/api/powerbi/export",
+   "backend": "next",
+   "label": "powerbi: export"
+  },
+  {
+   "id": "GET /api/push",
+   "method": "GET",
+   "path": "/api/push",
+   "backend": "next",
+   "label": "push: read (self)"
+  },
+  {
+   "id": "POST /api/push",
+   "method": "POST",
+   "path": "/api/push",
+   "backend": "next",
+   "label": "push: write (self)"
+  },
+  {
+   "id": "GET /api/quotations",
+   "method": "GET",
+   "path": "/api/quotations",
+   "backend": "next",
+   "label": "quotations: view"
+  },
+  {
+   "id": "POST /api/quotations",
+   "method": "POST",
+   "path": "/api/quotations",
+   "backend": "next",
+   "label": "quotations: create"
+  },
+  {
+   "id": "PATCH /api/quotations/harness-probe",
+   "method": "PATCH",
+   "path": "/api/quotations/harness-probe",
+   "backend": "next",
+   "label": "quotations: edit"
+  },
+  {
+   "id": "DELETE /api/quotations/harness-probe",
+   "method": "DELETE",
+   "path": "/api/quotations/harness-probe",
+   "backend": "next",
+   "label": "quotations: delete"
+  },
+  {
+   "id": "POST /api/quotations/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/quotations/harness-probe/approve",
+   "backend": "next",
+   "label": "quotations: approve"
+  },
+  {
+   "id": "GET /api/quotations/export",
+   "method": "GET",
+   "path": "/api/quotations/export",
+   "backend": "next",
+   "label": "quotations: export"
+  },
+  {
+   "id": "GET /api/realtime",
+   "method": "GET",
+   "path": "/api/realtime",
+   "backend": "next",
+   "label": "realtime: read (self)"
+  },
+  {
+   "id": "POST /api/realtime",
+   "method": "POST",
+   "path": "/api/realtime",
+   "backend": "next",
+   "label": "realtime: write (self)"
+  },
+  {
+   "id": "GET /api/rental",
+   "method": "GET",
+   "path": "/api/rental",
+   "backend": "next",
+   "label": "rental: view"
+  },
+  {
+   "id": "POST /api/rental",
+   "method": "POST",
+   "path": "/api/rental",
+   "backend": "next",
+   "label": "rental: create"
+  },
+  {
+   "id": "PATCH /api/rental/harness-probe",
+   "method": "PATCH",
+   "path": "/api/rental/harness-probe",
+   "backend": "next",
+   "label": "rental: edit"
+  },
+  {
+   "id": "DELETE /api/rental/harness-probe",
+   "method": "DELETE",
+   "path": "/api/rental/harness-probe",
+   "backend": "next",
+   "label": "rental: delete"
+  },
+  {
+   "id": "POST /api/rental/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/rental/harness-probe/approve",
+   "backend": "next",
+   "label": "rental: approve"
+  },
+  {
+   "id": "GET /api/rental/export",
+   "method": "GET",
+   "path": "/api/rental/export",
+   "backend": "next",
+   "label": "rental: export"
+  },
+  {
+   "id": "GET /api/reports",
+   "method": "GET",
+   "path": "/api/reports",
+   "backend": "next",
+   "label": "reports: view"
+  },
+  {
+   "id": "POST /api/reports",
+   "method": "POST",
+   "path": "/api/reports",
+   "backend": "next",
+   "label": "reports: create"
+  },
+  {
+   "id": "PATCH /api/reports/harness-probe",
+   "method": "PATCH",
+   "path": "/api/reports/harness-probe",
+   "backend": "next",
+   "label": "reports: edit"
+  },
+  {
+   "id": "DELETE /api/reports/harness-probe",
+   "method": "DELETE",
+   "path": "/api/reports/harness-probe",
+   "backend": "next",
+   "label": "reports: delete"
+  },
+  {
+   "id": "POST /api/reports/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/reports/harness-probe/approve",
+   "backend": "next",
+   "label": "reports: approve"
+  },
+  {
+   "id": "GET /api/reports/export",
+   "method": "GET",
+   "path": "/api/reports/export",
+   "backend": "next",
+   "label": "reports: export"
+  },
+  {
+   "id": "GET /api/route-optimizer",
+   "method": "GET",
+   "path": "/api/route-optimizer",
+   "backend": "next",
+   "label": "route-optimizer: view"
+  },
+  {
+   "id": "POST /api/route-optimizer",
+   "method": "POST",
+   "path": "/api/route-optimizer",
+   "backend": "next",
+   "label": "route-optimizer: create"
+  },
+  {
+   "id": "PATCH /api/route-optimizer/harness-probe",
+   "method": "PATCH",
+   "path": "/api/route-optimizer/harness-probe",
+   "backend": "next",
+   "label": "route-optimizer: edit"
+  },
+  {
+   "id": "DELETE /api/route-optimizer/harness-probe",
+   "method": "DELETE",
+   "path": "/api/route-optimizer/harness-probe",
+   "backend": "next",
+   "label": "route-optimizer: delete"
+  },
+  {
+   "id": "POST /api/route-optimizer/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/route-optimizer/harness-probe/approve",
+   "backend": "next",
+   "label": "route-optimizer: approve"
+  },
+  {
+   "id": "GET /api/route-optimizer/export",
+   "method": "GET",
+   "path": "/api/route-optimizer/export",
+   "backend": "next",
+   "label": "route-optimizer: export"
+  },
+  {
+   "id": "GET /api/school-bus",
+   "method": "GET",
+   "path": "/api/school-bus",
+   "backend": "next",
+   "label": "school-bus: view"
+  },
+  {
+   "id": "POST /api/school-bus",
+   "method": "POST",
+   "path": "/api/school-bus",
+   "backend": "next",
+   "label": "school-bus: create"
+  },
+  {
+   "id": "PATCH /api/school-bus/harness-probe",
+   "method": "PATCH",
+   "path": "/api/school-bus/harness-probe",
+   "backend": "next",
+   "label": "school-bus: edit"
+  },
+  {
+   "id": "DELETE /api/school-bus/harness-probe",
+   "method": "DELETE",
+   "path": "/api/school-bus/harness-probe",
+   "backend": "next",
+   "label": "school-bus: delete"
+  },
+  {
+   "id": "POST /api/school-bus/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/school-bus/harness-probe/approve",
+   "backend": "next",
+   "label": "school-bus: approve"
+  },
+  {
+   "id": "GET /api/school-bus/export",
+   "method": "GET",
+   "path": "/api/school-bus/export",
+   "backend": "next",
+   "label": "school-bus: export"
+  },
+  {
+   "id": "GET /api/search",
+   "method": "GET",
+   "path": "/api/search",
+   "backend": "next",
+   "label": "search: read (self)"
+  },
+  {
+   "id": "POST /api/search",
+   "method": "POST",
+   "path": "/api/search",
+   "backend": "next",
+   "label": "search: write (self)"
+  },
+  {
+   "id": "GET /api/service-requests",
+   "method": "GET",
+   "path": "/api/service-requests",
+   "backend": "next",
+   "label": "service-requests: view"
+  },
+  {
+   "id": "POST /api/service-requests",
+   "method": "POST",
+   "path": "/api/service-requests",
+   "backend": "next",
+   "label": "service-requests: create"
+  },
+  {
+   "id": "PATCH /api/service-requests/harness-probe",
+   "method": "PATCH",
+   "path": "/api/service-requests/harness-probe",
+   "backend": "next",
+   "label": "service-requests: edit"
+  },
+  {
+   "id": "DELETE /api/service-requests/harness-probe",
+   "method": "DELETE",
+   "path": "/api/service-requests/harness-probe",
+   "backend": "next",
+   "label": "service-requests: delete"
+  },
+  {
+   "id": "POST /api/service-requests/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/service-requests/harness-probe/approve",
+   "backend": "next",
+   "label": "service-requests: approve"
+  },
+  {
+   "id": "GET /api/service-requests/export",
+   "method": "GET",
+   "path": "/api/service-requests/export",
+   "backend": "next",
+   "label": "service-requests: export"
+  },
+  {
+   "id": "GET /api/service-tickets",
+   "method": "GET",
+   "path": "/api/service-tickets",
+   "backend": "next",
+   "label": "service-tickets: view"
+  },
+  {
+   "id": "POST /api/service-tickets",
+   "method": "POST",
+   "path": "/api/service-tickets",
+   "backend": "next",
+   "label": "service-tickets: create"
+  },
+  {
+   "id": "PATCH /api/service-tickets/harness-probe",
+   "method": "PATCH",
+   "path": "/api/service-tickets/harness-probe",
+   "backend": "next",
+   "label": "service-tickets: edit"
+  },
+  {
+   "id": "DELETE /api/service-tickets/harness-probe",
+   "method": "DELETE",
+   "path": "/api/service-tickets/harness-probe",
+   "backend": "next",
+   "label": "service-tickets: delete"
+  },
+  {
+   "id": "POST /api/service-tickets/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/service-tickets/harness-probe/approve",
+   "backend": "next",
+   "label": "service-tickets: approve"
+  },
+  {
+   "id": "GET /api/service-tickets/export",
+   "method": "GET",
+   "path": "/api/service-tickets/export",
+   "backend": "next",
+   "label": "service-tickets: export"
+  },
+  {
+   "id": "GET /api/sustainability",
+   "method": "GET",
+   "path": "/api/sustainability",
+   "backend": "next",
+   "label": "sustainability: view"
+  },
+  {
+   "id": "POST /api/sustainability",
+   "method": "POST",
+   "path": "/api/sustainability",
+   "backend": "next",
+   "label": "sustainability: create"
+  },
+  {
+   "id": "PATCH /api/sustainability/harness-probe",
+   "method": "PATCH",
+   "path": "/api/sustainability/harness-probe",
+   "backend": "next",
+   "label": "sustainability: edit"
+  },
+  {
+   "id": "DELETE /api/sustainability/harness-probe",
+   "method": "DELETE",
+   "path": "/api/sustainability/harness-probe",
+   "backend": "next",
+   "label": "sustainability: delete"
+  },
+  {
+   "id": "POST /api/sustainability/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/sustainability/harness-probe/approve",
+   "backend": "next",
+   "label": "sustainability: approve"
+  },
+  {
+   "id": "GET /api/sustainability/export",
+   "method": "GET",
+   "path": "/api/sustainability/export",
+   "backend": "next",
+   "label": "sustainability: export"
+  },
+  {
+   "id": "GET /api/telematics",
+   "method": "GET",
+   "path": "/api/telematics",
+   "backend": "next",
+   "label": "telematics: view"
+  },
+  {
+   "id": "POST /api/telematics",
+   "method": "POST",
+   "path": "/api/telematics",
+   "backend": "next",
+   "label": "telematics: create"
+  },
+  {
+   "id": "PATCH /api/telematics/harness-probe",
+   "method": "PATCH",
+   "path": "/api/telematics/harness-probe",
+   "backend": "next",
+   "label": "telematics: edit"
+  },
+  {
+   "id": "DELETE /api/telematics/harness-probe",
+   "method": "DELETE",
+   "path": "/api/telematics/harness-probe",
+   "backend": "next",
+   "label": "telematics: delete"
+  },
+  {
+   "id": "POST /api/telematics/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/telematics/harness-probe/approve",
+   "backend": "next",
+   "label": "telematics: approve"
+  },
+  {
+   "id": "GET /api/telematics/export",
+   "method": "GET",
+   "path": "/api/telematics/export",
+   "backend": "next",
+   "label": "telematics: export"
+  },
+  {
+   "id": "GET /api/tenant",
+   "method": "GET",
+   "path": "/api/tenant",
+   "backend": "next",
+   "label": "tenant: read (self)"
+  },
+  {
+   "id": "POST /api/tenant",
+   "method": "POST",
+   "path": "/api/tenant",
+   "backend": "next",
+   "label": "tenant: write (tenant-admin)"
+  },
+  {
+   "id": "GET /api/tenant-branches",
+   "method": "GET",
+   "path": "/api/tenant-branches",
+   "backend": "next",
+   "label": "tenant-branches: read (self)"
+  },
+  {
+   "id": "POST /api/tenant-branches",
+   "method": "POST",
+   "path": "/api/tenant-branches",
+   "backend": "next",
+   "label": "tenant-branches: write (tenant-admin)"
+  },
+  {
+   "id": "GET /api/tenant-subscriptions",
+   "method": "GET",
+   "path": "/api/tenant-subscriptions",
+   "backend": "next",
+   "label": "tenant-subscriptions: read (tenant-admin)"
+  },
+  {
+   "id": "POST /api/tenant-subscriptions",
+   "method": "POST",
+   "path": "/api/tenant-subscriptions",
+   "backend": "next",
+   "label": "tenant-subscriptions: write (tenant-admin)"
+  },
+  {
+   "id": "GET /api/users",
+   "method": "GET",
+   "path": "/api/users",
+   "backend": "next",
+   "label": "users: read (self)"
+  },
+  {
+   "id": "POST /api/users",
+   "method": "POST",
+   "path": "/api/users",
+   "backend": "next",
+   "label": "users: write (tenant-admin)"
+  },
+  {
+   "id": "GET /api/vehicles",
+   "method": "GET",
+   "path": "/api/vehicles",
+   "backend": "next",
+   "label": "vehicles: view"
+  },
+  {
+   "id": "POST /api/vehicles",
+   "method": "POST",
+   "path": "/api/vehicles",
+   "backend": "next",
+   "label": "vehicles: create"
+  },
+  {
+   "id": "PATCH /api/vehicles/harness-probe",
+   "method": "PATCH",
+   "path": "/api/vehicles/harness-probe",
+   "backend": "next",
+   "label": "vehicles: edit"
+  },
+  {
+   "id": "DELETE /api/vehicles/harness-probe",
+   "method": "DELETE",
+   "path": "/api/vehicles/harness-probe",
+   "backend": "next",
+   "label": "vehicles: delete"
+  },
+  {
+   "id": "POST /api/vehicles/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/vehicles/harness-probe/approve",
+   "backend": "next",
+   "label": "vehicles: approve"
+  },
+  {
+   "id": "GET /api/vehicles/export",
+   "method": "GET",
+   "path": "/api/vehicles/export",
+   "backend": "next",
+   "label": "vehicles: export"
+  },
+  {
+   "id": "GET /api/whatsapp",
+   "method": "GET",
+   "path": "/api/whatsapp",
+   "backend": "next",
+   "label": "whatsapp: read (tenant-admin)"
+  },
+  {
+   "id": "POST /api/whatsapp",
+   "method": "POST",
+   "path": "/api/whatsapp",
+   "backend": "next",
+   "label": "whatsapp: write (tenant-admin)"
+  },
+  {
+   "id": "GET /api/work-orders",
+   "method": "GET",
+   "path": "/api/work-orders",
+   "backend": "next",
+   "label": "work-orders: view"
+  },
+  {
+   "id": "POST /api/work-orders",
+   "method": "POST",
+   "path": "/api/work-orders",
+   "backend": "next",
+   "label": "work-orders: create"
+  },
+  {
+   "id": "PATCH /api/work-orders/harness-probe",
+   "method": "PATCH",
+   "path": "/api/work-orders/harness-probe",
+   "backend": "next",
+   "label": "work-orders: edit"
+  },
+  {
+   "id": "DELETE /api/work-orders/harness-probe",
+   "method": "DELETE",
+   "path": "/api/work-orders/harness-probe",
+   "backend": "next",
+   "label": "work-orders: delete"
+  },
+  {
+   "id": "POST /api/work-orders/harness-probe/approve",
+   "method": "POST",
+   "path": "/api/work-orders/harness-probe/approve",
+   "backend": "next",
+   "label": "work-orders: approve"
+  },
+  {
+   "id": "GET /api/work-orders/export",
+   "method": "GET",
+   "path": "/api/work-orders/export",
+   "backend": "next",
+   "label": "work-orders: export"
+  },
+  {
+   "id": "GET /api/workflow",
+   "method": "GET",
+   "path": "/api/workflow",
+   "backend": "next",
+   "label": "workflow: read (tenant-admin)"
+  },
+  {
+   "id": "POST /api/workflow",
+   "method": "POST",
+   "path": "/api/workflow",
+   "backend": "next",
+   "label": "workflow: write (tenant-admin)"
+  },
+  {
+   "id": "GET /api/admin/audit-logs",
+   "method": "GET",
+   "path": "/api/admin/audit-logs",
+   "backend": "next",
+   "label": "admin audit-logs: GET"
+  },
+  {
+   "id": "POST /api/admin/audit-logs",
+   "method": "POST",
+   "path": "/api/admin/audit-logs",
+   "backend": "next",
+   "label": "admin audit-logs: POST"
+  },
+  {
+   "id": "GET /api/admin/billing",
+   "method": "GET",
+   "path": "/api/admin/billing",
+   "backend": "next",
+   "label": "admin billing: GET"
+  },
+  {
+   "id": "POST /api/admin/billing/checkout",
+   "method": "POST",
+   "path": "/api/admin/billing/checkout",
+   "backend": "next",
+   "label": "admin billing/checkout: POST"
+  },
+  {
+   "id": "POST /api/admin/billing/portal",
+   "method": "POST",
+   "path": "/api/admin/billing/portal",
+   "backend": "next",
+   "label": "admin billing/portal: POST"
+  },
+  {
+   "id": "POST /api/admin/change-password",
+   "method": "POST",
+   "path": "/api/admin/change-password",
+   "backend": "next",
+   "label": "admin change-password: POST"
+  },
+  {
+   "id": "GET /api/admin/corporate-clients",
+   "method": "GET",
+   "path": "/api/admin/corporate-clients",
+   "backend": "next",
+   "label": "admin corporate-clients: GET"
+  },
+  {
+   "id": "POST /api/admin/corporate-clients",
+   "method": "POST",
+   "path": "/api/admin/corporate-clients",
+   "backend": "next",
+   "label": "admin corporate-clients: POST"
+  },
+  {
+   "id": "GET /api/admin/customers/harness-probe/portal-invitations",
+   "method": "GET",
+   "path": "/api/admin/customers/harness-probe/portal-invitations",
+   "backend": "next",
+   "label": "admin customers/[id]/portal-invitations: GET"
+  },
+  {
+   "id": "POST /api/admin/customers/harness-probe/portal-invitations",
+   "method": "POST",
+   "path": "/api/admin/customers/harness-probe/portal-invitations",
+   "backend": "next",
+   "label": "admin customers/[id]/portal-invitations: POST"
+  },
+  {
+   "id": "PATCH /api/admin/customers/harness-probe/tracking-visibility",
+   "method": "PATCH",
+   "path": "/api/admin/customers/harness-probe/tracking-visibility",
+   "backend": "next",
+   "label": "admin customers/[id]/tracking-visibility: PATCH"
+  },
+  {
+   "id": "GET /api/admin/customers/portal-status",
+   "method": "GET",
+   "path": "/api/admin/customers/portal-status",
+   "backend": "next",
+   "label": "admin customers/portal-status: GET"
+  },
+  {
+   "id": "GET /api/admin/dispatch-stats",
+   "method": "GET",
+   "path": "/api/admin/dispatch-stats",
+   "backend": "next",
+   "label": "admin dispatch-stats: GET"
+  },
+  {
+   "id": "GET /api/admin/events/outbox",
+   "method": "GET",
+   "path": "/api/admin/events/outbox",
+   "backend": "next",
+   "label": "admin events/outbox: GET"
+  },
+  {
+   "id": "GET /api/admin/exchange/partner-users",
+   "method": "GET",
+   "path": "/api/admin/exchange/partner-users",
+   "backend": "next",
+   "label": "admin exchange/partner-users: GET"
+  },
+  {
+   "id": "POST /api/admin/exchange/partner-users",
+   "method": "POST",
+   "path": "/api/admin/exchange/partner-users",
+   "backend": "next",
+   "label": "admin exchange/partner-users: POST"
+  },
+  {
+   "id": "DELETE /api/admin/exchange/partner-users",
+   "method": "DELETE",
+   "path": "/api/admin/exchange/partner-users",
+   "backend": "next",
+   "label": "admin exchange/partner-users: DELETE"
+  },
+  {
+   "id": "GET /api/admin/exchange/partners",
+   "method": "GET",
+   "path": "/api/admin/exchange/partners",
+   "backend": "next",
+   "label": "admin exchange/partners: GET"
+  },
+  {
+   "id": "POST /api/admin/exchange/partners",
+   "method": "POST",
+   "path": "/api/admin/exchange/partners",
+   "backend": "next",
+   "label": "admin exchange/partners: POST"
+  },
+  {
+   "id": "PUT /api/admin/exchange/partners/harness-probe/services",
+   "method": "PUT",
+   "path": "/api/admin/exchange/partners/harness-probe/services",
+   "backend": "next",
+   "label": "admin exchange/partners/[id]/services: PUT"
+  },
+  {
+   "id": "PUT /api/admin/exchange/partners/harness-probe/onboarding-tenant",
+   "method": "PUT",
+   "path": "/api/admin/exchange/partners/harness-probe/onboarding-tenant",
+   "backend": "next",
+   "label": "admin exchange/partners/[id]/onboarding-tenant: PUT"
+  },
+  {
+   "id": "GET /api/admin/exchange/partners/harness-probe/invitations",
+   "method": "GET",
+   "path": "/api/admin/exchange/partners/harness-probe/invitations",
+   "backend": "next",
+   "label": "admin exchange/partners/[id]/invitations: GET"
+  },
+  {
+   "id": "POST /api/admin/exchange/partners/harness-probe/invitations",
+   "method": "POST",
+   "path": "/api/admin/exchange/partners/harness-probe/invitations",
+   "backend": "next",
+   "label": "admin exchange/partners/[id]/invitations: POST"
+  },
+  {
+   "id": "DELETE /api/admin/exchange/partners/harness-probe/invitations",
+   "method": "DELETE",
+   "path": "/api/admin/exchange/partners/harness-probe/invitations",
+   "backend": "next",
+   "label": "admin exchange/partners/[id]/invitations: DELETE"
+  },
+  {
+   "id": "GET /api/admin/exchange/partners/harness-probe/compliance",
+   "method": "GET",
+   "path": "/api/admin/exchange/partners/harness-probe/compliance",
+   "backend": "next",
+   "label": "admin exchange/partners/[id]/compliance: GET"
+  },
+  {
+   "id": "PATCH /api/admin/exchange/partners/harness-probe/compliance/harness-probe",
+   "method": "PATCH",
+   "path": "/api/admin/exchange/partners/harness-probe/compliance/harness-probe",
+   "backend": "next",
+   "label": "admin exchange/partners/[id]/compliance/[id]: PATCH"
+  },
+  {
+   "id": "GET /api/admin/exchange/onboarding",
+   "method": "GET",
+   "path": "/api/admin/exchange/onboarding",
+   "backend": "next",
+   "label": "admin exchange/onboarding: GET"
+  },
+  {
+   "id": "GET /api/admin/exchange/onboarding/harness-probe",
+   "method": "GET",
+   "path": "/api/admin/exchange/onboarding/harness-probe",
+   "backend": "next",
+   "label": "admin exchange/onboarding/[id]: GET"
+  },
+  {
+   "id": "POST /api/admin/exchange/onboarding/harness-probe/decision",
+   "method": "POST",
+   "path": "/api/admin/exchange/onboarding/harness-probe/decision",
+   "backend": "next",
+   "label": "admin exchange/onboarding/[id]/decision: POST"
+  },
+  {
+   "id": "PATCH /api/admin/exchange/onboarding/harness-probe/documents/harness-probe",
+   "method": "PATCH",
+   "path": "/api/admin/exchange/onboarding/harness-probe/documents/harness-probe",
+   "backend": "next",
+   "label": "admin exchange/onboarding/[id]/documents/[id]: PATCH"
+  },
+  {
+   "id": "GET /api/admin/exchange/onboarding/harness-probe/documents/harness-probe/file",
+   "method": "GET",
+   "path": "/api/admin/exchange/onboarding/harness-probe/documents/harness-probe/file",
+   "backend": "next",
+   "label": "admin exchange/onboarding/[id]/documents/[id]/file: GET"
+  },
+  {
+   "id": "POST /api/admin/events/outbox/replay",
+   "method": "POST",
+   "path": "/api/admin/events/outbox/replay",
+   "backend": "next",
+   "label": "admin events/outbox/replay: POST"
+  },
+  {
+   "id": "POST /api/admin/impersonate",
+   "method": "POST",
+   "path": "/api/admin/impersonate",
+   "backend": "next",
+   "label": "admin impersonate: POST"
+  },
+  {
+   "id": "POST /api/admin/impersonate/stop",
+   "method": "POST",
+   "path": "/api/admin/impersonate/stop",
+   "backend": "next",
+   "label": "admin impersonate/stop: POST"
+  },
+  {
+   "id": "GET /api/admin/info",
+   "method": "GET",
+   "path": "/api/admin/info",
+   "backend": "next",
+   "label": "admin info: GET"
+  },
+  {
+   "id": "GET /api/admin/migrate/fleet-phase1",
+   "method": "GET",
+   "path": "/api/admin/migrate/fleet-phase1",
+   "backend": "next",
+   "label": "admin migrate/fleet-phase1: GET"
+  },
+  {
+   "id": "POST /api/admin/migrate/fleet-phase1",
+   "method": "POST",
+   "path": "/api/admin/migrate/fleet-phase1",
+   "backend": "next",
+   "label": "admin migrate/fleet-phase1: POST"
+  },
+  {
+   "id": "GET /api/admin/migrate/indexes",
+   "method": "GET",
+   "path": "/api/admin/migrate/indexes",
+   "backend": "next",
+   "label": "admin migrate/indexes: GET"
+  },
+  {
+   "id": "POST /api/admin/migrate/indexes",
+   "method": "POST",
+   "path": "/api/admin/migrate/indexes",
+   "backend": "next",
+   "label": "admin migrate/indexes: POST"
+  },
+  {
+   "id": "POST /api/admin/migrate/rac-phase1",
+   "method": "POST",
+   "path": "/api/admin/migrate/rac-phase1",
+   "backend": "next",
+   "label": "admin migrate/rac-phase1: POST"
+  },
+  {
+   "id": "GET /api/admin/nav-permissions",
+   "method": "GET",
+   "path": "/api/admin/nav-permissions",
+   "backend": "next",
+   "label": "admin nav-permissions: GET"
+  },
+  {
+   "id": "PUT /api/admin/nav-permissions",
+   "method": "PUT",
+   "path": "/api/admin/nav-permissions",
+   "backend": "next",
+   "label": "admin nav-permissions: PUT"
+  },
+  {
+   "id": "GET /api/admin/notification-rules",
+   "method": "GET",
+   "path": "/api/admin/notification-rules",
+   "backend": "next",
+   "label": "admin notification-rules: GET"
+  },
+  {
+   "id": "POST /api/admin/notification-rules",
+   "method": "POST",
+   "path": "/api/admin/notification-rules",
+   "backend": "next",
+   "label": "admin notification-rules: POST"
+  },
+  {
+   "id": "PUT /api/admin/notification-rules",
+   "method": "PUT",
+   "path": "/api/admin/notification-rules",
+   "backend": "next",
+   "label": "admin notification-rules: PUT"
+  },
+  {
+   "id": "GET /api/admin/notification-templates",
+   "method": "GET",
+   "path": "/api/admin/notification-templates",
+   "backend": "next",
+   "label": "admin notification-templates: GET"
+  },
+  {
+   "id": "POST /api/admin/notification-templates",
+   "method": "POST",
+   "path": "/api/admin/notification-templates",
+   "backend": "next",
+   "label": "admin notification-templates: POST"
+  },
+  {
+   "id": "PUT /api/admin/notification-templates",
+   "method": "PUT",
+   "path": "/api/admin/notification-templates",
+   "backend": "next",
+   "label": "admin notification-templates: PUT"
+  },
+  {
+   "id": "GET /api/admin/permissions",
+   "method": "GET",
+   "path": "/api/admin/permissions",
+   "backend": "next",
+   "label": "admin permissions: GET"
+  },
+  {
+   "id": "GET /api/admin/platform-settings",
+   "method": "GET",
+   "path": "/api/admin/platform-settings",
+   "backend": "next",
+   "label": "admin platform-settings: GET"
+  },
+  {
+   "id": "PATCH /api/admin/platform-settings",
+   "method": "PATCH",
+   "path": "/api/admin/platform-settings",
+   "backend": "next",
+   "label": "admin platform-settings: PATCH"
+  },
+  {
+   "id": "GET /api/admin/platform/plans",
+   "method": "GET",
+   "path": "/api/admin/platform/plans",
+   "backend": "next",
+   "label": "admin platform/plans: GET"
+  },
+  {
+   "id": "POST /api/admin/platform/plans",
+   "method": "POST",
+   "path": "/api/admin/platform/plans",
+   "backend": "next",
+   "label": "admin platform/plans: POST"
+  },
+  {
+   "id": "PATCH /api/admin/platform/plans/harness-probe",
+   "method": "PATCH",
+   "path": "/api/admin/platform/plans/harness-probe",
+   "backend": "next",
+   "label": "admin platform/plans/[id]: PATCH"
+  },
+  {
+   "id": "DELETE /api/admin/platform/plans/harness-probe",
+   "method": "DELETE",
+   "path": "/api/admin/platform/plans/harness-probe",
+   "backend": "next",
+   "label": "admin platform/plans/[id]: DELETE"
+  },
+  {
+   "id": "GET /api/admin/roles",
+   "method": "GET",
+   "path": "/api/admin/roles",
+   "backend": "next",
+   "label": "admin roles: GET"
+  },
+  {
+   "id": "POST /api/admin/roles",
+   "method": "POST",
+   "path": "/api/admin/roles",
+   "backend": "next",
+   "label": "admin roles: POST"
+  },
+  {
+   "id": "GET /api/admin/roles/harness-probe",
+   "method": "GET",
+   "path": "/api/admin/roles/harness-probe",
+   "backend": "next",
+   "label": "admin roles/[id]: GET"
+  },
+  {
+   "id": "PATCH /api/admin/roles/harness-probe",
+   "method": "PATCH",
+   "path": "/api/admin/roles/harness-probe",
+   "backend": "next",
+   "label": "admin roles/[id]: PATCH"
+  },
+  {
+   "id": "DELETE /api/admin/roles/harness-probe",
+   "method": "DELETE",
+   "path": "/api/admin/roles/harness-probe",
+   "backend": "next",
+   "label": "admin roles/[id]: DELETE"
+  },
+  {
+   "id": "GET /api/admin/roles/harness-probe/permissions",
+   "method": "GET",
+   "path": "/api/admin/roles/harness-probe/permissions",
+   "backend": "next",
+   "label": "admin roles/[id]/permissions: GET"
+  },
+  {
+   "id": "PUT /api/admin/roles/harness-probe/permissions",
+   "method": "PUT",
+   "path": "/api/admin/roles/harness-probe/permissions",
+   "backend": "next",
+   "label": "admin roles/[id]/permissions: PUT"
+  },
+  {
+   "id": "POST /api/admin/roles/override",
+   "method": "POST",
+   "path": "/api/admin/roles/override",
+   "backend": "next",
+   "label": "admin roles/override: POST"
+  },
+  {
+   "id": "GET /api/admin/seed",
+   "method": "GET",
+   "path": "/api/admin/seed",
+   "backend": "next",
+   "label": "admin seed: GET"
+  },
+  {
+   "id": "POST /api/admin/seed",
+   "method": "POST",
+   "path": "/api/admin/seed",
+   "backend": "next",
+   "label": "admin seed: POST"
+  },
+  {
+   "id": "POST /api/admin/seed/leasing",
+   "method": "POST",
+   "path": "/api/admin/seed/leasing",
+   "backend": "next",
+   "label": "admin seed/leasing: POST"
+  },
+  {
+   "id": "GET /api/admin/service-config/categories",
+   "method": "GET",
+   "path": "/api/admin/service-config/categories",
+   "backend": "next",
+   "label": "admin service-config/categories: GET"
+  },
+  {
+   "id": "POST /api/admin/service-config/categories",
+   "method": "POST",
+   "path": "/api/admin/service-config/categories",
+   "backend": "next",
+   "label": "admin service-config/categories: POST"
+  },
+  {
+   "id": "PATCH /api/admin/service-config/categories/harness-probe",
+   "method": "PATCH",
+   "path": "/api/admin/service-config/categories/harness-probe",
+   "backend": "next",
+   "label": "admin service-config/categories/[id]: PATCH"
+  },
+  {
+   "id": "DELETE /api/admin/service-config/categories/harness-probe",
+   "method": "DELETE",
+   "path": "/api/admin/service-config/categories/harness-probe",
+   "backend": "next",
+   "label": "admin service-config/categories/[id]: DELETE"
+  },
+  {
+   "id": "GET /api/admin/service-config/scopes",
+   "method": "GET",
+   "path": "/api/admin/service-config/scopes",
+   "backend": "next",
+   "label": "admin service-config/scopes: GET"
+  },
+  {
+   "id": "POST /api/admin/service-config/scopes",
+   "method": "POST",
+   "path": "/api/admin/service-config/scopes",
+   "backend": "next",
+   "label": "admin service-config/scopes: POST"
+  },
+  {
+   "id": "PATCH /api/admin/service-config/scopes/harness-probe",
+   "method": "PATCH",
+   "path": "/api/admin/service-config/scopes/harness-probe",
+   "backend": "next",
+   "label": "admin service-config/scopes/[id]: PATCH"
+  },
+  {
+   "id": "DELETE /api/admin/service-config/scopes/harness-probe",
+   "method": "DELETE",
+   "path": "/api/admin/service-config/scopes/harness-probe",
+   "backend": "next",
+   "label": "admin service-config/scopes/[id]: DELETE"
+  },
+  {
+   "id": "POST /api/admin/service-config/types",
+   "method": "POST",
+   "path": "/api/admin/service-config/types",
+   "backend": "next",
+   "label": "admin service-config/types: POST"
+  },
+  {
+   "id": "PATCH /api/admin/service-config/types/harness-probe",
+   "method": "PATCH",
+   "path": "/api/admin/service-config/types/harness-probe",
+   "backend": "next",
+   "label": "admin service-config/types/[id]: PATCH"
+  },
+  {
+   "id": "DELETE /api/admin/service-config/types/harness-probe",
+   "method": "DELETE",
+   "path": "/api/admin/service-config/types/harness-probe",
+   "backend": "next",
+   "label": "admin service-config/types/[id]: DELETE"
+  },
+  {
+   "id": "GET /api/admin/service-config/types/harness-probe/module-mapping",
+   "method": "GET",
+   "path": "/api/admin/service-config/types/harness-probe/module-mapping",
+   "backend": "next",
+   "label": "admin service-config/types/[id]/module-mapping: GET"
+  },
+  {
+   "id": "PUT /api/admin/service-config/types/harness-probe/module-mapping",
+   "method": "PUT",
+   "path": "/api/admin/service-config/types/harness-probe/module-mapping",
+   "backend": "next",
+   "label": "admin service-config/types/[id]/module-mapping: PUT"
+  },
+  {
+   "id": "GET /api/admin/service-config/types/harness-probe/rules/harness-probe",
+   "method": "GET",
+   "path": "/api/admin/service-config/types/harness-probe/rules/harness-probe",
+   "backend": "next",
+   "label": "admin service-config/types/[id]/rules/[id]: GET"
+  },
+  {
+   "id": "PUT /api/admin/service-config/types/harness-probe/rules/harness-probe",
+   "method": "PUT",
+   "path": "/api/admin/service-config/types/harness-probe/rules/harness-probe",
+   "backend": "next",
+   "label": "admin service-config/types/[id]/rules/[id]: PUT"
+  },
+  {
+   "id": "GET /api/admin/service-config/types/harness-probe/rules/harness-probe/history",
+   "method": "GET",
+   "path": "/api/admin/service-config/types/harness-probe/rules/harness-probe/history",
+   "backend": "next",
+   "label": "admin service-config/types/[id]/rules/[id]/history: GET"
+  },
+  {
+   "id": "POST /api/admin/service-config/types/harness-probe/rules/harness-probe/history",
+   "method": "POST",
+   "path": "/api/admin/service-config/types/harness-probe/rules/harness-probe/history",
+   "backend": "next",
+   "label": "admin service-config/types/[id]/rules/[id]/history: POST"
+  },
+  {
+   "id": "POST /api/admin/shipper-portal/seed-demo",
+   "method": "POST",
+   "path": "/api/admin/shipper-portal/seed-demo",
+   "backend": "next",
+   "label": "admin shipper-portal/seed-demo: POST"
+  },
+  {
+   "id": "GET /api/admin/tenant-settings/tracking-visibility",
+   "method": "GET",
+   "path": "/api/admin/tenant-settings/tracking-visibility",
+   "backend": "next",
+   "label": "admin tenant-settings/tracking-visibility: GET"
+  },
+  {
+   "id": "PUT /api/admin/tenant-settings/tracking-visibility",
+   "method": "PUT",
+   "path": "/api/admin/tenant-settings/tracking-visibility",
+   "backend": "next",
+   "label": "admin tenant-settings/tracking-visibility: PUT"
+  },
+  {
+   "id": "GET /api/admin/tenants",
+   "method": "GET",
+   "path": "/api/admin/tenants",
+   "backend": "next",
+   "label": "admin tenants: GET"
+  },
+  {
+   "id": "POST /api/admin/tenants",
+   "method": "POST",
+   "path": "/api/admin/tenants",
+   "backend": "next",
+   "label": "admin tenants: POST"
+  },
+  {
+   "id": "GET /api/admin/tenants/{tenant}",
+   "method": "GET",
+   "path": "/api/admin/tenants/{tenant}",
+   "backend": "next",
+   "label": "admin tenants/[id]: GET"
+  },
+  {
+   "id": "PATCH /api/admin/tenants/{tenant}",
+   "method": "PATCH",
+   "path": "/api/admin/tenants/{tenant}",
+   "backend": "next",
+   "label": "admin tenants/[id]: PATCH"
+  },
+  {
+   "id": "DELETE /api/admin/tenants/{tenant}",
+   "method": "DELETE",
+   "path": "/api/admin/tenants/{tenant}",
+   "backend": "next",
+   "label": "admin tenants/[id]: DELETE"
+  },
+  {
+   "id": "GET /api/admin/tenants/{tenant}/api-keys",
+   "method": "GET",
+   "path": "/api/admin/tenants/{tenant}/api-keys",
+   "backend": "next",
+   "label": "admin tenants/[id]/api-keys: GET"
+  },
+  {
+   "id": "POST /api/admin/tenants/{tenant}/api-keys",
+   "method": "POST",
+   "path": "/api/admin/tenants/{tenant}/api-keys",
+   "backend": "next",
+   "label": "admin tenants/[id]/api-keys: POST"
+  },
+  {
+   "id": "POST /api/admin/tenants/{tenant}/api-keys/harness-probe/revoke",
+   "method": "POST",
+   "path": "/api/admin/tenants/{tenant}/api-keys/harness-probe/revoke",
+   "backend": "next",
+   "label": "admin tenants/[id]/api-keys/[id]/revoke: POST"
+  },
+  {
+   "id": "GET /api/admin/tenants/{tenant}/branding",
+   "method": "GET",
+   "path": "/api/admin/tenants/{tenant}/branding",
+   "backend": "next",
+   "label": "admin tenants/[id]/branding: GET"
+  },
+  {
+   "id": "PUT /api/admin/tenants/{tenant}/branding",
+   "method": "PUT",
+   "path": "/api/admin/tenants/{tenant}/branding",
+   "backend": "next",
+   "label": "admin tenants/[id]/branding: PUT"
+  },
+  {
+   "id": "POST /api/admin/tenants/{tenant}/branding/logo",
+   "method": "POST",
+   "path": "/api/admin/tenants/{tenant}/branding/logo",
+   "backend": "next",
+   "label": "admin tenants/[id]/branding/logo: POST"
+  },
+  {
+   "id": "POST /api/admin/tenants/{tenant}/hard-delete",
+   "method": "POST",
+   "path": "/api/admin/tenants/{tenant}/hard-delete",
+   "backend": "next",
+   "label": "admin tenants/[id]/hard-delete: POST"
+  },
+  {
+   "id": "GET /api/admin/tenants/{tenant}/invitations",
+   "method": "GET",
+   "path": "/api/admin/tenants/{tenant}/invitations",
+   "backend": "next",
+   "label": "admin tenants/[id]/invitations: GET"
+  },
+  {
+   "id": "POST /api/admin/tenants/{tenant}/invitations",
+   "method": "POST",
+   "path": "/api/admin/tenants/{tenant}/invitations",
+   "backend": "next",
+   "label": "admin tenants/[id]/invitations: POST"
+  },
+  {
+   "id": "POST /api/admin/tenants/{tenant}/invitations/harness-probe/revoke",
+   "method": "POST",
+   "path": "/api/admin/tenants/{tenant}/invitations/harness-probe/revoke",
+   "backend": "next",
+   "label": "admin tenants/[id]/invitations/[id]/revoke: POST"
+  },
+  {
+   "id": "GET /api/admin/tenants/{tenant}/modules",
+   "method": "GET",
+   "path": "/api/admin/tenants/{tenant}/modules",
+   "backend": "next",
+   "label": "admin tenants/[id]/modules: GET"
+  },
+  {
+   "id": "PUT /api/admin/tenants/{tenant}/modules",
+   "method": "PUT",
+   "path": "/api/admin/tenants/{tenant}/modules",
+   "backend": "next",
+   "label": "admin tenants/[id]/modules: PUT"
+  },
+  {
+   "id": "GET /api/admin/tenants/{tenant}/settings",
+   "method": "GET",
+   "path": "/api/admin/tenants/{tenant}/settings",
+   "backend": "next",
+   "label": "admin tenants/[id]/settings: GET"
+  },
+  {
+   "id": "PUT /api/admin/tenants/{tenant}/settings",
+   "method": "PUT",
+   "path": "/api/admin/tenants/{tenant}/settings",
+   "backend": "next",
+   "label": "admin tenants/[id]/settings: PUT"
+  },
+  {
+   "id": "GET /api/admin/tenants/{tenant}/sso",
+   "method": "GET",
+   "path": "/api/admin/tenants/{tenant}/sso",
+   "backend": "next",
+   "label": "admin tenants/[id]/sso: GET"
+  },
+  {
+   "id": "PUT /api/admin/tenants/{tenant}/sso",
+   "method": "PUT",
+   "path": "/api/admin/tenants/{tenant}/sso",
+   "backend": "next",
+   "label": "admin tenants/[id]/sso: PUT"
+  },
+  {
+   "id": "DELETE /api/admin/tenants/{tenant}/sso",
+   "method": "DELETE",
+   "path": "/api/admin/tenants/{tenant}/sso",
+   "backend": "next",
+   "label": "admin tenants/[id]/sso: DELETE"
+  },
+  {
+   "id": "GET /api/admin/tenants/{tenant}/ticket-types",
+   "method": "GET",
+   "path": "/api/admin/tenants/{tenant}/ticket-types",
+   "backend": "next",
+   "label": "admin tenants/[id]/ticket-types: GET"
+  },
+  {
+   "id": "PUT /api/admin/tenants/{tenant}/ticket-types",
+   "method": "PUT",
+   "path": "/api/admin/tenants/{tenant}/ticket-types",
+   "backend": "next",
+   "label": "admin tenants/[id]/ticket-types: PUT"
+  },
+  {
+   "id": "GET /api/admin/tenants/{tenant}/users",
+   "method": "GET",
+   "path": "/api/admin/tenants/{tenant}/users",
+   "backend": "next",
+   "label": "admin tenants/[id]/users: GET"
+  },
+  {
+   "id": "POST /api/admin/tenants/{tenant}/users",
+   "method": "POST",
+   "path": "/api/admin/tenants/{tenant}/users",
+   "backend": "next",
+   "label": "admin tenants/[id]/users: POST"
+  },
+  {
+   "id": "DELETE /api/admin/tenants/{tenant}/users",
+   "method": "DELETE",
+   "path": "/api/admin/tenants/{tenant}/users",
+   "backend": "next",
+   "label": "admin tenants/[id]/users: DELETE"
+  },
+  {
+   "id": "POST /api/admin/test-channel",
+   "method": "POST",
+   "path": "/api/admin/test-channel",
+   "backend": "next",
+   "label": "admin test-channel: POST"
+  },
+  {
+   "id": "GET /api/admin/users",
+   "method": "GET",
+   "path": "/api/admin/users",
+   "backend": "next",
+   "label": "admin users: GET"
+  },
+  {
+   "id": "POST /api/admin/users",
+   "method": "POST",
+   "path": "/api/admin/users",
+   "backend": "next",
+   "label": "admin users: POST"
+  },
+  {
+   "id": "GET /api/admin/users/harness-probe",
+   "method": "GET",
+   "path": "/api/admin/users/harness-probe",
+   "backend": "next",
+   "label": "admin users/[id]: GET"
+  },
+  {
+   "id": "PATCH /api/admin/users/harness-probe",
+   "method": "PATCH",
+   "path": "/api/admin/users/harness-probe",
+   "backend": "next",
+   "label": "admin users/[id]: PATCH"
+  },
+  {
+   "id": "DELETE /api/admin/users/harness-probe",
+   "method": "DELETE",
+   "path": "/api/admin/users/harness-probe",
+   "backend": "next",
+   "label": "admin users/[id]: DELETE"
+  },
+  {
+   "id": "POST /api/admin/users/harness-probe/revoke-sessions",
+   "method": "POST",
+   "path": "/api/admin/users/harness-probe/revoke-sessions",
+   "backend": "next",
+   "label": "admin users/[id]/revoke-sessions: POST"
+  },
+  {
+   "id": "POST /api/admin/users/harness-probe/hard-delete",
+   "method": "POST",
+   "path": "/api/admin/users/harness-probe/hard-delete",
+   "backend": "next",
+   "label": "admin users/[id]/hard-delete: POST"
+  },
+  {
+   "id": "DELETE /api/admin/users/harness-probe/passkeys",
+   "method": "DELETE",
+   "path": "/api/admin/users/harness-probe/passkeys",
+   "backend": "next",
+   "label": "admin users/[id]/passkeys: DELETE"
+  },
+  {
+   "id": "POST /api/admin/users/set-password",
+   "method": "POST",
+   "path": "/api/admin/users/set-password",
+   "backend": "next",
+   "label": "admin users/set-password: POST"
+  },
+  {
+   "id": "GET /api/admin/workflow-instances",
+   "method": "GET",
+   "path": "/api/admin/workflow-instances",
+   "backend": "next",
+   "label": "admin workflow-instances: GET"
+  },
+  {
+   "id": "GET /api/admin/workflows",
+   "method": "GET",
+   "path": "/api/admin/workflows",
+   "backend": "next",
+   "label": "admin workflows: GET"
+  },
+  {
+   "id": "POST /api/admin/workflows",
+   "method": "POST",
+   "path": "/api/admin/workflows",
+   "backend": "next",
+   "label": "admin workflows: POST"
+  },
+  {
+   "id": "GET /api/admin/workflows/harness-probe",
+   "method": "GET",
+   "path": "/api/admin/workflows/harness-probe",
+   "backend": "next",
+   "label": "admin workflows/[id]: GET"
+  },
+  {
+   "id": "PUT /api/admin/workflows/harness-probe",
+   "method": "PUT",
+   "path": "/api/admin/workflows/harness-probe",
+   "backend": "next",
+   "label": "admin workflows/[id]: PUT"
+  },
+  {
+   "id": "DELETE /api/admin/workflows/harness-probe",
+   "method": "DELETE",
+   "path": "/api/admin/workflows/harness-probe",
+   "backend": "next",
+   "label": "admin workflows/[id]: DELETE"
+  },
+  {
+   "id": "POST /api/admin/workflows/harness-probe/duplicate",
+   "method": "POST",
+   "path": "/api/admin/workflows/harness-probe/duplicate",
+   "backend": "next",
+   "label": "admin workflows/[id]/duplicate: POST"
+  },
+  {
+   "id": "GET /api/admin/workflows/harness-probe/steps",
+   "method": "GET",
+   "path": "/api/admin/workflows/harness-probe/steps",
+   "backend": "next",
+   "label": "admin workflows/[id]/steps: GET"
+  },
+  {
+   "id": "POST /api/admin/workflows/harness-probe/steps",
+   "method": "POST",
+   "path": "/api/admin/workflows/harness-probe/steps",
+   "backend": "next",
+   "label": "admin workflows/[id]/steps: POST"
+  },
+  {
+   "id": "PUT /api/admin/workflows/harness-probe/steps/harness-probe",
+   "method": "PUT",
+   "path": "/api/admin/workflows/harness-probe/steps/harness-probe",
+   "backend": "next",
+   "label": "admin workflows/[id]/steps/[id]: PUT"
+  },
+  {
+   "id": "DELETE /api/admin/workflows/harness-probe/steps/harness-probe",
+   "method": "DELETE",
+   "path": "/api/admin/workflows/harness-probe/steps/harness-probe",
+   "backend": "next",
+   "label": "admin workflows/[id]/steps/[id]: DELETE"
+  },
+  {
+   "id": "GET /api/admin/workflows/stats",
+   "method": "GET",
+   "path": "/api/admin/workflows/stats",
+   "backend": "next",
+   "label": "admin workflows/stats: GET"
+  },
+  {
+   "id": "GET /api/fleet/vehicles?tenantId={other}",
+   "method": "GET",
+   "path": "/api/fleet/vehicles?tenantId={other}",
+   "backend": "next",
+   "label": "cross-tenant selector"
+  },
+  {
+   "id": "go GET /api/fleet/vehicles",
+   "method": "GET",
+   "path": "/api/fleet/vehicles",
+   "backend": "go",
+   "label": "go: GET /api/fleet/vehicles"
+  },
+  {
+   "id": "go GET /api/fleet/vehicles/v1",
+   "method": "GET",
+   "path": "/api/fleet/vehicles/v1",
+   "backend": "go",
+   "label": "go: GET /api/fleet/vehicles/v1"
+  },
+  {
+   "id": "go POST /api/fleet/vehicles",
+   "method": "POST",
+   "path": "/api/fleet/vehicles",
+   "backend": "go",
+   "label": "go: POST /api/fleet/vehicles"
+  },
+  {
+   "id": "go PATCH /api/fleet/vehicles/v1",
+   "method": "PATCH",
+   "path": "/api/fleet/vehicles/v1",
+   "backend": "go",
+   "label": "go: PATCH /api/fleet/vehicles/v1"
+  },
+  {
+   "id": "go DELETE /api/fleet/vehicles/v1",
+   "method": "DELETE",
+   "path": "/api/fleet/vehicles/v1",
+   "backend": "go",
+   "label": "go: DELETE /api/fleet/vehicles/v1"
+  },
+  {
+   "id": "go GET /api/fleet/drivers",
+   "method": "GET",
+   "path": "/api/fleet/drivers",
+   "backend": "go",
+   "label": "go: GET /api/fleet/drivers"
+  },
+  {
+   "id": "go GET /api/fleet/drivers/d1",
+   "method": "GET",
+   "path": "/api/fleet/drivers/d1",
+   "backend": "go",
+   "label": "go: GET /api/fleet/drivers/d1"
+  },
+  {
+   "id": "go GET /api/fleet/garages",
+   "method": "GET",
+   "path": "/api/fleet/garages",
+   "backend": "go",
+   "label": "go: GET /api/fleet/garages"
+  },
+  {
+   "id": "go POST /api/fleet/garages",
+   "method": "POST",
+   "path": "/api/fleet/garages",
+   "backend": "go",
+   "label": "go: POST /api/fleet/garages"
+  },
+  {
+   "id": "go PUT /api/fleet/garages/g1",
+   "method": "PUT",
+   "path": "/api/fleet/garages/g1",
+   "backend": "go",
+   "label": "go: PUT /api/fleet/garages/g1"
+  },
+  {
+   "id": "go GET /api/maintenance/requests",
+   "method": "GET",
+   "path": "/api/maintenance/requests",
+   "backend": "go",
+   "label": "go: GET /api/maintenance/requests"
+  },
+  {
+   "id": "go GET /api/maintenance/requests/m1",
+   "method": "GET",
+   "path": "/api/maintenance/requests/m1",
+   "backend": "go",
+   "label": "go: GET /api/maintenance/requests/m1"
+  },
+  {
+   "id": "go POST /api/maintenance/requests",
+   "method": "POST",
+   "path": "/api/maintenance/requests",
+   "backend": "go",
+   "label": "go: POST /api/maintenance/requests"
+  },
+  {
+   "id": "go PATCH /api/maintenance/requests/m1",
+   "method": "PATCH",
+   "path": "/api/maintenance/requests/m1",
+   "backend": "go",
+   "label": "go: PATCH /api/maintenance/requests/m1"
+  },
+  {
+   "id": "go GET /api/maintenance/predictive",
+   "method": "GET",
+   "path": "/api/maintenance/predictive",
+   "backend": "go",
+   "label": "go: GET /api/maintenance/predictive"
+  },
+  {
+   "id": "go GET /api/service/requests",
+   "method": "GET",
+   "path": "/api/service/requests",
+   "backend": "go",
+   "label": "go: GET /api/service/requests"
+  },
+  {
+   "id": "go POST /api/service/requests",
+   "method": "POST",
+   "path": "/api/service/requests",
+   "backend": "go",
+   "label": "go: POST /api/service/requests"
+  },
+  {
+   "id": "go PATCH /api/service/requests/s1",
+   "method": "PATCH",
+   "path": "/api/service/requests/s1",
+   "backend": "go",
+   "label": "go: PATCH /api/service/requests/s1"
+  },
+  {
+   "id": "go POST /api/quotations",
+   "method": "POST",
+   "path": "/api/quotations",
+   "backend": "go",
+   "label": "go: POST /api/quotations"
+  },
+  {
+   "id": "go PUT /api/quotations/q1",
+   "method": "PUT",
+   "path": "/api/quotations/q1",
+   "backend": "go",
+   "label": "go: PUT /api/quotations/q1"
+  },
+  {
+   "id": "go PATCH /api/quotations/q1",
+   "method": "PATCH",
+   "path": "/api/quotations/q1",
+   "backend": "go",
+   "label": "go: PATCH /api/quotations/q1"
+  },
+  {
+   "id": "go POST /api/alerts",
+   "method": "POST",
+   "path": "/api/alerts",
+   "backend": "go",
+   "label": "go: POST /api/alerts"
+  },
+  {
+   "id": "go GET /api/alerts/configs",
+   "method": "GET",
+   "path": "/api/alerts/configs",
+   "backend": "go",
+   "label": "go: GET /api/alerts/configs"
+  },
+  {
+   "id": "go POST /api/alerts/configs",
+   "method": "POST",
+   "path": "/api/alerts/configs",
+   "backend": "go",
+   "label": "go: POST /api/alerts/configs"
+  },
+  {
+   "id": "go PATCH /api/alerts/configs/c1",
+   "method": "PATCH",
+   "path": "/api/alerts/configs/c1",
+   "backend": "go",
+   "label": "go: PATCH /api/alerts/configs/c1"
+  },
+  {
+   "id": "go DELETE /api/alerts/configs/c1",
+   "method": "DELETE",
+   "path": "/api/alerts/configs/c1",
+   "backend": "go",
+   "label": "go: DELETE /api/alerts/configs/c1"
+  },
+  {
+   "id": "go POST /api/files/upload",
+   "method": "POST",
+   "path": "/api/files/upload",
+   "backend": "go",
+   "label": "go: POST /api/files/upload"
+  },
+  {
+   "id": "go GET /api/files/sign",
+   "method": "GET",
+   "path": "/api/files/sign",
+   "backend": "go",
+   "label": "go: GET /api/files/sign"
+  },
+  {
+   "id": "go DELETE /api/files",
+   "method": "DELETE",
+   "path": "/api/files",
+   "backend": "go",
+   "label": "go: DELETE /api/files"
+  },
+  {
+   "id": "go GET /api/logistics/shipments",
+   "method": "GET",
+   "path": "/api/logistics/shipments",
+   "backend": "go",
+   "label": "go: GET /api/logistics/shipments"
+  },
+  {
+   "id": "go GET /api/logistics/shipments/s1",
+   "method": "GET",
+   "path": "/api/logistics/shipments/s1",
+   "backend": "go",
+   "label": "go: GET /api/logistics/shipments/s1"
+  },
+  {
+   "id": "go POST /api/logistics/shipments",
+   "method": "POST",
+   "path": "/api/logistics/shipments",
+   "backend": "go",
+   "label": "go: POST /api/logistics/shipments"
+  },
+  {
+   "id": "go GET /api/logistics/stats",
+   "method": "GET",
+   "path": "/api/logistics/stats",
+   "backend": "go",
+   "label": "go: GET /api/logistics/stats"
+  },
+  {
+   "id": "go GET /api/logistics/analytics",
+   "method": "GET",
+   "path": "/api/logistics/analytics",
+   "backend": "go",
+   "label": "go: GET /api/logistics/analytics"
+  },
+  {
+   "id": "go GET /api/logistics/sla",
+   "method": "GET",
+   "path": "/api/logistics/sla",
+   "backend": "go",
+   "label": "go: GET /api/logistics/sla"
+  },
+  {
+   "id": "go GET /api/logistics/carriers",
+   "method": "GET",
+   "path": "/api/logistics/carriers",
+   "backend": "go",
+   "label": "go: GET /api/logistics/carriers"
+  },
+  {
+   "id": "go POST /api/logistics/carriers",
+   "method": "POST",
+   "path": "/api/logistics/carriers",
+   "backend": "go",
+   "label": "go: POST /api/logistics/carriers"
+  },
+  {
+   "id": "go POST /api/logistics/rate-contracts",
+   "method": "POST",
+   "path": "/api/logistics/rate-contracts",
+   "backend": "go",
+   "label": "go: POST /api/logistics/rate-contracts"
+  },
+  {
+   "id": "go POST /api/logistics/rates/quote",
+   "method": "POST",
+   "path": "/api/logistics/rates/quote",
+   "backend": "go",
+   "label": "go: POST /api/logistics/rates/quote"
+  },
+  {
+   "id": "go GET /api/logistics/rfqs",
+   "method": "GET",
+   "path": "/api/logistics/rfqs",
+   "backend": "go",
+   "label": "go: GET /api/logistics/rfqs"
+  },
+  {
+   "id": "go POST /api/logistics/bids",
+   "method": "POST",
+   "path": "/api/logistics/bids",
+   "backend": "go",
+   "label": "go: POST /api/logistics/bids"
+  },
+  {
+   "id": "go POST /api/logistics/shipments/s1/tracking",
+   "method": "POST",
+   "path": "/api/logistics/shipments/s1/tracking",
+   "backend": "go",
+   "label": "go: POST /api/logistics/shipments/s1/tracking"
+  },
+  {
+   "id": "go GET /api/logistics/finance/reconciliation",
+   "method": "GET",
+   "path": "/api/logistics/finance/reconciliation",
+   "backend": "go",
+   "label": "go: GET /api/logistics/finance/reconciliation"
+  },
+  {
+   "id": "go POST /api/logistics/planner/optimize",
+   "method": "POST",
+   "path": "/api/logistics/planner/optimize",
+   "backend": "go",
+   "label": "go: POST /api/logistics/planner/optimize"
+  },
+  {
+   "id": "go POST /api/logistics/planner/plans/p1/commit",
+   "method": "POST",
+   "path": "/api/logistics/planner/plans/p1/commit",
+   "backend": "go",
+   "label": "go: POST /api/logistics/planner/plans/p1/commit"
+  },
+  {
+   "id": "go POST /api/admin/tenants",
+   "method": "POST",
+   "path": "/api/admin/tenants",
+   "backend": "go",
+   "label": "go: POST /api/admin/tenants"
+  },
+  {
+   "id": "go GET /api/admin/tenants/{tenant}",
+   "method": "GET",
+   "path": "/api/admin/tenants/{tenant}",
+   "backend": "go",
+   "label": "go: GET /api/admin/tenants/{tenant}"
+  },
+  {
+   "id": "go PATCH /api/admin/tenants/{tenant}",
+   "method": "PATCH",
+   "path": "/api/admin/tenants/{tenant}",
+   "backend": "go",
+   "label": "go: PATCH /api/admin/tenants/{tenant}"
+  },
+  {
+   "id": "go POST /api/admin/tenants/{tenant}/suspend",
+   "method": "POST",
+   "path": "/api/admin/tenants/{tenant}/suspend",
+   "backend": "go",
+   "label": "go: POST /api/admin/tenants/{tenant}/suspend"
+  },
+  {
+   "id": "go POST /api/admin/tenants/{tenant}/offboard",
+   "method": "POST",
+   "path": "/api/admin/tenants/{tenant}/offboard",
+   "backend": "go",
+   "label": "go: POST /api/admin/tenants/{tenant}/offboard"
+  },
+  {
+   "id": "go GET /api/admin/tenants/{tenant}/audit",
+   "method": "GET",
+   "path": "/api/admin/tenants/{tenant}/audit",
+   "backend": "go",
+   "label": "go: GET /api/admin/tenants/{tenant}/audit"
+  },
+  {
+   "id": "go GET /api/admin/tenants/{tenant}/plan",
+   "method": "GET",
+   "path": "/api/admin/tenants/{tenant}/plan",
+   "backend": "go",
+   "label": "go: GET /api/admin/tenants/{tenant}/plan"
+  },
+  {
+   "id": "go POST /api/admin/tenants/{tenant}/invitations",
+   "method": "POST",
+   "path": "/api/admin/tenants/{tenant}/invitations",
+   "backend": "go",
+   "label": "go: POST /api/admin/tenants/{tenant}/invitations"
+  },
+  {
+   "id": "go POST /api/admin/audit/verify",
+   "method": "POST",
+   "path": "/api/admin/audit/verify",
+   "backend": "go",
+   "label": "go: POST /api/admin/audit/verify"
+  },
+  {
+   "id": "go GET /api/dispatch/trips",
+   "method": "GET",
+   "path": "/api/dispatch/trips",
+   "backend": "go",
+   "label": "go: GET /api/dispatch/trips"
+  },
+  {
+   "id": "go POST /api/dispatch/trips",
+   "method": "POST",
+   "path": "/api/dispatch/trips",
+   "backend": "go",
+   "label": "go: POST /api/dispatch/trips"
+  },
+  {
+   "id": "go DELETE /api/dispatch/trips/t1",
+   "method": "DELETE",
+   "path": "/api/dispatch/trips/t1",
+   "backend": "go",
+   "label": "go: DELETE /api/dispatch/trips/t1"
+  },
+  {
+   "id": "go GET /api/dispatch/incidents",
+   "method": "GET",
+   "path": "/api/dispatch/incidents",
+   "backend": "go",
+   "label": "go: GET /api/dispatch/incidents"
+  },
+  {
+   "id": "go POST /api/dispatch/incidents",
+   "method": "POST",
+   "path": "/api/dispatch/incidents",
+   "backend": "go",
+   "label": "go: POST /api/dispatch/incidents"
+  },
+  {
+   "id": "go GET /api/dispatch/ambulance-calls",
+   "method": "GET",
+   "path": "/api/dispatch/ambulance-calls",
+   "backend": "go",
+   "label": "go: GET /api/dispatch/ambulance-calls"
+  },
+  {
+   "id": "go POST /api/dispatch/ambulance-calls",
+   "method": "POST",
+   "path": "/api/dispatch/ambulance-calls",
+   "backend": "go",
+   "label": "go: POST /api/dispatch/ambulance-calls"
+  },
+  {
+   "id": "go PATCH /api/dispatch/ambulance-calls/a1",
+   "method": "PATCH",
+   "path": "/api/dispatch/ambulance-calls/a1",
+   "backend": "go",
+   "label": "go: PATCH /api/dispatch/ambulance-calls/a1"
+  },
+  {
+   "id": "go GET /api/dispatch/routes",
+   "method": "GET",
+   "path": "/api/dispatch/routes",
+   "backend": "go",
+   "label": "go: GET /api/dispatch/routes"
+  },
+  {
+   "id": "go GET /api/dispatch/trips/t1/passengers",
+   "method": "GET",
+   "path": "/api/dispatch/trips/t1/passengers",
+   "backend": "go",
+   "label": "go: GET /api/dispatch/trips/t1/passengers"
+  }
+ ],
+ "expected": {
+  "SUPER_ADMIN": {
+   "PRO": "11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+   "TRIAL": "11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "TENANT_ADMIN": {
+   "PRO": "11111111111111111111111111111111111111111111111111111100111111111111110011111111111111001111110111111111110011111101111011111111111111111111111111111111101111101111111111111110000111111111111111111000011111111111111111111111111111111111110111111111111101111110111111111111111110000000000000111110010000001000000010000001011111000011111111111111111011101001111110111101111111111010000100011111111111101111111111111111111111111111111111111111111110100000101111111111",
+   "TRIAL": "10000011111000001000001111100000100000100000100000111000001000001000000010000010000010000010000010000011100000111101100000100000111110000010000010000010000010000011111110000110000011100000111000001000001000001000001110000010000010000011110111111111111101111000001111111111111110000000000000111110010000001000000010000001011111000011111111111111111011101001111110111101111111111010000100011111111111101111111111110011000001111111111011110011001000100000101001010011"
+  },
+  "LEASING_MANAGER": {
+   "PRO": "00000000110000000000001100000000000000000000000000110000000000000000000000000000000000000000000011111111100000000000000000000000000000000011111100000000000000000011111110000110000111000000110000001000010000000000001100000000000000000000000010100010000000000000000001100100110000000000000000000000010000000000000000000001000000000010001000000101010000101000000000000000000010000010000000010000000000000000000000000000000001000011100000000010000000100000000000000000",
+   "TRIAL": "00000000110000000000001100000000000000000000000000110000000000000000000000000000000000000000000010000011100000000000000000000000000000000010000000000000000000000011111110000110000011000000110000001000000000000000001100000000000000000000000010100010000000000000000001100100110000000000000000000000010000000000000000000001000000000010001000000101010000101000000000000000000010000010000000010000000000000000000000000000000001000011100000000010000000100000000000000000"
+  },
+  "LEASING_OPERATOR": {
+   "PRO": "00000000110000000000001100000000000000000000000000110000000000000000000000000000000000000000000011100011000000000000000000000000000000000011100000000000000000000011111110000100000011000000110000000000000000000000001100000000000000000000000010100010000000000000000001100100110000000000000000000000010000000000000000000001000000000010001000000101010000101000000000000000000010000010000000010000000000000000000000000000000001000011100000000010000000100000000000000000",
+   "TRIAL": "00000000110000000000001100000000000000000000000000110000000000000000000000000000000000000000000010000011000000000000000000000000000000000010000000000000000000000011111110000100000011000000110000000000000000000000001100000000000000000000000010100010000000000000000001100100110000000000000000000000010000000000000000000001000000000010001000000101010000101000000000000000000010000010000000010000000000000000000000000000000001000011100000000010000000100000000000000000"
+  },
+  "RAC_MANAGER": {
+   "PRO": "00000000110000000000001100000000000000000000000000110000000000000000000000000000000000000000000000000011000000000000000000000000000000000000000000000000000000000011111110000110000011000000111111111000000000000000001100000000000000000000000010100010000000000000000001100100110000000000000000000000010000000000000000000001000000000010001000000101010000101000000000000000000010000010000000010000000000000000000000000000000001000011100000000010000000100000000000000000",
+   "TRIAL": "00000000110000000000001100000000000000000000000000110000000000000000000000000000000000000000000000000011000000000000000000000000000000000000000000000000000000000011111110000110000011000000111000001000000000000000001100000000000000000000000010100010000000000000000001100100110000000000000000000000010000000000000000000001000000000010001000000101010000101000000000000000000010000010000000010000000000000000000000000000000001000011100000000010000000100000000000000000"
+  },
+  "RAC_OPERATOR": {
+   "PRO": "00000000110000000000001100000000000000000000000000110000000000000000000000000000000000000000000000000011000000000000000000000000000000000000000000000000000000000011111110000100000011000000111110000000000000000000001100000000000000000000000010100010000000000000000001100100110000000000000000000000010000000000000000000001000000000010001000000101010000101000000000000000000010000010000000010000000000000000000000000000000001000011100000000010000000100000000000000000",
+   "TRIAL": "00000000110000000000001100000000000000000000000000110000000000000000000000000000000000000000000000000011000000000000000000000000000000000000000000000000000000000011111110000100000011000000111000000000000000000000001100000000000000000000000010100010000000000000000001100100110000000000000000000000010000000000000000000001000000000010001000000101010000101000000000000000000010000010000000010000000000000000000000000000000001000011100000000010000000100000000000000000"
+  },
+  "TRANSPORT_MANAGER": {
+   "PRO": "00000000110000000000001100000000000000111111111111110000000000000000000000000000000000000000000000000011000000000000000000000000000000000000000000000000000000000011111110000110000011000000110000001000001111110000001100000000000000000000000010100010000000000000000001100100110000000000000000000000010000000000000000000001000000000010001000000101010000101000000000000000000010000010000000010000000000000000000000000000000001000011100000000010000000100000000000000000",
+   "TRIAL": "00000000110000000000001100000000000000100000100000110000000000000000000000000000000000000000000000000011000000000000000000000000000000000000000000000000000000000011111110000110000011000000110000001000001000000000001100000000000000000000000010100010000000000000000001100100110000000000000000000000010000000000000000000001000000000010001000000101010000101000000000000000000010000010000000010000000000000000000000000000000001000011100000000010000000100000000000000000"
+  },
+  "TRANSPORT_OPERATOR": {
+   "PRO": "00000000110000000000001100000000000000111010111010110000000000000000000000000000000000000000000000000011000000000000000000000000000000000000000000000000000000000011111110000100000011000000110000000000001110100000001100000000000000000000000010100010000000000000000001100100110000000000000000000000010000000000000000000001000000000010001000000101010000101000000000000000000010000010000000010000000000000000000000000000000001000011100000000010000000100000000000000000",
+   "TRIAL": "00000000110000000000001100000000000000100000100000110000000000000000000000000000000000000000000000000011000000000000000000000000000000000000000000000000000000000011111110000100000011000000110000000000001000000000001100000000000000000000000010100010000000000000000001100100110000000000000000000000010000000000000000000001000000000010001000000101010000101000000000000000000010000010000000010000000000000000000000000000000001000011100000000010000000100000000000000000"
+  },
+  "FLEET_MANAGER": {
+   "PRO": "00000000110000000000001100000000000000000000000000110000000000000000000000000000000000000011110100000011000000111101111011000000000000000000000000000011101111101111111110000110000111000000110000001000010000000000001100000000000000000011110110100010111101001110110001100100110000000000000000000000010000000000000000000001000000000010001000000101010000101000000000000000000010000010000000010000000000001111111111111111110001000011100000000010000000100000000000000000",
+   "TRIAL": "00000000110000000000001100000000000000000000000000110000000000000000000000000000000000000010000000000011000000111101100000000000000000000000000000000010000010000011111110000110000011000000110000001000000000000000001100000000000000000011110110100010111101001000000001100100110000000000000000000000010000000000000000000001000000000010001000000101010000101000000000000000000010000010000000010000000000001111111111110011000001000011100000000010000000100000000000000000"
+  },
+  "FINANCE_MANAGER": {
+   "PRO": "10000000111000001000001100100000100000100000100000111000001000001000000010000010000010000010000011011111110011100000100000100000000010000011011110000010000010000011111110000110000111100000111000001000011000001000001110000010000010000010000010100010100000001000000001100100110000000000000000000000010000000000000000000001000000000010001000000101010000101000000000000000000010000010000000010000000000001100011100110011000001000011111011110011001000100000001001010011",
+   "TRIAL": "10000000111000001000001100100000100000100000100000111000001000001000000010000010000010000010000010000011100000100000100000100000000010000010000010000010000010000011111110000110000011100000111000001000001000001000001110000010000010000010000010100010100000001000000001100100110000000000000000000000010000000000000000000001000000000010001000000101010000101000000000000000000010000010000000010000000000001100011100110011000001000011111011110011001000100000001001010011"
+  },
+  "VIEWER": {
+   "PRO": "10000000111000001000001100100000100000100000100000111000001000001000000010000010000010000010000010000011100000100000100000100000000010000010000010000010000010000011111110000110000011100000111000001000001000001000001110000010000010000010000010100010100000001000000001100100110000000000000000000000010000000000000000000001000000000010001000000101010000101000000000000000000010000010000000010000000000001100011100110011000001000011111011110011001000100000001001010011",
+   "TRIAL": "10000000111000001000001100100000100000100000100000111000001000001000000010000010000010000010000010000011100000100000100000100000000010000010000010000010000010000011111110000110000011100000111000001000001000001000001110000010000010000010000010100010100000001000000001100100110000000000000000000000010000000000000000000001000000000010001000000101010000101000000000000000000010000010000000010000000000001100011100110011000001000011111011110011001000100000001001010011"
+  },
+  "PARTNER": {
+   "PRO": "00000000110000000000001100000000000000000000000000110000000000000000000000000000000000000000000000000011000000000000000000000000000000000000000000000000000000000011111110000100000011000000110000000000000000000000001100000000000000000000000010100010000000000000000001100100110000000000000000000000010000000000000000000001000000000010001000000101010000101000000000000000000010000010000000010000000000000000000000000000000001000011100000000010000000100000000000000000",
+   "TRIAL": "00000000110000000000001100000000000000000000000000110000000000000000000000000000000000000000000000000011000000000000000000000000000000000000000000000000000000000011111110000100000011000000110000000000000000000000001100000000000000000000000010100010000000000000000001100100110000000000000000000000010000000000000000000001000000000010001000000101010000101000000000000000000010000010000000010000000000000000000000000000000001000011100000000010000000100000000000000000"
+  }
+ },
+ "stepUp": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000011000000000000001100010110100000000100000101101101100000000000000000000010110100001010010001100011001011011100000000000000000000000000000000000000000000000000000000001011100100000000000",
+ "resources": [
+  {
+   "area": "assets",
+   "list": "/api/assets/ble-gateways",
+   "detail": "/api/assets/ble-gateways/{id}",
+   "writes": [
+    "PATCH"
+   ]
+  },
+  {
+   "area": "assets",
+   "list": "/api/assets/ble-tags",
+   "detail": "/api/assets/ble-tags/{id}",
+   "writes": [
+    "PATCH"
+   ]
+  },
+  {
+   "area": "assets",
+   "list": "/api/assets/dispatch",
+   "detail": "/api/assets/dispatch/{id}",
+   "writes": [
+    "PATCH"
+   ]
+  },
+  {
+   "area": "assets",
+   "list": "/api/assets/hva",
+   "detail": "/api/assets/hva/{id}",
+   "writes": [
+    "PATCH"
+   ]
+  },
+  {
+   "area": "assets",
+   "list": "/api/assets/medical",
+   "detail": "/api/assets/medical/{id}",
+   "writes": [
+    "PATCH"
+   ]
+  },
+  {
+   "area": "assets",
+   "list": "/api/assets/registry",
+   "detail": "/api/assets/registry/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "assets",
+   "list": "/api/assets/returns",
+   "detail": "/api/assets/returns/{id}",
+   "writes": [
+    "PATCH"
+   ]
+  },
+  {
+   "area": "assets",
+   "list": "/api/assets/spm/cycles",
+   "detail": "/api/assets/spm/cycles/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "assets",
+   "list": "/api/assets/spm/tickets",
+   "detail": "/api/assets/spm/tickets/{id}",
+   "writes": [
+    "PATCH"
+   ]
+  },
+  {
+   "area": "bookings",
+   "list": "/api/bookings",
+   "detail": "/api/bookings/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH",
+    "PUT"
+   ]
+  },
+  {
+   "area": "bus-ops",
+   "list": "/api/bus-ops/fleet-optimizer/runs",
+   "detail": "/api/bus-ops/fleet-optimizer/runs/{id}",
+   "writes": []
+  },
+  {
+   "area": "bus-ops",
+   "list": "/api/bus-ops/geofences",
+   "detail": "/api/bus-ops/geofences/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "bus-ops",
+   "list": "/api/bus-ops/incidents",
+   "detail": "/api/bus-ops/incidents/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "bus-ops",
+   "list": "/api/bus-ops/plan",
+   "detail": "/api/bus-ops/plan/{id}",
+   "writes": []
+  },
+  {
+   "area": "bus-ops",
+   "list": "/api/bus-ops/planning-constraints",
+   "detail": "/api/bus-ops/planning-constraints/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "bus-ops",
+   "list": "/api/bus-ops/route-passengers",
+   "detail": "/api/bus-ops/route-passengers/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "bus-ops",
+   "list": "/api/bus-ops/routes",
+   "detail": "/api/bus-ops/routes/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "bus-ops",
+   "list": "/api/bus-ops/schedule-templates",
+   "detail": "/api/bus-ops/schedule-templates/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "bus-ops",
+   "list": "/api/bus-ops/schedules",
+   "detail": "/api/bus-ops/schedules/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "bus-ops",
+   "list": "/api/bus-ops/staff",
+   "detail": "/api/bus-ops/staff/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "bus-ops",
+   "list": "/api/bus-ops/transport-calendars",
+   "detail": "/api/bus-ops/transport-calendars/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "bus-ops",
+   "list": "/api/bus-ops/transport-enrollments",
+   "detail": "/api/bus-ops/transport-enrollments/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "customers",
+   "list": "/api/customers",
+   "detail": "/api/customers/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "drivers",
+   "list": "/api/drivers",
+   "detail": "/api/drivers/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "finance",
+   "list": "/api/finance/coa",
+   "detail": "/api/finance/coa/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "finance",
+   "list": "/api/finance/collections",
+   "detail": "/api/finance/collections/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "finance",
+   "list": "/api/finance/credit-notes",
+   "detail": "/api/finance/credit-notes/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "finance",
+   "list": "/api/finance/debit-notes",
+   "detail": "/api/finance/debit-notes/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "finance",
+   "list": "/api/finance/expenses",
+   "detail": "/api/finance/expenses/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "finance",
+   "list": "/api/finance/fixed-assets",
+   "detail": "/api/finance/fixed-assets/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "finance",
+   "list": "/api/finance/invoices",
+   "detail": "/api/finance/invoices/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "finance",
+   "list": "/api/finance/journal-entries",
+   "detail": "/api/finance/journal-entries/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "finance",
+   "list": "/api/finance/payables",
+   "detail": "/api/finance/payables/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "finance",
+   "list": "/api/finance/pdc",
+   "detail": "/api/finance/pdc/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "finance",
+   "list": "/api/finance/vat",
+   "detail": "/api/finance/vat/{id}",
+   "writes": [
+    "PATCH"
+   ]
+  },
+  {
+   "area": "fleet",
+   "list": "/api/fleet/allocations",
+   "detail": "/api/fleet/allocations/{id}",
+   "writes": [
+    "DELETE",
+    "PUT"
+   ]
+  },
+  {
+   "area": "fleet",
+   "list": "/api/fleet/hos/logs",
+   "detail": "/api/fleet/hos/logs/{id}",
+   "writes": [
+    "PATCH"
+   ]
+  },
+  {
+   "area": "fleet",
+   "list": "/api/fleet/insurance",
+   "detail": "/api/fleet/insurance/{id}",
+   "writes": [
+    "DELETE",
+    "PUT"
+   ]
+  },
+  {
+   "area": "fleet",
+   "list": "/api/fleet/transfers",
+   "detail": "/api/fleet/transfers/{id}",
+   "writes": [
+    "DELETE",
+    "PUT"
+   ]
+  },
+  {
+   "area": "fleet",
+   "list": "/api/fleet/vehicle-types",
+   "detail": "/api/fleet/vehicle-types/{id}",
+   "writes": [
+    "DELETE",
+    "PUT"
+   ]
+  },
+  {
+   "area": "fleet",
+   "list": "/api/fleet/vehicles",
+   "detail": "/api/fleet/vehicles/{id}",
+   "writes": [
+    "DELETE",
+    "PUT"
+   ]
+  },
+  {
+   "area": "fleet",
+   "list": "/api/fleet/work-orders",
+   "detail": "/api/fleet/work-orders/{id}",
+   "writes": [
+    "DELETE",
+    "PUT"
+   ]
+  },
+  {
+   "area": "garages",
+   "list": "/api/garages",
+   "detail": "/api/garages/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH",
+    "PUT"
+   ]
+  },
+  {
+   "area": "incidents",
+   "list": "/api/incidents",
+   "detail": "/api/incidents/{id}",
+   "writes": [
+    "PATCH"
+   ]
+  },
+  {
+   "area": "leasing",
+   "list": "/api/leasing/contracts",
+   "detail": "/api/leasing/contracts/{id}",
+   "writes": [
+    "DELETE",
+    "PUT"
+   ]
+  },
+  {
+   "area": "leasing",
+   "list": "/api/leasing/contracts-v2",
+   "detail": "/api/leasing/contracts-v2/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "leasing",
+   "list": "/api/leasing/early-terminations",
+   "detail": "/api/leasing/early-terminations/{id}",
+   "writes": [
+    "PATCH"
+   ]
+  },
+  {
+   "area": "leasing",
+   "list": "/api/leasing/inquiries",
+   "detail": "/api/leasing/inquiries/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH",
+    "PUT"
+   ]
+  },
+  {
+   "area": "leasing",
+   "list": "/api/leasing/insurance",
+   "detail": "/api/leasing/insurance/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "leasing",
+   "list": "/api/leasing/invoices",
+   "detail": "/api/leasing/invoices/{id}",
+   "writes": [
+    "PATCH"
+   ]
+  },
+  {
+   "area": "leasing",
+   "list": "/api/leasing/lessees",
+   "detail": "/api/leasing/lessees/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "leasing",
+   "list": "/api/leasing/quotations",
+   "detail": "/api/leasing/quotations/{id}",
+   "writes": []
+  },
+  {
+   "area": "leasing",
+   "list": "/api/leasing/returns",
+   "detail": "/api/leasing/returns/{id}",
+   "writes": [
+    "PATCH"
+   ]
+  },
+  {
+   "area": "leasing",
+   "list": "/api/leasing/traffic-fines",
+   "detail": "/api/leasing/traffic-fines/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "logistics",
+   "list": "/api/logistics/control-tower",
+   "detail": "/api/logistics/control-tower/{id}",
+   "writes": []
+  },
+  {
+   "area": "logistics",
+   "list": "/api/logistics/planner/plans",
+   "detail": "/api/logistics/planner/plans/{id}",
+   "writes": []
+  },
+  {
+   "area": "logistics",
+   "list": "/api/logistics/shippers",
+   "detail": "/api/logistics/shippers/{id}",
+   "writes": [
+    "PATCH"
+   ]
+  },
+  {
+   "area": "logistics",
+   "list": "/api/logistics/shipping-requests",
+   "detail": "/api/logistics/shipping-requests/{id}",
+   "writes": [
+    "PATCH"
+   ]
+  },
+  {
+   "area": "maintenance-requests",
+   "list": "/api/maintenance-requests",
+   "detail": "/api/maintenance-requests/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "maintenance",
+   "list": "/api/maintenance/breakdown-reports",
+   "detail": "/api/maintenance/breakdown-reports/{id}",
+   "writes": [
+    "PATCH"
+   ]
+  },
+  {
+   "area": "maintenance",
+   "list": "/api/maintenance/pm-plans",
+   "detail": "/api/maintenance/pm-plans/{id}",
+   "writes": [
+    "DELETE",
+    "PUT"
+   ]
+  },
+  {
+   "area": "quotations",
+   "list": "/api/quotations",
+   "detail": "/api/quotations/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH",
+    "PUT"
+   ]
+  },
+  {
+   "area": "rental",
+   "list": "/api/rental/agreements",
+   "detail": "/api/rental/agreements/{id}",
+   "writes": [
+    "PATCH"
+   ]
+  },
+  {
+   "area": "rental",
+   "list": "/api/rental/ancillaries",
+   "detail": "/api/rental/ancillaries/{id}",
+   "writes": [
+    "DELETE"
+   ]
+  },
+  {
+   "area": "rental",
+   "list": "/api/rental/bookings",
+   "detail": "/api/rental/bookings/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "rental",
+   "list": "/api/rental/customers",
+   "detail": "/api/rental/customers/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "rental",
+   "list": "/api/rental/damage-claims",
+   "detail": "/api/rental/damage-claims/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "rental",
+   "list": "/api/rental/invoices",
+   "detail": "/api/rental/invoices/{id}",
+   "writes": [
+    "DELETE",
+    "PUT"
+   ]
+  },
+  {
+   "area": "rental",
+   "list": "/api/rental/pricing",
+   "detail": "/api/rental/pricing/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH",
+    "PUT"
+   ]
+  },
+  {
+   "area": "rental",
+   "list": "/api/rental/rate-events",
+   "detail": "/api/rental/rate-events/{id}",
+   "writes": [
+    "DELETE"
+   ]
+  },
+  {
+   "area": "rental",
+   "list": "/api/rental/rates",
+   "detail": "/api/rental/rates/{id}",
+   "writes": [
+    "DELETE",
+    "PUT"
+   ]
+  },
+  {
+   "area": "school-bus",
+   "list": "/api/school-bus/allocations",
+   "detail": "/api/school-bus/allocations/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "school-bus",
+   "list": "/api/school-bus/fees",
+   "detail": "/api/school-bus/fees/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "school-bus",
+   "list": "/api/school-bus/routes",
+   "detail": "/api/school-bus/routes/{id}",
+   "writes": [
+    "POST"
+   ]
+  },
+  {
+   "area": "school-bus",
+   "list": "/api/school-bus/stops",
+   "detail": "/api/school-bus/stops/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "school-bus",
+   "list": "/api/school-bus/students",
+   "detail": "/api/school-bus/students/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "school-bus",
+   "list": "/api/school-bus/trips",
+   "detail": "/api/school-bus/trips/{id}",
+   "writes": [
+    "PATCH"
+   ]
+  },
+  {
+   "area": "service-requests",
+   "list": "/api/service-requests",
+   "detail": "/api/service-requests/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "service-tickets",
+   "list": "/api/service-tickets",
+   "detail": "/api/service-tickets/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  },
+  {
+   "area": "vehicles",
+   "list": "/api/vehicles",
+   "detail": "/api/vehicles/{id}",
+   "writes": [
+    "DELETE",
+    "PATCH"
+   ]
+  }
+ ]
+}

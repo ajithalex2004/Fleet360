@@ -126,3 +126,7 @@ classes.dex
 # Local scratch scripts
 test_claude.py
 /.audit-reports/
+
+# Security harness: evidence reports and the accounts file (names env vars, no secrets, but site-specific)
+/security-evidence/
+/harness.accounts.json

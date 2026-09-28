@@ -152,13 +152,27 @@ interface CredentialRow {
   mfa_recovery_codes: string[] | null;
 }
 
+/**
+ * The user's credentials. Read as one JSON row: is_active, password_hash
+ * and the mfa_* columns are added at runtime (ensureMfaColumns and
+ * friends) and may be missing from a freshly migrated database, where a
+ * query naming them would fail. A missing is_active counts as active.
+ */
 async function credentialRow(userId: string): Promise<CredentialRow | null> {
-  const rows = await withPlatformAdmin(prisma, (tx) => tx.$queryRawUnsafe<CredentialRow[]>(
-    `SELECT email, username, password_hash, mfa_enabled, mfa_secret, mfa_recovery_codes
-       FROM "User" WHERE id = $1 AND is_active = true LIMIT 1`,
+  const rows = await withPlatformAdmin(prisma, (tx) => tx.$queryRawUnsafe<Array<{ row: Record<string, unknown> }>>(
+    `SELECT to_jsonb(u) AS row FROM "User" u WHERE u.id = $1 LIMIT 1`,
     userId,
   ));
-  return rows[0] ?? null;
+  const r = rows[0]?.row;
+  if (!r || r.is_active === false) return null;
+  return {
+    email: String(r.email ?? ''),
+    username: String(r.username ?? ''),
+    password_hash: typeof r.password_hash === 'string' ? r.password_hash : null,
+    mfa_enabled: r.mfa_enabled === true,
+    mfa_secret: typeof r.mfa_secret === 'string' ? r.mfa_secret : null,
+    mfa_recovery_codes: Array.isArray(r.mfa_recovery_codes) ? (r.mfa_recovery_codes as string[]) : null,
+  };
 }
 
 /** What a user must present to register their first passkey. */
