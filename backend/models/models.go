@@ -54,6 +54,22 @@ func (m *Model) BeforeCreate(tx *gorm.DB) (err error) {
 	return
 }
 
+// PlainModel is Model for tables without a deleted_at column: embedding
+// Model there makes every query add "deleted_at IS NULL" and fail.
+type PlainModel struct {
+	ID        string    `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// BeforeCreate hook to generate UUID if ID is empty
+func (m *PlainModel) BeforeCreate(tx *gorm.DB) (err error) {
+	if m.ID == "" {
+		m.ID = uuid.New().String()
+	}
+	return
+}
+
 // Vehicle
 type Vehicle struct {
 	Model

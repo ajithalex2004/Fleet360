@@ -14,7 +14,7 @@ package handlers
 //
 // What's wired:
 //   - List/Create/Get/Update/Delete for trip_schedules (the central entity)
-//   - List/Create/Get/Update for trip_incidents (incident reports)
+//   - List/Create/Get/Update for incidents (operations.incidents)
 //   - List/Create/Get/Update for ambulance_calls (emergency dispatch)
 //   - List/Get for trip_logs (driver-reported — write path is from driver
 //     app, separate endpoint family)
@@ -32,9 +32,12 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
+	"math/rand"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"fleet360-backend/auth"
 	"fleet360-backend/models"
@@ -290,13 +293,18 @@ func ListAmbulanceCalls(c *gin.Context) {
 	if s := strings.TrimSpace(c.Query("status")); s != "" {
 		q = q.Where("status IN ?", splitCSV(s))
 	}
-	if sev := strings.TrimSpace(c.Query("severity")); sev != "" {
-		q = q.Where("severity = ?", sev)
+	// priority; severity is its earlier name.
+	priority := strings.TrimSpace(c.Query("priority"))
+	if priority == "" {
+		priority = strings.TrimSpace(c.Query("severity"))
+	}
+	if priority != "" {
+		q = q.Where("priority = ?", priority)
 	}
 	var total int64
 	q.Count(&total)
 	var calls []models.AmbulanceCall
-	if err := q.Order("received_at DESC").
+	if err := q.Order("call_received_at DESC").
 		Limit(limit).Offset(offset).
 		Find(&calls).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -315,8 +323,15 @@ func CreateAmbulanceCall(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	in.PickupLocation = strings.TrimSpace(in.PickupLocation)
+	if in.PickupLocation == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "pickupLocation is required"})
+		return
+	}
 	in.TenantID = tid
 	in.ID = ""
+	// Numbered as /api/ambulance/calls does: AMB-YYYYMMDD-NNNN.
+	in.CallNo = fmt.Sprintf("AMB-%s-%04d", time.Now().UTC().Format("20060102"), 1000+rand.Intn(9000))
 	if err := auth.TenantDB(c).Create(&in).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
