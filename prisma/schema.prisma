@@ -7324,3 +7324,19 @@ model PartnerScorecard {
   @@schema("public")
 }
 
+
+/// Sessions issued before `notBefore` are invalid for this scope (a user, a
+/// tenant, or a user in one tenant). See src/lib/auth/session-revocation.ts
+/// and migration 20260929090000_session_revocations.
+model SessionRevocation {
+  id         String   @id @default(dbgenerated("gen_random_uuid()::text"))
+  userId     String?  @map("user_id")
+  tenantId   String?  @map("tenant_id")
+  notBefore  DateTime @map("not_before") @db.Timestamptz(6)
+  reason     String
+  revokedBy  String?  @map("revoked_by")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("session_revocations")
+  @@schema("public")
+}

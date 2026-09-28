@@ -123,6 +123,8 @@ export const ADMIN_ROUTE_POLICY: Record<string, Partial<Record<Method, AdminLeve
   // User rows and stay platform-only.
   'users':                                       { GET: 'member', POST: 'platform' },
   'users/[id]':                                  { GET: 'platform', PATCH: 'platform', DELETE: 'platform' },
+  // Ends a user's sessions within 60 s; a tenant admin only in their own tenant.
+  'users/[id]/revoke-sessions':                  { POST: 'admin' },
   'users/[id]/hard-delete':                      { POST: 'platform' },
   'users/set-password':                          { POST: 'platform' },
   'workflow-instances':                          { GET: 'member' },   // approvals page

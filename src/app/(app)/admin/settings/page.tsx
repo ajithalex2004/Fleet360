@@ -234,7 +234,11 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
         body: JSON.stringify({ user_id: user.id, current_password: form.current, new_password: form.next }),
       });
       const data = await res.json();
-      if (res.ok) { setResult({ ok: true }); setTimeout(onClose, 1500); }
+      if (res.ok) {
+        setResult({ ok: true });
+        // Changing the password signs out every session, this one included.
+        setTimeout(() => { if (data.reauthenticate) window.location.href = '/login'; else onClose(); }, 1500);
+      }
       else { setResult({ error: data.error || 'Failed to change password' }); }
     } catch { setResult({ error: 'Network error' }); }
     finally { setSaving(false); }
@@ -303,7 +307,7 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
         </div>
         {result && (
           <div className={`mt-4 p-3 rounded-xl text-sm ${result.ok ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-red-500/20 text-red-300 border border-red-500/30'}`}>
-            {result.ok ? '✓ Password changed successfully!' : `✕ ${result.error}`}
+            {result.ok ? '✓ Password changed. Signing you out so you can sign in with the new password…' : `✕ ${result.error}`}
           </div>
         )}
         <div className="flex gap-3 mt-6">

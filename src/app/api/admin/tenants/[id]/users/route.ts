@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 
+import { revokeSessionsSafely } from '@/lib/auth/session-revocation';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls, withPlatformAdmin } from '@/lib/rls';
@@ -105,7 +106,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     if (roleDenied) return roleDenied;
 
     // Upsert membership inside the tenant-scoped transaction.
-    return await withTenantRls(prisma, params.id, async (tx) => {
+    const { ut, roleChanged } = await withTenantRls(prisma, params.id, async (tx) => {
       const existing = await tx.userTenant.findUnique({
         where: { userId_tenantId: { userId, tenantId: params.id } },
       });
@@ -118,9 +119,13 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         : await tx.userTenant.create({
             data: { userId, tenantId: params.id, roleId },
           });
-
-      return NextResponse.json(ut, { status: 201 });
+      return { ut, roleChanged: !!existing && existing.roleId !== roleId };
     });
+    // Sessions signed with the old role (and its permissions) end within 60 s.
+    if (roleChanged) {
+      await revokeSessionsSafely({ userId, tenantId: params.id, reason: 'role-changed', revokedBy: authz.userId });
+    }
+    return NextResponse.json(ut, { status: 201 });
     } catch (e) {
     console.error('POST /api/admin/tenants/[id]/users error:', e);
     if (errorCode(e) === 'P2002') {
@@ -152,6 +157,7 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
     await withTenantRls(prisma, params.id, (tx) =>
       tx.userTenant.deleteMany({ where: { tenantId: params.id, userId } })
     );
+    await revokeSessionsSafely({ userId, tenantId: params.id, reason: 'membership-removed', revokedBy: authz.userId });
     return NextResponse.json({ success: true });
     } catch (e) {
     console.error('DELETE /api/admin/tenants/[id]/users error:', e);

@@ -84,11 +84,44 @@ and logged with every decision. The permission catalogue has its own
 version (`CATALOGUE_VERSION`, a hash of `ALL_PERMISSIONS`); new permissions
 are appended to the catalogue so existing claims keep their meaning.
 
+## Session revocation (60 seconds)
+
+A change to someone's access ends the sessions issued before it, on every
+instance, within `REVOCATION_RECHECK_MS` (60 s). They sign in again and get
+a session with their current role and permissions.
+
+A revocation records "sessions issued before this moment are invalid" for
+one of three scopes, in `session_revocations` (one row per scope):
+
+| Scope | Triggered by |
+|---|---|
+| user, every tenant | user deactivated or deleted, module access changed, password reset / changed / set by an admin, "sign out everywhere" (`POST /api/auth/logout-all`), a platform admin revoking a user (`POST /api/admin/users/[id]/revoke-sessions`) |
+| user in one tenant | role changed, membership removed, a tenant admin revoking a member |
+| tenant | tenant deactivated or its plan changed, a tenant role's permissions or code changed or the role deleted, a role override created |
+
+A platform role change revokes every user holding that role
+(`holdersOfRole` / `revokeRoleHolders` in `src/lib/auth/session-revocation.ts`).
+Each revocation is audited (entity `Session`).
+
+Where it is checked:
+
+- **Next.js** (`verifySession`, edge middleware): sessions carry `iat`; the
+  three "not before" moments are read from the **Upstash Redis** mirror
+  (`sess:nbf:*`) in one MGET, cached per instance for 60 s. Without Redis
+  configured, revocations do not reach Next.js sessions (they expire after
+  24 h as before) and a warning is logged on each revocation.
+- **Go backend** (`auth.Middleware`): reads `session_revocations` directly,
+  cached per (user, tenant) for 60 s; compares at whole seconds (JWT `iat`).
+
+Both fail open on store errors (last known value, else not revoked): an
+outage must not sign everyone out. Changing your own password signs you out
+everywhere, including the current browser.
+
+`/api/users` now lists and reads only members of the caller's tenant; it no
+longer creates, edits or deletes users (use `/api/admin/users`).
+
 ## Not yet covered (next steps)
 
-- **Revocation window:** permissions are signed into sessions that live 24
-  hours; removing a role takes effect at the next sign-in. A per-user
-  session version with a short re-check interval is the next step.
 - **Step-up authentication** (WebAuthn) for high-impact admin actions.
 - **Go handlers:** requests proxied through Next.js (`/api/<module>` →
   Go) are decided here first; direct calls to Go check only the tenant.

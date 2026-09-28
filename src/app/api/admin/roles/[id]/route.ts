@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 
+import { holdersOfRole, revokeRoleHolders } from '@/lib/auth/session-revocation';
 import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
@@ -70,12 +71,15 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     }
     // Super Admin can update any role including system roles
     // This allows editing name, description, isSystem flag etc.
+    const holders = data.code !== undefined ? await holdersOfRole(params.id) : null;
     const role = await withPlatformAdmin(prisma, (tx) =>
       tx.role.update({
         where: { id: params.id },
         data,
       })
     );
+    // The code is signed into holders' sessions.
+    await revokeRoleHolders(holders, 'role-code-changed', authz.userId);
     await revalidateCache(CACHE_TAG);
     return NextResponse.json(role);
   } catch (e) {
@@ -98,9 +102,11 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
   try {
     // Super Admin can delete any role including system roles
     // The UI already shows a warning confirmation for system roles
+    const holders = await holdersOfRole(params.id);
     await withPlatformAdmin(prisma, (tx) =>
       tx.role.delete({ where: { id: params.id } })
     );
+    await revokeRoleHolders(holders, 'role-deleted', authz.userId);
     await revalidateCache(CACHE_TAG);
     return NextResponse.json({ success: true });
     } catch (e) {

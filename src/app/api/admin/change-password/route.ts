@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 
+import { revokeSessionsSafely } from '@/lib/auth/session-revocation';
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
@@ -40,12 +41,10 @@ export async function POST(req: NextRequest) {
   const body = stripTenantOwnershipFields(bodyRaw);
     const { current_password, new_password } = body;
 
-    // Always prefer the JWT-verified middleware header — it comes from the signed
-    // session cookie and cannot be spoofed by the client.  Fall back to body only
-    // when the middleware header is absent (e.g. direct API calls in tests).
-    const user_id = req.headers.get('x-user-id') || body.user_id;
-
-    console.log('[change-password] user_id from header:', req.headers.get('x-user-id'), '| from body:', body.user_id);
+    // Only the signed-in user's own password: the id comes from the verified
+    // session (middleware), never from the request body.
+    const user_id = req.headers.get('x-user-id');
+    if (!user_id) return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
 
     if (!user_id || !current_password || !new_password) {
       return NextResponse.json({ error: 'All fields are required' }, { status: 400 });
@@ -98,14 +97,17 @@ export async function POST(req: NextRequest) {
     // NOTE: User table is legacy — column is camelCase "updatedAt" (quoted at
     // CREATE TABLE time), not snake_case. Prisma model has no @map on it.
     // Unquoted identifiers in Postgres fold to lowercase, so this MUST be quoted.
-    return withPlatformAdmin(prisma, async (tx) => {
-      await tx.$executeRawUnsafe(
-        `UPDATE "User" SET password_hash = $1, "updatedAt" = NOW() WHERE id = $2`,
-        newHash,
-        user_id,
-      );
-      return NextResponse.json({ ok: true, message: 'Password changed successfully' });
-    });
+    await withPlatformAdmin(prisma, (tx) => tx.$executeRawUnsafe(
+      `UPDATE "User" SET password_hash = $1, "updatedAt" = NOW() WHERE id = $2`,
+      newHash,
+      user_id,
+    ));
+    // Sign out everywhere, this browser included: the user signs in again
+    // with the new password.
+    await revokeSessionsSafely({ userId: user_id, reason: 'password-changed', revokedBy: user_id });
+    const res = NextResponse.json({ ok: true, reauthenticate: true, message: 'Password changed. Please sign in again.' });
+    res.cookies.set('xl-session', '', { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', path: '/', maxAge: 0 });
+    return res;
     } catch (err) {
     console.error('[change-password]', err);
     const msg = err instanceof Error ? err.message : String(err);

@@ -167,16 +167,6 @@ const RULE_EXEMPTIONS = [
 
   // ── Webhooks & Inbound Ingestion ───────────────────────────────────────────
   {
-    file: 'src/app/api/telematics/webhook/route.ts',
-    method: 'POST',
-    type: 'missing_auth',
-    reason: 'Telematics IoT gateway webhook endpoint. External telematics gateways authenticate via x-webhook-secret / x-telematics-secret and specify tenantId via headers or query parameters, with all database writes strictly executed under withTenantRls.',
-    authMechanism: 'x-webhook-secret / x-telematics-secret header',
-    dataScope: 'Telemetry batch ingestion under target tenant context via processTelemetryBatch',
-    owner: 'Telematics & IoT Engineering',
-    test: 'tests/telematics/webhook.test.ts',
-  },
-  {
     file: 'src/app/api/integrations/enterprise/webhook/[id]/route.ts',
     method: 'POST',
     type: 'missing_auth',

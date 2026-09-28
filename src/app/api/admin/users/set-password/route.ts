@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic';
  * Body: { userId: string, password: string }
  */
 
+import { revokeSessionsSafely } from '@/lib/auth/session-revocation';
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
@@ -62,6 +63,12 @@ export async function POST(request: NextRequest) {
       );
 
       return NextResponse.json({ ok: true });
+    }).then(async (res) => {
+      // Password set by an administrator: the user's sessions end within 60 s.
+      if (res.status === 200) {
+        await revokeSessionsSafely({ userId, reason: 'password-set-by-admin', revokedBy: authz.userId });
+      }
+      return res;
     });
     } catch (err) {
     console.error('[set-password]', err);

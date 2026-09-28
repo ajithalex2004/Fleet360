@@ -36,6 +36,7 @@ export const dynamic = 'force-dynamic';
  * Response: 201 with the new role including its permission count.
  */
 
+import { revokeSessionsSafely } from '@/lib/auth/session-revocation';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
@@ -145,6 +146,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Holders of the platform role in this tenant now get the override's
+    // permissions: their current sessions end within 60 s.
+    await revokeSessionsSafely({ tenantId, reason: 'role-override-created', revokedBy: authz.userId });
     // New override means the cached role list (per tenant) is stale.
     await revalidateCache(ROLES_TAG);
     return NextResponse.json(result.role, { status: 201 });
