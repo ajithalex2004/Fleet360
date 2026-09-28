@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { ensureTenantChartOfAccounts } from '@/lib/finance/chart-of-accounts';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type CoaRow = Record<string, unknown>;
@@ -17,6 +18,7 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
+    await ensureTenantChartOfAccounts(tx, tenantId);
     const [row] = await tx.$queryRawUnsafe<CoaRow[]>(
         `SELECT c.*,
            (SELECT COALESCE(SUM(CASE WHEN jl.normal_balance='DEBIT' THEN jl.debit_amount - jl.credit_amount
