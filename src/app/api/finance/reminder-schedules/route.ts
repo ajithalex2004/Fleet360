@@ -8,10 +8,12 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { ensureTenantReminderSchedules } from '@/lib/finance/reminder-schedules';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-// finance_reminder_schedules and finance_reminder_log are created + seeded by
-// migration 20260810000003_finance_reference_data_seed — no runtime DDL needed.
+// finance_reminder_schedules and finance_reminder_log come from migrations and
+// hold each tenant's own rows (20261005090000_finance_tenant_tables); a tenant
+// gets a copy of the default schedules on first use.
 
 export async function GET(req: NextRequest) {
 
@@ -28,14 +30,16 @@ export async function GET(req: NextRequest) {
 
       if (schedule_id && include_log) {
         const logs = await tx.$queryRawUnsafe(
-          `SELECT * FROM finance_reminder_log WHERE schedule_id = $1::uuid ORDER BY sent_at DESC LIMIT 100`,
-          schedule_id
+          `SELECT * FROM finance_reminder_log WHERE tenant_id = $2 AND schedule_id::text = $1 ORDER BY sent_at DESC LIMIT 100`,
+          schedule_id, tenantId
         ) as Record<string, unknown>[];
         return NextResponse.json({ logs });
       }
 
+      await ensureTenantReminderSchedules(tx, tenantId);
       const schedules = await tx.$queryRawUnsafe(
-        `SELECT * FROM finance_reminder_schedules ORDER BY trigger_type, trigger_days`
+        `SELECT * FROM finance_reminder_schedules WHERE tenant_id = $1 ORDER BY trigger_type, trigger_days`,
+        tenantId,
       ) as Record<string, unknown>[];
 
       // Stats per schedule
@@ -46,8 +50,9 @@ export async function GET(req: NextRequest) {
                COUNT(*) FILTER (WHERE status = 'FAILED')    AS failed,
                MAX(sent_at)                                  AS last_run
         FROM finance_reminder_log
+        WHERE tenant_id = $1
         GROUP BY schedule_id
-      `).catch(() => []) as Record<string, unknown>[];
+      `, tenantId).catch(() => []) as Record<string, unknown>[];
 
       const statsMap: Record<string, Record<string, unknown>> = {};
       stats.forEach(s => { statsMap[String(s.schedule_id)] = s; });
@@ -76,8 +81,10 @@ export async function POST(req: NextRequest) {
 
       if (b.action === 'run') {
         // ── Process all active schedules against overdue/upcoming invoices ─────
+        await ensureTenantReminderSchedules(tx, tenantId);
         const schedules = await tx.$queryRawUnsafe(
-          `SELECT * FROM finance_reminder_schedules WHERE is_active = TRUE`
+          `SELECT * FROM finance_reminder_schedules WHERE tenant_id = $1 AND is_active = TRUE`,
+          tenantId,
         ) as Record<string, unknown>[];
 
         let totalFired = 0;
@@ -117,9 +124,9 @@ export async function POST(req: NextRequest) {
             // De-dup: skip if already sent for same schedule + invoice today
             const already = await tx.$queryRawUnsafe(`
               SELECT 1 FROM finance_reminder_log
-              WHERE schedule_id = $1::uuid AND invoice_id = $2 AND sent_at::date = CURRENT_DATE
+              WHERE tenant_id = $3 AND schedule_id = $1::uuid AND invoice_id = $2 AND sent_at::date = CURRENT_DATE
               LIMIT 1
-            `, schId, invId).catch(() => []) as unknown[];
+            `, schId, invId, tenantId).catch(() => []) as unknown[];
 
             if (already.length) continue;
 
@@ -137,12 +144,12 @@ export async function POST(req: NextRequest) {
             // For now: log as SENT (simulated delivery)
             await tx.$executeRawUnsafe(`
               INSERT INTO finance_reminder_log
-                (schedule_id, invoice_id, invoice_no, client_name, client_email, channel, subject, body, status)
-              VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, 'SENT')
+                (schedule_id, invoice_id, invoice_no, client_name, client_email, channel, subject, body, status, tenant_id)
+              VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, 'SENT', $9)
             `,
               schId, invId, invNo,
               String(inv.client_name), inv.client_email ?? null,
-              String(sch.channel), subject, body
+              String(sch.channel), subject, body, tenantId
             );
 
             firedInvoices.push(invNo);
@@ -160,13 +167,13 @@ export async function POST(req: NextRequest) {
       // ── Create new schedule ───────────────────────────────────────────────────
       const rows = await tx.$queryRawUnsafe(`
         INSERT INTO finance_reminder_schedules
-          (name, trigger_type, trigger_days, channel, template_subject, template_body, module_filter, branch_filter)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+          (name, trigger_type, trigger_days, channel, template_subject, template_body, module_filter, branch_filter, tenant_id)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
         RETURNING *
       `,
         b.name, b.trigger_type ?? 'AFTER_DUE', b.trigger_days ?? 7,
         b.channel ?? 'EMAIL', b.template_subject, b.template_body,
-        b.module_filter ?? null, b.branch_filter ?? null
+        b.module_filter ?? null, b.branch_filter ?? null, tenantId
       ) as Record<string, unknown>[];
 
       return NextResponse.json(rows[0], { status: 201 });
@@ -190,8 +197,8 @@ export async function PATCH(req: NextRequest) {
 
       if ('is_active' in b) {
         await tx.$executeRawUnsafe(
-          `UPDATE finance_reminder_schedules SET is_active = $2, updated_at = NOW() WHERE id = $1::uuid`,
-          id, b.is_active
+          `UPDATE finance_reminder_schedules SET is_active = $2, updated_at = NOW() WHERE id::text = $1 AND tenant_id = $3`,
+          id, b.is_active, tenantId
         );
       }
 
@@ -204,14 +211,15 @@ export async function PATCH(req: NextRequest) {
       }
       if (updates.length) {
         updates.push('updated_at = NOW()');
+        vals.push(tenantId);
         await tx.$executeRawUnsafe(
-          `UPDATE finance_reminder_schedules SET ${updates.join(', ')} WHERE id = $1::uuid`,
+          `UPDATE finance_reminder_schedules SET ${updates.join(', ')} WHERE id::text = $1 AND tenant_id = $${pi}`,
           ...vals
         );
       }
 
       const rows = await tx.$queryRawUnsafe(
-        `SELECT * FROM finance_reminder_schedules WHERE id = $1::uuid`, id
+        `SELECT * FROM finance_reminder_schedules WHERE id::text = $1 AND tenant_id = $2`, id, tenantId
       ) as Record<string, unknown>[];
       return NextResponse.json(rows[0]);
   });
@@ -228,7 +236,9 @@ export async function DELETE(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     const { id } = await req.json();
-      await tx.$executeRawUnsafe(`DELETE FROM finance_reminder_schedules WHERE id = $1::uuid`, id);
+      await tx.$executeRawUnsafe(
+        `DELETE FROM finance_reminder_schedules WHERE id::text = $1 AND tenant_id = $2`, id, tenantId,
+      );
       return NextResponse.json({ ok: true });
   });
 }

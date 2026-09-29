@@ -24,7 +24,7 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
            (SELECT COALESCE(SUM(CASE WHEN jl.normal_balance='DEBIT' THEN jl.debit_amount - jl.credit_amount
                                    ELSE jl.credit_amount - jl.debit_amount END),0)::text
               FROM finance_journal_lines jl
-              JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id
+              JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id::text
              WHERE jl.account_code = c.account_code AND je.status = 'POSTED'
                AND je.tenant_id = c.tenant_id) as current_balance
          FROM finance_chart_of_accounts c

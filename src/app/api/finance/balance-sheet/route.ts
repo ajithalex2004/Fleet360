@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
 
       // ── Check GL availability ────────────────────────────────────────────────
       const [glCheck] = await tx.$queryRawUnsafe<{ count: string }[]>(
-        `SELECT COUNT(*)::text as count FROM finance_journal_entries WHERE tenant_id = $2 AND status='POSTED' AND entry_date <= $1`, asOf, tenantId
+        `SELECT COUNT(*)::text as count FROM finance_journal_entries WHERE tenant_id = $2 AND status='POSTED' AND entry_date <= $1::date`, asOf, tenantId
       ).catch(() => [{ count: '0' }]);
       const hasGl = parseInt(glCheck?.count ?? '0') > 0;
 
@@ -41,9 +41,9 @@ export async function GET(req: NextRequest) {
           `SELECT jl.account_code, c.account_name, c.account_subtype,
              COALESCE(SUM(jl.debit_amount - jl.credit_amount),0)::text as balance
            FROM finance_journal_lines jl
-           JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id
+           JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id::text
            JOIN finance_chart_of_accounts c ON c.account_code = jl.account_code AND c.tenant_id = je.tenant_id
-           WHERE je.tenant_id = $3 AND je.status='POSTED' AND je.entry_date <= $1
+           WHERE je.tenant_id = $3 AND je.status='POSTED' AND je.entry_date <= $1::date
              AND jl.account_code LIKE $2
              AND c.is_header = FALSE
            GROUP BY jl.account_code, c.account_name, c.account_subtype
@@ -70,13 +70,13 @@ export async function GET(req: NextRequest) {
           };
         }
         // Module fallback
-        const [cash]    = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(amount),0)::text as t FROM finance_payments WHERE tenant_id = $2 AND deleted_at IS NULL AND status='RECONCILED' AND payment_date <= $1`, asOf, tenantId).catch(()=>[{t:'0'}]);
-        const [ar]      = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(total_amount - paid_amount),0)::text as t FROM finance_invoices WHERE tenant_id = $2 AND deleted_at IS NULL AND issue_date <= $1 AND payment_status NOT IN ('PAID','CANCELLED','DRAFT')`, asOf, tenantId).catch(()=>[{t:'0'}]);
-        const [pdc]     = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(amount),0)::text as t FROM finance_pdc_cheques WHERE tenant_id = $2 AND deleted_at IS NULL AND direction='INWARD' AND status IN ('HELD','DEPOSITED') AND cheque_date <= $1`, asOf, tenantId).catch(()=>[{t:'0'}]);
+        const [cash]    = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(amount),0)::text as t FROM finance_payments WHERE tenant_id = $2 AND payment_date <= $1::date`, asOf, tenantId).catch(()=>[{t:'0'}]);
+        const [ar]      = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(total_amount - paid_amount),0)::text as t FROM finance_invoices WHERE tenant_id = $2 AND deleted_at IS NULL AND issue_date <= $1::date AND payment_status NOT IN ('PAID','CANCELLED','DRAFT')`, asOf, tenantId).catch(()=>[{t:'0'}]);
+        const [pdc]     = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(amount),0)::text as t FROM finance_pdc_cheques WHERE tenant_id = $2 AND deleted_at IS NULL AND direction='INWARD' AND status IN ('HELD','DEPOSITED') AND cheque_date <= $1::date`, asOf, tenantId).catch(()=>[{t:'0'}]);
         // Fixed assets count only where the register is tenant-scoped.
         const faScoped  = await fixedAssetsTenantScoped(tx);
-        const [nbv]     = faScoped ? await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(net_book_value),0)::text as t FROM finance_fixed_assets WHERE tenant_id = $2 AND deleted_at IS NULL AND acquisition_date <= $1 AND status != 'DISPOSED'`, asOf, tenantId).catch(()=>[{t:'0'}]) : [{t:'0'}];
-        const [accDep]  = faScoped ? await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(accumulated_depreciation),0)::text as t FROM finance_fixed_assets WHERE tenant_id = $2 AND deleted_at IS NULL AND acquisition_date <= $1 AND status != 'DISPOSED'`, asOf, tenantId).catch(()=>[{t:'0'}]) : [{t:'0'}];
+        const [nbv]     = faScoped ? await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(net_book_value),0)::text as t FROM finance_fixed_assets WHERE tenant_id = $2 AND deleted_at IS NULL AND acquisition_date <= $1::date AND status != 'DISPOSED'`, asOf, tenantId).catch(()=>[{t:'0'}]) : [{t:'0'}];
+        const [accDep]  = faScoped ? await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(accumulated_depreciation),0)::text as t FROM finance_fixed_assets WHERE tenant_id = $2 AND deleted_at IS NULL AND acquisition_date <= $1::date AND status != 'DISPOSED'`, asOf, tenantId).catch(()=>[{t:'0'}]) : [{t:'0'}];
         return {
           current: [
             { code: '1110', label: 'Cash & Cash Equivalents',   amount: toN(cash?.t)  },
@@ -100,9 +100,9 @@ export async function GET(req: NextRequest) {
             nonCurrent: rows.filter(r => r.subtype !== 'CURRENT' && !r.code.startsWith('21')),
           };
         }
-        const [vat]     = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(vat_amount),0)::text as t FROM finance_invoices WHERE tenant_id = $2 AND deleted_at IS NULL AND issue_date <= $1 AND payment_status NOT IN ('PAID','CANCELLED','DRAFT')`, asOf, tenantId).catch(()=>[{t:'0'}]);
-        const [expPay]  = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(total_amount),0)::text as t FROM finance_expenses WHERE tenant_id = $2 AND deleted_at IS NULL AND status='APPROVED' AND expense_date <= $1`, asOf, tenantId).catch(()=>[{t:'0'}]);
-        const [pdcOut]  = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(amount),0)::text as t FROM finance_pdc_cheques WHERE tenant_id = $2 AND deleted_at IS NULL AND direction='OUTWARD' AND status IN ('HELD','DEPOSITED') AND cheque_date <= $1`, asOf, tenantId).catch(()=>[{t:'0'}]);
+        const [vat]     = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(vat_amount),0)::text as t FROM finance_invoices WHERE tenant_id = $2 AND deleted_at IS NULL AND issue_date <= $1::date AND payment_status NOT IN ('PAID','CANCELLED','DRAFT')`, asOf, tenantId).catch(()=>[{t:'0'}]);
+        const [expPay]  = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(total_amount),0)::text as t FROM finance_expenses WHERE tenant_id = $2 AND deleted_at IS NULL AND status='APPROVED' AND expense_date <= $1::date`, asOf, tenantId).catch(()=>[{t:'0'}]);
+        const [pdcOut]  = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(amount),0)::text as t FROM finance_pdc_cheques WHERE tenant_id = $2 AND deleted_at IS NULL AND direction='OUTWARD' AND status IN ('HELD','DEPOSITED') AND cheque_date <= $1::date`, asOf, tenantId).catch(()=>[{t:'0'}]);
         return {
           current: [
             { code: '2120', label: 'VAT Payable (FTA)',          amount: toN(vat?.t)    },
@@ -124,9 +124,9 @@ export async function GET(req: NextRequest) {
                                    WHEN c.account_type='EXPENSE' THEN jl.debit_amount - jl.credit_amount
                                    ELSE 0 END),0)::text as net
              FROM finance_journal_lines jl
-             JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id
+             JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id::text
              JOIN finance_chart_of_accounts c ON c.account_code = jl.account_code AND c.tenant_id = je.tenant_id
-             WHERE je.tenant_id = $2 AND je.status='POSTED' AND je.entry_date <= $1
+             WHERE je.tenant_id = $2 AND je.status='POSTED' AND je.entry_date <= $1::date
                AND c.account_type IN ('INCOME','EXPENSE')`, asOf, tenantId
           ).catch(() => [{ net: '0' }]);
           const retainedEarnings = toN((Array.isArray(pl) ? pl[0]?.net : pl?.net) ?? '0');
@@ -136,8 +136,8 @@ export async function GET(req: NextRequest) {
           ];
         }
         // Module fallback: estimate retained earnings from revenue - expenses
-        const [rev]  = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(subtotal_amount),0)::text as t FROM finance_invoices WHERE tenant_id = $2 AND deleted_at IS NULL AND issue_date <= $1 AND payment_status NOT IN ('DRAFT','CANCELLED')`, asOf, tenantId).catch(()=>[{t:'0'}]);
-        const [exp]  = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(total_amount),0)::text as t FROM finance_expenses WHERE tenant_id = $2 AND deleted_at IS NULL AND status IN ('APPROVED','PAID') AND expense_date <= $1`, asOf, tenantId).catch(()=>[{t:'0'}]);
+        const [rev]  = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(subtotal),0)::text as t FROM finance_invoices WHERE tenant_id = $2 AND deleted_at IS NULL AND issue_date <= $1::date AND payment_status NOT IN ('DRAFT','CANCELLED')`, asOf, tenantId).catch(()=>[{t:'0'}]);
+        const [exp]  = await tx.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(total_amount),0)::text as t FROM finance_expenses WHERE tenant_id = $2 AND deleted_at IS NULL AND status IN ('APPROVED','PAID') AND expense_date <= $1::date`, asOf, tenantId).catch(()=>[{t:'0'}]);
         return [
           { code: '3100', label: 'Share Capital',                       amount: 0 },
           { code: '3200', label: 'Retained Earnings (Estimated P&L)',   amount: Math.max(0, toN(rev?.t) - toN(exp?.t)) },

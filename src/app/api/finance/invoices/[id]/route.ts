@@ -91,7 +91,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
           await tx.$executeRawUnsafe(
             `INSERT INTO finance_payments (tenant_id, invoice_id, amount, payment_date, payment_method, reference, notes)
-             VALUES ($1, $2, $3, $4::date, $5, $6, $7)`,
+             VALUES ($1, $2::uuid, $3, $4::date, $5, $6, $7)`,
             tenantId, params.id, Number(amount),
             paymentDate ?? new Date().toISOString().split('T')[0],
             paymentMethod, reference ?? null, notes ?? null

@@ -10,35 +10,10 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-const INIT = `
-  CREATE TABLE IF NOT EXISTS finance_credit_notes (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at          TIMESTAMPTZ DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ DEFAULT NOW(),
-    deleted_at          TIMESTAMPTZ,
-    cn_number           TEXT UNIQUE NOT NULL,
-    original_invoice_id TEXT,
-    original_invoice_no TEXT,
-    client_name         TEXT NOT NULL,
-    client_email        TEXT,
-    module              TEXT,
-    reason_code         TEXT NOT NULL,
-    reason_detail       TEXT,
-    line_items          JSONB,
-    subtotal            NUMERIC(15,2) NOT NULL,
-    vat_amount          NUMERIC(15,2) DEFAULT 0,
-    total_amount        NUMERIC(15,2) NOT NULL,
-    currency            TEXT DEFAULT 'AED',
-    issue_date          DATE NOT NULL,
-    status              TEXT DEFAULT 'DRAFT',
-    applied_amount      NUMERIC(15,2) DEFAULT 0,
-    refunded_at         TIMESTAMPTZ,
-    refund_method       TEXT,
-    issued_by           TEXT,
-    approved_by         TEXT,
-    notes               TEXT
-  );
-`;
+// Tables come from migrations (the last: 20261005090000_finance_tenant_tables).
+// A request runs no DDL: the runtime role may not create tables, and the
+// failed statement aborted the request's transaction, so every query after
+// it failed too.
 
 type CnRow = Record<string, unknown>;
 
@@ -60,7 +35,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(INIT).catch(() => {});
       const sp      = req.nextUrl.searchParams;
       const status  = sp.get('status');
       const module  = sp.get('module');
@@ -90,7 +64,6 @@ export async function GET(req: NextRequest) {
   });
 }
 
-
 export async function POST(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -100,7 +73,6 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(INIT).catch(() => {});
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
       const cnNumber = await nextCnNumber();
@@ -115,7 +87,7 @@ export async function POST(req: NextRequest) {
            (cn_number, original_invoice_id, original_invoice_no, client_name, client_email,
             module, reason_code, reason_detail, line_items, subtotal, vat_amount, total_amount,
             currency, issue_date, issued_by, notes, tenant_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12,$13,$14,$15,$16,$17)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10::numeric,$11::numeric,$12::numeric,$13,$14::date,$15,$16,$17)
          RETURNING *`,
         cnNumber,
         body.originalInvoiceId ?? null, body.originalInvoiceNo ?? null,

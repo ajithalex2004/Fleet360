@@ -48,44 +48,45 @@ export async function GET(req: NextRequest) {
       ] = await Promise.all([
         // Maintenance: approved quotations
         tx.$queryRawUnsafe<NumRow[]>(
-          `SELECT COALESCE(SUM(total_cost),0) AS total FROM maintenance_requests
+          `SELECT COALESCE(SUM(COALESCE(actual_cost, estimated_cost, 0)),0) AS total FROM maintenance_requests
            WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('COMPLETED','IN_PROGRESS')
-             AND created_at::date BETWEEN $1 AND $2`, startDate, endDate, tenantId
+             AND created_at::date BETWEEN $1::date AND $2::date`, startDate, endDate, tenantId
         ).catch(zero),
         // Fuel: fuel logs
         tx.$queryRawUnsafe<NumRow[]>(
           `SELECT COALESCE(SUM(total_cost),0) AS total FROM fuel_logs
-           WHERE tenant_id = $3 AND created_at::date BETWEEN $1 AND $2`, startDate, endDate, tenantId
+           WHERE tenant_id = $3 AND created_at::date BETWEEN $1::date AND $2::date`, startDate, endDate, tenantId
         ).catch(zero),
         // Leasing: lease payments
         tx.$queryRawUnsafe<NumRow[]>(
-          `SELECT COALESCE(SUM(monthly_rate),0) AS total FROM lease_agreements
+          `SELECT COALESCE(SUM(monthly_rate),0) AS total FROM lease_contracts_v2
            WHERE tenant_id = $3 AND deleted_at IS NULL AND status = 'ACTIVE'
-             AND start_date::date <= $2 AND (end_date IS NULL OR end_date::date >= $1)`, startDate, endDate, tenantId
+             AND start_date::date <= $2::date AND (end_date IS NULL OR end_date::date >= $1::date)`, startDate, endDate, tenantId
         ).catch(zero),
         // Staff transport: trip schedule costs (proxy)
         tx.$queryRawUnsafe<NumRow[]>(
           `SELECT COALESCE(COUNT(*) * 50,0) AS total FROM trip_schedules
            WHERE tenant_id::text = $3 AND deleted_at IS NULL AND status = 'COMPLETED'
-             AND departure_time::date BETWEEN $1 AND $2`, startDate, endDate, tenantId
+             AND departure_time::date BETWEEN $1::date AND $2::date`, startDate, endDate, tenantId
         ).catch(zero),
-        // School bus
+        // School bus: its trips live in school_bus_trips (trip_schedules has
+        // no trip type)
         tx.$queryRawUnsafe<NumRow[]>(
-          `SELECT COALESCE(COUNT(*) * 30,0) AS total FROM trip_schedules
-           WHERE tenant_id::text = $3 AND deleted_at IS NULL AND status = 'COMPLETED' AND trip_type = 'SCHOOL_BUS'
-             AND departure_time::date BETWEEN $1 AND $2`, startDate, endDate, tenantId
+          `SELECT COALESCE(COUNT(*) * 30,0) AS total FROM school_bus_trips
+           WHERE tenant_id = $3 AND status = 'COMPLETED'
+             AND scheduled_date BETWEEN $1::date AND $2::date`, startDate, endDate, tenantId
         ).catch(zero),
         // RAC revenue (operating cost proxy: 30% of revenue)
         tx.$queryRawUnsafe<NumRow[]>(
           `SELECT COALESCE(SUM(total_amount) * 0.30, 0) AS total FROM rental_agreements
-           WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('ACTIVE','COMPLETED')
-             AND created_at::date BETWEEN $1 AND $2`, startDate, endDate, tenantId
+           WHERE tenant_id = $3 AND status IN ('ACTIVE','COMPLETED')
+             AND created_at::date BETWEEN $1::date AND $2::date`, startDate, endDate, tenantId
         ).catch(zero),
         // Logistics operational cost (40% of revenue)
         tx.$queryRawUnsafe<NumRow[]>(
           `SELECT COALESCE(SUM(customer_rate_amount) * 0.40, 0) AS total FROM logistics_shipment_orders
            WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED')
-             AND created_at::date BETWEEN $1 AND $2`, startDate, endDate, tenantId
+             AND created_at::date BETWEEN $1::date AND $2::date`, startDate, endDate, tenantId
         ).catch(zero),
         // Insurance: from compliance documents (use static zero if table missing)
         zero(),
@@ -104,7 +105,7 @@ export async function GET(req: NextRequest) {
 
       // ── Budget entries ─────────────────────────────────────────────────────────
       const budgets = await tx.financeBudget.findMany({
-        where: { year },
+        where: { year, tenantId },
         orderBy: { category: 'asc' },
       }).catch(() => []);
 
@@ -161,6 +162,7 @@ export async function POST(req: NextRequest) {
       const body = stripTenantOwnershipFields(bodyRaw);
         const budget = await tx.financeBudget.create({
           data: {
+            tenantId,
             category:     body.category,
             year:         body.year ?? new Date().getFullYear(),
             month:        body.month ?? null,

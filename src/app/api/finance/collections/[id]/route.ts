@@ -21,7 +21,7 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     const [row] = await tx.$queryRawUnsafe<CaseRow[]>(
-        `SELECT * FROM finance_collection_cases WHERE id=$1 AND deleted_at IS NULL AND tenant_id=$2`, params.id, tenantId
+        `SELECT * FROM finance_collection_cases WHERE id::text=$1 AND deleted_at IS NULL AND tenant_id=$2`, params.id, tenantId
       ).catch(() => [] as CaseRow[]);
       if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
       return NextResponse.json(row);
@@ -47,7 +47,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
       // Get current case for timeline append
       const [current] = await tx.$queryRawUnsafe<{timeline: unknown}[]>(
-        `SELECT timeline FROM finance_collection_cases WHERE id=$1 AND tenant_id=$2`, params.id, tenantId
+        `SELECT timeline FROM finance_collection_cases WHERE id::text=$1 AND tenant_id=$2`, params.id, tenantId
       ).catch(() => [] as {timeline: unknown}[]);
 
       const timeline: {date: string; action: string; by: string; note: string}[] =
@@ -61,46 +61,46 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
       switch (action) {
         case 'contact':
-          sql = `UPDATE finance_collection_cases SET status='CONTACTED', dunning_stage=$2, last_contact_date=$3, timeline=$4::jsonb, updated_at=$5, notes=COALESCE($6,notes) WHERE id=$1 RETURNING *`;
+          sql = `UPDATE finance_collection_cases SET status='CONTACTED', dunning_stage=$2, last_contact_date=$3::date, timeline=$4::jsonb, updated_at=$5::timestamptz, notes=COALESCE($6,notes) WHERE id::text=$1 RETURNING *`;
           sqlParams = [params.id, body.dunningStage ?? 'DUNNING_1', today, JSON.stringify(addEvent('CONTACTED', body.note ?? 'Client contacted')), now, body.notes ?? null];
           break;
         case 'promise':
-          sql = `UPDATE finance_collection_cases SET status='PROMISED', promised_pay_date=$2, promised_amount=$3, dunning_stage=$4, timeline=$5::jsonb, updated_at=$6, notes=COALESCE($7,notes) WHERE id=$1 RETURNING *`;
+          sql = `UPDATE finance_collection_cases SET status='PROMISED', promised_pay_date=$2::date, promised_amount=$3, dunning_stage=$4, timeline=$5::jsonb, updated_at=$6::timestamptz, notes=COALESCE($7,notes) WHERE id::text=$1 RETURNING *`;
           sqlParams = [params.id, body.promisedPayDate, body.promisedAmount ?? null, body.dunningStage ?? null, JSON.stringify(addEvent('PROMISE_RECEIVED', `Promise to pay AED ${body.promisedAmount} by ${body.promisedPayDate}`)), now, body.notes ?? null];
           break;
         case 'escalate':
-          sql = `UPDATE finance_collection_cases SET status='ESCALATED', dunning_stage='FINAL_NOTICE', timeline=$2::jsonb, updated_at=$3, notes=COALESCE($4,notes) WHERE id=$1 RETURNING *`;
+          sql = `UPDATE finance_collection_cases SET status='ESCALATED', dunning_stage='FINAL_NOTICE', timeline=$2::jsonb, updated_at=$3::timestamptz, notes=COALESCE($4,notes) WHERE id::text=$1 RETURNING *`;
           sqlParams = [params.id, JSON.stringify(addEvent('ESCALATED', body.note ?? 'Escalated to final notice')), now, body.notes ?? null];
           break;
         case 'legal':
-          sql = `UPDATE finance_collection_cases SET status='LEGAL', dunning_stage='LEGAL_NOTICE', timeline=$2::jsonb, updated_at=$3, notes=COALESCE($4,notes) WHERE id=$1 RETURNING *`;
+          sql = `UPDATE finance_collection_cases SET status='LEGAL', dunning_stage='LEGAL_NOTICE', timeline=$2::jsonb, updated_at=$3::timestamptz, notes=COALESCE($4,notes) WHERE id::text=$1 RETURNING *`;
           sqlParams = [params.id, JSON.stringify(addEvent('LEGAL_ACTION', body.note ?? 'Referred to legal team')), now, body.notes ?? null];
           break;
         case 'settle':
-          sql = `UPDATE finance_collection_cases SET status='SETTLED', paid_amount=$2, outstanding_amount=0, timeline=$3::jsonb, updated_at=$4, notes=COALESCE($5,notes) WHERE id=$1 RETURNING *`;
+          sql = `UPDATE finance_collection_cases SET status='SETTLED', paid_amount=$2, outstanding_amount=0, timeline=$3::jsonb, updated_at=$4::timestamptz, notes=COALESCE($5,notes) WHERE id::text=$1 RETURNING *`;
           sqlParams = [params.id, body.paidAmount ?? 0, JSON.stringify(addEvent('SETTLED', `Settled with AED ${body.paidAmount}`)), now, body.notes ?? null];
           break;
         case 'write_off':
-          sql = `UPDATE finance_collection_cases SET status='WRITTEN_OFF', timeline=$2::jsonb, updated_at=$3, notes=COALESCE($4,notes) WHERE id=$1 RETURNING *`;
+          sql = `UPDATE finance_collection_cases SET status='WRITTEN_OFF', timeline=$2::jsonb, updated_at=$3::timestamptz, notes=COALESCE($4,notes) WHERE id::text=$1 RETURNING *`;
           sqlParams = [params.id, JSON.stringify(addEvent('WRITTEN_OFF', body.note ?? 'Written off as bad debt')), now, body.notes ?? null];
           break;
         case 'close':
-          sql = `UPDATE finance_collection_cases SET status='CLOSED', timeline=$2::jsonb, updated_at=$3 WHERE id=$1 RETURNING *`;
+          sql = `UPDATE finance_collection_cases SET status='CLOSED', timeline=$2::jsonb, updated_at=$3::timestamptz WHERE id::text=$1 RETURNING *`;
           sqlParams = [params.id, JSON.stringify(addEvent('CLOSED', body.note ?? 'Case closed')), now];
           break;
         case 'add_note':
-          sql = `UPDATE finance_collection_cases SET timeline=$2::jsonb, updated_at=$3, notes=$4 WHERE id=$1 RETURNING *`;
+          sql = `UPDATE finance_collection_cases SET timeline=$2::jsonb, updated_at=$3::timestamptz, notes=$4 WHERE id::text=$1 RETURNING *`;
           sqlParams = [params.id, JSON.stringify(addEvent('NOTE', body.note ?? '')), now, body.notes ?? null];
           break;
         default:
           return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
       }
 
-      // Each statement above targets `WHERE id=$1`: narrow it to the tenant.
+      // Each statement above targets `WHERE id::text=$1`: narrow it to the tenant.
 
       sqlParams.push(tenantId);
 
-      sql = sql.replace('WHERE id=$1', () => `WHERE id=$1 AND tenant_id=$${sqlParams.length}`);
+      sql = sql.replace('WHERE id::text=$1', () => `WHERE id::text=$1 AND tenant_id=$${sqlParams.length}`);
 
       const [row] = await tx.$queryRawUnsafe<CaseRow[]>(sql, ...sqlParams).catch(() => [] as CaseRow[]);
       if (!row) return NextResponse.json({ error: 'Update failed' }, { status: 500 });
@@ -120,7 +120,7 @@ export async function DELETE(_: NextRequest, props: { params: Promise<{ id: stri
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     await tx.$executeRawUnsafe(
-        `UPDATE finance_collection_cases SET deleted_at=NOW() WHERE id=$1 AND tenant_id=$2`, params.id, tenantId
+        `UPDATE finance_collection_cases SET deleted_at=NOW() WHERE id::text=$1 AND tenant_id=$2`, params.id, tenantId
       ).catch(() => {});
       return NextResponse.json({ ok: true });
   });

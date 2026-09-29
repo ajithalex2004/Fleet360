@@ -31,7 +31,7 @@ async function queryGL(from: string, to: string, tenantId: string | null) {
 
   const [glCheck] = await (prisma.$queryRawUnsafe as (...a: unknown[]) => Promise<{ count: string }[]>)(
     `SELECT COUNT(*)::text AS count FROM finance_journal_entries
-     WHERE status='POSTED' AND entry_date BETWEEN $1 AND $2${tenantId ? ` AND tenant_id = $3` : ''}`,
+     WHERE status='POSTED' AND entry_date BETWEEN $1::date AND $2::date${tenantId ? ` AND tenant_id = $3` : ''}`,
     ...(tenantId ? [from, to, tenantId] : [from, to])
   ).catch(() => [{ count: '0' }]);
   const hasGlData = parseInt(glCheck?.count ?? '0') > 0;
@@ -44,9 +44,9 @@ async function queryGL(from: string, to: string, tenantId: string | null) {
     `SELECT jl.account_code, c.account_name, COALESCE(c.account_subtype,'REVENUE') AS account_subtype,
        COALESCE(SUM(jl.credit_amount - jl.debit_amount),0)::text AS amount
      FROM finance_journal_lines jl
-     JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id
+     JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id::text
      JOIN finance_chart_of_accounts c ON c.account_code = jl.account_code AND c.tenant_id = je.tenant_id
-     WHERE je.status='POSTED' AND je.entry_date BETWEEN $1 AND $2
+     WHERE je.status='POSTED' AND je.entry_date BETWEEN $1::date AND $2::date
        AND jl.account_code LIKE '4%'${tenantFilter}
      GROUP BY jl.account_code, c.account_name, c.account_subtype
      ORDER BY jl.account_code`,
@@ -59,9 +59,9 @@ async function queryGL(from: string, to: string, tenantId: string | null) {
     `SELECT jl.account_code, c.account_name, COALESCE(c.account_subtype,'OPEX') AS account_subtype,
        COALESCE(SUM(jl.debit_amount - jl.credit_amount),0)::text AS amount
      FROM finance_journal_lines jl
-     JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id
+     JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id::text
      JOIN finance_chart_of_accounts c ON c.account_code = jl.account_code AND c.tenant_id = je.tenant_id
-     WHERE je.status='POSTED' AND je.entry_date BETWEEN $1 AND $2
+     WHERE je.status='POSTED' AND je.entry_date BETWEEN $1::date AND $2::date
        AND jl.account_code LIKE '5%'${tenantFilter}
      GROUP BY jl.account_code, c.account_name, c.account_subtype
      ORDER BY jl.account_code`,
@@ -91,15 +91,15 @@ async function getRevenue(
 
   const [racAmt, lsAmt, lgAmt, fiAmt] = await Promise.all([
     enabled('RAC')
-      ? q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM rental_invoices WHERE deleted_at IS NULL AND created_at::date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to]))
+      ? q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM rental_invoices WHERE deleted_at IS NULL AND created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to]))
       : Promise.resolve(0),
     enabled('LEASING')
-      ? q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM lease_invoices WHERE deleted_at IS NULL AND created_at::date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to]))
+      ? q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM lease_invoices WHERE created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to]))
       : Promise.resolve(0),
     enabled('LOGISTICS')
-      ? q(`SELECT COALESCE(SUM(customer_rate_amount),0)::text AS t FROM logistics_shipment_orders WHERE deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED') AND created_at::date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to]))
+      ? q(`SELECT COALESCE(SUM(customer_rate_amount),0)::text AS t FROM logistics_shipment_orders WHERE deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED') AND created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to]))
       : Promise.resolve(0),
-    q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED') AND invoice_number NOT LIKE 'SUB-%' AND issue_date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
+    q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED') AND invoice_number NOT LIKE 'SUB-%' AND issue_date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
   ]);
 
   return [
@@ -124,9 +124,9 @@ async function getExpenses(
   const tc = (len: number) => tenantId ? ` AND tenant_id = $${len + 1}` : '';
 
   const [fuelAmt, maintAmt, expAmt] = await Promise.all([
-    q(`SELECT COALESCE(SUM(total_cost),0)::text AS t FROM fuel_logs WHERE created_at::date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
-    q(`SELECT COALESCE(SUM(total_cost),0)::text AS t FROM maintenance_requests WHERE deleted_at IS NULL AND status='COMPLETED' AND created_at::date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
-    q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_expenses WHERE deleted_at IS NULL AND status IN ('APPROVED','PAID') AND expense_date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
+    q(`SELECT COALESCE(SUM(total_cost),0)::text AS t FROM fuel_logs WHERE created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
+    q(`SELECT COALESCE(SUM(COALESCE(actual_cost, estimated_cost, 0)),0)::text AS t FROM maintenance_requests WHERE deleted_at IS NULL AND status='COMPLETED' AND created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
+    q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_expenses WHERE deleted_at IS NULL AND status IN ('APPROVED','PAID') AND expense_date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
   ]);
 
   // Depreciation comes from the fixed asset register, which counts only
@@ -136,7 +136,7 @@ async function getExpenses(
     depAmt = await q(
       `SELECT COALESCE(SUM(ds.depreciation),0)::text AS t
        FROM finance_depreciation_schedule ds
-       JOIN finance_fixed_assets fa ON fa.id = ds.asset_id
+       JOIN finance_fixed_assets fa ON fa.id::text = ds.asset_id AND fa.tenant_id = ds.tenant_id
        WHERE fa.tenant_id = $1 AND ds.period_year || '-' || LPAD(ds.period_month::text,2,'0') || '-01' BETWEEN $2 AND $3`,
       tenantId, from, to
     );
@@ -242,11 +242,11 @@ export async function GET(req: NextRequest) {
         const tc = (len: number) => tenantId ? ` AND tenant_id = $${len + 1}` : '';
 
         const [racAmt, lsAmt, lgAmt, fiAmt, schoolAmt] = await Promise.all([
-          q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM rental_invoices WHERE deleted_at IS NULL AND created_at::date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
-          q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM lease_invoices WHERE deleted_at IS NULL AND created_at::date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
-          q(`SELECT COALESCE(SUM(customer_rate_amount),0)::text AS t FROM logistics_shipment_orders WHERE deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED') AND created_at::date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
-          q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED') AND invoice_number NOT LIKE 'SUB-%' AND module NOT IN ('RAC','LEASING','LOGISTICS','SCHOOL_BUS') AND issue_date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
-          q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED') AND module = 'SCHOOL_BUS' AND issue_date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
+          q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM rental_invoices WHERE deleted_at IS NULL AND created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
+          q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM lease_invoices WHERE created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
+          q(`SELECT COALESCE(SUM(customer_rate_amount),0)::text AS t FROM logistics_shipment_orders WHERE deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED') AND created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
+          q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED') AND invoice_number NOT LIKE 'SUB-%' AND module NOT IN ('RAC','LEASING','LOGISTICS','SCHOOL_BUS') AND issue_date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
+          q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED') AND module = 'SCHOOL_BUS' AND issue_date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
         ]);
 
         const modules = [
@@ -311,8 +311,8 @@ export async function GET(req: NextRequest) {
 
       // Working capital
       const [arChange, expPayable] = await Promise.all([
-        q(`SELECT COALESCE(SUM(total_amount - paid_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND invoice_number NOT LIKE 'SUB-%' AND issue_date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
-        q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_expenses WHERE deleted_at IS NULL AND status='APPROVED' AND expense_date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
+        q(`SELECT COALESCE(SUM(total_amount - paid_amount),0)::text AS t FROM finance_invoices WHERE deleted_at IS NULL AND invoice_number NOT LIKE 'SUB-%' AND issue_date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
+        q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_expenses WHERE deleted_at IS NULL AND status='APPROVED' AND expense_date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
       ]);
 
       // CapEx & disposals: from the fixed asset register, only where it is
@@ -321,15 +321,15 @@ export async function GET(req: NextRequest) {
       let disposalAmount = 0;
       if (await fixedAssetsTenantScoped(tx)) {
         [capexAmount, disposalAmount] = await Promise.all([
-          q(`SELECT COALESCE(SUM(acquisition_cost),0)::text AS t FROM finance_fixed_assets WHERE deleted_at IS NULL AND tenant_id = $1 AND acquisition_date BETWEEN $2 AND $3`, tenantId, from, to),
-          q(`SELECT COALESCE(SUM(disposal_proceeds),0)::text AS t FROM finance_fixed_assets WHERE deleted_at IS NULL AND tenant_id = $1 AND disposal_date BETWEEN $2 AND $3`, tenantId, from, to),
+          q(`SELECT COALESCE(SUM(acquisition_cost),0)::text AS t FROM finance_fixed_assets WHERE deleted_at IS NULL AND tenant_id = $1 AND acquisition_date BETWEEN $2::date AND $3::date`, tenantId, from, to),
+          q(`SELECT COALESCE(SUM(disposal_proceeds),0)::text AS t FROM finance_fixed_assets WHERE deleted_at IS NULL AND tenant_id = $1 AND disposal_date BETWEEN $2::date AND $3::date`, tenantId, from, to),
         ]);
       }
 
       // Financing — pull from leasing (loan drawdowns and repayments)
       const [leasingDrawdowns, leasingRepayments] = await Promise.all([
-        q(`SELECT COALESCE(SUM(financed_amount),0)::text AS t FROM lease_contracts WHERE deleted_at IS NULL AND start_date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
-        q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM lease_invoices WHERE deleted_at IS NULL AND status='PAID' AND created_at::date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
+        q(`SELECT COALESCE(SUM(total_contract_value),0)::text AS t FROM lease_contracts_v2 WHERE deleted_at IS NULL AND start_date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
+        q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM lease_invoices WHERE status='PAID' AND created_at::date BETWEEN $1::date AND $2::date${tc(2)}`, ...tp([from, to])),
       ]);
 
       const operatingCashFlow  = netProfit + depreciation - arChange + expPayable;

@@ -10,43 +10,10 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-const INIT_BUDGET_SUBMISSIONS = `
-  CREATE TABLE IF NOT EXISTS finance_budget_submissions (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ DEFAULT NOW(),
-    deleted_at      TIMESTAMPTZ,
-    submission_no   TEXT UNIQUE NOT NULL,    -- BUDG-2025-001
-    fiscal_year     INTEGER NOT NULL,
-    department      TEXT NOT NULL,           -- FLEET | RAC | LOGISTICS | STAFF_TRANSPORT | SCHOOL_BUS | AMBULANCE | ADMIN | FINANCE | HR | IT
-    department_head TEXT NOT NULL,
-    total_requested NUMERIC(15,2) NOT NULL,
-    total_approved  NUMERIC(15,2),
-    status          TEXT DEFAULT 'DRAFT',    -- DRAFT | SUBMITTED | FM_REVIEW | CFO_REVIEW | APPROVED | REJECTED | REVISION_REQUIRED
-    submitted_at    TIMESTAMPTZ,
-    fm_reviewed_at  TIMESTAMPTZ,
-    fm_reviewed_by  TEXT,
-    fm_notes        TEXT,
-    cfo_approved_at TIMESTAMPTZ,
-    cfo_approved_by TEXT,
-    cfo_notes       TEXT,
-    rejection_reason TEXT,
-    notes           TEXT,
-    line_items      JSONB DEFAULT '[]'       -- [{category, amount, description, justification}]
-  );
-`;
-
-const INIT_BUDGET_COMMENTS = `
-  CREATE TABLE IF NOT EXISTS finance_budget_comments (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at  TIMESTAMPTZ DEFAULT NOW(),
-    submission_id TEXT NOT NULL,
-    author      TEXT NOT NULL,
-    role        TEXT NOT NULL,              -- DEPT_HEAD | FM | CFO | SYSTEM
-    comment     TEXT NOT NULL,
-    action      TEXT                        -- SUBMITTED | FM_APPROVED | FM_REJECTED | CFO_APPROVED | CFO_REJECTED | REVISED
-  );
-`;
+// Tables come from migrations (the last: 20261005090000_finance_tenant_tables).
+// A request runs no DDL: the runtime role may not create tables, and the
+// failed statement aborted the request's transaction, so every query after
+// it failed too.
 
 function nextSubmissionNo(year: number, count: number): string {
   return `BUDG-${year}-${String(count + 1).padStart(3, '0')}`;
@@ -61,8 +28,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(INIT_BUDGET_SUBMISSIONS).catch(()=>{});
-      await tx.$executeRawUnsafe(INIT_BUDGET_COMMENTS).catch(()=>{});
 
       const sp      = req.nextUrl.searchParams;
       const year    = sp.get('year');
@@ -72,18 +37,18 @@ export async function GET(req: NextRequest) {
 
       if (id) {
         const [sub] = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
-          `SELECT * FROM finance_budget_submissions WHERE id=$1 AND deleted_at IS NULL`, id
+          `SELECT * FROM finance_budget_submissions WHERE id::text=$1 AND tenant_id=$2 AND deleted_at IS NULL`, id, tenantId
         ).catch(()=>[]);
         if (!sub) return NextResponse.json({ error: 'Not found' }, { status: 404 });
         const comments = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
-          `SELECT * FROM finance_budget_comments WHERE submission_id=$1 ORDER BY created_at ASC`, id
+          `SELECT * FROM finance_budget_comments WHERE submission_id=$1 AND tenant_id=$2 ORDER BY created_at ASC`, id, tenantId
         ).catch(()=>[]);
         return NextResponse.json({ ...sub, comments });
       }
 
-      let where = 'WHERE deleted_at IS NULL';
-      const params: unknown[] = [];
-      let pi = 1;
+      let where = 'WHERE tenant_id = $1 AND deleted_at IS NULL';
+      const params: unknown[] = [tenantId];
+      let pi = 2;
       if (year)   { where += ` AND fiscal_year = $${pi++}`;  params.push(parseInt(year)); }
       if (dept)   { where += ` AND department = $${pi++}`;   params.push(dept); }
       if (status) { where += ` AND status = $${pi++}`;       params.push(status); }
@@ -95,13 +60,13 @@ export async function GET(req: NextRequest) {
       // Status summary
       const statusCounts = await tx.$queryRawUnsafe<{status:string; count:string; total_requested:string}[]>(
         `SELECT status, COUNT(*)::text as count, COALESCE(SUM(total_requested),0)::text as total_requested
-         FROM finance_budget_submissions WHERE deleted_at IS NULL GROUP BY status`
+         FROM finance_budget_submissions WHERE tenant_id = $1 AND deleted_at IS NULL GROUP BY status`,
+        tenantId,
       ).catch(()=>[]);
 
       return NextResponse.json({ data: subs, statusCounts });
   });
 }
-
 
 export async function POST(req: NextRequest) {
 
@@ -112,8 +77,6 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(INIT_BUDGET_SUBMISSIONS).catch(()=>{});
-      await tx.$executeRawUnsafe(INIT_BUDGET_COMMENTS).catch(()=>{});
 
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
@@ -123,13 +86,13 @@ export async function POST(req: NextRequest) {
         const [row] = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
           `UPDATE finance_budget_submissions
            SET status='SUBMITTED', submitted_at=NOW(), updated_at=NOW()
-           WHERE id=$1 AND status='DRAFT' RETURNING *`, body.submissionId
+           WHERE id::text=$1 AND tenant_id=$2 AND status='DRAFT' RETURNING *`, body.submissionId, tenantId
         ).catch(()=>[]);
         if (row) {
           await tx.$executeRawUnsafe(
-            `INSERT INTO finance_budget_comments (submission_id, author, role, comment, action)
-             VALUES ($1,$2,'DEPT_HEAD','Budget submitted for Finance Manager review','SUBMITTED')`,
-            body.submissionId, body.performedBy ?? 'Dept Head'
+            `INSERT INTO finance_budget_comments (submission_id, author, role, comment, action, tenant_id)
+             VALUES ($1,$2,'DEPT_HEAD','Budget submitted for Finance Manager review','SUBMITTED',$3)`,
+            body.submissionId, body.performedBy ?? 'Dept Head', tenantId
           ).catch(()=>{});
         }
         return NextResponse.json(row ?? {});
@@ -140,7 +103,7 @@ export async function POST(req: NextRequest) {
         const { submissionId, decision, notes, approvedAmount, reviewedBy } = body;
         let newStatus = 'CFO_REVIEW';
         const [current] = await tx.$queryRawUnsafe<{total_requested: string}[]>(
-          `SELECT total_requested FROM finance_budget_submissions WHERE id=$1`, submissionId
+          `SELECT total_requested FROM finance_budget_submissions WHERE id::text=$1 AND tenant_id=$2`, submissionId, tenantId
         ).catch(()=>[{total_requested:'0'}]);
         const amount = parseFloat(current?.total_requested ?? '0');
 
@@ -156,16 +119,16 @@ export async function POST(req: NextRequest) {
           `UPDATE finance_budget_submissions
            SET status=$2, fm_reviewed_at=NOW(), fm_reviewed_by=$3, fm_notes=$4,
                total_approved=COALESCE($5,total_requested), updated_at=NOW()
-           WHERE id=$1 RETURNING *`,
-          submissionId, newStatus, reviewedBy ?? 'Finance Manager', notes ?? null, approvedAmount ?? null
+           WHERE id::text=$1 AND tenant_id=$6 RETURNING *`,
+          submissionId, newStatus, reviewedBy ?? 'Finance Manager', notes ?? null, approvedAmount ?? null, tenantId
         ).catch(()=>[]);
         if (row) {
           await tx.$executeRawUnsafe(
-            `INSERT INTO finance_budget_comments (submission_id, author, role, comment, action)
-             VALUES ($1,$2,'FM',$3,$4)`,
+            `INSERT INTO finance_budget_comments (submission_id, author, role, comment, action, tenant_id)
+             VALUES ($1,$2,'FM',$3,$4,$5)`,
             submissionId, reviewedBy ?? 'Finance Manager',
             notes ?? `FM ${decision}D budget`,
-            `FM_${decision === 'APPROVE' ? 'APPROVED' : 'REJECTED'}`
+            `FM_${decision === 'APPROVE' ? 'APPROVED' : 'REJECTED'}`, tenantId
           ).catch(()=>{});
         }
         return NextResponse.json(row ?? {});
@@ -178,16 +141,16 @@ export async function POST(req: NextRequest) {
           `UPDATE finance_budget_submissions
            SET status=$2, cfo_approved_at=NOW(), cfo_approved_by=$3, cfo_notes=$4,
                total_approved=COALESCE($5,total_approved), updated_at=NOW()
-           WHERE id=$1 RETURNING *`,
-          submissionId, newStatus, decidedBy ?? 'CFO', notes ?? null, approvedAmount ?? null
+           WHERE id::text=$1 AND tenant_id=$6 RETURNING *`,
+          submissionId, newStatus, decidedBy ?? 'CFO', notes ?? null, approvedAmount ?? null, tenantId
         ).catch(()=>[]);
         if (row) {
           await tx.$executeRawUnsafe(
-            `INSERT INTO finance_budget_comments (submission_id, author, role, comment, action)
-             VALUES ($1,$2,'CFO',$3,$4)`,
+            `INSERT INTO finance_budget_comments (submission_id, author, role, comment, action, tenant_id)
+             VALUES ($1,$2,'CFO',$3,$4,$5)`,
             submissionId, decidedBy ?? 'CFO',
             notes ?? `CFO ${decision}D budget`,
-            `CFO_${decision === 'APPROVE' ? 'APPROVED' : 'REJECTED'}`
+            `CFO_${decision === 'APPROVE' ? 'APPROVED' : 'REJECTED'}`, tenantId
           ).catch(()=>{});
         }
         return NextResponse.json(row ?? {});
@@ -195,9 +158,9 @@ export async function POST(req: NextRequest) {
 
       if (body.action === 'add_comment') {
         const [row] = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
-          `INSERT INTO finance_budget_comments (submission_id, author, role, comment)
-           VALUES ($1,$2,$3,$4) RETURNING *`,
-          body.submissionId, body.author, body.role ?? 'FM', body.comment
+          `INSERT INTO finance_budget_comments (submission_id, author, role, comment, tenant_id)
+           VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+          body.submissionId, body.author, body.role ?? 'FM', body.comment, tenantId
         ).catch(()=>[]);
         return NextResponse.json(row ?? {}, { status: 201 });
       }
@@ -207,23 +170,22 @@ export async function POST(req: NextRequest) {
       const totalRequested = (lineItems ?? []).reduce((s: number, i: {amount: number}) => s + (i.amount ?? 0), 0);
 
       const [countRow] = await tx.$queryRawUnsafe<{count:string}[]>(
-        `SELECT COUNT(*)::text as count FROM finance_budget_submissions WHERE fiscal_year=$1`, fiscalYear
+        `SELECT COUNT(*)::text as count FROM finance_budget_submissions WHERE tenant_id=$1 AND fiscal_year=$2`, tenantId, fiscalYear
       ).catch(()=>[{count:'0'}]);
       const submissionNo = nextSubmissionNo(fiscalYear, parseInt(countRow?.count ?? '0'));
 
       const [row] = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
         `INSERT INTO finance_budget_submissions
-           (submission_no, fiscal_year, department, department_head, total_requested, line_items, notes)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+           (submission_no, fiscal_year, department, department_head, total_requested, line_items, notes, tenant_id)
+         VALUES ($1,$2,$3,$4,$5::numeric,$6::jsonb,$7,$8) RETURNING *`,
         submissionNo, fiscalYear, department, departmentHead, totalRequested,
-        JSON.stringify(lineItems ?? []), notes ?? null
+        JSON.stringify(lineItems ?? []), notes ?? null, tenantId
       ).catch(()=>[]);
 
       if (!row) return NextResponse.json({ error: 'Failed to create submission' }, { status: 500 });
       return NextResponse.json(row, { status: 201 });
   });
 }
-
 
 export async function DELETE(req: NextRequest) {
 
@@ -238,7 +200,7 @@ export async function DELETE(req: NextRequest) {
       const id = sp.get('id');
       if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
       await tx.$executeRawUnsafe(
-        `UPDATE finance_budget_submissions SET deleted_at=NOW() WHERE id=$1 AND status='DRAFT'`, id
+        `UPDATE finance_budget_submissions SET deleted_at=NOW() WHERE id::text=$1 AND tenant_id=$2 AND status='DRAFT'`, id, tenantId
       ).catch(()=>{});
       return NextResponse.json({ ok: true });
   });

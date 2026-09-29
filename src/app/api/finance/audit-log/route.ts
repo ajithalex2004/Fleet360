@@ -10,27 +10,10 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-const INIT_AUDIT = `
-  CREATE TABLE IF NOT EXISTS finance_audit_log (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    module          TEXT NOT NULL,        -- JE | COA | FIXED_ASSETS | PERIOD | CT | BANK_RECON | EXPENSE | INVOICE | PDC | CREDIT_NOTE
-    action          TEXT NOT NULL,        -- CREATED | POSTED | APPROVED | REJECTED | VOIDED | REVERSED | LOCKED | FILED | DISPOSED
-    entity_type     TEXT NOT NULL,
-    entity_id       TEXT NOT NULL,
-    entity_ref      TEXT,                 -- human-readable (JE number, asset no, etc.)
-    performed_by    TEXT NOT NULL,
-    ip_address      TEXT,
-    old_values      JSONB,
-    new_values      JSONB,
-    description     TEXT NOT NULL,
-    amount          NUMERIC(15,2),
-    metadata        JSONB
-  );
-`;
-
-const INIT_AUDIT_IDX = `CREATE INDEX IF NOT EXISTS finance_audit_log_module_idx ON finance_audit_log(module, created_at DESC)`;
-const INIT_AUDIT_IDX2 = `CREATE INDEX IF NOT EXISTS finance_audit_log_entity_idx ON finance_audit_log(entity_type, entity_id)`;
+// Tables come from migrations (the last: 20261005090000_finance_tenant_tables).
+// A request runs no DDL: the runtime role may not create tables, and the
+// failed statement aborted the request's transaction, so every query after
+// it failed too.
 
 export async function GET(req: NextRequest) {
 
@@ -41,9 +24,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(INIT_AUDIT).catch(()=>{});
-      await tx.$executeRawUnsafe(INIT_AUDIT_IDX).catch(()=>{});
-      await tx.$executeRawUnsafe(INIT_AUDIT_IDX2).catch(()=>{});
 
       const sp        = req.nextUrl.searchParams;
       const module_   = sp.get('module');
@@ -55,14 +35,14 @@ export async function GET(req: NextRequest) {
       const limit     = parseInt(sp.get('limit') ?? '100');
       const offset    = parseInt(sp.get('offset') ?? '0');
 
-      let where = 'WHERE 1=1';
-      const params: unknown[] = [];
-      let pi = 1;
+      let where = 'WHERE tenant_id = $1';
+      const params: unknown[] = [tenantId];
+      let pi = 2;
 
       if (module_)  { where += ` AND module = $${pi++}`;                params.push(module_); }
       if (action)   { where += ` AND action = $${pi++}`;                params.push(action); }
       if (entityId) { where += ` AND entity_id = $${pi++}`;             params.push(entityId); }
-      if (from)     { where += ` AND created_at >= $${pi++}`;           params.push(from); }
+      if (from)     { where += ` AND created_at >= $${pi++}::timestamptz`;           params.push(from); }
       if (to)       { where += ` AND created_at < ($${pi++}::date + interval '1 day')`; params.push(to); }
       if (search)   { where += ` AND (description ILIKE $${pi} OR entity_ref ILIKE $${pi} OR performed_by ILIKE $${pi})`; params.push(`%${search}%`); pi++; }
 
@@ -78,7 +58,8 @@ export async function GET(req: NextRequest) {
 
       // Module breakdown counts
       const moduleCounts = await tx.$queryRawUnsafe<{module:string; count:string}[]>(
-        `SELECT module, COUNT(*)::text as count FROM finance_audit_log GROUP BY module ORDER BY count DESC`
+        `SELECT module, COUNT(*)::text as count FROM finance_audit_log WHERE tenant_id = $1 GROUP BY module ORDER BY count DESC`,
+        tenantId,
       ).catch(()=>[]);
 
       return NextResponse.json({
@@ -90,7 +71,6 @@ export async function GET(req: NextRequest) {
   });
 }
 
-
 export async function POST(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -100,7 +80,6 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(INIT_AUDIT).catch(()=>{});
 
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
@@ -112,13 +91,14 @@ export async function POST(req: NextRequest) {
 
       const [row] = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
         `INSERT INTO finance_audit_log
-           (module, action, entity_type, entity_id, entity_ref, performed_by, ip_address, description, amount, old_values, new_values, metadata)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+           (module, action, entity_type, entity_id, entity_ref, performed_by, ip_address, description, amount, old_values, new_values, metadata, tenant_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
         mod, action, entityType, entityId, entityRef ?? null, performedBy,
         ipAddress ?? null, description, amount ?? null,
         oldValues ? JSON.stringify(oldValues) : null,
         newValues ? JSON.stringify(newValues) : null,
         metadata  ? JSON.stringify(metadata)  : null,
+        tenantId,
       ).catch(()=>[]);
 
       return NextResponse.json(row ?? {}, { status: 201 });

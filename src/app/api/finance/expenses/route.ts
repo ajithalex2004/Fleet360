@@ -9,44 +9,10 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-const INIT = `
-  CREATE TABLE IF NOT EXISTS finance_expenses (
-    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at       TIMESTAMPTZ DEFAULT NOW(),
-    updated_at       TIMESTAMPTZ DEFAULT NOW(),
-    deleted_at       TIMESTAMPTZ,
-    expense_no       TEXT UNIQUE NOT NULL,
-    category         TEXT NOT NULL,
-    sub_category     TEXT,
-    description      TEXT NOT NULL,
-    amount           NUMERIC(15,2) NOT NULL,
-    currency         TEXT DEFAULT 'AED',
-    vat_amount       NUMERIC(15,2) DEFAULT 0,
-    total_amount     NUMERIC(15,2) NOT NULL,
-    expense_date     DATE NOT NULL,
-    payment_method   TEXT,
-    reference_no     TEXT,
-    status           TEXT DEFAULT 'DRAFT',
-    vehicle_id       TEXT,
-    driver_id        TEXT,
-    cost_centre      TEXT,
-    receipt_url      TEXT,
-    submitted_by     TEXT,
-    submitted_at     TIMESTAMPTZ,
-    approved_by      TEXT,
-    approved_at      TIMESTAMPTZ,
-    rejected_by      TEXT,
-    rejected_at      TIMESTAMPTZ,
-    rejection_reason TEXT,
-    paid_at          TIMESTAMPTZ,
-    notes            TEXT
-  );
-`;
-
-const MIGRATE = `
-  ALTER TABLE finance_expenses ADD COLUMN IF NOT EXISTS branch_id UUID;
-  ALTER TABLE finance_expenses ADD COLUMN IF NOT EXISTS vat_amount NUMERIC(15,2) DEFAULT 0;
-`;
+// Tables come from migrations (the last: 20261005090000_finance_tenant_tables).
+// A request runs no DDL: the runtime role may not create tables, and the
+// failed statement aborted the request's transaction, so every query after
+// it failed too.
 
 type ExpRow = Record<string, unknown>;
 
@@ -68,8 +34,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(INIT).catch(() => {});
-      await tx.$executeRawUnsafe(MIGRATE).catch(() => {});
       const sp = req.nextUrl.searchParams;
       const status    = sp.get('status');
       const category  = sp.get('category');
@@ -86,8 +50,8 @@ export async function GET(req: NextRequest) {
       if (status)   { where += ` AND status = $${pi++}`;          params.push(status); }
       if (category) { where += ` AND category = $${pi++}`;        params.push(category); }
       if (centre)   { where += ` AND cost_centre = $${pi++}`;     params.push(centre); }
-      if (from)     { where += ` AND expense_date >= $${pi++}`;   params.push(from); }
-      if (to)       { where += ` AND expense_date <= $${pi++}`;   params.push(to); }
+      if (from)     { where += ` AND expense_date >= $${pi++}::date`;   params.push(from); }
+      if (to)       { where += ` AND expense_date <= $${pi++}::date`;   params.push(to); }
 
       const [rows, summary] = await Promise.all([
         tx.$queryRawUnsafe<ExpRow[]>(
@@ -111,7 +75,6 @@ export async function GET(req: NextRequest) {
   });
 }
 
-
 export async function POST(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -121,8 +84,6 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(INIT).catch(() => {});
-      await tx.$executeRawUnsafe(MIGRATE).catch(() => {});
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
       const expenseNo = await nextExpenseNo();
@@ -136,7 +97,7 @@ export async function POST(req: NextRequest) {
            (expense_no, category, sub_category, description, amount, currency,
             vat_amount, total_amount, expense_date, payment_method, reference_no,
             vehicle_id, driver_id, cost_centre, receipt_url, submitted_by, notes, tenant_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+         VALUES ($1,$2,$3,$4,$5::numeric,$6,$7::numeric,$8::numeric,$9::date,$10,$11,$12,$13,$14,$15,$16,$17,$18)
          RETURNING *`,
         expenseNo, body.category, body.subCategory ?? null, body.description,
         amount, body.currency ?? 'AED', vatAmt, total,

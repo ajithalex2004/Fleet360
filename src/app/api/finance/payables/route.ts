@@ -61,8 +61,8 @@ export async function GET(req: NextRequest) {
       if (paymentStatus)    { where += ` AND payment_status = $${pi++}`;     params.push(paymentStatus); }
       if (module)           { where += ` AND module = $${pi++}`;             params.push(module); }
       if (vendor)           { where += ` AND vendor_name ILIKE $${pi++}`;    params.push(`%${vendor}%`); }
-      if (from)             { where += ` AND issue_date >= $${pi++}`;        params.push(from); }
-      if (to)               { where += ` AND issue_date <= $${pi++}`;        params.push(to); }
+      if (from)             { where += ` AND issue_date >= $${pi++}::date`;        params.push(from); }
+      if (to)               { where += ` AND issue_date <= $${pi++}::date`;        params.push(to); }
       if (overdue === 'true') {
         where += ` AND due_date < CURRENT_DATE AND payment_status NOT IN ('PAID','VOID')`;
       }
@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
             issue_date, due_date,
             cost_centre, profit_centre,
             prepared_by, notes, tenant_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::numeric,$12::numeric,$13::numeric,$14,$15::date,$16::date,$17,$18,$19,$20,$21)
          RETURNING *`,
         payableNumber,
         body.vendorId      ?? null,

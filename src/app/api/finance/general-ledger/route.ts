@@ -67,9 +67,9 @@ export async function GET(req: NextRequest) {
            FROM finance_chart_of_accounts c
            LEFT JOIN finance_journal_lines jl
              ON jl.account_code = c.account_code
-             AND jl.journal_entry_id IN (
+             AND jl.journal_entry_id::text IN (
                SELECT id::text FROM finance_journal_entries
-               WHERE status = 'POSTED' AND entry_date BETWEEN $1 AND $2 AND deleted_at IS NULL${tenantFilter}
+               WHERE status = 'POSTED' AND entry_date BETWEEN $1::date AND $2::date AND deleted_at IS NULL${tenantFilter}
              )
            WHERE c.tenant_id = $${params.length} AND c.deleted_at IS NULL AND c.is_active = TRUE AND c.is_header = FALSE
            GROUP BY c.account_code, c.account_name, c.account_type, c.account_subtype,
@@ -113,9 +113,9 @@ export async function GET(req: NextRequest) {
           `SELECT COALESCE(SUM(jl.debit_amount),0)::text as debit,
                   COALESCE(SUM(jl.credit_amount),0)::text as credit
              FROM finance_journal_lines jl
-             JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id
+             JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id::text
             WHERE jl.account_code = $1 AND je.status = 'POSTED'
-              AND je.entry_date < $2 AND je.deleted_at IS NULL${obTenantFilter}`,
+              AND je.entry_date < $2::date AND je.deleted_at IS NULL${obTenantFilter}`,
           ...obParams
         ).catch(() => [{ debit: '0', credit: '0' }]);
 
@@ -137,9 +137,9 @@ export async function GET(req: NextRequest) {
         const lines = await (tx.$queryRawUnsafe as (...a: unknown[]) => Promise<GlRow[]>)(
           `SELECT jl.*, je.je_number, je.entry_date, je.narration, je.reference, je.status as je_status
              FROM finance_journal_lines jl
-             JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id
+             JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id::text
             WHERE jl.account_code = $1 AND je.status = 'POSTED'
-              AND je.entry_date BETWEEN $2 AND $3 AND je.deleted_at IS NULL${lineTenantFilter}
+              AND je.entry_date BETWEEN $2::date AND $3::date AND je.deleted_at IS NULL${lineTenantFilter}
             ORDER BY je.entry_date ASC, je.je_number ASC, jl.line_number ASC`,
           ...lineParams
         ).catch(() => []);
@@ -193,9 +193,9 @@ export async function GET(req: NextRequest) {
          FROM finance_chart_of_accounts c
          LEFT JOIN finance_journal_lines jl
            ON jl.account_code = c.account_code
-           AND jl.journal_entry_id IN (
+           AND jl.journal_entry_id::text IN (
              SELECT id::text FROM finance_journal_entries
-             WHERE status='POSTED' AND entry_date <= $1 AND deleted_at IS NULL${balTenantFilter}
+             WHERE status='POSTED' AND entry_date <= $1::date AND deleted_at IS NULL${balTenantFilter}
            )
          WHERE c.tenant_id = $${balParams.length} AND c.deleted_at IS NULL AND c.is_active=TRUE
          GROUP BY c.account_code, c.account_name, c.account_type, c.account_subtype,

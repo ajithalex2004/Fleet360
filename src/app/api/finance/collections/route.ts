@@ -9,33 +9,10 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-const INIT = `
-  CREATE TABLE IF NOT EXISTS finance_collection_cases (
-    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at         TIMESTAMPTZ DEFAULT NOW(),
-    updated_at         TIMESTAMPTZ DEFAULT NOW(),
-    deleted_at         TIMESTAMPTZ,
-    case_no            TEXT UNIQUE NOT NULL,
-    invoice_id         TEXT NOT NULL,
-    invoice_no         TEXT NOT NULL,
-    client_name        TEXT NOT NULL,
-    client_email       TEXT,
-    client_phone       TEXT,
-    invoice_amount     NUMERIC(15,2) NOT NULL,
-    paid_amount        NUMERIC(15,2) DEFAULT 0,
-    outstanding_amount NUMERIC(15,2) NOT NULL,
-    due_date           DATE NOT NULL,
-    days_overdue       INTEGER DEFAULT 0,
-    status             TEXT DEFAULT 'OPEN',
-    dunning_stage      TEXT,
-    last_contact_date  DATE,
-    promised_pay_date  DATE,
-    promised_amount    NUMERIC(15,2),
-    assigned_to        TEXT,
-    notes              TEXT,
-    timeline           JSONB DEFAULT '[]'::jsonb
-  );
-`;
+// Tables come from migrations (the last: 20261005090000_finance_tenant_tables).
+// A request runs no DDL: the runtime role may not create tables, and the
+// failed statement aborted the request's transaction, so every query after
+// it failed too.
 
 type CaseRow = Record<string, unknown>;
 
@@ -57,7 +34,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(INIT).catch(() => {});
       const sp     = req.nextUrl.searchParams;
       const status = sp.get('status');
       const page   = Math.max(1, parseInt(sp.get('page')  ?? '1'));
@@ -109,7 +85,8 @@ export async function GET(req: NextRequest) {
          WHERE tenant_id = $1 AND deleted_at IS NULL
            AND payment_status IN ('SENT','PARTIAL','OVERDUE')
            AND due_date < CURRENT_DATE
-           AND id NOT IN (SELECT invoice_id FROM finance_collection_cases WHERE tenant_id = $1 AND deleted_at IS NULL)
+           AND id::text NOT IN (SELECT invoice_id::text FROM finance_collection_cases
+                                WHERE tenant_id = $1 AND deleted_at IS NULL AND invoice_id IS NOT NULL)
          ORDER BY due_date ASC LIMIT 20`,
         tenantId,
       ).catch(() => []);
@@ -117,7 +94,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ data: rows, aging, overdueInvoices, page, limit });
   });
 }
-
 
 export async function POST(req: NextRequest) {
 
@@ -128,7 +104,6 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(INIT).catch(() => {});
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
       const caseNo = await nextCaseNo();
@@ -141,7 +116,7 @@ export async function POST(req: NextRequest) {
         `INSERT INTO finance_collection_cases
            (case_no, invoice_id, invoice_no, client_name, client_email, client_phone,
             invoice_amount, paid_amount, outstanding_amount, due_date, days_overdue, assigned_to, notes, tenant_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+         VALUES ($1,$2,$3,$4,$5,$6,$7::numeric,$8::numeric,$9::numeric,$10::date,$11,$12,$13,$14)
          RETURNING *`,
         caseNo, body.invoiceId, body.invoiceNo, body.clientName,
         body.clientEmail ?? null, body.clientPhone ?? null,

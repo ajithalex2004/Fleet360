@@ -25,8 +25,8 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
              'closingNbv', d.closing_nbv, 'isPosted', d.is_posted
            ) ORDER BY d.period_year, d.period_month) FILTER (WHERE d.id IS NOT NULL) as schedule
          FROM finance_fixed_assets a
-         LEFT JOIN finance_depreciation_schedule d ON d.asset_id = a.id::text
-         WHERE a.id = $1 AND a.deleted_at IS NULL GROUP BY a.id`, params.id
+         LEFT JOIN finance_depreciation_schedule d ON d.asset_id = a.id::text AND d.tenant_id = a.tenant_id
+         WHERE a.id::text = $1 AND a.tenant_id = $2 AND a.deleted_at IS NULL GROUP BY a.id`, params.id, tenantId
       ).catch(() => [] as AssetRow[]);
       if (!asset) return NextResponse.json({ error: 'Not found' }, { status: 404 });
       return NextResponse.json(asset);
@@ -55,9 +55,10 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         if (allowed.includes(col)) { updates.push(`${col} = $${pi++}`); values.push(val); }
       }
       if (!updates.length) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
-      values.push(params.id);
+      values.push(params.id, tenantId);
       const [row] = await tx.$queryRawUnsafe<AssetRow[]>(
-        `UPDATE finance_fixed_assets SET ${updates.join(', ')}, updated_at=NOW() WHERE id=$${pi} RETURNING *`, ...values
+        `UPDATE finance_fixed_assets SET ${updates.join(', ')}, updated_at=NOW()
+          WHERE id::text=$${pi} AND tenant_id=$${pi + 1} RETURNING *`, ...values
       ).catch(() => [] as AssetRow[]);
       if (!row) return NextResponse.json({ error: 'Update failed' }, { status: 500 });
       return NextResponse.json(row);
@@ -75,7 +76,9 @@ export async function DELETE(_: NextRequest, props: { params: Promise<{ id: stri
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(`UPDATE finance_fixed_assets SET deleted_at=NOW() WHERE id=$1`, params.id).catch(() => {});
+    await tx.$executeRawUnsafe(
+        `UPDATE finance_fixed_assets SET deleted_at=NOW() WHERE id::text=$1 AND tenant_id=$2`, params.id, tenantId,
+      ).catch(() => {});
       return NextResponse.json({ ok: true });
   });
 }

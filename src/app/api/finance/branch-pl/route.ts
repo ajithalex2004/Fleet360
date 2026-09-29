@@ -140,7 +140,7 @@ export async function GET(req: NextRequest) {
       // ── Tenant info ──────────────────────────────────────────────────────────
       type TenantRow = { name: string; trn?: string; code?: string };
       const [tenant] = await tx.$queryRawUnsafe<TenantRow[]>(
-        `SELECT name, trn, code FROM tenants WHERE id = $1`,
+        `SELECT name, trn, code FROM tenants WHERE id::text = $1`,
         tenantId
       ).catch(() => [] as TenantRow[]);
 

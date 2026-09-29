@@ -48,46 +48,46 @@ export async function GET(req: NextRequest) {
         // Standard-rated revenue (5% VAT applies)
         tx.$queryRawUnsafe<RevRow[]>(
           `SELECT COALESCE(SUM(customer_rate_amount),0) AS total FROM logistics_shipment_orders
-           WHERE deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED')
-             AND created_at::date BETWEEN $1 AND $2`, start, end
+           WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED')
+             AND created_at::date BETWEEN $1::date AND $2::date`, start, end, tenantId
         ).catch(zero),
         tx.$queryRawUnsafe<RevRow[]>(
           `SELECT COALESCE(SUM(total_amount),0) AS total FROM rental_agreements
-           WHERE deleted_at IS NULL AND status IN ('ACTIVE','COMPLETED')
-             AND created_at::date BETWEEN $1 AND $2`, start, end
+           WHERE tenant_id = $3 AND status IN ('ACTIVE','COMPLETED')
+             AND created_at::date BETWEEN $1::date AND $2::date`, start, end, tenantId
         ).catch(zero),
         tx.$queryRawUnsafe<RevRow[]>(
-          `SELECT COALESCE(SUM(monthly_rate),0) AS total FROM lease_agreements
-           WHERE deleted_at IS NULL AND status IN ('ACTIVE','COMPLETED')
-             AND created_at::date BETWEEN $1 AND $2`, start, end
+          `SELECT COALESCE(SUM(monthly_rate),0) AS total FROM lease_contracts_v2
+           WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('ACTIVE','COMPLETED')
+             AND created_at::date BETWEEN $1::date AND $2::date`, start, end, tenantId
         ).catch(zero),
         // Finance invoices VAT base (subtotal after discount)
         tx.$queryRawUnsafe<RevRow[]>(
           `SELECT COALESCE(SUM(total_amount - vat_amount),0) AS total FROM finance_invoices
-           WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED')
-             AND issue_date BETWEEN $1 AND $2`, start, end
+           WHERE tenant_id = $3 AND deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED')
+             AND issue_date BETWEEN $1::date AND $2::date`, start, end, tenantId
         ).catch(zero),
 
         // VAT collected
         tx.$queryRawUnsafe<RevRow[]>(
           `SELECT COALESCE(SUM(customer_rate_amount * 0.05 / 1.05),0) AS total FROM logistics_shipment_orders
-           WHERE deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED')
-             AND created_at::date BETWEEN $1 AND $2`, start, end
+           WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED')
+             AND created_at::date BETWEEN $1::date AND $2::date`, start, end, tenantId
         ).catch(zero),
         tx.$queryRawUnsafe<RevRow[]>(
           `SELECT COALESCE(SUM(total_amount * 0.05 / 1.05),0) AS total FROM rental_agreements
-           WHERE deleted_at IS NULL AND status IN ('ACTIVE','COMPLETED')
-             AND created_at::date BETWEEN $1 AND $2`, start, end
+           WHERE tenant_id = $3 AND status IN ('ACTIVE','COMPLETED')
+             AND created_at::date BETWEEN $1::date AND $2::date`, start, end, tenantId
         ).catch(zero),
         tx.$queryRawUnsafe<RevRow[]>(
-          `SELECT COALESCE(SUM(monthly_rate * 0.05),0) AS total FROM lease_agreements
-           WHERE deleted_at IS NULL AND status IN ('ACTIVE','COMPLETED')
-             AND created_at::date BETWEEN $1 AND $2`, start, end
+          `SELECT COALESCE(SUM(monthly_rate * 0.05),0) AS total FROM lease_contracts_v2
+           WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('ACTIVE','COMPLETED')
+             AND created_at::date BETWEEN $1::date AND $2::date`, start, end, tenantId
         ).catch(zero),
         tx.$queryRawUnsafe<RevRow[]>(
           `SELECT COALESCE(SUM(vat_amount),0) AS total FROM finance_invoices
-           WHERE deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED')
-             AND issue_date BETWEEN $1 AND $2`, start, end
+           WHERE tenant_id = $3 AND deleted_at IS NULL AND payment_status NOT IN ('DRAFT','CANCELLED')
+             AND issue_date BETWEEN $1::date AND $2::date`, start, end, tenantId
         ).catch(zero),
       ]);
 
@@ -100,7 +100,7 @@ export async function GET(req: NextRequest) {
       type InputVatRow = { total: number | null };
       const [inputVatRow] = await tx.$queryRawUnsafe<InputVatRow[]>(
         `SELECT COALESCE(SUM(total_cost),0) AS total FROM fuel_logs
-         WHERE created_at::date BETWEEN $1 AND $2`, start, end
+         WHERE tenant_id = $3 AND created_at::date BETWEEN $1::date AND $2::date`, start, end, tenantId
       ).catch(() => [{ total: 0 }]);
       const inputVat = Math.round(Number(inputVatRow?.total ?? 0) * 0.05 * 100) / 100;
 

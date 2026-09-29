@@ -101,8 +101,8 @@ export async function createDraftJournalEntry(
        (journal_entry_id, line_number, account_code, account_name, description,
         debit_amount, credit_amount, normal_balance, cost_centre, currency)
      VALUES
-       ($1,1,$2,$3,$4,$5,0,'DEBIT',$6,$7),
-       ($1,2,$8,$9,$10,0,$5,'CREDIT',$6,$7)`,
+       ($1::uuid,1,$2,$3,$4,$5,0,'DEBIT',$6,$7),
+       ($1::uuid,2,$8,$9,$10,0,$5,'CREDIT',$6,$7)`,
     je.id,
     p.debit.code,  p.debit.name,  p.debit.description,
     p.amount,

@@ -57,8 +57,8 @@ export async function GET(req: NextRequest) {
       where += ` AND tenant_id = $${pi++}`; params.push(tenantId);
       if (status)           { where += ` AND status = $${pi++}`;    params.push(status); }
       if (module)           { where += ` AND module = $${pi++}`;    params.push(module); }
-      if (from)             { where += ` AND issue_date >= $${pi++}`; params.push(from); }
-      if (to)               { where += ` AND issue_date <= $${pi++}`; params.push(to); }
+      if (from)             { where += ` AND issue_date >= $${pi++}::date`; params.push(from); }
+      if (to)               { where += ` AND issue_date <= $${pi++}::date`; params.push(to); }
 
       const [rows, counts] = await Promise.all([
         tx.$queryRawUnsafe<Row[]>(
@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
             reason_code, reason_detail, line_items,
             subtotal, vat_amount, total_amount, currency, issue_date,
             issued_by, notes, tenant_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14,$15,$16,$17,$18,$19)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12::numeric,$13::numeric,$14::numeric,$15,$16::date,$17,$18,$19)
          RETURNING *`,
         dnNumber,
         body.originalPayableId  ?? null,

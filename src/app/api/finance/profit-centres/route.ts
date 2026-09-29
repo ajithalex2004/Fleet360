@@ -56,11 +56,11 @@ export async function GET(req: NextRequest) {
                  COALESCE(SUM(jl.credit_amount - jl.debit_amount),0)
              END::numeric(15,2) AS balance
            FROM finance_journal_lines jl
-           JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id
+           JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id::text
            JOIN finance_chart_of_accounts c ON c.account_code = jl.account_code AND c.tenant_id = je.tenant_id
           WHERE je.tenant_id = $3
             AND je.status = 'POSTED'
-            AND je.entry_date BETWEEN $1 AND $2
+            AND je.entry_date BETWEEN $1::date AND $2::date
             AND je.deleted_at IS NULL
             AND c.is_header = FALSE
             ${code ? `AND jl.profit_centre = $4` : ''}

@@ -76,25 +76,25 @@ const getFinanceSummary = cacheRead(
         `SELECT COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
            FROM quotations
           WHERE status = 'APPROVED' AND deleted_at IS NULL
-            AND created_at BETWEEN $1 AND $2`,
+            AND created_at BETWEEN $1::timestamptz AND $2::timestamptz`,
         fromTs, toTs,
       ).catch(zeroAgg),
 
       tx.$queryRawUnsafe<AggRow[]>(
         `SELECT COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
-           FROM rental_invoices WHERE deleted_at IS NULL AND created_at BETWEEN $1 AND $2`,
+           FROM rental_invoices WHERE deleted_at IS NULL AND created_at BETWEEN $1::timestamptz AND $2::timestamptz`,
         fromTs, toTs,
       ).catch(zeroAgg),
 
       tx.$queryRawUnsafe<AggRow[]>(
         `SELECT COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
-           FROM lease_invoices WHERE deleted_at IS NULL AND created_at BETWEEN $1 AND $2`,
+           FROM lease_invoices WHERE created_at BETWEEN $1::timestamptz AND $2::timestamptz`,
         fromTs, toTs,
       ).catch(zeroAgg),
 
       tx.$queryRawUnsafe<AggRow[]>(
         `SELECT COALESCE(SUM(amount),0) as total, COUNT(*) as count
-           FROM invoices WHERE deleted_at IS NULL AND created_at BETWEEN $1 AND $2`,
+           FROM invoices WHERE deleted_at IS NULL AND created_at BETWEEN $1::timestamptz AND $2::timestamptz`,
         fromTs, toTs,
       ).catch(zeroAgg),
 
@@ -111,7 +111,7 @@ const getFinanceSummary = cacheRead(
         `SELECT COALESCE(SUM(amount),0) as total, COUNT(*) as count
            FROM payment_transactions
           WHERE deleted_at IS NULL AND status = 'COMPLETED'
-            AND created_at BETWEEN $1 AND $2`,
+            AND created_at BETWEEN $1::timestamptz AND $2::timestamptz`,
         fromTs, toTs,
       ).catch(zeroAgg),
 
@@ -127,7 +127,7 @@ const getFinanceSummary = cacheRead(
                 COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
            FROM quotations
           WHERE status = 'APPROVED' AND deleted_at IS NULL
-            AND created_at BETWEEN $1 AND $2
+            AND created_at BETWEEN $1::timestamptz AND $2::timestamptz
           GROUP BY DATE_TRUNC('month', created_at) ORDER BY month`,
         fromTs, toTs,
       ).catch(zeroMonth),
@@ -136,7 +136,7 @@ const getFinanceSummary = cacheRead(
         `SELECT TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM') as month,
                 COALESCE(SUM(total_amount),0) as total, COUNT(*) as count
            FROM rental_invoices WHERE deleted_at IS NULL
-            AND created_at BETWEEN $1 AND $2
+            AND created_at BETWEEN $1::timestamptz AND $2::timestamptz
           GROUP BY DATE_TRUNC('month', created_at) ORDER BY month`,
         fromTs, toTs,
       ).catch(zeroMonth),
