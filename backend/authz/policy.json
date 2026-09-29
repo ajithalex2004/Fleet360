@@ -1,5 +1,5 @@
 {
- "policyVersion": "2026-09-29.1",
+ "policyVersion": "2026-09-29.2",
  "catalogueVersion": "14e88206",
  "catalogue": [
   "leasing:view:*",
@@ -375,6 +375,15 @@
    },
    "write": {
     "kind": "external"
+   }
+  },
+  {
+   "prefix": "customer",
+   "read": {
+    "kind": "self"
+   },
+   "write": {
+    "kind": "self"
    }
   },
   {

@@ -32,7 +32,8 @@ export default function MyBookingsPage() {
   const fetchBookings = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/bookings');
+      // The customer's own bookings, not the tenant-wide /api/bookings list.
+      const res = await fetch('/api/customer/bookings', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setBookings(data.bookings || []);

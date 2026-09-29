@@ -3,7 +3,7 @@
 Generated from `src/lib/authz/policy-matrix.ts` and `SYSTEM_ROLES` by `tests/unit/authz-policy-matrix.test.ts`.
 Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-policy-matrix.test.ts`.
 
-- Policy version: `2026-09-29.1`
+- Policy version: `2026-09-29.2`
 - Permission catalogue version: `14e88206` (163 permissions)
 
 ## API areas
@@ -23,12 +23,13 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `bookings` | 2 | module `booking-portal` | module `booking-portal` |
 | `branch-staff` | 1 | module `bus-ops` | module `bus-ops` |
 | `branding` | 1 | external | external |
-| `bus-ops` | 105 | module `bus-ops` | module `bus-ops` |
+| `bus-ops` | 106 | module `bus-ops` | module `bus-ops` |
 | `bus-ops/gateway` | 1 | external | external |
 | `carrier-portal` | 8 | external | external |
 | `chat` | 1 | self | self |
 | `compliance` | 7 | module `compliance` | module `compliance` |
 | `cron` | 2 | external | external |
+| `customer` | 3 | self | self |
 | `customer-hierarchy` | 2 | module `customer-mgmt` | module `customer-mgmt` |
 | `customers` | 4 | module `customer-mgmt` | module `customer-mgmt` |
 | `debug` | 1 | platform | platform |
@@ -74,7 +75,7 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `rental` | 52 | module `rental` | module `rental` |
 | `reports` | 5 | module `reports` | module `reports` |
 | `route-optimizer` | 2 | module `bus-ops` | module `bus-ops` |
-| `school-bus` | 34 | module `school-bus` | module `school-bus` |
+| `school-bus` | 35 | module `school-bus` | module `school-bus` |
 | `search` | 1 | self | self |
 | `service` | 0 | module `maintenance` | module `maintenance` |
 | `service-requests` | 2 | module `service-tickets` | module `service-tickets` |

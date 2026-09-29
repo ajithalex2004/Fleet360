@@ -59,7 +59,12 @@ export async function POST(req: NextRequest) {
       const body = stripTenantOwnershipFields(bodyRaw);
         // tenant_id is required and checked by row level security.
         const booking = await tx.booking.create({
-          data: { ...(body as Prisma.BookingUncheckedCreateInput), tenantId },
+          data: {
+            ...(body as Prisma.BookingUncheckedCreateInput),
+            tenantId,
+            // Links portal bookings to the customer who made them (My bookings).
+            requestorId: (body as { requestorId?: string }).requestorId ?? req.headers.get('x-user-id'),
+          },
         });
         return NextResponse.json(booking, { status: 201 });
         } catch (e) {
