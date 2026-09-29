@@ -1,5 +1,4 @@
 'use client';
-import { addDays } from '@/lib/autoFill';
 import React, { useState, useEffect, useCallback } from 'react';
 import SlideOverDrawer, { DrawerTab, DrawerAction } from '@/components/ui/SlideOverDrawer';
 import { 
@@ -7,12 +6,8 @@ import {
   Car, 
   User, 
   MapPin, 
-  Clock, 
-  CreditCard, 
   FileText, 
-  ShieldCheck, 
-  ExternalLink,
-  Code
+  ShieldCheck,
 } from 'lucide-react';
 
 interface Customer { id: string; fullName: string; email?: string; phone?: string; nationality?: string; }
@@ -143,13 +138,14 @@ export default function BookingsPage() {
   const handleAction = async (id: string, action: 'confirm' | 'activate' | 'complete' | 'cancel', extra?: Record<string, unknown>) => {
     setActionLoading(`${id}:${action}`);
     try {
-      const res = await fetch(`/api/rental/bookings/${id}/action`, {
+      // One route per action: /confirm, /activate, /complete, /cancel.
+      const res = await fetch(`/api/rental/bookings/${id}/${action}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, ...extra }),
+        body: JSON.stringify(extra ?? {}),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? `Failed to ${action} booking`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? `Failed to ${action} booking (HTTP ${res.status})`);
       
       // Update local state if currently inspecting
       if (inspectingBooking && inspectingBooking.id === id) {
@@ -170,15 +166,15 @@ export default function BookingsPage() {
   const runPenaltySweep = async () => {
     setSweeping(true);
     try {
-      const res = await fetch('/api/rental/penalties/sweep', { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Sweep failed');
+      const res = await fetch('/api/rental/bookings/sweep-penalties', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? `Sweep failed (HTTP ${res.status})`);
       alert(
         `Sweep complete:\n` +
-        `  ${data.counts.noShow} no-show flipped & charged\n` +
-        `  ${data.counts.lateReturn} late-return charged\n` +
-        `  ${data.counts.skipped} skipped (already today)\n` +
-        `  ${data.errors.length} errors`
+        `  ${data.noShow ?? 0} no-show flipped & charged\n` +
+        `  ${data.lateReturn ?? 0} late-return charged\n` +
+        `  ${data.skipped ?? 0} skipped (already today)\n` +
+        `  ${data.errors?.length ?? 0} errors`
       );
       loadData();
     } catch (e) {
@@ -192,7 +188,6 @@ export default function BookingsPage() {
     { id: 'overview', label: 'Overview', icon: <FileText className="w-3.5 h-3.5" /> },
     { id: 'customer', label: 'Customer', icon: <User className="w-3.5 h-3.5" /> },
     { id: 'compliance', label: 'Cross-Border Permit', icon: <ShieldCheck className="w-3.5 h-3.5" /> },
-    { id: 'json', label: 'Raw Payload', icon: <Code className="w-3.5 h-3.5" /> },
   ];
 
   const getDrawerActions = (b: Booking): DrawerAction[] => {
@@ -544,11 +539,6 @@ export default function BookingsPage() {
             </div>
           )}
 
-          {drawerTab === 'json' && (
-            <div className="p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] font-mono text-[11px] text-[var(--text-muted)] overflow-x-auto">
-              <pre>{JSON.stringify(inspectingBooking, null, 2)}</pre>
-            </div>
-          )}
         </SlideOverDrawer>
       )}
 
