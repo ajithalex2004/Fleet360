@@ -33,7 +33,7 @@
  */
 import type { ModuleKey } from '@/lib/modules';
 
-export const POLICY_VERSION = '2026-09-29.1';
+export const POLICY_VERSION = '2026-09-29.2';
 
 export type Rule =
   | { kind: 'module'; module: ModuleKey; action?: 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'export' }
@@ -146,6 +146,9 @@ export const AREAS: Readonly<Record<string, AreaRule>> = {
   kyc: m('customer-mgmt'),
   'booking-portal': m('booking-portal'),
   bookings: m('booking-portal'),
+  // Customer portal: the signed-in customer's own profile and bookings;
+  // the handlers scope every query to the caller (src/lib/customer/portal.ts).
+  customer: SELF,
   quotations: m('booking-portal'),
   assets: m('assets'),
   sustainability: m('sustainability'),

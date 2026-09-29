@@ -68,7 +68,7 @@ export default function CRMPage() {
     setUpdating(inquiryId);
 
     try {
-      const res = await fetch(`/api/leasing/crm/${inquiryId}`, {
+      const res = await fetch(`/api/leasing/inquiries/${inquiryId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nextStatus }),
@@ -80,7 +80,8 @@ export default function CRMPage() {
       if (data) {
         setData({
           ...data,
-          inquiries: data.inquiries.map((inq) => (inq.id === inquiryId ? updated : inq)),
+          // The update response has no quotations: keep the row's own.
+          inquiries: data.inquiries.map((inq) => (inq.id === inquiryId ? { ...inq, ...updated } : inq)),
         });
       }
     } catch (err) {

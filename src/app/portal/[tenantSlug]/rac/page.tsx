@@ -90,11 +90,17 @@ export default function TenantRACPage() {
     if (!tenant) return;
 
     // Fleet summary
-    fetch(`/api/fleet?tenantId=${tenant.id}&summary=true`)
+    fetch('/api/fleet/stats', { cache: 'no-store' })
       .then(r => r.ok ? r.json() : null)
       .then(d => {
-        if (d && (d.total !== undefined || d.summary)) {
-          setFleet(d.summary ?? d);
+        if (d && d.totalVehicles !== undefined) {
+          setFleet({
+            total: d.totalVehicles,
+            available: d.available ?? 0,
+            rented: d.allocated ?? 0,
+            maintenance: d.inMaintenance ?? 0,
+            maxVehicles: undefined,
+          });
         }
       })
       .catch(() => {})
@@ -111,15 +117,15 @@ export default function TenantRACPage() {
       .finally(() => setLoadingBookings(false));
 
     // Monthly revenue from rental
-    fetch(`/api/rental?tenantId=${tenant.id}&from=${monthStart}&to=${today}&summary=true`)
+    fetch(`/api/rental/analytics?startDate=${monthStart}&endDate=${today}`, { cache: 'no-store' })
       .then(r => r.ok ? r.json() : null)
-      .then(d => setRevenue(d?.totalRevenue ?? d?.revenue ?? null))
+      .then(d => setRevenue(d?.overview?.total_revenue ?? null))
       .catch(() => {});
 
     // Agreements count
-    fetch(`/api/rental?tenantId=${tenant.id}&type=agreements&count=true`)
+    fetch('/api/rental/agreements?status=ACTIVE&limit=1', { cache: 'no-store' })
       .then(r => r.ok ? r.json() : null)
-      .then(d => setAgreements(d?.count ?? d?.total ?? 0))
+      .then(d => setAgreements(d?.total ?? 0))
       .catch(() => {});
   }, [tenant, today, monthStart]);
 
