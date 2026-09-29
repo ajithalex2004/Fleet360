@@ -53,16 +53,6 @@ const DEFAULTS: Record<string, Record<string, unknown>> = {
   },
 };
 
-const DDL = `
-  CREATE TABLE IF NOT EXISTS agent_configs (
-    id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    agent_id      TEXT        NOT NULL UNIQUE,
-    thresholds    JSONB       NOT NULL DEFAULT '{}',
-    schedule_cron TEXT,
-    updated_at    TIMESTAMPTZ DEFAULT NOW()
-  );
-`;
-
 export async function GET(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -72,8 +62,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(DDL).catch(() => {});
-
       const rows = await tx.$queryRawUnsafe<{ agent_id: string; thresholds: string }[]>(
         `SELECT agent_id, thresholds::text FROM agent_configs`,
       ).catch(() => []);
@@ -92,7 +80,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ thresholds: result });
   });
 }
-
 
 export async function PATCH(req: NextRequest) {
 
@@ -113,8 +100,6 @@ export async function PATCH(req: NextRequest) {
       if (!agentId || !DEFAULTS[agentId]) {
         return NextResponse.json({ error: 'Unknown agentId' }, { status: 400 });
       }
-
-      await tx.$executeRawUnsafe(DDL).catch(() => {});
 
       // Upsert — merge incoming thresholds with existing
       await tx.$executeRawUnsafe(

@@ -1,15 +1,16 @@
 import { prisma } from '@/lib/prisma';
+import { provisionSchemaOnce } from '@/lib/db/schema-init';
 
-const _g = globalThis as { _spmSchemaInit?: Promise<void> };
-
-// Singleton: runs once per server process, concurrent callers wait on same Promise
+// Runs no DDL where these tables exist; see provisionSchemaOnce.
 export function ensureSpmSchema(): Promise<void> {
-  if (_g._spmSchemaInit) return _g._spmSchemaInit;
-  _g._spmSchemaInit = _doInit().catch((e) => {
-    delete _g._spmSchemaInit;
-    throw e;
-  });
-  return _g._spmSchemaInit;
+  return provisionSchemaOnce('spm', { tables: [
+    'spm_cycles',
+    'spm_tickets',
+    'spm_checklist_templates',
+    'spm_ticket_checks',
+    'spm_audit_logs',
+    'spm_notifications',
+  ] }, _doInit);
 }
 
 async function _doInit(): Promise<void> {
@@ -69,9 +70,12 @@ async function _doInit(): Promise<void> {
         technician_notes TEXT,
         completion_photos TEXT[],
         created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        UNIQUE (cycle_id, (DATE(scheduled_date)))
+        updated_at TIMESTAMPTZ DEFAULT NOW()
       );
+      -- One ticket per cycle per UTC day (a table constraint cannot hold an
+      -- expression, and DATE() of a timestamptz is not immutable).
+      CREATE UNIQUE INDEX IF NOT EXISTS spm_tickets_cycle_day_key
+        ON spm_tickets (cycle_id, ((scheduled_date AT TIME ZONE 'UTC')::date));
 
       -- spm_checklist_templates
       CREATE TABLE IF NOT EXISTS spm_checklist_templates (

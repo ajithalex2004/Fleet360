@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { provisionSchemaOnce } from '@/lib/db/schema-init';
 import type { DispatchWeights, ServiceType, DispatchPriority } from './types';
 
 /* ─────────────────────────────────────────────────────────────
@@ -45,15 +46,18 @@ export const DEFAULT_WEIGHTS: Record<string, Record<string, DispatchWeights>> = 
    All 23 DDL statements are collapsed into ONE PL/pgSQL block —
    a single round-trip to Neon instead of 23 sequential awaits.
 ───────────────────────────────────────────────────────────── */
-const _g = globalThis as { _dispatchSchemaInit?: Promise<void> };
-
+// Runs no DDL where these tables exist; see provisionSchemaOnce.
 export function ensureDispatchSchema(): Promise<void> {
-  if (_g._dispatchSchemaInit) return _g._dispatchSchemaInit;
-  _g._dispatchSchemaInit = _doInit().catch((e) => {
-    delete _g._dispatchSchemaInit; // allow retry on failure
-    throw e;
-  });
-  return _g._dispatchSchemaInit;
+  return provisionSchemaOnce('dispatch', { tables: [
+    'dispatch_jobs',
+    'dispatch_attempts',
+    'dispatch_weights',
+    'vehicle_locations',
+    'driver_availability',
+    'ambulance_capabilities',
+    'school_bus_routes',
+    'dispatch_merge_suggestions',
+  ] }, _doInit);
 }
 
 async function _doInit(): Promise<void> {

@@ -1,62 +1,16 @@
-import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { provisionSchemaOnce } from '@/lib/db/schema-init';
 
-const _g = globalThis as { _fleetSchemaInit?: Promise<void> };
-
-// The production runtime role (fleet360_app) has no CREATE privilege on the
-// public schema, so this DDL always fails with 42501 there. The tables it
-// creates already exist in every live environment - this block only matters
-// for fresh/local databases connecting as an owner-equivalent role.
-function isInsufficientPrivilege(e: unknown): boolean {
-  return (
-    e instanceof Prisma.PrismaClientKnownRequestError &&
-    (e.meta as { code?: string } | undefined)?.code === '42501'
-  );
-}
-
-// Singleton: runs once per server process, concurrent callers wait on same Promise
+// Runs no DDL where these tables exist; see provisionSchemaOnce.
 export function ensureFleetSchema(): Promise<void> {
-  if (_g._fleetSchemaInit) return _g._fleetSchemaInit;
-  _g._fleetSchemaInit = _doInit()
-    .then(async (skippedDdl) => {
-      // If DDL was skipped because the runtime role lacks CREATE privilege,
-      // we're on the assumption above that the tables already exist -- do not
-      // verify. A caller that reached ensureFleetSchema() from inside a
-      // withTenantRls/withPlatformAdmin transaction shares that transaction's
-      // connection, and the 42501 we just swallowed leaves it aborted: any
-      // further statement on it fails with 25P02 regardless of whether
-      // vehicle_types actually exists, which previously misreported as
-      // "schema init incomplete" and 500'd the whole request.
-      if (skippedDdl) return;
-      // Verify the primary table was actually created (Neon cold-start can silently
-      // swallow CREATE TABLE errors via exec(), leaving the singleton resolved but
-      // tables absent). Reset the singleton so the next request retries.
-      const rows = await prisma.$queryRawUnsafe<{ exists: boolean }[]>(
-        `SELECT EXISTS(
-           SELECT 1 FROM information_schema.tables
-           WHERE table_schema = 'public' AND table_name = 'vehicle_types'
-         ) AS exists`,
-      ).catch(() => [] as { exists: boolean }[]);
-      if (!rows[0]?.exists) {
-        throw new Error('Fleet schema init incomplete: vehicle_types not created (Neon cold-start?)');
-      }
-    })
-    .catch((e) => { delete _g._fleetSchemaInit; throw e; });
-  return _g._fleetSchemaInit;
-}
-
-/** Returns true if DDL was skipped because the runtime role lacks CREATE privilege. */
-async function _doInit(): Promise<boolean> {
-  try {
-    await _runDdl();
-    return false;
-  } catch (e) {
-    if (isInsufficientPrivilege(e)) {
-      console.warn('[ensureFleetSchema] DDL skipped: runtime role lacks CREATE privilege on public schema (assuming tables already exist)');
-      return true;
-    }
-    throw e;
-  }
+  return provisionSchemaOnce('fleet', { tables: [
+    'vehicle_types',
+    'fleet_work_orders',
+    'fleet_lifecycle_events',
+    'fleet_allocations',
+    'fleet_transfers',
+    'fleet_vehicle_insurance',
+  ] }, _runDdl);
 }
 
 async function _runDdl(): Promise<void> {

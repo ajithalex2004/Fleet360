@@ -135,29 +135,15 @@ export async function POST(req: NextRequest) {
         // change attendance — student already had it from BOARDING.
         if (scanType === 'BOARDING') {
           const today = new Date().toISOString().slice(0, 10);
-          await tx.$executeRawUnsafe(`
-            CREATE TABLE IF NOT EXISTS school_bus_attendance (
-              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-              student_id UUID NOT NULL,
-              date DATE NOT NULL,
-              session_type TEXT NOT NULL,
-              status TEXT NOT NULL DEFAULT 'ABSENT',
-              boarded_at TIMESTAMPTZ,
-              scanned_at TIMESTAMPTZ,
-              reason TEXT,
-              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-              UNIQUE (student_id, date, session_type)
-            )
-          `);
           await tx.$executeRawUnsafe(
             `INSERT INTO school_bus_attendance
-               (student_id, date, session_type, status, boarded_at, scanned_at, reason)
-             VALUES ($1::uuid, $2::date, $3, 'PRESENT', NOW(), NOW(), $4)
+               (student_id, date, session_type, status, boarded_at, scanned_at, notes, tenant_id)
+             VALUES ($1::uuid, $2::date, $3, 'PRESENT', NOW(), NOW(), $4, $5)
              ON CONFLICT (student_id, date, session_type)
              DO UPDATE SET status='PRESENT', boarded_at=NOW(), scanned_at=NOW(),
-                           reason=EXCLUDED.reason`,
+                           notes=EXCLUDED.notes`,
             student.id, today, trip.session_type ?? 'MORNING',
-            rfidCard ? 'RFID' : 'CODE',
+            rfidCard ? 'RFID' : 'CODE', tenantId,
           );
         }
 

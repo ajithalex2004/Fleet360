@@ -212,23 +212,6 @@ async function listCargoLines(tenantId: string, shipmentOrderId: string) {
 }
 
 async function listDocuments(tenantId: string, shipmentOrderId: string) {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS logistics_shipment_documents (
-      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      tenant_id TEXT NOT NULL,
-      shipment_order_id TEXT NOT NULL,
-      doc_type TEXT NOT NULL,
-      doc_name TEXT NOT NULL,
-      file_url TEXT,
-      file_data TEXT,
-      mime_type TEXT,
-      file_size BIGINT,
-      uploaded_by TEXT,
-      notes TEXT,
-      metadata JSONB
-    )
-  `).catch(() => {});
 
   const rows = await prisma.$queryRawUnsafe<Array<{
     id: string;

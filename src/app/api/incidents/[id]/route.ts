@@ -71,27 +71,20 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           });
 
           // Auto-add status change note
-          await tx.$executeRawUnsafe(`
-            CREATE TABLE IF NOT EXISTS incident_notes (
-              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-              incident_id UUID NOT NULL, note_type TEXT NOT NULL DEFAULT 'UPDATE',
-              content TEXT NOT NULL, author TEXT,
-              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
-          `).catch(() => {});
 
           const noteContent = resolutionNotes
             ? `Status changed to ${status}. ${resolutionNotes}`
             : `Status changed to ${status}${assignedTo ? ` — Assigned to ${assignedTo}` : ''}`;
 
           await tx.$executeRawUnsafe(
-            `INSERT INTO incident_notes (incident_id, note_type, content, author)
-             VALUES ($1, $2, $3, $4)`,
+            `INSERT INTO incident_notes (incident_id, note_type, content, author, tenant_id)
+             VALUES ($1, $2, $3, $4, $5)`,
             params.id,
             status === 'ESCALATED' ? 'ESCALATION' : status === 'RESOLVED' ? 'RESOLUTION' : 'UPDATE',
             noteContent,
-            resolvedBy || assignedTo || 'System'
-          ).catch(() => {});
+            resolvedBy || assignedTo || 'System',
+            tenantId,
+          );
 
           return NextResponse.json({ success: true, id: params.id, status });
         }
