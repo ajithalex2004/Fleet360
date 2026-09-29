@@ -78,7 +78,7 @@ export default function BookingsPage() {
     setError('');
     try {
       const [bRes, cRes] = await Promise.all([
-        fetch('/api/rental/bookings'),
+        fetch('/api/rental/bookings', { cache: 'no-store' }),
         fetch('/api/rental/customers'),
       ]);
       const [bData, cData] = await Promise.all([bRes.json(), cRes.json()]);
@@ -154,6 +154,8 @@ export default function BookingsPage() {
       loadData();
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : `Failed to ${action} booking`);
+      // A refusal usually means the booking changed elsewhere: show its real status.
+      loadData();
     } finally {
       setActionLoading(null);
     }
