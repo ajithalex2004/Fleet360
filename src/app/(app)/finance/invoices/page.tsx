@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { downloadXLSX } from '@/lib/exportUtils';
+import { DrawerPortal } from '@/components/ui/DrawerPortal';
 
 /* ─────────────────────────── types ─────────────────────────── */
 interface LineItem { description: string; qty: number; unitPrice: number }
@@ -400,19 +401,19 @@ function InvoiceDrawer({ invoiceId, onClose, onRefresh }: { invoiceId: string; o
   };
 
   if (!inv) return (
-    <>
+    <DrawerPortal>
       <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
       <div className="fixed inset-y-0 right-0 z-40 w-[480px] bg-[var(--bg-canvas)] border-l border-[var(--border-subtle)] flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500" />
       </div>
-    </>
+    </DrawerPortal>
   );
 
   const outstanding = Math.max(0, Number(inv.total_amount) - Number(inv.paid_amount));
   const items: LineItem[] = Array.isArray(inv.line_items) ? inv.line_items : [];
 
   return (
-    <>
+    <DrawerPortal>
       {showPay && <PaymentModal invoice={inv} onClose={() => setShowPay(false)} onPaid={() => { load(); onRefresh(); }} />}
       <div className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
       <div className="fixed inset-y-0 right-0 z-40 w-[480px] bg-[var(--bg-canvas)] border-l border-[var(--border-subtle)] overflow-y-auto">
@@ -556,7 +557,7 @@ function InvoiceDrawer({ invoiceId, onClose, onRefresh }: { invoiceId: string; o
           )}
         </div>
       </div>
-    </>
+    </DrawerPortal>
   );
 }
 

@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import { downloadXLSX } from '@/lib/exportUtils';
+import { DrawerPortal } from '@/components/ui/DrawerPortal';
 
 interface Expense {
   id: string; expense_no: string; category: string; sub_category: string | null;
@@ -241,6 +242,7 @@ function ExpenseDrawer({ expenseId, onClose, onChanged }: { expenseId: string; o
   ] : [];
 
   return (
+    <DrawerPortal>
     <div className="fixed inset-0 z-40 flex justify-end bg-black/50" onClick={onClose}>
       <div className="w-full max-w-[480px] h-full bg-[var(--bg-surface)] border-l border-[var(--border-subtle)] overflow-y-auto"
         onClick={e => e.stopPropagation()}>
@@ -367,6 +369,7 @@ function ExpenseDrawer({ expenseId, onClose, onChanged }: { expenseId: string; o
         </div>
       )}
     </div>
+    </DrawerPortal>
   );
 }
 

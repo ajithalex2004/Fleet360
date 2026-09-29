@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { DrawerPortal } from '@/components/ui/DrawerPortal';
 
 interface FixedAsset {
   id: string; asset_no: string; asset_name: string; asset_category: string;
@@ -302,6 +303,7 @@ function ScheduleDrawer({ asset, onClose }: { asset: FixedAsset; onClose: () => 
   const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
   return (
+    <DrawerPortal>
     <div className="fixed inset-0 z-50 flex justify-end bg-black/50">
       <div className="w-[580px] bg-[var(--bg-surface)] border-l border-[var(--border-subtle)] flex flex-col">
         <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)]">
@@ -360,6 +362,7 @@ function ScheduleDrawer({ asset, onClose }: { asset: FixedAsset; onClose: () => 
         </div>
       </div>
     </div>
+    </DrawerPortal>
   );
 }
 
@@ -483,6 +486,7 @@ function AssetDrawer({ assetId, onClose, onChanged }: { assetId: string; onClose
     : null;
 
   return (
+    <DrawerPortal>
     <div className="fixed inset-0 z-40 flex justify-end bg-black/50" onClick={onClose}>
       <div className="w-full max-w-[520px] h-full bg-[var(--bg-surface)] border-l border-[var(--border-subtle)] overflow-y-auto"
         onClick={e => e.stopPropagation()}>
@@ -638,6 +642,7 @@ function AssetDrawer({ assetId, onClose, onChanged }: { assetId: string; onClose
         </div>
       )}
     </div>
+    </DrawerPortal>
   );
 }
 
