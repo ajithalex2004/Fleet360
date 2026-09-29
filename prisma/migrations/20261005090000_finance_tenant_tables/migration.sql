@@ -34,14 +34,17 @@
 
 SELECT set_config('app.tenant_id', '*', false);
 
--- A finance table lives in public or finance depending on the environment.
-CREATE FUNCTION pg_temp.fin_rel(name text) RETURNS regclass
-  LANGUAGE sql AS $$ SELECT COALESCE(to_regclass('public.' || name), to_regclass('finance.' || name)) $$;
+-- A finance table lives in public or finance depending on the environment:
+-- every block below looks it up in both.
+--
+-- Blocks use the named quote $mig$ and no helper function, so SQL editors
+-- that split a script on semicolons (the Neon SQL Editor) keep each block
+-- whole.
 
 -- ── 1. missing tables ────────────────────────────────────────────────────
-DO $$
+DO $mig$
 BEGIN
-  IF pg_temp.fin_rel('finance_fixed_assets') IS NULL THEN
+  IF COALESCE(to_regclass('public.' || 'finance_fixed_assets'), to_regclass('finance.' || 'finance_fixed_assets')) IS NULL THEN
     CREATE TABLE finance.finance_fixed_assets (
       id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       tenant_id           TEXT NOT NULL,
@@ -76,7 +79,7 @@ BEGIN
     );
   END IF;
 
-  IF pg_temp.fin_rel('finance_depreciation_schedule') IS NULL THEN
+  IF COALESCE(to_regclass('public.' || 'finance_depreciation_schedule'), to_regclass('finance.' || 'finance_depreciation_schedule')) IS NULL THEN
     CREATE TABLE finance.finance_depreciation_schedule (
       id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       tenant_id       TEXT NOT NULL,
@@ -95,7 +98,7 @@ BEGIN
       ON finance.finance_depreciation_schedule (tenant_id, asset_id, period_year, period_month);
   END IF;
 
-  IF pg_temp.fin_rel('finance_audit_log') IS NULL THEN
+  IF COALESCE(to_regclass('public.' || 'finance_audit_log'), to_regclass('finance.' || 'finance_audit_log')) IS NULL THEN
     CREATE TABLE finance.finance_audit_log (
       id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       tenant_id       TEXT NOT NULL,
@@ -117,7 +120,7 @@ BEGIN
     CREATE INDEX finance_audit_log_entity_idx ON finance.finance_audit_log (tenant_id, entity_type, entity_id);
   END IF;
 
-  IF pg_temp.fin_rel('finance_budget_submissions') IS NULL THEN
+  IF COALESCE(to_regclass('public.' || 'finance_budget_submissions'), to_regclass('finance.' || 'finance_budget_submissions')) IS NULL THEN
     CREATE TABLE finance.finance_budget_submissions (
       id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       tenant_id       TEXT NOT NULL,
@@ -145,7 +148,7 @@ BEGIN
     );
   END IF;
 
-  IF pg_temp.fin_rel('finance_budget_comments') IS NULL THEN
+  IF COALESCE(to_regclass('public.' || 'finance_budget_comments'), to_regclass('finance.' || 'finance_budget_comments')) IS NULL THEN
     CREATE TABLE finance.finance_budget_comments (
       id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       tenant_id     TEXT NOT NULL,
@@ -160,7 +163,7 @@ BEGIN
       ON finance.finance_budget_comments (tenant_id, submission_id);
   END IF;
 
-  IF pg_temp.fin_rel('finance_ct_returns') IS NULL THEN
+  IF COALESCE(to_regclass('public.' || 'finance_ct_returns'), to_regclass('finance.' || 'finance_ct_returns')) IS NULL THEN
     CREATE TABLE public.finance_ct_returns (
       id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       tenant_id       TEXT NOT NULL,
@@ -190,7 +193,7 @@ BEGIN
     );
   END IF;
 
-  IF pg_temp.fin_rel('finance_ct_adjustments') IS NULL THEN
+  IF COALESCE(to_regclass('public.' || 'finance_ct_adjustments'), to_regclass('finance.' || 'finance_ct_adjustments')) IS NULL THEN
     CREATE TABLE public.finance_ct_adjustments (
       id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       tenant_id       TEXT NOT NULL,
@@ -204,7 +207,7 @@ BEGIN
     );
   END IF;
 
-  IF pg_temp.fin_rel('finance_periods') IS NULL THEN
+  IF COALESCE(to_regclass('public.' || 'finance_periods'), to_regclass('finance.' || 'finance_periods')) IS NULL THEN
     CREATE TABLE public.finance_periods (
       id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       tenant_id       TEXT NOT NULL,
@@ -223,7 +226,7 @@ BEGIN
     );
   END IF;
 
-  IF pg_temp.fin_rel('finance_fiscal_years') IS NULL THEN
+  IF COALESCE(to_regclass('public.' || 'finance_fiscal_years'), to_regclass('finance.' || 'finance_fiscal_years')) IS NULL THEN
     CREATE TABLE public.finance_fiscal_years (
       id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       tenant_id       TEXT NOT NULL,
@@ -239,14 +242,14 @@ BEGIN
       notes           TEXT
     );
   END IF;
-END $$;
+END $mig$;
 
 -- ── 2 and 6. tenant column (text) and row level security ─────────────────
 -- Existing policies are dropped first: a column a policy uses cannot change
 -- type, and a leftover permissive policy would OR-widen the new one.
-DO $$
+DO $mig$
 DECLARE
-  name text;
+  tname text;
   rel  regclass;
   pol  record;
   col_type text;
@@ -257,10 +260,10 @@ DECLARE
     'finance_budgets', 'vat_returns', 'finance_reminder_schedules', 'finance_reminder_log'
   ];
 BEGIN
-  FOREACH name IN ARRAY names LOOP
-    rel := pg_temp.fin_rel(name);
+  FOREACH tname IN ARRAY names LOOP
+    rel := COALESCE(to_regclass('public.' || tname), to_regclass('finance.' || tname));
     IF rel IS NULL THEN
-      RAISE NOTICE 'finance tenant tables: % does not exist here, skipped', name;
+      RAISE NOTICE 'finance tenant tables: % does not exist here, skipped', tname;
       CONTINUE;
     END IF;
 
@@ -276,7 +279,7 @@ BEGIN
       EXECUTE format('ALTER TABLE %s ALTER COLUMN tenant_id TYPE TEXT USING tenant_id::text', rel);
     END IF;
 
-    EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON %s (tenant_id)', name || '_tenant_id_idx', rel);
+    EXECUTE format('CREATE INDEX IF NOT EXISTS %I ON %s (tenant_id)', tname || '_tenant_id_idx', rel);
     EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON %s TO fleet360_app', rel);
     EXECUTE format('ALTER TABLE %s ENABLE ROW LEVEL SECURITY', rel);
     EXECUTE format('ALTER TABLE %s FORCE ROW LEVEL SECURITY', rel);
@@ -287,7 +290,7 @@ BEGIN
       rel
     );
   END LOOP;
-END $$;
+END $mig$;
 
 -- ── 3. per-tenant payment reminder schedules ─────────────────────────────
 CREATE TABLE IF NOT EXISTS finance.finance_reminder_schedule_template (
@@ -302,9 +305,9 @@ CREATE TABLE IF NOT EXISTS finance.finance_reminder_schedule_template (
   branch_filter    TEXT
 );
 
-DO $$
+DO $mig$
 DECLARE
-  rel regclass := pg_temp.fin_rel('finance_reminder_schedules');
+  rel regclass := COALESCE(to_regclass('public.' || 'finance_reminder_schedules'), to_regclass('finance.' || 'finance_reminder_schedules'));
   name_attnum smallint;
   r record;
 BEGIN
@@ -344,12 +347,12 @@ BEGIN
       WHERE s.tenant_id IS NULL
      ON CONFLICT (tenant_id, name) DO NOTHING', rel, rel);
   EXECUTE format('DELETE FROM %s WHERE tenant_id IS NULL', rel);
-END $$;
+END $mig$;
 
 GRANT SELECT ON finance.finance_reminder_schedule_template TO fleet360_app;
 
 -- ── 4. accounting periods and fiscal years unique per tenant ─────────────
-DO $$
+DO $mig$
 DECLARE
   spec record;
   rel  regclass;
@@ -360,7 +363,7 @@ BEGIN
       ('finance_periods',      ARRAY['fiscal_year', 'period_number'], 'finance_periods_tenant_year_period_key'),
       ('finance_fiscal_years', ARRAY['fiscal_year'],                  'finance_fiscal_years_tenant_year_key')
     ) AS s(tbl, cols, idx) LOOP
-    rel := pg_temp.fin_rel(spec.tbl);
+    rel := COALESCE(to_regclass('public.' || spec.tbl), to_regclass('finance.' || spec.tbl));
     CONTINUE WHEN rel IS NULL;
 
     SELECT array_agg(a.attnum ORDER BY a.attnum) INTO keycols
@@ -383,14 +386,14 @@ BEGIN
     EXECUTE format('CREATE UNIQUE INDEX IF NOT EXISTS %I ON %s (tenant_id, %s)',
                    spec.idx, rel, array_to_string(spec.cols, ', '));
   END LOOP;
-END $$;
+END $mig$;
 
 -- ── 5. expense columns the route used to add at request time ─────────────
 -- Checked in the catalog first: ADD COLUMN IF NOT EXISTS still needs the
 -- table owner even when the column is there.
-DO $$
+DO $mig$
 DECLARE
-  rel regclass := pg_temp.fin_rel('finance_expenses');
+  rel regclass := COALESCE(to_regclass('public.' || 'finance_expenses'), to_regclass('finance.' || 'finance_expenses'));
 BEGIN
   IF rel IS NULL THEN RETURN; END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = rel AND attname = 'branch_id' AND NOT attisdropped) THEN
@@ -399,23 +402,23 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = rel AND attname = 'vat_amount' AND NOT attisdropped) THEN
     EXECUTE format('ALTER TABLE %s ADD COLUMN vat_amount NUMERIC(15,2) DEFAULT 0', rel);
   END IF;
-END $$;
+END $mig$;
 
 -- ── tenant_id NOT NULL where no row lacks one ────────────────────────────
-DO $$
+DO $mig$
 DECLARE
-  name text;
+  tname text;
   rel  regclass;
   has_null boolean;
 BEGIN
-  FOREACH name IN ARRAY ARRAY['finance_budgets', 'finance_reminder_schedules', 'finance_reminder_log', 'vat_returns'] LOOP
-    rel := pg_temp.fin_rel(name);
+  FOREACH tname IN ARRAY ARRAY['finance_budgets', 'finance_reminder_schedules', 'finance_reminder_log', 'vat_returns'] LOOP
+    rel := COALESCE(to_regclass('public.' || tname), to_regclass('finance.' || tname));
     CONTINUE WHEN rel IS NULL;
     EXECUTE format('SELECT EXISTS (SELECT 1 FROM %s WHERE tenant_id IS NULL)', rel) INTO has_null;
     IF has_null THEN
-      RAISE WARNING 'finance tenant tables: % has rows without a tenant; tenant_id left nullable', name;
+      RAISE WARNING 'finance tenant tables: % has rows without a tenant; tenant_id left nullable', tname;
     ELSE
       EXECUTE format('ALTER TABLE %s ALTER COLUMN tenant_id SET NOT NULL', rel);
     END IF;
   END LOOP;
-END $$;
+END $mig$;
