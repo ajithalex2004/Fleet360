@@ -1,11 +1,10 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureAssetsSchema } from '@/lib/assets/schema';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
   prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
@@ -31,7 +30,6 @@ export async function GET(req: NextRequest) {
   try {
     await ensureAssetsSchema();
     const sp = req.nextUrl.searchParams;
-    const tenantId = sp.get('tenantId') ?? 'default';
     const domain = sp.get('domain');
     const categoryId = sp.get('category_id');
     const status = sp.get('status');
@@ -88,7 +86,6 @@ export async function POST(req: NextRequest) {
   try {
     await ensureAssetsSchema();
     const body = await req.json();
-    const tenantId = body.tenantId ?? body.tenant_id ?? 'default';
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
 
@@ -106,9 +103,9 @@ export async function POST(req: NextRequest) {
         is_serialized, is_restricted, requires_calibration, is_ble_tracked, ble_tag_id,
         notes, status, is_active, created_at, updated_at
       ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
-        $14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,
-        $26,$27,$28,$29,$30
+        $1::uuid,$2,$3,$4,$5,$6::uuid,$7,$8,$9,$10,$11,$12,$13,
+        $14::numeric,$15::numeric,$16::numeric,$17::numeric,$18::numeric,$19,$20,$21::boolean,$22::boolean,$23::boolean,$24::boolean,$25,
+        $26,$27,$28::boolean,$29::timestamptz,$30::timestamptz
       ) RETURNING *
     `,
       id, tenantId, assetNo,
@@ -137,7 +134,7 @@ export async function POST(req: NextRequest) {
           quantity_before, quantity_change, quantity_after,
           unit_cost_aed, total_value_aed, reference_type,
           performed_by, performed_at, domain, notes, created_at
-        ) VALUES ($1,$2,$3,$4,$5,'INBOUND',0,$6,$7,$8,$9,'MANUAL',$10,NOW(),$11,'Initial stock',NOW())
+        ) VALUES ($1::uuid,$2,$3::uuid,$4,$5,'INBOUND',0,$6::numeric,$7::numeric,$8::numeric,$9::numeric,'MANUAL',$10,NOW(),$11,'Initial stock',NOW())
       `,
         txId, tenantId, id, body.name, assetNo,
         initialStock, initialStock,
@@ -152,7 +149,7 @@ export async function POST(req: NextRequest) {
           id, tenant_id, asset_id, asset_type, asset_name, asset_no,
           movement_type, to_location, quantity, reference_type,
           moved_by, moved_at, notes, created_at
-        ) VALUES ($1,$2,$3,'REGISTRY',$4,$5,'INBOUND',$6,$7,'MANUAL',$8,NOW(),'Initial stock inbound',NOW())
+        ) VALUES ($1::uuid,$2,$3,'REGISTRY',$4,$5,'INBOUND',$6,$7::numeric,'MANUAL',$8,NOW(),'Initial stock inbound',NOW())
       `,
         crypto.randomUUID(), tenantId, id, body.name, assetNo,
         body.warehouse_location ?? null,

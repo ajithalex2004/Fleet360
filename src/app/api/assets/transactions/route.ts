@@ -1,11 +1,10 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureAssetsSchema } from '@/lib/assets/schema';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
   prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
@@ -40,7 +39,6 @@ export async function GET(req: NextRequest) {
   try {
     await ensureAssetsSchema();
     const sp = req.nextUrl.searchParams;
-    const tenantId = sp.get('tenantId') ?? 'default';
     const assetId = sp.get('asset_id');
     const transactionType = sp.get('transaction_type');
     const domain = sp.get('domain');
@@ -97,14 +95,13 @@ export async function POST(req: NextRequest) {
   try {
     await ensureAssetsSchema();
     const body = await req.json();
-    const tenantId = body.tenantId ?? body.tenant_id ?? 'default';
     const id = crypto.randomUUID();
 
     // Get current asset
     const [asset] = await query(`
       SELECT id, name, asset_no, current_stock, reorder_threshold, unit_cost_aed, domain, warehouse_location
       FROM asset_registry
-      WHERE id = $1 AND tenant_id = $2 AND is_active = TRUE
+      WHERE id::text = $1 AND tenant_id = $2 AND is_active = TRUE
     `, body.asset_id, tenantId);
 
     if (!asset) return NextResponse.json({ error: 'Asset not found' }, { status: 404 });
@@ -135,7 +132,7 @@ export async function POST(req: NextRequest) {
         reference_type, reference_id, reference_no,
         from_location, to_location,
         performed_by, performed_at, domain, notes, created_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NOW(),$18,$19,NOW())
+      ) VALUES ($1::uuid,$2,$3::uuid,$4,$5,$6,$7::numeric,$8::numeric,$9::numeric,$10::numeric,$11::numeric,$12,$13,$14,$15,$16,$17,NOW(),$18,$19,NOW())
     `,
       id, tenantId, body.asset_id,
       a.name, a.asset_no, txType,
@@ -152,8 +149,8 @@ export async function POST(req: NextRequest) {
     const newStatus = computeStatus(qtyAfter, Number(a.reorder_threshold ?? 0));
     await exec(`
       UPDATE asset_registry
-      SET current_stock = $1, status = $2, updated_at = NOW()
-      WHERE id = $3 AND tenant_id = $4
+      SET current_stock = $1::numeric, status = $2, updated_at = NOW()
+      WHERE id::text = $3 AND tenant_id = $4
     `, qtyAfter, newStatus, body.asset_id, tenantId);
 
     // Log asset movement
@@ -164,7 +161,7 @@ export async function POST(req: NextRequest) {
         movement_type, from_location, to_location, quantity,
         reference_type, reference_id, reference_no,
         moved_by, moved_at, notes, created_at
-      ) VALUES ($1,$2,$3,'REGISTRY',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW(),$14,NOW())
+      ) VALUES ($1::uuid,$2,$3,'REGISTRY',$4,$5,$6,$7,$8,$9::numeric,$10,$11,$12,$13,NOW(),$14,NOW())
     `,
       crypto.randomUUID(), tenantId, body.asset_id,
       a.name, a.asset_no, mvType,
@@ -174,7 +171,7 @@ export async function POST(req: NextRequest) {
       body.notes ?? null,
     );
 
-    const [tx] = await query(`SELECT * FROM stock_transactions WHERE id = $1`, id);
+    const [tx] = await query(`SELECT * FROM stock_transactions WHERE id::text = $1`, id);
     return NextResponse.json(ser([tx as Row])[0], { status: 201 });
     } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });

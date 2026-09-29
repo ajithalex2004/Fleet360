@@ -1,13 +1,12 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureAssetsSchema } from '@/lib/assets/schema';
 import { ensureBleHwSchema } from '@/lib/assets/ble-hw-schema';
 import crypto from 'crypto';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
   prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
@@ -41,7 +40,6 @@ export async function POST(req: NextRequest) {
     const apiKey: string = headerKey ?? body.api_key ?? '';
     const gatewayCode: string = body.gateway_code ?? '';
     const detections: Detection[] = Array.isArray(body.detections) ? body.detections : [];
-    const tenantId = 'default';
 
     if (!gatewayCode) {
       return NextResponse.json({ error: 'gateway_code is required' }, { status: 400 });
@@ -82,9 +80,9 @@ export async function POST(req: NextRequest) {
          status = 'ONLINE',
          last_detection_at = NOW(),
          total_detections = COALESCE(total_detections, 0) + $1,
-         tags_visible = $2,
+         tags_visible = $2::int,
          updated_at = NOW()
-       WHERE id = $3 AND tenant_id = $4`,
+       WHERE id::text = $3 AND tenant_id = $4`,
       detections.length,
       uniqueMacs.size,
       gatewayId,
@@ -127,7 +125,7 @@ export async function POST(req: NextRequest) {
            rssi, tx_power, battery_pct,
            raw_payload, detected_at, created_at
          ) VALUES (
-           $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,NOW()
+           $1::uuid,$2,$3,$4,$5,$6,$7,$8,$9::int,$10::int,$11::int,$12::jsonb,$13::timestamptz,NOW()
          ) ON CONFLICT DO NOTHING`,
         detectionId,
         tenantId,
@@ -149,7 +147,7 @@ export async function POST(req: NextRequest) {
         tagsUpdated++;
         // Build update
         const sets: string[] = [
-          'last_seen_at = $1',
+          'last_seen_at = $1::timestamptz',
           'signal_rssi = $2',
           'last_gateway_id = $3',
           'last_location_zone = $4',
@@ -208,7 +206,7 @@ export async function POST(req: NextRequest) {
                  rule_id, severity, status,
                  detected_at, created_at
                ) VALUES (
-                 $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'OPEN',$15,NOW()
+                 $1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'OPEN',$15::timestamptz,NOW()
                )`,
               crypto.randomUUID(),
               tenantId,
@@ -239,7 +237,7 @@ export async function POST(req: NextRequest) {
              movement_type, from_location, to_location,
              moved_by, moved_at, gateway_id, created_at
            ) VALUES (
-             $1,$2,$3,'BLE_TAG',$4,'BLE_ZONE_CHANGE',$5,$6,'system',$7,$8,NOW()
+             $1::uuid,$2,$3,'BLE_TAG',$4,'BLE_ZONE_CHANGE',$5,$6,'system',$7::timestamptz,$8,NOW()
            )`,
           crypto.randomUUID(),
           tenantId,

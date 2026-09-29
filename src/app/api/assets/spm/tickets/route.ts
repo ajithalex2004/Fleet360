@@ -1,14 +1,10 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
-import { prisma } from '@/lib/prisma';
+import { spmSql } from '@/lib/assets/spm-sql';
 import { ensureSpmSchema } from '@/lib/assets/spm-schema';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-type Row = Record<string, unknown>;
-const query = <T = Row>(sql: string, ...v: unknown[]) =>
-  prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 
 function ser<T>(v: T): T {
   return JSON.parse(JSON.stringify(v, (_, val) =>
@@ -22,6 +18,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  const { query } = spmSql(tenantId);
 
   try {
     await ensureSpmSchema();
@@ -33,11 +30,11 @@ export async function GET(req: NextRequest) {
     const dateFrom = sp.get('date_from');
     const dateTo = sp.get('date_to');
 
-    const conditions: string[] = [`t.tenant_id = 'default'`];
+    const conditions: string[] = [`t.tenant_id = $tenant`];
     const params: unknown[] = [];
 
     if (status) { params.push(status); conditions.push(`t.status = $${params.length}`); }
-    if (cycleId) { params.push(cycleId); conditions.push(`t.cycle_id = $${params.length}`); }
+    if (cycleId) { params.push(cycleId); conditions.push(`t.cycle_id::text = $${params.length}`); }
     if (priority) { params.push(priority); conditions.push(`t.priority = $${params.length}`); }
     if (search) {
       params.push(`%${search}%`);

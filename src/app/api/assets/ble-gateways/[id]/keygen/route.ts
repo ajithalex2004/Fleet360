@@ -1,13 +1,12 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureAssetsSchema } from '@/lib/assets/schema';
 import { ensureBleHwSchema } from '@/lib/assets/ble-hw-schema';
 import crypto from 'crypto';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
   prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
@@ -40,12 +39,10 @@ export async function POST(
     await ensureBleHwSchema();
 
     const { id } = params;
-    const body = await req.json().catch(() => ({}));
-    const tenantId = (body as Row).tenant_id ?? 'default';
 
     // Look up the gateway
     const [gateway] = await query(
-      `SELECT id, gateway_code, tenant_id FROM ble_gateways WHERE id = $1 AND tenant_id = $2`,
+      `SELECT id, gateway_code, tenant_id FROM ble_gateways WHERE id::text = $1 AND tenant_id = $2`,
       id,
       tenantId,
     );
@@ -70,8 +67,8 @@ export async function POST(
        SET api_key_hash = $1,
            api_key_prefix = $2,
            api_key_created_at = $3,
-           updated_at = $3
-       WHERE id = $4 AND tenant_id = $5`,
+           updated_at = $3::timestamptz
+       WHERE id::text = $4 AND tenant_id = $5`,
       keyHash,
       keyPrefix,
       now,

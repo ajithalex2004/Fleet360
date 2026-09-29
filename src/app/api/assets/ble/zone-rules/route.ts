@@ -1,13 +1,12 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureAssetsSchema } from '@/lib/assets/schema';
 import { ensureBleHwSchema } from '@/lib/assets/ble-hw-schema';
 import crypto from 'crypto';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
   prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
@@ -36,7 +35,6 @@ export async function GET(req: NextRequest) {
     await ensureBleHwSchema();
 
     const sp = req.nextUrl.searchParams;
-    const tenantId = sp.get('tenantId') ?? 'default';
     const gatewayId = sp.get('gateway_id');
 
     const conditions: string[] = ['tenant_id = $1'];
@@ -71,7 +69,6 @@ export async function POST(req: NextRequest) {
     await ensureBleHwSchema();
 
     const body = await req.json();
-    const tenantId = body.tenant_id ?? 'default';
 
     const {
       gateway_id,
@@ -102,8 +99,12 @@ export async function POST(req: NextRequest) {
       tenantId,
     );
 
-    const gatewayCode = gateway ? (gateway.gateway_code as string) : null;
-    const gatewayZone = gateway ? (gateway.location_zone as string | null) : null;
+    // The gateway must belong to the caller's tenant.
+    if (!gateway) {
+      return NextResponse.json({ error: 'Gateway not found' }, { status: 404 });
+    }
+    const gatewayCode = gateway.gateway_code as string;
+    const gatewayZone = gateway.location_zone as string | null;
 
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
@@ -115,7 +116,7 @@ export async function POST(req: NextRequest) {
          alert_on_violation, severity, is_active,
          notes, created_at, updated_at
        ) VALUES (
-         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,TRUE,$11,$12,$12
+         $1::uuid,$2,$3,$4,$5,$6,$7::text[],$8::text[],$9::boolean,$10,TRUE,$11,$12::timestamptz,$12::timestamptz
        ) RETURNING *`,
       id,
       tenantId,
@@ -150,7 +151,6 @@ export async function DELETE(req: NextRequest) {
 
     const sp = req.nextUrl.searchParams;
     const id = sp.get('id');
-    const tenantId = sp.get('tenantId') ?? 'default';
 
     if (!id) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });

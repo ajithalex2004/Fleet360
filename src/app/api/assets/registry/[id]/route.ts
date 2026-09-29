@@ -1,11 +1,11 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { sqlCast } from '@/lib/assets/sql-cast';
 import { ensureAssetsSchema } from '@/lib/assets/schema';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
   prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
@@ -35,7 +35,6 @@ export async function GET(
   try {
     await ensureAssetsSchema();
     const { id } = params;
-    const tenantId = req.nextUrl.searchParams.get('tenantId') ?? 'default';
 
     const [row] = await query(`
       SELECT ar.*,
@@ -45,7 +44,7 @@ export async function GET(
              ac.domain as category_domain
       FROM asset_registry ar
       LEFT JOIN asset_categories ac ON ac.id = ar.category_id
-      WHERE ar.id = $1 AND ar.tenant_id = $2
+      WHERE ar.id::text = $1 AND ar.tenant_id = $2
     `, id, tenantId);
 
     if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -70,14 +69,13 @@ export async function PATCH(
     await ensureAssetsSchema();
     const { id } = params;
     const body = await req.json();
-    const tenantId = body.tenantId ?? body.tenant_id ?? 'default';
     const now = new Date().toISOString();
 
     // Get current asset
-    const [current] = await query(`SELECT * FROM asset_registry WHERE id = $1 AND tenant_id = $2`, id, tenantId);
+    const [current] = await query(`SELECT * FROM asset_registry WHERE id::text = $1 AND tenant_id = $2`, id, tenantId);
     if (!current) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const sets: string[] = ['updated_at = $2'];
+    const sets: string[] = ['updated_at = $2::timestamptz'];
     const values: unknown[] = [id, now];
 
     const fields = [
@@ -92,13 +90,13 @@ export async function PATCH(
     for (const f of fields) {
       if (body[f] !== undefined) {
         values.push(body[f]);
-        sets.push(`${f} = $${values.length}`);
+        sets.push(`${f} = $${values.length}${sqlCast('asset_registry', f)}`);
       }
     }
 
     values.push(id, tenantId);
     const [updated] = await query(
-      `UPDATE asset_registry SET ${sets.join(', ')} WHERE id = $${values.length - 1} AND tenant_id = $${values.length} RETURNING *`,
+      `UPDATE asset_registry SET ${sets.join(', ')} WHERE id::text = $${values.length - 1} AND tenant_id = $${values.length} RETURNING *`,
       ...values,
     );
 
@@ -114,7 +112,7 @@ export async function PATCH(
           quantity_before, quantity_change, quantity_after,
           unit_cost_aed, total_value_aed, reference_type,
           performed_by, performed_at, domain, notes, created_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'ADJUSTMENT',$12,NOW(),$13,$14,NOW())
+        ) VALUES ($1::uuid,$2,$3::uuid,$4,$5,$6,$7::numeric,$8::numeric,$9::numeric,$10::numeric,$11::numeric,'ADJUSTMENT',$12,NOW(),$13,$14,NOW())
       `,
         crypto.randomUUID(), tenantId, id,
         (current as Row).name, (current as Row).asset_no, txType,
@@ -147,10 +145,9 @@ export async function DELETE(
   try {
     await ensureAssetsSchema();
     const { id } = params;
-    const tenantId = req.nextUrl.searchParams.get('tenantId') ?? 'default';
 
     await exec(
-      `UPDATE asset_registry SET is_active = FALSE, updated_at = NOW() WHERE id = $1 AND tenant_id = $2`,
+      `UPDATE asset_registry SET is_active = FALSE, updated_at = NOW() WHERE id::text = $1 AND tenant_id = $2`,
       id, tenantId,
     );
 

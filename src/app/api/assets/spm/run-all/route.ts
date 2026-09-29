@@ -1,16 +1,11 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
-import { prisma } from '@/lib/prisma';
+import { spmSql } from '@/lib/assets/spm-sql';
 import { ensureSpmSchema } from '@/lib/assets/spm-schema';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
-const query = <T = Row>(sql: string, ...v: unknown[]) =>
-  prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
-const exec = (sql: string, ...v: unknown[]) =>
-  prisma.$executeRawUnsafe(sql, ...v).catch(() => 0);
 
 function ser<T>(v: T): T {
   return JSON.parse(JSON.stringify(v, (_, val) =>
@@ -24,6 +19,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  const { query, exec } = spmSql(tenantId);
 
   const startTime = Date.now();
   try {
@@ -34,7 +30,7 @@ export async function POST(req: NextRequest) {
     // Step 1: Fetch all ACTIVE cycles where next_run_at <= NOW() or next_run_at IS NULL
     const dueCycles = await query<Row>(`
       SELECT * FROM spm_cycles
-      WHERE tenant_id = 'default'
+      WHERE tenant_id = $tenant
         AND status = 'ACTIVE'
         AND (next_run_at <= NOW() OR next_run_at IS NULL)
       ORDER BY next_run_at ASC NULLS FIRST
@@ -43,12 +39,12 @@ export async function POST(req: NextRequest) {
     // Count PAUSED cycles for audit log
     const pausedRes = await query<{ count: bigint }>(`
       SELECT COUNT(*) AS count FROM spm_cycles
-      WHERE tenant_id = 'default' AND status = 'PAUSED'
+      WHERE tenant_id = $tenant AND status = 'PAUSED'
     `);
     const cyclesSkipped = Number(pausedRes[0]?.count ?? 0);
 
     // Get current ticket count for code generation base
-    const ticketCountRes = await query<{ count: bigint }>(`SELECT COUNT(*) AS count FROM spm_tickets WHERE tenant_id = 'default'`);
+    const ticketCountRes = await query<{ count: bigint }>(`SELECT COUNT(*) AS count FROM spm_tickets WHERE tenant_id = $tenant`);
     let ticketSeqBase = Number(ticketCountRes[0]?.count ?? 0);
 
     let ticketsGenerated = 0;
@@ -74,8 +70,8 @@ export async function POST(req: NextRequest) {
           assigned_to, assigned_to_user_id, assigned_to_email,
           scheduled_date, created_at, updated_at
         ) VALUES (
-          'default', $1, $2, $3,
-          $4, $5, $6, $7, $8, $9,
+          $tenant, $1, $2::uuid, $3,
+          $4::uuid, $5, $6, $7, $8, $9,
           $10, $11, 'OPEN', $12,
           $13, $14, $15,
           NOW(), NOW(), NOW()
@@ -105,7 +101,7 @@ export async function POST(req: NextRequest) {
         // Fetch the newly inserted ticket id
         const newTicketRows = await query<Row>(`
           SELECT id FROM spm_tickets
-          WHERE cycle_id = $1 AND ticket_code = $2 AND tenant_id = 'default'
+          WHERE cycle_id::text = $1 AND ticket_code = $2 AND tenant_id = $tenant
           LIMIT 1
         `, cycleId, ticketCode);
 
@@ -115,7 +111,7 @@ export async function POST(req: NextRequest) {
           // Copy checklist templates to spm_ticket_checks
           const templates = await query<Row>(`
             SELECT * FROM spm_checklist_templates
-            WHERE cycle_id = $1 AND tenant_id = 'default'
+            WHERE cycle_id::text = $1 AND tenant_id = $tenant
             ORDER BY item_order ASC
           `, cycleId);
 
@@ -124,7 +120,7 @@ export async function POST(req: NextRequest) {
               INSERT INTO spm_ticket_checks (
                 tenant_id, ticket_id, template_id, item_order, description,
                 is_mandatory, is_checked
-              ) VALUES ('default', $1, $2, $3, $4, $5, FALSE)
+              ) VALUES ($tenant, $1::uuid, $2::uuid, $3::int, $4, $5::boolean, FALSE)
             `,
               ticketId,
               tpl.id ?? null,
@@ -142,7 +138,7 @@ export async function POST(req: NextRequest) {
                 user_id, user_name, user_email,
                 type, message, is_read, created_at
               ) VALUES (
-                gen_random_uuid(), 'default', $1, $2,
+                gen_random_uuid(), $tenant, $1::uuid, $2::uuid,
                 $3, $4, $5,
                 'TICKET_ASSIGNED',
                 $6, FALSE, NOW()
@@ -170,8 +166,8 @@ export async function POST(req: NextRequest) {
       d.setDate(d.getDate() + intervalDays);
       await exec(`
         UPDATE spm_cycles
-        SET last_run_at = NOW(), next_run_at = $2, updated_at = NOW()
-        WHERE id = $1
+        SET last_run_at = NOW(), next_run_at = $2::timestamptz, updated_at = NOW()
+        WHERE id::text = $1
       `, cycleId, d.toISOString());
     }
 
@@ -183,7 +179,7 @@ export async function POST(req: NextRequest) {
         tenant_id, triggered_by, cycles_checked, tickets_generated,
         cycles_skipped, run_duration_ms, summary, run_at
       ) VALUES (
-        'default', $1, $2, $3, $4, $5, $6::jsonb, NOW()
+        $tenant, $1, $2::int, $3::int, $4::int, $5::int, $6::jsonb, NOW()
       ) RETURNING id
     `,
       triggeredBy,

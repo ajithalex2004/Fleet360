@@ -1,12 +1,11 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureAssetsSchema } from '@/lib/assets/schema';
 import { ensureBleHwSchema } from '@/lib/assets/ble-hw-schema';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
   prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
@@ -35,7 +34,6 @@ export async function GET(req: NextRequest) {
     await ensureBleHwSchema();
 
     const sp = req.nextUrl.searchParams;
-    const tenantId = sp.get('tenantId') ?? 'default';
     const status = sp.get('status');
     const severity = sp.get('severity');
     const from = sp.get('from');
@@ -99,7 +97,6 @@ export async function PATCH(req: NextRequest) {
     await ensureBleHwSchema();
 
     const body = await req.json();
-    const tenantId = body.tenant_id ?? 'default';
     const { id, status, acknowledged_by, resolution_notes } = body as {
       id: string;
       status: string;
