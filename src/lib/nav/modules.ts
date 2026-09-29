@@ -632,6 +632,7 @@ export const MODULES: ModuleDef[] = [
     icon: Settings,
     subPages: [
       { label: 'Overview',                href: '/admin',                       icon: LayoutDashboard },
+      { label: 'Company profile',         href: '/admin/company-profile',       icon: Building2 },
       { label: 'Users',                   href: '/admin/users',                 icon: Users },
       { label: 'Roles & permissions',     href: '/admin/roles',                 icon: Shield },
       { label: 'Branches & regions',      href: '/admin/branches',              icon: Building2 },

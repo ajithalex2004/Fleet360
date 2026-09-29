@@ -43,7 +43,13 @@ async function downloadPeppol(id: string, format: 'xml' | 'xlsx') {
   const res = await fetch(`/api/finance/invoices/${encodeURIComponent(id)}/peppol-xml?format=${format}`);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    alert(body.error ?? 'Could not generate the Peppol e-invoice');
+    const msg = body.error ?? 'Could not generate the Peppol e-invoice';
+    // A missing company TRN is fixed on the Company Profile page.
+    if (body.fixUrl) {
+      if (confirm(`${msg}\n\nOpen Company Profile now?`)) window.location.href = body.fixUrl;
+    } else {
+      alert(msg);
+    }
     return;
   }
   const cd = res.headers.get('Content-Disposition') ?? '';
