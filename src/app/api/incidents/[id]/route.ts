@@ -57,18 +57,18 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           if (escalationLevel) { values.push(escalationLevel); setClauses.push(`escalation_level = $${values.length}`); }
           if (assignedTo)      { values.push(assignedTo);      setClauses.push(`assigned_to = $${values.length}`); }
 
-          // Try with extended columns, fall back to minimal
-          await tx.$executeRawUnsafe(
-            `UPDATE operations.incidents SET ${setClauses.join(', ')} WHERE id = $1`,
-            ...values
-          ).catch(async () => {
-            // Minimal columns only
-            const minSet = ['status = $2', 'updated_at = NOW()'];
-            const minVals: unknown[] = [params.id, status];
-            if (status === 'RESOLVED' || status === 'CLOSED') minSet.push('resolved_at = NOW()');
-            if (resolutionNotes) { minVals.push(resolutionNotes); minSet.push(`resolution_notes = $${minVals.length}`); }
-            await tx.$executeRawUnsafe(`UPDATE operations.incidents SET ${minSet.join(', ')} WHERE id = $1`, ...minVals);
-          });
+          // One statement: a failed statement aborts the transaction, so a
+          // retry after it could never run. The lifecycle columns come from
+          // migration 20261012090000_incident_lifecycle_columns.
+          values.push(tenantId);
+          const updated = await tx.$executeRawUnsafe(
+            `UPDATE operations.incidents SET ${setClauses.join(', ')}
+              WHERE id = $1 AND tenant_id::text = $${values.length}`,
+            ...values,
+          );
+          if (updated === 0) {
+            return NextResponse.json({ error: 'Incident not found' }, { status: 404 });
+          }
 
           // Auto-add status change note
 
@@ -96,7 +96,15 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           if (severity)    { values.push(severity);    setClauses.push(`severity = $${values.length}`); }
           if (description) { values.push(description); setClauses.push(`description = $${values.length}`); }
           if (location)    { values.push(location);    setClauses.push(`location = $${values.length}`); }
-          await tx.$executeRawUnsafe(`UPDATE operations.incidents SET ${setClauses.join(', ')} WHERE id = $1`, ...values);
+          values.push(tenantId);
+          const updated = await tx.$executeRawUnsafe(
+            `UPDATE operations.incidents SET ${setClauses.join(', ')}
+              WHERE id = $1 AND tenant_id::text = $${values.length}`,
+            ...values,
+          );
+          if (updated === 0) {
+            return NextResponse.json({ error: 'Incident not found' }, { status: 404 });
+          }
           return NextResponse.json({ success: true });
         }
 
@@ -137,7 +145,7 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
         type NoteRow = { id: string; note_type: string; content: string; author: string | null; created_at: string };
         const notes = await tx.$queryRawUnsafe<NoteRow[]>(
           `SELECT id, note_type, content, author, created_at
-             FROM incident_notes WHERE incident_id = $1 ORDER BY created_at ASC`,
+             FROM incident_notes WHERE incident_id::text = $1 ORDER BY created_at ASC`,
           params.id
         ).catch(() => [] as NoteRow[]);
 
