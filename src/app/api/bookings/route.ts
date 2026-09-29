@@ -26,7 +26,8 @@ export async function GET(req: NextRequest) {
         // tenant. That is correct — a row belonging to no tenant should not
         // appear under one — but it means a previously-populated list can go
         // empty until those rows are assigned an owner.
-        const where: Record<string, unknown> = { tenantId, deletedAt: null };
+        // bookings has no deleted_at column.
+        const where: Record<string, unknown> = { tenantId };
         if (serviceType) where.serviceType = serviceType;
         if (status)      where.status      = status;
 
@@ -56,7 +57,10 @@ export async function POST(req: NextRequest) {
     try {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-        const booking = await tx.booking.create({ data: body as Prisma.BookingUncheckedCreateInput });
+        // tenant_id is required and checked by row level security.
+        const booking = await tx.booking.create({
+          data: { ...(body as Prisma.BookingUncheckedCreateInput), tenantId },
+        });
         return NextResponse.json(booking, { status: 201 });
         } catch (e) {
         console.error('Error creating booking:', e);

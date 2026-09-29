@@ -87,7 +87,8 @@ export default function BookingsPage() {
         fetch('/api/rental/customers'),
       ]);
       const [bData, cData] = await Promise.all([bRes.json(), cRes.json()]);
-      setBookings(Array.isArray(bData) ? bData : []);
+      // The list endpoint returns a page: { data, total, ... }.
+      setBookings(Array.isArray(bData) ? bData : Array.isArray(bData?.data) ? bData.data : []);
       setCustomers(Array.isArray(cData) ? cData : []);
     } catch {
       setError('Failed to load bookings');
