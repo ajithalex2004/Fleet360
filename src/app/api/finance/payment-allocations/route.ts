@@ -160,11 +160,13 @@ export async function POST(req: NextRequest) {
         `INSERT INTO finance_payment_allocations
            (payment_id, invoice_id, payable_id, allocated_amount, allocation_date,
             notes, allocated_by, tenant_id)
-         VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8)
+         VALUES ($1::uuid, $2::uuid, $3::uuid, $4::numeric, $5::date, $6, $7, $8)
          RETURNING *`,
         paymentId,
-        invoiceId ? `${invoiceId}::uuid` : null,   // trigger handles UUID cast
-        payableId ? `${payableId}::uuid` : null,
+        // Plain ids, cast in SQL. (These were sent as the text '<id>::uuid',
+        // which is not a uuid, so every allocation failed.)
+        invoiceId ?? null,
+        payableId ?? null,
         requestAmt,
         allocationDate ?? new Date().toISOString().slice(0, 10),
         notes          ?? null,
