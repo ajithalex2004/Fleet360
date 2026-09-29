@@ -1,41 +1,24 @@
-import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { provisionSchemaOnce } from '@/lib/db/schema-init';
 
-const _g = globalThis as { _assetsSchemaInit?: Promise<void> };
-
-// Singleton: runs once per server process, concurrent callers wait on same Promise
+// Runs no DDL where these tables exist; see provisionSchemaOnce.
 export function ensureAssetsSchema(): Promise<void> {
-  if (_g._assetsSchemaInit) return _g._assetsSchemaInit;
-  _g._assetsSchemaInit = _doInit().catch((e) => {
-    delete _g._assetsSchemaInit;
-    throw e;
-  });
-  return _g._assetsSchemaInit;
-}
-
-// The production runtime role (fleet360_app) has no CREATE privilege on the
-// public schema, so this DDL always fails with 42501 there. The tables it
-// creates already exist in every live environment - this block only matters
-// for fresh/local databases connecting as an owner-equivalent role. Treat
-// insufficient_privilege as "schema already provisioned, nothing to do"
-// instead of crashing every request that calls ensureAssetsSchema().
-function isInsufficientPrivilege(e: unknown): boolean {
-  return (
-    e instanceof Prisma.PrismaClientKnownRequestError &&
-    (e.meta as { code?: string } | undefined)?.code === '42501'
-  );
-}
-
-async function _doInit(): Promise<void> {
-  try {
-    await _runDdl();
-  } catch (e) {
-    if (isInsufficientPrivilege(e)) {
-      console.warn('[ensureAssetsSchema] DDL skipped: runtime role lacks CREATE privilege on public schema (assuming tables already exist)');
-      return;
-    }
-    throw e;
-  }
+  return provisionSchemaOnce('assets', { tables: [
+    'asset_categories',
+    'asset_registry',
+    'hva_assets',
+    'medical_assets',
+    'medical_seal_logs',
+    'ble_tags',
+    'ble_gateways',
+    'asset_movements',
+    'stock_transactions',
+    'field_dispatch',
+    'field_dispatch_items',
+    'personnel_stock',
+    'return_requests',
+    'return_request_items',
+  ] }, _runDdl);
 }
 
 async function _runDdl(): Promise<void> {

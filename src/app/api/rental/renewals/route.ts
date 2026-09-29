@@ -9,33 +9,6 @@ import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 
-const INIT = `
-  CREATE TABLE IF NOT EXISTS rental_renewals (
-    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at        TIMESTAMPTZ DEFAULT NOW(),
-    updated_at        TIMESTAMPTZ DEFAULT NOW(),
-    deleted_at        TIMESTAMPTZ,
-    renewal_no        TEXT UNIQUE NOT NULL,
-    agreement_id      TEXT,
-    agreement_no      TEXT,
-    customer_name     TEXT,
-    vehicle_name      TEXT,
-    vehicle_no        TEXT,
-    original_end_date DATE,
-    new_end_date      DATE,
-    extension_days    INT,
-    daily_rate        NUMERIC(10,2),
-    renewal_amount    NUMERIC(12,2),
-    vat_amount        NUMERIC(12,2),
-    total_amount      NUMERIC(12,2),
-    deposit_top_up    NUMERIC(12,2) DEFAULT 0,
-    status            TEXT DEFAULT 'PENDING',
-    approved_by       TEXT,
-    approved_at       TIMESTAMPTZ,
-    notes             TEXT
-  );
-`;
-
 type Row = Record<string, unknown>;
 
 async function nextNo(): Promise<string> {
@@ -59,8 +32,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(INIT).catch(() => {});
-
       const sp = req.nextUrl.searchParams;
       const status = sp.get('status');
       const search = sp.get('search');
@@ -83,7 +54,7 @@ export async function GET(req: NextRequest) {
       }
 
       const [rows, summary] = await Promise.all([
-        prisma
+        tx
           .$queryRawUnsafe<Row[]>(
             `SELECT * FROM rental_renewals ${where} ORDER BY created_at DESC LIMIT $${pi} OFFSET $${pi + 1}`,
             ...params,
@@ -91,7 +62,7 @@ export async function GET(req: NextRequest) {
             offset,
           )
           .catch(() => []),
-        prisma
+        tx
           .$queryRawUnsafe<{ status: string; count: string; total: string }[]>(
             `SELECT
                status,
@@ -113,7 +84,7 @@ export async function GET(req: NextRequest) {
       }
 
       // Month extensions
-      const thisMonthRows = await prisma
+      const thisMonthRows = await tx
         .$queryRawUnsafe<{ cnt: string; avg_days: string }[]>(
           `SELECT COUNT(*)::text as cnt, COALESCE(AVG(extension_days),0)::text as avg_days
            FROM rental_renewals
@@ -133,7 +104,6 @@ export async function GET(req: NextRequest) {
   });
 }
 
-
 /* ─── POST ─── */
 export async function POST(req: NextRequest) {
 
@@ -144,8 +114,6 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(INIT).catch(() => {});
-
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
       const renewalNo = await nextNo();
@@ -164,13 +132,13 @@ export async function POST(req: NextRequest) {
       const totalAmount = +(renewalAmount + vatAmount).toFixed(2);
       const depositTopUp = parseFloat(body.depositTopUp ?? '0');
 
-      const [row] = await prisma
+      const [row] = await tx
         .$queryRawUnsafe<Row[]>(
           `INSERT INTO rental_renewals
              (renewal_no, agreement_id, agreement_no, customer_name, vehicle_name, vehicle_no,
               original_end_date, new_end_date, extension_days, daily_rate,
-              renewal_amount, vat_amount, total_amount, deposit_top_up, status, notes)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+              renewal_amount, vat_amount, total_amount, deposit_top_up, status, notes, tenant_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7::date,$8::date,$9,$10,$11,$12,$13,$14,$15,$16,$17)
            RETURNING *`,
           renewalNo,
           body.agreementId ?? null,
@@ -188,6 +156,7 @@ export async function POST(req: NextRequest) {
           depositTopUp,
           body.status ?? 'PENDING',
           body.notes ?? null,
+          tenantId,
         )
         .catch(() => []);
 
@@ -195,7 +164,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(row, { status: 201 });
   });
 }
-
 
 /* ─── PATCH ─── */
 export async function PATCH(req: NextRequest) {
@@ -207,8 +175,6 @@ export async function PATCH(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(INIT).catch(() => {});
-
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
       const { id, status, approvedBy, notes, ...rest } = body;
@@ -249,9 +215,10 @@ export async function PATCH(req: NextRequest) {
         totalAmount: 'total_amount',
         depositTopUp: 'deposit_top_up',
       };
+      const dateColumns = new Set(['original_end_date', 'new_end_date']);
       for (const [k, col] of Object.entries(fieldMap)) {
         if (k in rest) {
-          sets.push(`${col}=$${pi++}`);
+          sets.push(`${col}=$${pi++}${dateColumns.has(col) ? '::date' : ''}`);
           params.push(rest[k]);
         }
       }
@@ -261,9 +228,9 @@ export async function PATCH(req: NextRequest) {
       sets.push(`updated_at=NOW()`);
       params.push(id);
 
-      const [row] = await prisma
+      const [row] = await tx
         .$queryRawUnsafe<Row[]>(
-          `UPDATE rental_renewals SET ${sets.join(',')} WHERE id=$${pi} RETURNING *`,
+          `UPDATE rental_renewals SET ${sets.join(',')} WHERE id::text=$${pi} RETURNING *`,
           ...params,
         )
         .catch(() => []);

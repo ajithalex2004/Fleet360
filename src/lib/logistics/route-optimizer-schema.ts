@@ -19,12 +19,14 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { provisionSchemaOnce } from '@/lib/db/schema-init';
 
-let ensurePromise: Promise<void> | null = null;
-
+// Runs no DDL where these tables and columns exist; see provisionSchemaOnce.
 export function ensureRouteOptimizerSchema(): Promise<void> {
-  if (!ensurePromise) ensurePromise = run().catch(err => { ensurePromise = null; throw err; });
-  return ensurePromise;
+  return provisionSchemaOnce('route-optimizer', {
+    tables: ['logistics_route_plans', 'logistics_geocode_cache'],
+    columns: [['logistics_route_plans', 'committed_by']],
+  }, run);
 }
 
 async function run(): Promise<void> {

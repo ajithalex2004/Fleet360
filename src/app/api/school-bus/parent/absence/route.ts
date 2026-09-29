@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
  * Body: { studentId, date: YYYY-MM-DD, sessionType: MORNING|AFTERNOON|BOTH, reason }
  *
  * Marks a child absent for the given date so the bus skips their stop.
- * Upserts into school_bus_attendance with status=EXCUSED + reason prefix
+ * Upserts into school_bus_attendance with status=EXCUSED and notes
  * "PARENT_ABSENCE: <reason>".
  *
  * Idempotent. Best-effort (table auto-created).
@@ -61,20 +61,6 @@ export async function POST(req: NextRequest) {
         ).catch(() => []);
         if (exists.length === 0) return NextResponse.json({ error: 'Student not found' }, { status: 404 });
 
-        await tx.$executeRawUnsafe(`
-          CREATE TABLE IF NOT EXISTS school_bus_attendance (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            student_id UUID NOT NULL,
-            date DATE NOT NULL,
-            session_type TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'ABSENT',
-            boarded_at TIMESTAMPTZ,
-            scanned_at TIMESTAMPTZ,
-            reason TEXT,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            UNIQUE (student_id, date, session_type)
-          )
-        `);
 
         const sessions: Array<'MORNING' | 'AFTERNOON'> = sessionType === 'BOTH'
           ? ['MORNING', 'AFTERNOON']
@@ -86,11 +72,11 @@ export async function POST(req: NextRequest) {
 
         for (const s of sessions) {
           await tx.$executeRawUnsafe(
-            `INSERT INTO school_bus_attendance (student_id, date, session_type, status, reason)
-             VALUES ($1::uuid, $2::date, $3, 'EXCUSED', $4)
+            `INSERT INTO school_bus_attendance (student_id, date, session_type, status, notes, tenant_id)
+             VALUES ($1::uuid, $2::date, $3, 'EXCUSED', $4, $5)
              ON CONFLICT (student_id, date, session_type)
-             DO UPDATE SET status = 'EXCUSED', reason = EXCLUDED.reason`,
-            studentId, date, s, reasonText,
+             DO UPDATE SET status = 'EXCUSED', notes = EXCLUDED.notes`,
+            studentId, date, s, reasonText, tenantId,
           );
         }
 

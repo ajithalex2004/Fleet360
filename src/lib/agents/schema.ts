@@ -16,35 +16,29 @@
  *   demand_forecasts             — predictive fleet demand
  */
 import { prisma } from '@/lib/prisma';
-import { Prisma } from '@prisma/client';
+import { provisionSchemaOnce } from '@/lib/db/schema-init';
 
-const _g = globalThis as { _agentsSchemaInit?: Promise<void> };
-
-// The production runtime role (fleet360_app) has no CREATE privilege on the
-// public schema, so this DDL always fails with 42501 there. The tables it
-// creates already exist in every live environment - this block only matters
-// for fresh/local databases connecting as an owner-equivalent role. Treat
-// insufficient_privilege as "already provisioned" instead of crashing every
-// caller — same rationale as ensureBillingColumns (src/lib/billing.ts), which
-// hit the identical issue on GET /api/admin/billing.
-function isInsufficientPrivilege(e: unknown): boolean {
-  return (
-    e instanceof Prisma.PrismaClientKnownRequestError &&
-    (e.meta as { code?: string } | undefined)?.code === '42501'
-  );
-}
-
+// Runs no DDL where these tables exist; see provisionSchemaOnce.
 export function ensureAgentSchema(): Promise<void> {
-  if (_g._agentsSchemaInit) return _g._agentsSchemaInit;
-  _g._agentsSchemaInit = _doInit().catch((e) => {
-    if (isInsufficientPrivilege(e)) {
-      console.warn('[ensureAgentSchema] DDL skipped: runtime role lacks CREATE privilege on public schema (assuming tables already exist)');
-      return;
-    }
-    delete _g._agentsSchemaInit;
-    throw e;
-  });
-  return _g._agentsSchemaInit;
+  return provisionSchemaOnce('agents', { tables: [
+    'agent_runs',
+    'agent_evaluation_metrics',
+    'agent_roi_metrics',
+    'route_matrix_cache',
+    'fleet_risk_scores',
+    'ai.agent_anomaly_flags',
+    'bus_ops_plan_recommendations',
+    'route_optimisation_results',
+    'incident_triage_assessments',
+    'dispatch_optimiser_recommendations',
+    'driver_coaching_plans',
+    'demand_forecasts',
+    'tenant_ai_policies',
+    'agent_approvals',
+    'whatsapp_messages',
+    'whatsapp_templates',
+    'preventive_maintenance_forecasts',
+  ] }, _doInit);
 }
 
 async function _doInit(): Promise<void> {

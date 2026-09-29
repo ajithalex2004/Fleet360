@@ -1,15 +1,13 @@
 import { prisma } from '@/lib/prisma';
+import { provisionSchemaOnce } from '@/lib/db/schema-init';
 
-const _g = globalThis as { _bleHwSchemaInit?: Promise<void> };
-
-// Singleton: runs once per server process, concurrent callers wait on same Promise
+// Runs no DDL where these tables exist; see provisionSchemaOnce.
 export function ensureBleHwSchema(): Promise<void> {
-  if (_g._bleHwSchemaInit) return _g._bleHwSchemaInit;
-  _g._bleHwSchemaInit = _doInit().catch((e) => {
-    delete _g._bleHwSchemaInit;
-    throw e;
-  });
-  return _g._bleHwSchemaInit;
+  return provisionSchemaOnce('ble-hw', { tables: [
+    'ble_detections',
+    'ble_zone_rules',
+    'ble_movement_alerts',
+  ] }, _doInit);
 }
 
 async function _doInit(): Promise<void> {

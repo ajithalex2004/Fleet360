@@ -10,12 +10,14 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { provisionSchemaOnce } from '@/lib/db/schema-init';
 
-let ensurePromise: Promise<void> | null = null;
-
+// Runs no DDL where the column exists; see provisionSchemaOnce.
 export function ensureGeofenceSchema(): Promise<void> {
-  if (!ensurePromise) ensurePromise = run().catch(err => { ensurePromise = null; throw err; });
-  return ensurePromise;
+  return provisionSchemaOnce('geofence', {
+    tables: [],
+    columns: [['logistics_shipment_stops', 'geofence_radius_m']],
+  }, run);
 }
 
 async function run(): Promise<void> {

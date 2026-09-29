@@ -23,6 +23,10 @@ vi.mock('@/lib/rls', () => ({
   withTenantRls: vi.fn().mockImplementation((_prisma: any, _tenantId: string, fn: any) => fn(_prisma)),
 }));
 
+// Schema setup reads the catalog before the agent's own queries; keep it out
+// of the queued query results below.
+vi.mock('@/lib/agents/schema', () => ({ ensureAgentSchema: vi.fn().mockResolvedValue(undefined) }));
+
 describe('Preventive Maintenance Agent: Continuous Burn-Down & Smart Slot Suite', () => {
   beforeEach(() => {
     vi.clearAllMocks();

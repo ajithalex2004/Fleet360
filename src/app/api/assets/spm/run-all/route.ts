@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
       ticketSeqBase += 1;
       const ticketCode = `SRT-${String(ticketSeqBase).padStart(4, '0')}`;
 
-      // Attempt idempotent insert (ON CONFLICT on cycle_id + DATE(scheduled_date) DO NOTHING)
+      // Idempotent insert: one ticket per cycle per UTC day (spm_tickets_cycle_day_key)
       const inserted = await exec(`
         INSERT INTO spm_tickets (
           tenant_id, ticket_code, cycle_id, cycle_name,
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
           $13, $14, $15,
           NOW(), NOW(), NOW()
         )
-        ON CONFLICT (cycle_id, (DATE(scheduled_date))) DO NOTHING
+        ON CONFLICT (cycle_id, ((scheduled_date AT TIME ZONE 'UTC')::date)) DO NOTHING
       `,
         ticketCode,
         cycleId,

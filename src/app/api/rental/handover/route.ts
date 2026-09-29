@@ -9,40 +9,6 @@ import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 
-const INIT = `
-  CREATE TABLE IF NOT EXISTS rental_handovers (
-    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at         TIMESTAMPTZ DEFAULT NOW(),
-    updated_at         TIMESTAMPTZ DEFAULT NOW(),
-    handover_no        TEXT UNIQUE NOT NULL,
-    agreement_id       TEXT,
-    agreement_no       TEXT,
-    customer_name      TEXT,
-    vehicle_id         TEXT,
-    vehicle_no         TEXT,
-    vehicle_name       TEXT,
-    handover_type      TEXT NOT NULL DEFAULT 'PICKUP',
-    handover_date      TIMESTAMPTZ DEFAULT NOW(),
-    fuel_level         INT DEFAULT 4,
-    odometer_reading   INT DEFAULT 0,
-    condition_score    INT DEFAULT 3,
-    body_condition     TEXT DEFAULT 'Good',
-    interior_condition TEXT DEFAULT 'Clean',
-    tyres_condition    TEXT DEFAULT 'Good',
-    keys_count         INT DEFAULT 1,
-    spare_key          BOOLEAN DEFAULT false,
-    salik_tag          BOOLEAN DEFAULT false,
-    parking_card       BOOLEAN DEFAULT false,
-    accessories        JSONB DEFAULT '[]',
-    checklist_items    JSONB DEFAULT '[]',
-    notes              TEXT,
-    signed_by          TEXT,
-    signed_at          TIMESTAMPTZ,
-    status             TEXT DEFAULT 'PENDING',
-    branch_id          TEXT
-  );
-`;
-
 type Row = Record<string, unknown>;
 
 async function nextNo(): Promise<string> {
@@ -66,8 +32,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(INIT).catch(() => {});
-
       const sp = req.nextUrl.searchParams;
       const handoverType = sp.get('handoverType');
       const status = sp.get('status');
@@ -100,7 +64,7 @@ export async function GET(req: NextRequest) {
       }
 
       const [rows, kpiRows] = await Promise.all([
-        prisma
+        tx
           .$queryRawUnsafe<Row[]>(
             `SELECT * FROM rental_handovers ${where} ORDER BY created_at DESC LIMIT $${pi} OFFSET $${pi + 1}`,
             ...params,
@@ -108,7 +72,7 @@ export async function GET(req: NextRequest) {
             offset,
           )
           .catch(() => []),
-        prisma
+        tx
           .$queryRawUnsafe<{
             pending_pickups: string;
             pending_returns: string;
@@ -148,7 +112,6 @@ export async function GET(req: NextRequest) {
   });
 }
 
-
 /* ─── POST ─── */
 export async function POST(req: NextRequest) {
 
@@ -159,8 +122,6 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(INIT).catch(() => {});
-
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
       const handoverNo = await nextNo();
@@ -168,7 +129,7 @@ export async function POST(req: NextRequest) {
       const accessories = body.accessories ?? [];
       const checklistItems = body.checklistItems ?? [];
 
-      const [row] = await prisma
+      const [row] = await tx
         .$queryRawUnsafe<Row[]>(
           `INSERT INTO rental_handovers
              (handover_no, agreement_id, agreement_no, customer_name,
@@ -178,8 +139,8 @@ export async function POST(req: NextRequest) {
               body_condition, interior_condition, tyres_condition,
               keys_count, spare_key, salik_tag, parking_card,
               accessories, checklist_items,
-              notes, signed_by, signed_at, status, branch_id)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
+              notes, signed_by, signed_at, status, branch_id, tenant_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::timestamptz,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb,$21::jsonb,$22,$23,$24::timestamptz,$25,$26,$27)
            RETURNING *`,
           handoverNo,
           body.agreementId ?? null,
@@ -207,6 +168,7 @@ export async function POST(req: NextRequest) {
           body.signedAt ?? null,
           body.status ?? 'PENDING',
           body.branchId ?? null,
+          tenantId,
         )
         .catch(() => []);
 
@@ -214,7 +176,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(row, { status: 201 });
   });
 }
-
 
 /* ─── PATCH ─── */
 export async function PATCH(req: NextRequest) {
@@ -226,8 +187,6 @@ export async function PATCH(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(INIT).catch(() => {});
-
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
       const { id, signOff, ...fields } = body;
@@ -268,11 +227,11 @@ export async function PATCH(req: NextRequest) {
       }
 
       if (fields.accessories !== undefined) {
-        sets.push(`accessories=$${pi++}`);
+        sets.push(`accessories=$${pi++}::jsonb`);
         params.push(JSON.stringify(fields.accessories));
       }
       if (fields.checklistItems !== undefined) {
-        sets.push(`checklist_items=$${pi++}`);
+        sets.push(`checklist_items=$${pi++}::jsonb`);
         params.push(JSON.stringify(fields.checklistItems));
       }
 
@@ -281,9 +240,9 @@ export async function PATCH(req: NextRequest) {
       sets.push(`updated_at=NOW()`);
       params.push(id);
 
-      const [row] = await prisma
+      const [row] = await tx
         .$queryRawUnsafe<Row[]>(
-          `UPDATE rental_handovers SET ${sets.join(',')} WHERE id=$${pi} RETURNING *`,
+          `UPDATE rental_handovers SET ${sets.join(',')} WHERE id::text=$${pi} RETURNING *`,
           ...params,
         )
         .catch(() => []);

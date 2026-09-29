@@ -1,15 +1,12 @@
 import { prisma } from '@/lib/prisma';
+import { provisionSchemaOnce } from '@/lib/db/schema-init';
 
-const _g = globalThis as { _hosSchemaInit?: Promise<void> };
-
-// Singleton: runs once per server process, concurrent callers wait on same Promise
+// Runs no DDL where these tables exist; see provisionSchemaOnce.
 export function ensureHosSchema(): Promise<void> {
-  if (_g._hosSchemaInit) return _g._hosSchemaInit;
-  _g._hosSchemaInit = _doInit().catch((e) => {
-    delete _g._hosSchemaInit;
-    throw e;
-  });
-  return _g._hosSchemaInit;
+  return provisionSchemaOnce('hos', { tables: [
+    'hos_logs',
+    'hos_violations',
+  ] }, _doInit);
 }
 
 async function _doInit(): Promise<void> {

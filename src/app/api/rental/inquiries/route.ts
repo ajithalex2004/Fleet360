@@ -9,41 +9,7 @@ import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 
-const INIT = `
-  CREATE TABLE IF NOT EXISTS rental_inquiries (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ DEFAULT NOW(),
-    deleted_at      TIMESTAMPTZ,
-    inquiry_no      TEXT UNIQUE NOT NULL,
-    customer_name   TEXT NOT NULL,
-    email           TEXT,
-    phone           TEXT NOT NULL,
-    vehicle_type    TEXT,
-    pickup_location TEXT,
-    pickup_date     DATE,
-    return_date     DATE,
-    rental_days     INT,
-    status          TEXT DEFAULT 'NEW',
-    source          TEXT DEFAULT 'WALK_IN',
-    assigned_to     TEXT,
-    notes           TEXT,
-    converted_to    TEXT
-  );
-`;
-
 type Row = Record<string, unknown>;
-
-/** Run INIT with one retry (handles Neon serverless cold-start). */
-async function ensureSchema(): Promise<void> {
-  try {
-    await prisma.$executeRawUnsafe(INIT);
-  } catch {
-    // Neon cold-start can drop the first connection; wait briefly and retry once.
-    await new Promise(r => setTimeout(r, 1_500));
-    await prisma.$executeRawUnsafe(INIT);
-  }
-}
 
 async function nextNo(): Promise<string> {
   const [r] = await prisma.$queryRawUnsafe<{count:string}[]>(`SELECT COUNT(*)::text as count FROM rental_inquiries`).catch(()=>[{count:'0'}]);
@@ -61,7 +27,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await ensureSchema();
       const sp = req.nextUrl.searchParams;
       const status = sp.get('status');
       const search = sp.get('search');
@@ -83,7 +48,6 @@ export async function GET(req: NextRequest) {
   });
 }
 
-
 export async function POST(req: NextRequest) {
 
   const authz = requireAuthorizedTenant(req);
@@ -93,7 +57,6 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await ensureSchema();
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
       const inquiryNo = await nextNo();
@@ -103,11 +66,11 @@ export async function POST(req: NextRequest) {
       let row: Row | undefined;
       try {
         [row] = await tx.$queryRawUnsafe<Row[]>(
-          `INSERT INTO rental_inquiries (inquiry_no,customer_name,email,phone,vehicle_type,pickup_location,pickup_date,return_date,rental_days,status,source,assigned_to,notes)
-           VALUES ($1,$2,$3,$4,$5,$6,$7::date,$8::date,$9,$10,$11,$12,$13) RETURNING *`,
+          `INSERT INTO rental_inquiries (inquiry_no,customer_name,email,phone,vehicle_type,pickup_location,pickup_date,return_date,rental_days,status,source,assigned_to,notes,tenant_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7::date,$8::date,$9,$10,$11,$12,$13,$14) RETURNING *`,
           inquiryNo, body.customerName, body.email??null, body.phone, body.vehicleType??null,
           body.pickupLocation??null, body.pickupDate??null, body.returnDate??null, days,
-          body.status??'NEW', body.source??'WALK_IN', body.assignedTo??null, body.notes??null
+          body.status??'NEW', body.source??'WALK_IN', body.assignedTo??null, body.notes??null, tenantId,
         );
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -119,7 +82,6 @@ export async function POST(req: NextRequest) {
   });
 }
 
-
 export async function PATCH(req: NextRequest) {
 
   const authz = requireAuthorizedTenant(req);
@@ -129,7 +91,6 @@ export async function PATCH(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await ensureSchema();
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
       const { id, ...fields } = body;
@@ -147,7 +108,7 @@ export async function PATCH(req: NextRequest) {
       if (!sets.length) return NextResponse.json({error:'Nothing to update'},{status:400});
       sets.push(`updated_at=NOW()`);
       params.push(id);
-      const [row] = await tx.$queryRawUnsafe<Row[]>(`UPDATE rental_inquiries SET ${sets.join(',')} WHERE id=$${pi} RETURNING *`, ...params).catch(()=>[]);
+      const [row] = await tx.$queryRawUnsafe<Row[]>(`UPDATE rental_inquiries SET ${sets.join(',')} WHERE id::text=$${pi} RETURNING *`, ...params).catch(()=>[]);
       if (!row) return NextResponse.json({error:'Not found'},{status:404});
       return NextResponse.json(row);
   });
