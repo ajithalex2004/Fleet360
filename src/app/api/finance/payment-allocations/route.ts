@@ -20,9 +20,6 @@ import { prisma } from '@/lib/prisma';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
-function getTenant(req: NextRequest): string | null {
-  return req.headers.get('x-tenant-id');
-}
 
 // ── GET /api/finance/payment-allocations ─────────────────────────────────────
 
@@ -35,8 +32,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    const tenantId = getTenant(req);
-      if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
       const sp        = req.nextUrl.searchParams;
       const paymentId = sp.get('paymentId');
@@ -54,7 +49,7 @@ export async function GET(req: NextRequest) {
       const params: unknown[] = [];
       let pi = 1;
 
-      if (tenantId !== '*') { where += ` AND pa.tenant_id = $${pi++}`; params.push(tenantId); }
+      where += ` AND pa.tenant_id = $${pi++}`; params.push(tenantId);
       if (paymentId)        { where += ` AND pa.payment_id = $${pi++}::uuid`; params.push(paymentId); }
       if (invoiceId)        { where += ` AND pa.invoice_id = $${pi++}::uuid`; params.push(invoiceId); }
       if (payableId)        { where += ` AND pa.payable_id = $${pi++}::uuid`; params.push(payableId); }
@@ -72,9 +67,9 @@ export async function GET(req: NextRequest) {
            ap.vendor_name    AS payable_vendor,
            ap.total_amount   AS payable_total
            FROM finance_payment_allocations pa
-           JOIN finance_payments p    ON p.id = pa.payment_id
-           LEFT JOIN finance_invoices i    ON i.id = pa.invoice_id
-           LEFT JOIN finance_payables ap   ON ap.id = pa.payable_id
+           JOIN finance_payments p    ON p.id = pa.payment_id AND p.tenant_id = pa.tenant_id
+           LEFT JOIN finance_invoices i    ON i.id = pa.invoice_id AND i.tenant_id = pa.tenant_id
+           LEFT JOIN finance_payables ap   ON ap.id = pa.payable_id AND ap.tenant_id = pa.tenant_id
           ${where}
           ORDER BY pa.created_at DESC`,
         ...params,
@@ -88,10 +83,10 @@ export async function GET(req: NextRequest) {
                   COALESCE(SUM(pa.allocated_amount),0)  AS total_allocated,
                   p.amount - COALESCE(SUM(pa.allocated_amount),0) AS unallocated
              FROM finance_payments p
-             LEFT JOIN finance_payment_allocations pa ON pa.payment_id = p.id
-            WHERE p.id = $1::uuid
+             LEFT JOIN finance_payment_allocations pa ON pa.payment_id = p.id AND pa.tenant_id = p.tenant_id
+            WHERE p.id = $1::uuid AND p.tenant_id = $2
             GROUP BY p.amount`,
-          paymentId,
+          paymentId, tenantId,
         ).catch(() => []);
         summary = s ?? null;
       }
@@ -112,8 +107,6 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    const tenantId = getTenant(req);
-      if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
@@ -136,19 +129,19 @@ export async function POST(req: NextRequest) {
       const [payment] = await tx.$queryRawUnsafe<
         { id: string; amount: string; tenant_id: string }[]
       >(
-        `SELECT id, amount::text, tenant_id FROM finance_payments WHERE id=$1::uuid`,
-        paymentId,
+        `SELECT id, amount::text, tenant_id FROM finance_payments WHERE id=$1::uuid AND tenant_id=$2`,
+        paymentId, tenantId,
       ).catch(() => []);
 
       if (!payment) return NextResponse.json({ error: 'Payment not found' }, { status: 404 });
-      if (tenantId !== '*' && payment.tenant_id !== tenantId) {
+      if (payment.tenant_id !== tenantId) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
 
       const [alreadyAllocated] = await tx.$queryRawUnsafe<{ total: string }[]>(
         `SELECT COALESCE(SUM(allocated_amount),0)::text AS total
-           FROM finance_payment_allocations WHERE payment_id=$1::uuid`,
-        paymentId,
+           FROM finance_payment_allocations WHERE payment_id=$1::uuid AND tenant_id=$2`,
+        paymentId, tenantId,
       ).catch(() => [{ total: '0' }]);
 
       const paymentAmt  = parseFloat(payment.amount);
@@ -196,25 +189,23 @@ export async function DELETE(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    const tenantId = getTenant(req);
-      if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
       const id = req.nextUrl.searchParams.get('id');
       if (!id) return NextResponse.json({ error: 'id query param required' }, { status: 400 });
 
       const [current] = await tx.$queryRawUnsafe<{ tenant_id: string }[]>(
-        `SELECT tenant_id FROM finance_payment_allocations WHERE id=$1::uuid`,
-        id,
+        `SELECT tenant_id FROM finance_payment_allocations WHERE id=$1::uuid AND tenant_id=$2`,
+        id, tenantId,
       ).catch(() => []);
 
       if (!current) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-      if (tenantId !== '*' && current.tenant_id !== tenantId) {
+      if (current.tenant_id !== tenantId) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
 
       // Hard delete — trigger will reverse paid_amount on the linked document
       await tx.$executeRawUnsafe(
-        `DELETE FROM finance_payment_allocations WHERE id=$1::uuid`, id,
+        `DELETE FROM finance_payment_allocations WHERE id=$1::uuid AND tenant_id=$2`, id, tenantId,
       );
       return NextResponse.json({ deleted: true });
   });

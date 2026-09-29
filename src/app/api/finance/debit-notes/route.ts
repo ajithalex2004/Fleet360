@@ -18,9 +18,6 @@ import { prisma } from '@/lib/prisma';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
-function getTenant(req: NextRequest): string | null {
-  return req.headers.get('x-tenant-id');
-}
 
 async function nextDnNumber(tenantId: string): Promise<string> {
   const [row] = await prisma.$queryRawUnsafe<{ count: string }[]>(
@@ -43,8 +40,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    const tenantId = getTenant(req);
-      if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
       const sp     = req.nextUrl.searchParams;
       const status  = sp.get('status');
@@ -59,7 +54,7 @@ export async function GET(req: NextRequest) {
       const params: unknown[] = [];
       let pi = 1;
 
-      if (tenantId !== '*') { where += ` AND tenant_id = $${pi++}`; params.push(tenantId); }
+      where += ` AND tenant_id = $${pi++}`; params.push(tenantId);
       if (status)           { where += ` AND status = $${pi++}`;    params.push(status); }
       if (module)           { where += ` AND module = $${pi++}`;    params.push(module); }
       if (from)             { where += ` AND issue_date >= $${pi++}`; params.push(from); }
@@ -77,9 +72,9 @@ export async function GET(req: NextRequest) {
                   COUNT(*)::text                      AS count,
                   COALESCE(SUM(total_amount),0)::text AS total
              FROM finance_debit_notes
-            WHERE deleted_at IS NULL
-              ${tenantId !== '*' ? `AND tenant_id = '${tenantId}'` : ''}
+            WHERE deleted_at IS NULL AND tenant_id = $1
             GROUP BY status`,
+          tenantId,
         ).catch(() => []),
       ]);
 
@@ -99,8 +94,6 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    const tenantId = getTenant(req);
-      if (!tenantId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);

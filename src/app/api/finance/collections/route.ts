@@ -64,15 +64,16 @@ export async function GET(req: NextRequest) {
       const limit  = Math.min(100, parseInt(sp.get('limit') ?? '50'));
       const offset = (page - 1) * limit;
 
-      let where = `WHERE deleted_at IS NULL`;
-      const params: unknown[] = [];
-      let pi = 1;
+      let where = `WHERE tenant_id = $1 AND deleted_at IS NULL`;
+      const params: unknown[] = [tenantId];
+      let pi = 2;
       if (status) { where += ` AND status = $${pi++}`; params.push(status); }
 
       // Recalculate days_overdue on every fetch
       await tx.$executeRawUnsafe(
         `UPDATE finance_collection_cases SET days_overdue = GREATEST(0, CURRENT_DATE - due_date), updated_at = NOW()
-         WHERE deleted_at IS NULL AND status NOT IN ('SETTLED','WRITTEN_OFF','CLOSED')`
+         WHERE tenant_id = $1 AND deleted_at IS NULL AND status NOT IN ('SETTLED','WRITTEN_OFF','CLOSED')`,
+        tenantId,
       ).catch(() => {});
 
       const [rows, aging] = await Promise.all([
@@ -91,8 +92,9 @@ export async function GET(req: NextRequest) {
              COUNT(*)::text as count,
              COALESCE(SUM(outstanding_amount),0)::text as total
            FROM finance_collection_cases
-           WHERE deleted_at IS NULL AND status NOT IN ('SETTLED','WRITTEN_OFF','CLOSED')
-           GROUP BY 1 ORDER BY 1`
+           WHERE tenant_id = $1 AND deleted_at IS NULL AND status NOT IN ('SETTLED','WRITTEN_OFF','CLOSED')
+           GROUP BY 1 ORDER BY 1`,
+          tenantId,
         ).catch(() => []),
       ]);
 
@@ -104,11 +106,12 @@ export async function GET(req: NextRequest) {
         `SELECT id, invoice_number, client_name, client_email,
                 total_amount::text, paid_amount::text, due_date
          FROM finance_invoices
-         WHERE deleted_at IS NULL
+         WHERE tenant_id = $1 AND deleted_at IS NULL
            AND payment_status IN ('SENT','PARTIAL','OVERDUE')
            AND due_date < CURRENT_DATE
-           AND id NOT IN (SELECT invoice_id FROM finance_collection_cases WHERE deleted_at IS NULL)
-         ORDER BY due_date ASC LIMIT 20`
+           AND id NOT IN (SELECT invoice_id FROM finance_collection_cases WHERE tenant_id = $1 AND deleted_at IS NULL)
+         ORDER BY due_date ASC LIMIT 20`,
+        tenantId,
       ).catch(() => []);
 
       return NextResponse.json({ data: rows, aging, overdueInvoices, page, limit });
@@ -137,13 +140,13 @@ export async function POST(req: NextRequest) {
       const [row] = await tx.$queryRawUnsafe<CaseRow[]>(
         `INSERT INTO finance_collection_cases
            (case_no, invoice_id, invoice_no, client_name, client_email, client_phone,
-            invoice_amount, paid_amount, outstanding_amount, due_date, days_overdue, assigned_to, notes)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+            invoice_amount, paid_amount, outstanding_amount, due_date, days_overdue, assigned_to, notes, tenant_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
          RETURNING *`,
         caseNo, body.invoiceId, body.invoiceNo, body.clientName,
         body.clientEmail ?? null, body.clientPhone ?? null,
         body.invoiceAmount, body.paidAmount ?? 0, outstanding,
-        body.dueDate, daysOverdue, body.assignedTo ?? null, body.notes ?? null,
+        body.dueDate, daysOverdue, body.assignedTo ?? null, body.notes ?? null, tenantId,
       ).catch(() => []);
 
       if (!row) return NextResponse.json({ error: 'Failed to create collection case' }, { status: 500 });

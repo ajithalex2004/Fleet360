@@ -17,6 +17,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureTenantChartOfAccounts } from '@/lib/finance/chart-of-accounts';
+import { fixedAssetsTenantScoped } from '@/lib/finance/fixed-assets-scope';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 function toN(v: unknown): number { return parseFloat(String(v ?? 0)) || 0; }
@@ -44,7 +45,7 @@ async function queryGL(from: string, to: string, tenantId: string | null) {
        COALESCE(SUM(jl.credit_amount - jl.debit_amount),0)::text AS amount
      FROM finance_journal_lines jl
      JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id
-     JOIN finance_chart_of_accounts c ON c.account_code = jl.account_code
+     JOIN finance_chart_of_accounts c ON c.account_code = jl.account_code AND c.tenant_id = je.tenant_id
      WHERE je.status='POSTED' AND je.entry_date BETWEEN $1 AND $2
        AND jl.account_code LIKE '4%'${tenantFilter}
      GROUP BY jl.account_code, c.account_name, c.account_subtype
@@ -59,7 +60,7 @@ async function queryGL(from: string, to: string, tenantId: string | null) {
        COALESCE(SUM(jl.debit_amount - jl.credit_amount),0)::text AS amount
      FROM finance_journal_lines jl
      JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id
-     JOIN finance_chart_of_accounts c ON c.account_code = jl.account_code
+     JOIN finance_chart_of_accounts c ON c.account_code = jl.account_code AND c.tenant_id = je.tenant_id
      WHERE je.status='POSTED' AND je.entry_date BETWEEN $1 AND $2
        AND jl.account_code LIKE '5%'${tenantFilter}
      GROUP BY jl.account_code, c.account_name, c.account_subtype
@@ -128,13 +129,10 @@ async function getExpenses(
     q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_expenses WHERE deleted_at IS NULL AND status IN ('APPROVED','PAID') AND expense_date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
   ]);
 
+  // Depreciation comes from the fixed asset register, which counts only
+  // where it is tenant-scoped (see fixedAssetsTenantScoped).
   let depAmt = 0;
-  if (!tenantId) {
-    depAmt = await q(
-      `SELECT COALESCE(SUM(depreciation),0)::text AS t FROM finance_depreciation_schedule WHERE period_year || '-' || LPAD(period_month::text,2,'0') || '-01' BETWEEN $1 AND $2`,
-      from, to
-    );
-  } else {
+  if (tenantId && await fixedAssetsTenantScoped(prisma)) {
     depAmt = await q(
       `SELECT COALESCE(SUM(ds.depreciation),0)::text AS t
        FROM finance_depreciation_schedule ds
@@ -219,7 +217,7 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await ensureTenantChartOfAccounts(tx, authz.tenantId);
+    await ensureTenantChartOfAccounts(tx, tenantId);
     const sp   = req.nextUrl.searchParams;
       const type = sp.get('type') ?? 'income_statement';
       const from = sp.get('from') ?? `${new Date().getFullYear()}-01-01`;
@@ -227,8 +225,8 @@ export async function GET(req: NextRequest) {
       const compFrom = sp.get('compFrom');
       const compTo   = sp.get('compTo');
 
-      const rawTenantId  = sp.get('tenantId');
-      const tenantId     = rawTenantId ? rawTenantId.replace(/[^a-zA-Z0-9_-]/g, '') : null;
+      // Every query below filters by the caller's tenant. (This used to read
+      // ?tenantId= and shadow it: without the parameter, no query filtered.)
       const modulesParam = sp.get('modules');
       const activeModules = modulesParam
         ? modulesParam.split(',').map(m => m.trim().toUpperCase()).filter(Boolean)
@@ -317,15 +315,11 @@ export async function GET(req: NextRequest) {
         q(`SELECT COALESCE(SUM(total_amount),0)::text AS t FROM finance_expenses WHERE deleted_at IS NULL AND status='APPROVED' AND expense_date BETWEEN $1 AND $2${tc(2)}`, ...tp([from, to])),
       ]);
 
-      // CapEx & disposals
+      // CapEx & disposals: from the fixed asset register, only where it is
+      // tenant-scoped (see fixedAssetsTenantScoped).
       let capexAmount = 0;
       let disposalAmount = 0;
-      if (!tenantId) {
-        [capexAmount, disposalAmount] = await Promise.all([
-          q(`SELECT COALESCE(SUM(acquisition_cost),0)::text AS t FROM finance_fixed_assets WHERE deleted_at IS NULL AND acquisition_date BETWEEN $1 AND $2`, from, to),
-          q(`SELECT COALESCE(SUM(disposal_proceeds),0)::text AS t FROM finance_fixed_assets WHERE deleted_at IS NULL AND disposal_date BETWEEN $1 AND $2`, from, to),
-        ]);
-      } else {
+      if (await fixedAssetsTenantScoped(tx)) {
         [capexAmount, disposalAmount] = await Promise.all([
           q(`SELECT COALESCE(SUM(acquisition_cost),0)::text AS t FROM finance_fixed_assets WHERE deleted_at IS NULL AND tenant_id = $1 AND acquisition_date BETWEEN $2 AND $3`, tenantId, from, to),
           q(`SELECT COALESCE(SUM(disposal_proceeds),0)::text AS t FROM finance_fixed_assets WHERE deleted_at IS NULL AND tenant_id = $1 AND disposal_date BETWEEN $2 AND $3`, tenantId, from, to),

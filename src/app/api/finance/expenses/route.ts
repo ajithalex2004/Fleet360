@@ -80,9 +80,9 @@ export async function GET(req: NextRequest) {
       const limit     = Math.min(100, parseInt(sp.get('limit') ?? '50'));
       const offset    = (page - 1) * limit;
 
-      let where = `WHERE deleted_at IS NULL`;
-      const params: unknown[] = [];
-      let pi = 1;
+      let where = `WHERE tenant_id = $1 AND deleted_at IS NULL`;
+      const params: unknown[] = [tenantId];
+      let pi = 2;
       if (status)   { where += ` AND status = $${pi++}`;          params.push(status); }
       if (category) { where += ` AND category = $${pi++}`;        params.push(category); }
       if (centre)   { where += ` AND cost_centre = $${pi++}`;     params.push(centre); }
@@ -96,12 +96,14 @@ export async function GET(req: NextRequest) {
         ).catch(() => []),
         tx.$queryRawUnsafe<{ status: string; count: string; total: string }[]>(
           `SELECT status, COUNT(*)::text as count, COALESCE(SUM(total_amount),0)::text as total
-             FROM finance_expenses WHERE deleted_at IS NULL GROUP BY status`
+             FROM finance_expenses WHERE tenant_id = $1 AND deleted_at IS NULL GROUP BY status`,
+          tenantId,
         ).catch(() => []),
         tx.$queryRawUnsafe<{ category: string; total: string }[]>(
           `SELECT category, COALESCE(SUM(total_amount),0)::text as total
-             FROM finance_expenses WHERE deleted_at IS NULL AND status IN ('APPROVED','PAID')
-             GROUP BY category ORDER BY total DESC`
+             FROM finance_expenses WHERE tenant_id = $1 AND deleted_at IS NULL AND status IN ('APPROVED','PAID')
+             GROUP BY category ORDER BY total DESC`,
+          tenantId,
         ).catch(() => []),
       ]);
 
@@ -133,14 +135,14 @@ export async function POST(req: NextRequest) {
         `INSERT INTO finance_expenses
            (expense_no, category, sub_category, description, amount, currency,
             vat_amount, total_amount, expense_date, payment_method, reference_no,
-            vehicle_id, driver_id, cost_centre, receipt_url, submitted_by, notes)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+            vehicle_id, driver_id, cost_centre, receipt_url, submitted_by, notes, tenant_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
          RETURNING *`,
         expenseNo, body.category, body.subCategory ?? null, body.description,
         amount, body.currency ?? 'AED', vatAmt, total,
         body.expenseDate, body.paymentMethod ?? null, body.referenceNo ?? null,
         body.vehicleId ?? null, body.driverId ?? null, body.costCentre ?? null,
-        body.receiptUrl ?? null, body.submittedBy ?? null, body.notes ?? null,
+        body.receiptUrl ?? null, body.submittedBy ?? null, body.notes ?? null, tenantId,
       ).catch(() => []);
 
       if (!row) return NextResponse.json({ error: 'Failed to create expense' }, { status: 500 });

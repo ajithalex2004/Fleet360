@@ -49,43 +49,43 @@ export async function GET(req: NextRequest) {
         // Maintenance: approved quotations
         tx.$queryRawUnsafe<NumRow[]>(
           `SELECT COALESCE(SUM(total_cost),0) AS total FROM maintenance_requests
-           WHERE deleted_at IS NULL AND status IN ('COMPLETED','IN_PROGRESS')
-             AND created_at::date BETWEEN $1 AND $2`, startDate, endDate
+           WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('COMPLETED','IN_PROGRESS')
+             AND created_at::date BETWEEN $1 AND $2`, startDate, endDate, tenantId
         ).catch(zero),
         // Fuel: fuel logs
         tx.$queryRawUnsafe<NumRow[]>(
           `SELECT COALESCE(SUM(total_cost),0) AS total FROM fuel_logs
-           WHERE created_at::date BETWEEN $1 AND $2`, startDate, endDate
+           WHERE tenant_id = $3 AND created_at::date BETWEEN $1 AND $2`, startDate, endDate, tenantId
         ).catch(zero),
         // Leasing: lease payments
         tx.$queryRawUnsafe<NumRow[]>(
           `SELECT COALESCE(SUM(monthly_rate),0) AS total FROM lease_agreements
-           WHERE deleted_at IS NULL AND status = 'ACTIVE'
-             AND start_date::date <= $2 AND (end_date IS NULL OR end_date::date >= $1)`, startDate, endDate
+           WHERE tenant_id = $3 AND deleted_at IS NULL AND status = 'ACTIVE'
+             AND start_date::date <= $2 AND (end_date IS NULL OR end_date::date >= $1)`, startDate, endDate, tenantId
         ).catch(zero),
         // Staff transport: trip schedule costs (proxy)
         tx.$queryRawUnsafe<NumRow[]>(
           `SELECT COALESCE(COUNT(*) * 50,0) AS total FROM trip_schedules
-           WHERE deleted_at IS NULL AND status = 'COMPLETED'
-             AND departure_time::date BETWEEN $1 AND $2`, startDate, endDate
+           WHERE tenant_id::text = $3 AND deleted_at IS NULL AND status = 'COMPLETED'
+             AND departure_time::date BETWEEN $1 AND $2`, startDate, endDate, tenantId
         ).catch(zero),
         // School bus
         tx.$queryRawUnsafe<NumRow[]>(
           `SELECT COALESCE(COUNT(*) * 30,0) AS total FROM trip_schedules
-           WHERE deleted_at IS NULL AND status = 'COMPLETED' AND trip_type = 'SCHOOL_BUS'
-             AND departure_time::date BETWEEN $1 AND $2`, startDate, endDate
+           WHERE tenant_id::text = $3 AND deleted_at IS NULL AND status = 'COMPLETED' AND trip_type = 'SCHOOL_BUS'
+             AND departure_time::date BETWEEN $1 AND $2`, startDate, endDate, tenantId
         ).catch(zero),
         // RAC revenue (operating cost proxy: 30% of revenue)
         tx.$queryRawUnsafe<NumRow[]>(
           `SELECT COALESCE(SUM(total_amount) * 0.30, 0) AS total FROM rental_agreements
-           WHERE deleted_at IS NULL AND status IN ('ACTIVE','COMPLETED')
-             AND created_at::date BETWEEN $1 AND $2`, startDate, endDate
+           WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('ACTIVE','COMPLETED')
+             AND created_at::date BETWEEN $1 AND $2`, startDate, endDate, tenantId
         ).catch(zero),
         // Logistics operational cost (40% of revenue)
         tx.$queryRawUnsafe<NumRow[]>(
           `SELECT COALESCE(SUM(customer_rate_amount) * 0.40, 0) AS total FROM logistics_shipment_orders
-           WHERE deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED')
-             AND created_at::date BETWEEN $1 AND $2`, startDate, endDate
+           WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED')
+             AND created_at::date BETWEEN $1 AND $2`, startDate, endDate, tenantId
         ).catch(zero),
         // Insurance: from compliance documents (use static zero if table missing)
         zero(),

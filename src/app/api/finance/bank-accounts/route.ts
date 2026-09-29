@@ -43,11 +43,12 @@ export async function GET(req: NextRequest) {
     await tx.$executeRawUnsafe(INIT).catch(() => {});
       const sp     = req.nextUrl.searchParams;
       const active = sp.get('active');
-      let where    = `WHERE deleted_at IS NULL`;
+      let where    = `WHERE tenant_id = $1 AND deleted_at IS NULL`;
       if (active === 'true') where += ` AND is_active = TRUE`;
 
       const rows = await tx.$queryRawUnsafe<BankRow[]>(
-        `SELECT * FROM finance_bank_accounts ${where} ORDER BY is_default DESC, bank_name ASC`
+        `SELECT * FROM finance_bank_accounts ${where} ORDER BY is_default DESC, bank_name ASC`,
+        tenantId,
       ).catch(() => []);
       return NextResponse.json({ data: rows });
   });
@@ -70,16 +71,17 @@ export async function POST(req: NextRequest) {
       // Unset existing default if setting new default
       if (body.isDefault) {
         await tx.$executeRawUnsafe(
-          `UPDATE finance_bank_accounts SET is_default=FALSE WHERE deleted_at IS NULL`
+          `UPDATE finance_bank_accounts SET is_default=FALSE WHERE tenant_id = $1 AND deleted_at IS NULL`,
+          tenantId,
         ).catch(() => {});
       }
 
       const [row] = await tx.$queryRawUnsafe<BankRow[]>(
         `INSERT INTO finance_bank_accounts
-           (bank_name, account_name, account_number, iban, currency,
+           (tenant_id, bank_name, account_name, account_number, iban, currency,
             branch_name, swift_code, is_default, current_balance)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-        body.bankName, body.accountName, body.accountNumber,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+        tenantId, body.bankName, body.accountName, body.accountNumber,
         body.iban ?? null, body.currency ?? 'AED',
         body.branchName ?? null, body.swiftCode ?? null,
         body.isDefault ?? false, body.currentBalance ?? 0,

@@ -67,9 +67,9 @@ export async function GET(req: NextRequest) {
 
       if (statementId) {
         // Return lines for a specific statement
-        let where = `WHERE statement_id = $1`;
-        const params: unknown[] = [statementId];
-        if (matchStatus) { where += ` AND match_status = $2`; params.push(matchStatus); }
+        let where = `WHERE tenant_id = $1 AND statement_id = $2`;
+        const params: unknown[] = [tenantId, statementId];
+        if (matchStatus) { where += ` AND match_status = $3`; params.push(matchStatus); }
         const lines = await tx.$queryRawUnsafe<LineRow[]>(
           `SELECT * FROM finance_bank_statement_lines ${where} ORDER BY txn_date ASC`, ...params
         ).catch(() => []);
@@ -79,16 +79,16 @@ export async function GET(req: NextRequest) {
                   SUM(CASE WHEN match_status='MATCHED'   THEN 1 ELSE 0 END)::text as matched,
                   SUM(CASE WHEN match_status='UNMATCHED' THEN 1 ELSE 0 END)::text as unmatched,
                   SUM(CASE WHEN match_status='EXCLUDED'  THEN 1 ELSE 0 END)::text as excluded
-           FROM finance_bank_statement_lines WHERE statement_id=$1`, statementId
+           FROM finance_bank_statement_lines WHERE tenant_id=$1 AND statement_id=$2`, tenantId, statementId
         ).catch(() => [{ total: '0', matched: '0', unmatched: '0', excluded: '0' }]);
 
         return NextResponse.json({ lines, stats });
       }
 
       // Return statements list
-      let where = `WHERE 1=1`;
-      const params: unknown[] = [];
-      let pi = 1;
+      let where = `WHERE s.tenant_id = $1`;
+      const params: unknown[] = [tenantId];
+      let pi = 2;
       if (bankAccountId) { where += ` AND bank_account_id = $${pi++}`; params.push(bankAccountId); }
 
       const statements = await tx.$queryRawUnsafe<StmtRow[]>(
@@ -97,7 +97,7 @@ export async function GET(req: NextRequest) {
                 SUM(CASE WHEN l.match_status='MATCHED' THEN 1 ELSE 0 END)::text as matched_lines,
                 SUM(CASE WHEN l.match_status='UNMATCHED' THEN 1 ELSE 0 END)::text as unmatched_lines
          FROM finance_bank_statements s
-         LEFT JOIN finance_bank_statement_lines l ON l.statement_id = s.id::text
+         LEFT JOIN finance_bank_statement_lines l ON l.statement_id = s.id::text AND l.tenant_id = s.tenant_id
          ${where} GROUP BY s.id ORDER BY s.statement_date DESC`, ...params
       ).catch(() => []);
 
@@ -124,9 +124,9 @@ export async function POST(req: NextRequest) {
         // body.lines: [{txnDate, valueDate?, description, reference?, debit?, credit?, balance?}]
         const [stmt] = await tx.$queryRawUnsafe<StmtRow[]>(
           `INSERT INTO finance_bank_statements
-             (bank_account_id, statement_date, period_start, period_end, opening_balance, closing_balance, imported_by, notes)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-          body.bankAccountId, body.statementDate ?? new Date().toISOString().slice(0,10),
+             (tenant_id, bank_account_id, statement_date, period_start, period_end, opening_balance, closing_balance, imported_by, notes)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+          tenantId, body.bankAccountId, body.statementDate ?? new Date().toISOString().slice(0,10),
           body.periodStart, body.periodEnd,
           body.openingBalance ?? 0, body.closingBalance ?? 0,
           body.importedBy ?? null, body.notes ?? null,
@@ -140,9 +140,9 @@ export async function POST(req: NextRequest) {
         for (const line of (body.lines ?? []) as Record<string,string>[]) {
           await tx.$executeRawUnsafe(
             `INSERT INTO finance_bank_statement_lines
-               (statement_id, txn_date, value_date, description, reference, debit, credit, balance)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-            stmtId, line.txnDate, line.valueDate ?? null, line.description,
+               (tenant_id, statement_id, txn_date, value_date, description, reference, debit, credit, balance)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+            tenantId, stmtId, line.txnDate, line.valueDate ?? null, line.description,
             line.reference ?? null, line.debit ?? null, line.credit ?? null, line.balance ?? null,
           ).catch(() => {});
           inserted++;
@@ -157,8 +157,8 @@ export async function POST(req: NextRequest) {
         await tx.$executeRawUnsafe(
           `UPDATE finance_bank_statement_lines
            SET match_status='MATCHED', matched_payment_id=$2, matched_at=$3, matched_by=$4
-           WHERE id=$1`,
-          body.lineId, body.paymentId, now, body.matchedBy ?? 'System'
+           WHERE id=$1 AND tenant_id=$5`,
+          body.lineId, body.paymentId, now, body.matchedBy ?? 'System', tenantId
         ).catch(() => {});
         return NextResponse.json({ ok: true });
       }
@@ -167,15 +167,15 @@ export async function POST(req: NextRequest) {
         await tx.$executeRawUnsafe(
           `UPDATE finance_bank_statement_lines
            SET match_status='UNMATCHED', matched_payment_id=NULL, matched_at=NULL, matched_by=NULL
-           WHERE id=$1`, body.lineId
+           WHERE id=$1 AND tenant_id=$2`, body.lineId, tenantId
         ).catch(() => {});
         return NextResponse.json({ ok: true });
       }
 
       if (body.action === 'exclude_line') {
         await tx.$executeRawUnsafe(
-          `UPDATE finance_bank_statement_lines SET match_status='EXCLUDED', notes=$2 WHERE id=$1`,
-          body.lineId, body.reason ?? 'Excluded'
+          `UPDATE finance_bank_statement_lines SET match_status='EXCLUDED', notes=$2 WHERE id=$1 AND tenant_id=$3`,
+          body.lineId, body.reason ?? 'Excluded', tenantId
         ).catch(() => {});
         return NextResponse.json({ ok: true });
       }
@@ -185,24 +185,26 @@ export async function POST(req: NextRequest) {
         const statementId = body.statementId;
         const unmatched = await tx.$queryRawUnsafe<{id: string; credit: string; txn_date: string}[]>(
           `SELECT id, credit::text, txn_date FROM finance_bank_statement_lines
-           WHERE statement_id=$1 AND match_status='UNMATCHED' AND credit IS NOT NULL`, statementId
+           WHERE tenant_id=$1 AND statement_id=$2 AND match_status='UNMATCHED' AND credit IS NOT NULL`, tenantId, statementId
         ).catch(() => []);
 
         let matched = 0;
         for (const line of unmatched) {
           const [payment] = await tx.$queryRawUnsafe<{id: string}[]>(
             `SELECT id FROM finance_payments
-             WHERE amount::numeric = $1::numeric
+             WHERE tenant_id = $3
+               AND amount::numeric = $1::numeric
                AND payment_date::date BETWEEN ($2::date - INTERVAL '3 days') AND ($2::date + INTERVAL '3 days')
-               AND id NOT IN (SELECT matched_payment_id FROM finance_bank_statement_lines WHERE matched_payment_id IS NOT NULL)
-             LIMIT 1`, line.credit, line.txn_date
+               AND id NOT IN (SELECT matched_payment_id FROM finance_bank_statement_lines
+                               WHERE tenant_id = $3 AND matched_payment_id IS NOT NULL)
+             LIMIT 1`, line.credit, line.txn_date, tenantId
           ).catch(() => []);
 
           if (payment) {
             await tx.$executeRawUnsafe(
               `UPDATE finance_bank_statement_lines
                SET match_status='MATCHED', matched_payment_id=$2, matched_at=NOW(), matched_by='Auto'
-               WHERE id=$1`, line.id, payment.id
+               WHERE id=$1 AND tenant_id=$3`, line.id, payment.id, tenantId
             ).catch(() => {});
             matched++;
           }

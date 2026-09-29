@@ -67,9 +67,9 @@ export async function GET(req: NextRequest) {
       const search       = p.get('search');
       const aging_only   = p.get('aging_only') === 'true'; // held > 365 days
 
-      let where = 'WHERE 1=1';
-      const params: unknown[] = [];
-      let idx = 1;
+      let where = 'WHERE tenant_id = $1';
+      const params: unknown[] = [tenantId];
+      let idx = 2;
 
       if (status)        { where += ` AND status = $${idx++}`;         params.push(status); }
       if (contract_type) { where += ` AND contract_type = $${idx++}`;  params.push(contract_type); }
@@ -97,7 +97,8 @@ export async function GET(req: NextRequest) {
           COALESCE(SUM(refund_amount)    FILTER (WHERE refund_amount IS NOT NULL), 0) AS total_refunded,
           COUNT(*) FILTER (WHERE held_days > 365)           AS overdue_count
         FROM finance_security_deposits
-      `) as Record<string, unknown>[];
+        WHERE tenant_id = $1
+      `, tenantId) as Record<string, unknown>[];
 
       return NextResponse.json({ deposits: rows.map(row), kpi: kpi[0] });
   });
@@ -227,7 +228,7 @@ export async function PATCH(req: NextRequest) {
       // ── Process Refund (legacy single-step — manual/non-workflow refunds) ───────
       if (action === 'refund') {
         const current = await tx.$queryRawUnsafe(
-          `SELECT * FROM finance_security_deposits WHERE id = $1::uuid`, id
+          `SELECT * FROM finance_security_deposits WHERE id = $1::uuid AND tenant_id = $2`, id, tenantId
         ) as Record<string, unknown>[];
         if (!current.length) return NextResponse.json({ error: 'not found' }, { status: 404 });
         const dep = current[0];
@@ -244,10 +245,10 @@ export async function PATCH(req: NextRequest) {
             refund_reference = $5,
             status           = $6,
             updated_at       = NOW()
-          WHERE id = $1::uuid
+          WHERE id = $1::uuid AND tenant_id = $7
           RETURNING *
         `, id, refundAmt, b.refund_date ?? new Date().toISOString().split('T')[0],
-           b.refund_method ?? 'BANK_TRANSFER', b.refund_reference ?? null, newStatus
+           b.refund_method ?? 'BANK_TRANSFER', b.refund_reference ?? null, newStatus, tenantId
         ) as Record<string, unknown>[];
         return NextResponse.json(row(rows[0]));
       }
@@ -270,9 +271,10 @@ export async function PATCH(req: NextRequest) {
       }
       if (!updates.length) return NextResponse.json({ error: 'no fields' }, { status: 400 });
       updates.push('updated_at = NOW()');
+      vals.push(tenantId);
 
       const rows = await tx.$queryRawUnsafe(
-        `UPDATE finance_security_deposits SET ${updates.join(', ')} WHERE id = $1::uuid RETURNING *`,
+        `UPDATE finance_security_deposits SET ${updates.join(', ')} WHERE id = $1::uuid AND tenant_id = $${pi} RETURNING *`,
         ...vals
       ) as Record<string, unknown>[];
       if (!rows.length) return NextResponse.json({ error: 'not found' }, { status: 404 });

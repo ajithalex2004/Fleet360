@@ -68,9 +68,9 @@ export async function GET(req: NextRequest) {
       const limit   = Math.min(100, parseInt(sp.get('limit') ?? '50'));
       const offset  = (page - 1) * limit;
 
-      let where = `WHERE deleted_at IS NULL`;
-      const params: unknown[] = [];
-      let pi = 1;
+      let where = `WHERE tenant_id = $1 AND deleted_at IS NULL`;
+      const params: unknown[] = [tenantId];
+      let pi = 2;
       if (status) { where += ` AND status = $${pi++}`;  params.push(status); }
       if (module) { where += ` AND module = $${pi++}`;  params.push(module); }
 
@@ -81,7 +81,8 @@ export async function GET(req: NextRequest) {
         ).catch(() => []),
         tx.$queryRawUnsafe<{ status: string; count: string; total: string }[]>(
           `SELECT status, COUNT(*)::text as count, COALESCE(SUM(total_amount),0)::text as total
-             FROM finance_credit_notes WHERE deleted_at IS NULL GROUP BY status`
+             FROM finance_credit_notes WHERE tenant_id = $1 AND deleted_at IS NULL GROUP BY status`,
+          tenantId,
         ).catch(() => []),
       ]);
 
@@ -113,8 +114,8 @@ export async function POST(req: NextRequest) {
         `INSERT INTO finance_credit_notes
            (cn_number, original_invoice_id, original_invoice_no, client_name, client_email,
             module, reason_code, reason_detail, line_items, subtotal, vat_amount, total_amount,
-            currency, issue_date, issued_by, notes)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12,$13,$14,$15,$16)
+            currency, issue_date, issued_by, notes, tenant_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12,$13,$14,$15,$16,$17)
          RETURNING *`,
         cnNumber,
         body.originalInvoiceId ?? null, body.originalInvoiceNo ?? null,
@@ -123,7 +124,7 @@ export async function POST(req: NextRequest) {
         JSON.stringify(lineItems), subtotal, vatAmount, total,
         body.currency ?? 'AED',
         body.issueDate ?? new Date().toISOString().slice(0, 10),
-        body.issuedBy ?? null, body.notes ?? null,
+        body.issuedBy ?? null, body.notes ?? null, tenantId,
       ).catch(() => []);
 
       if (!row) return NextResponse.json({ error: 'Failed to create credit note' }, { status: 500 });

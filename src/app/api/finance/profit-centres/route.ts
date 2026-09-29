@@ -57,16 +57,17 @@ export async function GET(req: NextRequest) {
              END::numeric(15,2) AS balance
            FROM finance_journal_lines jl
            JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id
-           JOIN finance_chart_of_accounts c ON c.account_code = jl.account_code
-          WHERE je.status = 'POSTED'
+           JOIN finance_chart_of_accounts c ON c.account_code = jl.account_code AND c.tenant_id = je.tenant_id
+          WHERE je.tenant_id = $3
+            AND je.status = 'POSTED'
             AND je.entry_date BETWEEN $1 AND $2
             AND je.deleted_at IS NULL
             AND c.is_header = FALSE
-            ${code ? `AND jl.profit_centre = $3` : ''}
+            ${code ? `AND jl.profit_centre = $4` : ''}
           GROUP BY jl.profit_centre, c.account_type, c.account_subtype,
                    c.account_code, c.account_name, c.normal_balance
           ORDER BY jl.profit_centre NULLS LAST, c.account_type, c.account_code`,
-          ...(code ? [from, to, code] : [from, to]),
+          ...(code ? [from, to, tenantId, code] : [from, to, tenantId]),
         ).catch(() => []);
 
         // Roll up income vs expense per profit centre
@@ -98,9 +99,9 @@ export async function GET(req: NextRequest) {
       }
 
       // ── List / master table ────────────────────────────────────────────────────
-      let where = `WHERE 1=1`;
-      const params: unknown[] = [];
-      let pi = 1;
+      let where = `WHERE tenant_id = $1`;
+      const params: unknown[] = [tenantId];
+      let pi = 2;
       const activeOnly = sp.get('activeOnly');
       const module     = sp.get('module');
       if (activeOnly === 'true') { where += ` AND is_active = TRUE`; }
@@ -145,7 +146,9 @@ export async function POST(req: NextRequest) {
         body.module       ?? null,
         body.isActive     ?? true,
         body.budget       ?? null,
-        body.tenantId     ?? null,
+        // The authorized tenant: the body's tenantId was stripped above, so
+        // this was always NULL, which the row level security check refuses.
+        tenantId,
       ).catch(() => []);
 
       if (!row) return NextResponse.json({ error: 'Failed to create profit centre' }, { status: 500 });
@@ -183,14 +186,14 @@ export async function PATCH(req: NextRequest) {
       }
       if (!sets.length) return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
       sets.push(`updated_at = NOW()`);
-      vals.push(code);
+      vals.push(code, tenantId);
 
       await tx.$executeRawUnsafe(
-        `UPDATE finance_profit_centres SET ${sets.join(', ')} WHERE code = $${pi}`,
+        `UPDATE finance_profit_centres SET ${sets.join(', ')} WHERE code = $${pi} AND tenant_id = $${pi + 1}`,
         ...vals,
       );
       const [updated] = await tx.$queryRawUnsafe<Row[]>(
-        `SELECT * FROM finance_profit_centres WHERE code=$1`, code,
+        `SELECT * FROM finance_profit_centres WHERE code=$1 AND tenant_id=$2`, code, tenantId,
       ).catch(() => []);
 
       if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 });

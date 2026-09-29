@@ -100,11 +100,11 @@ export async function POST(req: NextRequest) {
           const due_invoices = await tx.$queryRawUnsafe(`
             SELECT id, invoice_number, client_name, client_email, total_amount, paid_amount, due_date
             FROM finance_invoices
-            WHERE deleted_at IS NULL
+            WHERE tenant_id = $1 AND deleted_at IS NULL
               AND payment_status NOT IN ('PAID','CANCELLED')
               ${dateCond}
               ${moduleWhere}
-          `).catch(() => []) as Record<string, unknown>[];
+          `, tenantId).catch(() => []) as Record<string, unknown>[];
 
           const firedInvoices: string[] = [];
 

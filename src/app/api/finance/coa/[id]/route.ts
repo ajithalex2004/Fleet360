@@ -25,10 +25,11 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
                                    ELSE jl.credit_amount - jl.debit_amount END),0)::text
               FROM finance_journal_lines jl
               JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id
-             WHERE jl.account_code = c.account_code AND je.status = 'POSTED') as current_balance
+             WHERE jl.account_code = c.account_code AND je.status = 'POSTED'
+               AND je.tenant_id = c.tenant_id) as current_balance
          FROM finance_chart_of_accounts c
-         WHERE c.id::text = $1 OR c.account_code = $1`,
-        params.id
+         WHERE c.tenant_id = $2 AND (c.id::text = $1 OR c.account_code = $1)`,
+        params.id, tenantId
       ).catch(() => [] as CoaRow[]);
       if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
       return NextResponse.json(row);
@@ -58,10 +59,11 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         if (allowed.includes(col)) { updates.push(`${col} = $${pi++}`); values.push(val); }
       }
       if (!updates.length) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
-      values.push(params.id);
+      values.push(params.id, tenantId);
 
       const [row] = await tx.$queryRawUnsafe<CoaRow[]>(
-        `UPDATE finance_chart_of_accounts SET ${updates.join(', ')}, updated_at=NOW() WHERE id::text=$${pi} OR account_code=$${pi} RETURNING *`,
+        `UPDATE finance_chart_of_accounts SET ${updates.join(', ')}, updated_at=NOW()
+          WHERE tenant_id=$${pi + 1} AND (id::text=$${pi} OR account_code=$${pi}) RETURNING *`,
         ...values
       ).catch(() => [] as CoaRow[]);
 
@@ -83,24 +85,26 @@ export async function DELETE(_: NextRequest, props: { params: Promise<{ id: stri
   return withTenantRls(prisma, tenantId, async (tx) => {
     // Prevent deletion of system accounts or accounts with transactions
       const [acc] = await tx.$queryRawUnsafe<{is_system: boolean; account_code: string}[]>(
-        `SELECT is_system, account_code FROM finance_chart_of_accounts WHERE id::text=$1 OR account_code=$1`, params.id
+        `SELECT is_system, account_code FROM finance_chart_of_accounts
+          WHERE tenant_id=$2 AND (id::text=$1 OR account_code=$1)`, params.id, tenantId
       ).catch(() => [] as {is_system: boolean; account_code: string}[]);
 
       if (!acc) return NextResponse.json({ error: 'Not found' }, { status: 404 });
       if (acc.is_system) return NextResponse.json({ error: 'System accounts cannot be deleted' }, { status: 400 });
 
       // Journal lines carry no tenant: count only lines of the tenant's own
-      // entries (finance_journal_entries is under row level security).
+      // entries.
       const [{ count }] = await tx.$queryRawUnsafe<{count: string}[]>(
         `SELECT COUNT(*)::text as count
            FROM finance_journal_lines jl
            JOIN finance_journal_entries je ON je.id::text = jl.journal_entry_id::text
-          WHERE jl.account_code=$1`, acc.account_code
+          WHERE jl.account_code=$1 AND je.tenant_id=$2`, acc.account_code, tenantId
       ).catch(() => [{ count: '0' }]);
       if (parseInt(count) > 0) return NextResponse.json({ error: 'Account has journal entries and cannot be deleted' }, { status: 400 });
 
       await tx.$executeRawUnsafe(
-        `UPDATE finance_chart_of_accounts SET deleted_at=NOW() WHERE id::text=$1 OR account_code=$1`, params.id
+        `UPDATE finance_chart_of_accounts SET deleted_at=NOW()
+          WHERE tenant_id=$2 AND (id::text=$1 OR account_code=$1)`, params.id, tenantId
       ).catch(() => {});
       return NextResponse.json({ ok: true });
   });

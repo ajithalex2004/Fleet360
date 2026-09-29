@@ -21,7 +21,7 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     const [row] = await tx.$queryRawUnsafe<CaseRow[]>(
-        `SELECT * FROM finance_collection_cases WHERE id=$1 AND deleted_at IS NULL`, params.id
+        `SELECT * FROM finance_collection_cases WHERE id=$1 AND deleted_at IS NULL AND tenant_id=$2`, params.id, tenantId
       ).catch(() => [] as CaseRow[]);
       if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
       return NextResponse.json(row);
@@ -47,7 +47,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
       // Get current case for timeline append
       const [current] = await tx.$queryRawUnsafe<{timeline: unknown}[]>(
-        `SELECT timeline FROM finance_collection_cases WHERE id=$1`, params.id
+        `SELECT timeline FROM finance_collection_cases WHERE id=$1 AND tenant_id=$2`, params.id, tenantId
       ).catch(() => [] as {timeline: unknown}[]);
 
       const timeline: {date: string; action: string; by: string; note: string}[] =
@@ -96,6 +96,12 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
       }
 
+      // Each statement above targets `WHERE id=$1`: narrow it to the tenant.
+
+      sqlParams.push(tenantId);
+
+      sql = sql.replace('WHERE id=$1', () => `WHERE id=$1 AND tenant_id=$${sqlParams.length}`);
+
       const [row] = await tx.$queryRawUnsafe<CaseRow[]>(sql, ...sqlParams).catch(() => [] as CaseRow[]);
       if (!row) return NextResponse.json({ error: 'Update failed' }, { status: 500 });
       return NextResponse.json(row);
@@ -114,7 +120,7 @@ export async function DELETE(_: NextRequest, props: { params: Promise<{ id: stri
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     await tx.$executeRawUnsafe(
-        `UPDATE finance_collection_cases SET deleted_at=NOW() WHERE id=$1`, params.id
+        `UPDATE finance_collection_cases SET deleted_at=NOW() WHERE id=$1 AND tenant_id=$2`, params.id, tenantId
       ).catch(() => {});
       return NextResponse.json({ ok: true });
   });
