@@ -4861,14 +4861,17 @@ model FinanceTaxCategory {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  code        String  @unique // STANDARD|ZERO|EXEMPT|OUT_OF_SCOPE
+  code        String // STANDARD|ZERO|EXEMPT|OUT_OF_SCOPE; unique per tenant
   name        String
   rate        Decimal @db.Decimal(5, 2) // 5.00, 0.00 etc.
   description String?
   isDefault   Boolean @default(false) @map("is_default")
   isActive    Boolean @default(true) @map("is_active")
   ftaCode     String? @map("fta_code") // FTA box codes for VAT return
+  // NULL for the shared UAE VAT categories every tenant can read.
+  tenantId    String? @map("tenant_id")
 
+  @@unique([tenantId, code], map: "finance_tax_categories_tenant_code_key")
   @@map("finance_tax_categories")
   @@schema("finance")
 }
