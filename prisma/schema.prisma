@@ -5550,7 +5550,8 @@ model FinanceProfitCentre {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  code        String   @unique
+  // Unique per tenant (migration 20261006090000_profit_centres_per_tenant).
+  code        String
   name        String
   description String?
   parentCode  String?  @map("parent_code")
@@ -5560,6 +5561,7 @@ model FinanceProfitCentre {
   budget      Decimal? @db.Decimal(15, 2)
   tenantId    String?  @map("tenant_id")
 
+  @@unique([tenantId, code], map: "finance_profit_centres_tenant_code_key")
   @@index([code], map: "idx_profit_centres_code")
   @@index([tenantId], map: "idx_profit_centres_tenant")
   @@map("finance_profit_centres")

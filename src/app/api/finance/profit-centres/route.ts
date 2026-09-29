@@ -6,7 +6,9 @@ export const dynamic = 'force-dynamic';
  * Master table for profit centre codes. Separate from cost_centre (operational
  * cost tracking dimension) — profit centres track P&L by business unit.
  *
- * Seeded with 7 standard entries by migration 20260810000006.
+ * Profit centres are per tenant, codes unique per tenant; each tenant starts
+ * with the 7 standard entries (migration 20261006090000_profit_centres_per_tenant,
+ * src/lib/finance/profit-centres.ts).
  * Supports a P&L query: ?type=pl&code=PC-RENTAL&from=2026-01-01&to=2026-12-31
  *
  * Tables owned by migration 20260810000006_finance_ap_debit_notes_payment_alloc_profit_centres.
@@ -15,6 +17,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureTenantChartOfAccounts } from '@/lib/finance/chart-of-accounts';
+import { ensureTenantProfitCentres } from '@/lib/finance/profit-centres';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
@@ -31,6 +34,7 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     await ensureTenantChartOfAccounts(tx, tenantId);
+    await ensureTenantProfitCentres(tx, tenantId);
     const sp   = req.nextUrl.searchParams;
       const type = sp.get('type'); // list | pl
       const code = sp.get('code');
@@ -130,8 +134,20 @@ export async function POST(req: NextRequest) {
   return withTenantRls(prisma, tenantId, async (tx) => {
     const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-      if (!body.code || !body.name) {
+      const code = typeof body.code === 'string' ? body.code.trim() : '';
+      const name = typeof body.name === 'string' ? body.name.trim() : '';
+      if (!code || !name) {
         return NextResponse.json({ error: 'code and name are required' }, { status: 400 });
+      }
+      await ensureTenantProfitCentres(tx, tenantId);
+
+      // Codes are unique per tenant. Checked before the insert: a failed
+      // insert would abort the transaction.
+      const [existing] = await tx.$queryRawUnsafe<Row[]>(
+        `SELECT 1 FROM finance_profit_centres WHERE tenant_id = $1 AND code = $2`, tenantId, code,
+      );
+      if (existing) {
+        return NextResponse.json({ error: `Profit centre ${code} already exists` }, { status: 409 });
       }
 
       const [row] = await tx.$queryRawUnsafe<Row[]>(
@@ -139,8 +155,8 @@ export async function POST(req: NextRequest) {
            (code, name, description, parent_code, module, is_active, budget, tenant_id)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
          RETURNING *`,
-        body.code,
-        body.name,
+        code,
+        name,
         body.description  ?? null,
         body.parentCode   ?? null,
         body.module       ?? null,

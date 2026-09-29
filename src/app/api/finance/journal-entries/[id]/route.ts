@@ -11,6 +11,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { nextJournalNumber } from '@/lib/finance/journal-service';
 type JeRow = Record<string, unknown>;
 
 // ── GET /api/finance/journal-entries/:id ─────────────────────────────────────
@@ -143,6 +144,22 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
             return NextResponse.json({ error: 'Only POSTED entries can be reversed' }, { status: 400 });
           }
 
+          // Claim the entry before creating anything: a concurrent reversal
+          // blocks on this row, then finds it no longer POSTED and gets a 409,
+          // so an entry is reversed once. (Distinct journal numbers no longer
+          // make the second insert fail by accident.) If a later statement
+          // fails, the transaction is aborted and the claim rolls back with it.
+          const [claimed] = await tx.$queryRawUnsafe<{ id: string }[]>(
+            `UPDATE finance_journal_entries
+                SET status = 'REVERSED', updated_at = $2::timestamptz
+              WHERE id::text = $1 AND tenant_id = $3 AND status = 'POSTED'
+              RETURNING id::text`,
+            params.id, now, tenantId,
+          );
+          if (!claimed) {
+            return NextResponse.json({ error: 'This entry has already been reversed' }, { status: 409 });
+          }
+
           const lines = await tx.$queryRawUnsafe<
             { account_code: string; account_name: string; description: string; debit_amount: string; credit_amount: string; normal_balance: string; cost_centre: string }[]
           >(
@@ -153,14 +170,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
             params.id,
           ).catch(() => []);
 
-          const [{ count }] = await tx.$queryRawUnsafe<{ count: string }[]>(
-            `SELECT COUNT(*)::text AS count FROM finance_journal_entries WHERE tenant_id = $1`,
-            tenantId,
-          ).catch(() => [{ count: '0' }]);
-
-          const ym      = new Date().toISOString().slice(0, 7).replace('-', '');
-          const seq     = (parseInt(count) + 1).toString().padStart(5, '0');
-          const revJeNo = `JE-${ym}-${seq}-REV`;
+          const revJeNo = `${await nextJournalNumber(tx, tenantId)}-REV`;
 
           const revDate    = body.reversalDate ?? new Date().toISOString().slice(0, 10);
           const d          = new Date(revDate);
@@ -212,10 +222,10 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
           await tx.$executeRawUnsafe(
             `UPDATE finance_journal_entries
-                SET status = 'REVERSED', reversal_je_id = $2, updated_at = $3::timestamptz
+                SET reversal_je_id = $2, updated_at = $3::timestamptz
               WHERE id::text = $1 AND tenant_id = $4`,
             params.id, revId, now, tenantId,
-          ).catch(() => {});
+          );
 
           return NextResponse.json({ original: params.id, reversalJe: revJe });
         }

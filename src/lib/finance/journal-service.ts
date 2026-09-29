@@ -8,6 +8,7 @@
  *       happens exclusively via PATCH /api/finance/journal-entries/[id].
  */
 
+import { randomInt } from 'crypto';
 import { prisma } from '@/lib/prisma';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -38,6 +39,45 @@ export type DraftJournalEntryResult = {
   number: string;
 };
 
+// ── Numbering ──────────────────────────────────────────────────────────────────
+
+type RawQueryDb = {
+  $queryRawUnsafe<T = unknown>(query: string, ...values: unknown[]): Promise<T>;
+};
+
+const SUFFIX_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+/**
+ * Next journal entry number: JE-<yyyymm>-<seq>-<suffix>, e.g.
+ * JE-202609-00012-K7QX (reversals append -REV).
+ *
+ * je_number is unique across every tenant, but row-level security only lets
+ * a tenant count its own entries. A bare count-based number therefore
+ * collided as soon as a second tenant posted in the same month (the insert
+ * failed on the unique key). The sequence counts this tenant's entries for
+ * the month; the random suffix keeps the number unique platform-wide — the
+ * scheme invoice and expense numbers use.
+ */
+export async function nextJournalNumber(
+  db: RawQueryDb,
+  tenantId: string,
+  at: Date = new Date(),
+): Promise<string> {
+  const ym = `${at.getFullYear()}${String(at.getMonth() + 1).padStart(2, '0')}`;
+  const [row] = await db.$queryRawUnsafe<Array<{ count: bigint | number | string }>>(
+    `SELECT COUNT(*) AS count
+       FROM finance_journal_entries
+      WHERE tenant_id::text = $1
+        AND je_number LIKE $2`,
+    tenantId,
+    `JE-${ym}-%`,
+  );
+  const seq = String(Number(row?.count ?? 0) + 1).padStart(5, '0');
+  let suffix = '';
+  for (let i = 0; i < 4; i++) suffix += SUFFIX_CHARS[randomInt(SUFFIX_CHARS.length)];
+  return `JE-${ym}-${seq}-${suffix}`;
+}
+
 // ── Service function ───────────────────────────────────────────────────────────
 
 /**
@@ -52,19 +92,8 @@ export async function createDraftJournalEntry(
   p: CreateDraftJournalEntryParams,
 ): Promise<DraftJournalEntryResult> {
   const entryDate  = new Date();
-  const ym         = `${entryDate.getFullYear()}${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
   const costCentre = p.costCentre ?? 'GENERAL';
-
-  // Tenant-scoped sequential number within the month.
-  const [seqRow] = await prisma.$queryRawUnsafe<Array<{ count: bigint | number | string }>>(
-    `SELECT COUNT(*) AS count
-       FROM finance_journal_entries
-      WHERE tenant_id::text = $1
-        AND je_number LIKE $2`,
-    p.tenantId,
-    `JE-${ym}-%`,
-  ).catch(() => [{ count: 0 }]);
-  const jeNumber = `JE-${ym}-${String(Number(seqRow?.count ?? 0) + 1).padStart(5, '0')}`;
+  const jeNumber   = await nextJournalNumber(prisma, p.tenantId, entryDate);
 
   const [je] = await prisma.$queryRawUnsafe<Array<{ id: string; je_number: string }>>(
     `INSERT INTO finance_journal_entries (
