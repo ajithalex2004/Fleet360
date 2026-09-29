@@ -14,6 +14,14 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 
 type TaxRow = Record<string, unknown>;
 
+// The categories a tenant sees: its own and the shared UAE VAT categories
+// (tenant_id NULL), its own version replacing a shared one with the same code.
+// $1 is the tenant.
+const VISIBLE_CATEGORIES = `
+  SELECT DISTINCT ON (code) * FROM finance_tax_categories
+   WHERE tenant_id = $1 OR tenant_id IS NULL
+   ORDER BY code, tenant_id NULLS LAST`;
+
 export async function GET(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -96,8 +104,8 @@ export async function GET(req: NextRequest) {
 
         // Category breakdown
         const breakdown = await tx.$queryRawUnsafe<{ code: string; name: string; rate: string }[]>(
-          `SELECT code, name, rate::text FROM finance_tax_categories
-            WHERE (tenant_id = $1 OR tenant_id IS NULL) AND is_active = TRUE ORDER BY rate DESC`,
+          `SELECT code, name, rate::text FROM (${VISIBLE_CATEGORIES}) c
+            WHERE is_active = TRUE ORDER BY rate DESC, code`,
           tenantId,
         ).catch(() => []);
 
@@ -111,9 +119,9 @@ export async function GET(req: NextRequest) {
       }
 
       // Default: return categories — the tenant's own and the shared UAE ones
-      // (tenant_id NULL).
+      // (tenant_id NULL), the tenant's version winning where both have a code.
       const categories = await tx.$queryRawUnsafe<TaxRow[]>(
-        `SELECT * FROM finance_tax_categories WHERE tenant_id = $1 OR tenant_id IS NULL ORDER BY rate DESC, code`,
+        `SELECT * FROM (${VISIBLE_CATEGORIES}) c ORDER BY rate DESC, code`,
         tenantId,
       ).catch(() => []);
       return NextResponse.json({ data: categories });
@@ -143,24 +151,34 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true }, { status: 201 });
       }
 
-      // Create or update the tenant's own tax category. The shared UAE VAT
-      // categories (tenant_id NULL) are readable by every tenant but, under
-      // row level security, changed only in platform context: updating one
-      // from here is refused rather than changing it for every tenant.
-      const [row] = await tx.$queryRawUnsafe<TaxRow[]>(
-        `INSERT INTO finance_tax_categories (code, name, rate, description, fta_code, is_default, is_active, tenant_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-         ON CONFLICT (code) DO UPDATE SET name=$2, rate=$3, description=$4, fta_code=$5, is_default=$6, is_active=$7, updated_at=NOW()
-         RETURNING *`,
-        body.code, body.name, body.rate ?? 0, body.description ?? null,
-        body.ftaCode ?? null, body.isDefault ?? false, body.isActive ?? true, tenantId,
-      ).catch(() => []);
+      const code = typeof body.code === 'string' ? body.code.trim().toUpperCase() : '';
+      const name = typeof body.name === 'string' ? body.name.trim() : '';
+      const rate = Number(body.rate ?? 0);
+      if (!code || !name) {
+        return NextResponse.json({ error: 'Code and name are required' }, { status: 400 });
+      }
+      if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
+        return NextResponse.json({ error: 'Rate must be between 0 and 100' }, { status: 400 });
+      }
 
-      if (!row) {
-        return NextResponse.json(
-          { error: 'Failed to save tax category. Shared platform categories can only be changed by a platform admin.' },
-          { status: 500 },
+      // Create or update the tenant's own tax category. Codes are unique per
+      // tenant (finance_tax_categories_tenant_code_key), so a tenant may keep
+      // its own version of a shared UAE code; the shared rows (tenant_id NULL)
+      // change only in platform context and are never touched from here.
+      let row: TaxRow | undefined;
+      try {
+        [row] = await tx.$queryRawUnsafe<TaxRow[]>(
+        `INSERT INTO finance_tax_categories (code, name, rate, description, fta_code, is_default, is_active, tenant_id)
+         VALUES ($1,$2,$3::numeric,$4,$5,$6::boolean,$7::boolean,$8)
+         ON CONFLICT (tenant_id, code) DO UPDATE SET name=$2, rate=$3::numeric, description=$4, fta_code=$5,
+           is_default=$6::boolean, is_active=$7::boolean, updated_at=NOW()
+         RETURNING *`,
+        code, name, rate, body.description ?? null,
+        body.ftaCode ?? null, body.isDefault ?? false, body.isActive ?? true, tenantId,
         );
+      } catch (e) {
+        console.error('[finance/tax] save category failed:', e);
+        return NextResponse.json({ error: 'Failed to save tax category' }, { status: 500 });
       }
       return NextResponse.json(row, { status: 201 });
   });
