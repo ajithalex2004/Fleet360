@@ -11,6 +11,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { nextJournalNumber } from '@/lib/finance/journal-service';
 type JeRow = Record<string, unknown>;
 
 // ── GET /api/finance/journal-entries/:id ─────────────────────────────────────
@@ -153,14 +154,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
             params.id,
           ).catch(() => []);
 
-          const [{ count }] = await tx.$queryRawUnsafe<{ count: string }[]>(
-            `SELECT COUNT(*)::text AS count FROM finance_journal_entries WHERE tenant_id = $1`,
-            tenantId,
-          ).catch(() => [{ count: '0' }]);
-
-          const ym      = new Date().toISOString().slice(0, 7).replace('-', '');
-          const seq     = (parseInt(count) + 1).toString().padStart(5, '0');
-          const revJeNo = `JE-${ym}-${seq}-REV`;
+          const revJeNo = `${await nextJournalNumber(tx, tenantId)}-REV`;
 
           const revDate    = body.reversalDate ?? new Date().toISOString().slice(0, 10);
           const d          = new Date(revDate);

@@ -18,21 +18,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureTenantChartOfAccounts } from '@/lib/finance/chart-of-accounts';
+import { nextJournalNumber } from '@/lib/finance/journal-service';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type JeRow   = Record<string, unknown>;
-
-// ── helpers ───────────────────────────────────────────────────────────────────
-
-async function nextJeNumber(): Promise<string> {
-  const [row] = await prisma.$queryRawUnsafe<{ count: string }[]>(
-    `SELECT COUNT(*)::text AS count FROM finance_journal_entries WHERE deleted_at IS NULL`,
-  ).catch(() => [{ count: '0' }]);
-  const now = new Date();
-  const ym  = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const seq = (parseInt(row?.count ?? '0') + 1).toString().padStart(5, '0');
-  return `JE-${ym}-${seq}`;
-}
 
 // ── GET /api/finance/journal-entries ─────────────────────────────────────────
 
@@ -166,7 +155,7 @@ export async function POST(req: NextRequest) {
       ).catch(() => []);
       const accMap = new Map(accounts.map(a => [a.account_code, a]));
 
-      const jeNumber  = await nextJeNumber();
+      const jeNumber  = await nextJournalNumber(tx, tenantId);
       const entryDate = body.entryDate ?? new Date().toISOString().slice(0, 10);
       const d         = new Date(entryDate);
 
