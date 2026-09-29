@@ -37,6 +37,27 @@ const fmtAED = (n: number) => `AED ${Number(n).toLocaleString('en-AE', { minimum
 const fmtDate = (s?: string | null) => s ? new Date(s).toLocaleDateString('en-AE') : '—';
 
 /* ─────────────────────────── sub-components ─────────────────── */
+// Peppol downloads go through fetch so an error (e.g. the company TRN is not
+// set) is shown to the user instead of being saved as a file.
+async function downloadPeppol(id: string, format: 'xml' | 'xlsx') {
+  const res = await fetch(`/api/finance/invoices/${encodeURIComponent(id)}/peppol-xml?format=${format}`);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    alert(body.error ?? 'Could not generate the Peppol e-invoice');
+    return;
+  }
+  const cd = res.headers.get('Content-Disposition') ?? '';
+  const name = /filename="([^"]+)"/.exec(cd)?.[1] ?? `${id}-peppol.${format}`;
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 function StatusBadge({ status }: { status: string }) {
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${STATUS_STYLE[status] ?? STATUS_STYLE.DRAFT}`}>
@@ -484,18 +505,23 @@ function InvoiceDrawer({ invoiceId, onClose, onRefresh }: { invoiceId: string; o
               </button>
             )}
 
-            {/* UAE Peppol E-Invoice UBL 2.1 XML Export */}
-            <a
-              href={`/api/finance/invoices/${inv.id}/peppol-xml`}
-              download={`${inv.invoice_number || 'INV'}-peppol.xml`}
-              target="_blank"
-              rel="noreferrer"
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-violet-500/10 hover:bg-violet-500/15 border border-violet-500/30 text-violet-300 font-semibold text-xs transition-all shadow-sm"
-              title="Download compliant UAE MoF Peppol PINT (UBL 2.1 XML) E-Invoice"
-            >
-              <span>📜</span>
-              <span>Download UAE Peppol E-Invoice (XML)</span>
-            </a>
+            {/* UAE Peppol E-Invoice (PINT-UAE): XML for exchange, Excel for review */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => downloadPeppol(inv.id, 'xlsx')}
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-violet-500/10 hover:bg-violet-500/15 border border-violet-500/30 text-violet-300 font-semibold text-xs transition-all shadow-sm"
+                title="Download the UAE Peppol PINT-UAE e-invoice as an Excel workbook"
+              >
+                <span>📊</span><span>Peppol E-Invoice (Excel)</span>
+              </button>
+              <button
+                onClick={() => downloadPeppol(inv.id, 'xml')}
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-violet-500/10 hover:bg-violet-500/15 border border-violet-500/30 text-violet-300 font-semibold text-xs transition-all shadow-sm"
+                title="Download compliant UAE MoF Peppol PINT (UBL 2.1 XML) E-Invoice"
+              >
+                <span>📜</span><span>Peppol E-Invoice (XML)</span>
+              </button>
+            </div>
           </div>
 
           {inv.payments?.length > 0 && (
@@ -645,14 +671,20 @@ function FinanceInvoicesInner() {
             </p>
           </div>
         </div>
-        <a
-          href="/api/finance/invoices/INV-DEMO-001/peppol-xml"
-          target="_blank"
-          download="sample-peppol-pint.xml"
-          className="px-3.5 py-1.5 rounded-xl bg-violet-500/15 hover:bg-violet-500/25 border border-violet-500/30 text-violet-300 text-xs font-semibold whitespace-nowrap transition-all shadow-sm flex-shrink-0"
-        >
-          Download Sample XML ↓
-        </a>
+        <div className="flex gap-2 flex-shrink-0">
+          <button
+            onClick={() => downloadPeppol('INV-DEMO-001', 'xlsx')}
+            className="px-3.5 py-1.5 rounded-xl bg-violet-500/25 hover:bg-violet-500/35 border border-violet-500/40 text-violet-200 text-xs font-semibold whitespace-nowrap transition-all shadow-sm"
+          >
+            Download Sample (Excel) ↓
+          </button>
+          <button
+            onClick={() => downloadPeppol('INV-DEMO-001', 'xml')}
+            className="px-3.5 py-1.5 rounded-xl bg-violet-500/15 hover:bg-violet-500/25 border border-violet-500/30 text-violet-300 text-xs font-semibold whitespace-nowrap transition-all shadow-sm"
+          >
+            Sample XML ↓
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-3">

@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
  * Handles operational expenses with approval workflow: DRAFT→SUBMITTED→APPROVED/REJECTED→PAID
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
+import { withTenantRls, type TxClient } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
@@ -16,13 +16,20 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 
 type ExpRow = Record<string, unknown>;
 
-async function nextExpenseNo(): Promise<string> {
-  const [row] = await prisma.$queryRawUnsafe<{ count: string }[]>(
-    `SELECT COUNT(*)::text as count FROM finance_expenses`
-  ).catch(() => [{ count: '0' }]);
+// expense_no is unique across all tenants, but RLS only shows this tenant's
+// rows, so a count-based number alone collides with another tenant's (it used
+// to count outside the tenant context, saw no rows, and every expense after
+// the first was EXP-yyyymm-0001: a unique violation). The sequence counts the
+// tenant's own expenses; the random suffix keeps it unique platform-wide, the
+// same scheme invoice numbers use.
+async function nextExpenseNo(tx: TxClient, tenantId: string): Promise<string> {
+  const [row] = await tx.$queryRawUnsafe<{ count: string }[]>(
+    `SELECT COUNT(*)::text as count FROM finance_expenses WHERE tenant_id = $1`, tenantId,
+  );
   const seq = (parseInt(row?.count ?? '0') + 1).toString().padStart(4, '0');
   const ym = new Date().toISOString().slice(0, 7).replace('-', '');
-  return `EXP-${ym}-${seq}`;
+  const rnd = Math.random().toString(36).slice(2, 6).toUpperCase().padEnd(4, '0');
+  return `EXP-${ym}-${seq}-${rnd}`;
 }
 
 export async function GET(req: NextRequest) {
@@ -86,7 +93,7 @@ export async function POST(req: NextRequest) {
   return withTenantRls(prisma, tenantId, async (tx) => {
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-      const expenseNo = await nextExpenseNo();
+      const expenseNo = await nextExpenseNo(tx, tenantId);
 
       const vatAmt   = parseFloat(body.vatAmount ?? '0');
       const amount   = parseFloat(body.amount ?? '0');

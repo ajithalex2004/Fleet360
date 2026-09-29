@@ -172,17 +172,22 @@ export async function POST(req: NextRequest) {
 
       if (body.action === 'dispose') {
         const { assetId, disposalDate, disposalProceeds, disposalMethod, notes } = body;
-        const [asset] = await tx.$queryRawUnsafe<{net_book_value: string}[]>(
-          `SELECT net_book_value FROM finance_fixed_assets WHERE id::text=$1 AND tenant_id=$2`, assetId, tenantId
-        ).catch(() => [] as {net_book_value: string}[]);
+        const [asset] = await tx.$queryRawUnsafe<{net_book_value: string; status: string}[]>(
+          `SELECT net_book_value, status FROM finance_fixed_assets WHERE id::text=$1 AND tenant_id=$2 AND deleted_at IS NULL`, assetId, tenantId
+        );
+        if (!asset) return NextResponse.json({ error: 'Asset not found' }, { status: 404 });
+        if (asset.status === 'DISPOSED') {
+          return NextResponse.json({ error: 'Asset is already disposed' }, { status: 409 });
+        }
+        if (!disposalDate) return NextResponse.json({ error: 'disposalDate is required' }, { status: 400 });
 
         await tx.$executeRawUnsafe(
           `UPDATE finance_fixed_assets SET
              status='DISPOSED', disposal_date=$2::date, disposal_proceeds=$3::numeric,
              disposal_method=$4, notes=COALESCE($5,notes), updated_at=NOW()
            WHERE id::text=$1 AND tenant_id=$6`,
-          assetId, disposalDate, disposalProceeds ?? 0, disposalMethod ?? 'SOLD', notes ?? null, tenantId
-        ).catch(() => {});
+          assetId, disposalDate, disposalProceeds ?? 0, disposalMethod ?? 'SOLD', notes || null, tenantId
+        );
 
         const nbv      = parseFloat(asset?.net_book_value ?? '0');
         const proceeds = parseFloat(disposalProceeds ?? '0');

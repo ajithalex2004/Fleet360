@@ -46,13 +46,13 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   return withTenantRls(prisma, tenantId, async (tx) => {
     const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-      const allowed = ['asset_name', 'description', 'location', 'notes', 'registration_no', 'vehicle_id', 'coa_account_code'];
+      const allowed = ['asset_name', 'description', 'location', 'notes', 'registration_no', 'vehicle_id', 'coa_account_code', 'supplier', 'purchase_invoice_no'];
       const updates: string[] = [];
       const values: unknown[] = [];
       let pi = 1;
       for (const [key, val] of Object.entries(body)) {
         const col = key.replace(/([A-Z])/g, '_$1').toLowerCase();
-        if (allowed.includes(col)) { updates.push(`${col} = $${pi++}`); values.push(val); }
+        if (allowed.includes(col)) { updates.push(`${col} = $${pi++}`); values.push(val === '' ? null : val); }
       }
       if (!updates.length) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
       values.push(params.id, tenantId);
@@ -76,10 +76,23 @@ export async function DELETE(_: NextRequest, props: { params: Promise<{ id: stri
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
+    const [asset] = await tx.$queryRawUnsafe<{ accumulated_depreciation: string | null }[]>(
+      `SELECT accumulated_depreciation FROM finance_fixed_assets WHERE id::text=$1 AND tenant_id=$2 AND deleted_at IS NULL`,
+      params.id, tenantId,
+    );
+    if (!asset) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    // Once depreciation has been booked the asset is part of the ledger:
+    // it leaves the register by disposal, not deletion.
+    if (Number(asset.accumulated_depreciation ?? 0) > 0) {
+      return NextResponse.json(
+        { error: 'This asset has depreciation recorded. Dispose of it instead of deleting it.' },
+        { status: 409 },
+      );
+    }
     await tx.$executeRawUnsafe(
-        `UPDATE finance_fixed_assets SET deleted_at=NOW() WHERE id::text=$1 AND tenant_id=$2`, params.id, tenantId,
-      ).catch(() => {});
-      return NextResponse.json({ ok: true });
+      `UPDATE finance_fixed_assets SET deleted_at=NOW() WHERE id::text=$1 AND tenant_id=$2`, params.id, tenantId,
+    );
+    return NextResponse.json({ ok: true });
   });
 }
 
