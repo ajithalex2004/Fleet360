@@ -5580,7 +5580,7 @@ model FinancePayable {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  payableNumber String @unique @map("payable_number")
+  payableNumber String @map("payable_number")
 
   vendorId    String? @map("vendor_id")
   vendorName  String  @map("vendor_name")
@@ -5625,6 +5625,7 @@ model FinancePayable {
 
   allocations FinancePaymentAllocation[]
 
+  @@unique([tenantId, payableNumber], map: "finance_payables_tenant_payable_number_key")
   @@index([tenantId], map: "idx_finance_payables_tenant")
   @@index([status], map: "idx_finance_payables_status")
   @@index([paymentStatus], map: "idx_finance_payables_payment_status")
@@ -5646,7 +5647,7 @@ model FinanceDebitNote {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  dnNumber String @unique @map("dn_number")
+  dnNumber String @map("dn_number")
 
   // AP-side: debit note against a vendor payable
   originalPayableId String? @map("original_payable_id")
@@ -5681,6 +5682,7 @@ model FinanceDebitNote {
   notes      String?
   tenantId   String? @map("tenant_id")
 
+  @@unique([tenantId, dnNumber], map: "finance_debit_notes_tenant_dn_number_key")
   @@index([tenantId], map: "idx_finance_debit_notes_tenant")
   @@index([status], map: "idx_finance_debit_notes_status")
   @@index([originalPayableId], map: "idx_finance_debit_notes_payable")
