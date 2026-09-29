@@ -2557,8 +2557,9 @@ model BleGateway {
   createdAt            DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   tenantId             String?   @map("tenant_id")
-  vehicleId            String    @unique @map("vehicle_id")
-  gatewayId            String    @unique @map("gateway_id")
+  /// NULL for Assets-module gateways (depot, warehouse) not tied to a bus.
+  vehicleId            String?   @unique @map("vehicle_id")
+  gatewayId            String?   @unique @map("gateway_id")
   model                String?
   rssiThresholdDbm     Int?      @default(-75) @map("rssi_threshold_dbm")
   presenceGraceSeconds Int?      @default(10) @map("presence_grace_seconds")
