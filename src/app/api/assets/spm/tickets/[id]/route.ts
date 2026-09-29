@@ -3,15 +3,13 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { spmSql } from '@/lib/assets/spm-sql';
+import { sqlCast } from '@/lib/assets/sql-cast';
 import { ensureSpmSchema } from '@/lib/assets/spm-schema';
 import { randomUUID } from 'crypto';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
-const query = <T = Row>(sql: string, ...v: unknown[]) =>
-  prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
-const exec = (sql: string, ...v: unknown[]) =>
-  prisma.$executeRawUnsafe(sql, ...v).catch(() => 0);
 
 function ser<T>(v: T): T {
   return JSON.parse(JSON.stringify(v, (_, val) =>
@@ -25,6 +23,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  const { query } = spmSql(tenantId);
 
   try {
     await ensureSpmSchema();
@@ -35,12 +34,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         SELECT t.*, c.interval_days, c.cycle_code
         FROM spm_tickets t
         LEFT JOIN spm_cycles c ON t.cycle_id = c.id
-        WHERE t.id = $1 AND t.tenant_id = 'default'
+        WHERE t.id::text = $1 AND t.tenant_id = $tenant
         LIMIT 1
       `, id),
       query(`
         SELECT * FROM spm_ticket_checks
-        WHERE ticket_id = $1 AND tenant_id = 'default'
+        WHERE ticket_id::text = $1 AND tenant_id = $tenant
         ORDER BY item_order ASC
       `, id),
     ]);
@@ -65,6 +64,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  const { query, exec } = spmSql(tenantId);
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
@@ -73,7 +73,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
 
-        const currentRows = await query(`SELECT * FROM spm_tickets WHERE id = $1 AND tenant_id = 'default' LIMIT 1`, id);
+        const currentRows = await query(`SELECT * FROM spm_tickets WHERE id::text = $1 AND tenant_id = $tenant LIMIT 1`, id);
         if (currentRows.length === 0) {
           return NextResponse.json({ error: 'Ticket not found' }, { status: 404 });
         }
@@ -84,7 +84,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
         const addField = (col: string, val: unknown) => {
           vals.push(val);
-          sets.push(`${col} = $${vals.length}`);
+          sets.push(`${col} = $${vals.length}${sqlCast('spm_tickets', col)}`);
         };
 
         if (body.status !== undefined) {
@@ -133,7 +133,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         vals.push(id);
         const [row] = await query(`
           UPDATE spm_tickets SET ${sets.join(', ')}
-          WHERE id = $${vals.length} AND tenant_id = 'default'
+          WHERE id::text = $${vals.length} AND tenant_id = $tenant
           RETURNING *
         `, ...vals);
 
@@ -151,7 +151,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
               user_id, user_name, user_email,
               type, message, is_read, created_at
             ) VALUES (
-              $1, 'default', $2, $3,
+              $1::uuid, $tenant, $2::uuid, $3::uuid,
               $4, $5, $6,
               'TICKET_ASSIGNED',
               $7, FALSE, NOW()
@@ -170,15 +170,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         // If completing, update parent cycle's last_run_at and next_run_at
         if (body.status === 'COMPLETED') {
           const cycleId = current.cycle_id as string;
-          const cycleRows = await query(`SELECT interval_days FROM spm_cycles WHERE id = $1 LIMIT 1`, cycleId);
+          const cycleRows = await query(`SELECT interval_days FROM spm_cycles WHERE id::text = $1 LIMIT 1`, cycleId);
           if (cycleRows.length > 0) {
             const intervalDays = Number((cycleRows[0] as Row).interval_days ?? 30);
             const d = new Date();
             d.setDate(d.getDate() + intervalDays);
             await exec(`
               UPDATE spm_cycles
-              SET last_run_at = NOW(), next_run_at = $2, updated_at = NOW()
-              WHERE id = $1
+              SET last_run_at = NOW(), next_run_at = $2::timestamptz, updated_at = NOW()
+              WHERE id::text = $1
             `, cycleId, d.toISOString());
           }
         }

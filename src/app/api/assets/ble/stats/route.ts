@@ -1,12 +1,11 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureAssetsSchema } from '@/lib/assets/schema';
 import { ensureBleHwSchema } from '@/lib/assets/ble-hw-schema';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
   prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
@@ -22,7 +21,6 @@ export async function GET(req: NextRequest) {
     await ensureAssetsSchema();
     await ensureBleHwSchema();
 
-    const tenantId = req.nextUrl.searchParams.get('tenantId') ?? 'default';
 
     const [
       gatewayStats,

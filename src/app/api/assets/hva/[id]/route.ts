@@ -1,11 +1,11 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { sqlCast } from '@/lib/assets/sql-cast';
 import { ensureAssetsSchema } from '@/lib/assets/schema';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
   prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
@@ -35,14 +35,13 @@ export async function GET(
   try {
     await ensureAssetsSchema();
     const { id } = params;
-    const tenantId = req.nextUrl.searchParams.get('tenantId') ?? 'default';
 
     const [row] = await query(`
       SELECT h.*,
         (h.calibration_due_date < NOW()) as calibration_overdue,
         (h.insurance_expiry BETWEEN NOW() AND NOW() + INTERVAL '30 days') as insurance_expiring
       FROM hva_assets h
-      WHERE h.id = $1 AND h.tenant_id = $2
+      WHERE h.id::text = $1 AND h.tenant_id = $2
     `, id, tenantId);
 
     if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -78,13 +77,12 @@ export async function PATCH(
     await ensureAssetsSchema();
     const { id } = params;
     const body = await req.json();
-    const tenantId = body.tenantId ?? body.tenant_id ?? 'default';
     const now = new Date().toISOString();
 
-    const [current] = await query(`SELECT * FROM hva_assets WHERE id = $1 AND tenant_id = $2`, id, tenantId);
+    const [current] = await query(`SELECT * FROM hva_assets WHERE id::text = $1 AND tenant_id = $2`, id, tenantId);
     if (!current) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const sets: string[] = ['updated_at = $2'];
+    const sets: string[] = ['updated_at = $2::timestamptz'];
     const values: unknown[] = [id, now];
 
     const fields = [
@@ -101,13 +99,13 @@ export async function PATCH(
     for (const f of fields) {
       if (body[f] !== undefined) {
         values.push(body[f]);
-        sets.push(`${f} = $${values.length}`);
+        sets.push(`${f} = $${values.length}${sqlCast('hva_assets', f)}`);
       }
     }
 
     values.push(id, tenantId);
     const [updated] = await query(
-      `UPDATE hva_assets SET ${sets.join(', ')} WHERE id = $${values.length - 1} AND tenant_id = $${values.length} RETURNING *`,
+      `UPDATE hva_assets SET ${sets.join(', ')} WHERE id::text = $${values.length - 1} AND tenant_id = $${values.length} RETURNING *`,
       ...values,
     );
 
@@ -123,7 +121,7 @@ export async function PATCH(
           movement_type, from_custodian, to_custodian,
           from_location, to_location, reference_type,
           moved_by, moved_at, notes, created_at
-        ) VALUES ($1,$2,$3,'HVA',$4,$5,'CUSTODY_CHANGE',$6,$7,$8,$9,'MANUAL',$10,NOW(),$11,NOW())
+        ) VALUES ($1::uuid,$2,$3,'HVA',$4,$5,'CUSTODY_CHANGE',$6,$7,$8,$9,'MANUAL',$10,NOW(),$11,NOW())
       `,
         crypto.randomUUID(), tenantId, id,
         cur.name, cur.asset_no,
@@ -144,7 +142,7 @@ export async function PATCH(
         INSERT INTO asset_movements (
           id, tenant_id, asset_id, asset_type, asset_name, asset_no,
           movement_type, reference_type, moved_by, moved_at, notes, created_at
-        ) VALUES ($1,$2,$3,'HVA',$4,$5,'CALIBRATION_IN','MANUAL',$6,NOW(),$7,NOW())
+        ) VALUES ($1::uuid,$2,$3,'HVA',$4,$5,'CALIBRATION_IN','MANUAL',$6,NOW(),$7,NOW())
       `,
         crypto.randomUUID(), tenantId, id,
         cur.name, cur.asset_no,

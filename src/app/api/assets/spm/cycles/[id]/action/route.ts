@@ -1,14 +1,11 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
-import { prisma } from '@/lib/prisma';
+import { spmSql } from '@/lib/assets/spm-sql';
 import { ensureSpmSchema } from '@/lib/assets/spm-schema';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
-const query = <T = Row>(sql: string, ...v: unknown[]) =>
-  prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
 
 function ser<T>(v: T): T {
   return JSON.parse(JSON.stringify(v, (_, val) =>
@@ -22,6 +19,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  const { query } = spmSql(tenantId);
 
   try {
     await ensureSpmSchema();
@@ -33,7 +31,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Invalid action. Use: pause | resume | archive' }, { status: 400 });
     }
 
-    const currentRows = await query(`SELECT * FROM spm_cycles WHERE id = $1 AND tenant_id = 'default' LIMIT 1`, id);
+    const currentRows = await query(`SELECT * FROM spm_cycles WHERE id::text = $1 AND tenant_id = $tenant LIMIT 1`, id);
     if (currentRows.length === 0) {
       return NextResponse.json({ error: 'Cycle not found' }, { status: 404 });
     }
@@ -45,7 +43,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (action === 'pause') {
       sql = `
         UPDATE spm_cycles SET status = 'PAUSED', updated_at = NOW()
-        WHERE id = $1 AND tenant_id = 'default'
+        WHERE id::text = $1 AND tenant_id = $tenant
         RETURNING *,
           ROUND(EXTRACT(EPOCH FROM (next_run_at - NOW()))/86400)::int AS days_remaining
       `;
@@ -62,8 +60,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
       if (newNextRun) {
         sql = `
-          UPDATE spm_cycles SET status = 'ACTIVE', next_run_at = $2, updated_at = NOW()
-          WHERE id = $1 AND tenant_id = 'default'
+          UPDATE spm_cycles SET status = 'ACTIVE', next_run_at = $2::timestamptz, updated_at = NOW()
+          WHERE id::text = $1 AND tenant_id = $tenant
           RETURNING *,
             ROUND(EXTRACT(EPOCH FROM (next_run_at - NOW()))/86400)::int AS days_remaining
         `;
@@ -71,7 +69,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       } else {
         sql = `
           UPDATE spm_cycles SET status = 'ACTIVE', updated_at = NOW()
-          WHERE id = $1 AND tenant_id = 'default'
+          WHERE id::text = $1 AND tenant_id = $tenant
           RETURNING *,
             ROUND(EXTRACT(EPOCH FROM (next_run_at - NOW()))/86400)::int AS days_remaining
         `;
@@ -81,7 +79,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       // archive
       sql = `
         UPDATE spm_cycles SET status = 'ARCHIVED', updated_at = NOW()
-        WHERE id = $1 AND tenant_id = 'default'
+        WHERE id::text = $1 AND tenant_id = $tenant
         RETURNING *,
           ROUND(EXTRACT(EPOCH FROM (next_run_at - NOW()))/86400)::int AS days_remaining
       `;

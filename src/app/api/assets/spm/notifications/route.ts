@@ -7,16 +7,10 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
-import { prisma } from '@/lib/prisma';
+import { spmSql } from '@/lib/assets/spm-sql';
 import { ensureSpmSchema } from '@/lib/assets/spm-schema';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-type Row = Record<string, unknown>;
-const query = <T = Row>(sql: string, ...v: unknown[]) =>
-  prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
-const exec = (sql: string, ...v: unknown[]) =>
-  prisma.$executeRawUnsafe(sql, ...v).catch(() => 0);
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 
 function ser<T>(v: T): T {
   return JSON.parse(JSON.stringify(v, (_, val) =>
@@ -30,6 +24,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  const { query } = spmSql(tenantId);
 
   try {
     await ensureSpmSchema();
@@ -37,7 +32,7 @@ export async function GET(req: NextRequest) {
     const userId  = sp.get('user_id');
     const unread  = sp.get('unread'); // 'true' to filter unread only
 
-    const conditions: string[] = [`tenant_id = 'default'`];
+    const conditions: string[] = [`tenant_id = $tenant`];
     const params: unknown[] = [];
 
     if (userId) {
@@ -61,7 +56,7 @@ export async function GET(req: NextRequest) {
     `, ...params);
 
     // Unread count
-    const countConditions = [`tenant_id = 'default'`, `is_read = FALSE`];
+    const countConditions = [`tenant_id = $tenant`, `is_read = FALSE`];
     if (userId) countConditions.push(`user_id = '${userId}'`);
     const [countRow] = await query<{ count: bigint }>(`
       SELECT COUNT(*) AS count FROM spm_notifications WHERE ${countConditions.join(' AND ')}
@@ -82,6 +77,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  const { exec } = spmSql(tenantId);
 
   try {
     await ensureSpmSchema();
@@ -91,7 +87,7 @@ export async function PATCH(req: NextRequest) {
       await exec(`
         UPDATE spm_notifications
         SET is_read = TRUE, read_at = NOW()
-        WHERE tenant_id = 'default' AND user_id = $1 AND is_read = FALSE
+        WHERE tenant_id = $tenant AND user_id = $1 AND is_read = FALSE
       `, body.user_id);
       return NextResponse.json({ success: true });
     }
@@ -101,7 +97,7 @@ export async function PATCH(req: NextRequest) {
       await exec(`
         UPDATE spm_notifications
         SET is_read = TRUE, read_at = NOW()
-        WHERE id IN (${placeholders}) AND tenant_id = 'default'
+        WHERE id::text IN (${placeholders}) AND tenant_id = $tenant
       `, ...body.ids);
       return NextResponse.json({ success: true });
     }

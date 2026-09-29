@@ -1,11 +1,11 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { sqlCast } from '@/lib/assets/sql-cast';
 import { ensureAssetsSchema } from '@/lib/assets/schema';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
   prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
@@ -41,16 +41,15 @@ export async function GET(
   try {
     await ensureAssetsSchema();
     const { id } = params;
-    const tenantId = req.nextUrl.searchParams.get('tenantId') ?? 'default';
 
     const [dispatch] = await query(`
-      SELECT * FROM field_dispatch WHERE id = $1 AND tenant_id = $2
+      SELECT * FROM field_dispatch WHERE id::text = $1 AND tenant_id = $2
     `, id, tenantId);
 
     if (!dispatch) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     const items = await query(`
-      SELECT * FROM field_dispatch_items WHERE dispatch_id = $1 AND tenant_id = $2
+      SELECT * FROM field_dispatch_items WHERE dispatch_id::text = $1 AND tenant_id = $2
     `, id, tenantId);
 
     return NextResponse.json({
@@ -77,17 +76,16 @@ export async function PATCH(
     await ensureAssetsSchema();
     const { id } = params;
     const body = await req.json();
-    const tenantId = body.tenantId ?? body.tenant_id ?? 'default';
     const action = body.action as string | undefined;
 
-    const [dispatch] = await query(`SELECT * FROM field_dispatch WHERE id = $1 AND tenant_id = $2`, id, tenantId);
+    const [dispatch] = await query(`SELECT * FROM field_dispatch WHERE id::text = $1 AND tenant_id = $2`, id, tenantId);
     if (!dispatch) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     const d = dispatch as Row;
 
     if (action === 'accept') {
       await exec(`
         UPDATE field_dispatch SET status = 'ACCEPTED', accepted_at = NOW(), updated_at = NOW()
-        WHERE id = $1 AND tenant_id = $2
+        WHERE id::text = $1 AND tenant_id = $2
       `, id, tenantId);
 
       // Update accepted quantities for items
@@ -95,8 +93,8 @@ export async function PATCH(
       for (const item of itemUpdates) {
         if (item.id && item.quantity_accepted !== undefined) {
           await exec(`
-            UPDATE field_dispatch_items SET quantity_accepted = $1
-            WHERE id = $2 AND dispatch_id = $3
+            UPDATE field_dispatch_items SET quantity_accepted = $1::numeric
+            WHERE id::text = $2 AND dispatch_id::text = $3
           `, Number(item.quantity_accepted), item.id, id);
         }
       }
@@ -109,7 +107,7 @@ export async function PATCH(
           SELECT fdi.*, ar.current_stock, ar.reorder_threshold, ar.unit_cost_aed, ar.domain
           FROM field_dispatch_items fdi
           JOIN asset_registry ar ON ar.id = fdi.asset_id
-          WHERE fdi.id = $1 AND fdi.dispatch_id = $2
+          WHERE fdi.id::text = $1 AND fdi.dispatch_id::text = $2
         `, item.id, id);
 
         if (!dispItem) continue;
@@ -119,7 +117,7 @@ export async function PATCH(
         await exec(`
           UPDATE field_dispatch_items
           SET quantity_consumed = quantity_consumed + $1
-          WHERE id = $2 AND dispatch_id = $3
+          WHERE id::text = $2 AND dispatch_id::text = $3
         `, qtyConsumed, item.id, id);
 
         // Stock transaction CONSUMED — already removed at dispatch, just log it
@@ -130,7 +128,7 @@ export async function PATCH(
             unit_cost_aed, total_value_aed,
             reference_type, reference_id, reference_no,
             performed_by, performed_at, domain, notes, created_at
-          ) VALUES ($1,$2,$3,$4,$5,'CONSUMED',$6,$7,$6,$8,$9,'DISPATCH',$10,$11,$12,NOW(),$13,$14,NOW())
+          ) VALUES ($1::uuid,$2,$3::uuid,$4,$5,'CONSUMED',$6::numeric,$7::numeric,$6::numeric,$8::numeric,$9::numeric,'DISPATCH',$10,$11,$12,NOW(),$13,$14,NOW())
         `,
           crypto.randomUUID(), tenantId, di.asset_id,
           di.asset_name, di.asset_no,
@@ -147,23 +145,23 @@ export async function PATCH(
         await exec(`
           UPDATE personnel_stock
           SET quantity_on_hand = GREATEST(0, quantity_on_hand - $1), last_updated = NOW()
-          WHERE tenant_id = $2 AND technician_id = $3 AND asset_id = $4
+          WHERE tenant_id = $2 AND technician_id = $3 AND asset_id::text = $4
         `, qtyConsumed, tenantId, d.technician_id ?? null, di.asset_id);
       }
 
     } else if (action === 'cancel') {
       await exec(`
         UPDATE field_dispatch SET status = 'CANCELLED', updated_at = NOW()
-        WHERE id = $1 AND tenant_id = $2
+        WHERE id::text = $1 AND tenant_id = $2
       `, id, tenantId);
 
       // Reverse stock transactions — add stock back
-      const items = await query(`SELECT * FROM field_dispatch_items WHERE dispatch_id = $1 AND tenant_id = $2`, id, tenantId);
+      const items = await query(`SELECT * FROM field_dispatch_items WHERE dispatch_id::text = $1 AND tenant_id = $2`, id, tenantId);
       for (const item of items) {
         const di = item as Row;
         const qtyToRestore = Number(di.quantity_dispatched ?? 0);
         const [asset] = await query(`
-          SELECT current_stock, reorder_threshold, unit_cost_aed, domain FROM asset_registry WHERE id = $1 AND tenant_id = $2
+          SELECT current_stock, reorder_threshold, unit_cost_aed, domain FROM asset_registry WHERE id::text = $1 AND tenant_id = $2
         `, di.asset_id, tenantId);
 
         if (!asset) continue;
@@ -172,8 +170,8 @@ export async function PATCH(
         const newStatus = computeStatus(newStock, Number(a.reorder_threshold ?? 0));
 
         await exec(`
-          UPDATE asset_registry SET current_stock = $1, status = $2, updated_at = NOW()
-          WHERE id = $3 AND tenant_id = $4
+          UPDATE asset_registry SET current_stock = $1::numeric, status = $2, updated_at = NOW()
+          WHERE id::text = $3 AND tenant_id = $4
         `, newStock, newStatus, di.asset_id, tenantId);
 
         await exec(`
@@ -183,7 +181,7 @@ export async function PATCH(
             unit_cost_aed, total_value_aed,
             reference_type, reference_id, reference_no,
             performed_by, performed_at, domain, notes, created_at
-          ) VALUES ($1,$2,$3,$4,$5,'RETURN',$6,$7,$8,$9,$10,'DISPATCH',$11,$12,$13,NOW(),$14,'Dispatch cancelled — stock reversed',NOW())
+          ) VALUES ($1::uuid,$2,$3::uuid,$4,$5,'RETURN',$6::numeric,$7::numeric,$8::numeric,$9::numeric,$10::numeric,'DISPATCH',$11,$12,$13,NOW(),$14,'Dispatch cancelled — stock reversed',NOW())
         `,
           crypto.randomUUID(), tenantId, di.asset_id,
           di.asset_name, di.asset_no,
@@ -199,7 +197,7 @@ export async function PATCH(
         await exec(`
           UPDATE personnel_stock
           SET quantity_on_hand = GREATEST(0, quantity_on_hand - $1), last_updated = NOW()
-          WHERE tenant_id = $2 AND technician_id = $3 AND asset_id = $4
+          WHERE tenant_id = $2 AND technician_id = $3 AND asset_id::text = $4
         `, qtyToRestore, tenantId, d.technician_id ?? null, di.asset_id);
       }
 
@@ -212,18 +210,18 @@ export async function PATCH(
       for (const f of fields) {
         if (body[f] !== undefined) {
           values.push(body[f]);
-          sets.push(`${f} = $${values.length}`);
+          sets.push(`${f} = $${values.length}${sqlCast('field_dispatch', f)}`);
         }
       }
       values.push(id, tenantId);
       await exec(
-        `UPDATE field_dispatch SET ${sets.join(', ')} WHERE id = $${values.length - 1} AND tenant_id = $${values.length}`,
+        `UPDATE field_dispatch SET ${sets.join(', ')} WHERE id::text = $${values.length - 1} AND tenant_id = $${values.length}`,
         ...values,
       );
     }
 
-    const [updated] = await query(`SELECT * FROM field_dispatch WHERE id = $1 AND tenant_id = $2`, id, tenantId);
-    const items = await query(`SELECT * FROM field_dispatch_items WHERE dispatch_id = $1 AND tenant_id = $2`, id, tenantId);
+    const [updated] = await query(`SELECT * FROM field_dispatch WHERE id::text = $1 AND tenant_id = $2`, id, tenantId);
+    const items = await query(`SELECT * FROM field_dispatch_items WHERE dispatch_id::text = $1 AND tenant_id = $2`, id, tenantId);
 
     return NextResponse.json({
       ...ser([updated as Row])[0],

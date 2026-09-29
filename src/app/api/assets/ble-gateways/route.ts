@@ -1,11 +1,10 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureAssetsSchema } from '@/lib/assets/schema';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
   prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
@@ -29,7 +28,6 @@ export async function GET(req: NextRequest) {
   try {
     await ensureAssetsSchema();
     const sp = req.nextUrl.searchParams;
-    const tenantId = sp.get('tenantId') ?? 'default';
     const status = sp.get('status');
     const locationType = sp.get('location_type');
     const search = sp.get('search');
@@ -88,7 +86,6 @@ export async function POST(req: NextRequest) {
   try {
     await ensureAssetsSchema();
     const body = await req.json();
-    const tenantId = body.tenantId ?? body.tenant_id ?? 'default';
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
 
@@ -105,7 +102,7 @@ export async function POST(req: NextRequest) {
         alert_on_offline, offline_threshold_min,
         notes, created_at, updated_at
       ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21
+        $1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10::numeric,$11::numeric,$12,$13,$14::int,$15::timestamptz,$16,$17::boolean,$18::int,$19,$20::timestamptz,$21::timestamptz
       ) RETURNING *
     `,
       id, tenantId, gatewayCode,

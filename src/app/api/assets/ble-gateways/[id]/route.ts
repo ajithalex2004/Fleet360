@@ -1,11 +1,11 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { sqlCast } from '@/lib/assets/sql-cast';
 import { ensureAssetsSchema } from '@/lib/assets/schema';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
   prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
@@ -35,7 +35,6 @@ export async function GET(
   try {
     await ensureAssetsSchema();
     const { id } = params;
-    const tenantId = req.nextUrl.searchParams.get('tenantId') ?? 'default';
 
     const [row] = await query(`
       SELECT g.*,
@@ -45,7 +44,7 @@ export async function GET(
           ELSE NULL
         END::NUMERIC(10,1) as minutes_since_heartbeat
       FROM ble_gateways g
-      WHERE g.id = $1 AND g.tenant_id = $2
+      WHERE g.id::text = $1 AND g.tenant_id = $2
     `, id, tenantId);
 
     if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -70,32 +69,31 @@ export async function PATCH(
     await ensureAssetsSchema();
     const { id } = params;
     const body = await req.json();
-    const tenantId = body.tenantId ?? body.tenant_id ?? 'default';
     const now = new Date().toISOString();
     const action = body.action as string | undefined;
 
-    const [current] = await query(`SELECT * FROM ble_gateways WHERE id = $1 AND tenant_id = $2`, id, tenantId);
+    const [current] = await query(`SELECT * FROM ble_gateways WHERE id::text = $1 AND tenant_id = $2`, id, tenantId);
     if (!current) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     if (action === 'heartbeat') {
       await exec(`
         UPDATE ble_gateways SET
           last_heartbeat = NOW(),
-          tags_visible = $1,
+          tags_visible = $1::int,
           status = 'ONLINE',
           updated_at = NOW()
-        WHERE id = $2 AND tenant_id = $3
+        WHERE id::text = $2 AND tenant_id = $3
       `, body.tags_visible ?? (current as Row).tags_visible ?? 0, id, tenantId);
 
     } else if (action === 'offline') {
       await exec(`
         UPDATE ble_gateways SET status = 'OFFLINE', updated_at = NOW()
-        WHERE id = $1 AND tenant_id = $2
+        WHERE id::text = $1 AND tenant_id = $2
       `, id, tenantId);
 
     } else {
       // General field update
-      const sets: string[] = ['updated_at = $2'];
+      const sets: string[] = ['updated_at = $2::timestamptz'];
       const values: unknown[] = [id, now];
 
       const fields = [
@@ -108,13 +106,13 @@ export async function PATCH(
       for (const f of fields) {
         if (body[f] !== undefined) {
           values.push(body[f]);
-          sets.push(`${f} = $${values.length}`);
+          sets.push(`${f} = $${values.length}${sqlCast('ble_gateways', f)}`);
         }
       }
 
       values.push(id, tenantId);
       await exec(
-        `UPDATE ble_gateways SET ${sets.join(', ')} WHERE id = $${values.length - 1} AND tenant_id = $${values.length}`,
+        `UPDATE ble_gateways SET ${sets.join(', ')} WHERE id::text = $${values.length - 1} AND tenant_id = $${values.length}`,
         ...values,
       );
     }
@@ -122,7 +120,7 @@ export async function PATCH(
     const [updated] = await query(`
       SELECT g.*,
         CASE WHEN g.last_heartbeat IS NOT NULL THEN EXTRACT(EPOCH FROM (NOW() - g.last_heartbeat)) / 60 ELSE NULL END::NUMERIC(10,1) as minutes_since_heartbeat
-      FROM ble_gateways g WHERE g.id = $1 AND g.tenant_id = $2
+      FROM ble_gateways g WHERE g.id::text = $1 AND g.tenant_id = $2
     `, id, tenantId);
 
     return NextResponse.json(ser([updated as Row])[0]);

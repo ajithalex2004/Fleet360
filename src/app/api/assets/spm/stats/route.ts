@@ -1,14 +1,10 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
-import { prisma } from '@/lib/prisma';
+import { spmSql } from '@/lib/assets/spm-sql';
 import { ensureSpmSchema } from '@/lib/assets/spm-schema';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-type Row = Record<string, unknown>;
-const query = <T = Row>(sql: string, ...v: unknown[]) =>
-  prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 
 function ser<T>(v: T): T {
   return JSON.parse(JSON.stringify(v, (_, val) =>
@@ -22,6 +18,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  const { query } = spmSql(tenantId);
 
   try {
     await ensureSpmSchema();
@@ -36,28 +33,28 @@ export async function GET(req: NextRequest) {
       completedMonthRes,
       lastRunRes,
     ] = await Promise.all([
-      query<{ count: bigint }>(`SELECT COUNT(*) AS count FROM spm_cycles WHERE tenant_id = 'default'`),
-      query<{ count: bigint }>(`SELECT COUNT(*) AS count FROM spm_cycles WHERE tenant_id = 'default' AND status = 'ACTIVE'`),
-      query<{ count: bigint }>(`SELECT COUNT(*) AS count FROM spm_cycles WHERE tenant_id = 'default' AND status = 'PAUSED'`),
+      query<{ count: bigint }>(`SELECT COUNT(*) AS count FROM spm_cycles WHERE tenant_id = $tenant`),
+      query<{ count: bigint }>(`SELECT COUNT(*) AS count FROM spm_cycles WHERE tenant_id = $tenant AND status = 'ACTIVE'`),
+      query<{ count: bigint }>(`SELECT COUNT(*) AS count FROM spm_cycles WHERE tenant_id = $tenant AND status = 'PAUSED'`),
       query<{ count: bigint }>(`
         SELECT COUNT(*) AS count FROM spm_cycles
-        WHERE tenant_id = 'default' AND status = 'ACTIVE'
+        WHERE tenant_id = $tenant AND status = 'ACTIVE'
           AND next_run_at > NOW() AND next_run_at <= NOW() + INTERVAL '7 days'
       `),
       query<{ count: bigint }>(`
         SELECT COUNT(*) AS count FROM spm_cycles
-        WHERE tenant_id = 'default' AND status = 'ACTIVE' AND next_run_at < NOW()
+        WHERE tenant_id = $tenant AND status = 'ACTIVE' AND next_run_at < NOW()
       `),
       query<{ count: bigint }>(`
         SELECT COUNT(*) AS count FROM spm_tickets
-        WHERE tenant_id = 'default' AND status IN ('OPEN', 'IN_PROGRESS')
+        WHERE tenant_id = $tenant AND status IN ('OPEN', 'IN_PROGRESS')
       `),
       query<{ count: bigint }>(`
         SELECT COUNT(*) AS count FROM spm_tickets
-        WHERE tenant_id = 'default' AND status = 'COMPLETED'
+        WHERE tenant_id = $tenant AND status = 'COMPLETED'
           AND DATE_TRUNC('month', completed_at) = DATE_TRUNC('month', NOW())
       `),
-      query<{ max_run_at: Date | null }>(`SELECT MAX(run_at) AS max_run_at FROM spm_audit_logs WHERE tenant_id = 'default'`),
+      query<{ max_run_at: Date | null }>(`SELECT MAX(run_at) AS max_run_at FROM spm_audit_logs WHERE tenant_id = $tenant`),
     ]);
 
     return NextResponse.json(ser({

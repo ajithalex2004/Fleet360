@@ -1,11 +1,10 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureAssetsSchema } from '@/lib/assets/schema';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
   prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
@@ -31,7 +30,6 @@ export async function GET(req: NextRequest) {
   try {
     await ensureAssetsSchema();
     const sp = req.nextUrl.searchParams;
-    const tenantId = sp.get('tenantId') ?? 'default';
     const status = sp.get('status');
     const technicianId = sp.get('technician_id');
     const domain = sp.get('domain');
@@ -88,7 +86,6 @@ export async function POST(req: NextRequest) {
   try {
     await ensureAssetsSchema();
     const body = await req.json();
-    const tenantId = body.tenantId ?? body.tenant_id ?? 'default';
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
 
@@ -101,7 +98,7 @@ export async function POST(req: NextRequest) {
         id, tenant_id, return_no, technician_id, technician_name, technician_phone,
         from_dispatch_id, status, requested_at, domain, reason, notes,
         created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,'PENDING',NOW(),$8,$9,$10,$11,$12)
+      ) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,'PENDING',NOW(),$8,$9,$10,$11::timestamptz,$12::timestamptz)
       RETURNING *
     `,
       id, tenantId, returnNo,
@@ -122,7 +119,7 @@ export async function POST(req: NextRequest) {
           id, return_id, tenant_id, asset_id, asset_name, asset_no,
           quantity_returned, condition, is_restored, restore_to_stock,
           unit_cost_aed, reason, notes
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,FALSE,$9,$10,$11,$12)
+        ) VALUES ($1::uuid,$2::uuid,$3,$4::uuid,$5,$6,$7::numeric,$8,FALSE,$9::boolean,$10::numeric,$11,$12)
       `,
         crypto.randomUUID(), id, tenantId,
         item.asset_id, item.asset_name ?? null, item.asset_no ?? null,
@@ -137,7 +134,7 @@ export async function POST(req: NextRequest) {
       await exec(`
         UPDATE personnel_stock
         SET quantity_on_hand = GREATEST(0, quantity_on_hand - $1), last_updated = NOW()
-        WHERE tenant_id = $2 AND technician_id = $3 AND asset_id = $4
+        WHERE tenant_id = $2 AND technician_id = $3 AND asset_id::text = $4
       `, qtyReturned, tenantId, body.technician_id ?? null, item.asset_id);
     }
 

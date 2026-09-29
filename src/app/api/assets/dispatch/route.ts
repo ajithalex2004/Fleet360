@@ -1,11 +1,10 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureAssetsSchema } from '@/lib/assets/schema';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
   prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
@@ -37,7 +36,6 @@ export async function GET(req: NextRequest) {
   try {
     await ensureAssetsSchema();
     const sp = req.nextUrl.searchParams;
-    const tenantId = sp.get('tenantId') ?? 'default';
     const status = sp.get('status');
     const technicianId = sp.get('technician_id');
     const domain = sp.get('domain');
@@ -94,7 +92,9 @@ export async function POST(req: NextRequest) {
   try {
     await ensureAssetsSchema();
     const body = await req.json();
-    const tenantId = body.tenantId ?? body.tenant_id ?? 'default';
+    if (!body.technician_name || !body.from_warehouse) {
+      return NextResponse.json({ error: 'Technician name and warehouse are required' }, { status: 400 });
+    }
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
 
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
         technician_id, technician_name, technician_phone,
         status, dispatched_by, dispatched_at,
         work_order_no, domain, notes, created_at, updated_at
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,'DISPATCHED',$8,NOW(),$9,$10,$11,$12,$13)
+      ) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,'DISPATCHED',$8,NOW(),$9,$10,$11,$12::timestamptz,$13::timestamptz)
       RETURNING *
     `,
       id, tenantId, dispatchNo, body.from_warehouse,
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
       // Get asset details
       const [asset] = await query(`
         SELECT id, name, asset_no, current_stock, reorder_threshold, unit_cost_aed, domain
-        FROM asset_registry WHERE id = $1 AND tenant_id = $2
+        FROM asset_registry WHERE id::text = $1 AND tenant_id = $2
       `, item.asset_id, tenantId);
 
       if (!asset) continue;
@@ -141,7 +141,7 @@ export async function POST(req: NextRequest) {
           id, dispatch_id, tenant_id, asset_id, asset_name, asset_no,
           quantity_dispatched, quantity_accepted, quantity_consumed, quantity_returned,
           unit_cost_aed, notes
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,0,0,0,$8,$9)
+        ) VALUES ($1::uuid,$2::uuid,$3,$4::uuid,$5,$6,$7::numeric,0,0,0,$8::numeric,$9)
       `,
         itemId, id, tenantId, item.asset_id,
         a.name, a.asset_no, qtyDispatched,
@@ -159,7 +159,7 @@ export async function POST(req: NextRequest) {
           reference_type, reference_id, reference_no,
           from_location, to_location,
           performed_by, performed_at, domain, notes, created_at
-        ) VALUES ($1,$2,$3,$4,$5,'DISPATCH',$6,$7,$8,$9,$10,'DISPATCH',$11,$12,$13,$14,$15,NOW(),$16,$17,NOW())
+        ) VALUES ($1::uuid,$2,$3::uuid,$4,$5,'DISPATCH',$6::numeric,$7::numeric,$8::numeric,$9::numeric,$10::numeric,'DISPATCH',$11,$12,$13,$14,$15,NOW(),$16,$17,NOW())
       `,
         txId, tenantId, item.asset_id,
         a.name, a.asset_no,
@@ -177,8 +177,8 @@ export async function POST(req: NextRequest) {
       // Update asset stock
       const newStatus = computeStatus(qtyAfter, Number(a.reorder_threshold ?? 0));
       await exec(`
-        UPDATE asset_registry SET current_stock = $1, status = $2, updated_at = NOW()
-        WHERE id = $3 AND tenant_id = $4
+        UPDATE asset_registry SET current_stock = $1::numeric, status = $2, updated_at = NOW()
+        WHERE id::text = $3 AND tenant_id = $4
       `, qtyAfter, newStatus, item.asset_id, tenantId);
 
       // Upsert personnel_stock
@@ -187,7 +187,7 @@ export async function POST(req: NextRequest) {
           id, tenant_id, technician_id, technician_name,
           asset_id, asset_name, asset_no,
           quantity_on_hand, unit_cost_aed, last_dispatch_id, last_updated
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+        ) VALUES ($1::uuid,$2,$3,$4,$5::uuid,$6,$7,$8::numeric,$9::numeric,$10,NOW())
         ON CONFLICT (tenant_id, technician_id, asset_id)
         DO UPDATE SET
           quantity_on_hand = personnel_stock.quantity_on_hand + $8,
@@ -210,7 +210,7 @@ export async function POST(req: NextRequest) {
           movement_type, from_location, to_custodian, quantity,
           reference_type, reference_id, reference_no,
           moved_by, moved_at, notes, created_at
-        ) VALUES ($1,$2,$3,'REGISTRY',$4,$5,'DISPATCH',$6,$7,$8,'DISPATCH',$9,$10,$11,NOW(),$12,NOW())
+        ) VALUES ($1::uuid,$2,$3,'REGISTRY',$4,$5,'DISPATCH',$6,$7,$8::numeric,'DISPATCH',$9,$10,$11,NOW(),$12,NOW())
       `,
         crypto.randomUUID(), tenantId, item.asset_id,
         a.name, a.asset_no,

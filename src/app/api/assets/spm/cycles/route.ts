@@ -3,12 +3,11 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { spmSql } from '@/lib/assets/spm-sql';
 import { ensureSpmSchema } from '@/lib/assets/spm-schema';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
-const query = <T = Row>(sql: string, ...v: unknown[]) =>
-  prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
 // prisma client also used directly for User lookup (Prisma model)
 
 function ser<T>(v: T): T {
@@ -23,6 +22,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  const { query } = spmSql(tenantId);
 
   try {
     await ensureSpmSchema();
@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
     const priority = sp.get('priority');
     const search = sp.get('search');
 
-    const conditions: string[] = [`tenant_id = 'default'`];
+    const conditions: string[] = [`tenant_id = $tenant`];
     const params: unknown[] = [];
 
     if (status) { params.push(status); conditions.push(`status = $${params.length}`); }
@@ -61,6 +61,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  const { query } = spmSql(tenantId);
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest) {
       const body = stripTenantOwnershipFields(bodyRaw);
 
         // Auto-generate cycle_code
-        const countRes = await query<{ count: bigint }>(`SELECT COUNT(*) AS count FROM spm_cycles WHERE tenant_id = 'default'`);
+        const countRes = await query<{ count: bigint }>(`SELECT COUNT(*) AS count FROM spm_cycles WHERE tenant_id = $tenant`);
         const seq = Number(countRes[0]?.count ?? 0) + 1;
         const cycleCode = `SPM-${String(seq).padStart(4, '0')}`;
 
@@ -85,7 +86,7 @@ export async function POST(req: NextRequest) {
             SELECT name, asset_no, domain, warehouse_location,
                    (SELECT name FROM asset_categories ac WHERE ac.id = ar.category_id) AS category_name
             FROM asset_registry ar
-            WHERE id = $1 AND tenant_id = 'default'
+            WHERE id::text = $1 AND tenant_id = $tenant
             LIMIT 1
           `, body.asset_id);
           if (assetRows.length > 0) {
@@ -136,11 +137,11 @@ export async function POST(req: NextRequest) {
             estimated_duration_mins, notes,
             created_at, updated_at
           ) VALUES (
-            'default', $1, $2, $3,
-            $4, $5, $6, $7, $8, $9,
-            $10, $11, $12, $13,
+            $tenant, $1, $2, $3,
+            $4::uuid, $5, $6, $7, $8, $9,
+            $10, $11::int, $12::timestamptz, $13::timestamptz,
             $14, $15, $16, $17, $18,
-            $19, $20,
+            $19::int, $20,
             NOW(), NOW()
           ) RETURNING *,
             ROUND(EXTRACT(EPOCH FROM (next_run_at - NOW()))/86400)::int AS days_remaining

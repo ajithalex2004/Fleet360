@@ -1,11 +1,10 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureAssetsSchema } from '@/lib/assets/schema';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
   prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
@@ -31,7 +30,6 @@ export async function GET(req: NextRequest) {
   try {
     await ensureAssetsSchema();
     const sp = req.nextUrl.searchParams;
-    const tenantId = sp.get('tenantId') ?? 'default';
     const domain = sp.get('domain');
     const status = sp.get('status');
     const condition = sp.get('condition');
@@ -89,7 +87,6 @@ export async function POST(req: NextRequest) {
   try {
     await ensureAssetsSchema();
     const body = await req.json();
-    const tenantId = body.tenantId ?? body.tenant_id ?? 'default';
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
 
@@ -110,10 +107,10 @@ export async function POST(req: NextRequest) {
         condition, ble_tag_id, location_zone, last_lat, last_lng,
         status, notes, created_at, updated_at
       ) VALUES (
-        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
-        $14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,
-        $25,$26,$27,$28,$29,$30,$31,$32,$33,$34,
-        $35,$36,$37,$38,$39,$40,$41,$42,$43
+        $1::uuid,$2,$3,$4::uuid,$5,$6,$7,$8,$9,$10,$11,$12::int,$13,
+        $14::date,$15::numeric,$16::numeric,$17,$18,$19,$20,$21,$22,$23,$24::date,
+        $25,$26,$27::date,$28::numeric,$29::date,$30::date,$31::int,$32,$33,$34::date,
+        $35,$36,$37,$38::numeric,$39::numeric,$40,$41,$42::timestamptz,$43::timestamptz
       ) RETURNING *
     `,
       id, tenantId, assetNo,
@@ -142,7 +139,7 @@ export async function POST(req: NextRequest) {
         id, tenant_id, asset_id, asset_type, asset_name, asset_no,
         movement_type, to_location, to_custodian, reference_type,
         moved_by, moved_at, notes, created_at
-      ) VALUES ($1,$2,$3,'HVA',$4,$5,'INBOUND',$6,$7,'MANUAL',$8,NOW(),'HVA registered',NOW())
+      ) VALUES ($1::uuid,$2,$3,'HVA',$4,$5,'INBOUND',$6,$7,'MANUAL',$8,NOW(),'HVA registered',NOW())
     `,
       crypto.randomUUID(), tenantId, id,
       body.name, assetNo,

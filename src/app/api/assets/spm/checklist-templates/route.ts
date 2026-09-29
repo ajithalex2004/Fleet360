@@ -1,16 +1,10 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
-import { prisma } from '@/lib/prisma';
+import { spmSql } from '@/lib/assets/spm-sql';
 import { ensureSpmSchema } from '@/lib/assets/spm-schema';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-type Row = Record<string, unknown>;
-const query = <T = Row>(sql: string, ...v: unknown[]) =>
-  prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
-const exec = (sql: string, ...v: unknown[]) =>
-  prisma.$executeRawUnsafe(sql, ...v).catch(() => 0);
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 
 function ser<T>(v: T): T {
   return JSON.parse(JSON.stringify(v, (_, val) =>
@@ -24,6 +18,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  const { query } = spmSql(tenantId);
 
   try {
     await ensureSpmSchema();
@@ -36,7 +31,7 @@ export async function GET(req: NextRequest) {
 
     const rows = await query(`
       SELECT * FROM spm_checklist_templates
-      WHERE cycle_id = $1 AND tenant_id = 'default'
+      WHERE cycle_id::text = $1 AND tenant_id = $tenant
       ORDER BY item_order ASC, created_at ASC
     `, cycleId);
 
@@ -52,6 +47,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  const { query } = spmSql(tenantId);
 
   try {
     await ensureSpmSchema();
@@ -65,7 +61,7 @@ export async function POST(req: NextRequest) {
       INSERT INTO spm_checklist_templates (
         tenant_id, cycle_id, item_order, description, is_mandatory, created_at
       ) VALUES (
-        'default', $1, $2, $3, $4, NOW()
+        $tenant, $1::uuid, $2::int, $3, $4::boolean, NOW()
       ) RETURNING *
     `,
       body.cycle_id,
@@ -86,6 +82,7 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  const { exec } = spmSql(tenantId);
 
   try {
     await ensureSpmSchema();
@@ -96,7 +93,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'id query param is required' }, { status: 400 });
     }
 
-    await exec(`DELETE FROM spm_checklist_templates WHERE id = $1 AND tenant_id = 'default'`, id);
+    await exec(`DELETE FROM spm_checklist_templates WHERE id::text = $1 AND tenant_id = $tenant`, id);
 
     return NextResponse.json({ success: true, deleted_id: id });
     } catch (err) {
