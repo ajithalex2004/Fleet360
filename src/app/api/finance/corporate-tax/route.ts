@@ -11,82 +11,45 @@ import { prisma } from '@/lib/prisma';
 import { fixedAssetsTenantScoped } from '@/lib/finance/fixed-assets-scope';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-const INIT_CT = `
-  CREATE TABLE IF NOT EXISTS finance_ct_returns (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    updated_at      TIMESTAMPTZ DEFAULT NOW(),
-    deleted_at      TIMESTAMPTZ,
-    tax_year        INTEGER NOT NULL,
-    period_from     DATE NOT NULL,
-    period_to       DATE NOT NULL,
-    status          TEXT DEFAULT 'DRAFT',   -- DRAFT | FILED | AMENDED | ASSESSED
-    revenue         NUMERIC(15,2) DEFAULT 0,
-    exempt_income   NUMERIC(15,2) DEFAULT 0,
-    allowable_deductions NUMERIC(15,2) DEFAULT 0,
-    taxable_income  NUMERIC(15,2) DEFAULT 0,
-    threshold       NUMERIC(15,2) DEFAULT 375000,
-    taxable_above_threshold NUMERIC(15,2) DEFAULT 0,
-    ct_rate         NUMERIC(5,4)  DEFAULT 0.09,
-    ct_liability    NUMERIC(15,2) DEFAULT 0,
-    withholding_tax NUMERIC(15,2) DEFAULT 0,
-    tax_paid        NUMERIC(15,2) DEFAULT 0,
-    balance_due     NUMERIC(15,2) DEFAULT 0,
-    is_sbr_eligible BOOLEAN DEFAULT FALSE,  -- Small Business Relief
-    sbr_threshold   NUMERIC(15,2) DEFAULT 3000000,
-    filing_deadline DATE,
-    filed_at        TIMESTAMPTZ,
-    notes           TEXT
-  );
-`;
-
-const INIT_CT_ADJ = `
-  CREATE TABLE IF NOT EXISTS finance_ct_adjustments (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at      TIMESTAMPTZ DEFAULT NOW(),
-    return_id       TEXT NOT NULL,
-    adj_type        TEXT NOT NULL,   -- ADD_BACK | DEDUCTION | EXEMPT | TRANSFER_PRICE
-    description     TEXT NOT NULL,
-    amount          NUMERIC(15,2) NOT NULL,
-    reference       TEXT,
-    notes           TEXT
-  );
-`;
+// Tables come from migrations (the last: 20261005090000_finance_tenant_tables).
+// A request runs no DDL: the runtime role may not create tables, and the
+// failed statement aborted the request's transaction, so every query after
+// it failed too.
 
 function toN(v: unknown): number { return parseFloat(String(v ?? 0)) || 0; }
 
 async function computeRevenue(from: string, to: string, tenantId: string): Promise<number> {
   const [rev] = await prisma.$queryRawUnsafe<{t:string}[]>(
-    `SELECT COALESCE(SUM(subtotal_amount),0)::text as t FROM finance_invoices
-     WHERE tenant_id = $3 AND deleted_at IS NULL AND issue_date BETWEEN $1 AND $2
+    `SELECT COALESCE(SUM(subtotal),0)::text as t FROM finance_invoices
+     WHERE tenant_id = $3 AND deleted_at IS NULL AND issue_date BETWEEN $1::date AND $2::date
        AND payment_status NOT IN ('DRAFT','CANCELLED')`, from, to, tenantId
   ).catch(()=>[{t:'0'}]);
   const [rac] = await prisma.$queryRawUnsafe<{t:string}[]>(
     `SELECT COALESCE(SUM(total_amount),0)::text as t FROM rental_invoices
-     WHERE tenant_id = $3 AND deleted_at IS NULL AND created_at::date BETWEEN $1 AND $2`, from, to, tenantId
+     WHERE tenant_id = $3 AND deleted_at IS NULL AND created_at::date BETWEEN $1::date AND $2::date`, from, to, tenantId
   ).catch(()=>[{t:'0'}]);
   const [lg] = await prisma.$queryRawUnsafe<{t:string}[]>(
     `SELECT COALESCE(SUM(customer_rate_amount),0)::text as t FROM logistics_shipment_orders
-     WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED') AND created_at::date BETWEEN $1 AND $2`, from, to, tenantId
+     WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED') AND created_at::date BETWEEN $1::date AND $2::date`, from, to, tenantId
   ).catch(()=>[{t:'0'}]);
   return toN(rev?.t) + toN(rac?.t) + toN(lg?.t);
 }
 
 async function computeDeductions(from: string, to: string, tenantId: string): Promise<number> {
-  const [fuel]  = await prisma.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(total_cost),0)::text as t FROM fuel_logs WHERE tenant_id = $3 AND created_at::date BETWEEN $1 AND $2`, from, to, tenantId).catch(()=>[{t:'0'}]);
-  const [maint] = await prisma.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(total_cost),0)::text as t FROM maintenance_requests WHERE tenant_id = $3 AND deleted_at IS NULL AND status='COMPLETED' AND created_at::date BETWEEN $1 AND $2`, from, to, tenantId).catch(()=>[{t:'0'}]);
+  const [fuel]  = await prisma.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(total_cost),0)::text as t FROM fuel_logs WHERE tenant_id = $3 AND created_at::date BETWEEN $1::date AND $2::date`, from, to, tenantId).catch(()=>[{t:'0'}]);
+  const [maint] = await prisma.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(COALESCE(actual_cost, estimated_cost, 0)),0)::text as t FROM maintenance_requests WHERE tenant_id = $3 AND deleted_at IS NULL AND status='COMPLETED' AND created_at::date BETWEEN $1::date AND $2::date`, from, to, tenantId).catch(()=>[{t:'0'}]);
   // Depreciation from the fixed asset register, only where it is tenant-scoped
   // (it used to sum every tenant's schedule).
   const [dep]   = await fixedAssetsTenantScoped(prisma)
     ? await prisma.$queryRawUnsafe<{t:string}[]>(
         `SELECT COALESCE(SUM(ds.depreciation),0)::text as t
            FROM finance_depreciation_schedule ds
-           JOIN finance_fixed_assets fa ON fa.id = ds.asset_id
+           JOIN finance_fixed_assets fa ON fa.id::text = ds.asset_id AND fa.tenant_id = ds.tenant_id
           WHERE fa.tenant_id = $3
             AND ds.period_year || '-' || LPAD(ds.period_month::text,2,'0') || '-01' BETWEEN $1 AND $2`,
         from, to, tenantId).catch(()=>[{t:'0'}])
     : [{t:'0'}];
-  const [exp]   = await prisma.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(total_amount),0)::text as t FROM finance_expenses WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('APPROVED','PAID') AND expense_date BETWEEN $1 AND $2`, from, to, tenantId).catch(()=>[{t:'0'}]);
+  const [exp]   = await prisma.$queryRawUnsafe<{t:string}[]>(`SELECT COALESCE(SUM(total_amount),0)::text as t FROM finance_expenses WHERE tenant_id = $3 AND deleted_at IS NULL AND status IN ('APPROVED','PAID') AND expense_date BETWEEN $1::date AND $2::date`, from, to, tenantId).catch(()=>[{t:'0'}]);
   return toN(fuel?.t) + toN(maint?.t) + toN(dep?.t) + toN(exp?.t);
 }
 
@@ -99,8 +62,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(INIT_CT).catch(()=>{});
-      await tx.$executeRawUnsafe(INIT_CT_ADJ).catch(()=>{});
 
       const sp   = req.nextUrl.searchParams;
       const type = sp.get('type') ?? 'returns';
@@ -114,9 +75,10 @@ export async function GET(req: NextRequest) {
           computeRevenue(from, to, tenantId),
           computeDeductions(from, to, tenantId),
           tx.$queryRawUnsafe<{adj_type:string; amount:string}[]>(
-            `SELECT adj_type, SUM(amount)::text as amount FROM finance_ct_adjustments WHERE return_id IN (
-               SELECT id::text FROM finance_ct_returns WHERE tax_year=$1 AND deleted_at IS NULL
-             ) GROUP BY adj_type`, year
+            `SELECT adj_type, SUM(amount)::text as amount FROM finance_ct_adjustments
+              WHERE tenant_id=$2 AND return_id IN (
+               SELECT id::text FROM finance_ct_returns WHERE tenant_id=$2 AND tax_year=$1 AND deleted_at IS NULL
+             ) GROUP BY adj_type`, year, tenantId
           ).catch(()=>[]),
         ]);
 
@@ -146,19 +108,19 @@ export async function GET(req: NextRequest) {
         const returnId = sp.get('returnId');
         if (!returnId) return NextResponse.json({ error: 'returnId required' }, { status: 400 });
         const rows = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
-          `SELECT * FROM finance_ct_adjustments WHERE return_id=$1 ORDER BY created_at`, returnId
+          `SELECT * FROM finance_ct_adjustments WHERE tenant_id=$2 AND return_id=$1 ORDER BY created_at`, returnId, tenantId
         ).catch(()=>[]);
         return NextResponse.json({ data: rows });
       }
 
       // Default: list returns
       const returns = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
-        `SELECT * FROM finance_ct_returns WHERE deleted_at IS NULL ORDER BY tax_year DESC, period_from DESC`
+        `SELECT * FROM finance_ct_returns WHERE tenant_id=$1 AND deleted_at IS NULL ORDER BY tax_year DESC, period_from DESC`,
+        tenantId,
       ).catch(()=>[]);
       return NextResponse.json({ data: returns });
   });
 }
-
 
 export async function POST(req: NextRequest) {
 
@@ -169,8 +131,6 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(INIT_CT).catch(()=>{});
-      await tx.$executeRawUnsafe(INIT_CT_ADJ).catch(()=>{});
 
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
@@ -178,16 +138,17 @@ export async function POST(req: NextRequest) {
       if (body.action === 'add_adjustment') {
         const { returnId, adjType, description, amount, reference, notes } = body;
         const [row] = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
-          `INSERT INTO finance_ct_adjustments (return_id, adj_type, description, amount, reference, notes)
-           VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-          returnId, adjType, description, amount, reference ?? null, notes ?? null
+          `INSERT INTO finance_ct_adjustments (return_id, adj_type, description, amount, reference, notes, tenant_id)
+           VALUES ($1,$2,$3,$4::numeric,$5,$6,$7) RETURNING *`,
+          returnId, adjType, description, amount, reference ?? null, notes ?? null, tenantId
         ).catch(()=>[]);
         return NextResponse.json(row ?? {}, { status: 201 });
       }
 
       if (body.action === 'file') {
         const [row] = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
-          `UPDATE finance_ct_returns SET status='FILED', filed_at=NOW(), updated_at=NOW() WHERE id=$1 RETURNING *`, body.returnId
+          `UPDATE finance_ct_returns SET status='FILED', filed_at=NOW(), updated_at=NOW()
+            WHERE id::text=$1 AND tenant_id=$2 RETURNING *`, body.returnId, tenantId
         ).catch(()=>[]);
         return NextResponse.json(row ?? {});
       }
@@ -195,8 +156,9 @@ export async function POST(req: NextRequest) {
       if (body.action === 'record_payment') {
         const { returnId, amount } = body;
         const [row] = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
-          `UPDATE finance_ct_returns SET tax_paid=$2, balance_due=ct_liability-$2, updated_at=NOW() WHERE id=$1 RETURNING *`,
-          returnId, amount
+          `UPDATE finance_ct_returns SET tax_paid=$2::numeric, balance_due=ct_liability-$2::numeric, updated_at=NOW()
+            WHERE id::text=$1 AND tenant_id=$3 RETURNING *`,
+          returnId, amount, tenantId
         ).catch(()=>[]);
         return NextResponse.json(row ?? {});
       }
@@ -214,12 +176,12 @@ export async function POST(req: NextRequest) {
       const [row] = await tx.$queryRawUnsafe<Record<string,unknown>[]>(
         `INSERT INTO finance_ct_returns
            (tax_year, period_from, period_to, revenue, allowable_deductions, taxable_income,
-            taxable_above_threshold, ct_liability, balance_due, is_sbr_eligible, filing_deadline, notes)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8,$9,$10,$11) RETURNING *`,
+            taxable_above_threshold, ct_liability, balance_due, is_sbr_eligible, filing_deadline, notes, tenant_id)
+         VALUES ($1,$2::date,$3::date,$4,$5,$6,$7,$8,$8,$9,$10::date,$11,$12) RETURNING *`,
         taxYear, periodFrom, periodTo,
         Math.round(revenue*100)/100, Math.round(deductions*100)/100, Math.round(taxableIncome*100)/100,
         Math.round(aboveThreshold*100)/100, ctLiability,
-        isSBR, filingDeadline, notes ?? null
+        isSBR, filingDeadline, notes ?? null, tenantId
       ).catch(()=>[]);
 
       if (!row) return NextResponse.json({ error: 'Failed to create return' }, { status: 500 });

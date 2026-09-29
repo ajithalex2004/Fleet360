@@ -46,7 +46,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
              '[]'::json
            ) AS lines
          FROM finance_journal_entries je
-         LEFT JOIN finance_journal_lines jl ON jl.journal_entry_id = je.id::text
+         LEFT JOIN finance_journal_lines jl ON jl.journal_entry_id::text = je.id::text
          WHERE je.id::text = $1 AND je.deleted_at IS NULL ${tenantClause}
          GROUP BY je.id`,
         params.id,
@@ -96,7 +96,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
             return NextResponse.json({ error: 'Only DRAFT entries can be submitted' }, { status: 400 });
           }
           sql = `UPDATE finance_journal_entries
-                    SET status = 'SUBMITTED', updated_at = $2
+                    SET status = 'SUBMITTED', updated_at = $2::timestamptz
                   WHERE id::text = $1 AND tenant_id = $3
                   RETURNING *`;
           sqlParams = [params.id, now, tenantId];
@@ -107,7 +107,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
             return NextResponse.json({ error: 'Only SUBMITTED entries can be approved' }, { status: 400 });
           }
           sql = `UPDATE finance_journal_entries
-                    SET status = 'APPROVED', approved_by = $2, approved_at = $3, updated_at = $3
+                    SET status = 'APPROVED', approved_by = $2, approved_at = $3::timestamptz, updated_at = $3::timestamptz
                   WHERE id::text = $1 AND tenant_id = $4
                   RETURNING *`;
           sqlParams = [params.id, body.approvedBy ?? req.headers.get('x-user-id') ?? 'Finance Manager', now, tenantId];
@@ -118,7 +118,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
             return NextResponse.json({ error: 'Entry must be APPROVED before posting' }, { status: 400 });
           }
           sql = `UPDATE finance_journal_entries
-                    SET status = 'POSTED', posted_by = $2, posted_at = $3, updated_at = $3
+                    SET status = 'POSTED', posted_by = $2, posted_at = $3::timestamptz, updated_at = $3::timestamptz
                   WHERE id::text = $1 AND tenant_id = $4
                   RETURNING *`;
           sqlParams = [params.id, body.postedBy ?? req.headers.get('x-user-id') ?? 'Finance Manager', now, tenantId];
@@ -132,7 +132,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
             );
           }
           sql = `UPDATE finance_journal_entries
-                    SET status = 'VOID', updated_at = $2, notes = COALESCE($3, notes)
+                    SET status = 'VOID', updated_at = $2::timestamptz, notes = COALESCE($3, notes)
                   WHERE id::text = $1 AND tenant_id = $4
                   RETURNING *`;
           sqlParams = [params.id, now, body.notes ?? null, tenantId];
@@ -148,7 +148,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           >(
             `SELECT account_code, account_name, description, debit_amount, credit_amount, normal_balance, cost_centre
                FROM finance_journal_lines
-              WHERE journal_entry_id = $1
+              WHERE journal_entry_id::text = $1
               ORDER BY line_number`,
             params.id,
           ).catch(() => []);
@@ -172,7 +172,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
                 narration, source_type, source_id, status,
                 total_debit, total_credit, is_balanced,
                 reversed_je_id, prepared_by, currency, tenant_id)
-             VALUES ($1,$2,$3,$4,$5,'REVERSAL',$6,'POSTED',$7,$7,TRUE,$8,$9,'AED',$10)
+             VALUES ($1,$2::date,$3,$4,$5,'REVERSAL',$6,'POSTED',$7,$7,TRUE,$8,$9,'AED',$10)
              RETURNING *`,
             revJeNo,
             revDate,
@@ -197,7 +197,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
               `INSERT INTO finance_journal_lines
                  (journal_entry_id, line_number, account_code, account_name,
                   description, debit_amount, credit_amount, normal_balance, cost_centre)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+               VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9)`,
               revId,
               i + 1,
               l.account_code,
@@ -212,7 +212,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
           await tx.$executeRawUnsafe(
             `UPDATE finance_journal_entries
-                SET status = 'REVERSED', reversal_je_id = $2, updated_at = $3
+                SET status = 'REVERSED', reversal_je_id = $2, updated_at = $3::timestamptz
               WHERE id::text = $1 AND tenant_id = $4`,
             params.id, revId, now, tenantId,
           ).catch(() => {});

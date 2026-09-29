@@ -10,31 +10,10 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-const INIT = `
-  CREATE TABLE IF NOT EXISTS finance_pdc_cheques (
-    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at       TIMESTAMPTZ DEFAULT NOW(),
-    updated_at       TIMESTAMPTZ DEFAULT NOW(),
-    deleted_at       TIMESTAMPTZ,
-    cheque_number    TEXT NOT NULL,
-    bank_name        TEXT NOT NULL,
-    account_name     TEXT,
-    cheque_date      DATE NOT NULL,
-    amount           NUMERIC(15,2) NOT NULL,
-    currency         TEXT DEFAULT 'AED',
-    direction        TEXT DEFAULT 'INCOMING',
-    client_name      TEXT,
-    client_ref       TEXT,
-    status           TEXT DEFAULT 'HELD',
-    deposited_at     TIMESTAMPTZ,
-    cleared_at       TIMESTAMPTZ,
-    bounced_at       TIMESTAMPTZ,
-    bounce_reason    TEXT,
-    linked_invoice_id TEXT,
-    notes            TEXT,
-    created_by       TEXT
-  );
-`;
+// Tables come from migrations (the last: 20261005090000_finance_tenant_tables).
+// A request runs no DDL: the runtime role may not create tables, and the
+// failed statement aborted the request's transaction, so every query after
+// it failed too.
 
 type PdcRow = {
   id: string; created_at: string; cheque_number: string; bank_name: string;
@@ -54,7 +33,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(INIT).catch(() => {});
       const sp = req.nextUrl.searchParams;
       const status = sp.get('status');
       const direction = sp.get('direction');
@@ -69,8 +47,8 @@ export async function GET(req: NextRequest) {
       let pi = 2;
       if (status)    { where += ` AND status = $${pi++}`;         params.push(status); }
       if (direction) { where += ` AND direction = $${pi++}`;      params.push(direction); }
-      if (from)      { where += ` AND cheque_date >= $${pi++}`;   params.push(from); }
-      if (to)        { where += ` AND cheque_date <= $${pi++}`;   params.push(to); }
+      if (from)      { where += ` AND cheque_date >= $${pi++}::date`;   params.push(from); }
+      if (to)        { where += ` AND cheque_date <= $${pi++}::date`;   params.push(to); }
 
       const [rows, counts] = await Promise.all([
         tx.$queryRawUnsafe<PdcRow[]>(
@@ -95,7 +73,6 @@ export async function GET(req: NextRequest) {
   });
 }
 
-
 export async function POST(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -105,7 +82,6 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(INIT).catch(() => {});
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
 
@@ -113,7 +89,7 @@ export async function POST(req: NextRequest) {
         `INSERT INTO finance_pdc_cheques
            (cheque_number, bank_name, account_name, cheque_date, amount, currency,
             direction, client_name, client_ref, linked_invoice_id, notes, created_by, tenant_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+         VALUES ($1,$2,$3,$4::date,$5::numeric,$6,$7,$8,$9,$10,$11,$12,$13)
          RETURNING *`,
         body.chequeNumber, body.bankName, body.accountName ?? null,
         body.chequeDate, body.amount, body.currency ?? 'AED',

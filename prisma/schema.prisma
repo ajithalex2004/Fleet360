@@ -3052,6 +3052,7 @@ model CreditNote {
 
 model FinanceBudget {
   id           String    @id @default(uuid())
+  tenantId     String    @map("tenant_id")
   createdAt    DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   year         Int
   month        Int?
@@ -3061,6 +3062,7 @@ model FinanceBudget {
   currency     String?   @default("AED")
   notes        String?
 
+  @@index([tenantId])
   @@map("finance_budgets")
   @@schema("finance")
 }

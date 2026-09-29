@@ -22,7 +22,7 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     const [row] = await tx.$queryRawUnsafe<ExpRow[]>(
-        `SELECT * FROM finance_expenses WHERE id=$1 AND deleted_at IS NULL AND tenant_id=$2`, params.id, tenantId
+        `SELECT * FROM finance_expenses WHERE id::text=$1 AND deleted_at IS NULL AND tenant_id=$2`, params.id, tenantId
       ).catch(() => [] as ExpRow[]);
       if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
       return NextResponse.json(row);
@@ -50,30 +50,30 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
       switch (action) {
         case 'submit':
-          sql = `UPDATE finance_expenses SET status='SUBMITTED', submitted_by=$2, submitted_at=$3, updated_at=$4 WHERE id=$1 AND deleted_at IS NULL RETURNING *`;
+          sql = `UPDATE finance_expenses SET status='SUBMITTED', submitted_by=$2, submitted_at=$3::timestamptz, updated_at=$4::timestamptz WHERE id::text=$1 AND deleted_at IS NULL RETURNING *`;
           sqlParams = [params.id, body.submittedBy ?? 'System', now, now];
           break;
         case 'approve':
-          sql = `UPDATE finance_expenses SET status='APPROVED', approved_by=$2, approved_at=$3, updated_at=$4 WHERE id=$1 AND deleted_at IS NULL RETURNING *`;
+          sql = `UPDATE finance_expenses SET status='APPROVED', approved_by=$2, approved_at=$3::timestamptz, updated_at=$4::timestamptz WHERE id::text=$1 AND deleted_at IS NULL RETURNING *`;
           sqlParams = [params.id, body.approvedBy ?? 'Finance Manager', now, now];
           break;
         case 'reject':
-          sql = `UPDATE finance_expenses SET status='REJECTED', rejected_by=$2, rejected_at=$3, rejection_reason=$4, updated_at=$5 WHERE id=$1 AND deleted_at IS NULL RETURNING *`;
+          sql = `UPDATE finance_expenses SET status='REJECTED', rejected_by=$2, rejected_at=$3::timestamptz, rejection_reason=$4, updated_at=$5::timestamptz WHERE id::text=$1 AND deleted_at IS NULL RETURNING *`;
           sqlParams = [params.id, body.rejectedBy ?? 'Finance Manager', now, body.rejectionReason ?? '', now];
           break;
         case 'mark_paid':
-          sql = `UPDATE finance_expenses SET status='PAID', paid_at=$2, updated_at=$3, notes=COALESCE($4,notes) WHERE id=$1 AND deleted_at IS NULL RETURNING *`;
+          sql = `UPDATE finance_expenses SET status='PAID', paid_at=$2::timestamptz, updated_at=$3::timestamptz, notes=COALESCE($4,notes) WHERE id::text=$1 AND deleted_at IS NULL RETURNING *`;
           sqlParams = [params.id, now, now, body.notes ?? null];
           break;
         default:
           return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
       }
 
-      // Each statement above targets `WHERE id=$1`: narrow it to the tenant.
+      // Each statement above targets `WHERE id::text=$1`: narrow it to the tenant.
 
       sqlParams.push(tenantId);
 
-      sql = sql.replace('WHERE id=$1', () => `WHERE id=$1 AND tenant_id=$${sqlParams.length}`);
+      sql = sql.replace('WHERE id::text=$1', () => `WHERE id::text=$1 AND tenant_id=$${sqlParams.length}`);
 
       const [row] = await tx.$queryRawUnsafe<ExpRow[]>(sql, ...sqlParams).catch(() => [] as ExpRow[]);
       if (!row) return NextResponse.json({ error: 'Update failed' }, { status: 500 });
@@ -93,7 +93,7 @@ export async function DELETE(_: NextRequest, props: { params: Promise<{ id: stri
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     await tx.$executeRawUnsafe(
-        `UPDATE finance_expenses SET deleted_at=NOW() WHERE id=$1 AND tenant_id=$2`, params.id, tenantId
+        `UPDATE finance_expenses SET deleted_at=NOW() WHERE id::text=$1 AND tenant_id=$2`, params.id, tenantId
       ).catch(() => {});
       return NextResponse.json({ ok: true });
   });

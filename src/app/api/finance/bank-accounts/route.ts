@@ -9,25 +9,10 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-const INIT = `
-  CREATE TABLE IF NOT EXISTS finance_bank_accounts (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at          TIMESTAMPTZ DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ DEFAULT NOW(),
-    deleted_at          TIMESTAMPTZ,
-    bank_name           TEXT NOT NULL,
-    account_name        TEXT NOT NULL,
-    account_number      TEXT NOT NULL,
-    iban                TEXT,
-    currency            TEXT DEFAULT 'AED',
-    branch_name         TEXT,
-    swift_code          TEXT,
-    is_default          BOOLEAN DEFAULT FALSE,
-    is_active           BOOLEAN DEFAULT TRUE,
-    current_balance     NUMERIC(15,2) DEFAULT 0,
-    last_reconciled_at  TIMESTAMPTZ
-  );
-`;
+// Tables come from migrations (the last: 20261005090000_finance_tenant_tables).
+// A request runs no DDL: the runtime role may not create tables, and the
+// failed statement aborted the request's transaction, so every query after
+// it failed too.
 
 type BankRow = Record<string, unknown>;
 
@@ -40,7 +25,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(INIT).catch(() => {});
       const sp     = req.nextUrl.searchParams;
       const active = sp.get('active');
       let where    = `WHERE tenant_id = $1 AND deleted_at IS NULL`;
@@ -54,7 +38,6 @@ export async function GET(req: NextRequest) {
   });
 }
 
-
 export async function POST(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -64,7 +47,6 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(INIT).catch(() => {});
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
 

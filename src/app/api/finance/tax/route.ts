@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
           `SELECT COALESCE(SUM(vat_amount),0)::text as total, COUNT(*)::text as count
              FROM finance_invoices WHERE tenant_id = $3 AND deleted_at IS NULL
                AND payment_status NOT IN ('DRAFT','CANCELLED')
-               AND issue_date BETWEEN $1 AND $2`,
+               AND issue_date BETWEEN $1::date AND $2::date`,
           startDate, endDate, tenantId
         ).catch(() => [{ total: '0', count: '0' }]);
 
@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
           `SELECT COALESCE(SUM(customer_rate_amount * 0.05 / 1.05),0)::text as total
              FROM logistics_shipment_orders WHERE tenant_id = $3 AND deleted_at IS NULL
                AND status IN ('DELIVERED','POD_SUBMITTED','CLOSED')
-               AND created_at::date BETWEEN $1 AND $2`,
+               AND created_at::date BETWEEN $1::date AND $2::date`,
           startDate, endDate, tenantId
         ).catch(() => [{ total: '0' }]);
 
@@ -67,23 +67,23 @@ export async function GET(req: NextRequest) {
         const [racRow] = await tx.$queryRawUnsafe<{ total: string }[]>(
           `SELECT COALESCE(SUM(total_amount * 0.05 / 1.05),0)::text as total
              FROM rental_invoices WHERE tenant_id = $3 AND deleted_at IS NULL
-               AND created_at::date BETWEEN $1 AND $2`,
+               AND created_at::date BETWEEN $1::date AND $2::date`,
           startDate, endDate, tenantId
         ).catch(() => [{ total: '0' }]);
 
         // Input VAT from fuel logs
         const [fuelRow] = await tx.$queryRawUnsafe<{ total: string }[]>(
           `SELECT COALESCE(SUM(total_cost * 0.05 / 1.05),0)::text as total
-             FROM fuel_logs WHERE tenant_id = $3 AND created_at::date BETWEEN $1 AND $2`,
+             FROM fuel_logs WHERE tenant_id = $3 AND created_at::date BETWEEN $1::date AND $2::date`,
           startDate, endDate, tenantId
         ).catch(() => [{ total: '0' }]);
 
         // Input VAT from approved maintenance
         const [mainRow] = await tx.$queryRawUnsafe<{ total: string }[]>(
-          `SELECT COALESCE(SUM(total_cost * 0.05 / 1.05),0)::text as total
+          `SELECT COALESCE(SUM(COALESCE(actual_cost, estimated_cost, 0) * 0.05 / 1.05),0)::text as total
              FROM maintenance_requests WHERE tenant_id = $3 AND deleted_at IS NULL
                AND status IN ('COMPLETED')
-               AND created_at::date BETWEEN $1 AND $2`,
+               AND created_at::date BETWEEN $1::date AND $2::date`,
           startDate, endDate, tenantId
         ).catch(() => [{ total: '0' }]);
 

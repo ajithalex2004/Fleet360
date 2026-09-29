@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
                '[]'::json
              ) AS lines
            FROM finance_journal_entries je
-           LEFT JOIN finance_journal_lines jl ON jl.journal_entry_id = je.id::text
+           LEFT JOIN finance_journal_lines jl ON jl.journal_entry_id::text = je.id::text
            ${where}
            GROUP BY je.id
            ORDER BY je.entry_date DESC, je.je_number DESC
@@ -176,7 +176,7 @@ export async function POST(req: NextRequest) {
             narration, reference, source_type, source_id, status,
             total_debit, total_credit, is_balanced,
             prepared_by, notes, currency, tenant_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'DRAFT',$9,$10,$11,$12,$13,$14,$15)
+         VALUES ($1,$2::date,$3,$4,$5,$6,$7,$8,'DRAFT',$9,$10,$11,$12,$13,$14,$15)
          RETURNING *`,
         jeNumber,
         entryDate,
@@ -207,7 +207,7 @@ export async function POST(req: NextRequest) {
           `INSERT INTO finance_journal_lines
              (journal_entry_id, line_number, account_code, account_name,
               description, debit_amount, credit_amount, normal_balance, cost_centre)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+           VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9)`,
           jeId,
           i + 1,
           l.accountCode,
@@ -235,7 +235,7 @@ export async function POST(req: NextRequest) {
              '[]'::json
            ) AS lines
          FROM finance_journal_entries je
-         LEFT JOIN finance_journal_lines jl ON jl.journal_entry_id = je.id::text
+         LEFT JOIN finance_journal_lines jl ON jl.journal_entry_id::text = je.id::text
          WHERE je.id::text = $1 GROUP BY je.id`,
         jeId,
       ).catch(() => []);

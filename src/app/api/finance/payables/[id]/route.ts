@@ -52,7 +52,7 @@ export async function GET(
            ) AS allocations
            FROM finance_payables p
            LEFT JOIN finance_payment_allocations pa ON pa.payable_id = p.id AND pa.tenant_id = p.tenant_id
-          WHERE p.id = $1 AND p.tenant_id = $2
+          WHERE p.id::text = $1 AND p.tenant_id = $2
             AND p.deleted_at IS NULL
           GROUP BY p.id`,
         params.id, tenantId,
@@ -89,7 +89,7 @@ export async function PATCH(
       const [current] = await tx.$queryRawUnsafe<
         (Row & { status: string; total_amount: string; module: string; description: string; payable_number: string; tenant_id: string })[]
       >(
-        `SELECT * FROM finance_payables WHERE id=$1 AND deleted_at IS NULL AND tenant_id=$2`,
+        `SELECT * FROM finance_payables WHERE id::text=$1 AND deleted_at IS NULL AND tenant_id=$2`,
         params.id, tenantId,
       ).catch(() => []);
 
@@ -104,11 +104,11 @@ export async function PATCH(
           return NextResponse.json({ error: 'Only DRAFT payables can be submitted' }, { status: 400 });
         }
         await tx.$executeRawUnsafe(
-          `UPDATE finance_payables SET status='SUBMITTED', updated_at=$1 WHERE id=$2 AND tenant_id=$3`,
+          `UPDATE finance_payables SET status='SUBMITTED', updated_at=$1::timestamptz WHERE id::text=$2 AND tenant_id=$3`,
           now, params.id, tenantId,
         );
         const [updated] = await tx.$queryRawUnsafe<Row[]>(
-          `SELECT * FROM finance_payables WHERE id=$1 AND tenant_id=$2`, params.id, tenantId,
+          `SELECT * FROM finance_payables WHERE id::text=$1 AND tenant_id=$2`, params.id, tenantId,
         ).catch(() => []);
         return NextResponse.json(updated);
       }
@@ -120,12 +120,12 @@ export async function PATCH(
         const approvedBy = body.approvedBy ?? req.headers.get('x-user-id') ?? 'Finance Manager';
         await tx.$executeRawUnsafe(
           `UPDATE finance_payables
-              SET status='APPROVED', approved_by=$1, approved_at=$2, updated_at=$2
-            WHERE id=$3 AND tenant_id=$4`,
+              SET status='APPROVED', approved_by=$1, approved_at=$2::timestamptz, updated_at=$2::timestamptz
+            WHERE id::text=$3 AND tenant_id=$4`,
           approvedBy, now, params.id, tenantId,
         );
         const [updated] = await tx.$queryRawUnsafe<Row[]>(
-          `SELECT * FROM finance_payables WHERE id=$1 AND tenant_id=$2`, params.id, tenantId,
+          `SELECT * FROM finance_payables WHERE id::text=$1 AND tenant_id=$2`, params.id, tenantId,
         ).catch(() => []);
         return NextResponse.json(updated);
       }
@@ -162,13 +162,13 @@ export async function PATCH(
 
         await tx.$executeRawUnsafe(
           `UPDATE finance_payables
-              SET status='POSTED', posted_by=$1, posted_at=$2, updated_at=$2,
+              SET status='POSTED', posted_by=$1, posted_at=$2::timestamptz, updated_at=$2::timestamptz,
                   journal_entry_id=$3
-            WHERE id=$4 AND tenant_id=$5`,
+            WHERE id::text=$4 AND tenant_id=$5`,
           postedBy, now, je?.id ?? null, params.id, tenantId,
         );
         const [updated] = await tx.$queryRawUnsafe<Row[]>(
-          `SELECT * FROM finance_payables WHERE id=$1 AND tenant_id=$2`, params.id, tenantId,
+          `SELECT * FROM finance_payables WHERE id::text=$1 AND tenant_id=$2`, params.id, tenantId,
         ).catch(() => []);
         return NextResponse.json({ ...updated, journalEntry: je });
       }
@@ -179,12 +179,12 @@ export async function PATCH(
         }
         await tx.$executeRawUnsafe(
           `UPDATE finance_payables
-              SET payment_status='VOID', status='VOID', updated_at=$1
-            WHERE id=$2 AND tenant_id=$3`,
+              SET payment_status='VOID', status='VOID', updated_at=$1::timestamptz
+            WHERE id::text=$2 AND tenant_id=$3`,
           now, params.id, tenantId,
         );
         const [updated] = await tx.$queryRawUnsafe<Row[]>(
-          `SELECT * FROM finance_payables WHERE id=$1 AND tenant_id=$2`, params.id, tenantId,
+          `SELECT * FROM finance_payables WHERE id::text=$1 AND tenant_id=$2`, params.id, tenantId,
         ).catch(() => []);
         return NextResponse.json(updated);
       }
@@ -208,16 +208,16 @@ export async function PATCH(
         }
       }
       if (!sets.length) return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
-      sets.push(`updated_at = $${pi++}`);
+      sets.push(`updated_at = $${pi++}::timestamptz`);
       vals.push(now);
       vals.push(params.id, tenantId);
 
       await tx.$executeRawUnsafe(
-        `UPDATE finance_payables SET ${sets.join(', ')} WHERE id = $${pi} AND tenant_id = $${pi + 1}`,
+        `UPDATE finance_payables SET ${sets.join(', ')} WHERE id::text = $${pi} AND tenant_id = $${pi + 1}`,
         ...vals,
       );
       const [updated] = await tx.$queryRawUnsafe<Row[]>(
-        `SELECT * FROM finance_payables WHERE id=$1 AND tenant_id=$2`, params.id, tenantId,
+        `SELECT * FROM finance_payables WHERE id::text=$1 AND tenant_id=$2`, params.id, tenantId,
       ).catch(() => []);
       return NextResponse.json(updated);
   });
@@ -241,7 +241,7 @@ export async function DELETE(
   return withTenantRls(prisma, tenantId, async (tx) => {
 
       const [current] = await tx.$queryRawUnsafe<{ status: string; tenant_id: string }[]>(
-        `SELECT status, tenant_id FROM finance_payables WHERE id=$1 AND deleted_at IS NULL AND tenant_id=$2`,
+        `SELECT status, tenant_id FROM finance_payables WHERE id::text=$1 AND deleted_at IS NULL AND tenant_id=$2`,
         params.id, tenantId,
       ).catch(() => []);
 
@@ -254,7 +254,7 @@ export async function DELETE(
       }
 
       await tx.$executeRawUnsafe(
-        `UPDATE finance_payables SET deleted_at=NOW() WHERE id=$1 AND tenant_id=$2`, params.id, tenantId,
+        `UPDATE finance_payables SET deleted_at=NOW() WHERE id::text=$1 AND tenant_id=$2`, params.id, tenantId,
       );
       return NextResponse.json({ deleted: true });
   });

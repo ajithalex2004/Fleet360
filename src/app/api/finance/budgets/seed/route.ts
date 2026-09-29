@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
         req.nextUrl.searchParams.get('year') ?? String(new Date().getFullYear())
       );
 
-      const existing = await tx.financeBudget.count({ where: { year } }).catch(() => -1);
+      const existing = await tx.financeBudget.count({ where: { year, tenantId } }).catch(() => -1);
 
       if (existing > 0) {
         return NextResponse.json(
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
       let seeded = 0;
       for (const d of DEFAULT_BUDGETS) {
         await tx.financeBudget.create({
-          data: { ...d, year, month: null, actualAmount: 0 },
+          data: { ...d, tenantId, year, month: null, actualAmount: 0 },
         }).catch(() => {});
         seeded++;
       }

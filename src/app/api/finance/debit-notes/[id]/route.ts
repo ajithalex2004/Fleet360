@@ -32,7 +32,7 @@ export async function GET(
   return withTenantRls(prisma, tenantId, async (tx) => {
       const [row] = await tx.$queryRawUnsafe<Row[]>(
         `SELECT * FROM finance_debit_notes
-          WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+          WHERE id::text = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
         params.id, tenantId,
       ).catch(() => []);
 
@@ -66,7 +66,7 @@ export async function PATCH(
       const [current] = await tx.$queryRawUnsafe<
         (Row & { status: string; total_amount: string; applied_amount: string; tenant_id: string })[]
       >(
-        `SELECT * FROM finance_debit_notes WHERE id=$1 AND deleted_at IS NULL AND tenant_id=$2`,
+        `SELECT * FROM finance_debit_notes WHERE id::text=$1 AND deleted_at IS NULL AND tenant_id=$2`,
         params.id, tenantId,
       ).catch(() => []);
 
@@ -82,8 +82,8 @@ export async function PATCH(
         const issuedBy = body.issuedBy ?? req.headers.get('x-user-id') ?? 'Finance Manager';
         await tx.$executeRawUnsafe(
           `UPDATE finance_debit_notes
-              SET status='ISSUED', issued_by=$1, updated_at=$2
-            WHERE id=$3 AND tenant_id=$4`,
+              SET status='ISSUED', issued_by=$1, updated_at=$2::timestamptz
+            WHERE id::text=$3 AND tenant_id=$4`,
           issuedBy, now, params.id, tenantId,
         );
       } else if (action === 'apply') {
@@ -96,8 +96,8 @@ export async function PATCH(
         const newStatus   = newApplied >= total ? 'APPLIED' : 'ISSUED';
         await tx.$executeRawUnsafe(
           `UPDATE finance_debit_notes
-              SET applied_amount=$1, status=$2, updated_at=$3
-            WHERE id=$4 AND tenant_id=$5`,
+              SET applied_amount=$1, status=$2, updated_at=$3::timestamptz
+            WHERE id::text=$4 AND tenant_id=$5`,
           newApplied, newStatus, now, params.id, tenantId,
         );
       } else if (action === 'void') {
@@ -105,7 +105,7 @@ export async function PATCH(
           return NextResponse.json({ error: 'Cannot void a fully-applied debit note' }, { status: 400 });
         }
         await tx.$executeRawUnsafe(
-          `UPDATE finance_debit_notes SET status='VOIDED', updated_at=$1 WHERE id=$2 AND tenant_id=$3`,
+          `UPDATE finance_debit_notes SET status='VOIDED', updated_at=$1::timestamptz WHERE id::text=$2 AND tenant_id=$3`,
           now, params.id, tenantId,
         );
       } else {
@@ -127,16 +127,16 @@ export async function PATCH(
           }
         }
         if (!sets.length) return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
-        sets.push(`updated_at = $${pi++}`);
+        sets.push(`updated_at = $${pi++}::timestamptz`);
         vals.push(now, params.id, tenantId);
         await tx.$executeRawUnsafe(
-          `UPDATE finance_debit_notes SET ${sets.join(', ')} WHERE id = $${pi} AND tenant_id = $${pi + 1}`,
+          `UPDATE finance_debit_notes SET ${sets.join(', ')} WHERE id::text = $${pi} AND tenant_id = $${pi + 1}`,
           ...vals,
         );
       }
 
       const [updated] = await tx.$queryRawUnsafe<Row[]>(
-        `SELECT * FROM finance_debit_notes WHERE id=$1 AND tenant_id=$2`, params.id, tenantId,
+        `SELECT * FROM finance_debit_notes WHERE id::text=$1 AND tenant_id=$2`, params.id, tenantId,
       ).catch(() => []);
       return NextResponse.json(updated);
   });
@@ -160,7 +160,7 @@ export async function DELETE(
   return withTenantRls(prisma, tenantId, async (tx) => {
 
       const [current] = await tx.$queryRawUnsafe<{ status: string; tenant_id: string }[]>(
-        `SELECT status, tenant_id FROM finance_debit_notes WHERE id=$1 AND deleted_at IS NULL AND tenant_id=$2`,
+        `SELECT status, tenant_id FROM finance_debit_notes WHERE id::text=$1 AND deleted_at IS NULL AND tenant_id=$2`,
         params.id, tenantId,
       ).catch(() => []);
 
@@ -173,7 +173,7 @@ export async function DELETE(
       }
 
       await tx.$executeRawUnsafe(
-        `UPDATE finance_debit_notes SET deleted_at=NOW() WHERE id=$1 AND tenant_id=$2`, params.id, tenantId,
+        `UPDATE finance_debit_notes SET deleted_at=NOW() WHERE id::text=$1 AND tenant_id=$2`, params.id, tenantId,
       );
       return NextResponse.json({ deleted: true });
   });

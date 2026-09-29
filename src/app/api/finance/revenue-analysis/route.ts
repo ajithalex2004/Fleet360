@@ -45,8 +45,8 @@ export async function GET(req: NextRequest) {
 
   if (branch)    { where += ` AND branch = $${idx++}`;      params.push(branch); }
   if (module_f)  { where += ` AND module = $${idx++}`;      params.push(module_f); }
-  if (date_from) { where += ` AND issue_date >= $${idx++}`; params.push(date_from); }
-  if (date_to)   { where += ` AND issue_date <= $${idx++}`; params.push(date_to); }
+  if (date_from) { where += ` AND issue_date >= $${idx++}::date`; params.push(date_from); }
+  if (date_to)   { where += ` AND issue_date <= $${idx++}::date`; params.push(date_to); }
   if (search && view === 'vehicle')  {
     where += ` AND vehicle_no ILIKE $${idx}`;
     params.push(`%${search}%`); idx++;
@@ -77,16 +77,19 @@ export async function GET(req: NextRequest) {
       LIMIT 100
     `, ...params) as Record<string, unknown>[];
 
-    // Maintenance costs per vehicle (cross-module; no tenant scope on this table yet)
+    // Maintenance costs per vehicle, keyed by plate like the invoices above.
+    // (This read maintenance_invoices, which does not exist: the query always
+    // failed and aborted the transaction.)
     const maint_costs = await tx.$queryRawUnsafe(`
       SELECT
-        COALESCE(vehicle_registration, vehicle_id::text, 'UNKNOWN') AS vehicle_no,
-        COALESCE(SUM(invoice_amount), 0) AS total_maint_cost,
+        COALESCE(v.plate_number, v.license_plate, mr.vehicle_id, 'UNKNOWN') AS vehicle_no,
+        COALESCE(SUM(COALESCE(mr.actual_cost, mr.estimated_cost, 0)), 0) AS total_maint_cost,
         COUNT(*) AS maint_count
-      FROM maintenance_invoices
-      WHERE status NOT IN ('CANCELLED')
-      GROUP BY vehicle_registration, vehicle_id
-    `).catch(() => []) as Record<string, unknown>[];
+      FROM maintenance_requests mr
+      LEFT JOIN vehicles v ON v.id = mr.vehicle_id AND v.tenant_id = mr.tenant_id
+      WHERE mr.tenant_id = $1 AND mr.deleted_at IS NULL AND mr.status NOT IN ('CANCELLED')
+      GROUP BY 1
+    `, tenantId).catch(() => []) as Record<string, unknown>[];
 
     const maintMap: Record<string, { cost: number; count: number }> = {};
     maint_costs.forEach(m => {
@@ -96,12 +99,13 @@ export async function GET(req: NextRequest) {
     // Depreciation per vehicle from fixed_assets
     const depreciation = await tx.$queryRawUnsafe(`
       SELECT
-        COALESCE(registration_no, asset_tag, asset_name) AS vehicle_no,
-        COALESCE(SUM(accumulated_depreciation), 0)        AS total_depreciation
+        COALESCE(registration_no, asset_no, asset_name) AS vehicle_no,
+        COALESCE(SUM(accumulated_depreciation), 0)       AS total_depreciation
       FROM finance_fixed_assets
-      WHERE category ILIKE '%vehicle%' OR category ILIKE '%fleet%' OR category ILIKE '%car%'
-      GROUP BY registration_no, asset_tag, asset_name
-    `).catch(() => []) as Record<string, unknown>[];
+      WHERE tenant_id = $1 AND deleted_at IS NULL
+        AND asset_category IN ('PASSENGER_VEHICLE','LCV','HEAVY_VEHICLE','BUS','AMBULANCE')
+      GROUP BY 1
+    `, tenantId).catch(() => []) as Record<string, unknown>[];
 
     const deprMap: Record<string, number> = {};
     depreciation.forEach(d => {

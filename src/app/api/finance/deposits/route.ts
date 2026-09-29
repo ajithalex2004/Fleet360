@@ -74,14 +74,14 @@ export async function GET(req: NextRequest) {
       if (status)        { where += ` AND status = $${idx++}`;         params.push(status); }
       if (contract_type) { where += ` AND contract_type = $${idx++}`;  params.push(contract_type); }
       if (branch)        { where += ` AND branch = $${idx++}`;         params.push(branch); }
-      if (aging_only)    { where += ` AND held_days > 365`; }
+      if (aging_only)    { where += ` AND (CURRENT_DATE - collection_date) > 365`; }
       if (search) {
         where += ` AND (customer_name ILIKE $${idx} OR vehicle_no ILIKE $${idx} OR deposit_no ILIKE $${idx} OR contract_id ILIKE $${idx})`;
         params.push(`%${search}%`); idx++;
       }
 
       const rows = await tx.$queryRawUnsafe(
-        `SELECT * FROM finance_security_deposits ${where} ORDER BY created_at DESC`,
+        `SELECT *, (CURRENT_DATE - collection_date) AS held_days FROM finance_security_deposits ${where} ORDER BY created_at DESC`,
         ...params
       ) as Record<string, unknown>[];
 
@@ -95,7 +95,7 @@ export async function GET(req: NextRequest) {
           COALESCE(SUM(collected_amount) FILTER (WHERE status = 'HELD'), 0)        AS total_held_amount,
           COALESCE(SUM(collected_amount) FILTER (WHERE status = 'FORFEITED'), 0)   AS total_forfeited,
           COALESCE(SUM(refund_amount)    FILTER (WHERE refund_amount IS NOT NULL), 0) AS total_refunded,
-          COUNT(*) FILTER (WHERE held_days > 365)           AS overdue_count
+          COUNT(*) FILTER (WHERE (CURRENT_DATE - collection_date) > 365) AS overdue_count
         FROM finance_security_deposits
         WHERE tenant_id = $1
       `, tenantId) as Record<string, unknown>[];
@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
           (tenant_id, deposit_no, contract_id, contract_type, customer_name, customer_trn,
            vehicle_no, vehicle_type, branch, collected_amount, collection_date,
            collection_method, cheque_no, bank_name, notes)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::numeric,$11::date,$12,$13,$14,$15)
         RETURNING *
       `,
         tenantId,
@@ -240,7 +240,7 @@ export async function PATCH(req: NextRequest) {
           UPDATE finance_security_deposits
           SET
             refund_amount    = $2,
-            refund_date      = $3,
+            refund_date      = $3::date,
             refund_method    = $4,
             refund_reference = $5,
             status           = $6,

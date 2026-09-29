@@ -9,41 +9,10 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-const INIT_STATEMENTS = `
-  CREATE TABLE IF NOT EXISTS finance_bank_statements (
-    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at       TIMESTAMPTZ DEFAULT NOW(),
-    updated_at       TIMESTAMPTZ DEFAULT NOW(),
-    bank_account_id  TEXT NOT NULL,
-    statement_date   DATE NOT NULL,
-    period_start     DATE NOT NULL,
-    period_end       DATE NOT NULL,
-    opening_balance  NUMERIC(15,2) NOT NULL DEFAULT 0,
-    closing_balance  NUMERIC(15,2) NOT NULL DEFAULT 0,
-    imported_by      TEXT,
-    notes            TEXT
-  );
-`;
-
-const INIT_LINES = `
-  CREATE TABLE IF NOT EXISTS finance_bank_statement_lines (
-    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    created_at          TIMESTAMPTZ DEFAULT NOW(),
-    statement_id        TEXT NOT NULL,
-    txn_date            DATE NOT NULL,
-    value_date          DATE,
-    description         TEXT NOT NULL,
-    reference           TEXT,
-    debit               NUMERIC(15,2),
-    credit              NUMERIC(15,2),
-    balance             NUMERIC(15,2),
-    match_status        TEXT DEFAULT 'UNMATCHED',
-    matched_payment_id  TEXT,
-    matched_at          TIMESTAMPTZ,
-    matched_by          TEXT,
-    notes               TEXT
-  );
-`;
+// Tables come from migrations (the last: 20261005090000_finance_tenant_tables).
+// A request runs no DDL: the runtime role may not create tables, and the
+// failed statement aborted the request's transaction, so every query after
+// it failed too.
 
 type StmtRow = Record<string, unknown>;
 type LineRow  = Record<string, unknown>;
@@ -57,8 +26,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(INIT_STATEMENTS).catch(() => {});
-      await tx.$executeRawUnsafe(INIT_LINES).catch(() => {});
 
       const sp            = req.nextUrl.searchParams;
       const bankAccountId = sp.get('bankAccountId');
@@ -105,7 +72,6 @@ export async function GET(req: NextRequest) {
   });
 }
 
-
 export async function POST(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -115,8 +81,6 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-    await tx.$executeRawUnsafe(INIT_STATEMENTS).catch(() => {});
-      await tx.$executeRawUnsafe(INIT_LINES).catch(() => {});
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
 
@@ -125,7 +89,7 @@ export async function POST(req: NextRequest) {
         const [stmt] = await tx.$queryRawUnsafe<StmtRow[]>(
           `INSERT INTO finance_bank_statements
              (tenant_id, bank_account_id, statement_date, period_start, period_end, opening_balance, closing_balance, imported_by, notes)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+           VALUES ($1,$2,$3::date,$4::date,$5::date,$6::numeric,$7::numeric,$8,$9) RETURNING *`,
           tenantId, body.bankAccountId, body.statementDate ?? new Date().toISOString().slice(0,10),
           body.periodStart, body.periodEnd,
           body.openingBalance ?? 0, body.closingBalance ?? 0,
@@ -141,7 +105,7 @@ export async function POST(req: NextRequest) {
           await tx.$executeRawUnsafe(
             `INSERT INTO finance_bank_statement_lines
                (tenant_id, statement_id, txn_date, value_date, description, reference, debit, credit, balance)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+             VALUES ($1,$2,$3::date,$4::date,$5,$6,$7::numeric,$8::numeric,$9::numeric)`,
             tenantId, stmtId, line.txnDate, line.valueDate ?? null, line.description,
             line.reference ?? null, line.debit ?? null, line.credit ?? null, line.balance ?? null,
           ).catch(() => {});
@@ -156,8 +120,8 @@ export async function POST(req: NextRequest) {
         const now = new Date().toISOString();
         await tx.$executeRawUnsafe(
           `UPDATE finance_bank_statement_lines
-           SET match_status='MATCHED', matched_payment_id=$2, matched_at=$3, matched_by=$4
-           WHERE id=$1 AND tenant_id=$5`,
+           SET match_status='MATCHED', matched_payment_id=$2, matched_at=$3::timestamptz, matched_by=$4
+           WHERE id::text=$1 AND tenant_id=$5`,
           body.lineId, body.paymentId, now, body.matchedBy ?? 'System', tenantId
         ).catch(() => {});
         return NextResponse.json({ ok: true });
@@ -167,14 +131,14 @@ export async function POST(req: NextRequest) {
         await tx.$executeRawUnsafe(
           `UPDATE finance_bank_statement_lines
            SET match_status='UNMATCHED', matched_payment_id=NULL, matched_at=NULL, matched_by=NULL
-           WHERE id=$1 AND tenant_id=$2`, body.lineId, tenantId
+           WHERE id::text=$1 AND tenant_id=$2`, body.lineId, tenantId
         ).catch(() => {});
         return NextResponse.json({ ok: true });
       }
 
       if (body.action === 'exclude_line') {
         await tx.$executeRawUnsafe(
-          `UPDATE finance_bank_statement_lines SET match_status='EXCLUDED', notes=$2 WHERE id=$1 AND tenant_id=$3`,
+          `UPDATE finance_bank_statement_lines SET match_status='EXCLUDED', notes=$2 WHERE id::text=$1 AND tenant_id=$3`,
           body.lineId, body.reason ?? 'Excluded', tenantId
         ).catch(() => {});
         return NextResponse.json({ ok: true });
@@ -195,7 +159,7 @@ export async function POST(req: NextRequest) {
              WHERE tenant_id = $3
                AND amount::numeric = $1::numeric
                AND payment_date::date BETWEEN ($2::date - INTERVAL '3 days') AND ($2::date + INTERVAL '3 days')
-               AND id NOT IN (SELECT matched_payment_id FROM finance_bank_statement_lines
+               AND id::text NOT IN (SELECT matched_payment_id::text FROM finance_bank_statement_lines
                                WHERE tenant_id = $3 AND matched_payment_id IS NOT NULL)
              LIMIT 1`, line.credit, line.txn_date, tenantId
           ).catch(() => []);
@@ -204,7 +168,7 @@ export async function POST(req: NextRequest) {
             await tx.$executeRawUnsafe(
               `UPDATE finance_bank_statement_lines
                SET match_status='MATCHED', matched_payment_id=$2, matched_at=NOW(), matched_by='Auto'
-               WHERE id=$1 AND tenant_id=$3`, line.id, payment.id, tenantId
+               WHERE id::text=$1 AND tenant_id=$3`, line.id, payment.id, tenantId
             ).catch(() => {});
             matched++;
           }
