@@ -37,12 +37,13 @@ SELECT set_config('app.tenant_id', '*', false);
 -- A finance table lives in public or finance depending on the environment:
 -- every block below looks it up in both.
 --
--- Blocks use the named quote $mig$ and no helper function, so SQL editors
--- that split a script on semicolons (the Neon SQL Editor) keep each block
--- whole.
+-- Written in the one form the Neon SQL Editor is known to run whole (as the
+-- chart of accounts migration did): plain DO blocks, no helper function and
+-- no named quote tags. The editor split this migration apart in both of
+-- those other forms.
 
 -- ── 1. missing tables ────────────────────────────────────────────────────
-DO $mig$
+DO $$
 BEGIN
   IF COALESCE(to_regclass('public.' || 'finance_fixed_assets'), to_regclass('finance.' || 'finance_fixed_assets')) IS NULL THEN
     CREATE TABLE finance.finance_fixed_assets (
@@ -242,12 +243,12 @@ BEGIN
       notes           TEXT
     );
   END IF;
-END $mig$;
+END $$;
 
 -- ── 2 and 6. tenant column (text) and row level security ─────────────────
 -- Existing policies are dropped first: a column a policy uses cannot change
 -- type, and a leftover permissive policy would OR-widen the new one.
-DO $mig$
+DO $$
 DECLARE
   tname text;
   rel  regclass;
@@ -290,7 +291,7 @@ BEGIN
       rel
     );
   END LOOP;
-END $mig$;
+END $$;
 
 -- ── 3. per-tenant payment reminder schedules ─────────────────────────────
 CREATE TABLE IF NOT EXISTS finance.finance_reminder_schedule_template (
@@ -305,7 +306,7 @@ CREATE TABLE IF NOT EXISTS finance.finance_reminder_schedule_template (
   branch_filter    TEXT
 );
 
-DO $mig$
+DO $$
 DECLARE
   rel regclass := COALESCE(to_regclass('public.' || 'finance_reminder_schedules'), to_regclass('finance.' || 'finance_reminder_schedules'));
   name_attnum smallint;
@@ -347,12 +348,12 @@ BEGIN
       WHERE s.tenant_id IS NULL
      ON CONFLICT (tenant_id, name) DO NOTHING', rel, rel);
   EXECUTE format('DELETE FROM %s WHERE tenant_id IS NULL', rel);
-END $mig$;
+END $$;
 
 GRANT SELECT ON finance.finance_reminder_schedule_template TO fleet360_app;
 
 -- ── 4. accounting periods and fiscal years unique per tenant ─────────────
-DO $mig$
+DO $$
 DECLARE
   spec record;
   rel  regclass;
@@ -386,12 +387,12 @@ BEGIN
     EXECUTE format('CREATE UNIQUE INDEX IF NOT EXISTS %I ON %s (tenant_id, %s)',
                    spec.idx, rel, array_to_string(spec.cols, ', '));
   END LOOP;
-END $mig$;
+END $$;
 
 -- ── 5. expense columns the route used to add at request time ─────────────
 -- Checked in the catalog first: ADD COLUMN IF NOT EXISTS still needs the
 -- table owner even when the column is there.
-DO $mig$
+DO $$
 DECLARE
   rel regclass := COALESCE(to_regclass('public.' || 'finance_expenses'), to_regclass('finance.' || 'finance_expenses'));
 BEGIN
@@ -402,10 +403,10 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = rel AND attname = 'vat_amount' AND NOT attisdropped) THEN
     EXECUTE format('ALTER TABLE %s ADD COLUMN vat_amount NUMERIC(15,2) DEFAULT 0', rel);
   END IF;
-END $mig$;
+END $$;
 
 -- ── tenant_id NOT NULL where no row lacks one ────────────────────────────
-DO $mig$
+DO $$
 DECLARE
   tname text;
   rel  regclass;
@@ -421,4 +422,4 @@ BEGIN
       EXECUTE format('ALTER TABLE %s ALTER COLUMN tenant_id SET NOT NULL', rel);
     END IF;
   END LOOP;
-END $mig$;
+END $$;
