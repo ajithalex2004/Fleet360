@@ -62,7 +62,7 @@ import {
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 import type { BoardingEventSource } from '@prisma/client';
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import {
   recordBoarding,
   logAlightEvent,
@@ -173,6 +173,16 @@ export async function POST(req: NextRequest) {
       // inside withTenantRls, so the row already belongs to authTenantId.
       const tenantId: string = gateway.tenantId ?? authTenantId;
 
+      // Assets-module gateways (depot, warehouse) share this table but are not
+      // mounted on a bus, so they have no vehicle to record boardings against.
+      const vehicleId = gateway.vehicleId;
+      if (!vehicleId) {
+        return NextResponse.json(
+          { ok: false, error: 'Gateway is not assigned to a vehicle' },
+          { status: 409 },
+        );
+      }
+
       // Heartbeat the gateway up-front, even if the payload is empty.
       await tx.bleGateway.update({
         where: { gatewayId },
@@ -181,7 +191,7 @@ export async function POST(req: NextRequest) {
 
       const summary: IngestSummary = {
         gatewayId,
-        vehicleId: gateway.vehicleId,
+        vehicleId,
         scheduleId: null,
         payload: 'EMPTY',
         transitionsApplied: 0,
@@ -200,7 +210,7 @@ export async function POST(req: NextRequest) {
             // there. Conditional so pre-migration gateways with a null tenant
             // keep working, matching the pattern used elsewhere in this file.
             tenantId,
-            vehicleId: gateway.vehicleId,
+            vehicleId,
             deletedAt: null,
             status: { in: ['SCHEDULED', 'STARTED', 'EN_ROUTE', 'DEPARTED', 'IN_TRANSIT'] },
             // Trip is "active" if it's within ±2h of departure, or currently in
@@ -218,7 +228,7 @@ export async function POST(req: NextRequest) {
           for (const ev of payload.events) {
             await applyTransition(
               { tagId: ev.tagId, kind: ev.kind, occurredAt: new Date(ev.occurredAt), rssiDbm: ev.rssiDbm, location: ev.location ?? payload.location },
-              gateway.vehicleId,
+              vehicleId,
               activeTrip?.id ?? null,
               gatewayId,
               tenantId,
@@ -258,7 +268,7 @@ export async function POST(req: NextRequest) {
           for (const t of transitions) {
             await applyTransition(
               { tagId: t.tagId, kind: t.kind, occurredAt: t.occurredAt, rssiDbm: t.rssiDbm, location: window.location },
-              gateway.vehicleId,
+              vehicleId,
               activeTrip?.id ?? null,
               gatewayId,
               tenantId,
@@ -282,7 +292,7 @@ export async function POST(req: NextRequest) {
                 },
                 create: {
                   gatewayId,
-                  vehicleId: gateway.vehicleId,
+                  vehicleId,
                   tagId: obs.tagId,
                   scheduleId: activeTrip.id,
                   firstSeenAt: new Date(obs.firstSeenAt),

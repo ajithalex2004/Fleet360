@@ -15,7 +15,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { gatewaySecretConfigured } from '@/lib/bus-gateway';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 const OFFLINE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes without heartbeat → offline
@@ -35,7 +35,8 @@ export async function GET(req: NextRequest) {
   return withTenantRls(prisma, tenantId, async (tx) => {
 
       const gateways = await tx.bleGateway.findMany({
-        where: { tenantId },
+        // Bus gateways only: Assets-module gateways share the table with no vehicle.
+        where: { tenantId, vehicleId: { not: null } },
         orderBy: { createdAt: 'desc' },
       });
       const now = Date.now();
