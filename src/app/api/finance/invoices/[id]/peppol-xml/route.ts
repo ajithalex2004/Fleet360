@@ -10,6 +10,7 @@ import {
   PeppolParty,
 } from '@/lib/finance/peppol-e-invoice';
 import { buildPeppolWorkbook } from '@/lib/finance/peppol-xlsx';
+import { emirateOf, normalizeTrn } from '@/lib/finance/uae';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,12 +35,10 @@ function isoDate(v: unknown): string | undefined {
   return Number.isNaN(d.getTime()) ? undefined : d.toISOString().slice(0, 10);
 }
 
-const EMIRATES = ['Abu Dhabi', 'Dubai', 'Sharjah', 'Ajman', 'Umm Al Quwain', 'Ras Al Khaimah', 'Fujairah'];
-
 // Addresses are free text; pick the emirate out of it when one is named.
 function address(street: unknown): PeppolParty['address'] {
   const s = String(street || '').trim();
-  const emirate = EMIRATES.find(e => s.toLowerCase().includes(e.toLowerCase()));
+  const emirate = emirateOf(s);
   return { street: s || '—', city: emirate ?? 'Dubai', state: emirate, countryCode: 'AE' };
 }
 
@@ -90,7 +89,7 @@ async function tenantSeller(tx: TxClient, tenantId: string): Promise<PeppolParty
   if (!t) return null;
   return {
     name: t.name,
-    trn: (t.trn ?? '').replace(/[-\s]/g, ''),
+    trn: normalizeTrn(t.trn),
     address: address(t.address),
     contact: {
       name: t.contactName || undefined,
@@ -198,7 +197,8 @@ export async function GET(
       }
       if (!loaded.seller || !isValidUaeTrn(loaded.seller.trn)) {
         return NextResponse.json({
-          error: 'Your company TRN is missing or invalid. Set a 15-digit UAE TRN (starting with 100) in company settings before issuing Peppol e-invoices.',
+          error: 'Your company TRN is missing or invalid. An administrator can set the 15-digit UAE TRN (starting with 100) under Admin → Company profile before issuing Peppol e-invoices.',
+          fixUrl: '/admin/company-profile',
         }, { status: 422 });
       }
       invoiceData = { ...loaded.invoice, seller: loaded.seller };

@@ -43,6 +43,8 @@ export const ADMIN_ROUTE_POLICY: Record<string, Partial<Record<Method, AdminLeve
   'billing/checkout':                            { POST: 'admin' },
   'billing/portal':                              { POST: 'admin' },
   'change-password':                             { POST: 'member' },  // caller's own password
+  // Caller's own company identity (TRN, address) — read by invoice screens.
+  'company-profile':                             { GET: 'member', PATCH: 'admin' },
   'corporate-clients':                           { GET: 'admin', POST: 'admin' },
   // logistics/shippers page (operations users) invites shippers to the portal
   'customers/[id]/portal-invitations':           { GET: 'member', POST: 'member' },

@@ -1075,6 +1075,13 @@
    }
   },
   {
+   "template": "company-profile",
+   "methods": {
+    "GET": "member",
+    "PATCH": "admin"
+   }
+  },
+  {
    "template": "corporate-clients",
    "methods": {
     "GET": "admin",
