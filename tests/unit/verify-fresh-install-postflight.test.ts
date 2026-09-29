@@ -5,6 +5,7 @@ import {
   RUNTIME_ROLE,
   verifyRolePrivileges,
   verifyDeterministicDualTenantRls,
+  verifyNoPolicylessRlsTables,
 } from '../../scripts/verify-fresh-install-postflight.cjs';
 
 describe('Post-flight verification manifest and privilege audits', () => {
@@ -330,5 +331,17 @@ describe('Post-flight verification manifest and privilege audits', () => {
 
     expect(mockRuntimePrisma.$transaction).toHaveBeenCalledTimes(1);
     expect(mockAdminPrisma.$queryRaw).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects a table with row level security enabled but no policy', async () => {
+    const prisma = {
+      $queryRaw: vi.fn().mockResolvedValueOnce([{ name: 'public.bookings' }]),
+    };
+    await expect(verifyNoPolicylessRlsTables(prisma)).rejects.toThrow('public.bookings');
+  });
+
+  it('passes when every row-level-security table has a policy', async () => {
+    const prisma = { $queryRaw: vi.fn().mockResolvedValueOnce([]) };
+    await expect(verifyNoPolicylessRlsTables(prisma)).resolves.toBeUndefined();
   });
 });

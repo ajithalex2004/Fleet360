@@ -404,6 +404,28 @@ async function verifySchemaIntegrity(prisma) {
 }
 
 /**
+ * Fails when any table has row level security enabled but no policy. Postgres
+ * then denies every row to the runtime role, so the table silently stops
+ * working: public.bookings shipped this way on fresh installs until
+ * 20261014090000_bookings_tenant_policy.
+ */
+async function verifyNoPolicylessRlsTables(prisma) {
+  const rows = await prisma.$queryRaw`
+    SELECT n.nspname || '.' || c.relname AS name
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE c.relkind IN ('r', 'p')
+       AND c.relrowsecurity
+       AND NOT EXISTS (SELECT 1 FROM pg_policy p WHERE p.polrelid = c.oid)
+     ORDER BY 1`;
+  if (rows.length > 0) {
+    const names = rows.map((r) => r.name).join(', ');
+    throw new Error(`Row level security is enabled with no policy on: ${names}. The runtime role can read or write none of their rows.`);
+  }
+  console.log('  ✓ Every table with row level security has at least one policy.');
+}
+
+/**
  * Audits runtime role permissions, recursively checks pg_auth_members,
  * asserts zero object ownership, rejects CREATE on all schemas, and protects _prisma_migrations.
  */
@@ -817,6 +839,7 @@ async function verifyFreshInstallPostflight(options = {}) {
   const adminPrisma = options.prismaClient || new PrismaClient({ datasources: { db: { url: adminUrl } } });
   try {
     await verifySchemaIntegrity(adminPrisma);
+    await verifyNoPolicylessRlsTables(adminPrisma);
     await verifyRolePrivileges(adminPrisma, options.roleName || RUNTIME_ROLE);
 
     // Deterministic dual-tenant RLS probe under runtime role credentials
@@ -852,6 +875,7 @@ module.exports = {
   MANAGED_SCHEMAS,
   RUNTIME_ROLE,
   verifySchemaIntegrity,
+  verifyNoPolicylessRlsTables,
   verifyRolePrivileges,
   verifyDeterministicDualTenantRls,
   verifyFreshInstallPostflight,
