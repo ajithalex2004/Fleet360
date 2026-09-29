@@ -9,6 +9,13 @@ interface FixedAsset {
   status: string; accumulated_depreciation: string; net_book_value: string;
   last_depreciation_date: string | null; supplier: string | null; location: string | null;
   disposal_date: string | null; disposal_proceeds: string | null; disposal_method: string | null;
+  purchase_invoice_no?: string | null; coa_account_code?: string | null; notes?: string | null;
+  created_at?: string | null;
+}
+
+// GET /api/finance/fixed-assets/:id returns the asset with its schedule inline.
+interface AssetDetail extends FixedAsset {
+  schedule: { id: string; periodYear: number; periodMonth: number; openingNbv: string; depreciation: string; closingNbv: string; isPosted: boolean }[] | null;
 }
 
 interface DepScheduleLine {
@@ -218,9 +225,10 @@ function DisposeModal({ asset, onClose, onDone }: { asset: FixedAsset; onClose: 
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'dispose', assetId: asset.id, ...form }),
     });
-    const d = await res.json();
-    setResult(d);
+    const d = await res.json().catch(() => ({}));
     setSaving(false);
+    if (!res.ok) return alert(d.error ?? 'Disposal failed');
+    setResult(d);
     onDone();
   };
 
@@ -355,6 +363,284 @@ function ScheduleDrawer({ asset, onClose }: { asset: FixedAsset; onClose: () => 
   );
 }
 
+/* ── Edit Asset Modal ── */
+function EditAssetModal({ asset, onClose, onSaved }: { asset: FixedAsset; onClose: () => void; onSaved: () => void }) {
+  const [form, setForm] = useState({
+    assetName:         asset.asset_name ?? '',
+    registrationNo:    asset.registration_no ?? '',
+    description:       asset.description ?? '',
+    supplier:          asset.supplier ?? '',
+    purchaseInvoiceNo: asset.purchase_invoice_no ?? '',
+    location:          asset.location ?? '',
+    coaAccountCode:    asset.coa_account_code ?? '',
+    notes:             asset.notes ?? '',
+  });
+  const [saving, setSaving] = useState(false);
+  const s = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  const save = async () => {
+    if (!form.assetName.trim()) return alert('Asset name is required');
+    setSaving(true);
+    const res = await fetch(`/api/finance/fixed-assets/${asset.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
+    });
+    setSaving(false);
+    if (res.ok) { onSaved(); onClose(); }
+    else alert((await res.json().catch(() => ({}))).error ?? 'Failed to update asset');
+  };
+
+  const inp = 'w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-purple-500';
+  const fields: [string, string][] = [
+    ['assetName', 'Asset Name *'], ['registrationNo', 'Registration No.'],
+    ['supplier', 'Supplier'], ['purchaseInvoiceNo', 'Purchase Invoice No.'],
+    ['location', 'Location'], ['coaAccountCode', 'GL Account Code'],
+  ];
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={e => e.stopPropagation()}>
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)]">
+          <h2 className="text-lg font-bold text-[var(--text-main)]">Edit {asset.asset_no}</h2>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl">×</button>
+        </div>
+        <div className="p-5 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            {fields.map(([k, label]) => (
+              <div key={k}>
+                <label className="block text-xs text-[var(--text-muted)] mb-1">{label}</label>
+                <input value={form[k as keyof typeof form]} onChange={s(k)} className={inp} />
+              </div>
+            ))}
+          </div>
+          <div>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Description</label>
+            <input value={form.description} onChange={s('description')} className={inp} />
+          </div>
+          <div>
+            <label className="block text-xs text-[var(--text-muted)] mb-1">Notes</label>
+            <textarea value={form.notes} onChange={s('notes')} rows={2} className={`${inp} resize-none`} />
+          </div>
+          <p className="text-xs text-[var(--text-faint)]">
+            Cost, acquisition date, useful life and depreciation method are fixed once the asset is registered, so booked depreciation stays consistent.
+          </p>
+        </div>
+        <div className="flex gap-2 p-5 border-t border-[var(--border-subtle)]">
+          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-[var(--border-subtle)] text-sm text-[var(--text-muted)] hover:text-[var(--text-main)]">Cancel</button>
+          <button onClick={save} disabled={saving}
+            className="flex-1 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-sm disabled:opacity-50">
+            {saving ? 'Saving…' : '✓ Save Changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Asset Detail Drawer ── */
+function Field({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <p className="text-[11px] text-[var(--text-faint)] uppercase tracking-wide">{label}</p>
+      <p className="text-sm text-[var(--text-main)] mt-0.5 break-words">{value || '—'}</p>
+    </div>
+  );
+}
+
+const fmtDate = (s: string | null | undefined) => s ? new Date(s).toLocaleDateString('en-AE') : '—';
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function AssetDrawer({ assetId, onClose, onChanged }: { assetId: string; onClose: () => void; onChanged: () => void }) {
+  const [asset, setAsset]         = useState<AssetDetail | null>(null);
+  const [error, setError]         = useState<string | null>(null);
+  const [busy, setBusy]           = useState(false);
+  const [editing, setEditing]     = useState(false);
+  const [disposing, setDisposing] = useState(false);
+
+  const fetchOne = useCallback(async () => {
+    setError(null);
+    const res = await fetch(`/api/finance/fixed-assets/${assetId}`, { cache: 'no-store' });
+    if (res.ok) setAsset(await res.json());
+    else setError(res.status === 404 ? 'Asset not found' : 'Could not load asset');
+  }, [assetId]);
+
+  useEffect(() => { fetchOne(); }, [fetchOne]);
+
+  const remove = async () => {
+    if (!asset || !confirm(`Delete asset ${asset.asset_no}? This cannot be undone.`)) return;
+    setBusy(true);
+    const res = await fetch(`/api/finance/fixed-assets/${assetId}`, { method: 'DELETE' });
+    setBusy(false);
+    if (!res.ok) return alert((await res.json().catch(() => ({}))).error ?? 'Delete failed');
+    onChanged();
+    onClose();
+  };
+
+  const card = 'bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-4';
+  const schedule = asset?.schedule ?? [];
+  const depPct = asset ? pct(asset.accumulated_depreciation ?? '0', asset.acquisition_cost) : 0;
+  const hasDepreciation = Number(asset?.accumulated_depreciation ?? 0) > 0;
+  const gainLoss = asset?.status === 'DISPOSED'
+    ? Number(asset.disposal_proceeds ?? 0) - Number(asset.net_book_value ?? 0)
+    : null;
+
+  return (
+    <div className="fixed inset-0 z-40 flex justify-end bg-black/50" onClick={onClose}>
+      <div className="w-full max-w-[520px] h-full bg-[var(--bg-surface)] border-l border-[var(--border-subtle)] overflow-y-auto"
+        onClick={e => e.stopPropagation()}>
+        <div className="sticky top-0 z-10 bg-[var(--bg-surface)] border-b border-[var(--border-subtle)] px-5 py-4 flex items-start justify-between">
+          <div>
+            <p className="text-xs text-[var(--text-faint)] font-mono">{asset?.asset_no ?? '…'}</p>
+            <h2 className="text-lg font-bold text-[var(--text-main)]">
+              {asset ? `${CATEGORY_ICONS[asset.asset_category] ?? '📦'} ${asset.asset_name}` : 'Loading…'}
+            </h2>
+            {asset && (
+              <span className={`inline-block mt-1 text-xs px-2 py-0.5 rounded-full border font-medium ${STATUS_COLORS[asset.status] ?? ''}`}>
+                {asset.status.replace(/_/g, ' ')}
+              </span>
+            )}
+          </div>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-2xl leading-none">×</button>
+        </div>
+
+        {error ? (
+          <p className="p-5 text-sm text-red-400">{error}</p>
+        ) : !asset ? (
+          <div className="p-5 space-y-3">
+            {[0, 1, 2].map(i => <div key={i} className="h-24 rounded-xl bg-[var(--bg-surface-hover)] animate-pulse" />)}
+          </div>
+        ) : (
+          <div className="p-5 space-y-4">
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { label: 'Cost', value: asset.acquisition_cost, color: 'text-[var(--text-main)]' },
+                { label: 'Acc. Depreciation', value: asset.accumulated_depreciation ?? '0', color: 'text-amber-400' },
+                { label: 'Net Book Value', value: asset.net_book_value ?? asset.acquisition_cost, color: 'text-emerald-400' },
+              ].map(c => (
+                <div key={c.label} className={card}>
+                  <p className="text-[11px] text-[var(--text-faint)]">{c.label}</p>
+                  <p className={`text-sm font-bold mt-1 ${c.color}`}>AED {fmt(c.value)}</p>
+                </div>
+              ))}
+            </div>
+            <div>
+              <div className="flex justify-between text-xs text-[var(--text-muted)] mb-1">
+                <span>Depreciated</span><span>{depPct}%</span>
+              </div>
+              <div className="w-full bg-[var(--bg-surface-hover)] rounded-full h-2">
+                <div className="bg-amber-500 h-2 rounded-full" style={{ width: `${Math.min(depPct, 100)}%` }} />
+              </div>
+            </div>
+
+            <div className={`${card} grid grid-cols-2 gap-4`}>
+              <Field label="Category" value={asset.asset_category.replace(/_/g, ' ')} />
+              <Field label="Registration" value={asset.registration_no} />
+              <Field label="Acquisition date" value={fmtDate(asset.acquisition_date)} />
+              <Field label="Residual value" value={`AED ${fmt(asset.residual_value ?? '0')}`} />
+              <Field label="Useful life" value={`${asset.useful_life_months} months (${(asset.useful_life_months / 12).toFixed(1)} yrs)`} />
+              <Field label="Method" value={asset.depreciation_method === 'REDUCING_BALANCE'
+                ? `Reducing balance${asset.depreciation_rate ? ` @ ${Math.round(Number(asset.depreciation_rate) * 100)}%` : ''}`
+                : 'Straight line'} />
+              <Field label="Last depreciation" value={fmtDate(asset.last_depreciation_date)} />
+              <Field label="Location" value={asset.location} />
+              <Field label="Supplier" value={asset.supplier} />
+              <Field label="Purchase invoice" value={asset.purchase_invoice_no} />
+              <Field label="GL account" value={asset.coa_account_code} />
+              <Field label="Vehicle" value={asset.vehicle_id} />
+            </div>
+
+            {(asset.description || asset.notes) && (
+              <div className={`${card} space-y-3`}>
+                {asset.description && <Field label="Description" value={asset.description} />}
+                {asset.notes && (
+                  <div>
+                    <p className="text-[11px] text-[var(--text-faint)] uppercase tracking-wide">Notes</p>
+                    <p className="text-sm text-[var(--text-muted)] mt-0.5 whitespace-pre-wrap">{asset.notes}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {asset.status === 'DISPOSED' && (
+              <div className={`${card} grid grid-cols-2 gap-4 border-red-500/30`}>
+                <Field label="Disposal date" value={fmtDate(asset.disposal_date)} />
+                <Field label="Method" value={asset.disposal_method?.replace(/_/g, ' ')} />
+                <Field label="Proceeds" value={`AED ${fmt(asset.disposal_proceeds ?? '0')}`} />
+                <div>
+                  <p className="text-[11px] text-[var(--text-faint)] uppercase tracking-wide">Gain / (loss)</p>
+                  <p className={`text-sm font-bold mt-0.5 ${gainLoss! >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    AED {fmt(gainLoss!)}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className={card}>
+              <p className="text-[11px] text-[var(--text-faint)] uppercase tracking-wide mb-2">
+                Depreciation schedule ({schedule.length} period{schedule.length === 1 ? '' : 's'})
+              </p>
+              {schedule.length === 0 ? (
+                <p className="text-xs text-[var(--text-faint)] py-3">No depreciation booked yet. Use “Run Depreciation” on the register.</p>
+              ) : (
+                <div className="max-h-72 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-[var(--bg-surface)]">
+                      <tr className="text-[var(--text-muted)] border-b border-[var(--border-subtle)]">
+                        <th className="text-left py-1.5">Period</th>
+                        <th className="text-right py-1.5">Opening</th>
+                        <th className="text-right py-1.5">Charge</th>
+                        <th className="text-right py-1.5">Closing</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {schedule.map(r => (
+                        <tr key={r.id} className="border-b border-[var(--border-subtle)] last:border-0">
+                          <td className="py-1.5 text-[var(--text-main)]">{MONTHS[r.periodMonth - 1]} {r.periodYear}</td>
+                          <td className="py-1.5 text-right text-[var(--text-muted)]">{fmt(r.openingNbv)}</td>
+                          <td className="py-1.5 text-right text-amber-400">({fmt(r.depreciation)})</td>
+                          <td className="py-1.5 text-right text-[var(--text-main)] font-medium">{fmt(r.closingNbv)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => setEditing(true)} disabled={busy || asset.status === 'DISPOSED'}
+                  className="py-2.5 rounded-xl border border-[var(--border-subtle)] text-sm text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] disabled:opacity-40">
+                  ✎ Edit
+                </button>
+                <button onClick={() => setDisposing(true)} disabled={busy || !['ACTIVE', 'FULLY_DEPRECIATED'].includes(asset.status)}
+                  className="py-2.5 rounded-xl bg-red-900/40 hover:bg-red-900/60 text-red-300 text-sm font-semibold disabled:opacity-40">
+                  Dispose
+                </button>
+              </div>
+              {!hasDepreciation && asset.status !== 'DISPOSED' && (
+                <button onClick={remove} disabled={busy}
+                  className="w-full py-2.5 rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 text-sm disabled:opacity-50">
+                  🗑 Delete Asset
+                </button>
+              )}
+              {hasDepreciation && asset.status !== 'DISPOSED' && (
+                <p className="text-xs text-[var(--text-faint)] text-center">Assets with booked depreciation leave the register by disposal, not deletion.</p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+      {editing && asset && (
+        <EditAssetModal asset={asset} onClose={() => setEditing(false)} onSaved={() => { fetchOne(); onChanged(); }} />
+      )}
+      {disposing && asset && (
+        <div onClick={e => e.stopPropagation()}>
+          <DisposeModal asset={asset} onClose={() => setDisposing(false)} onDone={() => { fetchOne(); onChanged(); }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function FixedAssetsPage() {
   const [assets, setAssets] = useState<FixedAsset[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -362,7 +648,7 @@ export default function FixedAssetsPage() {
   const [statusFilter, setStatusFilter] = useState('ACTIVE');
   const [showAdd, setShowAdd] = useState(false);
   const [showDepRun, setShowDepRun] = useState(false);
-  const [selectedAsset, setSelectedAsset] = useState<FixedAsset | null>(null);
+  const [openAssetId, setOpenAssetId] = useState<string | null>(null);
   const [disposeAsset, setDisposeAsset] = useState<FixedAsset | null>(null);
   const [scheduleAsset, setScheduleAsset] = useState<FixedAsset | null>(null);
 
@@ -448,7 +734,8 @@ export default function FixedAssetsPage() {
               {assets.map(asset => {
                 const depPct = pct(asset.accumulated_depreciation, asset.acquisition_cost);
                 return (
-                  <tr key={asset.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]/40">
+                  <tr key={asset.id} onClick={() => setOpenAssetId(asset.id)}
+                    className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]/40 cursor-pointer">
                     <td className="px-4 py-3 font-mono text-xs text-purple-400">{asset.asset_no}</td>
                     <td className="px-4 py-3">
                       <p className="text-sm text-[var(--text-main)] font-medium">{asset.asset_name}</p>
@@ -475,7 +762,7 @@ export default function FixedAssetsPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-xs text-[var(--text-muted)]">{asset.location ?? '—'}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                       <div className="flex gap-1">
                         <button onClick={() => setScheduleAsset(asset)}
                           className="px-2 py-1 bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] rounded-lg text-xs">
@@ -504,6 +791,7 @@ export default function FixedAssetsPage() {
       {showDepRun && <DepRunModal onClose={() => setShowDepRun(false)} onDone={load} />}
       {disposeAsset && <DisposeModal asset={disposeAsset} onClose={() => setDisposeAsset(null)} onDone={load} />}
       {scheduleAsset && <ScheduleDrawer asset={scheduleAsset} onClose={() => setScheduleAsset(null)} />}
+      {openAssetId && <AssetDrawer assetId={openAssetId} onClose={() => setOpenAssetId(null)} onChanged={load} />}
     </div>
   );
 }
