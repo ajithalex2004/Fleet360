@@ -5,6 +5,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { nextDocumentNumber } from '@/lib/finance/document-number';
 import { addDeduction, forfeitDeposit, recordRefundDetails, executeRefund, cancelRefundRequest, SecurityDepositError } from '@/lib/finance/security-deposit';
 function toStr(v: unknown) {
   if (v instanceof Buffer) return v.toString('hex');
@@ -117,15 +118,7 @@ export async function POST(req: NextRequest) {
       const bRaw = await req.json();
   const b = stripTenantOwnershipFields(bRaw);
 
-      // Auto-number
-      const now = new Date();
-      const ym  = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const cnt = await tx.$queryRawUnsafe(
-        `SELECT COUNT(*) AS c FROM finance_security_deposits WHERE deposit_no LIKE $1`,
-        `FSD-${ym}-%`
-      ) as { c: bigint | number }[];
-      const seq = String(Number(cnt[0].c) + 1).padStart(4, '0');
-      const deposit_no = `FSD-${ym}-${seq}`;
+      const deposit_no = await nextDocumentNumber(tx, tenantId, 'FSD');
 
       const rows = await tx.$queryRawUnsafe(`
         INSERT INTO finance_security_deposits
