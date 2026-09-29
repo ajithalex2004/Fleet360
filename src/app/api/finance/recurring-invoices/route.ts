@@ -5,6 +5,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { nextDocumentNumber } from '@/lib/finance/document-number';
 function toStr(v: unknown) {
   if (v instanceof Buffer) return v.toString('hex');
   return String(v ?? '');
@@ -230,14 +231,7 @@ export async function POST(req: NextRequest) {
       }
 
       // ── Create new schedule ───────────────────────────────────────────────────
-      const now = new Date();
-      const ym  = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const cnt = await tx.$queryRawUnsafe(
-        `SELECT COUNT(*) AS c FROM finance_recurring_schedules WHERE schedule_no LIKE $1`,
-        `FRS-${ym}-%`
-      ) as { c: bigint | number }[];
-      const seq         = String(Number(cnt[0].c) + 1).padStart(4, '0');
-      const schedule_no = `FRS-${ym}-${seq}`;
+      const schedule_no = await nextDocumentNumber(tx, tenantId, 'FRS');
 
       const rows = await tx.$queryRawUnsafe(`
         INSERT INTO finance_recurring_schedules

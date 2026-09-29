@@ -9,6 +9,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { nextDocumentNumber } from '@/lib/finance/document-number';
 // Tables come from migrations (the last: 20261005090000_finance_tenant_tables).
 // A request runs no DDL: the runtime role may not create tables, and the
 // failed statement aborted the request's transaction, so every query after
@@ -16,14 +17,6 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 
 type CaseRow = Record<string, unknown>;
 
-async function nextCaseNo(): Promise<string> {
-  const [row] = await prisma.$queryRawUnsafe<{ count: string }[]>(
-    `SELECT COUNT(*)::text as count FROM finance_collection_cases`
-  ).catch(() => [{ count: '0' }]);
-  const seq = (parseInt(row?.count ?? '0') + 1).toString().padStart(4, '0');
-  const ym  = new Date().toISOString().slice(0, 7).replace('-', '');
-  return `COL-${ym}-${seq}`;
-}
 
 export async function GET(req: NextRequest) {
 
@@ -106,7 +99,7 @@ export async function POST(req: NextRequest) {
   return withTenantRls(prisma, tenantId, async (tx) => {
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-      const caseNo = await nextCaseNo();
+      const caseNo = await nextDocumentNumber(tx, tenantId, 'COL');
 
       const outstanding = parseFloat(body.invoiceAmount) - parseFloat(body.paidAmount ?? '0');
       const dueDate     = new Date(body.dueDate);
