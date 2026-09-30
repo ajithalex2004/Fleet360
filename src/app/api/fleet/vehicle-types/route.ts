@@ -102,10 +102,10 @@ export async function POST(req: NextRequest) {
             fuel_efficiency_kml, cost_per_km, idle_fuel_consumption,
             co2_emission_factor, is_active, notes, created_at, updated_at
           ) VALUES (
-            $1, $2, $3, $4, $5, $6, $7, $8,
-            $9, $10, $11, $12,
-            $13, $14, $15,
-            $16, $17, $18, $19, $20
+            $1::uuid, $2, $3, $4, $5, $6, $7, $8,
+            $9, $10, $11::int, $12::int,
+            $13::numeric, $14::numeric, $15::numeric,
+            $16::numeric, $17::boolean, $18, $19::timestamptz, $20::timestamptz
           ) RETURNING *`,
           id,
           body.code,

@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
 
         if (vehicleId) {
           params.push(vehicleId);
-          conditions.push(`fle.vehicle_id = $${params.length}`);
+          conditions.push(`fle.vehicle_id::text = $${params.length}`);
         }
         if (eventType) {
           params.push(eventType);
@@ -98,9 +98,9 @@ export async function POST(req: NextRequest) {
             reference_no, performed_by, from_stage, to_stage,
             cost, metadata, notes, created_at, updated_at
           ) VALUES (
-            $1, $2, $3, $4, $5,
+            $1::uuid, $2::uuid, $3, $4::timestamptz, $5,
             $6, $7, $8, $9,
-            $10, $11, $12, $13, $14
+            $10::numeric, $11::jsonb, $12, $13::timestamptz, $14::timestamptz
           ) RETURNING *`,
           id,
           body.vehicleId ?? null,

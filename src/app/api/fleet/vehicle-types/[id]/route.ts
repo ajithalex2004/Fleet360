@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { ensureFleetSchema } from '@/lib/fleet/schema';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { sqlCast } from '@/lib/fleet/sql-cast';
 const toCamel = (s: string) => s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 const rowToCamel = (r: Record<string, unknown>) =>
   Object.fromEntries(Object.entries(r).map(([k, v]) => [toCamel(k), v]));
@@ -26,7 +27,7 @@ export async function GET(
       try {
         const { id } = await params;
         const rows = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
-          `SELECT * FROM vehicle_types WHERE id = $1 AND deleted_at IS NULL`,
+          `SELECT * FROM vehicle_types WHERE id::text = $1 AND deleted_at IS NULL`,
           id,
         );
 
@@ -83,12 +84,12 @@ export async function PUT(
 
         const setClauses: string[] = [];
         const queryParams: unknown[] = [new Date().toISOString()];
-        setClauses.push(`updated_at = $1`);
+        setClauses.push(`updated_at = $1::timestamptz`);
 
         for (const [camelKey, snakeKey] of Object.entries(fieldMap)) {
           if (Object.prototype.hasOwnProperty.call(body, camelKey)) {
             queryParams.push(body[camelKey]);
-            setClauses.push(`${snakeKey} = $${queryParams.length}`);
+            setClauses.push(`${snakeKey} = $${queryParams.length}${sqlCast('vehicle_types', snakeKey)}`);
           }
         }
 
@@ -96,7 +97,7 @@ export async function PUT(
         const idParam = queryParams.length;
 
         const rows = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
-          `UPDATE vehicle_types SET ${setClauses.join(', ')} WHERE id = $${idParam} AND deleted_at IS NULL RETURNING *`,
+          `UPDATE vehicle_types SET ${setClauses.join(', ')} WHERE id::text = $${idParam} AND deleted_at IS NULL RETURNING *`,
           ...queryParams,
         );
 
@@ -129,7 +130,7 @@ export async function DELETE(
       try {
         const { id } = await params;
         await tx.$executeRawUnsafe(
-          `UPDATE vehicle_types SET deleted_at = NOW() WHERE id = $1`,
+          `UPDATE vehicle_types SET deleted_at = NOW() WHERE id::text = $1`,
           id,
         );
         return NextResponse.json({ success: true });

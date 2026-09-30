@@ -126,12 +126,12 @@ export async function POST(req: NextRequest) {
             requested_by, approved_by, notes, variance, variance_alert,
             created_at, updated_at
           ) VALUES (
-            $1, $2, $3, $4, $5, $6,
-            $7, $8, $9, $10,
-            $11, $12, $13, $14,
-            $15, $16, $17, $18, $19,
-            $20, $21, $22, $23, $24,
-            $25, $26
+            $1::uuid, $2, $3::uuid, $4, $5, $6,
+            $7, $8, $9, $10::timestamptz,
+            $11::timestamptz, $12::timestamptz, $13::int, $14::numeric,
+            $15::numeric, $16, $17, $18, $19::jsonb,
+            $20, $21, $22, $23::numeric, $24::boolean,
+            $25::timestamptz, $26::timestamptz
           ) RETURNING *`,
           id,
           woNumber,

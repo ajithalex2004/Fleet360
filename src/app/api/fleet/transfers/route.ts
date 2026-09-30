@@ -106,10 +106,10 @@ export async function POST(req: NextRequest) {
             reason, mileage_at_transfer, fuel_level_at_transfer, notes,
             status, created_at, updated_at
           ) VALUES (
-            $1, $2, $3, $4, $5,
-            $6, $7, $8, $9,
-            $10, $11, $12, $13,
-            $14, $15, $16
+            $1::uuid, $2, $3::uuid, $4, $5,
+            $6, $7, $8::timestamptz, $9,
+            $10, $11::int, $12, $13,
+            $14, $15::timestamptz, $16::timestamptz
           ) RETURNING *`,
           id,
           transferNo,

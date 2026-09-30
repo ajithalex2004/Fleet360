@@ -98,9 +98,9 @@ export async function POST(req: NextRequest) {
             allocation_date, expected_return_date, purpose, authorized_by,
             mileage_at_allocation, notes, status, created_at, updated_at
           ) VALUES (
-            $1, $2, $3, $4, $5,
-            $6, $7, $8, $9,
-            $10, $11, $12, $13, $14
+            $1::uuid, $2::uuid, $3, $4, $5,
+            $6::timestamptz, $7::timestamptz, $8, $9,
+            $10::int, $11, $12, $13::timestamptz, $14::timestamptz
           ) RETURNING *`,
           id,
           body.vehicleId ?? null,

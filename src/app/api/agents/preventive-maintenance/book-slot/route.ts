@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
           wo_type, requested_by, start_date, end_date, created_at, updated_at
         ) VALUES (
           $1::uuid, $2, $3::uuid, $4, 'OPEN', 'MEDIUM',
-          'PREVENTIVE', 'Preventive Maintenance Agent', $5::timestamptz, $6::timestamptz, $7, $8
+          'PREVENTIVE', 'Preventive Maintenance Agent', $5::timestamptz, $6::timestamptz, $7::timestamptz, $8::timestamptz
         )
       `,
         id,

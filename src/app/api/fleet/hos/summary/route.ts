@@ -5,7 +5,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { ensureHosSchema } from '@/lib/fleet/hos-schema';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
@@ -182,33 +182,35 @@ export async function GET(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  await ensureHosSchema();
-  try {
-    const sp = req.nextUrl.searchParams;
-    const driverId = sp.get('driver_id');
-    const days = parseInt(sp.get('days') ?? '7', 10);
+  return withTenantRls(prisma, tenantId, async () => {
+    await ensureHosSchema();
+    try {
+      const sp = req.nextUrl.searchParams;
+      const driverId = sp.get('driver_id');
+      const days = parseInt(sp.get('days') ?? '7', 10);
 
-    if (driverId) {
-      const summary = await buildDriverSummary(driverId);
-      return NextResponse.json(ser(summary));
+      if (driverId) {
+        const summary = await buildDriverSummary(driverId);
+        return NextResponse.json(ser(summary));
+      }
+
+      // All drivers with activity in the past `days` days
+      const driverRows = await query<{ driver_id: string }>(
+        `SELECT DISTINCT driver_id
+         FROM hos_logs
+         WHERE started_at >= NOW() - ($1 || ' days')::INTERVAL
+         ORDER BY driver_id`,
+        String(days),
+      );
+
+      const summaries = await Promise.all(
+        driverRows.map((r) => buildDriverSummary(r.driver_id)),
+      );
+
+      return NextResponse.json(ser(summaries));
+    } catch (e) {
+      console.error('Error fetching HoS summary:', e);
+      return NextResponse.json({ error: 'Failed to fetch HoS summary' }, { status: 500 });
     }
-
-    // All drivers with activity in the past `days` days
-    const driverRows = await query<{ driver_id: string }>(
-      `SELECT DISTINCT driver_id
-       FROM hos_logs
-       WHERE started_at >= NOW() - ($1 || ' days')::INTERVAL
-       ORDER BY driver_id`,
-      String(days),
-    );
-
-    const summaries = await Promise.all(
-      driverRows.map((r) => buildDriverSummary(r.driver_id)),
-    );
-
-    return NextResponse.json(ser(summaries));
-  } catch (e) {
-    console.error('Error fetching HoS summary:', e);
-    return NextResponse.json({ error: 'Failed to fetch HoS summary' }, { status: 500 });
-  }
+  });
 }
