@@ -5,6 +5,7 @@ import {
     GaragePerformance,
     Garage
 } from '@/types/maintenance';
+import PreviewBanner from '@/components/PreviewBanner';
 
 export default function GaragePerformancePage() {
     // Mock garage performance data
@@ -76,6 +77,7 @@ export default function GaragePerformancePage() {
 
     return (
         <div className="space-y-6">
+            <PreviewBanner />
             <div>
                 <h1 className="text-2xl font-bold text-[var(--text-main)]">Garage Performance Metrics</h1>
                 <p className="text-xs mt-1 text-[var(--text-faint)]">Compare and analyze garage performance across key metrics</p>

@@ -7,6 +7,7 @@
 
 import Link from 'next/link';
 import { Sparkles, AlertTriangle, TrendingUp, Activity } from 'lucide-react';
+import PreviewBanner from '@/components/PreviewBanner';
 
 const RISK_ITEMS = [
   { vehicle: 'Toyota Hilux – DXB-A-12345', component: 'Brake pads', risk: 'High', days: 8, confidence: 94 },
@@ -22,6 +23,7 @@ const riskColor = (r: string) =>
 export default function AIPlatformPredictivePage() {
   return (
     <div className="space-y-6">
+      <PreviewBanner />
       <div>
         <h1 className="text-2xl font-bold text-[var(--text-main)]">Predictive Maintenance</h1>
         <p className="text-xs mt-1 text-[var(--text-faint)]">AI-powered failure prediction and cost forecasting — owned by AI Platform.</p>

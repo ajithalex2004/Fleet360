@@ -7,6 +7,7 @@ import {
     ApproverRole
 } from '@/types/maintenance';
 import { formatCurrency } from '@/utils/currency';
+import PreviewBanner from '@/components/PreviewBanner';
 
 export default function ApprovalRulesPage() {
     const [rules, setRules] = useState<ApprovalRule[]>([
@@ -108,6 +109,7 @@ export default function ApprovalRulesPage() {
 
     return (
         <div className="space-y-6">
+            <PreviewBanner note="These approval rules are examples and changes here are not saved." />
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>

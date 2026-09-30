@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import PreviewBanner from '@/components/PreviewBanner';
 
 /* ─────────────────────────── types ─────────────────────────── */
 interface RouteMetric {
@@ -166,6 +167,7 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-5">
+      <PreviewBanner />
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>

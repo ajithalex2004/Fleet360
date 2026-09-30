@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { PMItemStatus, PMTriggerType } from '@/types/maintenance';
+import PreviewBanner from '@/components/PreviewBanner';
 
 // ── Mock data representing PM due calculations ────────────────────────────────
 
@@ -112,6 +113,7 @@ export default function PMSchedulePage() {
 
     return (
         <div className="space-y-6">
+            <PreviewBanner note="These due and overdue services are examples. Your PM plans are saved on the PM Plans screen; this schedule is not yet connected to them." />
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>

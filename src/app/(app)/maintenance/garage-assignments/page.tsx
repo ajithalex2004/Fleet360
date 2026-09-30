@@ -7,6 +7,7 @@
 
 import Link from 'next/link';
 import { Building2, ExternalLink } from 'lucide-react';
+import PreviewBanner from '@/components/PreviewBanner';
 
 const MOCK_ASSIGNMENTS = [
   { workOrder: 'WO-2026-001', vehicle: 'Toyota Hilux – DXB-A-12345', garage: 'Autopro Service Centre', status: 'UNDER_MAINTENANCE', since: '2026-08-09' },
@@ -23,6 +24,7 @@ const statusColor: Record<string, string> = {
 export default function GarageAssignmentsPage() {
   return (
     <div className="space-y-6">
+      <PreviewBanner />
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--text-main)]">Garage Assignments</h1>

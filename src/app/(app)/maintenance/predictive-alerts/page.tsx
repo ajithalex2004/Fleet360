@@ -7,6 +7,7 @@
 
 import Link from 'next/link';
 import { Sparkles, ExternalLink, AlertTriangle } from 'lucide-react';
+import PreviewBanner from '@/components/PreviewBanner';
 
 const MOCK_ALERTS = [
   { vehicle: 'Toyota Hilux – DXB-A-12345', component: 'Brake pads', risk: 'High', days: 8, confidence: 94, action: 'Schedule brake service immediately' },
@@ -24,6 +25,7 @@ const riskStyle: Record<string, { badge: string; bg: string }> = {
 export default function PredictiveAlertsPage() {
   return (
     <div className="space-y-6">
+      <PreviewBanner />
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--text-main)]">Predictive Alerts</h1>
