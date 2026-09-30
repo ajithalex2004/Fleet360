@@ -119,9 +119,7 @@ export async function acceptInvitation(
 // ── Email send ─────────────────────────────────────────────────────────
 
 /**
- * Sends the setup link via the tenant's configured SMTP integration. Uses
- * the same IntegrationConfig type='EMAIL' pattern the workflow engine
- * already uses for outbound mail.
+ * Sends the setup link via the platform email sender (src/lib/email.ts).
  *
  * Non-fatal: returns { ok: false, reason } on SMTP misconfiguration so
  * the caller can show a "couldn't send email — copy the link manually"
@@ -167,45 +165,15 @@ export async function sendInvitationEmail(args: {
       </div>
     `;
 
-    // 1) Preferred: the tenant's active EMAIL IntegrationConfig (SMTP via nodemailer).
-    try {
-      const cfgRows = await prisma.$queryRawUnsafe<Array<{ config: unknown }>>(
-        `SELECT config FROM "IntegrationConfig"
-          WHERE type = 'EMAIL' AND "isActive" = true
-            AND (tenant_id = $1 OR tenant_id IS NULL)
-          ORDER BY tenant_id NULLS LAST
-          LIMIT 1`,
-        args.tenantId,
-      ).catch(() => []);
-      if (cfgRows[0]) {
-        const raw = cfgRows[0].config as unknown;
-        const cfg = (typeof raw === 'string' ? JSON.parse(raw) : raw) as Record<string, unknown>;
-        const nodemailer = await import('nodemailer');
-        const transporter = nodemailer.createTransport({
-          host: String(cfg.smtpHost ?? ''),
-          port: parseInt(String(cfg.smtpPort ?? '587')) || 587,
-          secure: cfg.smtpSecure === true || String(cfg.smtpPort ?? '') === '465',
-          auth: { user: String(cfg.smtpUser ?? ''), pass: String(cfg.smtpPassword ?? '') },
-        });
-        await transporter.sendMail({
-          from: (cfg.fromEmail as string) ?? (cfg.smtpUser as string),
-          to: args.recipientEmail,
-          subject,
-          html,
-        });
-        return { ok: true };
-      }
-    } catch (e) {
-      console.warn('[shipper-portal] SMTP invitation email failed; trying SendGrid fallback:', e);
-    }
-
-    // 2) Fallback: the centralized SendGrid transport (SENDGRID_API_KEY + EMAIL_FROM).
+    // The platform email sender (SMTP under Admin > Settings > Notifications,
+    // or SendGrid). An "IntegrationConfig" lookup used to come first here; it
+    // read columns that table does not have, so it always failed.
     const r = await sendEmail({ to: args.recipientEmail, subject, html });
     if (r.sent) return { ok: true };
     return {
       ok: false,
-      reason: r.reason === 'not_configured'
-        ? 'No email transport configured — set up an EMAIL integration, or set SENDGRID_API_KEY + EMAIL_FROM in the environment.'
+      reason: r.reason === 'not_configured' || r.reason === 'smtp_not_configured'
+        ? 'No email transport configured — set up SMTP in Admin > Settings > Notifications, or set SENDGRID_API_KEY + EMAIL_FROM in the environment.'
         : (r.error ?? r.reason ?? 'Email send failed.'),
     };
 }
