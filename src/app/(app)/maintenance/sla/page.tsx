@@ -12,6 +12,7 @@ import {
 } from '@/types/maintenance';
 import { computeSLASnapshot } from '@/lib/maintenance/sla-engine';
 import type { MaintenanceRequest } from '@/types/maintenance';
+import PreviewBanner from '@/components/PreviewBanner';
 
 // ── seed data ─────────────────────────────────────────────────────────────────
 
@@ -297,6 +298,7 @@ export default function SLADashboardPage() {
 
     return (
         <div className="min-h-screen bg-[var(--bg-surface-hover)] p-6 space-y-6">
+            <PreviewBanner note="The SLA figures below are calculated from example maintenance requests, not your records." />
             {/* Header */}
             <div>
                 <h1 className="text-xl font-bold text-[var(--text-main)] flex items-center gap-2">

@@ -48,7 +48,14 @@ export async function POST(request: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-            const body = await request.json();
+            const body = stripTenantOwnershipFields(await request.json());
+
+            // The vehicle must be one of this tenant's (RLS scopes the lookup).
+            const vehicleId = body.vehicleId || body.vehicle_id;
+            if (vehicleId) {
+                const vehicle = await tx.vehicle.findFirst({ where: { id: String(vehicleId), deletedAt: null }, select: { id: true } });
+                if (!vehicle) return NextResponse.json({ error: 'Vehicle not found' }, { status: 404 });
+            }
 
             const req = await tx.maintenanceRequest.create({
                 data: {
