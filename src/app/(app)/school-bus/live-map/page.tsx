@@ -39,7 +39,6 @@ interface FleetSummary {
 }
 
 /* ─────────────────────────── constants ──────────────────────── */
-const TENANTID = 'default';
 const REFRESH_MS = 15_000;
 
 // Dubai bounding box for demo marker positions
@@ -305,7 +304,6 @@ async function seedDemoPositions() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        tenantId: TENANTID,
         vehicleId: b.vehicleId, vehiclePlate: b.vehiclePlate,
         routeName: b.routeName,
         driverName: b.driver, attendantName: b.attendant,
@@ -331,7 +329,7 @@ export default function LiveMapPage() {
 
   const fetchPositions = useCallback(async () => {
     try {
-      const params = new URLSearchParams({ tenantId: TENANTID });
+      const params = new URLSearchParams();
       if (filterStatus) params.set('status', filterStatus);
       const r = await fetch(`/api/school-bus/fleet-positions?${params}`);
       if (!r.ok) return;

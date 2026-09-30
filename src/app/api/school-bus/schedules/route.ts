@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 /**
- * GET  /api/school-bus/schedules?tenantId=X&routeId=X&weekType=MON_THU|FRI&status=ACTIVE
+ * GET  /api/school-bus/schedules?routeId=X&weekType=MON_THU|FRI&status=ACTIVE
  *   Returns schedule records for routes.
  *
  * POST /api/school-bus/schedules
@@ -40,7 +40,6 @@ export async function GET(req: NextRequest) {
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
         const sp       = new URL(req.url).searchParams;
-        const tenantId = sp.get('tenantId')  ?? 'default';
         const routeId  = sp.get('routeId')   ?? '';
         const weekType = sp.get('weekType')  ?? '';
         const session  = sp.get('session')   ?? '';
@@ -92,7 +91,7 @@ export async function POST(req: NextRequest) {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const {
-          tenantId = 'default', scheduleName, routeId, routeName, routeCode,
+          scheduleName, routeId, routeName, routeCode,
           vehicleId, vehiclePlate, driverId, driverName, attendantId, attendantName,
           weekType = 'MON_THU', activeDays, session = 'MORNING', direction = 'PICKUP',
           departureTime, arrivalTime, effectiveFrom, effectiveTo,

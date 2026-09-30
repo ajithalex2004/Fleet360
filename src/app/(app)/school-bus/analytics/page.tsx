@@ -37,7 +37,6 @@ interface ServiceAreaStats {
   avgDistanceToStop: number; // km
 }
 
-const TENANTID = 'default';
 
 // Mock data for parent analytics (in production, computed from real tables)
 const MOCK_ROUTE_METRICS: RouteMetric[] = [

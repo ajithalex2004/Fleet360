@@ -34,7 +34,6 @@ export async function GET(req: NextRequest) {
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
         const sp         = new URL(req.url).searchParams;
-        const tenantId   = sp.get('tenantId')  ?? '';
         const emirate    = sp.get('emirate')   ?? '';
         const city       = sp.get('city')      ?? '';
         const area       = sp.get('area')      ?? '';
@@ -86,7 +85,7 @@ export async function POST(req: NextRequest) {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const {
-          tenantId = 'default', stopName, emirate = 'Dubai', city, area, neighbourhood,
+          stopName, emirate = 'Dubai', city, area, neighbourhood,
           landmark, lat, lng, geofenceRadiusM = 100, notes,
         } = body;
 

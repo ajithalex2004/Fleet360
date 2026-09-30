@@ -9,7 +9,6 @@ export const dynamic = 'force-dynamic';
  * Body:
  *   date      string   — YYYY-MM-DD (defaults to today)
  *   routeIds  string[] — optional filter; omit to generate for ALL active routes
- *   tenantId  string   — defaults to 'default'
  *
  * Returns:
  *   { ok, generated, skipped, trips: [{ id, tripCode, routeName, status }] }
@@ -35,7 +34,6 @@ export async function POST(req: NextRequest) {
     await ensureDispatchSchema();
 
     const body     = await req.json().catch(() => ({}));
-    const tenantId = body.tenantId ?? 'default';
     const date     = body.date     ?? new Date().toISOString().slice(0, 10);
     const routeIds = Array.isArray(body.routeIds) && body.routeIds.length > 0
       ? body.routeIds as string[]

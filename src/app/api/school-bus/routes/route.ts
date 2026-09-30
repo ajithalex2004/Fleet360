@@ -43,7 +43,6 @@ export async function GET(req: NextRequest) {
         await ensureDispatchSchema();
 
         const sp         = new URL(req.url).searchParams;
-        const tenantId   = sp.get('tenantId')  ?? '';
         const status     = sp.get('status')    ?? '';
         const direction  = sp.get('direction') ?? '';
 
@@ -94,7 +93,6 @@ export async function POST(req: NextRequest) {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const {
-          tenantId       = 'default',
           routeName, routeCode,
           direction      = 'PICKUP',
           session        = 'MORNING',

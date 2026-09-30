@@ -70,7 +70,6 @@ interface Toast {
   type: 'success' | 'error' | 'info';
 }
 
-const TENANTID = 'default';
 
 const STATUS_CFG: Record<string, { color: string; bg: string; border: string; dot: string }> = {
   SCHEDULED:   { color: 'text-[var(--text-muted)]',  bg: 'bg-[var(--bg-surface-hover)]/50',  border: 'border-[var(--border-strong)]',     dot: 'bg-slate-500'  },
@@ -450,7 +449,7 @@ function GenerateModal({
 
   /* Load active routes for selection */
   useEffect(() => {
-    fetch(`/api/school-bus/routes?tenantId=${TENANTID}&status=ACTIVE`)
+    fetch(`/api/school-bus/routes?status=ACTIVE`)
       .then(r => r.json())
       .then(d => {
         const list: ActiveRoute[] = (d.routes ?? []).filter((r: ActiveRoute & { is_active?: boolean }) => r.is_active !== false);
@@ -487,7 +486,6 @@ function GenerateModal({
     try {
       const body: Record<string, unknown> = {
         date: genDate,
-        tenantId: TENANTID,
       };
       // Only pass routeIds if not all routes selected
       if (selected.size < routes.length) {
@@ -621,7 +619,7 @@ export default function TripsPage() {
   const fetchTrips = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ tenantId: TENANTID, date });
+      const params = new URLSearchParams({ date });
       if (filterStatus) params.set('status', filterStatus);
       if (search)       params.set('search', search);
       const r = await fetch(`/api/school-bus/trips?${params}`);

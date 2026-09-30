@@ -34,7 +34,6 @@ interface ScoreSummary {
   avgScore: number;
 }
 
-const TENANTID = 'default';
 
 const RAG_CFG: Record<string, { color: string; bg: string; border: string; ring: string; label: string; emoji: string }> = {
   GREEN: { color: 'text-green-400',  bg: 'bg-green-500/15',  border: 'border-green-500/30',  ring: 'ring-green-500/30',  label: 'GREEN',  emoji: '🟢' },
@@ -182,7 +181,7 @@ function SeedModal({ period, onDone, onClose }: { period: string; onDone: () => 
       await fetch('/api/school-bus/driver-scores', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tenantId: 'default', period, totalDistanceKm: d.tripsTotal * 18, totalStudents: d.tripsTotal * 22, ...d }),
+        body: JSON.stringify({ period, totalDistanceKm: d.tripsTotal * 18, totalStudents: d.tripsTotal * 22, ...d }),
       }).catch(() => {});
     }
     setSeeding(false);
@@ -219,7 +218,7 @@ export default function DriverScoresPage() {
   const fetch_ = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ tenantId: TENANTID, period });
+      const params = new URLSearchParams({ period });
       if (filterRAG) params.set('ragStatus', filterRAG);
       const r = await fetch(`/api/school-bus/driver-scores?${params}`);
       if (r.ok) {

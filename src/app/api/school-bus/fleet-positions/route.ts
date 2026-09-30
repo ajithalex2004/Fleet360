@@ -1,13 +1,13 @@
 export const dynamic = 'force-dynamic';
 
 /**
- * GET  /api/school-bus/fleet-positions?tenantId=X
+ * GET  /api/school-bus/fleet-positions
  *   Returns the latest GPS position for every active school bus vehicle,
  *   joined with trip and route context for the live map.
  *
  * POST /api/school-bus/fleet-positions
  *   Upserts a vehicle's current GPS position (called by the on-board telematics unit).
- *   Body: { tenantId, vehicleId, lat, lng, speedKmh, headingDeg, tripId?, routeId?, status? }
+ *   Body: { vehicleId, lat, lng, speedKmh, headingDeg, tripId?, routeId?, status? }
  *
  * Tables:
  *   school_bus_vehicle_positions — one row per vehicle (upserted on each telemetry ping)
@@ -41,7 +41,6 @@ export async function GET(req: NextRequest) {
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
         const sp       = new URL(req.url).searchParams;
-        const tenantId = sp.get('tenantId') ?? 'default';
         const routeId  = sp.get('routeId')  ?? '';
         const status   = sp.get('status')   ?? '';
 
@@ -102,7 +101,7 @@ export async function POST(req: NextRequest) {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const {
-          tenantId = 'default', vehicleId, vehiclePlate,
+          vehicleId, vehiclePlate,
           routeId, routeName, tripId,
           driverId, driverName, attendantId, attendantName,
           lat, lng, speedKmh = 0, headingDeg = 0,

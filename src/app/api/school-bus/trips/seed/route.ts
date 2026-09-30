@@ -87,6 +87,7 @@ const TRIP_PLANS: TripPlan[] = [
 
 /* ── insert events for a trip ─────────────────────────────── */
 async function insertEvents(
+  tenantId: string,
   tripId: string,
   plan: TripPlan,
   route: typeof ROUTES[0],
@@ -105,7 +106,7 @@ async function insertEvents(
         (tenant_id, trip_id, event_type, event_time, stop_name, students_count, description, speed_kmh, metadata)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)
     `,
-      'default', tripId, type, evtTime,
+      tenantId, tripId, type, evtTime,
       extras.stop_name ?? null,
       extras.students_count ?? null,
       desc,
@@ -178,7 +179,7 @@ export async function POST(req: NextRequest) {
 
       // Skip if already exists
       const [existing] = await query<{ id: string }>(
-        `SELECT id FROM school_bus_trips WHERE trip_code = $1 AND tenant_id = 'default'`, safeCode,
+        `SELECT id FROM school_bus_trips WHERE trip_code = $1 AND tenant_id = $2`, safeCode, tenantId,
       );
       if (existing?.id) { skipped++; continue; }
 
@@ -213,7 +214,7 @@ export async function POST(req: NextRequest) {
           speeding_events, harsh_braking, geofence_exits,
           status, notes
         ) VALUES (
-          'default',$1,$2,$3,$4,$5,$6,$7,$8,$9,$10::time,$11,$12,
+          $26,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10::time,$11,$12,
           $13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25
         )
         ON CONFLICT (trip_code, tenant_id) DO NOTHING
@@ -229,6 +230,7 @@ export async function POST(req: NextRequest) {
         plan.distKm, durationMin, plan.speed, plan.maxSpeed,
         plan.speeding, plan.braking, plan.geofence,
         plan.status, plan.notes ?? null,
+        tenantId,
       );
 
       if (!tripRow?.id) { skipped++; continue; }
@@ -237,13 +239,13 @@ export async function POST(req: NextRequest) {
       inserted.push(`${safeCode} (${plan.status})`);
 
       // Telemetry events
-      const evts = await insertEvents(tripRow.id, plan, route, tripDate);
+      const evts = await insertEvents(tenantId, tripRow.id, plan, route, tripDate);
       eventCount += evts;
     }
 
     // Final summary from DB
     const statusSummary = await query<{ status: string; cnt: bigint }>(
-      `SELECT status, COUNT(*) AS cnt FROM school_bus_trips WHERE tenant_id = 'default' GROUP BY status ORDER BY cnt DESC`,
+      `SELECT status, COUNT(*) AS cnt FROM school_bus_trips WHERE tenant_id = $1 GROUP BY status ORDER BY cnt DESC`, tenantId,
     );
 
     return NextResponse.json({

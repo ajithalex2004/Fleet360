@@ -27,7 +27,6 @@ interface Schedule {
   created_at: string;
 }
 
-const TENANTID = 'default';
 
 const WEEK_TYPES = ['MON_THU', 'FRI', 'DAILY', 'CUSTOM'];
 const SESSIONS   = ['MORNING', 'AFTERNOON', 'BOTH'];
@@ -380,7 +379,7 @@ export default function SchedulesPage() {
   const fetchSchedules = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ tenantId: TENANTID });
+      const params = new URLSearchParams();
       if (filterWeek)    params.set('weekType', filterWeek);
       if (filterSession) params.set('session', filterSession);
       if (filterStatus)  params.set('status', filterStatus);
@@ -398,7 +397,7 @@ export default function SchedulesPage() {
   const handleSave = async (data: Record<string, unknown>) => {
     const method = editing ? 'PATCH' : 'POST';
     const url    = editing ? `/api/school-bus/schedules/${editing.id}` : '/api/school-bus/schedules';
-    const body   = editing ? data : { ...data, tenantId: TENANTID };
+    const body   = data;
     await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     setShowModal(false);
     setEditing(null);
