@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { PMTriggerType } from '@/types/maintenance';
 
 interface PMTriggerForm {
@@ -38,40 +38,37 @@ const TRIGGER_UNITS: Record<PMTriggerType, 'KM' | 'DAYS' | 'HOURS'> = {
     [PMTriggerType.COMPONENT_LIFE]:  'DAYS',
 };
 
-const SEED_PLANS: PMPlanData[] = [
-    {
-        id: 'plan-1',
-        name: 'Engine Oil Service',
-        description: 'Oil + filter replacement',
-        maintenanceType: 'PREVENTIVE',
-        triggers: [
-            { triggerType: PMTriggerType.ODOMETER, intervalValue: 10000, intervalUnit: 'KM' },
-            { triggerType: PMTriggerType.CALENDAR, intervalValue: 180,   intervalUnit: 'DAYS' },
-        ],
-        gracePeriodDays: 7, earlyWindowDays: 14, earlyWindowKm: 500, notifyDaysBefore: 7, isActive: true,
-    },
-    {
-        id: 'plan-2',
-        name: 'Brake Inspection',
-        description: 'Full brake system inspection',
-        maintenanceType: 'INSPECTION',
-        triggers: [
-            { triggerType: PMTriggerType.ODOMETER, intervalValue: 15000, intervalUnit: 'KM' },
-        ],
-        gracePeriodDays: 3, earlyWindowDays: 7, earlyWindowKm: 300, notifyDaysBefore: 5, isActive: true,
-    },
-    {
-        id: 'plan-3',
-        name: 'Major Service',
-        description: 'Full 50k service package',
-        maintenanceType: 'PREVENTIVE',
-        triggers: [
-            { triggerType: PMTriggerType.ODOMETER, intervalValue: 50000, intervalUnit: 'KM' },
-            { triggerType: PMTriggerType.CALENDAR, intervalValue: 365,   intervalUnit: 'DAYS' },
-        ],
-        gracePeriodDays: 14, earlyWindowDays: 30, earlyWindowKm: 1000, notifyDaysBefore: 14, isActive: true,
-    },
-];
+/** A plan as the API returns it, with nulls filled for the form. */
+function toPlan(r: Record<string, unknown>): PMPlanData {
+    const n = (v: unknown, d: number) => (typeof v === 'number' ? v : d);
+    return {
+        id: String(r.id),
+        name: String(r.name ?? ''),
+        description: typeof r.description === 'string' ? r.description : '',
+        maintenanceType: typeof r.maintenanceType === 'string' ? r.maintenanceType : 'PREVENTIVE',
+        triggers: (Array.isArray(r.triggers) ? r.triggers : []).map((t: Record<string, unknown>) => ({
+            triggerType: t.triggerType as PMTriggerType,
+            intervalValue: n(t.intervalValue, 0),
+            intervalUnit: (t.intervalUnit as PMTriggerForm['intervalUnit']) ?? 'KM',
+        })),
+        gracePeriodDays: n(r.gracePeriodDays, 0),
+        earlyWindowDays: n(r.earlyWindowDays, 0),
+        earlyWindowKm: n(r.earlyWindowKm, 0),
+        notifyDaysBefore: n(r.notifyDaysBefore, 0),
+        isActive: Boolean(r.isActive),
+    };
+}
+
+async function send(url: string, method: string, body?: unknown) {
+    const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error ?? `Request failed (${res.status})`);
+    return json as Record<string, unknown>;
+}
 
 const blankPlan = (): Omit<PMPlanData, 'id'> => ({
     name: '', description: '', maintenanceType: 'PREVENTIVE',
@@ -88,19 +85,42 @@ function XIcon() {
 }
 
 export default function PMPlansPage() {
-    const [plans, setPlans]                 = useState<PMPlanData[]>(SEED_PLANS);
+    const [plans, setPlans]                 = useState<PMPlanData[]>([]);
+    const [loading, setLoading]             = useState(true);
+    const [saving, setSaving]               = useState(false);
+    const [error, setError]                 = useState<string | null>(null);
+    const [formError, setFormError]         = useState<string | null>(null);
     const [showModal, setShowModal]         = useState(false);
     const [editingId, setEditingId]         = useState<string | null>(null);
     const [form, setForm]                   = useState<Omit<PMPlanData, 'id'>>(blankPlan());
     const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
+    const load = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const res = await fetch('/api/maintenance/pm-plans?activeOnly=false', { cache: 'no-store' });
+            const json = await res.json().catch(() => null);
+            if (!res.ok) throw new Error(json?.error ?? `Could not load PM plans (${res.status})`);
+            setPlans((Array.isArray(json) ? json : []).map(toPlan));
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Could not load PM plans');
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => { void load(); }, [load]);
+
     function openCreate() {
+        setFormError(null);
         setEditingId(null);
         setForm(blankPlan());
         setShowModal(true);
     }
 
     function openEdit(plan: PMPlanData) {
+        setFormError(null);
         setEditingId(plan.id);
         setForm({ name: plan.name, description: plan.description, maintenanceType: plan.maintenanceType,
                   triggers: plan.triggers.map(t => ({ ...t })),
@@ -131,23 +151,50 @@ export default function PMPlansPage() {
         setForm(f => ({ ...f, triggers: f.triggers.filter((_, i) => i !== idx) }));
     }
 
-    function save() {
+    async function save() {
         if (!form.name.trim()) return;
-        if (editingId) {
-            setPlans(p => p.map(pl => pl.id === editingId ? { ...form, id: editingId } : pl));
-        } else {
-            setPlans(p => [...p, { ...form, id: `plan-${Date.now()}` }]);
+        if (form.triggers.length === 0) { setFormError('Add at least one trigger.'); return; }
+        setSaving(true);
+        setFormError(null);
+        try {
+            const body = { ...form, name: form.name.trim(), description: form.description?.trim() || null };
+            const saved = toPlan(editingId
+                ? await send(`/api/maintenance/pm-plans/${editingId}`, 'PUT', body)
+                : await send('/api/maintenance/pm-plans', 'POST', body));
+            setPlans(p => (editingId ? p.map(pl => (pl.id === editingId ? saved : pl)) : [saved, ...p]));
+            setShowModal(false);
+        } catch (e) {
+            setFormError(e instanceof Error ? e.message : 'Could not save the plan');
+        } finally {
+            setSaving(false);
         }
-        setShowModal(false);
     }
 
-    function deletePlan(id: string) {
-        setPlans(p => p.filter(pl => pl.id !== id));
-        setDeleteConfirm(null);
+    async function deletePlan(id: string) {
+        setSaving(true);
+        setError(null);
+        try {
+            await send(`/api/maintenance/pm-plans/${id}`, 'DELETE');
+            setPlans(p => p.filter(pl => pl.id !== id));
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Could not delete the plan');
+        } finally {
+            setSaving(false);
+            setDeleteConfirm(null);
+        }
     }
 
-    function toggleActive(id: string) {
-        setPlans(p => p.map(pl => pl.id === id ? { ...pl, isActive: !pl.isActive } : pl));
+    async function toggleActive(plan: PMPlanData) {
+        setSaving(true);
+        setError(null);
+        try {
+            const saved = toPlan(await send(`/api/maintenance/pm-plans/${plan.id}`, 'PUT', { isActive: !plan.isActive }));
+            setPlans(p => p.map(pl => (pl.id === plan.id ? saved : pl)));
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Could not update the plan');
+        } finally {
+            setSaving(false);
+        }
     }
 
     const totalTriggers = plans.reduce((s, p) => s + p.triggers.length, 0);
@@ -183,8 +230,17 @@ export default function PMPlansPage() {
                 ))}
             </div>
 
+            {error && (
+                <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">{error}</div>
+            )}
+
             {/* Plan list */}
             <div className="space-y-3">
+                {loading && (
+                    <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-12 text-center text-sm text-[var(--text-faint)]">
+                        Loading PM plans…
+                    </div>
+                )}
                 {plans.map(plan => (
                     <div
                         key={plan.id}
@@ -222,7 +278,8 @@ export default function PMPlansPage() {
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
                                 <button
-                                    onClick={() => toggleActive(plan.id)}
+                                    onClick={() => void toggleActive(plan)}
+                                    disabled={saving}
                                     className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] transition-colors"
                                 >
                                     {plan.isActive ? 'Deactivate' : 'Activate'}
@@ -243,7 +300,7 @@ export default function PMPlansPage() {
                         </div>
                     </div>
                 ))}
-                {plans.length === 0 && (
+                {!loading && plans.length === 0 && (
                     <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-12 text-center">
                         <p className="text-[var(--text-faint)] text-sm">No PM plans yet. Create one to start tracking preventive maintenance.</p>
                         <button onClick={openCreate} className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">
@@ -293,6 +350,8 @@ export default function PMPlansPage() {
                                 >
                                     <option value="PREVENTIVE">Preventive</option>
                                     <option value="INSPECTION">Inspection</option>
+                                    <option value="PREDICTIVE">Predictive</option>
+                                    <option value="CORRECTIVE">Corrective</option>
                                 </select>
                             </div>
                             <div>
@@ -378,7 +437,8 @@ export default function PMPlansPage() {
                                 </label>
                             </div>
                         </div>
-                        <div className="p-6 border-t border-[var(--border-subtle)] flex justify-end gap-3 shrink-0">
+                        <div className="p-6 border-t border-[var(--border-subtle)] flex items-center justify-end gap-3 shrink-0">
+                            {formError && <p className="mr-auto text-sm text-red-400">{formError}</p>}
                             <button
                                 onClick={() => setShowModal(false)}
                                 className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] transition-colors"
@@ -386,11 +446,11 @@ export default function PMPlansPage() {
                                 Cancel
                             </button>
                             <button
-                                onClick={save}
-                                disabled={!form.name.trim()}
+                                onClick={() => void save()}
+                                disabled={!form.name.trim() || saving}
                                 className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                             >
-                                {editingId ? 'Save changes' : 'Create plan'}
+                                {saving ? 'Saving…' : editingId ? 'Save changes' : 'Create plan'}
                             </button>
                         </div>
                     </div>
@@ -413,7 +473,8 @@ export default function PMPlansPage() {
                                 Cancel
                             </button>
                             <button
-                                onClick={() => deletePlan(deleteConfirm)}
+                                onClick={() => void deletePlan(deleteConfirm)}
+                                disabled={saving}
                                 className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors"
                             >
                                 Delete

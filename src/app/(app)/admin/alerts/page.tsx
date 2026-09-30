@@ -27,9 +27,15 @@ const MODULE_SOURCES = [
   { icon: Shield,    label: 'Incidents',    description: 'Active incidents, escalation SLAs' },
 ];
 
-const SECTIONS = [
+// href null: the screen isn't built yet, so it shows as "Coming soon"
+// rather than linking to a page that doesn't exist.
+const SECTIONS: Array<{
+  href: string | null; icon: typeof Settings; label: string; description: string;
+  accent: string; bg: string; iconColor: string;
+}> = [
   {
-    href:        '/admin/alerts/rules',
+    // The rules screen that saves to /api/alert-configs.
+    href:        '/maintenance/action-centre/config',
     icon:        Settings,
     label:       'Alert Rules',
     description: 'Configure thresholds, frequencies, and notification channels for every module.',
@@ -38,7 +44,7 @@ const SECTIONS = [
     iconColor:   'text-blue-400',
   },
   {
-    href:        '/admin/alerts/active',
+    href:        null,
     icon:        Activity,
     label:       'Active Alerts',
     description: 'Triage, assign, and escalate open alerts across all fleet modules.',
@@ -47,7 +53,7 @@ const SECTIONS = [
     iconColor:   'text-amber-400',
   },
   {
-    href:        '/admin/alerts/history',
+    href:        null,
     icon:        History,
     label:       'Alert History',
     description: 'Audit trail of resolved and closed alerts with full escalation timeline.',
@@ -94,21 +100,34 @@ export default function PlatformAlertsPage() {
       <div className="grid gap-4 md:grid-cols-3">
         {SECTIONS.map(s => {
           const Icon = s.icon;
-          return (
-            <Link
-              key={s.href}
-              href={s.href}
-              className={`group flex flex-col gap-4 rounded-xl border p-6 transition-all hover:shadow-lg hover:shadow-black/30 ${s.bg}`}
-            >
+          const body = (
+            <>
               <div className="flex items-center justify-between">
                 <Icon className={`h-6 w-6 ${s.iconColor}`} />
-                <ArrowRight className="h-4 w-4 text-[var(--text-faint)] transition-transform group-hover:translate-x-1" />
+                {s.href ? (
+                  <ArrowRight className="h-4 w-4 text-[var(--text-faint)] transition-transform group-hover:translate-x-1" />
+                ) : (
+                  <span className="rounded-full border border-[var(--border-subtle)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-faint)]">Coming soon</span>
+                )}
               </div>
               <div>
                 <p className="font-semibold text-[var(--text-main)]">{s.label}</p>
                 <p className="mt-1 text-xs text-[var(--text-muted)]">{s.description}</p>
               </div>
+            </>
+          );
+          return s.href ? (
+            <Link
+              key={s.label}
+              href={s.href}
+              className={`group flex flex-col gap-4 rounded-xl border p-6 transition-all hover:shadow-lg hover:shadow-black/30 ${s.bg}`}
+            >
+              {body}
             </Link>
+          ) : (
+            <div key={s.label} className={`flex flex-col gap-4 rounded-xl border p-6 opacity-60 ${s.bg}`}>
+              {body}
+            </div>
           );
         })}
       </div>

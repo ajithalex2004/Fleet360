@@ -1,94 +1,32 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
     AlertTriangle, Plus, Truck, CheckCircle2, Clock,
     MapPin, Wrench, X, ChevronRight, Radio,
 } from 'lucide-react';
 import type { BreakdownReport, BreakdownType, BreakdownStatus, BreakdownSeverity } from '@/types/maintenance';
 
-// ─── seed data ────────────────────────────────────────────────────────────────
+// ─── api ──────────────────────────────────────────────────────────────────────
 
-const SEED: BreakdownReport[] = [
-    {
-        id: 'br-1',
-        reportNo: 'BRK-202608-00001',
-        tenantId: '',
-        vehicleId: 'v-001',
-        driverId: 'd-101',
-        reportedAt: '2026-08-11T08:15:00Z',
-        breakdownType: 'ENGINE_FAILURE',
-        location: 'Sheikh Zayed Road, Dubai — near Exit 43',
-        latitude: 25.1972,
-        longitude: 55.2796,
-        driverNotes: 'Engine warning light came on and vehicle lost power suddenly.',
-        photoUrls: [],
-        severity: 'HIGH',
-        status: 'RECOVERY_DISPATCHED',
-        recoveryVehicleId: 'rv-02',
-        recoveryDriverId: 'rd-05',
-        recoveryNotes: 'Recovery truck en route',
-        recoveryDispatchedAt: '2026-08-11T08:25:00Z',
-        recoveryCompletedAt: null,
-        estimatedArrivalAt: '2026-08-11T09:00:00Z',
-        maintenanceRequestId: 'mr-001',
-        MaintenanceRequest: { id: 'mr-001', status: 'Open', workOrderNo: 'BRK-MR-001' },
-        createdAt: '2026-08-11T08:15:00Z',
-        updatedAt: '2026-08-11T08:25:00Z',
-    },
-    {
-        id: 'br-2',
-        reportNo: 'BRK-202608-00002',
-        tenantId: '',
-        vehicleId: 'v-005',
-        driverId: 'd-108',
-        reportedAt: '2026-08-10T14:30:00Z',
-        breakdownType: 'FLAT_TYRE',
-        location: 'Al Khail Road, Dubai',
-        latitude: null,
-        longitude: null,
-        driverNotes: 'Front left tyre blew out.',
-        photoUrls: [],
-        severity: 'MEDIUM',
-        status: 'AT_WORKSHOP',
-        recoveryVehicleId: 'rv-01',
-        recoveryDriverId: 'rd-03',
-        recoveryNotes: null,
-        recoveryDispatchedAt: '2026-08-10T14:45:00Z',
-        recoveryCompletedAt: '2026-08-10T16:10:00Z',
-        estimatedArrivalAt: null,
-        maintenanceRequestId: 'mr-002',
-        MaintenanceRequest: { id: 'mr-002', status: 'IN_PROGRESS', workOrderNo: 'BRK-MR-002' },
-        createdAt: '2026-08-10T14:30:00Z',
-        updatedAt: '2026-08-10T16:10:00Z',
-    },
-    {
-        id: 'br-3',
-        reportNo: 'BRK-202608-00003',
-        tenantId: '',
-        vehicleId: 'v-012',
-        driverId: 'd-115',
-        reportedAt: '2026-08-09T11:00:00Z',
-        breakdownType: 'BATTERY_DEAD',
-        location: 'Business Bay, Dubai',
-        latitude: null,
-        longitude: null,
-        driverNotes: 'Vehicle would not start in the parking lot.',
-        photoUrls: [],
-        severity: 'LOW',
-        status: 'RESOLVED',
-        recoveryVehicleId: null,
-        recoveryDriverId: null,
-        recoveryNotes: null,
-        recoveryDispatchedAt: null,
-        recoveryCompletedAt: null,
-        estimatedArrivalAt: null,
-        maintenanceRequestId: 'mr-003',
-        MaintenanceRequest: { id: 'mr-003', status: 'CLOSED', workOrderNo: 'BRK-MR-003' },
-        createdAt: '2026-08-09T11:00:00Z',
-        updatedAt: '2026-08-09T15:30:00Z',
-    },
-];
+interface Option { id: string; label: string }
+
+async function send(url: string, method: string, body: unknown) {
+    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error ?? `Request failed (${res.status})`);
+    return json as BreakdownReport;
+}
+
+async function loadOptions(url: string, label: (row: Record<string, unknown>) => string): Promise<Option[]> {
+    try {
+        const res = await fetch(url, { cache: 'no-store' });
+        const rows = res.ok ? await res.json() : [];
+        return (Array.isArray(rows) ? rows : []).map((r: Record<string, unknown>) => ({ id: String(r.id), label: label(r) || String(r.id) }));
+    } catch {
+        return [];
+    }
+}
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -127,7 +65,13 @@ const BREAKDOWN_TYPES: BreakdownType[] = [
 // ─── component ────────────────────────────────────────────────────────────────
 
 export default function BreakdownPage() {
-    const [reports, setReports]         = useState<BreakdownReport[]>(SEED);
+    const [reports, setReports]         = useState<BreakdownReport[]>([]);
+    const [vehicles, setVehicles]       = useState<Option[]>([]);
+    const [drivers, setDrivers]         = useState<Option[]>([]);
+    const [loading, setLoading]         = useState(true);
+    const [saving, setSaving]           = useState(false);
+    const [error, setError]             = useState<string | null>(null);
+    const [formError, setFormError]     = useState<string | null>(null);
     const [selected, setSelected]       = useState<BreakdownReport | null>(null);
     const [showCreate, setShowCreate]   = useState(false);
     const [filterStatus, setFilterStatus] = useState<BreakdownStatus | 'ALL'>('ALL');
@@ -155,40 +99,66 @@ export default function BreakdownPage() {
 
     // ─── handlers ──────────────────────────────────────────────────────────────
 
-    const handleCreate = () => {
-        if (!form.vehicleId) return;
-        const now = new Date().toISOString();
-        const next: BreakdownReport = {
-            id:                   `br-${Date.now()}`,
-            reportNo:             `BRK-${now.slice(0,7).replace('-','')}-${String(reports.length + 1).padStart(5,'0')}`,
-            tenantId:             '',
-            vehicleId:            form.vehicleId,
-            driverId:             form.driverId || null,
-            reportedAt:           now,
-            breakdownType:        form.breakdownType,
-            location:             form.location || null,
-            latitude:             null,
-            longitude:            null,
-            driverNotes:          form.driverNotes || null,
-            photoUrls:            [],
-            severity:             form.severity,
-            status:               'REPORTED',
-            recoveryVehicleId:    null,
-            recoveryDriverId:     null,
-            recoveryNotes:        null,
-            recoveryDispatchedAt: null,
-            recoveryCompletedAt:  null,
-            estimatedArrivalAt:   null,
-            maintenanceRequestId: null,
-            createdAt:            now,
-            updatedAt:            null,
-        };
-        setReports(prev => [next, ...prev]);
-        setShowCreate(false);
-        setForm({ vehicleId: '', driverId: '', breakdownType: 'OTHER', location: '', driverNotes: '', severity: 'HIGH' });
+    // ─── load ──────────────────────────────────────────────────────────────────
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const res = await fetch('/api/maintenance/breakdown-reports', { cache: 'no-store' });
+            const json = await res.json().catch(() => null);
+            if (!res.ok) throw new Error(json?.error ?? `Could not load breakdown reports (${res.status})`);
+            setReports(Array.isArray(json) ? json : []);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Could not load breakdown reports');
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => { void load(); }, [load]);
+
+    useEffect(() => {
+        void loadOptions('/api/vehicles', v =>
+            [v.licensePlate, [v.make, v.model].filter(Boolean).join(' ')].filter(Boolean).join(' · ')).then(setVehicles);
+        void loadOptions('/api/drivers', d =>
+            String(d.name || [d.firstName, d.lastName].filter(Boolean).join(' ') || '')).then(setDrivers);
+    }, []);
+
+    const vehicleLabel = (id: string | null) => (id ? vehicles.find(v => v.id === id)?.label ?? id : '—');
+    const driverLabel  = (id: string | null) => (id ? drivers.find(d => d.id === id)?.label ?? id : null);
+
+    // ─── handlers ──────────────────────────────────────────────────────────────
+
+    const replace = (updated: BreakdownReport) => {
+        setReports(prev => prev.map(r => (r.id === updated.id ? updated : r)));
+        setSelected(prev => (prev?.id === updated.id ? updated : prev));
     };
 
-    const handleStatusAdvance = (id: string) => {
+    const handleCreate = async () => {
+        if (!form.vehicleId) return;
+        setSaving(true);
+        setFormError(null);
+        try {
+            const created = await send('/api/maintenance/breakdown-reports', 'POST', {
+                vehicleId:     form.vehicleId,
+                driverId:      form.driverId || null,
+                breakdownType: form.breakdownType,
+                severity:      form.severity,
+                location:      form.location.trim() || null,
+                driverNotes:   form.driverNotes.trim() || null,
+            });
+            setReports(prev => [created, ...prev]);
+            setShowCreate(false);
+            setForm({ vehicleId: '', driverId: '', breakdownType: 'OTHER', location: '', driverNotes: '', severity: 'HIGH' });
+        } catch (e) {
+            setFormError(e instanceof Error ? e.message : 'Could not save the report');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleStatusAdvance = async (report: BreakdownReport) => {
         const NEXT: Record<BreakdownStatus, BreakdownStatus | null> = {
             REPORTED:            'RECOVERY_DISPATCHED',
             RECOVERY_DISPATCHED: 'RECOVERY_COMPLETED',
@@ -196,17 +166,19 @@ export default function BreakdownPage() {
             AT_WORKSHOP:         'RESOLVED',
             RESOLVED:            null,
         };
-        setReports(prev => prev.map(r => {
-            if (r.id !== id) return r;
-            const next = NEXT[r.status];
-            return next ? { ...r, status: next, updatedAt: new Date().toISOString() } : r;
-        }));
-        if (selected?.id === id) {
-            setSelected(prev => {
-                if (!prev) return null;
-                const next = NEXT[prev.status];
-                return next ? { ...prev, status: next } : prev;
-            });
+        const next = NEXT[report.status];
+        if (!next) return;
+        setSaving(true);
+        setError(null);
+        try {
+            const updated = report.status === 'REPORTED'
+                ? await send(`/api/maintenance/breakdown-reports/${report.id}/dispatch-recovery`, 'POST', {})
+                : await send(`/api/maintenance/breakdown-reports/${report.id}`, 'PATCH', { status: next });
+            replace(updated);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Could not update the report');
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -275,9 +247,17 @@ export default function BreakdownPage() {
 
                 {/* List */}
                 <div className="flex-1 min-w-0 space-y-3">
-                    {filtered.length === 0 && (
+                    {error && (
+                        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">{error}</div>
+                    )}
+                    {loading && (
                         <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-10 text-center text-[var(--text-faint)]">
-                            No breakdown reports found.
+                            Loading breakdown reports…
+                        </div>
+                    )}
+                    {!loading && filtered.length === 0 && (
+                        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-10 text-center text-[var(--text-faint)]">
+                            {reports.length === 0 ? 'No breakdowns reported yet.' : 'No breakdown reports with this status.'}
                         </div>
                     )}
                     {filtered.map(r => {
@@ -307,7 +287,7 @@ export default function BreakdownPage() {
                                         </div>
                                         <p className="text-sm font-medium text-[var(--text-main)]">
                                             {BREAKDOWN_TYPE_LABELS[r.breakdownType as BreakdownType] ?? r.breakdownType}
-                                            {' '}— Vehicle {r.vehicleId}
+                                            {' '}— {vehicleLabel(r.vehicleId)}
                                         </p>
                                         {r.location && (
                                             <p className="text-xs text-[var(--text-muted)] mt-0.5 flex items-center gap-1 truncate">
@@ -337,7 +317,10 @@ export default function BreakdownPage() {
                                 <h2 className="text-base font-semibold text-[var(--text-main)]">
                                     {BREAKDOWN_TYPE_LABELS[selected.breakdownType as BreakdownType] ?? selected.breakdownType}
                                 </h2>
-                                <p className="text-xs text-[var(--text-muted)] mt-0.5">Vehicle {selected.vehicleId}</p>
+                                <p className="text-xs text-[var(--text-muted)] mt-0.5">{vehicleLabel(selected.vehicleId)}</p>
+                                {driverLabel(selected.driverId) && (
+                                    <p className="text-xs text-[var(--text-faint)]">Driver: {driverLabel(selected.driverId)}</p>
+                                )}
                             </div>
                             <button onClick={() => setSelected(null)} className="text-[var(--text-faint)] hover:text-[var(--text-main)]">
                                 <X className="h-4 w-4" />
@@ -424,8 +407,9 @@ export default function BreakdownPage() {
                             const Icon = ICONS[selected.status];
                             return (
                                 <button
-                                    onClick={() => handleStatusAdvance(selected.id)}
-                                    className="w-full flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                                    onClick={() => void handleStatusAdvance(selected)}
+                                    disabled={saving}
+                                    className="w-full flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
                                 >
                                     <Icon className="h-4 w-4" />
                                     {LABELS[selected.status]}
@@ -452,22 +436,26 @@ export default function BreakdownPage() {
 
                         <div className="space-y-3">
                             <div>
-                                <label className="block text-xs text-[var(--text-muted)] mb-1">Vehicle ID *</label>
-                                <input
+                                <label className="block text-xs text-[var(--text-muted)] mb-1">Vehicle *</label>
+                                <select
                                     value={form.vehicleId}
                                     onChange={e => setForm(p => ({ ...p, vehicleId: e.target.value }))}
-                                    placeholder="e.g. v-001"
-                                    className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                />
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                >
+                                    <option value="">{vehicles.length ? 'Select a vehicle' : 'No vehicles found'}</option>
+                                    {vehicles.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
+                                </select>
                             </div>
                             <div>
-                                <label className="block text-xs text-[var(--text-muted)] mb-1">Driver ID</label>
-                                <input
+                                <label className="block text-xs text-[var(--text-muted)] mb-1">Driver</label>
+                                <select
                                     value={form.driverId}
                                     onChange={e => setForm(p => ({ ...p, driverId: e.target.value }))}
-                                    placeholder="e.g. d-101"
-                                    className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                />
+                                    className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)] px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                >
+                                    <option value="">Not recorded</option>
+                                    {drivers.map(d => <option key={d.id} value={d.id}>{d.label}</option>)}
+                                </select>
                             </div>
                             <div>
                                 <label className="block text-xs text-[var(--text-muted)] mb-1">Breakdown Type</label>
@@ -514,6 +502,8 @@ export default function BreakdownPage() {
                             </div>
                         </div>
 
+                        {formError && <p className="text-sm text-red-400">{formError}</p>}
+
                         <p className="text-xs text-[var(--text-faint)]">
                             A HIGH-priority maintenance request will be automatically created and linked to this report.
                         </p>
@@ -526,11 +516,11 @@ export default function BreakdownPage() {
                                 Cancel
                             </button>
                             <button
-                                onClick={handleCreate}
-                                disabled={!form.vehicleId}
+                                onClick={() => void handleCreate()}
+                                disabled={!form.vehicleId || saving}
                                 className="flex-1 rounded-lg bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-40 disabled:cursor-not-allowed"
                             >
-                                Report Breakdown
+                                {saving ? 'Saving…' : 'Report Breakdown'}
                             </button>
                         </div>
                     </div>

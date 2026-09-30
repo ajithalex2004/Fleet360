@@ -5,6 +5,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { parsePmPlanInput } from '@/lib/maintenance/pm-plan';
 export async function GET(request: NextRequest) {
 
     const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
@@ -50,31 +51,23 @@ export async function POST(request: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-            const body = await request.json();
+            const input = parsePmPlanInput(stripTenantOwnershipFields(await request.json().catch(() => null)), false);
+            if (!input.ok) return NextResponse.json({ error: input.error }, { status: 400 });
+            const d = input.data;
 
             const plan = await tx.maintenancePlan.create({
                 data: {
                     tenantId,
-                    name:             body.name,
-                    description:      body.description,
-                    maintenanceType:  body.maintenanceType  ?? 'PREVENTIVE',
-                    applicability:    body.applicability    ?? { allVehicles: true },
-                    gracePeriodDays:  body.gracePeriodDays  ?? 0,
-                    earlyWindowDays:  body.earlyWindowDays  ?? 7,
-                    earlyWindowKm:    body.earlyWindowKm    ?? 500,
-                    isActive:         body.isActive         ?? true,
-                    notifyDaysBefore: body.notifyDaysBefore ?? 7,
-                    triggers: {
-                        create: (body.triggers ?? []).map((t: {
-                            triggerType: string;
-                            intervalValue: number;
-                            intervalUnit: string;
-                        }) => ({
-                            triggerType:   t.triggerType,
-                            intervalValue: t.intervalValue,
-                            intervalUnit:  t.intervalUnit,
-                        })),
-                    },
+                    name:             d.name!,
+                    description:      d.description ?? null,
+                    maintenanceType:  d.maintenanceType ?? 'PREVENTIVE',
+                    applicability:    { allVehicles: true },
+                    gracePeriodDays:  d.gracePeriodDays  ?? 0,
+                    earlyWindowDays:  d.earlyWindowDays  ?? 7,
+                    earlyWindowKm:    d.earlyWindowKm    ?? 500,
+                    isActive:         d.isActive         ?? true,
+                    notifyDaysBefore: d.notifyDaysBefore ?? 7,
+                    triggers: { create: d.triggers ?? [] },
                 },
                 include: { triggers: true },
             });
