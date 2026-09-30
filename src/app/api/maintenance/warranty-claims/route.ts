@@ -5,7 +5,9 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { publishWarrantyClaimRaised } from '@/lib/maintenance/publish-event';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { runAsTenant } from '@/lib/rls-scope';
+import { parseClaimInput, warrantyOpenForClaims } from '@/lib/maintenance/warranty';
 // GET /api/maintenance/warranty-claims
 // Query params: warrantyId?, requestId?, status?
 export async function GET(request: NextRequest) {
@@ -47,7 +49,7 @@ export async function GET(request: NextRequest) {
 
 
 // POST /api/maintenance/warranty-claims
-// Body: { warrantyId, requestId?, claimDate?, claimedAmount?, description? }
+// Body: { warrantyId, description, requestId?, claimDate?, claimedAmount?, referenceNumber? }
 export async function POST(request: NextRequest) {
 
     const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
@@ -56,45 +58,53 @@ export async function POST(request: NextRequest) {
     }
     const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  // Published once the claim is committed: an event written from inside the
+  // transaction would run after it had closed.
+  const pending: { raised: Parameters<typeof publishWarrantyClaimRaised> | null } = { raised: null };
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
     try {
-            const body = await request.json();
+            const body = await request.json().catch(() => null);
+            if (!body || typeof body !== 'object') {
+                return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+            }
+            const input = parseClaimInput(body);
+            if (!input.ok) return NextResponse.json({ error: input.error }, { status: 400 });
 
+            // RLS scopes the lookup to this tenant's warranties.
+            const warranty = await tx.vehicleWarranty.findUnique({ where: { id: input.data.warrantyId } });
+            if (!warranty) return NextResponse.json({ error: 'Warranty not found' }, { status: 404 });
+            if (!warrantyOpenForClaims(warranty, input.data.claimDate)) {
+                return NextResponse.json(
+                    { error: 'This warranty is inactive or did not cover the claim date.' },
+                    { status: 409 },
+                );
+            }
+
+            // A new claim always starts PENDING; it is approved separately.
             const claim = await tx.warrantyClaim.create({
-                data: {
-                    tenantId,
-                    warrantyId:      body.warrantyId,
-                    requestId:       body.requestId       ?? null,
-                    claimDate:       body.claimDate ? new Date(body.claimDate) : null,
-                    claimedAmount:   body.claimedAmount   ?? null,
-                    approvedAmount:  body.approvedAmount  ?? null,
-                    status:          body.status          ?? 'PENDING',
-                    description:     body.description     ?? null,
-                    referenceNumber: body.referenceNumber ?? null,
-                },
+                data: { tenantId, ...input.data, status: 'PENDING' },
                 include: { VehicleWarranty: true },
             });
 
-            // Publish WarrantyClaimRaised event (fire-and-forget)
-            publishWarrantyClaimRaised(
-                (claim as any).id,
+            pending.raised = [
+                claim.id,
                 tenantId,
                 {
-                    claimId:       (claim as any).id,
-                    warrantyId:    (claim as any).warrantyId,
-                    requestId:     (claim as any).requestId       ?? null,
-                    vehicleId:     (claim as any).VehicleWarranty?.vehicleId ?? '',
+                    claimId:       claim.id,
+                    warrantyId:    claim.warrantyId,
+                    requestId:     claim.requestId       ?? null,
+                    vehicleId:     claim.VehicleWarranty?.vehicleId ?? '',
                     tenantId,
-                    claimedAmount: (claim as any).claimedAmount != null
-                        ? Number((claim as any).claimedAmount)
+                    claimedAmount: claim.claimedAmount != null
+                        ? Number(claim.claimedAmount)
                         : null,
                     currency:      'AED',
-                    description:   (claim as any).description     ?? null,
-                    claimDate:     (claim as any).claimDate
-                        ? new Date((claim as any).claimDate).toISOString()
+                    description:   claim.description     ?? null,
+                    claimDate:     claim.claimDate
+                        ? new Date(claim.claimDate).toISOString()
                         : null,
                 },
-            ).catch(err => console.warn('[maintenance] warranty_claim_raised publish failed:', err));
+            ];
 
             return NextResponse.json(
                 JSON.parse(JSON.stringify(claim)),
@@ -108,5 +118,11 @@ export async function POST(request: NextRequest) {
             );
         }
   });
+  const raised = pending.raised;
+  if (raised) {
+    void runAsTenant(tenantId, () => publishWarrantyClaimRaised(...raised))
+      .catch(err => console.warn('[maintenance] warranty_claim_raised publish failed:', err));
+  }
+  return response;
 }
 

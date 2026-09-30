@@ -1,54 +1,54 @@
 'use client';
 
-import { useState } from 'react';
-import { Shield, Plus, AlertTriangle, CheckCircle, Clock, X } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Shield, Plus, AlertTriangle, CheckCircle, Clock, X, Loader2 } from 'lucide-react';
 import { VehicleWarranty, WarrantyClaim, WarrantyType, WarrantyClaimStatus } from '@/types/maintenance';
 
-// ─── seed data ────────────────────────────────────────────────────────────────
+// ─── data ─────────────────────────────────────────────────────────────────────
 
-const SEED_WARRANTIES: VehicleWarranty[] = [
-    {
-        id: 'w-1',
-        tenantId: '',
-        vehicleId: 'v-001',
-        warrantyType: 'MANUFACTURER',
-        provider: 'Toyota',
-        startDate: '2023-01-15',
-        expiryDate: '2026-01-15',
-        coverageDescription: 'Full manufacturer warranty covering engine, transmission, and drivetrain',
-        maxClaimAmount: 50000,
-        isActive: true,
-        claims: [
-            { id: 'wc-1', warrantyId: 'w-1', claimDate: '2025-03-10', claimedAmount: 3200, approvedAmount: 3200, status: 'PAID', description: 'Engine sensor replacement', referenceNumber: 'CLM-2025-001', createdAt: '2025-03-10T09:00:00Z' },
-        ],
-    },
-    {
-        id: 'w-2',
-        tenantId: '',
-        vehicleId: 'v-002',
-        warrantyType: 'EXTENDED',
-        provider: 'Al-Futtaim Warranty Services',
-        startDate: '2024-06-01',
-        expiryDate: '2027-06-01',
-        coverageDescription: 'Extended warranty for electrical systems and AC',
-        maxClaimAmount: 20000,
-        isActive: true,
-        claims: [],
-    },
-    {
-        id: 'w-3',
-        tenantId: '',
-        vehicleId: 'v-003',
-        warrantyType: 'THIRD_PARTY',
-        provider: 'FleetGuard Insurance',
-        startDate: '2022-09-01',
-        expiryDate: '2024-09-01',
-        coverageDescription: 'Third-party mechanical breakdown coverage',
-        maxClaimAmount: 15000,
-        isActive: false,
-        claims: [],
-    },
-];
+interface VehicleOption { id: string; label: string }
+
+const day = (v: unknown) => (typeof v === 'string' ? v.slice(0, 10) : '');
+const money = (v: unknown) => (v === null || v === undefined || v === '' ? undefined : Number(v));
+
+/** API rows (ISO dates, decimal strings) to the screen's shape. */
+function toClaim(c: Record<string, unknown>): WarrantyClaim {
+    return {
+        id: String(c.id),
+        warrantyId: String(c.warrantyId),
+        requestId: (c.requestId as string) ?? undefined,
+        claimDate: day(c.claimDate) || undefined,
+        claimedAmount: money(c.claimedAmount),
+        approvedAmount: money(c.approvedAmount),
+        status: c.status as WarrantyClaimStatus,
+        description: (c.description as string) ?? undefined,
+        referenceNumber: (c.referenceNumber as string) ?? undefined,
+        createdAt: String(c.createdAt ?? ''),
+    };
+}
+
+function toWarranty(w: Record<string, unknown>): VehicleWarranty {
+    return {
+        id: String(w.id),
+        tenantId: String(w.tenantId ?? ''),
+        vehicleId: String(w.vehicleId),
+        warrantyType: w.warrantyType as WarrantyType,
+        provider: (w.provider as string) ?? undefined,
+        startDate: day(w.startDate),
+        expiryDate: day(w.expiryDate),
+        coverageDescription: (w.coverageDescription as string) ?? undefined,
+        maxClaimAmount: money(w.maxClaimAmount),
+        isActive: Boolean(w.isActive),
+        claims: Array.isArray(w.claims) ? (w.claims as Record<string, unknown>[]).map(toClaim) : [],
+    };
+}
+
+async function send(url: string, method: string, body: unknown) {
+    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error ?? `Request failed (${res.status})`);
+    return json as Record<string, unknown>;
+}
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -83,14 +83,22 @@ function isExpired(w: VehicleWarranty): boolean {
     return new Date(w.expiryDate) < new Date();
 }
 
+/** Approved and paid claims count against the claim limit. */
 function claimedTotal(w: VehicleWarranty): number {
-    return (w.claims ?? []).reduce((s, c) => s + (c.approvedAmount ?? c.claimedAmount ?? 0), 0);
+    return (w.claims ?? [])
+        .filter(c => c.status === 'APPROVED' || c.status === 'PAID')
+        .reduce((s, c) => s + (c.approvedAmount ?? c.claimedAmount ?? 0), 0);
 }
 
 // ─── component ────────────────────────────────────────────────────────────────
 
 export default function WarrantyPage() {
-    const [warranties, setWarranties] = useState<VehicleWarranty[]>(SEED_WARRANTIES);
+    const [warranties, setWarranties] = useState<VehicleWarranty[]>([]);
+    const [vehicles, setVehicles] = useState<VehicleOption[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [formError, setFormError] = useState<string | null>(null);
     const [modalMode, setModalMode] = useState<ModalMode>(null);
     const [selectedWarrantyId, setSelectedWarrantyId] = useState<string | null>(null);
     const [filterActive, setFilterActive] = useState<'all' | 'active' | 'expired'>('all');
@@ -129,54 +137,101 @@ export default function WarrantyPage() {
 
     const selectedWarranty = warranties.find(w => w.id === selectedWarrantyId) ?? null;
 
+    // ─── load ──────────────────────────────────────────────────────────────────
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const res = await fetch('/api/maintenance/warranties?activeOnly=false', { cache: 'no-store' });
+            const json = await res.json().catch(() => null);
+            if (!res.ok) throw new Error(json?.error ?? `Could not load warranties (${res.status})`);
+            setWarranties((Array.isArray(json) ? json : []).map(toWarranty));
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Could not load warranties');
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => { void load(); }, [load]);
+
+    useEffect(() => {
+        fetch('/api/vehicles', { cache: 'no-store' })
+            .then(r => (r.ok ? r.json() : []))
+            .then((rows: Array<Record<string, unknown>>) => setVehicles((Array.isArray(rows) ? rows : []).map(v => ({
+                id: String(v.id),
+                label: [v.licensePlate, [v.make, v.model].filter(Boolean).join(' ')].filter(Boolean).join(' · ') || String(v.id),
+            }))))
+            .catch(() => setVehicles([]));
+    }, []);
+
+    const vehicleLabel = (id: string) => vehicles.find(v => v.id === id)?.label ?? id;
+
     // ─── handlers ──────────────────────────────────────────────────────────────
 
-    const handleCreateWarranty = () => {
-        if (!warrantyForm.vehicleId || !warrantyForm.startDate || !warrantyForm.expiryDate) return;
-        const newW: VehicleWarranty = {
-            id: `w-${Date.now()}`,
-            tenantId: '',
-            ...warrantyForm,
-            isActive: true,
-            claims: [],
-        };
-        setWarranties(prev => [newW, ...prev]);
-        setModalMode(null);
-        setWarrantyForm({ vehicleId: '', warrantyType: 'MANUFACTURER', provider: '', startDate: '', expiryDate: '', coverageDescription: '', maxClaimAmount: 0 });
+    const closeModal = () => { setModalMode(null); setFormError(null); };
+
+    const handleCreateWarranty = async () => {
+        if (!warrantyForm.vehicleId || !warrantyForm.startDate || !warrantyForm.expiryDate) {
+            setFormError('Vehicle, start date and expiry date are required.');
+            return;
+        }
+        setSaving(true);
+        setFormError(null);
+        try {
+            const created = toWarranty(await send('/api/maintenance/warranties', 'POST', warrantyForm));
+            setWarranties(prev => [created, ...prev]);
+            closeModal();
+            setWarrantyForm({ vehicleId: '', warrantyType: 'MANUFACTURER', provider: '', startDate: '', expiryDate: '', coverageDescription: '', maxClaimAmount: 0 });
+        } catch (e) {
+            setFormError(e instanceof Error ? e.message : 'Could not save the warranty');
+        } finally {
+            setSaving(false);
+        }
     };
 
-    const handleCreateClaim = () => {
-        if (!selectedWarrantyId || !claimForm.description) return;
-        const newClaim: WarrantyClaim = {
-            id: `wc-${Date.now()}`,
-            warrantyId: selectedWarrantyId,
-            claimDate: claimForm.claimDate,
-            claimedAmount: claimForm.claimedAmount,
-            status: 'PENDING',
-            description: claimForm.description,
-            referenceNumber: claimForm.referenceNumber || undefined,
-            createdAt: new Date().toISOString(),
-        };
-        setWarranties(prev => prev.map(w =>
-            w.id === selectedWarrantyId ? { ...w, claims: [...(w.claims ?? []), newClaim] } : w
-        ));
-        setModalMode(null);
-        setClaimForm({ claimDate: new Date().toISOString().split('T')[0], claimedAmount: 0, description: '', referenceNumber: '' });
+    const handleCreateClaim = async () => {
+        if (!selectedWarrantyId || !claimForm.description.trim()) {
+            setFormError('Describe the repair being claimed.');
+            return;
+        }
+        setSaving(true);
+        setFormError(null);
+        try {
+            const claim = toClaim(await send('/api/maintenance/warranty-claims', 'POST', { warrantyId: selectedWarrantyId, ...claimForm }));
+            setWarranties(prev => prev.map(w =>
+                w.id === selectedWarrantyId ? { ...w, claims: [claim, ...(w.claims ?? [])] } : w
+            ));
+            closeModal();
+            setClaimForm({ claimDate: new Date().toISOString().split('T')[0], claimedAmount: 0, description: '', referenceNumber: '' });
+        } catch (e) {
+            setFormError(e instanceof Error ? e.message : 'Could not file the claim');
+        } finally {
+            setSaving(false);
+        }
     };
 
-    const handleToggleActive = (id: string) => {
-        setWarranties(prev => prev.map(w => w.id === id ? { ...w, isActive: !w.isActive } : w));
+    const handleToggleActive = async (w: VehicleWarranty) => {
+        setError(null);
+        try {
+            const updated = toWarranty(await send(`/api/maintenance/warranties/${w.id}`, 'PATCH', { isActive: !w.isActive }));
+            setWarranties(prev => prev.map(x => (x.id === w.id ? updated : x)));
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Could not update the warranty');
+        }
     };
 
-    const handleUpdateClaimStatus = (warrantyId: string, claimId: string, status: WarrantyClaimStatus) => {
-        setWarranties(prev => prev.map(w =>
-            w.id !== warrantyId ? w : {
-                ...w,
-                claims: (w.claims ?? []).map(c =>
-                    c.id !== claimId ? c : { ...c, status }
-                ),
-            }
-        ));
+    const handleUpdateClaimStatus = async (warrantyId: string, claimId: string, status: WarrantyClaimStatus) => {
+        setError(null);
+        try {
+            const updated = toClaim(await send(`/api/maintenance/warranty-claims/${claimId}`, 'PATCH', { status }));
+            setWarranties(prev => prev.map(w =>
+                w.id !== warrantyId ? w : { ...w, claims: (w.claims ?? []).map(c => (c.id === claimId ? updated : c)) }
+            ));
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Could not update the claim');
+        }
     };
 
     // ─── render ────────────────────────────────────────────────────────────────
@@ -190,13 +245,20 @@ export default function WarrantyPage() {
                     <p className="text-[var(--text-faint)] text-xs mt-1">Track vehicle warranties and manage repair cost claims</p>
                 </div>
                 <button
-                    onClick={() => setModalMode('create-warranty')}
+                    onClick={() => { setFormError(null); setModalMode('create-warranty'); }}
                     className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
                 >
                     <Plus className="h-4 w-4" />
                     Add Warranty
                 </button>
             </div>
+
+            {error && (
+                <div className="flex items-center justify-between gap-3 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+                    <span>{error}</span>
+                    <button onClick={() => void load()} className="text-xs underline">Retry</button>
+                </div>
+            )}
 
             {/* KPI strip */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -252,11 +314,11 @@ export default function WarrantyPage() {
                                             </span>
                                         )}
                                     </div>
-                                    <p className="mt-1 text-sm font-semibold text-[var(--text-main)] truncate">Vehicle: {w.vehicleId}</p>
+                                    <p className="mt-1 text-sm font-semibold text-[var(--text-main)] truncate">Vehicle: {vehicleLabel(w.vehicleId)}</p>
                                     {w.provider && <p className="text-xs text-[var(--text-muted)]">{w.provider}</p>}
                                 </div>
                                 <button
-                                    onClick={() => handleToggleActive(w.id)}
+                                    onClick={() => void handleToggleActive(w)}
                                     className="text-xs text-[var(--text-faint)] hover:text-[var(--text-main)] shrink-0"
                                     title={w.isActive ? 'Deactivate' : 'Activate'}
                                 >
@@ -320,12 +382,12 @@ export default function WarrantyPage() {
                                                 </span>
                                                 {c.status === 'PENDING' && (
                                                     <div className="flex gap-1">
-                                                        <button onClick={() => handleUpdateClaimStatus(w.id, c.id, 'APPROVED')} className="text-xs text-emerald-400 hover:text-emerald-300">✓</button>
-                                                        <button onClick={() => handleUpdateClaimStatus(w.id, c.id, 'REJECTED')} className="text-xs text-red-400 hover:text-red-300">✗</button>
+                                                        <button onClick={() => void handleUpdateClaimStatus(w.id, c.id, 'APPROVED')} className="text-xs text-emerald-400 hover:text-emerald-300">✓</button>
+                                                        <button onClick={() => void handleUpdateClaimStatus(w.id, c.id, 'REJECTED')} className="text-xs text-red-400 hover:text-red-300">✗</button>
                                                     </div>
                                                 )}
                                                 {c.status === 'APPROVED' && (
-                                                    <button onClick={() => handleUpdateClaimStatus(w.id, c.id, 'PAID')} className="text-xs text-blue-400 hover:text-blue-300">Mark Paid</button>
+                                                    <button onClick={() => void handleUpdateClaimStatus(w.id, c.id, 'PAID')} className="text-xs text-blue-400 hover:text-blue-300">Mark Paid</button>
                                                 )}
                                             </div>
                                         </div>
@@ -336,7 +398,7 @@ export default function WarrantyPage() {
                             {/* Footer actions */}
                             <div className="flex items-center justify-end gap-2 border-t border-[var(--border-subtle)] pt-3 mt-auto">
                                 <button
-                                    onClick={() => { setSelectedWarrantyId(w.id); setModalMode('create-claim'); }}
+                                    onClick={() => { setSelectedWarrantyId(w.id); setFormError(null); setModalMode('create-claim'); }}
                                     disabled={!w.isActive || expired}
                                     className="rounded-lg border border-[var(--border-subtle)] px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] disabled:opacity-40 disabled:cursor-not-allowed"
                                 >
@@ -347,11 +409,17 @@ export default function WarrantyPage() {
                     );
                 })}
 
-                {filtered.length === 0 && (
+                {loading && (
+                    <div className="col-span-full flex items-center justify-center gap-2 p-12 text-[var(--text-faint)]">
+                        <Loader2 className="h-5 w-5 animate-spin" /> Loading warranties…
+                    </div>
+                )}
+
+                {!loading && filtered.length === 0 && (
                     <div className="col-span-full rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-12 text-center">
                         <Shield className="h-10 w-10 text-[var(--text-faint)] mx-auto mb-3" />
                         <p className="text-[var(--text-faint)]">No warranties found</p>
-                        <button onClick={() => setModalMode('create-warranty')} className="mt-3 text-sm text-blue-400 hover:text-blue-300">
+                        <button onClick={() => { setFormError(null); setModalMode('create-warranty'); }} className="mt-3 text-sm text-blue-400 hover:text-blue-300">
                             Add the first warranty
                         </button>
                     </div>
@@ -366,8 +434,11 @@ export default function WarrantyPage() {
                         <div className="space-y-4">
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Vehicle ID *</label>
-                                    <input type="text" value={warrantyForm.vehicleId} onChange={e => setWarrantyForm({ ...warrantyForm, vehicleId: e.target.value })} className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm bg-[var(--bg-surface)] text-[var(--text-main)]" placeholder="v-001" />
+                                    <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Vehicle *</label>
+                                    <select value={warrantyForm.vehicleId} onChange={e => setWarrantyForm({ ...warrantyForm, vehicleId: e.target.value })} className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm bg-[var(--bg-surface)] text-[var(--text-main)]">
+                                        <option value="">{vehicles.length ? 'Select a vehicle' : 'No vehicles found'}</option>
+                                        {vehicles.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
+                                    </select>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-medium text-[var(--text-muted)] mb-1">Warranty Type</label>
@@ -401,9 +472,10 @@ export default function WarrantyPage() {
                                 <input type="number" min={0} value={warrantyForm.maxClaimAmount} onChange={e => setWarrantyForm({ ...warrantyForm, maxClaimAmount: parseFloat(e.target.value) || 0 })} className="w-full rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm bg-[var(--bg-surface)] text-[var(--text-main)]" />
                             </div>
                         </div>
+                        {formError && <p className="mt-4 text-sm text-red-400">{formError}</p>}
                         <div className="flex justify-end gap-3 mt-6">
-                            <button onClick={() => setModalMode(null)} className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]">Cancel</button>
-                            <button onClick={handleCreateWarranty} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">Create Warranty</button>
+                            <button onClick={closeModal} className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]">Cancel</button>
+                            <button onClick={() => void handleCreateWarranty()} disabled={saving} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60">{saving ? 'Saving…' : 'Create Warranty'}</button>
                         </div>
                     </div>
                 </div>
@@ -415,7 +487,7 @@ export default function WarrantyPage() {
                     <div className="w-full max-w-md rounded-xl bg-[var(--bg-surface)] p-6 shadow-xl">
                         <h3 className="text-lg font-bold text-[var(--text-main)] mb-1">File Warranty Claim</h3>
                         <p className="text-xs text-[var(--text-muted)] mb-4">
-                            {selectedWarranty.provider} · {WARRANTY_TYPE_LABELS[selectedWarranty.warrantyType]} · Vehicle {selectedWarranty.vehicleId}
+                            {selectedWarranty.provider} · {WARRANTY_TYPE_LABELS[selectedWarranty.warrantyType]} · Vehicle {vehicleLabel(selectedWarranty.vehicleId)}
                         </p>
                         <div className="space-y-4">
                             <div className="grid grid-cols-2 gap-3">
@@ -442,9 +514,10 @@ export default function WarrantyPage() {
                                 </div>
                             )}
                         </div>
+                        {formError && <p className="mt-4 text-sm text-red-400">{formError}</p>}
                         <div className="flex justify-end gap-3 mt-6">
-                            <button onClick={() => setModalMode(null)} className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]">Cancel</button>
-                            <button onClick={handleCreateClaim} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">Submit Claim</button>
+                            <button onClick={closeModal} className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]">Cancel</button>
+                            <button onClick={() => void handleCreateClaim()} disabled={saving} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60">{saving ? 'Saving…' : 'Submit Claim'}</button>
                         </div>
                     </div>
                 </div>
