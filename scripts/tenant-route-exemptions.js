@@ -39,6 +39,15 @@ const RULE_EXEMPTIONS = [
     dataScope: 'Public VAPID key only', owner: 'Identity & Security Engineering',
     test: 'tests/unit/public-endpoint-auth.test.ts',
   },
+  // ── Device ingest ──────────────────────────────────────────────────────────
+  {
+    file: 'src/app/api/assets/ble/ingest/route.ts', method: 'POST', type: 'missing_auth',
+    reason: 'BLE gateway hardware has no operator session. The gateway is identified by the SHA-256 of its X-Gateway-Key plus gateway_code in one withPlatformAdmin read (withWebhookTenant); every other statement runs under withTenantRls for the tenant stored on that gateway row. Client tenant headers and body fields are ignored.',
+    authMechanism: 'Per-gateway API key (SHA-256 match, unique index) via withWebhookTenant',
+    dataScope: 'Detections, tags, alerts and movements of the key owner gateway tenant only',
+    owner: 'Assets & IoT Engineering',
+    test: 'tests/unit/ble-ingest-auth.test.ts',
+  },
   // ── Session & Platform Bootstrap ───────────────────────────────────────────
   {
     file: 'src/app/api/admin/session/route.ts',

@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 import { ensureAssetsSchema } from '@/lib/assets/schema';
 import { ensureBleHwSchema } from '@/lib/assets/ble-hw-schema';
 import crypto from 'crypto';
@@ -10,8 +11,6 @@ import { requireAuthorizedTenant } from '@/lib/tenant-context';
 type Row = Record<string, unknown>;
 const query = <T = Row>(sql: string, ...v: unknown[]) =>
   prisma.$queryRawUnsafe<T[]>(sql, ...v).catch(() => [] as T[]);
-const exec = (sql: string, ...v: unknown[]) =>
-  prisma.$executeRawUnsafe(sql, ...v).catch(() => 0);
 
 function ser(rows: Row[]): Row[] {
   return rows.map(r => {
@@ -37,56 +36,66 @@ export async function POST(
   try {
     await ensureAssetsSchema();
     await ensureBleHwSchema();
-
-    const { id } = params;
-
-    // Look up the gateway
-    const [gateway] = await query(
-      `SELECT id, gateway_code, tenant_id FROM ble_gateways WHERE id::text = $1 AND tenant_id = $2`,
-      id,
-      tenantId,
-    );
-
-    if (!gateway) {
-      return NextResponse.json({ error: 'Gateway not found' }, { status: 404 });
-    }
-
-    // Generate key: "bleg_" + 32 random hex bytes
-    const rawKey = `bleg_${crypto.randomBytes(32).toString('hex')}`;
-
-    // Hash for storage
-    const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
-
-    // First 12 chars of raw key (including "bleg_" prefix) for display
-    const keyPrefix = rawKey.slice(0, 12);
-
-    const now = new Date().toISOString();
-
-    await exec(
-      `UPDATE ble_gateways
-       SET api_key_hash = $1,
-           api_key_prefix = $2,
-           api_key_created_at = $3,
-           updated_at = $3::timestamptz
-       WHERE id::text = $4 AND tenant_id = $5`,
-      keyHash,
-      keyPrefix,
-      now,
-      id,
-      tenantId,
-    );
-
-    return NextResponse.json(
-      ser([{
-        raw_key: rawKey,
-        prefix: keyPrefix,
-        created_at: now,
-        gateway_code: gateway.gateway_code,
-        gateway_id: id,
-      }])[0],
-      { status: 201 },
-    );
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
+
+  const { id } = params;
+  return withTenantRls(prisma, tenantId, async (tx) => {
+    try {
+      // Look up the gateway
+      const [gateway] = await query(
+        `SELECT id, gateway_code, tenant_id FROM ble_gateways WHERE id::text = $1 AND tenant_id = $2`,
+        id,
+        tenantId,
+      );
+
+      if (!gateway) {
+        return NextResponse.json({ error: 'Gateway not found' }, { status: 404 });
+      }
+
+      // Generate key: "bleg_" + 32 random hex bytes
+      const rawKey = `bleg_${crypto.randomBytes(32).toString('hex')}`;
+
+      // Hash for storage
+      const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
+
+      // First 12 chars of raw key (including "bleg_" prefix) for display
+      const keyPrefix = rawKey.slice(0, 12);
+
+      const now = new Date().toISOString();
+
+      // Errors are not swallowed: a failed save must not hand back a key that
+      // was never stored. api_key_created_at is cast because a bound string is text.
+      const saved = await tx.$executeRawUnsafe(
+        `UPDATE ble_gateways
+         SET api_key_hash = $1,
+             api_key_prefix = $2,
+             api_key_created_at = $3::timestamptz,
+             updated_at = $3::timestamptz
+         WHERE id::text = $4 AND tenant_id = $5`,
+        keyHash,
+        keyPrefix,
+        now,
+        id,
+        tenantId,
+      );
+      if (saved !== 1) {
+        return NextResponse.json({ error: 'Gateway not found' }, { status: 404 });
+      }
+
+      return NextResponse.json(
+        ser([{
+          raw_key: rawKey,
+          prefix: keyPrefix,
+          created_at: now,
+          gateway_code: gateway.gateway_code,
+          gateway_id: id,
+        }])[0],
+        { status: 201 },
+      );
+    } catch (err) {
+      return NextResponse.json({ error: String(err) }, { status: 500 });
+    }
+  });
 }
