@@ -589,7 +589,7 @@ export default function DocumentIntelligencePage() {
             <Zap className="w-5 h-5 text-emerald-400" />
           </div>
           <div className="text-2xl font-bold text-emerald-400 mt-2">
-            {stats.stpRatePct ? `${stats.stpRatePct}%` : '93.5%'}
+            {stats.stpRatePct != null ? `${stats.stpRatePct}%` : '—'}
           </div>
           <span className="text-xs text-slate-500 mt-1 flex items-center gap-1">Auto-processed without manual touch</span>
         </div>
@@ -622,9 +622,9 @@ export default function DocumentIntelligencePage() {
             <Clock className="w-5 h-5 text-purple-400" />
           </div>
           <div className="text-2xl font-bold text-purple-400 mt-2">
-            AED {stats.estimatedSavingsAed || 650}
+            AED {(stats.estimatedSavingsAed ?? 0).toLocaleString()}
           </div>
-          <span className="text-xs text-slate-500 mt-1 flex items-center gap-1">≈ {stats.estimatedHoursSaved ? `${stats.estimatedHoursSaved.toFixed(1)} hrs` : '14.5 hrs'} labor saved</span>
+          <span className="text-xs text-slate-500 mt-1 flex items-center gap-1">≈ {(stats.estimatedHoursSaved ?? 0).toFixed(1)} hrs labor saved</span>
         </div>
       </div>
 

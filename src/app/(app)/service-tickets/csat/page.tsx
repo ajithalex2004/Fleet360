@@ -82,7 +82,7 @@ export default function ServiceTicketsCsatPage() {
             <Star className="w-4 h-4 fill-amber-400 text-amber-400" /> Average CSAT Score
           </div>
           <div className="text-3xl font-extrabold text-white mt-2">
-            {analytics?.averageCsatScore ?? 4.9} <span className="text-sm text-slate-400 font-normal">/ 5.0</span>
+            {analytics?.averageCsatScore != null && (analytics?.totalFeedbackReceived ?? 0) > 0 ? analytics.averageCsatScore : '—'} <span className="text-sm text-slate-400 font-normal">/ 5.0</span>
           </div>
           <div className="text-[11px] text-slate-400 mt-1">Based on {analytics?.totalFeedbackReceived ?? 0} driver reviews</div>
         </div>
@@ -92,7 +92,7 @@ export default function ServiceTicketsCsatPage() {
             <UserCheck className="w-4 h-4" /> First-Contact Resolution (FCR)
           </div>
           <div className="text-3xl font-extrabold text-emerald-400 mt-2">
-            {analytics?.firstContactResolutionRate ?? 88}%
+            {analytics?.firstContactResolutionRate != null && (analytics?.totalFeedbackReceived ?? 0) > 0 ? `${analytics.firstContactResolutionRate}%` : '—'}
           </div>
           <div className="text-[11px] text-slate-400 mt-1">Resolved without supervisor escalation</div>
         </div>
@@ -102,7 +102,7 @@ export default function ServiceTicketsCsatPage() {
             <ThumbsUp className="w-4 h-4" /> Net Promoter Score (NPS)
           </div>
           <div className="text-3xl font-extrabold text-violet-300 mt-2">
-            +{analytics?.npsBreakdown.netPromoterScore ?? 80}
+            {analytics?.npsBreakdown && (analytics?.totalFeedbackReceived ?? 0) > 0 ? `${analytics.npsBreakdown.netPromoterScore > 0 ? '+' : ''}${analytics.npsBreakdown.netPromoterScore}` : '—'}
           </div>
           <div className="text-[11px] text-slate-400 mt-1">
             {analytics?.npsBreakdown.promoters ?? 0} Promoters · {analytics?.npsBreakdown.detractors ?? 0} Detractors

@@ -335,7 +335,7 @@ export default function DemandForecastPage() {
             <Coins className="h-4 w-4" />
           </div>
           <div className="text-2xl font-bold text-[var(--text-main)]">
-            AED {potentialSavings > 0 ? potentialSavings.toLocaleString() : '1,250'}
+            AED {potentialSavings.toLocaleString()}
           </div>
           <p className="mt-1 text-[11px] text-emerald-300">Avoided overtime & fuel waste</p>
         </div>

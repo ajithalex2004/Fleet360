@@ -227,7 +227,7 @@ export default function FleetDiagnosticsPage() {
             <Activity className="w-4 h-4 text-cyan-400" />
           </div>
           <p className="text-2xl font-bold text-cyan-300">
-            {summary?.fleetAverageVhi ?? 100}%
+            {summary?.fleetAverageVhi != null ? `${summary.fleetAverageVhi}%` : '—'}
           </p>
           <p className="text-[11px] text-[var(--text-faint)]">Fleet-wide mechanical health mean</p>
         </div>

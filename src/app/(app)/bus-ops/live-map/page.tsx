@@ -5,11 +5,10 @@
  * Mirrors the school-bus live-map layout (KPI strip → breakdown alert →
  * map + sidebar) but built on real Google Maps tiles and staff-transport
  * data (passengers instead of students, no attendant column). Auto-refreshes
- * every 15s. If the tenant has zero positions on first load, we seed 5 demo
- * vehicles around Abu Dhabi so the map isn't empty during a demo.
+ * every 15s. An empty fleet shows an empty map; nothing is invented.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Satellite, RefreshCw } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
@@ -72,28 +71,6 @@ function sinceStr(sec: number): string {
   return `${Math.floor(sec / 3600)}h ago`;
 }
 
-// ── Demo seeder ─────────────────────────────────────────────────────────────
-// Only runs when the tenant has zero positions on first load. Anchored around
-// Abu Dhabi / Musaffah / Yas Island so it's realistic for staff-transport.
-async function seedDemoPositions() {
-  const buses = [
-    { vehicleId: 'BOX-DEMO-1', vehiclePlate: 'AUH 12-345', routeName: 'Musaffah → HQ Morning',   lat: 24.3623, lng: 54.5210, speed: 52, status: 'EN_ROUTE',  passengers: 34, driver: 'Rashid Al Mansouri',  nextStop: 'ICAD 3 · Gate B',            heading: 45 },
-    { vehicleId: 'BOX-DEMO-2', vehiclePlate: 'AUH 67-890', routeName: 'ICAD Loop Evening',       lat: 24.3720, lng: 54.5080, speed: 0,  status: 'AT_STOP',   passengers: 28, driver: 'Salem Al Otaiba',      nextStop: 'ICAD 2 · Bay 4',              heading: 180 },
-    { vehicleId: 'BOX-DEMO-3', vehiclePlate: 'AUH 24-680', routeName: 'Yas Island → HQ',         lat: 24.4890, lng: 54.6100, speed: 68, status: 'EN_ROUTE',  passengers: 45, driver: 'Khalid Al Hamdan',    nextStop: 'Al Reem Bridge',              heading: 270 },
-    { vehicleId: 'BOX-DEMO-4', vehiclePlate: 'AUH 13-579', routeName: 'Khalifa City → HQ',       lat: 24.4180, lng: 54.5730, speed: 42, status: 'EN_ROUTE',  passengers: 22, driver: 'Omar Al Shamsi',       nextStop: 'Airport Road Interchange',    heading: 315 },
-    { vehicleId: 'BOX-DEMO-5', vehiclePlate: 'AUH 99-001', routeName: null,                      lat: 24.4200, lng: 54.4700, speed: 0,  status: 'IDLE',      passengers: 0,  driver: 'Saeed Al Falasi',      nextStop: null,                          heading: 0   },
-  ];
-  await Promise.all(buses.map(b => fetch('/api/bus-ops/fleet-positions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      vehicleId: b.vehicleId, vehiclePlate: b.vehiclePlate, routeName: b.routeName,
-      driverName: b.driver, lat: b.lat, lng: b.lng,
-      speedKmh: b.speed, headingDeg: b.heading, status: b.status,
-      nextStopName: b.nextStop, passengersOnboard: b.passengers,
-    }),
-  }).catch(() => {})));
-}
 
 // ── VehicleCard ─────────────────────────────────────────────────────────────
 function VehicleCard({ v, selected, onSelect }: { v: VehiclePositionFull; selected: boolean; onSelect: () => void }) {
@@ -205,7 +182,6 @@ export default function LiveFleetMapPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [loading, setLoading]         = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
-  const seededRef = useRef(false);
 
   const fetchPositions = useCallback(async () => {
     try {
@@ -222,23 +198,7 @@ export default function LiveFleetMapPage() {
   }, [filterStatus]);
 
   useEffect(() => {
-    const init = async () => {
-      // Only seed on the very first call if the tenant has no positions.
-      // Guard is a module-scope ref so React StrictMode's double-mount doesn't
-      // double-seed on the same page load.
-      if (!seededRef.current) {
-        seededRef.current = true;
-        try {
-          const r = await fetch('/api/bus-ops/fleet-positions', { cache: 'no-store' });
-          const d = r.ok ? await r.json() : { positions: [] };
-          if ((d.positions ?? []).length === 0) {
-            await seedDemoPositions();
-          }
-        } catch { /* seed is best-effort */ }
-      }
-      await fetchPositions();
-    };
-    init();
+    void fetchPositions();
     const id = setInterval(fetchPositions, REFRESH_MS);
     return () => clearInterval(id);
   }, [fetchPositions]);
