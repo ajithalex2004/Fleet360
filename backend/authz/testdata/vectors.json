@@ -9,8 +9,8 @@
     "*:*:*"
    ],
    "claim": {
-    "v": "14e88206",
-    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "v": "7deb1e4f",
+    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "w": 1
    }
   },
@@ -176,11 +176,17 @@
     "agents:edit:*",
     "agents:delete:*",
     "agents:approve:*",
-    "agents:export:*"
+    "agents:export:*",
+    "finance:edit:*",
+    "finance:delete:*",
+    "leasing:edit:renewals",
+    "bus-ops:create:route-consolidation",
+    "bus-ops:edit:incidents",
+    "reports:create:*"
    ],
    "claim": {
-    "v": "14e88206",
-    "b": "______________8HgP________8H"
+    "v": "7deb1e4f",
+    "b": "______________8HgP__________AQ"
    }
   },
   {
@@ -338,11 +344,17 @@
     "agents:edit:*",
     "agents:delete:*",
     "agents:approve:*",
-    "agents:export:*"
+    "agents:export:*",
+    "finance:edit:*",
+    "finance:delete:*",
+    "leasing:edit:renewals",
+    "bus-ops:create:route-consolidation",
+    "bus-ops:edit:incidents",
+    "reports:create:*"
    ],
    "claim": {
-    "v": "14e88206",
-    "b": "______________8HgP________8H"
+    "v": "7deb1e4f",
+    "b": "______________8HgP__________AQ"
    }
   },
   {
@@ -368,12 +380,21 @@
     "driver-mgmt:edit:profiles",
     "driver-mgmt:delete:profiles",
     "driver-mgmt:export:*",
+    "assets:view:*",
+    "assets:create:*",
+    "assets:edit:*",
+    "assets:delete:*",
+    "assets:approve:*",
+    "assets:export:*",
+    "compliance:view:*",
+    "compliance:create:*",
     "reports:view:*",
-    "reports:export:*"
+    "reports:export:*",
+    "reports:create:*"
    ],
    "claim": {
-    "v": "14e88206",
-    "b": "AAAAAAAAAMD_Bx8GAAAAAAAAAAAA"
+    "v": "7deb1e4f",
+    "b": "AAAAAAAAAMD_B38GAAAAAAAAfgAAAQ"
    }
   },
   {
@@ -390,8 +411,8 @@
     "rental:edit:pricing"
    ],
    "claim": {
-    "v": "14e88206",
-    "b": "AAAAAM4FAAAAAAAAAAAAAAAAAAAA"
+    "v": "7deb1e4f",
+    "b": "AAAAAM4FAAAAAAAAAAAAAAAAAAAAAA"
    }
   },
   {
@@ -424,8 +445,8 @@
     "agents:view:*"
    ],
    "claim": {
-    "v": "14e88206",
-    "b": "AQAAAAIQAEAQSCGKiCAIgiAIgiAA"
+    "v": "7deb1e4f",
+    "b": "AQAAAAIQAEAQSCGKiCAIgiAIgiAAAA"
    }
   },
   {
@@ -438,8 +459,8 @@
     "custom:thing:x"
    ],
    "claim": {
-    "v": "14e88206",
-    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "v": "7deb1e4f",
+    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "x": [
      "custom:thing:x",
      "fleet:view:vehicles",
@@ -457,8 +478,8 @@
     "maintenance:view:*"
    ],
    "claim": {
-    "v": "14e88206",
-    "b": "AAAAAAAAAAARAAAAAAAAAAAAAAAA",
+    "v": "7deb1e4f",
+    "b": "AAAAAAAAAAARAAAAAAAAAAAAAAAAAA",
     "x": [
      "logistics:create:shipments"
     ]
@@ -470,8 +491,8 @@
    "plan": "PRO",
    "permissions": [],
    "claim": {
-    "v": "14e88206",
-    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "v": "7deb1e4f",
+    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
    }
   },
   {
@@ -496,8 +517,8 @@
     "*:*:*"
    ],
    "claim": {
-    "v": "14e88206",
-    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "v": "7deb1e4f",
+    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "w": 1
    }
   }

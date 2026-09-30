@@ -21,10 +21,11 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
+import { loadModuleAccess } from '@/lib/authz/module-access';
 import { getStorage } from '@/lib/storage';
 import { fileContentProblem } from '@/lib/storage/file-type';
 import { logAudit } from '@/lib/audit';
@@ -67,6 +68,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  // Shared by the leasing documents page and the RAC counter (see the
+  // 'leasing/documents/upload' area in policy-matrix.ts).
+  const denied = (await loadModuleAccess(req.headers, tenantId))(['leasing', 'rental'], 'create', '/api/leasing/documents/upload');
+  if (denied) return denied;
   try {
     const form = await req.formData();
     const file = form.get('file');

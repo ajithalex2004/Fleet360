@@ -33,7 +33,7 @@
  */
 import type { ModuleKey } from '@/lib/modules';
 
-export const POLICY_VERSION = '2026-09-30.1';
+export const POLICY_VERSION = '2026-09-30.2';
 
 export type Rule =
   | { kind: 'module'; module: ModuleKey; action?: 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'export' }
@@ -66,6 +66,9 @@ export const AREAS: Readonly<Record<string, AreaRule>> = {
   'alert-configs': TENANT_ADMIN,
   whatsapp: TENANT_ADMIN,
   workflow: TENANT_ADMIN,
+  // Starting a module's workflow (a leasing quotation's approval, …): the
+  // handler requires create in that module (module-access.ts).
+  'workflow/trigger': { read: TENANT_ADMIN, write: SELF },
 
   // ── The signed-in user's own things ───────────────────────────────────
   auth: SELF,
@@ -111,10 +114,16 @@ export const AREAS: Readonly<Record<string, AreaRule>> = {
 
   // ── Modules ───────────────────────────────────────────────────────────
   leasing: m('leasing'),
+  // Shared document upload: the leasing documents page and the RAC counter.
+  // The handler requires leasing or rental create (module-access.ts).
+  'leasing/documents/upload': { read: m('leasing'), write: SELF },
   esign: m('leasing'),
   rental: m('rental'),
   'bus-ops': m('bus-ops'),
-  'branch-staff': m('bus-ops'),
+  // Leasing and rental branch staff (module LEASING | RENTAL | BOTH). The
+  // module is in the query or body, so the handler checks it
+  // (requireModuleAccess in src/lib/authz/module-access.ts).
+  'branch-staff': SELF,
   'route-optimizer': m('bus-ops'),
   'school-bus': m('school-bus'),
   logistics: m('logistics'),
@@ -154,6 +163,11 @@ export const AREAS: Readonly<Record<string, AreaRule>> = {
   assets: m('assets'),
   sustainability: m('sustainability'),
   agents: m('agents'),
+  // AI panels embedded in a module's own screens are decided by that module,
+  // not by the AI agents area.
+  'agents/anomalies': m('finance'),
+  'agents/preventive-maintenance': m('maintenance'),
+  'agents/route-results': m('school-bus'),
 };
 
 /**
