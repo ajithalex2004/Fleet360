@@ -1,5 +1,5 @@
 {
- "policyVersion": "2026-09-29.2",
+ "policyVersion": "2026-09-30.1",
  "probes": [
   {
    "id": "GET /api/agents",

@@ -3,7 +3,7 @@
 Generated from `src/lib/authz/policy-matrix.ts` and `SYSTEM_ROLES` by `tests/unit/authz-policy-matrix.test.ts`.
 Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-policy-matrix.test.ts`.
 
-- Policy version: `2026-09-29.2`
+- Policy version: `2026-09-30.1`
 - Permission catalogue version: `14e88206` (163 permissions)
 
 ## API areas
@@ -16,7 +16,8 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `alerts` | 3 | self | self |
 | `alerts/configs` | 0 | tenant-admin | tenant-admin |
 | `ambulance` | 2 | module `incidents` | module `incidents` |
-| `assets` | 34 | module `assets` | module `assets` |
+| `assets` | 33 | module `assets` | module `assets` |
+| `assets/ble/ingest` | 1 | external | external |
 | `auth` | 22 | self | self |
 | `billing` | 2 | tenant-admin | tenant-admin |
 | `booking-portal` | 4 | module `booking-portal` | module `booking-portal` |

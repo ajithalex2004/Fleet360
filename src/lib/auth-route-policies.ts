@@ -44,6 +44,12 @@ export const PUBLIC_EXACT: readonly string[] = [
   // must bypass the session check here or that auth can never be reached.
   '/api/health/db-role',
   '/api/version',
+  // Assets BLE gateway ingest — hardware posts detections with its own API
+  // key (X-Gateway-Key) and has no operator session. The handler is the auth
+  // boundary: it finds the gateway by the key's SHA-256, 401s any mismatch,
+  // and takes tenantId from the gateway row. Exact match only: the rest of
+  // /api/assets/ble/ stays session-protected.
+  '/api/assets/ble/ingest',
   // /api/auth/me is NOT public — it must receive the injected headers
 ];
 

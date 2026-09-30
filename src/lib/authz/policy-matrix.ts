@@ -33,7 +33,7 @@
  */
 import type { ModuleKey } from '@/lib/modules';
 
-export const POLICY_VERSION = '2026-09-29.2';
+export const POLICY_VERSION = '2026-09-30.1';
 
 export type Rule =
   | { kind: 'module'; module: ModuleKey; action?: 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'export' }
@@ -105,6 +105,7 @@ export const AREAS: Readonly<Record<string, AreaRule>> = {
   tenants: EXTERNAL,       // provisioning and domain verification (public)
   'integrations/enterprise/webhook': EXTERNAL,
   'bus-ops/gateway': EXTERNAL,
+  'assets/ble/ingest': EXTERNAL,
   'push/run-scheduler': EXTERNAL,
   'documents/intelligence/cron': EXTERNAL,
 
