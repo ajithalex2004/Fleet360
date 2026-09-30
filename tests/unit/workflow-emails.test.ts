@@ -48,7 +48,10 @@ const baseSteps = () => [
 ];
 
 vi.mock('@/lib/branding', () => ({ getBranding: async () => null }));
-vi.mock('@/lib/rls-scope', () => ({ runOutsideRlsScope: <T>(fn: () => Promise<T>) => fn() }));
+vi.mock('@/lib/rls-scope', () => ({
+  runOutsideRlsScope: <T>(fn: () => Promise<T>) => fn(),
+  runAsTenant: <T>(_tenant: string, fn: () => Promise<T>) => fn(),
+}));
 vi.mock('@/lib/rls', () => ({
   withPlatformAdmin: async (_p: unknown, fn: (tx: unknown) => Promise<unknown>) => fn({
     userTenant: { findMany: async (args: unknown) => { state.roleQueries.push(args); return state.roleHolders; } },

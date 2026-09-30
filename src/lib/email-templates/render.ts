@@ -187,3 +187,11 @@ export function sampleValues(variables: TemplateVariable[], companyName: string)
   values.companyName = companyName;
   return { values, blocks };
 }
+
+/** A bulleted list block (e.g. the policies in a digest); items are escaped. */
+export function listBlock(items: string[]): EmailBlock {
+  return {
+    html: `<ul style="margin:0 0 16px;padding-inline-start:20px;color:#374151;font-size:14px;line-height:1.7;">${items.map((i) => `<li>${escapeHtml(i)}</li>`).join('')}</ul>`,
+    text: items.map((i) => `- ${i}`).join('\n'),
+  };
+}

@@ -15,14 +15,15 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
 
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { runSweep } from '@/lib/prisma-sweep';
-import { sendEmail } from '@/services/email/emailService';
+import { appUrl, sendTemplatedEmail } from '@/lib/email-templates';
+import { listBlock } from '@/lib/email-templates/render';
+import { tenantContact } from '@/lib/leasing/staff-recipients';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
@@ -166,23 +167,14 @@ export async function POST(req: NextRequest) {
         const newHits = r.result.assessments.filter(a => a.alertCreated);
         if (newHits.length === 0) continue;
         try {
-          const tenant = await prisma.tenant.findUnique({
-            where: { id: r.tenantId },
-            select: { contactEmail: true, contactName: true, name: true },
+          const contact = await tenantContact(r.tenantId);
+          if (!contact) continue;
+          const result = await sendTemplatedEmail({
+            tenantId: r.tenantId, key: 'leasing.mileage_overdue_digest', to: contact.email,
+            values: { recipientName: contact.name, count: String(newHits.length), contractsUrl: appUrl('/leasing/contracts') },
+            blocks: { contracts: listBlock(newHits.map(h => `${h.contractNumber ?? h.contractId.slice(0, 8)}: ${h.message}`)) },
           });
-          if (!tenant?.contactEmail) continue;
-          const rows = newHits.map(h =>
-            `<li>${h.contractNumber ?? h.contractId.slice(0, 8)}: ${h.message}</li>`,
-          ).join('');
-          await sendEmail({
-            to: [{ email: tenant.contactEmail, name: tenant.contactName ?? tenant.name }],
-            subject: `Mileage reading overdue on ${newHits.length} contract${newHits.length === 1 ? '' : 's'}`,
-            htmlBody: `<p>Dear ${tenant.contactName ?? tenant.name},</p>
-              <p>The following contract${newHits.length === 1 ? ' has' : 's have'} an overdue mileage reading:</p>
-              <ul>${rows}</ul>
-              <p>Best regards,<br/>Fleet360</p>`,
-          });
-          counts.emailsSent += 1;
+          if (result.sent) counts.emailsSent += 1;
         } catch (emailErr) {
           captureException(emailErr, { context: 'leasing.mileage.sweep-stale.email', tags: { tenantId: r.tenantId } });
         }

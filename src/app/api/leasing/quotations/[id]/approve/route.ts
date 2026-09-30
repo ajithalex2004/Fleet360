@@ -12,13 +12,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
-import { sendEmail } from '@/services/email/emailService';
-import {
-  generateInternalApprovalEmail,
-  generateCreditReviewEmail,
-  generateHandoverEmail
-} from '@/services/email/leasingTemplates';
-import { quotationEmailHtml } from '@/lib/email-templates/quotation';
+import { appUrl, sendTemplatedEmail } from '@/lib/email-templates';
+import { sendQuotationEmail, type QuotationForEmail } from '@/lib/leasing/quotation-email';
+import { staffRecipients } from '@/lib/leasing/staff-recipients';
+import { parseEmailList } from '@/lib/workflow-db';
+import { sessionUser } from '@/lib/session-user';
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -106,82 +104,57 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     });
 
     // ── Side Effects & Notifications ──
-    const lesseeName    = quotation.lessee?.name ?? 'Customer';
-    const lesseeEmail   = quotation.lessee?.email ?? 'customer@example.com';
-    const quotationNo   = quotation.quotationNumber ?? '(unnumbered)';
-    const currency      = quotation.currency ?? 'AED';
-    const amountStr     = `${currency} ${Number(quotation.totalMonthlyRate ?? 0).toLocaleString()}`;
-    const customerEmail = customRecipient || lesseeEmail;
+    // Through the tenant's email templates (Admin > Email templates) and the
+    // platform email sender; best-effort, never failing the status change.
+    // These used to go to made-up @fleet360.app team addresses and, with no
+    // lessee email, to customer@example.com, through a sender that read
+    // settings no screen fills in.
+    const quotationNo = quotation.quotationNumber ?? '(unnumbered)';
+    const lesseeName  = quotation.lessee?.name ?? '';
+    const currency    = quotation.currency ?? 'AED';
+    const monthlyRate = `${currency} ${Number(quotation.totalMonthlyRate ?? 0).toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    // An explicit recipient list from the approver, else the lessee's email.
+    const customerTo = customRecipient
+      ? parseEmailList(String(customRecipient))
+      : parseEmailList(quotation.lessee?.email ?? '');
+    const reviewUrl = appUrl('/leasing/quotations');
 
-    if (nextStatus === 'PENDING_APPROVAL') {
-      const template = generateInternalApprovalEmail(quotationNo, lesseeName, amountStr);
-      await sendEmail({
-        to: [{ email: 'approvals@fleet360.app', name: 'Internal Approvers' }],
-        ...template
-      });
-    }
+    try {
+      if (nextStatus === 'PENDING_APPROVAL') {
+        const to = await staffRecipients(tenantId, 'LEASING_MANAGER');
+        if (to.length) {
+          await sendTemplatedEmail({
+            tenantId, key: 'leasing.quotation_internal_approval', to,
+            values: { quotationNumber: quotationNo, lesseeName, monthlyRate, reviewUrl },
+          });
+        }
+      }
 
-    if (nextStatus === 'SENT_TO_CUSTOMER') {
-      const fullQuotation = quotation;
-
-      if (fullQuotation) {
-        const fqLesseeName  = fullQuotation.lessee?.name ?? 'Customer';
-        const fqLesseeEmail = fullQuotation.lessee?.email ?? 'customer@example.com';
-        const fqQuotationNo = fullQuotation.quotationNumber ?? '(unnumbered)';
-
-        const html = quotationEmailHtml({
-          quotationNumber: fqQuotationNo,
-          lesseeName: fqLesseeName,
-          leaseType: fullQuotation.leaseType as any,
-          durationMonths: fullQuotation.durationMonths ?? undefined,
-          startDate: fullQuotation.startDate?.toISOString(),
-          endDate: fullQuotation.endDate?.toISOString(),
-          validUntil: fullQuotation.validUntil?.toISOString(),
-          currency: fullQuotation.currency ?? undefined,
-          totalMonthlyRate: Number(fullQuotation.totalMonthlyRate || 0),
-          totalContractValue: Number(fullQuotation.totalContractValue || 0),
-          securityDeposit: Number(fullQuotation.securityDeposit || 0),
-          vehicles: (fullQuotation.vehicles || []).map((v: any) => ({
-            vehicleType: v.vehicleType,
-            make: v.make || '',
-            model: v.model || '',
-            year: v.year || undefined,
-            quantity: Number(v.quantity || 1),
-            monthlyRate: Number(v.monthlyRate || 0),
-          })),
-          notes: fullQuotation.notes || undefined
-        });
-
-        const toRecipients = customRecipient
-          ? customRecipient.split(/[,;]/).map((email: string) => ({ email: email.trim(), name: fqLesseeName }))
-          : [{ email: fqLesseeEmail, name: fqLesseeName }];
-
-        await sendEmail({
-          to: toRecipients,
-          subject: `Lease Quotation from Fleet360 - ${fqQuotationNo}`,
-          htmlBody: html
+      if (nextStatus === 'SENT_TO_CUSTOMER' && customerTo.length) {
+        await sendQuotationEmail({
+          tenantId, quotation: quotation as unknown as QuotationForEmail,
+          to: customerTo, sender: await sessionUser(req.headers),
         });
       }
-    }
 
-    if (nextStatus === 'PENDING_CREDIT_APPROVAL') {
-      const template = generateCreditReviewEmail(quotationNo, lesseeName);
-      await sendEmail({
-        to: [{ email: 'credit@fleet360.app', name: 'Credit Team' }],
-        ...template
-      });
-    }
+      if (nextStatus === 'PENDING_CREDIT_APPROVAL') {
+        const to = await staffRecipients(tenantId, 'FINANCE_MANAGER');
+        if (to.length) {
+          await sendTemplatedEmail({
+            tenantId, key: 'leasing.quotation_credit_review', to,
+            values: { quotationNumber: quotationNo, lesseeName, reviewUrl },
+          });
+        }
+      }
 
-    if (nextStatus === 'DELIVERED') {
-      const template = generateHandoverEmail(quotationNo, lesseeName);
-      const toRecipients = customRecipient
-          ? customRecipient.split(/[,;]/).map((email: string) => ({ email: email.trim(), name: lesseeName }))
-          : [{ email: customerEmail, name: lesseeName }];
-
-      await sendEmail({
-        to: toRecipients,
-        ...template
-      });
+      if (nextStatus === 'DELIVERED' && customerTo.length) {
+        await sendTemplatedEmail({
+          tenantId, key: 'leasing.vehicle_handover', to: customerTo,
+          values: { lesseeName, quotationNumber: quotationNo, portalUrl: appUrl('/leasing-portal') },
+        });
+      }
+    } catch (emailErr) {
+      console.error('Quotation notification failed:', emailErr instanceof Error ? emailErr.message : emailErr);
     }
 
     return NextResponse.json(updated);

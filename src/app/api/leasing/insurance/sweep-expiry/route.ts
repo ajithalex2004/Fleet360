@@ -16,14 +16,15 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
 
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { runSweep } from '@/lib/prisma-sweep';
-import { sendEmail } from '@/services/email/emailService';
+import { appUrl, sendTemplatedEmail } from '@/lib/email-templates';
+import { listBlock } from '@/lib/email-templates/render';
+import { tenantContact } from '@/lib/leasing/staff-recipients';
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
@@ -198,23 +199,14 @@ export async function POST(req: NextRequest) {
         const newHits = r.result.assessments.filter(a => a.alertCreated);
         if (newHits.length === 0) continue;
         try {
-          const tenant = await prisma.tenant.findUnique({
-            where: { id: r.tenantId },
-            select: { contactEmail: true, contactName: true, name: true },
+          const contact = await tenantContact(r.tenantId);
+          if (!contact) continue;
+          const result = await sendTemplatedEmail({
+            tenantId: r.tenantId, key: 'leasing.insurance_expiry_digest', to: contact.email,
+            values: { recipientName: contact.name, count: String(newHits.length), insuranceUrl: appUrl('/leasing/insurance') },
+            blocks: { policies: listBlock(newHits.map(h => `${h.severity === 'ERROR' ? 'EXPIRED' : 'Expiring soon'}: ${h.insurer} policy ${h.policyNo ?? h.policyId.slice(0, 8)} - ${h.message}`)) },
           });
-          if (!tenant?.contactEmail) continue;
-          const rows = newHits.map(h =>
-            `<li>${h.severity === 'ERROR' ? '<strong style="color:#dc2626">EXPIRED</strong>' : 'Expiring soon'} — ${h.insurer} policy ${h.policyNo ?? h.policyId.slice(0, 8)}: ${h.message}</li>`,
-          ).join('');
-          await sendEmail({
-            to: [{ email: tenant.contactEmail, name: tenant.contactName ?? tenant.name }],
-            subject: `Insurance renewal alert${newHits.length > 1 ? 's' : ''} — ${newHits.length} polic${newHits.length === 1 ? 'y' : 'ies'} need attention`,
-            htmlBody: `<p>Dear ${tenant.contactName ?? tenant.name},</p>
-              <p>The following vehicle insurance polic${newHits.length === 1 ? 'y needs' : 'ies need'} attention:</p>
-              <ul>${rows}</ul>
-              <p>Best regards,<br/>Fleet360</p>`,
-          });
-          counts.emailsSent += 1;
+          if (result.sent) counts.emailsSent += 1;
         } catch (emailErr) {
           captureException(emailErr, { context: 'leasing.insurance.sweep-expiry.email', tags: { tenantId: r.tenantId } });
         }

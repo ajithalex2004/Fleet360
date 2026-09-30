@@ -11,12 +11,18 @@
  *
  * Storage: email_templates / email_template_versions
  * (prisma/migrations/20261019090000_email_templates), under RLS. Queries use
- * the global client, which runs them with the request's tenant (or platform
- * context under runAsTenant('*')); each one also filters on the tenant.
+ * the global client. Rendering reads the tenant's rows as that tenant
+ * (runAsTenant), so it works the same from a request, a cron sweep or a
+ * background job; pass only a tenant id the server derived itself (the
+ * session's, or a record's), never one from request input. The admin
+ * storage functions run with the request's tenant (or platform context under
+ * runAsTenant('*')); every query also filters on the tenant.
  */
 import 'server-only';
 import { prisma } from '@/lib/prisma';
 import { getBranding } from '@/lib/branding';
+import { runAsTenant } from '@/lib/rls-scope';
+import type { EmailSendResult } from '@/lib/email';
 import {
   getTemplateDef, templateVariables, type EmailLocale, type EmailTemplateDef,
 } from './catalogue';
@@ -54,12 +60,12 @@ export interface TenantEmailContext {
 
 /** Name, language and branding of a tenant; safe defaults on any failure. */
 export async function tenantEmailContext(tenantId: string): Promise<TenantEmailContext> {
-  const [tenant, branding] = await Promise.all([
+  const [tenant, branding] = await runAsTenant(tenantId, () => Promise.all([
     prisma.$queryRawUnsafe<Array<{ name: string | null; default_language: string | null }>>(
       `SELECT name, default_language FROM tenants WHERE id::text = $1 LIMIT 1`, tenantId,
     ).catch(() => []),
     getBranding(tenantId).catch(() => null),
-  ]);
+  ]));
   const language = tenant[0]?.default_language ?? branding?.defaultLanguage ?? 'en';
   return {
     companyName: tenant[0]?.name || branding?.productName || 'Fleet360',
@@ -75,12 +81,12 @@ const scopeCondition = (tenantId: string | null, index: number) =>
 
 /** The tenant's and the platform's saved rows for one template and language. */
 export async function findTemplateRows(tenantId: string, key: string, locale: EmailLocale) {
-  const rows = await prisma.$queryRawUnsafe<TemplateRow[]>(
+  const rows = await runAsTenant(tenantId, () => prisma.$queryRawUnsafe<TemplateRow[]>(
     `SELECT * FROM email_templates
       WHERE template_key = $1 AND channel = 'EMAIL' AND locale = $2 AND is_active
         AND (tenant_id = $3 OR tenant_id IS NULL)`,
     key, locale, tenantId,
-  );
+  ));
   return {
     tenant: rows.find((r) => r.tenant_id === tenantId) ?? null,
     platform: rows.find((r) => r.tenant_id === null) ?? null,
@@ -139,6 +145,38 @@ export async function renderEmail(args: {
     },
   });
   return { ...rendered, locale, source };
+}
+
+/** An absolute link into the app. */
+export function appUrl(path: string): string {
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000';
+  return `${base.replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
+/**
+ * Renders a template for `tenantId` and sends it through the platform email
+ * sender (src/lib/email.ts). Never throws: a rendering or sending failure is
+ * returned as a not-sent result (and logged), so callers that email as a
+ * side effect can ignore it.
+ */
+export async function sendTemplatedEmail(args: Parameters<typeof renderEmail>[0] & {
+  to: string | string[];
+  replyTo?: string;
+}): Promise<EmailSendResult> {
+  try {
+    const { to, replyTo, ...render } = args;
+    const email = await renderEmail(render);
+    // Loaded on use: the sender pulls in Sentry and env validation.
+    const { sendEmail } = await import('@/lib/email');
+    const result = await sendEmail({ to, subject: email.subject, html: email.html, text: email.text, ...(replyTo ? { replyTo } : {}) });
+    if (!result.sent) {
+      console.warn(`[email-templates] ${args.key} for tenant ${args.tenantId} not sent (${result.reason ?? 'unknown'})`);
+    }
+    return result;
+  } catch (e) {
+    console.error(`[email-templates] ${args.key} failed:`, e instanceof Error ? e.message : e);
+    return { sent: false, reason: 'smtp_error', error: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 // ── Storage (admin screen) ───────────────────────────────────────────────

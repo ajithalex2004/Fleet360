@@ -120,6 +120,321 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     },
   },
   {
+    key: 'leasing.contract_ready',
+    module: 'Leasing',
+    name: 'Contract ready for review',
+    description: 'Sent to the customer when a new lease contract is prepared for them.',
+    variables: [
+      { name: 'lesseeName', description: 'Customer name', sample: 'Gulf Trading LLC', fallback: { en: 'Valued Customer', ar: 'عميلنا العزيز' } },
+      { name: 'contractNumber', description: 'Contract number', sample: 'LC-2026-0107' },
+      { name: 'monthlyRate', description: 'Monthly rate', sample: 'AED 12,500.00' },
+      { name: 'portalUrl', description: 'Link to the leasing portal', sample: 'https://app.example/leasing-portal' },
+    ],
+    defaults: {
+      en: {
+        subject: 'New lease contract ready for your review - {{contractNumber}}',
+        body: [
+          'Dear {{lesseeName}},',
+          'A new lease contract has been prepared for you: **{{contractNumber}}**, at **{{monthlyRate}}** per month.',
+          'Please log in to the leasing portal to review the terms and sign.',
+          '[Review my contract]({{portalUrl}})',
+          'Kind regards,\n{{companyName}}',
+        ].join('\n\n'),
+      },
+      ar: {
+        subject: 'عقد تأجير جديد جاهز للمراجعة - {{contractNumber}}',
+        body: [
+          'السادة {{lesseeName}} المحترمين،',
+          'تم إعداد عقد تأجير جديد لكم: **{{contractNumber}}**، بقيمة **{{monthlyRate}}** شهرياً.',
+          'يرجى تسجيل الدخول إلى بوابة التأجير لمراجعة الشروط والتوقيع.',
+          '[مراجعة العقد]({{portalUrl}})',
+          'مع أطيب التحيات،\n{{companyName}}',
+        ].join('\n\n'),
+      },
+    },
+  },
+  {
+    key: 'leasing.quotation_internal_approval',
+    module: 'Leasing',
+    name: 'Quotation needs internal approval',
+    description: "Sent to your Leasing Managers when a quotation is submitted for internal approval (falls back to your company's contact email).",
+    variables: [
+      { name: 'quotationNumber', description: 'Quotation number', sample: 'QT-2026-0042' },
+      { name: 'lesseeName', description: 'Customer name', sample: 'Gulf Trading LLC' },
+      { name: 'monthlyRate', description: 'Total monthly rate', sample: 'AED 12,500.00' },
+      { name: 'reviewUrl', description: 'Link to the quotations list', sample: 'https://app.example/leasing/quotations' },
+    ],
+    defaults: {
+      en: {
+        subject: '[Internal Approval] Lease Quotation {{quotationNumber}}',
+        body: [
+          'Hello team,',
+          'Lease quotation **{{quotationNumber}}** for {{lesseeName}} ({{monthlyRate}} per month) needs your internal approval before it goes to the customer.',
+          '[Review the quotation]({{reviewUrl}})',
+        ].join('\n\n'),
+      },
+      ar: {
+        subject: '[موافقة داخلية] عرض سعر التأجير {{quotationNumber}}',
+        body: [
+          'مرحباً فريق العمل،',
+          'عرض سعر التأجير **{{quotationNumber}}** للعميل {{lesseeName}} (بقيمة {{monthlyRate}} شهرياً) يحتاج إلى موافقتكم الداخلية قبل إرساله إلى العميل.',
+          '[مراجعة العرض]({{reviewUrl}})',
+        ].join('\n\n'),
+      },
+    },
+  },
+  {
+    key: 'leasing.quotation_credit_review',
+    module: 'Leasing',
+    name: 'Quotation needs credit review',
+    description: "Sent to your Finance Managers when a customer accepts a quotation and credit review starts (falls back to your company's contact email).",
+    variables: [
+      { name: 'quotationNumber', description: 'Quotation number', sample: 'QT-2026-0042' },
+      { name: 'lesseeName', description: 'Customer name', sample: 'Gulf Trading LLC' },
+      { name: 'reviewUrl', description: 'Link to the quotations list', sample: 'https://app.example/leasing/quotations' },
+    ],
+    defaults: {
+      en: {
+        subject: '[Credit Review] {{lesseeName}} - Quotation {{quotationNumber}}',
+        body: [
+          'Hello team,',
+          '{{lesseeName}} has accepted lease quotation **{{quotationNumber}}**. Please complete the credit assessment so procurement can go ahead.',
+          '[Open the credit case]({{reviewUrl}})',
+        ].join('\n\n'),
+      },
+      ar: {
+        subject: '[مراجعة ائتمانية] {{lesseeName}} - عرض السعر {{quotationNumber}}',
+        body: [
+          'مرحباً فريق العمل،',
+          'وافق العميل {{lesseeName}} على عرض سعر التأجير **{{quotationNumber}}**. يرجى إكمال التقييم الائتماني للمتابعة في إجراءات الشراء.',
+          '[فتح ملف المراجعة]({{reviewUrl}})',
+        ].join('\n\n'),
+      },
+    },
+  },
+  {
+    key: 'leasing.vehicle_handover',
+    module: 'Leasing',
+    name: 'Vehicle handover complete',
+    description: 'Sent to the customer when their leased vehicle has been delivered.',
+    variables: [
+      { name: 'lesseeName', description: 'Customer name', sample: 'Gulf Trading LLC', fallback: { en: 'Valued Customer', ar: 'عميلنا العزيز' } },
+      { name: 'quotationNumber', description: 'Quotation reference', sample: 'QT-2026-0042' },
+      { name: 'portalUrl', description: 'Link to the leasing portal', sample: 'https://app.example/leasing-portal' },
+    ],
+    defaults: {
+      en: {
+        subject: 'Handover complete - welcome to {{companyName}}',
+        body: [
+          'Dear {{lesseeName}},',
+          'Your vehicle has been delivered and the handover is complete (reference **{{quotationNumber}}**). Your contract documents are available in the leasing portal.',
+          '[Open the leasing portal]({{portalUrl}})',
+          'Safe travels!\n{{companyName}}',
+        ].join('\n\n'),
+      },
+      ar: {
+        subject: 'تم التسليم بنجاح - مرحباً بكم في {{companyName}}',
+        body: [
+          'السادة {{lesseeName}} المحترمين،',
+          'تم تسليم مركبتكم واكتملت عملية الاستلام (المرجع **{{quotationNumber}}**). مستندات العقد متاحة في بوابة التأجير.',
+          '[فتح بوابة التأجير]({{portalUrl}})',
+          'نتمنى لكم رحلات آمنة!\n{{companyName}}',
+        ].join('\n\n'),
+      },
+    },
+  },
+  {
+    key: 'leasing.inquiry_follow_up',
+    module: 'Leasing',
+    name: 'Enquiry follow-up message',
+    description: "Wraps the message a salesperson writes to a customer from the enquiry screen. The salesperson's own subject, when given, replaces this one.",
+    variables: [
+      { name: 'customerName', description: 'Customer name', sample: 'Omar Hassan', fallback: { en: 'Customer', ar: 'عميلنا العزيز' } },
+      { name: 'message', description: "The salesperson's message", sample: 'Thank you for your enquiry about our SUV lease packages. I have attached our latest offers.' },
+      { name: 'senderName', description: 'Salesperson name', sample: 'Sam Sales' },
+      { name: 'senderEmail', description: 'Salesperson email', sample: 'sam@acme.example' },
+    ],
+    defaults: {
+      en: {
+        subject: 'Following up on your enquiry',
+        body: ['Dear {{customerName}},', '{{message}}', 'Kind regards,\n{{senderName}}\n{{companyName}}'].join('\n\n'),
+      },
+      ar: {
+        subject: 'متابعة استفساركم',
+        body: ['عزيزي/عزيزتي {{customerName}}،', '{{message}}', 'مع أطيب التحيات،\n{{senderName}}\n{{companyName}}'].join('\n\n'),
+      },
+    },
+  },
+  {
+    key: 'leasing.inquiry_followup_digest',
+    module: 'Leasing',
+    name: 'Overdue follow-ups digest (staff)',
+    description: "Daily list of enquiries with overdue follow-ups, sent to your company's contact email.",
+    variables: [
+      { name: 'recipientName', description: 'Your contact name', sample: 'Sales team', fallback: { en: 'team', ar: 'فريق العمل' } },
+      { name: 'count', description: 'Number of enquiries', sample: '3' },
+      { name: 'followUps', description: 'List of enquiries with overdue follow-ups', sample: '[list]', block: true },
+      { name: 'crmUrl', description: 'Link to the enquiries list', sample: 'https://app.example/leasing/inquiries' },
+    ],
+    defaults: {
+      en: {
+        subject: '[Leasing CRM] {{count}} enquiries with overdue follow-ups',
+        body: ['Dear {{recipientName}},', 'These enquiries have overdue follow-ups:', '{{followUps}}', '[Open enquiries]({{crmUrl}})'].join('\n\n'),
+      },
+      ar: {
+        subject: '[إدارة العملاء] {{count}} استفسارات بمتابعات متأخرة',
+        body: ['عزيزي/عزيزتي {{recipientName}}،', 'الاستفسارات التالية لديها متابعات متأخرة:', '{{followUps}}', '[فتح الاستفسارات]({{crmUrl}})'].join('\n\n'),
+      },
+    },
+  },
+  {
+    key: 'leasing.insurance_expiry_digest',
+    module: 'Leasing',
+    name: 'Insurance renewal alert (staff)',
+    description: "Daily list of vehicle insurance policies expiring or expired, sent to your company's contact email.",
+    variables: [
+      { name: 'recipientName', description: 'Your contact name', sample: 'Fleet team', fallback: { en: 'team', ar: 'فريق العمل' } },
+      { name: 'count', description: 'Number of policies', sample: '2' },
+      { name: 'policies', description: 'List of policies needing attention', sample: '[list]', block: true },
+      { name: 'insuranceUrl', description: 'Link to insurance policies', sample: 'https://app.example/leasing/insurance' },
+    ],
+    defaults: {
+      en: {
+        subject: 'Insurance renewal alert - {{count}} policies need attention',
+        body: ['Dear {{recipientName}},', 'These vehicle insurance policies need attention:', '{{policies}}', '[Review insurance]({{insuranceUrl}})'].join('\n\n'),
+      },
+      ar: {
+        subject: 'تنبيه تجديد التأمين - {{count}} وثائق تحتاج إلى متابعة',
+        body: ['عزيزي/عزيزتي {{recipientName}}،', 'وثائق تأمين المركبات التالية تحتاج إلى متابعة:', '{{policies}}', '[مراجعة التأمين]({{insuranceUrl}})'].join('\n\n'),
+      },
+    },
+  },
+  {
+    key: 'leasing.mileage_overdue_digest',
+    module: 'Leasing',
+    name: 'Mileage reading overdue (staff)',
+    description: "Daily list of contracts whose mileage reading is overdue, sent to your company's contact email.",
+    variables: [
+      { name: 'recipientName', description: 'Your contact name', sample: 'Operations team', fallback: { en: 'team', ar: 'فريق العمل' } },
+      { name: 'count', description: 'Number of contracts', sample: '4' },
+      { name: 'contracts', description: 'List of contracts with overdue readings', sample: '[list]', block: true },
+      { name: 'contractsUrl', description: 'Link to contracts', sample: 'https://app.example/leasing/contracts' },
+    ],
+    defaults: {
+      en: {
+        subject: 'Mileage reading overdue on {{count}} contracts',
+        body: ['Dear {{recipientName}},', 'These contracts have an overdue mileage reading:', '{{contracts}}', '[Open contracts]({{contractsUrl}})'].join('\n\n'),
+      },
+      ar: {
+        subject: 'قراءة العداد متأخرة في {{count}} عقود',
+        body: ['عزيزي/عزيزتي {{recipientName}}،', 'العقود التالية لديها قراءة عداد متأخرة:', '{{contracts}}', '[فتح العقود]({{contractsUrl}})'].join('\n\n'),
+      },
+    },
+  },
+  {
+    key: 'leasing.document_expiring',
+    module: 'Leasing',
+    name: 'Customer document expiring',
+    description: 'Sent to the customer 30, 14 and 1 day before one of their documents (e.g. trade licence) expires.',
+    variables: [
+      { name: 'recipientName', description: 'Customer name', sample: 'Gulf Trading LLC', fallback: { en: 'Valued Customer', ar: 'عميلنا العزيز' } },
+      { name: 'documentName', description: 'Document name', sample: 'Trade licence 2026' },
+      { name: 'documentType', description: 'Document type', sample: 'TRADE_LICENSE' },
+      { name: 'expiryDate', description: 'Expiry date', sample: '15 October 2026' },
+      { name: 'daysLeft', description: 'Days until expiry', sample: '14' },
+      { name: 'portalUrl', description: 'Link to the leasing portal', sample: 'https://app.example/leasing-portal' },
+    ],
+    defaults: {
+      en: {
+        subject: 'Document expiring in {{daysLeft}} days: {{documentName}}',
+        body: [
+          'Dear {{recipientName}},',
+          'Your document **{{documentName}}** ({{documentType}}) expires on {{expiryDate}}, in {{daysLeft}} days.',
+          'Please upload a renewed copy through the leasing portal to avoid any disruption to your lease.',
+          '[Upload a renewed copy]({{portalUrl}})',
+          'Kind regards,\n{{companyName}}',
+        ].join('\n\n'),
+      },
+      ar: {
+        subject: 'مستند ينتهي خلال {{daysLeft}} يوماً: {{documentName}}',
+        body: [
+          'السادة {{recipientName}} المحترمين،',
+          'تنتهي صلاحية المستند **{{documentName}}** ({{documentType}}) في {{expiryDate}}، أي خلال {{daysLeft}} يوماً.',
+          'يرجى رفع نسخة مجددة عبر بوابة التأجير لتجنب أي انقطاع في عقد التأجير.',
+          '[رفع نسخة مجددة]({{portalUrl}})',
+          'مع أطيب التحيات،\n{{companyName}}',
+        ].join('\n\n'),
+      },
+    },
+  },
+  {
+    key: 'leasing.document_expired',
+    module: 'Leasing',
+    name: 'Customer document expired',
+    description: 'Sent to the customer when one of their documents has expired.',
+    variables: [
+      { name: 'recipientName', description: 'Customer name', sample: 'Gulf Trading LLC', fallback: { en: 'Valued Customer', ar: 'عميلنا العزيز' } },
+      { name: 'documentName', description: 'Document name', sample: 'Trade licence 2026' },
+      { name: 'documentType', description: 'Document type', sample: 'TRADE_LICENSE' },
+      { name: 'expiryDate', description: 'Expiry date', sample: '15 October 2026' },
+      { name: 'portalUrl', description: 'Link to the leasing portal', sample: 'https://app.example/leasing-portal' },
+    ],
+    defaults: {
+      en: {
+        subject: 'Document expired: {{documentName}}',
+        body: [
+          'Dear {{recipientName}},',
+          'Your document **{{documentName}}** ({{documentType}}) expired on {{expiryDate}}.',
+          'Please upload a renewed copy through the leasing portal as soon as possible to avoid any disruption to your lease.',
+          '[Upload a renewed copy]({{portalUrl}})',
+          'Kind regards,\n{{companyName}}',
+        ].join('\n\n'),
+      },
+      ar: {
+        subject: 'انتهت صلاحية المستند: {{documentName}}',
+        body: [
+          'السادة {{recipientName}} المحترمين،',
+          'انتهت صلاحية المستند **{{documentName}}** ({{documentType}}) في {{expiryDate}}.',
+          'يرجى رفع نسخة مجددة عبر بوابة التأجير في أقرب وقت لتجنب أي انقطاع في عقد التأجير.',
+          '[رفع نسخة مجددة]({{portalUrl}})',
+          'مع أطيب التحيات،\n{{companyName}}',
+        ].join('\n\n'),
+      },
+    },
+  },
+  {
+    key: 'leasing.portal_invitation',
+    module: 'Leasing',
+    name: 'Leasing portal invitation',
+    description: "Sent to a customer's contact invited to the leasing portal, with their account setup link.",
+    variables: [
+      { name: 'recipientName', description: 'Invited person', sample: 'Omar Hassan', fallback: { en: 'Customer', ar: 'عميلنا العزيز' } },
+      { name: 'lesseeName', description: 'Customer company', sample: 'Gulf Trading LLC' },
+      { name: 'setupUrl', description: 'Account setup link', sample: 'https://app.example/leasing-portal/setup?token=…' },
+      { name: 'expiresOn', description: 'Link expiry date', sample: '7 October 2026' },
+    ],
+    defaults: {
+      en: {
+        subject: 'Set up your {{companyName}} leasing portal access for {{lesseeName}}',
+        body: [
+          'Dear {{recipientName}},',
+          'You have been invited to the {{companyName}} leasing portal for **{{lesseeName}}**. Set up your account to view your contracts and invoices, make payments, sign renewals, upload documents and report issues online.',
+          '[Set up my access]({{setupUrl}})',
+          "This link expires on {{expiresOn}}. If you didn't expect this email, you can safely ignore it.",
+        ].join('\n\n'),
+      },
+      ar: {
+        subject: 'إعداد وصولك إلى بوابة التأجير لدى {{companyName}} لـ {{lesseeName}}',
+        body: [
+          'عزيزي/عزيزتي {{recipientName}}،',
+          'تمت دعوتك إلى بوابة التأجير لدى {{companyName}} نيابةً عن **{{lesseeName}}**. قم بإعداد حسابك لعرض العقود والفواتير، وإجراء المدفوعات، وتوقيع التجديدات، ورفع المستندات، والإبلاغ عن المشكلات عبر الإنترنت.',
+          '[إعداد حسابي]({{setupUrl}})',
+          'تنتهي صلاحية هذا الرابط في {{expiresOn}}. إذا لم تكن تتوقع هذه الرسالة، يمكنك تجاهلها.',
+        ].join('\n\n'),
+      },
+    },
+  },
+  {
     key: 'shipper.portal_invitation',
     module: 'Logistics',
     name: 'Shipper portal invitation',
