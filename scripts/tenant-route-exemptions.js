@@ -48,6 +48,14 @@ const RULE_EXEMPTIONS = [
     owner: 'Assets & IoT Engineering',
     test: 'tests/unit/ble-ingest-auth.test.ts',
   },
+  {
+    file: 'src/app/api/bus-ops/gateway/events/route.ts', method: 'POST', type: 'missing_auth',
+    reason: 'In-bus BLE gateways have no operator session. The gateway row is found by gatewayId in one withPlatformAdmin read (withWebhookTenant) and the raw body HMAC-SHA256 is verified against its secret there; every other statement runs under withTenantRls for the tenant stored on that gateway row. Client tenant headers are ignored.',
+    authMechanism: 'Per-gateway HMAC-SHA256 of the raw body (x-gateway-signature) via withWebhookTenant',
+    dataScope: 'Boarding events, presence and trips of the signing gateway tenant only',
+    owner: 'Bus Operations Engineering',
+    test: 'tests/unit/bus-gateway-events-auth.test.ts',
+  },
   // ── Session & Platform Bootstrap ───────────────────────────────────────────
   {
     file: 'src/app/api/admin/session/route.ts',
