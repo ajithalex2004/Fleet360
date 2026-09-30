@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 // GET /api/maintenance/warranties
-// Query params: tenantId?, vehicleId?, activeOnly?
+// Query params: vehicleId?, activeOnly?
 export async function GET(request: NextRequest) {
 
     const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
@@ -18,7 +18,6 @@ export async function GET(request: NextRequest) {
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
             const { searchParams } = new URL(request.url);
-            const tenantId  = searchParams.get('tenantId')  ?? '';
             const vehicleId = searchParams.get('vehicleId') ?? undefined;
             const activeOnly = searchParams.get('activeOnly') !== 'false';
 
@@ -46,7 +45,7 @@ export async function GET(request: NextRequest) {
 
 // POST /api/maintenance/warranties
 // Body: { vehicleId, warrantyType, provider?, startDate, expiryDate,
-//         coverageDescription?, maxClaimAmount?, isActive?, tenantId? }
+//         coverageDescription?, maxClaimAmount?, isActive? }
 export async function POST(request: NextRequest) {
 
     const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
@@ -61,7 +60,7 @@ export async function POST(request: NextRequest) {
 
             const warranty = await tx.vehicleWarranty.create({
                 data: {
-                    tenantId:            body.tenantId            ?? '',
+                    tenantId,
                     vehicleId:           body.vehicleId,
                     warrantyType:        body.warrantyType,
                     provider:            body.provider            ?? null,

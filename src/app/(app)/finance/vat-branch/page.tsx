@@ -53,31 +53,17 @@ function fmt(n: number) {
 export default function VATBranchPage() {
   const [data,     setData]     = useState<VATData | null>(null);
   const [loading,  setLoading]  = useState(true);
-  const [tenantId, setTenantId] = useState('');
   const [quarter,  setQuarter]  = useState(QUARTERS[0]);
-  const [tenants,  setTenants]  = useState<{ id: string; name: string; trn?: string }[]>([]);
 
-  useEffect(() => {
-    fetch('/api/admin/tenants?limit=200')
-      .then(r => r.ok ? r.json() : [])
-      .then(d => {
-        const list = Array.isArray(d) ? d : (d.data ?? []);
-        setTenants(list);
-        if (list.length > 0 && !tenantId) setTenantId(list[0].id);
-      })
-      .catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const load = useCallback(async () => {
-    if (!tenantId) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/finance/vat-branch?tenantId=${tenantId}&quarter=${quarter}`);
+      const res = await fetch(`/api/finance/vat-branch?quarter=${quarter}`);
       if (res.ok) setData(await res.json());
     } catch { /* silent */ }
     finally { setLoading(false); }
-  }, [tenantId, quarter]);
+  }, [quarter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -94,16 +80,6 @@ export default function VATBranchPage() {
 
       {/* Controls */}
       <div className="flex flex-wrap gap-3 items-end">
-        <div>
-          <label className="block text-[var(--text-muted)] text-xs mb-1.5">Tenant</label>
-          <select
-            value={tenantId}
-            onChange={e => setTenantId(e.target.value)}
-            className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] text-sm focus:outline-none min-w-48"
-          >
-            {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
-        </div>
         <div>
           <label className="block text-[var(--text-muted)] text-xs mb-1.5">VAT Period</label>
           <select

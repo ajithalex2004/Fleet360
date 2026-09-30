@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
  * GET  /api/dispatch/jobs — list dispatch jobs
  * POST /api/dispatch/jobs — manual admin override
  *
- * Query params: tenantId, status, serviceType, priority, dateFrom, dateTo, page, limit
+ * Query params: status, serviceType, priority, dateFrom, dateTo, page, limit
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
@@ -40,7 +40,6 @@ export async function GET(req: NextRequest) {
         await ensureDispatchSchema();
 
         const sp          = new URL(req.url).searchParams;
-        const tenantId    = sp.get('tenantId')    ?? '';
         const status      = sp.get('status')      ?? '';
         const serviceType = sp.get('serviceType') ?? '';
         const priority    = sp.get('priority')    ?? '';

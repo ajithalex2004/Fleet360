@@ -76,7 +76,6 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
       const { searchParams } = new URL(req.url);
-      const tenantId  = searchParams.get('tenantId') ?? '';
       const months    = Math.min(parseInt(searchParams.get('months') ?? '12'), 24);
 
       const now      = new Date();
