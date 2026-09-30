@@ -5,7 +5,7 @@ import { withTenantRls } from '@/lib/rls';
 import { updateStep, deleteStep } from '@/lib/workflow-db';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-import { checkWorkflowStepAccess } from '@/lib/admin-scope';
+import { checkWorkflowStepAccess, workflowRoute } from '@/lib/admin-scope';
 import { withAuditedAction } from '@/lib/audited-action';
 async function handlePUT(req: NextRequest, props: { params: Promise<{ stepId: string }> }) {
   const params = await props.params;
@@ -47,5 +47,5 @@ async function handleDELETE(_req: NextRequest, props: { params: Promise<{ stepId
 }
 
 // Privileged writes are always audited (src/lib/audited-action.ts).
-export const PUT = withAuditedAction(handlePUT);
-export const DELETE = withAuditedAction(handleDELETE);
+export const PUT = withAuditedAction(workflowRoute(handlePUT));
+export const DELETE = withAuditedAction(workflowRoute(handleDELETE));

@@ -2,6 +2,16 @@ import { prisma } from '@/lib/prisma';
 import { randomUUID } from 'crypto';
 
 /**
+ * Tenant isolation (prisma/migrations/20261018090000_workflow_tenant_isolation):
+ * all four tables carry "tenantId" and are under forced RLS. Queries here use
+ * the global client, which runs each statement of an authenticated request
+ * with that request's app.tenant_id (src/lib/prisma.ts), so a tenant sees its
+ * own rows plus platform templates (definitions and steps with tenantId NULL,
+ * read-only). Platform admins reach every tenant by running the call under
+ * runAsTenant('*') (see withWorkflowCaller in src/lib/admin-scope.ts).
+ * The engine functions also filter by tenant explicitly, so a connection that
+ * bypasses RLS still cannot cross tenants.
+ *
  * WorkflowDefinition / WorkflowStep / WorkflowInstance / WorkflowStepInstance
  * schema now lives in prisma/migrations/20260910000032_workflow_tables.
  * ensureWorkflowTables() used to lazily bootstrap it here on every call
@@ -71,6 +81,7 @@ interface WorkflowInstanceRow {
   completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  tenantId: string | null;
 }
 
 interface WorkflowStepInstanceRow {
@@ -87,6 +98,7 @@ interface WorkflowStepInstanceRow {
   actionedByEmail: string | null;
   dueAt: Date | null;
   createdAt: Date;
+  tenantId: string | null;
 }
 
 interface CountRow {
@@ -316,30 +328,33 @@ export async function duplicateWorkflow(id: string, tenantId: string | null = nu
       `INSERT INTO "WorkflowStep"
        (id,"workflowId","stepOrder","stepName","stepType","assigneeType","assigneeEmail",
         "assigneeRoleCode","multiApproverEmails","requireAllApprovers","emailSubject","emailBody",
-        "slaHours","escalationEmail","escalationHours","conditionJson","isOptional")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+        "slaHours","escalationEmail","escalationHours","conditionJson","isOptional","tenantId")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
       randomUUID(), newId, step.stepOrder, step.stepName, step.stepType,
       step.assigneeType, step.assigneeEmail ?? null, step.assigneeRoleCode ?? null,
       step.multiApproverEmails ?? null, step.requireAllApprovers ?? false,
       step.emailSubject ?? null, step.emailBody ?? null, step.slaHours ?? 24,
       step.escalationEmail ?? null, step.escalationHours ?? 48,
-      step.conditionJson ?? null, step.isOptional ?? false);
+      step.conditionJson ?? null, step.isOptional ?? false, tenantId);
   }
   return newId;
 }
 
 //  Global Stats 
-export async function getWorkflowStats() {
+/** Counts for one tenant (its own workflows plus platform templates), or
+ *  for every tenant when `tenantId` is null (platform admins). */
+export async function getWorkflowStats(tenantId: string | null) {
+  const defScope = tenantId ? `WHERE ("tenantId" = $1 OR "tenantId" IS NULL)` : '';
+  const runScope = tenantId ? `AND "tenantId" = $1` : '';
+  const args = tenantId ? [tenantId] : [];
   const totals: Array<{ total: string; active: string }> = await prisma.$queryRawUnsafe(
     `SELECT COUNT(*) as total,
             SUM(CASE WHEN "isActive" THEN 1 ELSE 0 END) as active
-     FROM "WorkflowDefinition"`);
+     FROM "WorkflowDefinition" ${defScope}`, ...args);
   const pending: Array<{ count: string }> = await prisma.$queryRawUnsafe<Array<{ count: string }>>(
-    `SELECT COUNT(*) as count FROM "WorkflowStepInstance" WHERE status='PENDING'`
-  ).catch(() => [{ count: '0' }]);
+    `SELECT COUNT(*) as count FROM "WorkflowStepInstance" WHERE status='PENDING' ${runScope}`, ...args);
   const instances: Array<{ count: string }> = await prisma.$queryRawUnsafe<Array<{ count: string }>>(
-    `SELECT COUNT(*) as count FROM "WorkflowInstance" WHERE status='IN_PROGRESS'`
-  ).catch(() => [{ count: '0' }]);
+    `SELECT COUNT(*) as count FROM "WorkflowInstance" WHERE status='IN_PROGRESS' ${runScope}`, ...args);
   return {
     total: parseInt(totals[0]?.total ?? '0'),
     active: parseInt(totals[0]?.active ?? '0'),
@@ -363,12 +378,14 @@ export async function createStep(workflowId: string, data: {
   conditionJson?: string; isOptional?: boolean;
 }) {
   const id = randomUUID();
+  // The step belongs to its workflow's tenant (NULL for a platform template).
   await prisma.$executeRawUnsafe(
     `INSERT INTO "WorkflowStep"
      (id,"workflowId","stepOrder","stepName","stepType","assigneeType","assigneeEmail",
       "assigneeRoleCode","multiApproverEmails","requireAllApprovers","emailSubject","emailBody",
-      "slaHours","escalationEmail","escalationHours","conditionJson","isOptional")
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+      "slaHours","escalationEmail","escalationHours","conditionJson","isOptional","tenantId")
+     SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,d."tenantId"
+       FROM "WorkflowDefinition" d WHERE d.id = $2`,
     id, workflowId, data.stepOrder, data.stepName, data.stepType, data.assigneeType,
     data.assigneeEmail ?? null, data.assigneeRoleCode ?? null,
     data.multiApproverEmails ?? null, data.requireAllApprovers ?? false,
@@ -421,7 +438,8 @@ export async function deleteStep(stepId: string) {
 export async function triggerWorkflow(params: {
   // Canonical Phase 2 keying — preferred for new callers.
   serviceTypeId?: string;
-  tenantId?:      string;
+  /** Tenant the approval runs in: always the caller's own (from the session). */
+  tenantId:       string;
   scopeId?:       string | null;
   // Legacy keying — still supported. If serviceTypeId is provided, the
   // resolver tries that first and only falls back to (module, procedure).
@@ -441,10 +459,11 @@ export async function triggerWorkflow(params: {
   //   1) (serviceTypeId, tenantId, scopeId) — Phase 2 canonical path
   //   2) (module, procedure)                — legacy fallback
   let wfRows: WorkflowDefinitionRow[] = [];
-  if (params.serviceTypeId && params.tenantId) {
+  const tenantId = params.tenantId;
+  if (params.serviceTypeId) {
     const found = await getActiveWorkflowForServiceType({
       serviceTypeId: params.serviceTypeId,
-      tenantId:      params.tenantId,
+      tenantId,
       scopeId:       params.scopeId ?? null,
     });
     if (found) {
@@ -455,14 +474,20 @@ export async function triggerWorkflow(params: {
     }
   }
   if (!wfRows.length && params.module && params.procedure) {
+    // The tenant's own workflow first, else a platform template. Never
+    // another tenant's: that started approvals on (and emailed the approvers
+    // of) whichever tenant's workflow the database happened to return.
     wfRows = await prisma.$queryRawUnsafe(
       `SELECT * FROM "WorkflowDefinition"
-       WHERE module=$1 AND procedure=$2 AND "isActive"=true LIMIT 1`,
-      params.module, params.procedure);
+       WHERE module=$1 AND procedure=$2 AND "isActive"=true
+         AND ("tenantId" = $3 OR "tenantId" IS NULL)
+       ORDER BY ("tenantId" IS NULL), "createdAt" ASC
+       LIMIT 1`,
+      params.module, params.procedure, tenantId);
   }
   if (!wfRows.length) {
     const key = params.serviceTypeId
-      ? `serviceType=${params.serviceTypeId} tenant=${params.tenantId}`
+      ? `serviceType=${params.serviceTypeId} tenant=${tenantId}`
       : `module=${params.module} procedure=${params.procedure}`;
     console.warn(`[Workflow] No active workflow for ${key}`);
     return { error: `No active workflow found for ${key}. Please define and activate one in Admin > Service Configuration > Workflow.` };
@@ -473,8 +498,9 @@ export async function triggerWorkflow(params: {
   // Idempotency: if an IN_PROGRESS instance already exists for this referenceId, return it
   if (!params.force) {
     const existing: Array<{ id: string }> = await prisma.$queryRawUnsafe(
-      `SELECT id FROM "WorkflowInstance" WHERE "referenceId"=$1 AND "workflowId"=$2 AND status='IN_PROGRESS' LIMIT 1`,
-      params.referenceId, wf.id);
+      `SELECT id FROM "WorkflowInstance"
+        WHERE "referenceId"=$1 AND "workflowId"=$2 AND "tenantId"=$3 AND status='IN_PROGRESS' LIMIT 1`,
+      params.referenceId, wf.id, tenantId);
     if (existing.length) {
       console.info(`[Workflow] Reusing existing instance ${existing[0].id} for ${params.referenceNumber}`);
       return { instanceId: existing[0].id, workflowName: wf.name, reused: true };
@@ -492,11 +518,11 @@ export async function triggerWorkflow(params: {
   await prisma.$executeRawUnsafe(
     `INSERT INTO "WorkflowInstance"
      (id,"workflowId","referenceType","referenceId","referenceNumber",
-      "currentStepOrder",status,"initiatedByEmail","initiatedByName")
-     VALUES ($1,$2,$3,$4,$5,$6,'IN_PROGRESS',$7,$8)`,
+      "currentStepOrder",status,"initiatedByEmail","initiatedByName","tenantId")
+     VALUES ($1,$2,$3,$4,$5,$6,'IN_PROGRESS',$7,$8,$9)`,
     instanceId, wf.id, params.referenceType, params.referenceId,
     params.referenceNumber, steps[0].stepOrder,
-    params.initiatedByEmail, params.initiatedByName ?? null);
+    params.initiatedByEmail, params.initiatedByName ?? null, tenantId);
 
   for (const step of steps) {
     const siId = randomUUID();
@@ -505,11 +531,11 @@ export async function triggerWorkflow(params: {
     const isPending = step.stepOrder === steps[0].stepOrder;
     await prisma.$executeRawUnsafe(
       `INSERT INTO "WorkflowStepInstance"
-       (id,"workflowInstanceId","stepId","stepOrder","stepName","assignedToEmail","assignedToName",status,"dueAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+       (id,"workflowInstanceId","stepId","stepOrder","stepName","assignedToEmail","assignedToName",status,"dueAt","tenantId")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::timestamp,$10)`,
       siId, instanceId, step.id, step.stepOrder, step.stepName,
       step.assigneeEmail ?? null, null,
-      isPending ? 'PENDING' : 'WAITING', dueAt);
+      isPending ? 'PENDING' : 'WAITING', dueAt, tenantId);
   }
 
   const firstStep = steps[0];
@@ -525,7 +551,7 @@ export async function triggerWorkflow(params: {
     });
   }
   if (firstStep.stepType === 'NOTIFICATION') {
-    await advanceWorkflow(instanceId, firstStep.stepOrder, 'AUTO',
+    await advanceWorkflow(tenantId, instanceId, firstStep.stepOrder, 'AUTO',
       'Auto-advanced (notification step)', 'system');
   }
 
@@ -533,20 +559,24 @@ export async function triggerWorkflow(params: {
 }
 
 export async function advanceWorkflow(
-  instanceId: string, currentStepOrder: number,
+  tenantId: string, instanceId: string, currentStepOrder: number,
   action: 'APPROVE' | 'REJECT' | 'AUTO', comments: string, actionedByEmail: string
 ) {
-  await prisma.$executeRawUnsafe(
+  const actioned = await prisma.$executeRawUnsafe(
     `UPDATE "WorkflowStepInstance"
      SET status=$1, comments=$2, "actionedAt"=NOW(), "actionedByEmail"=$3
-     WHERE "workflowInstanceId"=$4 AND "stepOrder"=$5 AND status='PENDING'`,
+     WHERE "workflowInstanceId"=$4 AND "stepOrder"=$5 AND status='PENDING' AND "tenantId"=$6`,
     action === 'REJECT' ? 'REJECTED' : 'APPROVED',
-    comments, actionedByEmail, instanceId, currentStepOrder);
+    comments, actionedByEmail, instanceId, currentStepOrder, tenantId);
+  // Nothing awaiting approval here (another tenant's instance, or a step
+  // already actioned): change nothing else.
+  if (!actioned) return { status: 'NOT_PENDING' as const };
 
   if (action === 'REJECT') {
     await prisma.$executeRawUnsafe(
       `UPDATE "WorkflowInstance"
-       SET status='REJECTED',"completedAt"=NOW(),"updatedAt"=NOW() WHERE id=$1`, instanceId);
+       SET status='REJECTED',"completedAt"=NOW(),"updatedAt"=NOW() WHERE id=$1 AND "tenantId"=$2`,
+      instanceId, tenantId);
     return { status: 'REJECTED' };
   }
 
@@ -554,28 +584,30 @@ export async function advanceWorkflow(
     `SELECT ws.* FROM "WorkflowStepInstance" wsi
      JOIN "WorkflowStep" ws ON ws.id=wsi."stepId"
      WHERE wsi."workflowInstanceId"=$1 AND wsi."stepOrder">$2 AND wsi.status='WAITING'
+       AND wsi."tenantId"=$3
      ORDER BY wsi."stepOrder" LIMIT 1`,
-    instanceId, currentStepOrder);
+    instanceId, currentStepOrder, tenantId);
 
   if (!nextSteps.length) {
     await prisma.$executeRawUnsafe(
       `UPDATE "WorkflowInstance"
-       SET status='APPROVED',"completedAt"=NOW(),"updatedAt"=NOW() WHERE id=$1`, instanceId);
+       SET status='APPROVED',"completedAt"=NOW(),"updatedAt"=NOW() WHERE id=$1 AND "tenantId"=$2`,
+      instanceId, tenantId);
     return { status: 'APPROVED' };
   }
 
   const nextStep = nextSteps[0];
   await prisma.$executeRawUnsafe(
     `UPDATE "WorkflowStepInstance" SET status='PENDING'
-     WHERE "workflowInstanceId"=$1 AND "stepOrder"=$2`,
-    instanceId, nextStep.stepOrder);
+     WHERE "workflowInstanceId"=$1 AND "stepOrder"=$2 AND "tenantId"=$3`,
+    instanceId, nextStep.stepOrder, tenantId);
   await prisma.$executeRawUnsafe(
-    `UPDATE "WorkflowInstance" SET "currentStepOrder"=$1,"updatedAt"=NOW() WHERE id=$2`,
-    nextStep.stepOrder, instanceId);
+    `UPDATE "WorkflowInstance" SET "currentStepOrder"=$1,"updatedAt"=NOW() WHERE id=$2 AND "tenantId"=$3`,
+    nextStep.stepOrder, instanceId, tenantId);
 
   if (nextStep.assigneeEmail && nextStep.stepType === 'APPROVAL') {
     const instance: WorkflowInstanceRow[] = await prisma.$queryRawUnsafe(
-      `SELECT * FROM "WorkflowInstance" WHERE id=$1`, instanceId);
+      `SELECT * FROM "WorkflowInstance" WHERE id=$1 AND "tenantId"=$2`, instanceId, tenantId);
     if (instance.length) {
       await sendWorkflowEmail({
         to: nextStep.assigneeEmail,
@@ -589,7 +621,7 @@ export async function advanceWorkflow(
     }
   }
   if (nextStep.stepType === 'NOTIFICATION') {
-    return advanceWorkflow(instanceId, nextStep.stepOrder, 'AUTO',
+    return advanceWorkflow(tenantId, instanceId, nextStep.stepOrder, 'AUTO',
       'Auto-advanced (notification step)', 'system');
   }
   return { status: 'IN_PROGRESS', nextStep: nextStep.stepName };
@@ -612,7 +644,7 @@ interface PendingApprovalRow {
   procedure: string;
 }
 
-export async function getMyPendingApprovals(email: string) {
+export async function getMyPendingApprovals(tenantId: string, email: string) {
   return prisma.$queryRawUnsafe<PendingApprovalRow[]>(`
     SELECT
       wsi.id as "stepInstanceId",
@@ -632,34 +664,41 @@ export async function getMyPendingApprovals(email: string) {
     FROM "WorkflowStepInstance" wsi
     JOIN "WorkflowInstance" wi ON wi.id = wsi."workflowInstanceId"
     JOIN "WorkflowDefinition" wd ON wd.id = wi."workflowId"
-    WHERE wsi."assignedToEmail" = $1 AND wsi.status = 'PENDING'
+    WHERE lower(wsi."assignedToEmail") = lower($1) AND wsi.status = 'PENDING'
+      AND wsi."tenantId" = $2
     ORDER BY wsi."createdAt" DESC
-  `, email);
+  `, email, tenantId);
 }
 
-export async function getWorkflowInstanceWithHistory(instanceId: string) {
+/** An approval with its steps, if it belongs to `tenantId` (any tenant when null: platform admins). */
+export async function getWorkflowInstanceWithHistory(instanceId: string, tenantId: string | null) {
   const instances: Array<WorkflowInstanceRow & { workflowName: string; module: string; procedure: string }> =
     await prisma.$queryRawUnsafe(`
     SELECT wi.*, wd.name as "workflowName", wd.module, wd.procedure
     FROM "WorkflowInstance" wi
     JOIN "WorkflowDefinition" wd ON wd.id=wi."workflowId"
-    WHERE wi.id=$1
-  `, instanceId);
+    WHERE wi.id=$1 AND ($2::text IS NULL OR wi."tenantId" = $2)
+  `, instanceId, tenantId);
   if (!instances.length) return null;
-  const stepInstances: WorkflowStepInstanceRow[] = await prisma.$queryRawUnsafe(
-    `SELECT * FROM "WorkflowStepInstance" WHERE "workflowInstanceId"=$1 ORDER BY "stepOrder"`,
-    instanceId);
+  // Steps with their step definition's assignee role, for the approver check.
+  const stepInstances: Array<WorkflowStepInstanceRow & { assigneeRoleCode: string | null }> = await prisma.$queryRawUnsafe(
+    `SELECT wsi.*, ws."assigneeRoleCode"
+       FROM "WorkflowStepInstance" wsi
+       LEFT JOIN "WorkflowStep" ws ON ws.id = wsi."stepId"
+      WHERE wsi."workflowInstanceId"=$1 AND wsi."tenantId" IS NOT DISTINCT FROM $2
+      ORDER BY wsi."stepOrder"`,
+    instanceId, instances[0].tenantId);
   return { ...instances[0], steps: stepInstances };
 }
 
-export async function getInstancesForReference(referenceId: string) {
+export async function getInstancesForReference(tenantId: string, referenceId: string) {
   return prisma.$queryRawUnsafe<Array<WorkflowInstanceRow & { workflowName: string; procedure: string }>>(`
     SELECT wi.*, wd.name as "workflowName", wd.procedure
     FROM "WorkflowInstance" wi
     JOIN "WorkflowDefinition" wd ON wd.id=wi."workflowId"
-    WHERE wi."referenceId"=$1
+    WHERE wi."referenceId"=$1 AND wi."tenantId"=$2
     ORDER BY wi."createdAt" DESC
-  `, referenceId);
+  `, referenceId, tenantId);
 }
 
 //  Email Sender 
@@ -711,16 +750,10 @@ async function sendWorkflowEmail(params: {
   }
 }
 
-// Returns ALL pending step instances (admin view - no email filter)
-// tenantId is required — WorkflowInstance has no tenant column of its own,
-// so this joins to WorkflowDefinition.tenantId. That column is nullable
-// (legacy pre-Phase-2 rows, shared across every tenant before the module/
-// procedure -> per-tenant migration finished) — the IS NULL branch keeps
-// those still-shared legacy workflows visible to every tenant, exactly
-// like before, while a Phase-2 row tagged to a DIFFERENT tenant is now
-// excluded. That second half is the actual fix: this endpoint had no
-// tenant filter at all, so any authenticated user of any tenant could
-// read every tenant's pending approvals and workflow instances.
+// Returns ALL of a tenant's pending step instances (admin view - no email
+// filter). Filtered on the instance's own tenant: the workflow's tenant is
+// NULL for platform templates, whose approvals belong to whichever tenant
+// started them (a filter on the definition showed those to every tenant).
 interface AllPendingStepInstanceRow {
   stepInstanceId: string;
   workflowInstanceId: string;
@@ -767,7 +800,7 @@ export async function getAllPendingStepInstances(tenantId: string) {
     JOIN "WorkflowInstance" wi ON wi.id = wsi."workflowInstanceId"
     JOIN "WorkflowDefinition" wd ON wd.id = wi."workflowId"
     WHERE wsi.status = 'PENDING'
-      AND (wd."tenantId" = $1 OR wd."tenantId" IS NULL)
+      AND wsi."tenantId" = $1
     ORDER BY wsi."createdAt" DESC
   `, tenantId);
 }
@@ -777,7 +810,7 @@ export async function getAllWorkflowInstances(
   tenantId: string,
   opts?: { status?: string; module?: string; limit?: number },
 ) {
-  const conditions: string[] = ['(wd."tenantId" = $1 OR wd."tenantId" IS NULL)'];
+  const conditions: string[] = ['wi."tenantId" = $1'];
   const values: string[] = [tenantId];
   let idx = 2;
   if (opts?.status) { conditions.push(`wi.status=$${idx++}`); values.push(opts.status); }

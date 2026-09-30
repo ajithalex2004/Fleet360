@@ -5,7 +5,7 @@ import { withTenantRls } from '@/lib/rls';
 import { duplicateWorkflow } from '@/lib/workflow-db';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-import { checkWorkflowAccess } from '@/lib/admin-scope';
+import { checkWorkflowAccess, workflowRoute } from '@/lib/admin-scope';
 import { isSuperAdmin } from '@/lib/admin-access';
 import { withAuditedAction } from '@/lib/audited-action';
 async function handlePOST(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -30,4 +30,4 @@ async function handlePOST(_req: NextRequest, props: { params: Promise<{ id: stri
 }
 
 // Privileged writes are always audited (src/lib/audited-action.ts).
-export const POST = withAuditedAction(handlePOST);
+export const POST = withAuditedAction(workflowRoute(handlePOST));
