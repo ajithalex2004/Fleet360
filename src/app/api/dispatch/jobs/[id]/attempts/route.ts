@@ -54,7 +54,7 @@ export async function GET(
           FROM dispatch_attempts da
           LEFT JOIN drivers  d ON d.id::text = da.driver_id  AND d.deleted_at IS NULL
           LEFT JOIN vehicles v ON v.id::text = da.vehicle_id AND v.deleted_at IS NULL
-          WHERE da.dispatch_job_id = $1::uuid
+          WHERE da.dispatch_job_id::text = $1
           ORDER BY da.offered_at ASC
         `, id);
 
