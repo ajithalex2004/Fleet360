@@ -1,33 +1,38 @@
 /**
  * Guardian-facing notifications for the school bus module.
  *
- * Wraps the platform whatsapp + email helpers with the school-bus
- * specific guardian-resolution + escalation pattern:
+ * For each student:
+ *   1. Try guardian1 (WhatsApp if a phone is known, and email if an
+ *      address is known).
+ *   2. If neither reached guardian1, try guardian2 the same way.
+ *   3. Log to school_bus_guardian_notifications (parent timeline + audit).
  *
- *   1. Try guardian1 (WhatsApp first if phone known, fall back to email).
- *   2. If guardian1 channel is "not_configured" / network errors, try
- *      guardian2 with the same channel preference.
- *   3. Best-effort — logs to school_bus_guardian_notifications and
- *      Sentry; never throws into the trip flow.
+ * The wording is the tenant's email template for the event (Admin > Email
+ * templates > School bus), in the tenant's language; WhatsApp gets the
+ * same text as the email.
  *
- * Public events: DEPARTURE, ETA_5MIN, BOARDED, ALIGHTED, NO_SHOW,
- *                NO_PICKUP, INCIDENT, CUSTOM.
+ * Runs detached from the caller's transaction and never throws, so callers
+ * in the trip flow can fire and forget it: an unawaited call made inside
+ * withTenantRls would otherwise run its queries on that transaction after
+ * it has committed.
  */
-
+import 'server-only';
 import { prisma } from '@/lib/prisma';
+import { runAsTenant, runOutsideRlsScope } from '@/lib/rls-scope';
 import { sendWhatsApp } from '@/lib/whatsapp';
 import { sendEmail } from '@/lib/email';
 import { captureException } from '@/lib/sentry';
+import { loadEmailTemplate } from '@/lib/email-templates';
 
-export type GuardianNotificationKind =
-  | 'DEPARTURE'
-  | 'ETA_5MIN'
-  | 'BOARDED'
-  | 'ALIGHTED'
-  | 'NO_SHOW'
-  | 'NO_PICKUP'
-  | 'INCIDENT'
-  | 'CUSTOM';
+export type GuardianNotificationKind = 'DEPARTURE' | 'BOARDED' | 'ALIGHTED' | 'NO_SHOW' | 'INCIDENT';
+
+export const GUARDIAN_TEMPLATE_KEY: Record<GuardianNotificationKind, string> = {
+  DEPARTURE: 'school_bus.departure',
+  BOARDED: 'school_bus.boarded',
+  ALIGHTED: 'school_bus.dropped_off',
+  NO_SHOW: 'school_bus.no_show',
+  INCIDENT: 'school_bus.incident',
+};
 
 export interface StudentForNotify {
   studentId: string;
@@ -42,70 +47,18 @@ export interface StudentForNotify {
   guardian2Email: string | null;
 }
 
-export interface NotifyContext {
-  routeName?: string | null;
+export interface GuardianNotice {
+  studentId: string;
   stopName?: string | null;
-  driverName?: string | null;
-  schoolName?: string | null;
-  /** Local time string for the message body — caller formats. */
-  whenLabel?: string | null;
-  customMessage?: string | null;
-  /** Free-text reason / details. */
+  /** Local time for the message, formatted by the caller. */
+  time?: string | null;
+  /** What was logged (incidents). */
   details?: string | null;
 }
 
 interface ChannelResult { sent: boolean; reason?: string }
 
-/* ── Message templates (guardian language is EN-first; expand later) ─ */
-
-function buildMessage(kind: GuardianNotificationKind, student: StudentForNotify, ctx: NotifyContext): { subject: string; body: string } {
-  const name = student.firstName ?? `student ${student.studentCode ?? ''}`;
-  const route = ctx.routeName ? ` (${ctx.routeName})` : '';
-  switch (kind) {
-    case 'DEPARTURE':
-      return {
-        subject: `🚌 Bus departed — ${name}`,
-        body: `Hi, ${name}'s school bus${route} has just departed${ctx.schoolName ? ` from ${ctx.schoolName}` : ''}. We'll alert you as it nears your stop.`,
-      };
-    case 'ETA_5MIN':
-      return {
-        subject: `🚌 Bus arriving in ~5 min — ${name}`,
-        body: `${name}'s school bus${route} is approximately 5 minutes from your stop${ctx.stopName ? ` (${ctx.stopName})` : ''}. Please head out shortly.`,
-      };
-    case 'BOARDED':
-      return {
-        subject: `✓ ${name} boarded`,
-        body: `Confirmed: ${name} has boarded the bus${route}${ctx.whenLabel ? ` at ${ctx.whenLabel}` : ''}. Have a good day!`,
-      };
-    case 'ALIGHTED':
-      return {
-        subject: `✓ ${name} dropped off`,
-        body: `Confirmed: ${name} has been dropped off${ctx.stopName ? ` at ${ctx.stopName}` : ''}${ctx.whenLabel ? ` at ${ctx.whenLabel}` : ''}.`,
-      };
-    case 'NO_SHOW':
-      return {
-        subject: `⚠ ${name} did NOT board today's bus`,
-        body: `${name} did not board the school bus at the scheduled stop${ctx.stopName ? ` (${ctx.stopName})` : ''}${ctx.whenLabel ? ` at ${ctx.whenLabel}` : ''}. If this is unexpected, please contact the school transport office immediately.`,
-      };
-    case 'NO_PICKUP':
-      return {
-        subject: `⚠ Bus did not stop for ${name}`,
-        body: `Our records show the bus passed your scheduled stop${ctx.stopName ? ` (${ctx.stopName})` : ''} without stopping. Please contact transport ops if ${name} has been left behind.`,
-      };
-    case 'INCIDENT':
-      return {
-        subject: `⚠ Bus incident — ${name}'s route`,
-        body: `An incident has been logged on ${name}'s school bus route${route}. ${ctx.details ?? ''} School transport ops will be in touch with details.`,
-      };
-    case 'CUSTOM':
-      return {
-        subject: `Bus update — ${name}`,
-        body: ctx.customMessage ?? '(empty message)',
-      };
-  }
-}
-
-/* ── Send to a specific guardian (WhatsApp first, email fallback) ─── */
+interface Message { subject: string; html: string; text: string }
 
 interface PerGuardianResult {
   guardian: 'GUARDIAN_1' | 'GUARDIAN_2';
@@ -114,60 +67,52 @@ interface PerGuardianResult {
   reachedAtLeastOnce: boolean;
 }
 
-async function tryGuardian(
-  which: 'GUARDIAN_1' | 'GUARDIAN_2',
-  phone: string | null, email: string | null,
-  msg: { subject: string; body: string },
-): Promise<PerGuardianResult> {
-  const result: PerGuardianResult = { guardian: which, whatsapp: null, email: null, reachedAtLeastOnce: false };
-  if (phone) {
-    const r = await sendWhatsApp({ to: phone, body: msg.body });
-    result.whatsapp = { sent: r.sent, reason: r.reason };
-    if (r.sent) result.reachedAtLeastOnce = true;
-  }
-  if (email) {
-    const r = await sendEmail({ to: email, subject: msg.subject, text: msg.body });
-    result.email = { sent: r.sent, reason: r.reason };
-    if (r.sent) result.reachedAtLeastOnce = true;
-  }
-  return result;
-}
-
-/* ── Public: notify guardians with escalation + log ───────────────── */
-
 export interface NotifyGuardiansResult {
+  studentId: string;
   ok: boolean;
   reachedGuardian1: boolean;
   reachedGuardian2: boolean;
   attempts: PerGuardianResult[];
 }
 
-export async function notifyGuardians(
-  kind: GuardianNotificationKind,
-  student: StudentForNotify,
-  ctx: NotifyContext = {},
-): Promise<NotifyGuardiansResult> {
-  const msg = buildMessage(kind, student, ctx);
-  const attempts: PerGuardianResult[] = [];
+async function tryGuardian(
+  which: 'GUARDIAN_1' | 'GUARDIAN_2',
+  phone: string | null, email: string | null,
+  msg: Message,
+): Promise<PerGuardianResult> {
+  const result: PerGuardianResult = { guardian: which, whatsapp: null, email: null, reachedAtLeastOnce: false };
+  if (phone) {
+    const r = await sendWhatsApp({ to: phone, body: msg.text });
+    result.whatsapp = { sent: r.sent, reason: r.reason };
+    if (r.sent) result.reachedAtLeastOnce = true;
+  }
+  if (email) {
+    const r = await sendEmail({ to: email, subject: msg.subject, html: msg.html, text: msg.text });
+    result.email = { sent: r.sent, reason: r.reason };
+    if (r.sent) result.reachedAtLeastOnce = true;
+  }
+  return result;
+}
 
+async function notifyOne(kind: GuardianNotificationKind, student: StudentForNotify, msg: Message): Promise<NotifyGuardiansResult> {
+  const attempts: PerGuardianResult[] = [];
   const g1 = await tryGuardian('GUARDIAN_1', student.guardian1Phone, student.guardian1Email, msg);
   attempts.push(g1);
 
-  // Escalate to guardian2 only if guardian1 didn't reach (no phone/email or both failed).
+  // Escalate to guardian2 only if guardian1 wasn't reached.
   let g2: PerGuardianResult | null = null;
   if (!g1.reachedAtLeastOnce && (student.guardian2Phone || student.guardian2Email)) {
     g2 = await tryGuardian('GUARDIAN_2', student.guardian2Phone, student.guardian2Email, msg);
     attempts.push(g2);
   }
 
-  // Persist to log for parent timeline + audit.
   try {
     await prisma.$executeRawUnsafe(
       `INSERT INTO school_bus_guardian_notifications
          (student_id, kind, subject, body, reached_guardian1, reached_guardian2,
           attempts_json, sent_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW())`,
-      student.studentId, kind, msg.subject, msg.body,
+       VALUES ($1::uuid, $2, $3, $4, $5, $6, $7::jsonb, NOW())`,
+      student.studentId, kind, msg.subject, msg.text,
       g1.reachedAtLeastOnce, g2?.reachedAtLeastOnce ?? false,
       JSON.stringify(attempts),
     );
@@ -176,6 +121,7 @@ export async function notifyGuardians(
   }
 
   return {
+    studentId: student.studentId,
     ok: g1.reachedAtLeastOnce || (g2?.reachedAtLeastOnce ?? false),
     reachedGuardian1: g1.reachedAtLeastOnce,
     reachedGuardian2: g2?.reachedAtLeastOnce ?? false,
@@ -183,8 +129,46 @@ export async function notifyGuardians(
   };
 }
 
-/* ── Hydrate student from DB by studentId ─────────────────────────── */
+/**
+ * Notifies the guardians of each student in `notices` about one event.
+ * `tenantId` is the tenant the students belong to (from the session or the
+ * trip record, never request input).
+ */
+export function notifyGuardians(
+  tenantId: string,
+  kind: GuardianNotificationKind,
+  notices: GuardianNotice[],
+): Promise<NotifyGuardiansResult[]> {
+  if (notices.length === 0) return Promise.resolve([]);
+  return runOutsideRlsScope(() => runAsTenant(tenantId, async () => {
+    const results: NotifyGuardiansResult[] = [];
+    try {
+      const template = await loadEmailTemplate({ tenantId, key: GUARDIAN_TEMPLATE_KEY[kind] });
+      for (const notice of notices) {
+        try {
+          const student = await loadStudentForNotify(notice.studentId);
+          if (!student) continue;
+          const msg = template.render({
+            values: {
+              studentName: student.firstName ?? '',
+              stopName: notice.stopName ?? '',
+              time: notice.time ?? '',
+              details: notice.details ?? '',
+            },
+          });
+          results.push(await notifyOne(kind, student, msg));
+        } catch (err) {
+          captureException(err, { context: 'school-bus.notifyGuardians', tags: { studentId: notice.studentId, kind, tenantId } });
+        }
+      }
+    } catch (err) {
+      captureException(err, { context: 'school-bus.notifyGuardians.template', tags: { kind, tenantId } });
+    }
+    return results;
+  }));
+}
 
+/** The student's name and guardian contacts (RLS scopes it to the current tenant). */
 export async function loadStudentForNotify(studentId: string): Promise<StudentForNotify | null> {
   const rows = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(
     `SELECT id, student_code, first_name, last_name,
@@ -192,7 +176,7 @@ export async function loadStudentForNotify(studentId: string): Promise<StudentFo
             guardian2_name, guardian2_phone, guardian2_email
      FROM school_bus_students WHERE id = $1::uuid AND deleted_at IS NULL`,
     studentId,
-  ).catch(() => []);
+  );
   const r = rows[0];
   if (!r) return null;
   return {

@@ -48,6 +48,19 @@ export const COMMON_VARIABLES: TemplateVariable[] = [
   { name: 'companyName', description: 'Your company name', sample: 'Acme Fleet Services' },
 ];
 
+/** Shared by the school bus guardian alerts (src/lib/school-bus-notify.ts). */
+const GUARDIAN_VARIABLES: TemplateVariable[] = [
+  { name: 'studentName', description: "Student's first name", sample: 'Layla', fallback: { en: 'your child', ar: 'طفلكم' } },
+];
+
+/** Shared by the staff transport trip notices (bus-ops schedules). */
+const TRIP_VARIABLES: TemplateVariable[] = [
+  { name: 'staffName', description: "Passenger's first name", sample: 'Ahmed', fallback: { en: 'colleague', ar: 'زميلنا العزيز' } },
+  { name: 'tripNumber', description: 'Trip number', sample: 'TRP-0412' },
+  { name: 'routeName', description: 'Route', sample: 'JAFZA Shift A', fallback: { en: 'your route', ar: 'مسارك' } },
+  { name: 'departureTime', description: 'Scheduled departure time', sample: '06:30' },
+];
+
 /** Shared by the overdue-payment notices (src/lib/finance/dunning-*). */
 const DUNNING_VARIABLES: TemplateVariable[] = [
   { name: 'customerName', description: 'Customer name', sample: 'Gulf Trading LLC', fallback: { en: 'Valued Customer', ar: 'عميلنا العزيز' } },
@@ -594,6 +607,251 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
           '[إعادة التفعيل]({{reactivateUrl}})',
           'تبقى بياناتكم محفوظة لمدة 30 يوماً ريثما تتخذون قراركم.',
         ].join('\n\n'),
+      },
+    },
+  },
+  {
+    key: 'school_bus.departure',
+    module: 'School bus',
+    name: 'Bus departed (guardians)',
+    description: "Sent to each student's guardians when the bus departs. The same wording is used for WhatsApp and SMS.",
+    variables: [...GUARDIAN_VARIABLES],
+    defaults: {
+      en: {
+        subject: 'Bus departed - {{studentName}}',
+        body: "{{studentName}}'s bus has just departed. We will let you know when {{studentName}} boards.\n\n{{companyName}}",
+      },
+      ar: {
+        subject: 'انطلقت الحافلة - {{studentName}}',
+        body: 'انطلقت الآن حافلة {{studentName}}. سنبلغكم عند صعود {{studentName}} إلى الحافلة.\n\n{{companyName}}',
+      },
+    },
+  },
+  {
+    key: 'school_bus.boarded',
+    module: 'School bus',
+    name: 'Student boarded (guardians)',
+    description: 'Sent to the guardians when the student is scanned or marked on board. The same wording is used for WhatsApp and SMS.',
+    variables: [
+      ...GUARDIAN_VARIABLES,
+      { name: 'stopName', description: 'Stop', sample: 'Street 12, Gate 3', fallback: { en: 'the stop', ar: 'المحطة' } },
+      { name: 'time', description: 'Time', sample: '06:52' },
+    ],
+    defaults: {
+      en: {
+        subject: '{{studentName}} is on the bus',
+        body: '{{studentName}} boarded the bus at {{stopName}} at {{time}}.\n\n{{companyName}}',
+      },
+      ar: {
+        subject: '{{studentName}} في الحافلة',
+        body: 'صعد {{studentName}} إلى الحافلة من {{stopName}} الساعة {{time}}.\n\n{{companyName}}',
+      },
+    },
+  },
+  {
+    key: 'school_bus.dropped_off',
+    module: 'School bus',
+    name: 'Student dropped off (guardians)',
+    description: 'Sent to the guardians when the student leaves the bus. The same wording is used for WhatsApp and SMS.',
+    variables: [
+      ...GUARDIAN_VARIABLES,
+      { name: 'stopName', description: 'Stop', sample: 'Main Gate', fallback: { en: 'the stop', ar: 'المحطة' } },
+      { name: 'time', description: 'Time', sample: '14:35' },
+    ],
+    defaults: {
+      en: {
+        subject: '{{studentName}} has been dropped off',
+        body: '{{studentName}} got off the bus at {{stopName}} at {{time}}.\n\n{{companyName}}',
+      },
+      ar: {
+        subject: 'نزل {{studentName}} من الحافلة',
+        body: 'نزل {{studentName}} من الحافلة عند {{stopName}} الساعة {{time}}.\n\n{{companyName}}',
+      },
+    },
+  },
+  {
+    key: 'school_bus.no_show',
+    module: 'School bus',
+    name: 'Student did not board (guardians)',
+    description: 'Sent to the guardians when the student has not boarded the morning bus and no absence was reported. The same wording is used for WhatsApp and SMS.',
+    variables: [
+      ...GUARDIAN_VARIABLES,
+      { name: 'stopName', description: 'Pickup stop', sample: 'Street 12, Gate 3', fallback: { en: 'the pickup stop', ar: 'محطة الصعود' } },
+      { name: 'time', description: 'Time', sample: '07:10' },
+    ],
+    defaults: {
+      en: {
+        subject: '{{studentName}} did not board the bus today',
+        body: '{{studentName}} did not board the bus at {{stopName}} this morning (checked at {{time}}).\n\nIf this is unexpected, please contact the school transport office straight away.\n\n{{companyName}}',
+      },
+      ar: {
+        subject: 'لم يصعد {{studentName}} إلى الحافلة اليوم',
+        body: 'لم يصعد {{studentName}} إلى الحافلة من {{stopName}} صباح اليوم (تم التحقق الساعة {{time}}).\n\nإذا كان ذلك غير متوقع، يرجى التواصل مع مكتب النقل المدرسي فوراً.\n\n{{companyName}}',
+      },
+    },
+  },
+  {
+    key: 'school_bus.incident',
+    module: 'School bus',
+    name: 'Incident on the route (guardians)',
+    description: "Sent to the guardians of every student on the route when an incident is logged on the trip. The same wording is used for WhatsApp and SMS.",
+    variables: [
+      ...GUARDIAN_VARIABLES,
+      { name: 'details', description: 'What was logged', sample: 'Minor traffic delay near the school gate.', fallback: { en: 'No further details yet.', ar: 'لا توجد تفاصيل إضافية حتى الآن.' } },
+    ],
+    defaults: {
+      en: {
+        subject: "Update on {{studentName}}'s bus",
+        body: "An incident has been logged on {{studentName}}'s bus.\n\n{{details}}\n\nOur transport team will contact you with more information.\n\n{{companyName}}",
+      },
+      ar: {
+        subject: 'تحديث بشأن حافلة {{studentName}}',
+        body: 'تم تسجيل حادث على حافلة {{studentName}}.\n\n{{details}}\n\nسيتواصل معكم فريق النقل بمزيد من المعلومات.\n\n{{companyName}}',
+      },
+    },
+  },
+  {
+    key: 'staff_transport.trip_delay',
+    module: 'Staff transport',
+    name: 'Trip delayed (passengers)',
+    description: 'Sent to the confirmed passengers when a dispatcher sends a delay notice for a trip. The same wording is used for WhatsApp and SMS.',
+    variables: [
+      ...TRIP_VARIABLES,
+      { name: 'delayMinutes', description: 'Minutes late', sample: '15' },
+      { name: 'newDepartureTime', description: 'New departure time', sample: '06:45', fallback: { en: 'to be confirmed', ar: 'سيتم تأكيده' } },
+      { name: 'reason', description: 'Reason given by the dispatcher', sample: 'Heavy traffic on E11', fallback: { en: 'Not specified', ar: 'غير محدد' } },
+    ],
+    defaults: {
+      en: {
+        subject: 'Your bus is running late - trip {{tripNumber}}',
+        body: 'Dear {{staffName}},\n\nYour bus on trip {{tripNumber}} ({{routeName}}) is running about {{delayMinutes}} minutes late.\n\n**New departure:** {{newDepartureTime}}\n**Reason:** {{reason}}\n\nWe apologise for the inconvenience.\n{{companyName}} Transport',
+      },
+      ar: {
+        subject: 'تأخر الحافلة - الرحلة {{tripNumber}}',
+        body: 'عزيزنا {{staffName}}،\n\nحافلتك في الرحلة {{tripNumber}} ({{routeName}}) متأخرة بحوالي {{delayMinutes}} دقيقة.\n\n**موعد الانطلاق الجديد:** {{newDepartureTime}}\n**السبب:** {{reason}}\n\nنعتذر عن الإزعاج.\nقسم النقل - {{companyName}}',
+      },
+    },
+  },
+  {
+    key: 'staff_transport.trip_cancelled',
+    module: 'Staff transport',
+    name: 'Trip cancelled (passengers)',
+    description: 'Sent to the confirmed passengers when a dispatcher cancels a trip. The same wording is used for WhatsApp and SMS.',
+    variables: [
+      ...TRIP_VARIABLES,
+      { name: 'reason', description: 'Reason given by the dispatcher', sample: 'Vehicle breakdown', fallback: { en: 'Not specified', ar: 'غير محدد' } },
+    ],
+    defaults: {
+      en: {
+        subject: 'Trip {{tripNumber}} is cancelled',
+        body: 'Dear {{staffName}},\n\nTrip {{tripNumber}} ({{routeName}}) departing at {{departureTime}} has been **cancelled**.\n\n**Reason:** {{reason}}\n\nPlease arrange other transport, and contact the transport office if you need help.\n{{companyName}} Transport',
+      },
+      ar: {
+        subject: 'تم إلغاء الرحلة {{tripNumber}}',
+        body: 'عزيزنا {{staffName}}،\n\nتم **إلغاء** الرحلة {{tripNumber}} ({{routeName}}) المقررة الساعة {{departureTime}}.\n\n**السبب:** {{reason}}\n\nيرجى ترتيب وسيلة نقل بديلة، والتواصل مع مكتب النقل إذا احتجت إلى مساعدة.\nقسم النقل - {{companyName}}',
+      },
+    },
+  },
+  {
+    key: 'staff_transport.route_change',
+    module: 'Staff transport',
+    name: 'Route changed (passengers)',
+    description: 'Sent to the confirmed passengers when a dispatcher announces a route change. The same wording is used for WhatsApp and SMS.',
+    variables: [
+      ...TRIP_VARIABLES,
+      { name: 'newDepartureTime', description: 'Departure time after the change', sample: '06:40' },
+      { name: 'reason', description: 'Details given by the dispatcher', sample: 'Pickup moved to Gate 2', fallback: { en: 'Not specified', ar: 'غير محدد' } },
+    ],
+    defaults: {
+      en: {
+        subject: 'Route change - trip {{tripNumber}}',
+        body: 'Dear {{staffName}},\n\nThe route for trip {{tripNumber}} ({{routeName}}) has changed.\n\n**Departure:** {{newDepartureTime}}\n**Details:** {{reason}}\n\n{{companyName}} Transport',
+      },
+      ar: {
+        subject: 'تغيير المسار - الرحلة {{tripNumber}}',
+        body: 'عزيزنا {{staffName}}،\n\nتم تغيير مسار الرحلة {{tripNumber}} ({{routeName}}).\n\n**موعد الانطلاق:** {{newDepartureTime}}\n**التفاصيل:** {{reason}}\n\nقسم النقل - {{companyName}}',
+      },
+    },
+  },
+  {
+    key: 'staff_transport.departure_reminder',
+    module: 'Staff transport',
+    name: 'Departure reminder (passengers)',
+    description: 'Sent to the confirmed passengers when a dispatcher sends a departure reminder. The same wording is used for WhatsApp and SMS.',
+    variables: [...TRIP_VARIABLES],
+    defaults: {
+      en: {
+        subject: 'Reminder: trip {{tripNumber}} departs at {{departureTime}}',
+        body: 'Dear {{staffName}},\n\nTrip {{tripNumber}} ({{routeName}}) departs at **{{departureTime}}**. Please be at your stop 5 minutes early.\n\n{{companyName}} Transport',
+      },
+      ar: {
+        subject: 'تذكير: الرحلة {{tripNumber}} تنطلق الساعة {{departureTime}}',
+        body: 'عزيزنا {{staffName}}،\n\nتنطلق الرحلة {{tripNumber}} ({{routeName}}) الساعة **{{departureTime}}**. يرجى التواجد في محطتك قبل الموعد بخمس دقائق.\n\nقسم النقل - {{companyName}}',
+      },
+    },
+  },
+  {
+    key: 'staff_transport.trip_update',
+    module: 'Staff transport',
+    name: 'Trip message (passengers)',
+    description: "Sent to the confirmed passengers when a dispatcher writes their own message for a trip. {{message}} is the dispatcher's text. The same wording is used for WhatsApp and SMS.",
+    variables: [
+      ...TRIP_VARIABLES,
+      { name: 'message', description: "The dispatcher's message", sample: 'Please use the rear door today.' },
+    ],
+    defaults: {
+      en: {
+        subject: 'Update - trip {{tripNumber}}',
+        body: '{{message}}\n\n{{companyName}} Transport',
+      },
+      ar: {
+        subject: 'تحديث - الرحلة {{tripNumber}}',
+        body: '{{message}}\n\nقسم النقل - {{companyName}}',
+      },
+    },
+  },
+  {
+    key: 'staff_transport.seat_confirmed',
+    module: 'Staff transport',
+    name: 'Seat confirmed from waitlist',
+    description: 'Sent to a waitlisted passenger when the nightly waitlist run gives them a seat. The same wording is used for WhatsApp.',
+    variables: [
+      ...TRIP_VARIABLES,
+      { name: 'departureDate', description: 'Trip date', sample: '2026-10-01' },
+    ],
+    defaults: {
+      en: {
+        subject: 'Seat confirmed - trip {{tripNumber}}',
+        body: 'Dear {{staffName}},\n\nA seat has opened up on {{routeName}} and you have been moved off the waitlist.\n\n**Trip:** {{tripNumber}}\n**Departure:** {{departureDate}} at {{departureTime}}\n\nSee you on board.\n{{companyName}} Transport',
+      },
+      ar: {
+        subject: 'تم تأكيد مقعدك - الرحلة {{tripNumber}}',
+        body: 'عزيزنا {{staffName}}،\n\nتوفر مقعد على {{routeName}} وتم نقلك من قائمة الانتظار.\n\n**الرحلة:** {{tripNumber}}\n**موعد الانطلاق:** {{departureDate}} الساعة {{departureTime}}\n\nنراك على متن الحافلة.\nقسم النقل - {{companyName}}',
+      },
+    },
+  },
+  {
+    key: 'staff_transport.ops_summary',
+    module: 'Staff transport',
+    name: 'Trip notice summary (transport managers)',
+    description: "Sent to the tenant's Transport Managers (else the company contact email) after a dispatcher sends a trip notice, with how many passengers were reached and the message they received.",
+    variables: [
+      { name: 'tripNumber', description: 'Trip number', sample: 'TRP-0412' },
+      { name: 'routeName', description: 'Route', sample: 'JAFZA Shift A', fallback: { en: 'the route', ar: 'المسار' } },
+      { name: 'noticeType', description: 'Kind of notice (delay, cancellation, ...)', sample: 'Delay' },
+      { name: 'reachedCount', description: 'Passengers reached', sample: '38' },
+      { name: 'passengerCount', description: 'Passengers on the trip', sample: '40' },
+      { name: 'sentBy', description: 'Dispatcher who sent it', sample: 'dispatch@acme.example', fallback: { en: 'a dispatcher', ar: 'أحد المرسلين' } },
+      { name: 'passengerMessage', description: 'The message passengers received', sample: '[passenger message]', block: true },
+    ],
+    defaults: {
+      en: {
+        subject: '{{noticeType}} sent for trip {{tripNumber}}: {{reachedCount}}/{{passengerCount}} reached',
+        body: 'A **{{noticeType}}** notice for trip {{tripNumber}} ({{routeName}}) was sent by {{sentBy}}.\n\n**Passengers reached:** {{reachedCount}} of {{passengerCount}}\n\nThe passengers received:\n\n{{passengerMessage}}',
+      },
+      ar: {
+        subject: 'تم إرسال {{noticeType}} للرحلة {{tripNumber}}: {{reachedCount}}/{{passengerCount}}',
+        body: 'أرسل {{sentBy}} إشعار **{{noticeType}}** للرحلة {{tripNumber}} ({{routeName}}).\n\n**الركاب الذين تم إبلاغهم:** {{reachedCount}} من {{passengerCount}}\n\nالرسالة التي تلقاها الركاب:\n\n{{passengerMessage}}',
       },
     },
   },
