@@ -10,7 +10,8 @@ export const dynamic = 'force-dynamic';
  *
  * POST /api/tenants/pre-verify-domain?action=send-otp
  *   Body: { id: string, email: string }
- *   → Generates a 6-digit OTP, stores it, sends via platform SMTP settings.
+ *   → Generates a 6-digit OTP, stores it, emails it (template
+ *     account.domain_verification_code, platform email sender).
  *
  * POST /api/tenants/pre-verify-domain?action=verify-otp
  *   Body: { id: string, otp: string }
@@ -27,12 +28,13 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
+import { NO_TENANT, sendTemplatedEmail } from '@/lib/email-templates';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function genId(): string    { return crypto.randomUUID(); }
 function genToken(): string { return crypto.randomBytes(20).toString('hex'); }
-function genOtp(): string   { return String(Math.floor(100000 + Math.random() * 900000)); }
+function genOtp(): string   { return String(crypto.randomInt(100000, 1000000)); }
 
 // ── POST — all actions ────────────────────────────────────────────────────────
 
@@ -86,10 +88,20 @@ export async function POST(request: NextRequest) {
         otp, email, otpExpiry.toISOString(), id,
       );
 
-      // Send OTP via platform SMTP (fire and forget on error — code is stored in DB)
-      await sendOtpEmail(email, otp, rec.domain).catch(err => {
-        console.error('[pre-verify-domain] sendOtpEmail failed:', err);
+      // The platform's wording (Admin > Email templates > Account), sent
+      // through the platform email sender. The code is never logged.
+      const sent = await sendTemplatedEmail({
+        tenantId: NO_TENANT,
+        key: 'account.domain_verification_code',
+        to: email,
+        values: { code: otp, domain: rec.domain, validMinutes: '15' },
       });
+      if (!sent.sent) {
+        return NextResponse.json(
+          { error: 'We could not send the verification email. Please try again later or contact support.' },
+          { status: 503 },
+        );
+      }
 
       return NextResponse.json({ ok: true, sentTo: email });
     } catch (err) {
@@ -196,83 +208,4 @@ export async function POST(request: NextRequest) {
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
-}
-
-
-// ── OTP email sender ──────────────────────────────────────────────────────────
-
-async function sendOtpEmail(toEmail: string, otp: string, domain: string): Promise<void> {
-  // Load platform SMTP settings from DB
-  type SettingRow = { key: string; value: string };
-  let rows: SettingRow[] = [];
-  try {
-    rows = await prisma.$queryRawUnsafe<SettingRow[]>(
-      `SELECT key, value FROM platform_settings WHERE key LIKE 'smtp_%' OR key LIKE 'email_%'`,
-    );
-  } catch {
-    // platform_settings may not exist yet
-  }
-
-  const s: Record<string, string> = {};
-  for (const r of rows) s[r.key] = r.value;
-
-  const host       = s['smtp_host'];
-  const port       = parseInt(s['smtp_port'] || '587', 10);
-  const username   = s['smtp_username'];
-  const password   = s['smtp_password'];
-  const encryption = s['smtp_encryption'] || 'tls';
-  const fromName   = s['email_from_name'] || 'Fleet360';
-  const fromAddr   = username || s['email_from_address'] || '';
-
-  if (!host || !username || !password) {
-    // SMTP not configured — OTP is stored in DB; log for operator reference
-    console.warn('[pre-verify-domain] SMTP not configured. OTP for', toEmail, '→', otp);
-    return;
-  }
-
-  const nodemailer = await import('nodemailer');
-  const secure     = encryption === 'ssl';
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const transportOptions: Record<string, any> = {
-    host, port, secure,
-    auth: { user: username, pass: password },
-    connectionTimeout: 10_000,
-    socketTimeout:     10_000,
-  };
-
-  if (host.includes('office365') || host.includes('outlook.com') || host.includes('exchange')) {
-    transportOptions.requireTLS = true;
-    transportOptions.tls        = { ciphers: 'SSLv3', rejectUnauthorized: false };
-  } else if (encryption === 'tls') {
-    transportOptions.tls = { rejectUnauthorized: false };
-  }
-
-  const transporter = nodemailer.default.createTransport(transportOptions);
-
-  await transporter.sendMail({
-    from:    `"${fromName}" <${fromAddr}>`,
-    to:      toEmail,
-    subject: `${otp} — Your domain verification code`,
-    html: `
-      <!DOCTYPE html>
-      <html>
-      <body style="font-family:Arial,sans-serif;background:#0f172a;color:#e2e8f0;padding:40px;margin:0;">
-        <div style="max-width:460px;margin:0 auto;background:#1e293b;border-radius:12px;padding:32px;border:1px solid rgba(255,255,255,0.1);">
-          <h2 style="color:#60a5fa;margin-top:0;font-size:20px;">Domain Verification</h2>
-          <p style="color:#94a3b8;margin-bottom:8px;">
-            You're registering <strong style="color:#e2e8f0;">${domain}</strong> on the Fleet360 platform.
-          </p>
-          <p style="color:#94a3b8;">Enter this code to verify you own the domain:</p>
-          <div style="background:#0f172a;border-radius:8px;padding:24px;text-align:center;margin:24px 0;border:1px solid rgba(96,165,250,0.3);">
-            <span style="font-size:36px;font-weight:700;letter-spacing:8px;color:#60a5fa;font-family:monospace;">${otp}</span>
-          </div>
-          <p style="color:#64748b;font-size:12px;margin:0;">
-            This code expires in 15 minutes. If you didn't request this, you can safely ignore it.
-          </p>
-        </div>
-      </body>
-      </html>
-    `,
-  });
 }

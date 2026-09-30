@@ -19,7 +19,8 @@ import {
 } from '@/lib/invitations';
 import { requireUnderQuota } from '@/lib/plan-limits';
 import type { PlanCode } from '@/lib/billing';
-import { sendEmail } from '@/lib/email';
+import { appUrl, sendTemplatedEmail } from '@/lib/email-templates';
+import { sessionUser } from '@/lib/session-user';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
@@ -118,7 +119,10 @@ async function handlePOST(req: NextRequest, { params }: RouteParams) {
     return NextResponse.json({ ok: false, error: 'roleId is required.' }, { status: 400 });
   }
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  // The invitation to email once it is saved (the email isn't sent while
+  // the transaction is open).
+  const created: { invite: { acceptUrl: string; roleName: string; tenantName: string } | null } = { invite: null };
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
     // Verify the role belongs to this tenant (or is global with tenant_id NULL).
     const role = await tx.role.findFirst({
       where: { id: roleId, OR: [{ tenantId }, { tenantId: null }] },
@@ -182,53 +186,52 @@ async function handlePOST(req: NextRequest, { params }: RouteParams) {
         tenantId, email, roleId, hash, auth.userId, expiresAt,
       );
 
-      const baseUrl   = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-      const acceptUrl = `${baseUrl}/invitation/${encodeURIComponent(token)}`;
-
-      const send = await sendEmail({
-        to: email,
-        subject: `You've been invited to ${tenant.name} on Fleet360`,
-        text: [
-          `You've been invited to join ${tenant.name} as ${role.name}.`,
-          '',
-          `Accept the invite (valid for ${INVITATION_TTL_DAYS} days):`,
-          acceptUrl,
-          '',
-          'If you didn\'t expect this, you can safely ignore the email.',
-        ].join('\n'),
-        html:
-          `<p>You&rsquo;ve been invited to join <strong>${escapeHtml(tenant.name)}</strong> as <strong>${escapeHtml(role.name)}</strong> on Fleet360.</p>` +
-          `<p><a href="${acceptUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:white;border-radius:8px;text-decoration:none">Accept invitation</a></p>` +
-          `<p style="color:#666;font-size:12px">Or copy this link: <code>${acceptUrl}</code><br/>Valid for ${INVITATION_TTL_DAYS} days.</p>` +
-          `<p style="color:#666;font-size:12px">If you didn&rsquo;t expect this, ignore the email.</p>`,
-      });
-
-      void logAudit({
-        tenantId, tenantName: tenant.name,
-        userId: auth.userId,
-        userRole: 'TENANT_ADMIN',
-        entityType: 'Invitation',
-        entityName: email,
-        action: 'CREATE',
-        details: `Invitation sent to ${email} as ${role.name}. Email send: ${send.sent ? 'OK' : `failed (${send.reason ?? 'unknown'})`}.`,
-      });
-
-      return NextResponse.json({
-        ok: true,
-        emailed: send.sent,
-        reason:  send.sent ? undefined : send.reason,
-        // Caller may still need the URL when SMTP isn't configured (dev environments).
-        acceptUrl: send.sent ? undefined : acceptUrl,
-      });
+      created.invite = {
+        acceptUrl: appUrl(`/invitation/${encodeURIComponent(token)}`),
+        roleName: role.name,
+        tenantName: tenant.name,
+      };
+      return null;
       } catch (err) {
       captureException(err, { context: 'admin.invitations.post' });
       return NextResponse.json({ ok: false, error: 'Failed to create invitation' }, { status: 500 });
     }
   });
-}
+  const invite = created.invite;
+  if (response || !invite) return response ?? NextResponse.json({ ok: false, error: 'Failed to create invitation' }, { status: 500 });
 
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+  // In the tenant's wording, name and language (Admin > Email templates).
+  const inviter = await sessionUser(req.headers).catch(() => null);
+  const send = await sendTemplatedEmail({
+    tenantId,
+    key: 'account.user_invitation',
+    to: email,
+    ...(inviter?.email ? { replyTo: inviter.email } : {}),
+    values: {
+      roleName: invite.roleName,
+      invitedBy: inviter?.name ?? inviter?.email ?? '',
+      acceptUrl: invite.acceptUrl,
+      validDays: String(INVITATION_TTL_DAYS),
+    },
+  });
+
+  void logAudit({
+    tenantId, tenantName: invite.tenantName,
+    userId: auth.userId,
+    userRole: 'TENANT_ADMIN',
+    entityType: 'Invitation',
+    entityName: email,
+    action: 'CREATE',
+    details: `Invitation sent to ${email} as ${invite.roleName}. Email send: ${send.sent ? 'OK' : `failed (${send.reason ?? 'unknown'})`}.`,
+  });
+
+  return NextResponse.json({
+    ok: true,
+    emailed: send.sent,
+    reason:  send.sent ? undefined : send.reason,
+    // Caller may still need the URL when SMTP isn't configured (dev environments).
+    acceptUrl: send.sent ? undefined : invite.acceptUrl,
+  });
 }
 
 // Privileged writes are always audited (src/lib/audited-action.ts).

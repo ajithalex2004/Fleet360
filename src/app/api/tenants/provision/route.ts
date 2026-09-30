@@ -14,6 +14,7 @@ import { tenantBootstrapHandler } from '@/lib/handlers/tenant-bootstrap-handler'
 import { z } from 'zod';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
+import { appUrl, sendTemplatedEmail } from '@/lib/email-templates';
 import { addMissingColumns } from '@/lib/ensure-columns';
 import { signSession } from '@/lib/tenant-session';
 // ── Free email domains blocklist ─────────────────────────────────────────────
@@ -63,73 +64,25 @@ function emailDomain(email: string): string {
   return email.split('@')[1]?.toLowerCase() ?? '';
 }
 
+/**
+ * Asks the new organisation's administrator to verify its domain, in the
+ * platform's wording (Admin > Email templates > Account). The link is built
+ * from NEXT_PUBLIC_APP_URL, never the request's Host header, and the token
+ * is never logged.
+ */
 async function sendVerificationEmail(opts: {
-  to: string; tenantName: string; token: string; baseUrl: string; tenantId: string;
+  to: string; tenantName: string; token: string; tenantId: string;
 }): Promise<void> {
-  const smtpHost = process.env.SMTP_HOST;
-  if (!smtpHost) {
-    console.log(
-      `[provision] SMTP not configured — verification token for ${opts.to}:\n  token: ${opts.token}\n  tenantId: ${opts.tenantId}`
-    );
-    return;
-  }
-
-  try {
-    const nodemailer  = await import('nodemailer');
-    const port        = Number(process.env.SMTP_PORT ?? 587);
-    const secure      = process.env.SMTP_SECURE === 'true'; // true only for port 465
-
-    const transporter = nodemailer.default.createTransport({
-      host:   smtpHost,
-      port,
-      secure,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-      // Office 365 / Exchange require explicit TLS options
-      ...(smtpHost.includes('office365') || smtpHost.includes('outlook') ? {
-        tls: { ciphers: 'SSLv3', rejectUnauthorized: false },
-        requireTLS: true,
-      } : {}),
-    });
-
-    const verifyUrl = `${opts.baseUrl}/api/tenants/verify-domain?token=${opts.token}&tenantId=${opts.tenantId}`;
-
-    await transporter.sendMail({
-      from:    process.env.SMTP_FROM ?? '"Fleet360" <noreply@xl-mobility.com>',
-      to:      opts.to,
-      subject: `Verify your domain — ${opts.tenantName}`,
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <body style="font-family:Arial,sans-serif;background:#0f172a;color:#e2e8f0;padding:40px;">
-          <div style="max-width:480px;margin:0 auto;background:#1e293b;border-radius:12px;padding:32px;">
-            <h2 style="color:#3b82f6;margin-top:0;">Welcome to Fleet360</h2>
-            <p>Hello, <strong>${opts.tenantName}</strong> is almost ready.</p>
-            <p>Click the button below to verify your domain and activate all platform features:</p>
-            <a href="${verifyUrl}"
-               style="display:inline-block;background:#3b82f6;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin:16px 0;">
-              Verify Domain
-            </a>
-            <p style="color:#94a3b8;font-size:13px;">
-              Or paste this link in your browser:<br/>
-              <a href="${verifyUrl}" style="color:#60a5fa;">${verifyUrl}</a>
-            </p>
-            <hr style="border-color:#334155;margin:24px 0;"/>
-            <p style="color:#64748b;font-size:12px;">
-              Verification token: <code style="background:#0f172a;padding:2px 6px;border-radius:4px;">${opts.token}</code>
-            </p>
-          </div>
-        </body>
-        </html>
-      `,
-    });
-
-    console.log(`[provision] Verification email sent to ${opts.to}`);
-  } catch (err) {
-    console.error('[provision] Email send failed:', err);
-  }
+  const verifyUrl = appUrl(
+    `/api/tenants/verify-domain?token=${encodeURIComponent(opts.token)}&tenantId=${encodeURIComponent(opts.tenantId)}`,
+  );
+  const sent = await sendTemplatedEmail({
+    tenantId: opts.tenantId,
+    key: 'account.domain_verification_link',
+    to: opts.to,
+    values: { organisationName: opts.tenantName, verifyUrl },
+  });
+  if (!sent.sent) console.warn(`[provision] domain verification email for tenant ${opts.tenantId} not sent (${sent.reason ?? 'unknown'})`);
 }
 
 // ── Ensure schema columns exist (run BEFORE transactions — DDL can't be in tx) ─
@@ -485,14 +438,12 @@ export async function POST(request: NextRequest) {
         // ever persisted. Confirmed live via pg_stat_activity: the ALTER TABLE
         // ran on this transaction's own pid immediately after the last real
         // statement, then "COMMIT" landed on an already-aborted transaction.
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? `https://${request.headers.get('host')}`;
         deferred.run = () => {
           if (!domainPreVerified) {
             sendVerificationEmail({
               to: user.email ?? data.contactEmail,
               tenantName: tenant.name,
               token: verificationToken,
-              baseUrl,
               tenantId: tenant.id,
             }).catch(() => {});
           }
