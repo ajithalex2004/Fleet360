@@ -16,6 +16,7 @@ import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 import { setPortalUserPassword } from './portal-users-store';
 import { sendEmail } from '@/lib/email';
+import { renderEmail, tenantEmailContext } from '@/lib/email-templates';
 
 const INVITATION_TTL_DAYS = 7;
 
@@ -119,7 +120,9 @@ export async function acceptInvitation(
 // ── Email send ─────────────────────────────────────────────────────────
 
 /**
- * Sends the setup link via the platform email sender (src/lib/email.ts).
+ * Sends the setup link via the platform email sender (src/lib/email.ts),
+ * worded by the tenant's "Shipper portal invitation" email template
+ * (Admin > Email templates, English or Arabic).
  *
  * Non-fatal: returns { ok: false, reason } on SMTP misconfiguration so
  * the caller can show a "couldn't send email — copy the link manually"
@@ -135,45 +138,26 @@ export async function sendInvitationEmail(args: {
   expiresAt: string;
 }): Promise<{ ok: true } | { ok: false; reason: string }> {
   const link = `${args.baseUrl.replace(/\/$/, '')}/shipper-portal/setup?token=${encodeURIComponent(args.rawToken)}`;
-    const greeting = args.recipientName ? `Dear ${args.recipientName},` : 'Hello,';
-    const subject = `Set up your Fleet360 portal access for ${args.customerName}`;
-    const html = `
-      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f8fafc;padding:24px;border-radius:12px;">
-        <div style="background:linear-gradient(135deg,#6366f1,#4f46e5);padding:24px;border-radius:10px;margin-bottom:24px;">
-          <h1 style="color:white;margin:0;font-size:20px;">Fleet360 Portal Access</h1>
-          <p style="color:rgba(255,255,255,0.85);margin:6px 0 0;">${args.customerName}</p>
-        </div>
-        <div style="background:white;border-radius:10px;padding:24px;border:1px solid #e2e8f0;">
-          <p style="color:#1e293b;">${greeting}</p>
-          <p style="color:#374151;line-height:1.6;">
-            You have been invited to use the Fleet360 portal as a shipper for
-            <strong>${args.customerName}</strong>. Set up your account using the
-            link below to start placing shipment requests and tracking your shipments.
-          </p>
-          <p style="text-align:center;margin:28px 0;">
-            <a href="${link}"
-               style="display:inline-block;background:#6366f1;color:white;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">
-              Set up my access
-            </a>
-          </p>
-          <p style="color:#64748b;font-size:12px;">
-            This link expires on ${new Date(args.expiresAt).toLocaleDateString()}. If you didn't
-            expect this email, you can safely ignore it.
-          </p>
-        </div>
-        <p style="color:#94a3b8;font-size:12px;margin-top:16px;text-align:center;">Fleet360 Platform</p>
-      </div>
-    `;
+  const context = await tenantEmailContext(args.tenantId);
+  const email = await renderEmail({
+    tenantId: args.tenantId, key: 'shipper.portal_invitation', context,
+    values: {
+      recipientName: args.recipientName ?? '',
+      customerName: args.customerName,
+      setupUrl: link,
+      expiresOn: new Date(args.expiresAt).toLocaleDateString(context.locale === 'ar' ? 'ar-AE' : 'en-AE', { day: 'numeric', month: 'long', year: 'numeric' }),
+    },
+  });
 
-    // The platform email sender (SMTP under Admin > Settings > Notifications,
-    // or SendGrid). An "IntegrationConfig" lookup used to come first here; it
-    // read columns that table does not have, so it always failed.
-    const r = await sendEmail({ to: args.recipientEmail, subject, html });
-    if (r.sent) return { ok: true };
-    return {
-      ok: false,
-      reason: r.reason === 'not_configured' || r.reason === 'smtp_not_configured'
-        ? 'No email transport configured — set up SMTP in Admin > Settings > Notifications, or set SENDGRID_API_KEY + EMAIL_FROM in the environment.'
-        : (r.error ?? r.reason ?? 'Email send failed.'),
-    };
+  // The platform email sender (SMTP under Admin > Settings > Notifications,
+  // or SendGrid). An "IntegrationConfig" lookup used to come first here; it
+  // read columns that table does not have, so it always failed.
+  const r = await sendEmail({ to: args.recipientEmail, subject: email.subject, html: email.html, text: email.text });
+  if (r.sent) return { ok: true };
+  return {
+    ok: false,
+    reason: r.reason === 'not_configured' || r.reason === 'smtp_not_configured'
+      ? 'No email transport configured — set up SMTP in Admin > Settings > Notifications, or set SENDGRID_API_KEY + EMAIL_FROM in the environment.'
+      : (r.error ?? r.reason ?? 'Email send failed.'),
+  };
 }

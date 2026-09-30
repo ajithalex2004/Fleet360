@@ -30,8 +30,10 @@ vi.mock('@/lib/rls', () => ({
     $queryRawUnsafe: async () => [{ name: 'Acme Leasing' }],
   }),
 }));
+vi.mock('@/lib/branding', () => ({ getBranding: async () => null }));
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    $queryRawUnsafe: async (sql: string) => (sql.includes('FROM tenants') ? [{ name: 'Acme Leasing', default_language: 'en' }] : []),
     leaseQuotation: {
       findFirst: async () => ({
         id: 'q1', quotationNumber: 'Q-100', leaseType: 'LONG_TERM', currency: 'AED',

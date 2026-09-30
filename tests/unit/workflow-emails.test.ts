@@ -1,7 +1,9 @@
 /**
  * tests/unit/workflow-emails.test.ts
  *
- * Approval emails go out through the platform email sender (src/lib/email.ts).
+ * Approval emails go out through the platform email sender (src/lib/email.ts),
+ * worded by the "workflow.approval_request" template (src/lib/email-templates;
+ * the built-in wording here, as the mocked database has no saved template).
  * They used to be read from an "IntegrationConfig" row with columns that
  * table does not have, so the lookup always failed and no approver was ever
  * emailed.
@@ -45,6 +47,7 @@ const baseSteps = () => [
   { id: 's2', workflowId: 'wf1', stepOrder: 2, stepName: 'Finance', stepType: 'APPROVAL', assigneeType: 'SPECIFIC_USER', assigneeEmail: 'finance@a.test', assigneeRoleCode: null, multiApproverEmails: null, emailSubject: null, emailBody: null, slaHours: 24 },
 ];
 
+vi.mock('@/lib/branding', () => ({ getBranding: async () => null }));
 vi.mock('@/lib/rls-scope', () => ({ runOutsideRlsScope: <T>(fn: () => Promise<T>) => fn() }));
 vi.mock('@/lib/rls', () => ({
   withPlatformAdmin: async (_p: unknown, fn: (tx: unknown) => Promise<unknown>) => fn({
@@ -68,7 +71,7 @@ vi.mock('@/lib/prisma', () => ({
   },
 }));
 
-import { triggerWorkflow, advanceWorkflow, buildWorkflowEmailHtml, fillPlaceholders, parseEmailList } from '@/lib/workflow-db';
+import { triggerWorkflow, advanceWorkflow, parseEmailList } from '@/lib/workflow-db';
 
 const trigger = () => triggerWorkflow({
   tenantId: TENANT, module: 'LEASING', procedure: 'quote',
@@ -111,9 +114,7 @@ describe('workflow approval emails', () => {
     expect(html).toContain('Manager &lt;review&gt;');
     expect(html).toContain('Q-&lt;1&gt;');
     expect(html).not.toContain('<review>');
-    expect(buildWorkflowEmailHtml({
-      body: '<script>x</script>', referenceNumber: 'R', referenceType: 'T', stepName: 'S', approvalUrl: 'https://x/approvals',
-    })).toContain('&lt;script&gt;');
+    expect(state.sent[0].text).toContain('Manager <review>');
   });
 
   it('never fails the approval when email is not set up or the send throws', async () => {
@@ -161,10 +162,7 @@ describe('workflow approval emails', () => {
   });
 });
 
-describe('placeholder and address helpers', () => {
-  it('fills both brace styles and keeps unknown names', () => {
-    expect(fillPlaceholders('{a} {{ b }} {c}', { a: '1', b: '2' })).toBe('1 2 {c}');
-  });
+describe('address helpers', () => {
   it('parses address lists', () => {
     expect(parseEmailList(' X@a.test;y@a.test ,bad ')).toEqual(['x@a.test', 'y@a.test']);
   });

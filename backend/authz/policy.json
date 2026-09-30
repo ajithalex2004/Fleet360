@@ -1188,6 +1188,31 @@
    }
   },
   {
+   "template": "email-templates",
+   "methods": {
+    "GET": "admin"
+   }
+  },
+  {
+   "template": "email-templates/[id]",
+   "methods": {
+    "PUT": "admin",
+    "DELETE": "admin"
+   }
+  },
+  {
+   "template": "email-templates/[id]/test",
+   "methods": {
+    "POST": "admin"
+   }
+  },
+  {
+   "template": "email-templates/[id]/versions",
+   "methods": {
+    "GET": "admin"
+   }
+  },
+  {
    "template": "events/outbox",
    "methods": {
     "GET": "platform"

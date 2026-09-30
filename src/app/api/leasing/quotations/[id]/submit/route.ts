@@ -5,8 +5,9 @@ export const dynamic = 'force-dynamic';
  *
  * Marks a LeaseQuotation as SENT_TO_CUSTOMER and (best-effort) emails the
  * lessee through the platform email sender (src/lib/email.ts: SMTP under
- * Admin > Settings > Notifications, or SendGrid). Replies go to the user who
- * sent it. Tenant scoping: the quotation must belong to the caller's tenant.
+ * Admin > Settings > Notifications, or SendGrid), worded by the tenant's
+ * "Lease quotation" email template (Admin > Email templates, English or
+ * Arabic). Replies go to the user who sent it. Tenant scoping: the quotation must belong to the caller's tenant.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -15,7 +16,8 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { sendEmail } from '@/lib/email';
 import { sessionUser } from '@/lib/session-user';
-import { quotationEmailHtml, quotationEmailText } from '@/lib/email-templates/quotation';
+import { quotationDetailsBlock } from '@/lib/email-templates/quotation';
+import { renderEmail, tenantEmailContext } from '@/lib/email-templates';
 
 function errorMessage(e: unknown, fallback: string): string {
   return e instanceof Error ? e.message : fallback;
@@ -69,25 +71,19 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
     if (recipientEmail) {
       try {
-        const [sender, tenant] = await Promise.all([
-          sessionUser(req.headers),
-          withTenantRls(prisma, tenantId, (tx) => tx.$queryRawUnsafe<Array<{ name: string }>>(
-            `SELECT name FROM tenants WHERE id::text = $1 LIMIT 1`, tenantId)),
-        ]);
-        const lesseeName  = (quotation.lessee as any)?.name ?? 'Valued Customer';
-        const companyName = tenant[0]?.name || 'Fleet360';
-        const contactEmail = sender?.email;
-
-        const htmlBody = quotationEmailHtml({
+        const [sender, context] = await Promise.all([sessionUser(req.headers), tenantEmailContext(tenantId)]);
+        const q = quotation as typeof quotation & { lessee: { name?: string } | null; vehicles: Array<Record<string, unknown>> };
+        const currency = quotation.currency ?? 'AED';
+        const money = (n: unknown) => `${currency} ${Number(n ?? 0).toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        const details = {
           quotationNumber:    quotation.quotationNumber ?? params.id,
-          lesseeName,
-          lesseeEmail:        recipientEmail,
+          lesseeName:         q.lessee?.name ?? '',
           leaseType:          quotation.leaseType ?? 'LONG_TERM',
           durationMonths:     quotation.durationMonths ?? undefined,
           startDate:          quotation.startDate?.toISOString(),
           endDate:            quotation.endDate?.toISOString(),
           validUntil:         quotation.validUntil?.toISOString(),
-          currency:           quotation.currency ?? 'AED',
+          currency,
           totalMonthlyRate:   Number(quotation.totalMonthlyRate ?? 0),
           totalContractValue: Number(quotation.totalContractValue ?? 0),
           securityDeposit:    Number(quotation.securityDeposit ?? 0),
@@ -95,34 +91,38 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           insuranceIncluded:  quotation.insuranceIncluded ?? false,
           maintenanceIncluded: quotation.maintenanceIncluded ?? false,
           driverIncluded:     quotation.driverIncluded ?? false,
-          vehicles:           (quotation.vehicles as any[]).map(v => ({
-            vehicleType: v.vehicleType,
-            make:        v.make,
-            model:       v.model,
-            year:        v.year,
+          vehicles:           q.vehicles.map(v => ({
+            vehicleType: String(v.vehicleType ?? ''),
+            make:        v.make ? String(v.make) : undefined,
+            model:       v.model ? String(v.model) : undefined,
+            year:        v.year ? Number(v.year) : undefined,
             quantity:    Number(v.quantity ?? 1),
             monthlyRate: Number(v.monthlyRate ?? 0),
           })),
           notes:        quotation.notes ?? undefined,
-          companyName,
-          contactEmail,
-        });
-
-        const textBody = quotationEmailText({
-          quotationNumber:    quotation.quotationNumber ?? params.id,
-          lesseeName,
-          totalMonthlyRate:   Number(quotation.totalMonthlyRate ?? 0),
-          totalContractValue: Number(quotation.totalContractValue ?? 0),
-          currency:           quotation.currency ?? 'AED',
-          validUntil:         quotation.validUntil?.toISOString(),
+        };
+        const email = await renderEmail({
+          tenantId, key: 'leasing.quotation_sent', context,
+          values: {
+            lesseeName:         details.lesseeName,
+            quotationNumber:    details.quotationNumber,
+            validUntil:         quotation.validUntil
+              ? quotation.validUntil.toLocaleDateString(context.locale === 'ar' ? 'ar-AE' : 'en-AE', { day: '2-digit', month: 'long', year: 'numeric' })
+              : '-',
+            totalMonthlyRate:   money(quotation.totalMonthlyRate),
+            totalContractValue: money(quotation.totalContractValue),
+            senderName:         sender?.name ?? '',
+            senderEmail:        sender?.email ?? '',
+          },
+          blocks: { quotationDetails: quotationDetailsBlock(details, context.locale) },
         });
 
         const sent = await sendEmail({
           to:      recipientEmail,
-          subject: `Lease Quotation ${quotation.quotationNumber ?? params.id} - ${companyName}`,
-          text:    textBody,
-          html:    htmlBody,
-          ...(contactEmail ? { replyTo: contactEmail } : {}),
+          subject: email.subject,
+          text:    email.text,
+          html:    email.html,
+          ...(sender?.email ? { replyTo: sender.email } : {}),
         });
 
         emailResult = sent.sent

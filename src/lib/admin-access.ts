@@ -51,6 +51,12 @@ export const ADMIN_ROUTE_POLICY: Record<string, Partial<Record<Method, AdminLeve
   'customers/[id]/tracking-visibility':          { PATCH: 'admin' },
   'customers/portal-status':                     { GET: 'admin' },
   'dispatch-stats':                              { GET: 'admin' },
+  // Email wording per tenant (src/lib/email-templates); the platform
+  // defaults (scope=platform) are checked for platform admins in the handlers.
+  'email-templates':                             { GET: 'admin' },
+  'email-templates/[id]':                        { PUT: 'admin', DELETE: 'admin' },
+  'email-templates/[id]/test':                   { POST: 'admin' },
+  'email-templates/[id]/versions':               { GET: 'admin' },
   'events/outbox':                               { GET: 'platform' },
   // Which users act for which Exchange transport partner (partner_users).
   'exchange/partner-users':                      { GET: 'platform', POST: 'platform', DELETE: 'platform' },
