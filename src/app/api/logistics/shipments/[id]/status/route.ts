@@ -5,6 +5,7 @@ import { withTenantRls } from '@/lib/rls';
 import { updateShipmentOrder } from '@/lib/logistics/domain';
 import { getEventBus }      from '@/events/event-bus';
 import { SHIPMENT_CLOSED }  from '@/events/registry';
+import { notifyShipmentStatus } from '@/lib/logistics/customer-notifications';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
@@ -89,6 +90,11 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           closedAt:        new Date().toISOString(),
         },
       }).catch(err => console.error('[logistics] outbox publish failed:', err));
+    }
+
+    // Tell the customer at the milestones they care about (best-effort).
+    if (next !== current) {
+      void notifyShipmentStatus({ tenantId, shipmentOrderId: params.id, status: next, reason: body.note ?? null });
     }
 
     return NextResponse.json({ success: true, data: shipment });
