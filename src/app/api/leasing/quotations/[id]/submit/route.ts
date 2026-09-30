@@ -14,10 +14,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
-import { sendEmail } from '@/lib/email';
 import { sessionUser } from '@/lib/session-user';
-import { quotationDetailsBlock } from '@/lib/email-templates/quotation';
-import { renderEmail, tenantEmailContext } from '@/lib/email-templates';
+import { sendQuotationEmail, type QuotationForEmail } from '@/lib/leasing/quotation-email';
 
 function errorMessage(e: unknown, fallback: string): string {
   return e instanceof Error ? e.message : fallback;
@@ -71,58 +69,11 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
     if (recipientEmail) {
       try {
-        const [sender, context] = await Promise.all([sessionUser(req.headers), tenantEmailContext(tenantId)]);
-        const q = quotation as typeof quotation & { lessee: { name?: string } | null; vehicles: Array<Record<string, unknown>> };
-        const currency = quotation.currency ?? 'AED';
-        const money = (n: unknown) => `${currency} ${Number(n ?? 0).toLocaleString('en-AE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-        const details = {
-          quotationNumber:    quotation.quotationNumber ?? params.id,
-          lesseeName:         q.lessee?.name ?? '',
-          leaseType:          quotation.leaseType ?? 'LONG_TERM',
-          durationMonths:     quotation.durationMonths ?? undefined,
-          startDate:          quotation.startDate?.toISOString(),
-          endDate:            quotation.endDate?.toISOString(),
-          validUntil:         quotation.validUntil?.toISOString(),
-          currency,
-          totalMonthlyRate:   Number(quotation.totalMonthlyRate ?? 0),
-          totalContractValue: Number(quotation.totalContractValue ?? 0),
-          securityDeposit:    Number(quotation.securityDeposit ?? 0),
-          mileageCap:         quotation.mileageCap ?? undefined,
-          insuranceIncluded:  quotation.insuranceIncluded ?? false,
-          maintenanceIncluded: quotation.maintenanceIncluded ?? false,
-          driverIncluded:     quotation.driverIncluded ?? false,
-          vehicles:           q.vehicles.map(v => ({
-            vehicleType: String(v.vehicleType ?? ''),
-            make:        v.make ? String(v.make) : undefined,
-            model:       v.model ? String(v.model) : undefined,
-            year:        v.year ? Number(v.year) : undefined,
-            quantity:    Number(v.quantity ?? 1),
-            monthlyRate: Number(v.monthlyRate ?? 0),
-          })),
-          notes:        quotation.notes ?? undefined,
-        };
-        const email = await renderEmail({
-          tenantId, key: 'leasing.quotation_sent', context,
-          values: {
-            lesseeName:         details.lesseeName,
-            quotationNumber:    details.quotationNumber,
-            validUntil:         quotation.validUntil
-              ? quotation.validUntil.toLocaleDateString(context.locale === 'ar' ? 'ar-AE' : 'en-AE', { day: '2-digit', month: 'long', year: 'numeric' })
-              : '-',
-            totalMonthlyRate:   money(quotation.totalMonthlyRate),
-            totalContractValue: money(quotation.totalContractValue),
-            senderName:         sender?.name ?? '',
-            senderEmail:        sender?.email ?? '',
-          },
-          blocks: { quotationDetails: quotationDetailsBlock(details, context.locale) },
-        });
-
-        const sent = await sendEmail({
-          to:      recipientEmail,
-          subject: email.subject,
-          text:    email.text,
-          html:    email.html,
-          ...(sender?.email ? { replyTo: sender.email } : {}),
+        const sent = await sendQuotationEmail({
+          tenantId,
+          quotation: quotation as unknown as QuotationForEmail,
+          to: recipientEmail,
+          sender: await sessionUser(req.headers),
         });
 
         emailResult = sent.sent

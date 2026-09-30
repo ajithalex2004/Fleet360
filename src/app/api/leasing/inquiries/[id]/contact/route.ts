@@ -24,7 +24,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
-import { sendEmail } from '@/lib/email';
+import { sendTemplatedEmail } from '@/lib/email-templates';
+import { sessionUser } from '@/lib/session-user';
 import { sendWhatsApp } from '@/lib/whatsapp';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
@@ -69,10 +70,20 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       if (!inquiry.customerEmail) {
         return NextResponse.json({ error: 'Inquiry has no customerEmail' }, { status: 400 });
       }
-      sendResult = await sendEmail({
-        to: inquiry.customerEmail,
-        subject: subject ?? 'Following up on your enquiry',
-        text: message,
+      // The salesperson's message inside the tenant's "Enquiry follow-up"
+      // template (greeting, signature, branding); their subject, if given,
+      // replaces the template's.
+      const sender = await sessionUser(req.headers);
+      sendResult = await sendTemplatedEmail({
+        tenantId, key: 'leasing.inquiry_follow_up', to: inquiry.customerEmail,
+        override: { subject },
+        values: {
+          customerName: inquiry.customerName ?? '',
+          message,
+          senderName: sender?.name ?? '',
+          senderEmail: sender?.email ?? '',
+        },
+        ...(sender?.email ? { replyTo: sender.email } : {}),
       });
     }
 
@@ -82,7 +93,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         sent: false,
         reason: sendResult.reason,
         error: sendResult.error,
-      }, { status: sendResult.reason === 'not_configured' ? 503 : 502 });
+      }, { status: sendResult.reason === 'not_configured' || sendResult.reason === 'smtp_not_configured' ? 503 : 502 });
     }
 
     // Append a timeline entry — outbound contact is part of the audit trail.

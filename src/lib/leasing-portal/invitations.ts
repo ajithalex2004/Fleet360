@@ -17,7 +17,7 @@
 import { prisma } from '@/lib/prisma';
 import crypto from 'crypto';
 import { setPortalUserPassword } from './portal-users-store';
-import { sendEmail } from '@/lib/email';
+import { sendTemplatedEmail, tenantEmailContext } from '@/lib/email-templates';
 
 const INVITATION_TTL_DAYS = 7;
 
@@ -116,7 +116,13 @@ export async function acceptInvitation(
 
 // ── Email send ─────────────────────────────────────────────────────────
 
+/**
+ * Sends the setup link through the platform email sender (src/lib/email.ts),
+ * worded by the tenant's "Leasing portal invitation" template (Admin > Email
+ * templates, English or Arabic).
+ */
 export async function sendInvitationEmail(args: {
+  tenantId: string;
   recipientEmail: string;
   recipientName: string | null;
   lesseeName: string;
@@ -125,43 +131,21 @@ export async function sendInvitationEmail(args: {
   expiresAt: string;
 }): Promise<{ ok: true } | { ok: false; reason: string }> {
   const link = `${args.baseUrl.replace(/\/$/, '')}/leasing-portal/setup?token=${encodeURIComponent(args.rawToken)}`;
-  const greeting = args.recipientName ? `Dear ${args.recipientName},` : 'Hello,';
-  const subject = `Set up your Fleet360 leasing portal access for ${args.lesseeName}`;
-  const html = `
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f8fafc;padding:24px;border-radius:12px;">
-      <div style="background:linear-gradient(135deg,#0891b2,#0e7490);padding:24px;border-radius:10px;margin-bottom:24px;">
-        <h1 style="color:white;margin:0;font-size:20px;">Fleet360 Leasing Portal</h1>
-        <p style="color:rgba(255,255,255,0.85);margin:6px 0 0;">${args.lesseeName}</p>
-      </div>
-      <div style="background:white;border-radius:10px;padding:24px;border:1px solid #e2e8f0;">
-        <p style="color:#1e293b;">${greeting}</p>
-        <p style="color:#374151;line-height:1.6;">
-          You have been invited to your leasing portal for
-          <strong>${args.lesseeName}</strong>. Set up your account using the
-          link below to view your contracts and invoices, make payments,
-          sign renewals, upload documents, and report issues online.
-        </p>
-        <p style="text-align:center;margin:28px 0;">
-          <a href="${link}"
-             style="display:inline-block;background:#0891b2;color:white;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">
-            Set up my access
-          </a>
-        </p>
-        <p style="color:#64748b;font-size:12px;">
-          This link expires on ${new Date(args.expiresAt).toLocaleDateString()}. If you didn't
-          expect this email, you can safely ignore it.
-        </p>
-      </div>
-      <p style="color:#94a3b8;font-size:12px;margin-top:16px;text-align:center;">Fleet360 Platform</p>
-    </div>
-  `;
-
-  const r = await sendEmail({ to: args.recipientEmail, subject, html });
+  const context = await tenantEmailContext(args.tenantId);
+  const r = await sendTemplatedEmail({
+    tenantId: args.tenantId, key: 'leasing.portal_invitation', context, to: args.recipientEmail,
+    values: {
+      recipientName: args.recipientName ?? '',
+      lesseeName: args.lesseeName,
+      setupUrl: link,
+      expiresOn: new Date(args.expiresAt).toLocaleDateString(context.locale === 'ar' ? 'ar-AE' : 'en-AE', { day: 'numeric', month: 'long', year: 'numeric' }),
+    },
+  });
   if (r.sent) return { ok: true };
   return {
     ok: false,
-    reason: r.reason === 'not_configured'
-      ? 'No email transport configured — set up an EMAIL integration, or set SENDGRID_API_KEY + EMAIL_FROM in the environment.'
+    reason: r.reason === 'not_configured' || r.reason === 'smtp_not_configured'
+      ? 'No email transport configured — set up SMTP in Admin > Settings > Notifications, or set SENDGRID_API_KEY + EMAIL_FROM in the environment.'
       : (r.error ?? r.reason ?? 'Email send failed.'),
   };
 }

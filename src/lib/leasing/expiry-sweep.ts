@@ -1,8 +1,9 @@
 /**
  * Document-expiry sweep — finds leasing documents whose expiry is approaching
  * or has passed, updates their status, and creates LeaseAlert rows so they
- * surface on the alerts dashboard. Sends email notifications when SMTP is
- * configured.
+ * surface on the alerts dashboard. Emails the lessee through the tenant's
+ * "Customer document expiring / expired" templates (Admin > Email
+ * templates) after each tenant's transaction commits.
  *
  * Designed to be idempotent — running it twice in the same day produces the
  * same result. Uses an "alert-fingerprint" check (entityId + bucket) to
@@ -16,7 +17,18 @@
 import { captureException, captureMessage } from '@/lib/sentry';
 import { runSweep } from '@/lib/prisma-sweep';
 import type { TxClient } from '@/lib/rls';
-import { sendEmail } from '@/services/email/emailService';
+import { appUrl, sendTemplatedEmail } from '@/lib/email-templates';
+
+interface PendingEmail {
+  tenantId: string;
+  recipient: { email: string; name: string };
+  expired: boolean;
+  days: number;
+  documentName: string;
+  documentType: string;
+  expiryDate: Date;
+  documentId: string;
+}
 
 export type ExpiryBucket = 'EXPIRED' | 'EXPIRING_1D' | 'EXPIRING_14D' | 'EXPIRING_30D';
 
@@ -118,8 +130,8 @@ export async function runExpirySweep(
       });
       let tenantAlerts = 0;
       let tenantStatusUpdates = 0;
-      let tenantEmails = 0;
       const tenantHits: ExpiryHit[] = [];
+      const pendingEmails: PendingEmail[] = [];
 
       for (const doc of docs) {
         if (!doc.expiryDate) continue;
@@ -181,32 +193,15 @@ export async function runExpirySweep(
             });
             tenantAlerts += 1;
 
-            // Best-effort — a failed send must not roll back the alert that
-            // already exists, so it's caught and counted separately rather
-            // than folded into the outer catch.
-            try {
-              const recipient = await resolveLesseeEmail(tx, doc.entityType, doc.entityId);
-              if (recipient) {
-                const expired = bucket === 'EXPIRED';
-                const subject = expired
-                  ? `Document expired: ${doc.docName}`
-                  : `Document expiring in ${days} day${days === 1 ? '' : 's'}: ${doc.docName}`;
-                await sendEmail({
-                  to: [{ email: recipient.email, name: recipient.name }],
-                  subject,
-                  htmlBody: `
-                    <p>Dear ${recipient.name},</p>
-                    <p>${expired
-                      ? `Your document <strong>${doc.docName}</strong> (${doc.docType}) expired on ${doc.expiryDate.toISOString().slice(0, 10)}.`
-                      : `Your document <strong>${doc.docName}</strong> (${doc.docType}) expires on ${doc.expiryDate.toISOString().slice(0, 10)} (in ${days} day${days === 1 ? '' : 's'}).`
-                    }</p>
-                    <p>Please upload a renewed copy via the lessee portal at your earliest convenience to avoid any disruption to your lease.</p>
-                    <p>Best regards,<br/>Fleet360</p>`,
-                });
-                tenantEmails += 1;
-              }
-            } catch (emailErr) {
-              captureException(emailErr, { context: 'leasing.expiry-sweep.email', tags: { documentId: doc.id } });
+            // Emailed after this tenant's transaction commits (below): an
+            // SMTP round-trip must not hold the transaction open, and a
+            // failed send must not roll back the alert.
+            const recipient = await resolveLesseeEmail(tx, doc.entityType, doc.entityId);
+            if (recipient) {
+              pendingEmails.push({
+                tenantId, recipient, expired: bucket === 'EXPIRED', days,
+                documentName: doc.docName, documentType: doc.docType, expiryDate: doc.expiryDate, documentId: doc.id,
+              });
             }
           }
         } catch (err) {
@@ -215,7 +210,7 @@ export async function runExpirySweep(
           captureException(err, { context: 'leasing.expiry-sweep', tags: { documentId: doc.id, bucket } });
         }
       }
-      return { scanned: docs.length, hits: tenantHits, alerts: tenantAlerts, statusUpdates: tenantStatusUpdates, emails: tenantEmails };
+      return { scanned: docs.length, hits: tenantHits, alerts: tenantAlerts, statusUpdates: tenantStatusUpdates, pendingEmails };
     },
     { tenantHeader: opts.tenantId },
   );
@@ -224,8 +219,27 @@ export async function runExpirySweep(
     scanned += r.result.scanned;
     alertsCreated += r.result.alerts;
     statusUpdates += r.result.statusUpdates;
-    emailsSent += r.result.emails;
     hits.push(...r.result.hits);
+    for (const p of r.result.pendingEmails) {
+      try {
+        const result = await sendTemplatedEmail({
+          tenantId: p.tenantId,
+          key: p.expired ? 'leasing.document_expired' : 'leasing.document_expiring',
+          to: p.recipient.email,
+          values: {
+            recipientName: p.recipient.name,
+            documentName: p.documentName,
+            documentType: p.documentType,
+            expiryDate: p.expiryDate.toISOString().slice(0, 10),
+            daysLeft: String(Math.max(p.days, 0)),
+            portalUrl: appUrl('/leasing-portal'),
+          },
+        });
+        if (result.sent) emailsSent += 1;
+      } catch (emailErr) {
+        captureException(emailErr, { context: 'leasing.expiry-sweep.email', tags: { documentId: p.documentId } });
+      }
+    }
   }
 
   if (alertsCreated > 0) {

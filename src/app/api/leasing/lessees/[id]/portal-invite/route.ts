@@ -90,6 +90,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
     const emailResult = await sendInvitationEmail({
+      tenantId,
       recipientEmail: email,
       recipientName: body.fullName ?? null,
       lesseeName: lessee.name,

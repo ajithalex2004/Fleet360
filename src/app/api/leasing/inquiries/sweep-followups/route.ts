@@ -21,7 +21,9 @@ import { prisma } from '@/lib/prisma';
 
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
-import { sendEmail } from '@/lib/email';
+import { appUrl, sendTemplatedEmail } from '@/lib/email-templates';
+import { listBlock } from '@/lib/email-templates/render';
+import { tenantContact } from '@/lib/leasing/staff-recipients';
 import { sendWhatsApp } from '@/lib/whatsapp';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
@@ -194,29 +196,38 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Digest notifications to the sales team (best-effort, non-blocking).
+    // Digest notifications (best-effort, non-blocking). Email: one digest
+    // per tenant, to that tenant's contact email, worded by its "Overdue
+    // follow-ups digest" template. It used to be one digest of every
+    // tenant's enquiries sent to a single LEASING_SALES_NOTIFY_EMAIL address.
     let digestEmailSent = false;
     let digestWhatsAppSent = false;
+    for (const r of perTenant) {
+      const assessments = r.result.assessments;
+      if (!assessments.length) continue;
+      try {
+        const contact = await tenantContact(r.tenantId);
+        if (!contact) continue;
+        const result = await sendTemplatedEmail({
+          tenantId: r.tenantId, key: 'leasing.inquiry_followup_digest', to: contact.email,
+          values: { recipientName: contact.name, count: String(assessments.length), crmUrl: appUrl('/leasing/inquiries') },
+          blocks: {
+            followUps: listBlock(assessments.map(a =>
+              `${a.inquiryNumber ?? a.inquiryId.slice(0, 8)} - ${a.label}: ${a.count} pending (oldest ${a.oldestDue.toISOString().slice(0, 10)})`)),
+          },
+        });
+        digestEmailSent ||= result.sent;
+      } catch (emailErr) {
+        captureException(emailErr, { context: 'leasing.inquiries.sweep-followups.email', tags: { tenantId: r.tenantId } });
+      }
+    }
     if (allAssessments.length > 0) {
-      const teamEmail = process.env.LEASING_SALES_NOTIFY_EMAIL;
       const teamPhone = process.env.LEASING_SALES_NOTIFY_WHATSAPP ?? process.env.OPERATIONS_PHONE;
       const lines = allAssessments.map(a =>
         `• ${a.inquiryNumber ?? a.inquiryId.slice(0, 8)} — ${a.label}: ${a.count} follow-up${a.count === 1 ? '' : 's'} (oldest ${a.oldestDue.toISOString().slice(0, 10)})`,
       );
       const summary = `Sales follow-up digest — ${allAssessments.length} inquiries with overdue follow-ups across ${perTenant.length} tenant(s)`;
 
-      if (teamEmail) {
-        const html = `<p>${summary}</p><ul>${allAssessments.map(a =>
-          `<li><strong>${a.inquiryNumber ?? a.inquiryId.slice(0, 8)}</strong> — ${escapeHtml(a.label)}: ${a.count} pending (oldest ${a.oldestDue.toISOString().slice(0, 10)})</li>`,
-        ).join('')}</ul><p style="color:#666;font-size:12px">Triggered by daily sweep at ${now.toISOString()}.</p>`;
-        const r = await sendEmail({
-          to: teamEmail,
-          subject: `[Leasing CRM] ${summary}`,
-          text: [summary, '', ...lines, '', `Generated ${now.toISOString()}`].join('\n'),
-          html,
-        });
-        digestEmailSent = r.sent;
-      }
       if (teamPhone) {
         const whatsappBody = `📋 ${summary}\n\n${lines.slice(0, 10).join('\n')}${lines.length > 10 ? `\n... and ${lines.length - 10} more` : ''}`;
         const r = await sendWhatsApp({ to: teamPhone, body: whatsappBody });
@@ -249,6 +260,3 @@ export async function POST(req: NextRequest) {
   }
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
-}
