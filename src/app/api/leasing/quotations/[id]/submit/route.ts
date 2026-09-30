@@ -4,15 +4,17 @@ export const dynamic = 'force-dynamic';
  * POST /api/leasing/quotations/[id]/submit
  *
  * Marks a LeaseQuotation as SENT_TO_CUSTOMER and (best-effort) emails the
- * lessee using the configured SMTP integration. Tenant scoping: the
- * quotation must belong to the caller's tenant.
+ * lessee through the platform email sender (src/lib/email.ts: SMTP under
+ * Admin > Settings > Notifications, or SendGrid). Replies go to the user who
+ * sent it. Tenant scoping: the quotation must belong to the caller's tenant.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
-import nodemailer from 'nodemailer';
+import { sendEmail } from '@/lib/email';
+import { sessionUser } from '@/lib/session-user';
 import { quotationEmailHtml, quotationEmailText } from '@/lib/email-templates/quotation';
 
 function errorMessage(e: unknown, fallback: string): string {
@@ -57,31 +59,24 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       return NextResponse.json({ error: 'Quotation not found' }, { status: 404 });
     }
 
-    // 3. Try to send email if SMTP is configured
+    // 3. Email the lessee, best-effort. This used to read an EMAIL row of
+    //    "IntegrationConfig", which no admin screen creates, so quotations
+    //    were never actually emailed.
     let emailResult: { sent: boolean; message: string; recipient?: string } = {
       sent: false,
-      message: 'No SMTP configuration found. Quotation status updated to SENT_TO_CUSTOMER.',
+      message: 'No customer email address. Quotation status updated to SENT_TO_CUSTOMER.',
     };
 
-    try {
-      const emailConfig = await prisma.integrationConfig.findFirst({
-        where: { type: 'EMAIL', isEnabled: true },
-      });
-
-      if (emailConfig && emailConfig.host && emailConfig.username) {
-        const transport = nodemailer.createTransport({
-          host:   emailConfig.host,
-          port:   parseInt(emailConfig.port ?? '587'),
-          secure: (emailConfig.encryption ?? '').toUpperCase() === 'SSL',
-          auth: {
-            user: emailConfig.username,
-            pass: emailConfig.password ?? '',
-          },
-          tls: { rejectUnauthorized: false },
-        });
-
+    if (recipientEmail) {
+      try {
+        const [sender, tenant] = await Promise.all([
+          sessionUser(req.headers),
+          withTenantRls(prisma, tenantId, (tx) => tx.$queryRawUnsafe<Array<{ name: string }>>(
+            `SELECT name FROM tenants WHERE id::text = $1 LIMIT 1`, tenantId)),
+        ]);
         const lesseeName  = (quotation.lessee as any)?.name ?? 'Valued Customer';
-        const contactEmail = emailConfig.senderEmail ?? emailConfig.username;
+        const companyName = tenant[0]?.name || 'Fleet360';
+        const contactEmail = sender?.email;
 
         const htmlBody = quotationEmailHtml({
           quotationNumber:    quotation.quotationNumber ?? params.id,
@@ -109,7 +104,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             monthlyRate: Number(v.monthlyRate ?? 0),
           })),
           notes:        quotation.notes ?? undefined,
-          companyName:  emailConfig.fromName  ?? 'Fleet360',
+          companyName,
           contactEmail,
         });
 
@@ -122,32 +117,29 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           validUntil:         quotation.validUntil?.toISOString(),
         });
 
-        const toAddress = recipientEmail || contactEmail;
-
-        await transport.sendMail({
-          from:    `"${emailConfig.fromName ?? 'Fleet360'}" <${emailConfig.senderEmail ?? emailConfig.username}>`,
-          to:      toAddress,
-          subject: `Lease Quotation ${quotation.quotationNumber ?? params.id} - Fleet360`,
+        const sent = await sendEmail({
+          to:      recipientEmail,
+          subject: `Lease Quotation ${quotation.quotationNumber ?? params.id} - ${companyName}`,
           text:    textBody,
           html:    htmlBody,
+          ...(contactEmail ? { replyTo: contactEmail } : {}),
         });
 
+        emailResult = sent.sent
+          ? { sent: true, message: `Quotation emailed successfully to ${recipientEmail}`, recipient: recipientEmail }
+          : {
+              sent: false,
+              message: sent.reason === 'smtp_not_configured' || sent.reason === 'not_configured'
+                ? 'Email is not set up. Configure SMTP in Admin > Settings > Notifications. Quotation status updated.'
+                : `Quotation status updated but email failed: ${sent.error ?? sent.reason ?? 'send error'}`,
+            };
+      } catch (e) {
+        console.error('Email send error:', e);
         emailResult = {
-          sent:      true,
-          message:   `Quotation emailed successfully to ${toAddress}`,
-          recipient: toAddress,
+          sent:    false,
+          message: `Quotation status updated but email failed: ${e instanceof Error ? e.message : 'SMTP error'}`,
         };
-      } else {
-        emailResult.message = emailConfig
-          ? 'Email config found but SMTP host/credentials not set. Quotation marked as SENT_TO_CUSTOMER.'
-          : 'No EMAIL integration configured. Go to Admin > Integrations to set up SMTP. Quotation status updated.';
       }
-    } catch (e) {
-      console.error('Email send error:', e);
-      emailResult = {
-        sent:    false,
-        message: `Quotation status updated but email failed: ${e instanceof Error ? e.message : 'SMTP error'}`,
-      };
     }
 
     return NextResponse.json({

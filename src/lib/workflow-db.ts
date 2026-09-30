@@ -106,14 +106,6 @@ interface CountRow {
   count: string;
 }
 
-interface EmailIntegrationConfig {
-  smtpHost: string;
-  smtpPort: string | number;
-  smtpSecure?: boolean | string;
-  smtpUser: string;
-  smtpPassword: string;
-  fromEmail?: string;
-}
 //  Workflow Definition CRUD
 /**
  * List workflows with optional filters. Backward-compatible signature —
@@ -701,50 +693,66 @@ export async function getInstancesForReference(tenantId: string, referenceId: st
   `, referenceId, tenantId);
 }
 
-//  Email Sender 
-async function sendWorkflowEmail(params: {
-  to: string; subject: string; body: string;
-  instanceId: string; referenceNumber: string; referenceType: string; stepName: string;
-}) {
-  try {
-    const cfgRows: Array<{ config: string | EmailIntegrationConfig }> = await prisma.$queryRawUnsafe(
-      `SELECT * FROM "IntegrationConfig" WHERE type='EMAIL' AND "isActive"=true LIMIT 1`);
-    if (!cfgRows.length) {
-      console.warn('[Workflow] Email skipped: no active EMAIL integration configured. Go to Admin > Integrations to set up SMTP.');
-      return;
-    }
-    const cfg = cfgRows[0];
-    const config: EmailIntegrationConfig =
-      typeof cfg.config === 'string' ? JSON.parse(cfg.config) : cfg.config;
-    const nodemailer = await import('nodemailer');
-    const transporter = nodemailer.createTransport({
-      host: config.smtpHost, port: parseInt(String(config.smtpPort)) || 587,
-      secure: config.smtpSecure === true || config.smtpPort === '465',
-      auth: { user: config.smtpUser, pass: config.smtpPassword },
-    });
-    const approvalUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/approvals`;
-    const html = `
+//  Email Sender
+const escapeHtml = (v: string) => v
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+/** The approval request email. Every interpolated value is escaped: step
+ *  names, reference numbers and bodies come from tenant configuration. */
+export function buildWorkflowEmailHtml(params: {
+  body: string; referenceNumber: string; referenceType: string; stepName: string; approvalUrl: string;
+}): string {
+  const { body, referenceNumber, referenceType, stepName, approvalUrl } = params;
+  return `
       <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f8fafc;padding:24px;border-radius:12px;">
         <div style="background:linear-gradient(135deg,#6366f1,#4f46e5);padding:24px;border-radius:10px;margin-bottom:24px;">
           <h1 style="color:white;margin:0;font-size:20px;">Action Required</h1>
           <p style="color:rgba(255,255,255,0.85);margin:6px 0 0;">Fleet360</p>
         </div>
         <div style="background:white;border-radius:10px;padding:24px;border:1px solid #e2e8f0;">
-          <h2 style="color:#1e293b;margin:0 0 16px;font-size:18px;">${params.stepName}</h2>
+          <h2 style="color:#1e293b;margin:0 0 16px;font-size:18px;">${escapeHtml(stepName)}</h2>
           <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
-            <tr><td style="padding:8px;background:#f1f5f9;border-radius:6px;color:#64748b;font-size:12px;font-weight:600;text-transform:uppercase;">Reference</td><td style="padding:8px;color:#1e293b;font-weight:700;">${params.referenceNumber}</td></tr>
-            <tr><td style="padding:8px;background:#f1f5f9;color:#64748b;font-size:12px;font-weight:600;text-transform:uppercase;">Type</td><td style="padding:8px;color:#1e293b;">${params.referenceType}</td></tr>
+            <tr><td style="padding:8px;background:#f1f5f9;border-radius:6px;color:#64748b;font-size:12px;font-weight:600;text-transform:uppercase;">Reference</td><td style="padding:8px;color:#1e293b;font-weight:700;">${escapeHtml(referenceNumber)}</td></tr>
+            <tr><td style="padding:8px;background:#f1f5f9;color:#64748b;font-size:12px;font-weight:600;text-transform:uppercase;">Type</td><td style="padding:8px;color:#1e293b;">${escapeHtml(referenceType)}</td></tr>
           </table>
-          <pre style="font-family:Arial,sans-serif;white-space:pre-wrap;color:#374151;line-height:1.6;">${params.body}</pre>
-          <a href="${approvalUrl}" style="display:inline-block;margin-top:20px;background:#6366f1;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">Review &amp; Approve</a>
+          <pre style="font-family:Arial,sans-serif;white-space:pre-wrap;color:#374151;line-height:1.6;">${escapeHtml(body)}</pre>
+          <a href="${escapeHtml(approvalUrl)}" style="display:inline-block;margin-top:20px;background:#6366f1;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">Review &amp; Approve</a>
         </div>
         <p style="color:#94a3b8;font-size:12px;margin-top:16px;text-align:center;">Fleet360 Platform</p>
       </div>
     `;
-    await transporter.sendMail({
-      from: config.fromEmail ?? config.smtpUser,
-      to: params.to, subject: params.subject, html,
+}
+
+/**
+ * Sends an approval request through the platform email sender
+ * (src/lib/email.ts: the SMTP settings under Admin > Settings >
+ * Notifications, or SendGrid when SENDGRID_API_KEY is set).
+ *
+ * This used to read an "IntegrationConfig" row with columns that table does
+ * not have ("isActive", a JSON "config"), so the query always failed and no
+ * approval email was ever sent. Best-effort: a failed send is logged and
+ * never fails the approval itself.
+ */
+async function sendWorkflowEmail(params: {
+  to: string; subject: string; body: string;
+  instanceId: string; referenceNumber: string; referenceType: string; stepName: string;
+}) {
+  try {
+    const approvalUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/approvals`;
+    // Loaded on use: the sender pulls in Sentry and env validation, which
+    // modules importing this file (admin-scope, its tests) shouldn't need.
+    const { sendEmail } = await import('@/lib/email');
+    const result = await sendEmail({
+      to: params.to,
+      subject: params.subject,
+      html: buildWorkflowEmailHtml({ ...params, approvalUrl }),
+      text: `${params.body}\n\nReview: ${approvalUrl}`,
     });
+    if (!result.sent) {
+      console.warn(`[Workflow] Approval email for ${params.referenceNumber} not sent (${result.reason ?? 'unknown'})${
+        result.reason === 'smtp_not_configured' ? ': set up SMTP in Admin > Settings > Notifications.' : ''}`);
+    }
   } catch (e) {
     console.error('Workflow email error:', e instanceof Error ? e.message : e);
   }
