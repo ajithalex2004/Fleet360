@@ -866,7 +866,7 @@ export default function WorkflowsPage() {
               {stepTab === 'email' && (
                 <div className="space-y-4">
                   <div className="px-4 py-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-300">
-                    Available template variables: <code className="bg-blue-500/20 px-1 rounded">{'{referenceNumber}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{submittedBy}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{stepName}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{moduleLabel}'}</code>
+                    Available template variables: <code className="bg-blue-500/20 px-1 rounded">{'{referenceNumber}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{approverName}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{submittedBy}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{stepName}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{moduleLabel}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{workflowName}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{approvalUrl}'}</code>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Email Subject</label>
@@ -1118,7 +1118,7 @@ export default function WorkflowsPage() {
                   <div className="px-4 py-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-300">
                     This is the <strong>workflow-level default</strong> email template. Steps that have no custom template will use this. Leave blank to use the system default.
                     <br /><br />
-                    Available variables: <code className="bg-blue-500/20 px-1 rounded">{'{referenceNumber}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{submittedBy}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{stepName}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{moduleLabel}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{approvalUrl}'}</code>
+                    Available variables: <code className="bg-blue-500/20 px-1 rounded">{'{referenceNumber}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{approverName}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{submittedBy}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{stepName}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{moduleLabel}'}</code> <code className="bg-blue-500/20 px-1 rounded">{'{approvalUrl}'}</code>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Default Email Subject</label>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getMyPendingApprovals } from '@/lib/workflow-db';
+import { getMyPendingApprovals, getUserRoleCodes } from '@/lib/workflow-db';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { sessionUser } from '@/lib/session-user';
@@ -23,7 +23,10 @@ export async function GET(req: NextRequest) {
   try {
     const me = await sessionUser(req.headers);
     if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    const approvals = await getMyPendingApprovals(tenantId, me.email);
+    // Steps routed to a role reach every holder of that role in this tenant.
+    const role = req.headers.get('x-user-role');
+    const roleCodes = [...new Set([...(role ? [role] : []), ...await getUserRoleCodes(tenantId, me.email)])];
+    const approvals = await getMyPendingApprovals(tenantId, me.email, roleCodes);
     return NextResponse.json({ email: me.email, approvals });
   } catch (e) {
     return NextResponse.json({ error: errorMessage(e, 'Failed to fetch approvals') }, { status: 500 });
