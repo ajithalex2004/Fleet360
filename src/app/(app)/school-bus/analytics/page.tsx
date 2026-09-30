@@ -1,472 +1,202 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
-import PreviewBanner from '@/components/PreviewBanner';
+/**
+ * School Bus analytics, from /api/school-bus/reports: how each route is
+ * used and how its trips go (last 30 days), enrolment and this month's
+ * fees, and where riders are picked up. Every figure comes from the
+ * tenant's routes, allocations, trips and school-bus invoices.
+ */
+import { useEffect, useState } from 'react';
 
-/* ─────────────────────────── types ─────────────────────────── */
-interface RouteMetric {
-  routeName: string;
-  totalTrips: number;
-  avgOnTimeRate: number;  // %
-  avgOccupancy: number;   // %
-  avgSpeed: number;       // km/h
-  totalStudents: number;
-  totalDistanceKm: number;
-  congestionScore: number; // 0-100 (100 = severe congestion)
-  congestionLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'SEVERE';
-  peakDelayMin: number;   // avg peak delay minutes
-  session: 'MORNING' | 'AFTERNOON';
+interface RouteUtil {
+  routeCode: string; routeName: string; emirate: string; vehicle: string;
+  capacity: number; total: number; utilPct: number; monthlyRev: number; revPerRider: number;
+}
+interface RouteTrips { routeCode: string; routeName: string; tripType: string; trips: number; marked: number; boarded: number; boardingRate: number }
+interface AreaDetail { area: string; emirate: string; routes: number; totalRiders: number; distribution: number }
+interface Reports {
+  overview: {
+    kpis: { activeRoutes: number; totalVehicles: number; totalStudents: number; fleetCapacity: number; totalEnrolled: number; capacityUsedPct: number; monthlyRevenue: number };
+    busModeSplit: { twoWay: number; pickupOnly: number; dropOnly: number; total: number };
+  };
+  routeUtilization: { routes: RouteUtil[] };
+  tripEfficiency: { kpis: { totalMarked: number; totalBoarded: number; boardingRate: number }; byRoute: RouteTrips[] };
+  areaDistribution: { kpis: { areasServed: number }; byEmirate: Array<{ emirate: string; riders: number }>; areaDetails: AreaDetail[] };
+  feeAnalysis: { kpis: { monthlyRevenue: number; payingRiders: number; avgPerRider: number } };
 }
 
-interface ParentEngagement {
-  month: string;
-  totalAllocations: number;
-  activeAllocations: number;
-  withdrawals: number;
-  newEnrollments: number;
-  averageFeesPaid: number;   // AED
-  outstandingFees: number;   // AED
-  satisfactionScore: number; // 1-5 (mock)
-}
+const aed = (n: number) => `AED ${Math.round(n).toLocaleString('en-AE')}`;
+const pctColor = (p: number) => (p >= 90 ? 'text-red-400' : p >= 70 ? 'text-amber-400' : 'text-emerald-400');
 
-interface ServiceAreaStats {
-  emirate: string;
-  city: string;
-  area: string;
-  stopCount: number;
-  studentCount: number;
-  routeCount: number;
-  avgDistanceToStop: number; // km
-}
-
-
-// Mock data for parent analytics (in production, computed from real tables)
-const MOCK_ROUTE_METRICS: RouteMetric[] = [
-  { routeName: 'Marina Morning Route', totalTrips: 85, avgOnTimeRate: 94, avgOccupancy: 82, avgSpeed: 38, totalStudents: 28, totalDistanceKm: 1530, congestionScore: 72, congestionLevel: 'HIGH', peakDelayMin: 12, session: 'MORNING' },
-  { routeName: 'JBR Afternoon Route', totalTrips: 82, avgOnTimeRate: 88, avgOccupancy: 75, avgSpeed: 32, totalStudents: 22, totalDistanceKm: 1476, congestionScore: 85, congestionLevel: 'SEVERE', peakDelayMin: 18, session: 'AFTERNOON' },
-  { routeName: 'Downtown Express', totalTrips: 90, avgOnTimeRate: 96, avgOccupancy: 95, avgSpeed: 42, totalStudents: 35, totalDistanceKm: 1800, congestionScore: 45, congestionLevel: 'MEDIUM', peakDelayMin: 6, session: 'MORNING' },
-  { routeName: 'Deira North Route', totalTrips: 78, avgOnTimeRate: 91, avgOccupancy: 58, avgSpeed: 45, totalStudents: 18, totalDistanceKm: 1404, congestionScore: 28, congestionLevel: 'LOW', peakDelayMin: 3, session: 'MORNING' },
-  { routeName: 'Business Bay Loop', totalTrips: 88, avgOnTimeRate: 85, avgOccupancy: 88, avgSpeed: 28, totalStudents: 32, totalDistanceKm: 1584, congestionScore: 91, congestionLevel: 'SEVERE', peakDelayMin: 22, session: 'AFTERNOON' },
-];
-
-const MOCK_ENGAGEMENT: ParentEngagement[] = [
-  { month: '2026-01', totalAllocations: 142, activeAllocations: 135, withdrawals: 3, newEnrollments: 8, averageFeesPaid: 1850, outstandingFees: 24600, satisfactionScore: 4.2 },
-  { month: '2026-02', totalAllocations: 148, activeAllocations: 141, withdrawals: 2, newEnrollments: 11, averageFeesPaid: 1920, outstandingFees: 18400, satisfactionScore: 4.3 },
-  { month: '2026-03', totalAllocations: 155, activeAllocations: 149, withdrawals: 1, newEnrollments: 8, averageFeesPaid: 1780, outstandingFees: 21800, satisfactionScore: 4.1 },
-  { month: '2026-04', totalAllocations: 160, activeAllocations: 154, withdrawals: 2, newEnrollments: 7, averageFeesPaid: 1950, outstandingFees: 15200, satisfactionScore: 4.4 },
-];
-
-const MOCK_SERVICE_AREAS: ServiceAreaStats[] = [
-  { emirate: 'Dubai', city: 'Dubai City', area: 'Marina', stopCount: 8, studentCount: 42, routeCount: 3, avgDistanceToStop: 0.4 },
-  { emirate: 'Dubai', city: 'Dubai City', area: 'JBR', stopCount: 5, studentCount: 28, routeCount: 2, avgDistanceToStop: 0.3 },
-  { emirate: 'Dubai', city: 'Dubai City', area: 'Downtown Dubai', stopCount: 6, studentCount: 38, routeCount: 2, avgDistanceToStop: 0.5 },
-  { emirate: 'Dubai', city: 'Dubai City', area: 'Deira', stopCount: 9, studentCount: 35, routeCount: 3, avgDistanceToStop: 0.6 },
-  { emirate: 'Dubai', city: 'Dubai City', area: 'Business Bay', stopCount: 7, studentCount: 44, routeCount: 3, avgDistanceToStop: 0.4 },
-  { emirate: 'Dubai', city: 'Dubai City', area: 'Al Barsha', stopCount: 6, studentCount: 31, routeCount: 2, avgDistanceToStop: 0.7 },
-  { emirate: 'Abu Dhabi', city: 'Abu Dhabi City', area: 'Al Reem Island', stopCount: 4, studentCount: 18, routeCount: 1, avgDistanceToStop: 0.5 },
-  { emirate: 'Sharjah', city: 'Sharjah City', area: 'Al Nahda', stopCount: 5, studentCount: 22, routeCount: 2, avgDistanceToStop: 0.6 },
-];
-
-/* ─────────────────────────── Congestion Badge ─────────────────── */
-const CONGESTION_CFG: Record<string, { color: string; bg: string; border: string }> = {
-  LOW:    { color: 'text-green-400',  bg: 'bg-green-500/10',  border: 'border-green-500/20'  },
-  MEDIUM: { color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20' },
-  HIGH:   { color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
-  SEVERE: { color: 'text-red-400',    bg: 'bg-red-500/10',    border: 'border-red-500/30'    },
-};
-
-function CongestionBar({ score, level }: { score: number; level: string }) {
-  const cfg = CONGESTION_CFG[level] ?? CONGESTION_CFG.LOW;
+function Kpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-2 bg-[var(--bg-surface)] rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-all ${
-          level === 'LOW' ? 'bg-green-500' : level === 'MEDIUM' ? 'bg-yellow-500' : level === 'HIGH' ? 'bg-orange-500' : 'bg-red-500'
-        }`} style={{ width: `${score}%` }} />
-      </div>
-      <span className={`text-xs font-semibold ${cfg.color} w-12 flex-shrink-0`}>{score}</span>
+    <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4">
+      <p className="text-xs text-[var(--text-faint)]">{label}</p>
+      <p className={`text-2xl font-bold ${value === '—' ? 'text-[var(--text-faint)]' : 'text-[var(--text-main)]'}`}>{value}</p>
+      {sub && <p className="text-xs text-[var(--text-faint)] mt-0.5">{sub}</p>}
     </div>
   );
 }
 
-/* ─────────────────────────── Route Congestion Card ─────────────── */
-function RouteCard({ r }: { r: RouteMetric }) {
-  const cfg = CONGESTION_CFG[r.congestionLevel];
-  return (
-    <div className={`bg-[var(--bg-surface)] border rounded-xl p-4 ${cfg.border}`}>
-      <div className="flex items-start justify-between mb-3">
-        <div>
-          <h3 className="text-sm font-semibold text-[var(--text-main)]">{r.routeName}</h3>
-          <span className="text-xs text-[var(--text-faint)]">{r.session}</span>
-        </div>
-        <span className={`text-xs px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.color} ${cfg.border}`}>
-          {r.congestionLevel}
-        </span>
-      </div>
-
-      <div className="mb-3">
-        <div className="flex justify-between text-xs mb-1">
-          <span className="text-[var(--text-faint)]">Congestion Score</span>
-          <span className={r.congestionLevel === 'SEVERE' ? 'text-red-400' : 'text-[var(--text-muted)]'}>+{r.peakDelayMin}min peak delay</span>
-        </div>
-        <CongestionBar score={r.congestionScore} level={r.congestionLevel} />
-      </div>
-
-      <div className="grid grid-cols-3 gap-2 text-center text-xs">
-        <div className="bg-[var(--bg-surface)] rounded-lg p-2">
-          <p className="font-bold text-[var(--text-main)]">{r.avgOnTimeRate}%</p>
-          <p className="text-[var(--text-faint)]">On-time</p>
-        </div>
-        <div className="bg-[var(--bg-surface)] rounded-lg p-2">
-          <p className="font-bold text-[var(--text-main)]">{r.avgOccupancy}%</p>
-          <p className="text-[var(--text-faint)]">Occupancy</p>
-        </div>
-        <div className="bg-[var(--bg-surface)] rounded-lg p-2">
-          <p className="font-bold text-[var(--text-main)]">{r.avgSpeed} km/h</p>
-          <p className="text-[var(--text-faint)]">Avg Speed</p>
-        </div>
-      </div>
-
-      {r.congestionLevel === 'SEVERE' && (
-        <div className="mt-3 bg-red-500/5 border border-red-500/10 rounded-lg px-2 py-1.5 text-xs text-red-400">
-          🚦 Severe congestion — consider route re-timing or alternate corridor
-        </div>
-      )}
-    </div>
-  );
+function Empty({ text }: { text: string }) {
+  return <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-10 text-center text-sm text-[var(--text-faint)]">{text}</div>;
 }
 
-/* ─────────────────────────── Sparkline ─────────────────────────── */
-function Sparkline({ data, color = '#f59e0b' }: { data: number[]; color?: string }) {
-  if (data.length < 2) return null;
-  const max = Math.max(...data);
-  const min = Math.min(...data);
-  const range = max - min || 1;
-  const W = 120, H = 32;
-  const pts = data.map((v, i) => ({
-    x: (i / (data.length - 1)) * W,
-    y: H - ((v - min) / range) * (H - 4) - 2,
-  }));
-  const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-24 h-8">
-      <path d={d} stroke={color} strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={pts[pts.length - 1].x} cy={pts[pts.length - 1].y} r={3} fill={color} />
-    </svg>
-  );
-}
+export default function SchoolBusAnalyticsPage() {
+  const [tab, setTab] = useState<'routes' | 'enrolment' | 'areas'>('routes');
+  const [data, setData] = useState<Reports | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-/* ─────────────────────────── Page ──────────────────────────── */
-export default function AnalyticsPage() {
-  const [tab, setTab] = useState<'congestion' | 'parent' | 'service-areas'>('congestion');
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/school-bus/reports', { cache: 'no-store' })
+      .then(async (res) => {
+        const json = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(json?.error ?? `Could not load analytics (${res.status})`);
+        if (!cancelled) setData(json as Reports);
+      })
+      .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load analytics'); });
+    return () => { cancelled = true; };
+  }, []);
 
-  const totalStudents = MOCK_SERVICE_AREAS.reduce((s, a) => s + a.studentCount, 0);
-  const totalRoutes   = new Set(MOCK_ROUTE_METRICS.map(r => r.routeName)).size;
-
-  const severeRoutes  = MOCK_ROUTE_METRICS.filter(r => r.congestionLevel === 'SEVERE');
-  const latestEngagement = MOCK_ENGAGEMENT[MOCK_ENGAGEMENT.length - 1];
+  const k = data?.overview.kpis;
+  const trips = data?.tripEfficiency;
+  // Trips per route, both directions together.
+  const tripsByRoute = new Map<string, { trips: number; marked: number; boarded: number }>();
+  for (const t of trips?.byRoute ?? []) {
+    const cur = tripsByRoute.get(t.routeCode) ?? { trips: 0, marked: 0, boarded: 0 };
+    tripsByRoute.set(t.routeCode, { trips: cur.trips + t.trips, marked: cur.marked + t.marked, boarded: cur.boarded + t.boarded });
+  }
+  const routes = [...(data?.routeUtilization.routes ?? [])].sort((a, b) => b.utilPct - a.utilPct);
+  // Seat use from each route's allocated riders against its seats.
+  const seats = routes.reduce((s, r) => s + r.capacity, 0);
+  const riders = routes.reduce((s, r) => s + r.total, 0);
+  const split = data?.overview.busModeSplit;
+  const fees = data?.feeAnalysis.kpis;
+  const areas = data?.areaDistribution;
 
   return (
     <div className="space-y-5">
-      <PreviewBanner />
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--text-main)]">📊 System Analytics & Intelligence</h1>
-          <p className="text-[var(--text-muted)] text-xs mt-0.5">Route congestion · parent engagement · service area coverage · IQ tracker</p>
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold text-[var(--text-main)]">School Bus Analytics</h1>
+        <p className="text-xs text-[var(--text-muted)] mt-0.5">Route use, trips in the last 30 days, enrolment, fees this month and pickup areas</p>
       </div>
 
-      {/* Fleet summary strip */}
-      <div className="grid grid-cols-4 gap-3">
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3 text-center">
-          <p className="text-2xl font-bold text-[var(--text-main)]">{totalStudents}</p>
-          <p className="text-xs text-[var(--text-faint)]">Total Students Served</p>
-        </div>
-        <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-3 text-center">
-          <p className="text-2xl font-bold text-yellow-400">{totalRoutes}</p>
-          <p className="text-xs text-[var(--text-faint)]">Active Routes</p>
-        </div>
-        <div className="bg-red-500/10 border border-red-500/10 rounded-xl p-3 text-center">
-          <p className="text-2xl font-bold text-red-400">{severeRoutes.length}</p>
-          <p className="text-xs text-[var(--text-faint)]">Severe Congestion Alerts</p>
-        </div>
-        <div className="bg-green-500/10 border border-green-500/10 rounded-xl p-3 text-center">
-          <p className="text-2xl font-bold text-green-400">{latestEngagement.satisfactionScore}★</p>
-          <p className="text-xs text-[var(--text-faint)]">Parent Satisfaction (5)</p>
-        </div>
+      {error && <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">{error}</div>}
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Kpi label="Active routes" value={k ? String(k.activeRoutes) : '—'} sub={k ? `${k.totalVehicles} buses` : undefined} />
+        <Kpi label="Students riding" value={k ? k.totalStudents.toLocaleString('en-AE') : '—'} sub={seats > 0 ? `${Math.round((riders / seats) * 100)}% of ${seats} seats` : undefined} />
+        <Kpi
+          label="Boarding rate (30 days)"
+          value={trips && trips.kpis.totalMarked > 0 ? `${trips.kpis.boardingRate}%` : '—'}
+          sub={trips && trips.kpis.totalMarked > 0 ? `${trips.kpis.totalBoarded} of ${trips.kpis.totalMarked} boarded` : 'No trips recorded'}
+        />
+        <Kpi label="Fees invoiced this month" value={fees && fees.monthlyRevenue > 0 ? aed(fees.monthlyRevenue) : '—'} sub={fees && fees.payingRiders > 0 ? `${fees.payingRiders} invoices` : 'No invoices yet'} />
       </div>
 
-      {/* Congestion alerts banner */}
-      {severeRoutes.length > 0 && (
-        <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-4">
-          <p className="text-red-400 font-semibold mb-2 text-sm">🚦 Congestion Alerts — Immediate Action Required</p>
-          <div className="grid grid-cols-2 gap-2">
-            {severeRoutes.map(r => (
-              <div key={r.routeName} className="bg-red-500/5 border border-red-500/10 rounded-lg px-3 py-2 text-xs">
-                <span className="text-red-300 font-semibold">{r.routeName}</span>
-                <span className="text-red-400 ml-2">+{r.peakDelayMin}min avg delay · {r.avgOnTimeRate}% on-time</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Tab navigation */}
-      <div className="flex gap-1 border-b border-[var(--border-subtle)] pb-0">
-        {[
-          { key: 'congestion', label: '🚦 Route Congestion' },
-          { key: 'parent', label: '👨‍👩‍👧 Parent Engagement' },
-          { key: 'service-areas', label: '📍 Service Areas' },
-        ].map(t => (
-          <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
-              tab === t.key
-                ? 'text-yellow-400 border-yellow-500'
-                : 'text-[var(--text-muted)] border-transparent hover:text-[var(--text-main)]'
-            }`}>{t.label}</button>
+      <div className="flex gap-2 border-b border-[var(--border-subtle)]">
+        {([['routes', 'Route performance'], ['enrolment', 'Enrolment & fees'], ['areas', 'Pickup areas']] as const).map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px ${tab === id ? 'border-blue-500 text-[var(--text-main)]' : 'border-transparent text-[var(--text-faint)] hover:text-[var(--text-muted)]'}`}
+          >
+            {label}
+          </button>
         ))}
       </div>
 
-      {/* Tab: Congestion */}
-      {tab === 'congestion' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-[var(--text-muted)]">Route congestion score based on average speed, occupancy, and delay data. 0 = free flow, 100 = gridlock.</p>
-          </div>
-
-          {/* Congestion heat table */}
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-[var(--bg-surface)]/60 border-b border-[var(--border-subtle)]">
-                <tr>
-                  {['Route', 'Session', 'Congestion', 'On-Time', 'Occupancy', 'Avg Speed', 'Peak Delay', 'Trips'].map(h => (
-                    <th key={h} className="text-left py-3 px-4 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider whitespace-nowrap">{h}</th>
-                  ))}
+      {!data && !error ? (
+        <Empty text="Loading analytics…" />
+      ) : tab === 'routes' ? (
+        routes.length === 0 ? <Empty text="No active school bus routes yet." /> : (
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs uppercase text-[var(--text-faint)]">
+                  {['Route', 'Bus', 'Riders / seats', 'Seat use', 'Trips (30d)', 'Boarding rate'].map((h) => <th key={h} className="px-4 py-3">{h}</th>)}
                 </tr>
               </thead>
-              <tbody>
-                {MOCK_ROUTE_METRICS.sort((a, b) => b.congestionScore - a.congestionScore).map(r => {
-                  const cfg = CONGESTION_CFG[r.congestionLevel];
+              <tbody className="divide-y divide-white/5">
+                {routes.map((r) => {
+                  const t = tripsByRoute.get(r.routeCode);
                   return (
-                    <tr key={r.routeName} className="border-t border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]/20">
-                      <td className="py-3 px-4 font-semibold text-[var(--text-main)]">{r.routeName}</td>
-                      <td className="py-3 px-4 text-xs text-[var(--text-muted)]">{r.session}</td>
-                      <td className="py-3 px-4 min-w-36">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className={`text-xs px-1.5 py-0.5 rounded border ${cfg.bg} ${cfg.color} ${cfg.border}`}>{r.congestionLevel}</span>
-                        </div>
-                        <CongestionBar score={r.congestionScore} level={r.congestionLevel} />
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className={`text-sm font-bold ${r.avgOnTimeRate >= 90 ? 'text-green-400' : r.avgOnTimeRate >= 80 ? 'text-amber-400' : 'text-red-400'}`}>
-                          {r.avgOnTimeRate}%
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
-                        <span className={`text-sm font-bold ${r.avgOccupancy >= 90 ? 'text-amber-400' : 'text-[var(--text-main)]'}`}>
-                          {r.avgOccupancy}%
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-[var(--text-muted)]">{r.avgSpeed} km/h</td>
-                      <td className="py-3 px-4">
-                        <span className={r.peakDelayMin > 15 ? 'text-red-400' : r.peakDelayMin > 8 ? 'text-amber-400' : 'text-[var(--text-muted)]'}>
-                          +{r.peakDelayMin} min
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-[var(--text-muted)]">{r.totalTrips}</td>
+                    <tr key={r.routeCode}>
+                      <td className="px-4 py-3"><p className="font-medium text-[var(--text-main)]">{r.routeName}</p><p className="text-xs text-[var(--text-faint)]">{r.routeCode} · {r.emirate}</p></td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{r.vehicle || '—'}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{r.total} / {r.capacity}</td>
+                      <td className={`px-4 py-3 font-semibold ${pctColor(r.utilPct)}`}>{r.capacity ? `${r.utilPct}%` : '—'}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{t?.trips ?? 0}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{t && t.marked > 0 ? `${Math.round((t.boarded / t.marked) * 1000) / 10}%` : '—'}</td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
           </div>
-
-          {/* Route cards */}
-          <div className="grid grid-cols-3 gap-4">
-            {MOCK_ROUTE_METRICS.map(r => <RouteCard key={r.routeName} r={r} />)}
-          </div>
-
-          {/* Recommendations */}
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4">
-            <p className="text-sm font-semibold text-[var(--text-main)] mb-3">💡 Smart Recommendations</p>
-            <div className="space-y-2 text-xs text-[var(--text-muted)]">
-              <div className="flex gap-2"><span className="text-amber-400">→</span><span>JBR Afternoon Route: Consider shifting departure time from 14:00 to 14:30 to avoid peak SZR traffic. Expected congestion improvement: 25%.</span></div>
-              <div className="flex gap-2"><span className="text-amber-400">→</span><span>Business Bay Loop: Route passes through Financial District at peak hours. Consider Sheikh Zayed Road alternate via Al Khail.</span></div>
-              <div className="flex gap-2"><span className="text-green-400">→</span><span>Deira North Route: Excellent performance. Template timing for other routes operating in similar low-congestion corridors.</span></div>
-              <div className="flex gap-2"><span className="text-blue-400">→</span><span>Downtown Express: At 95% occupancy — consider adding a second bus or expanding route capacity next term.</span></div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Tab: Parent Engagement */}
-      {tab === 'parent' && (
-        <div className="space-y-4">
-          <p className="text-sm text-[var(--text-muted)]">Monthly parent/guardian engagement metrics: enrollments, withdrawals, fee collections, and satisfaction trends.</p>
-
-          {/* Trend cards */}
-          <div className="grid grid-cols-4 gap-4">
-            {[
-              { label: 'Active Allocations', data: MOCK_ENGAGEMENT.map(e => e.activeAllocations), color: '#22c55e', unit: 'students' },
-              { label: 'New Enrollments', data: MOCK_ENGAGEMENT.map(e => e.newEnrollments), color: '#60a5fa', unit: '/month' },
-              { label: 'Fees Collected', data: MOCK_ENGAGEMENT.map(e => e.averageFeesPaid), color: '#f59e0b', unit: 'AED avg' },
-              { label: 'Satisfaction', data: MOCK_ENGAGEMENT.map(e => e.satisfactionScore * 20), color: '#a78bfa', unit: '/5 ★' },
-            ].map(k => {
-              const latest = k.data[k.data.length - 1];
-              const prev   = k.data[k.data.length - 2];
-              const delta  = latest - prev;
-              return (
-                <div key={k.label} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4">
-                  <p className="text-xs text-[var(--text-faint)] mb-1">{k.label}</p>
-                  <div className="flex items-end justify-between">
-                    <div>
-                      <p className="text-2xl font-bold text-[var(--text-main)]">{k.label === 'Satisfaction' ? (latest / 20).toFixed(1) : latest}</p>
-                      <p className="text-xs text-[var(--text-faint)]">{k.unit}</p>
-                    </div>
-                    <Sparkline data={k.data} color={k.color} />
-                  </div>
-                  <p className={`text-xs mt-1 ${delta >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                    {delta >= 0 ? '▲' : '▼'} {Math.abs(delta).toFixed(k.label === 'Satisfaction' ? 1 : 0)} vs prev month
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Monthly table */}
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-[var(--bg-surface)]/60 border-b border-[var(--border-subtle)]">
-                <tr>
-                  {['Month', 'Active', 'New', 'Withdrawn', 'Avg Fee Paid', 'Outstanding', 'Satisfaction'].map(h => (
-                    <th key={h} className="text-left py-3 px-4 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {[...MOCK_ENGAGEMENT].reverse().map(e => (
-                  <tr key={e.month} className="border-t border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]/20">
-                    <td className="py-3 px-4 text-[var(--text-muted)] font-medium">{e.month}</td>
-                    <td className="py-3 px-4 text-[var(--text-main)] font-semibold">{e.activeAllocations}</td>
-                    <td className="py-3 px-4 text-green-400">+{e.newEnrollments}</td>
-                    <td className="py-3 px-4 text-red-400">−{e.withdrawals}</td>
-                    <td className="py-3 px-4 text-[var(--text-main)]">AED {e.averageFeesPaid.toLocaleString()}</td>
-                    <td className="py-3 px-4">
-                      <span className={e.outstandingFees > 20000 ? 'text-amber-400' : 'text-[var(--text-muted)]'}>
-                        AED {e.outstandingFees.toLocaleString()}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-1">
-                        {'★'.repeat(Math.round(e.satisfactionScore))}{'☆'.repeat(5 - Math.round(e.satisfactionScore))}
-                        <span className="text-xs text-[var(--text-faint)] ml-1">{e.satisfactionScore}</span>
-                      </div>
-                    </td>
-                  </tr>
+        )
+      ) : tab === 'enrolment' ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-[var(--text-main)] mb-3">Service type</h3>
+            {!split || split.total === 0 ? <p className="text-sm text-[var(--text-faint)]">No active allocations yet.</p> : (
+              <ul className="space-y-2 text-sm">
+                {[['Two-way', split.twoWay], ['Pickup only', split.pickupOnly], ['Drop-off only', split.dropOnly]].map(([label, n]) => (
+                  <li key={label as string} className="flex justify-between text-[var(--text-muted)]">
+                    <span>{label}</span>
+                    <span className="font-medium text-[var(--text-main)]">{n as number} · {Math.round(((n as number) / split.total) * 100)}%</span>
+                  </li>
                 ))}
-              </tbody>
-            </table>
+              </ul>
+            )}
           </div>
-
-          {/* Parent IQ Tracker */}
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4">
-            <p className="text-sm font-semibold text-[var(--text-main)] mb-3">🧠 Parent IQ Tracker — Key Insights</p>
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              {[
-                { label: 'Retention Rate', val: '97.1%', trend: '▲ +1.2%', color: 'text-green-400', note: 'Students retained month-on-month' },
-                { label: 'Payment Compliance', val: '82%', trend: '▲ +4%', color: 'text-green-400', note: 'Invoices paid within due date' },
-                { label: 'Parent App Notifications', val: '94%', trend: '▲', color: 'text-blue-400', note: 'Parents receiving real-time ETA alerts' },
-                { label: 'Avg Time to Stop', val: '3.2 min', trend: '▼ −0.5 min', color: 'text-green-400', note: 'Average parent wait time at stop' },
-                { label: 'Late Pickup Incidents', val: '2', trend: '▼', color: 'text-green-400', note: 'Children not collected on arrival this month' },
-                { label: 'Feedback Response Rate', val: '68%', trend: '▲ +8%', color: 'text-blue-400', note: 'Parents responding to surveys' },
-              ].map(k => (
-                <div key={k.label} className="bg-[var(--bg-surface)] rounded-lg p-3">
-                  <div className="flex justify-between items-start mb-1">
-                    <span className="text-[var(--text-muted)]">{k.label}</span>
-                    <span className={`text-xs ${k.color}`}>{k.trend}</span>
-                  </div>
-                  <p className={`text-xl font-bold ${k.color}`}>{k.val}</p>
-                  <p className="text-[var(--text-faint)] mt-0.5">{k.note}</p>
-                </div>
-              ))}
-            </div>
+          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-[var(--text-main)] mb-3">Fees by route (this month)</h3>
+            {routes.filter((r) => r.monthlyRev > 0).length === 0 ? <p className="text-sm text-[var(--text-faint)]">No school bus invoices this month yet.</p> : (
+              <ul className="space-y-2 text-sm">
+                {routes.filter((r) => r.monthlyRev > 0).sort((a, b) => b.monthlyRev - a.monthlyRev).map((r) => (
+                  <li key={r.routeCode} className="flex justify-between text-[var(--text-muted)]">
+                    <span>{r.routeName}</span>
+                    <span className="font-medium text-[var(--text-main)]">{aed(r.monthlyRev)}{r.revPerRider ? ` · ${aed(r.revPerRider)}/rider` : ''}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
-      )}
-
-      {/* Tab: Service Areas */}
-      {tab === 'service-areas' && (
-        <div className="space-y-4">
-          <p className="text-sm text-[var(--text-muted)]">Geographic coverage across Emirates → Cities → Areas. Monitor stop density and student distribution.</p>
-
-          {/* Coverage by emirate */}
-          <div className="grid grid-cols-3 gap-3">
-            {['Dubai', 'Abu Dhabi', 'Sharjah'].map(em => {
-              const areas = MOCK_SERVICE_AREAS.filter(a => a.emirate === em);
-              const students = areas.reduce((s, a) => s + a.studentCount, 0);
-              const stops    = areas.reduce((s, a) => s + a.stopCount, 0);
-              const routes   = areas.reduce((s, a) => s + a.routeCount, 0);
-              return (
-                <div key={em} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4">
-                  <p className="text-sm font-bold text-[var(--text-main)] mb-3">🏙️ {em}</p>
-                  <div className="space-y-1.5 text-xs">
-                    <div className="flex justify-between text-[var(--text-muted)]"><span>Areas served</span><span className="text-[var(--text-main)] font-semibold">{areas.length}</span></div>
-                    <div className="flex justify-between text-[var(--text-muted)]"><span>Total stops</span><span className="text-[var(--text-main)] font-semibold">{stops}</span></div>
-                    <div className="flex justify-between text-[var(--text-muted)]"><span>Students</span><span className="text-[var(--text-main)] font-semibold">{students}</span></div>
-                    <div className="flex justify-between text-[var(--text-muted)]"><span>Routes</span><span className="text-[var(--text-main)] font-semibold">{routes}</span></div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Area table */}
-          <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-[var(--bg-surface)]/60 border-b border-[var(--border-subtle)]">
-                <tr>
-                  {['Emirate', 'Area', 'Stops', 'Students', 'Routes', 'Avg Dist to Stop', 'Density'].map(h => (
-                    <th key={h} className="text-left py-3 px-4 text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {MOCK_SERVICE_AREAS.map(a => {
-                  const studentsPerStop = a.stopCount > 0 ? Math.round(a.studentCount / a.stopCount) : 0;
-                  return (
-                    <tr key={`${a.emirate}-${a.area}`} className="border-t border-[var(--border-subtle)] hover:bg-[var(--bg-surface)]/20">
-                      <td className="py-3 px-4 text-[var(--text-muted)]">{a.emirate}</td>
-                      <td className="py-3 px-4 font-semibold text-[var(--text-main)]">{a.area}</td>
-                      <td className="py-3 px-4 text-[var(--text-muted)]">{a.stopCount}</td>
-                      <td className="py-3 px-4 text-[var(--text-main)] font-semibold">{a.studentCount}</td>
-                      <td className="py-3 px-4 text-[var(--text-muted)]">{a.routeCount}</td>
-                      <td className="py-3 px-4 text-[var(--text-muted)]">{a.avgDistanceToStop} km</td>
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 h-1.5 bg-[var(--bg-surface)] rounded-full overflow-hidden">
-                            <div className="h-full bg-yellow-500 rounded-full" style={{ width: `${Math.min(studentsPerStop * 5, 100)}%` }} />
-                          </div>
-                          <span className="text-xs text-[var(--text-muted)]">{studentsPerStop}/stop</span>
-                        </div>
-                      </td>
+      ) : (
+        !areas || areas.areaDetails.length === 0 ? <Empty text="No pickup areas yet: allocate students to stops to see where riders are." /> : (
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-5">
+              <h3 className="text-sm font-semibold text-[var(--text-main)] mb-3">Riders by emirate</h3>
+              <ul className="space-y-2 text-sm">
+                {areas.byEmirate.map((e) => (
+                  <li key={e.emirate} className="flex justify-between text-[var(--text-muted)]"><span>{e.emirate}</span><span className="font-medium text-[var(--text-main)]">{e.riders}</span></li>
+                ))}
+              </ul>
+            </div>
+            <div className="md:col-span-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs uppercase text-[var(--text-faint)]">
+                    {['Pickup area', 'Emirate', 'Routes', 'Riders', 'Share'].map((h) => <th key={h} className="px-4 py-3">{h}</th>)}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {areas.areaDetails.map((a) => (
+                    <tr key={a.area}>
+                      <td className="px-4 py-3 font-medium text-[var(--text-main)]">{a.area}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{a.emirate}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{a.routes}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{a.totalRiders}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{a.distribution}%</td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Gap analysis */}
-          <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4">
-            <p className="text-sm font-semibold text-amber-300 mb-2">🔍 Coverage Gap Analysis</p>
-            <div className="space-y-1.5 text-xs text-[var(--text-muted)]">
-              <div className="flex gap-2"><span className="text-amber-400">→</span><span>Abu Dhabi — Al Reem Island: Only 1 route serving 18 students. Consider adding a second route for redundancy.</span></div>
-              <div className="flex gap-2"><span className="text-amber-400">→</span><span>Sharjah — Al Nahda: Average walk-to-stop of 0.6km exceeds 500m guideline. Add 2 intermediate stops.</span></div>
-              <div className="flex gap-2"><span className="text-amber-400">→</span><span>Dubai — Palm Jumeirah, Jumeirah 1, Umm Suqeim: No service coverage. Potential demand from {'>'}50 students.</span></div>
-              <div className="flex gap-2"><span className="text-green-400">✓</span><span>Dubai — Marina and Downtown: Excellent coverage with {'<'}0.5km average distance to nearest stop.</span></div>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
-        </div>
+        )
       )}
     </div>
   );

@@ -50,24 +50,32 @@ export async function GET(req: NextRequest) {
   }
   const { tenantId } = authz;
 
+  // Every query runs in the tenant's RLS scope, like the other school-bus
+  // routes, instead of relying on the request headers being readable.
+  return withTenantRls(prisma, tenantId, async () => {
   try {
 
     /* ── 1. ROUTES ─────────────────────────────────────────────── */
     const routes = await q<Row>(`
       SELECT
         r.id, r.route_name, r.route_code, r.direction, r.session, r.route_type,
-        COALESCE(r.seat_capacity, 40)  AS seat_capacity,
+        -- Seats: the route's own figure, else its bus's; 0 when neither is
+        -- recorded (this used to assume 40, which invented capacity).
+        COALESCE(r.seat_capacity, v.seating_capacity, 0) AS seat_capacity,
         COALESCE(r.student_count, 0)   AS student_count,
         r.is_active, r.status,
-        r.vehicle_reg, r.driver_name,
-        COALESCE(v.registration_number, r.vehicle_reg, '') AS vehicle_label,
-        COALESCE(v.make, '') || ' ' || COALESCE(v.model, '') AS vehicle_name,
-        COALESCE(v.ownership_type, 'Owned') AS vehicle_ownership,
-        COALESCE(v.capacity, r.seat_capacity, 40) AS vehicle_capacity
+        -- school_bus_routes has no vehicle_reg / driver_name, and vehicles
+        -- has license_plate / seating_capacity (not registration_number /
+        -- capacity / ownership_type): the old names made this query fail,
+        -- and q() swallowed the error, so every report showed no routes.
+        COALESCE(v.license_plate, '') AS vehicle_label,
+        TRIM(COALESCE(v.make, '') || ' ' || COALESCE(v.model, '')) AS vehicle_name,
+        'Owned' AS vehicle_ownership,
+        COALESCE(v.seating_capacity, r.seat_capacity, 0) AS vehicle_capacity
       FROM school_bus_routes r
       LEFT JOIN vehicles v
-        ON v.id::text = r.assigned_vehicle_id AND v.deleted_at IS NULL
-      WHERE r.tenant_id = $1 AND r.status != 'DELETED' AND COALESCE(r.is_active, TRUE) = TRUE
+        ON v.id = r.assigned_vehicle_id AND v.deleted_at IS NULL
+      WHERE r.tenant_id = $1 AND COALESCE(r.status, '') <> 'DELETED' AND COALESCE(r.is_active, TRUE) = TRUE
       ORDER BY r.route_code ASC, r.route_name ASC
     `, tenantId);
 
@@ -78,7 +86,7 @@ export async function GET(req: NextRequest) {
         a.bus_mode,
         a.pickup_stop_name,
         a.student_name, a.student_grade,
-        COALESCE(a.seat_type, '') AS seat_type,
+        '' AS seat_type, -- no such column on school_bus_allocations
         a.status
       FROM school_bus_allocations a
       WHERE a.tenant_id = $1 AND a.status = 'ACTIVE'
@@ -102,15 +110,16 @@ export async function GET(req: NextRequest) {
     /* ── 4. FINANCE INVOICES — school bus, current month ─────── */
     const invoices = await q<Row>(`
       SELECT
-        i.id, i.total_amount, i.status, i.client_name,
-        COALESCE(i.reference_id, '') AS reference_id,
+        i.id, i.total_amount, i.payment_status AS status, i.client_name,
+        COALESCE(i.reference_id::text, '') AS reference_id,
         COALESCE(i.notes, '')        AS notes,
-        COALESCE(i.metadata::text, '{}') AS metadata_raw,
+        COALESCE(i.source_payload::text, '{}') AS metadata_raw,
         i.created_at
       FROM finance_invoices i
       WHERE i.tenant_id = $1
         AND i.module = 'SCHOOL_BUS'
-        AND i.status NOT IN ('CANCELLED', 'VOID')
+        AND i.deleted_at IS NULL
+        AND COALESCE(i.payment_status, '') NOT IN ('DRAFT', 'CANCELLED', 'VOID')
         AND DATE_TRUNC('month', i.created_at) = DATE_TRUNC('month', CURRENT_DATE)
     `, tenantId);
 
@@ -171,9 +180,9 @@ export async function GET(req: NextRequest) {
       const rid      = str(r.id);
       const rac      = routeAllocCounts[rid] ?? { students: 0 };
       const students = Math.max(num(r.student_count), rac.students);
-      const staff    = str(r.route_type) === 'STAFF' ? 5 : 0;
+      const staff    = 0; // staff riders aren't recorded on routes (this used to assume 5)
       const total    = students + staff;
-      const capacity = num(r.seat_capacity) || num(r.vehicle_capacity) || 40;
+      const capacity = num(r.seat_capacity) || num(r.vehicle_capacity);
       const utilPct  = capacity > 0 ? (total / capacity) * 100 : 0;
       const emirate  = emirateFromRoute(str(r.route_name), str(r.route_code));
 
@@ -188,7 +197,7 @@ export async function GET(req: NextRequest) {
       const revPerRider = total > 0 && monthlyRev > 0 ? monthlyRev / total : 0;
 
       // Vehicle label
-      const vLabel = str(r.vehicle_label) || str(r.vehicle_reg) || '—';
+      const vLabel = str(r.vehicle_label) || '—';
       const vName  = str(r.vehicle_name).trim() || vLabel;
       const vType  = str(r.vehicle_ownership) || 'Owned';
 
@@ -319,12 +328,8 @@ export async function GET(req: NextRequest) {
       revenue:   r.monthlyRev,
     }));
 
-    // If no invoice data, show routes with 0
-    if (feeRevByRoute.every(r => r.revenue === 0) && monthlyRevenue > 0) {
-      // Distribute evenly as fallback
-      const perRoute = Math.round(monthlyRevenue / (activeRoutes || 1));
-      feeRevByRoute.forEach(r => { r.revenue = perRoute; });
-    }
+    // Invoices that can't be matched to a route stay unattributed; they are
+    // no longer spread evenly across routes as if each had earned a share.
 
     // Fee per rider
     const feePerRider = routeUtilTable.map(r => ({
@@ -397,6 +402,7 @@ export async function GET(req: NextRequest) {
     });
     } catch (err) {
     console.error('[school-bus/reports GET]', err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return NextResponse.json({ error: 'Could not build the school bus reports' }, { status: 500 });
   }
+  });
 }
