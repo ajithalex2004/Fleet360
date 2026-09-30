@@ -13,6 +13,7 @@ import { withTenantRls } from '@/lib/rls';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { withAuditedAction } from '@/lib/audited-action';
+import { smtpTlsOptions } from '@/lib/smtp-tls';
 async function handlePOST(request: NextRequest) {
   const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
   if (!authz.ok) {
@@ -119,14 +120,8 @@ async function testSmtp(
       socketTimeout:     10_000,
     };
 
-    // Office 365 / Exchange requires explicit TLS options
-    if (host.includes('office365') || host.includes('outlook.com') || host.includes('exchange')) {
-      transportOptions.requireTLS = true;
-      transportOptions.tls = { ciphers: 'SSLv3', rejectUnauthorized: false };
-    } else if (encryption === 'tls') {
-      // Standard STARTTLS
-      transportOptions.tls = { rejectUnauthorized: false };
-    }
+    // Same TLS options as real sends (certificate verified).
+    Object.assign(transportOptions, smtpTlsOptions(host, encryption));
 
     const transporter = nodemailer.default.createTransport(transportOptions as Parameters<typeof nodemailer.default.createTransport>[0]);
 

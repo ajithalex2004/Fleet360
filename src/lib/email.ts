@@ -24,6 +24,7 @@
 
 import { prisma } from './prisma';
 import { captureException } from './sentry';
+import { smtpTlsOptions } from './smtp-tls';
 
 export interface EmailSendResult {
   sent: boolean;
@@ -198,12 +199,7 @@ async function sendViaSmtp(msg: EmailMessage, recipients: string[]): Promise<Ema
     connectionTimeout: 10_000,
     socketTimeout:     10_000,
   };
-  if (cfg.host.includes('office365') || cfg.host.includes('outlook.com') || cfg.host.includes('exchange')) {
-    transportOptions.requireTLS = true;
-    transportOptions.tls        = { ciphers: 'SSLv3', rejectUnauthorized: false };
-  } else if (cfg.encryption === 'tls') {
-    transportOptions.tls = { rejectUnauthorized: false };
-  }
+  Object.assign(transportOptions, smtpTlsOptions(cfg.host, cfg.encryption));
 
   try {
     const nodemailer = await import('nodemailer');
