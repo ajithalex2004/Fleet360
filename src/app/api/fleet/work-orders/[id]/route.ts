@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { ensureFleetSchema } from '@/lib/fleet/schema';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { sqlCast } from '@/lib/fleet/sql-cast';
 const toCamel = (s: string) => s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 const rowToCamel = (r: Record<string, unknown>) =>
   Object.fromEntries(Object.entries(r).map(([k, v]) => [toCamel(k), v]));
@@ -30,7 +31,7 @@ export async function GET(
                   v.vehicle_type_id, v.branch_id, v.branch_name
            FROM fleet_work_orders fwo
            LEFT JOIN vehicles v ON v.id = fwo.vehicle_id::text
-           WHERE fwo.id = $1`,
+           WHERE fwo.id::text = $1`,
           id,
         );
 
@@ -90,7 +91,7 @@ export async function PUT(
 
         const setClauses: string[] = [];
         const queryParams: unknown[] = [new Date().toISOString()];
-        setClauses.push(`updated_at = $1`);
+        setClauses.push(`updated_at = $1::timestamptz`);
 
         for (const [camelKey, snakeKey] of Object.entries(fieldMap)) {
           if (Object.prototype.hasOwnProperty.call(body, camelKey)) {
@@ -99,7 +100,7 @@ export async function PUT(
               value = JSON.stringify(value);
             }
             queryParams.push(value);
-            setClauses.push(`${snakeKey} = $${queryParams.length}`);
+            setClauses.push(`${snakeKey} = $${queryParams.length}${sqlCast('fleet_work_orders', snakeKey)}`);
           }
         }
 
@@ -112,7 +113,7 @@ export async function PUT(
           const current = await tx.$queryRawUnsafe<
             Array<{ actual_cost: unknown; authorized_po_amount: unknown }>
           >(
-            `SELECT actual_cost, authorized_po_amount FROM fleet_work_orders WHERE id = $1`,
+            `SELECT actual_cost, authorized_po_amount FROM fleet_work_orders WHERE id::text = $1`,
             id,
           );
           if (current.length > 0) {
@@ -126,9 +127,9 @@ export async function PUT(
               const varianceAlert = variance > 0;
 
               queryParams.push(variance);
-              setClauses.push(`variance = $${queryParams.length}`);
+              setClauses.push(`variance = $${queryParams.length}::numeric`);
               queryParams.push(varianceAlert);
-              setClauses.push(`variance_alert = $${queryParams.length}`);
+              setClauses.push(`variance_alert = $${queryParams.length}::boolean`);
             }
           }
         }
@@ -137,7 +138,7 @@ export async function PUT(
         const idParam = queryParams.length;
 
         const rows = await tx.$queryRawUnsafe<Array<Record<string, unknown>>>(
-          `UPDATE fleet_work_orders SET ${setClauses.join(', ')} WHERE id = $${idParam} RETURNING *`,
+          `UPDATE fleet_work_orders SET ${setClauses.join(', ')} WHERE id::text = $${idParam} RETURNING *`,
           ...queryParams,
         );
 
@@ -170,10 +171,13 @@ export async function DELETE(
       try {
         const { id } = await params;
         // Work orders are cancelled, not hard deleted
-        await tx.$executeRawUnsafe(
-          `UPDATE fleet_work_orders SET status = 'CANCELLED' WHERE id = $1`,
+        const cancelled = await tx.$executeRawUnsafe(
+          `UPDATE fleet_work_orders SET status = 'CANCELLED' WHERE id::text = $1`,
           id,
         );
+        if (cancelled === 0) {
+          return NextResponse.json({ error: 'Work order not found' }, { status: 404 });
+        }
         return NextResponse.json({ success: true });
         } catch (e) {
         console.error('Error cancelling work order:', e);

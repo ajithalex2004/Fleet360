@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { ensureFleetSchema } from '@/lib/fleet/schema';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { sqlCast } from '@/lib/fleet/sql-cast';
 
 function errorMessage(e: unknown, fallback: string): string {
   return e instanceof Error && e.message ? e.message : fallback;
@@ -24,7 +25,7 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
   return withTenantRls(prisma, tenantId, async (tx) => {
       try {
         const rows = await tx.$queryRawUnsafe<any[]>(
-          "SELECT * FROM fleet_transfers WHERE id = $1", params.id
+          "SELECT * FROM fleet_transfers WHERE id::text = $1", params.id
         );
         if (!rows.length) return NextResponse.json({ error: 'Not found' }, { status: 404 });
         return NextResponse.json(rows[0]);
@@ -65,18 +66,18 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
           reason: 'reason',
           notes: 'notes',
         };
-        const sets: string[] = [`updated_at = $1`];
+        const sets: string[] = [`updated_at = $1::timestamptz`];
         const vals: any[] = [now];
         let idx = 2;
         for (const [key, col] of Object.entries(fieldMap)) {
-          if (key in body) { sets.push(`${col} = $${idx++}`); vals.push(body[key]); }
+          if (key in body) { sets.push(`${col} = $${idx++}${sqlCast('fleet_transfers', col)}`); vals.push(body[key]); }
         }
         vals.push(params.id);
         await tx.$executeRawUnsafe(
-          `UPDATE fleet_transfers SET ${sets.join(', ')} WHERE id = $${idx}`, ...vals
+          `UPDATE fleet_transfers SET ${sets.join(', ')} WHERE id::text = $${idx}`, ...vals
         );
         const rows = await tx.$queryRawUnsafe<any[]>(
-          "SELECT * FROM fleet_transfers WHERE id = $1", params.id
+          "SELECT * FROM fleet_transfers WHERE id::text = $1", params.id
         );
         return NextResponse.json(rows[0]);
       } catch (e) {
@@ -99,7 +100,7 @@ export async function DELETE(_: NextRequest, props: { params: Promise<{ id: stri
   return withTenantRls(prisma, tenantId, async (tx) => {
       try {
         await tx.$executeRawUnsafe(
-          "DELETE FROM fleet_transfers WHERE id = $1", params.id
+          "DELETE FROM fleet_transfers WHERE id::text = $1", params.id
         );
         return NextResponse.json({ success: true });
         } catch (e) {

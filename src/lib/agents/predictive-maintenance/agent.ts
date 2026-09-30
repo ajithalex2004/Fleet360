@@ -253,7 +253,7 @@ async function autoCreateWorkOrder(score: VehicleRiskScore): Promise<string | nu
       `INSERT INTO fleet_work_orders (
          id, wo_number, vehicle_id, description, status, priority,
          wo_type, requested_by, created_at, updated_at
-       ) VALUES ($1::uuid,$2,$3::uuid,$4,'OPEN',$5,'PREVENTIVE','Predictive Maintenance Agent',$6,$7)`,
+       ) VALUES ($1::uuid,$2,$3::uuid,$4,'OPEN',$5,'PREVENTIVE','Predictive Maintenance Agent',$6::timestamptz,$7::timestamptz)`,
       id,
       woNumber,
       score.vehicleId,

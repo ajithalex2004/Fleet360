@@ -99,10 +99,10 @@ export async function POST(req: NextRequest) {
             deductible, renewal_reminder_days, document_url, notes,
             status, created_at, updated_at
           ) VALUES (
-            $1, $2, $3, $4, $5,
-            $6, $7, $8, $9,
-            $10, $11, $12, $13,
-            $14, $15, $16
+            $1::uuid, $2::uuid, $3, $4, $5,
+            $6::date, $7::date, $8::numeric, $9::numeric,
+            $10::numeric, $11::int, $12, $13,
+            $14, $15::timestamptz, $16::timestamptz
           ) RETURNING *`,
           id,
           body.vehicleId ?? null,
@@ -122,10 +122,11 @@ export async function POST(req: NextRequest) {
           now,
         );
 
-        // Update vehicle insurance_expiry_date
+        // Keep the vehicle's insurance expiry (vehicles.insurance_expiry, the
+        // column the vehicle record reads) in step with the policy.
         if (body.vehicleId && body.endDate) {
           await tx.$executeRawUnsafe(
-            `UPDATE vehicles SET insurance_expiry_date = $1, updated_at = $2 WHERE id = $3`,
+            `UPDATE vehicles SET insurance_expiry = $1::timestamptz, updated_at = $2::timestamptz WHERE id::text = $3`,
             body.endDate,
             now,
             body.vehicleId,
