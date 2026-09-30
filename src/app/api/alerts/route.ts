@@ -47,8 +47,9 @@ export async function POST(request: NextRequest) {
 
             const alert = await tx.alert.create({
                 data: {
-                    // TODO: read tenantId from request headers via getTenantContext()
-                    tenantId: '',
+                    // The signed-in tenant (was '', which row level security refuses,
+                    // so this create always failed).
+                    tenantId,
                     type: body.type,
                     title: body.title,
                     description: body.description,

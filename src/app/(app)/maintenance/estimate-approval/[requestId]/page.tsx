@@ -5,14 +5,13 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
     EnhancedMaintenanceRequest,
     VendorQuotation,
-    EstimateApproval,
     MaintenanceStatus,
     Vehicle
 } from '@/types/maintenance';
-import { getMaintenanceRequests, getVehicles } from '@/services/mockData';
+import { getGarages, getMaintenanceRequests, getVehicles } from '@/services/mockData';
 import { formatCurrency } from '@/utils/currency';
 import { validateApprovalLink } from '@/services/approvalLinkService';
-import { UserRole, Permission, hasPermission, getCurrentUserRole } from '@/services/rbac';
+import { Permission, hasPermission, getCurrentUserRole } from '@/services/rbac';
 
 export default function EstimateApprovalPage() {
     const router = useRouter();
@@ -31,6 +30,8 @@ export default function EstimateApprovalPage() {
     const [approvalAction, setApprovalAction] = useState<'approve' | 'reject'>('approve');
     const [isEmailApproval, setIsEmailApproval] = useState(false);
     const [linkValid, setLinkValid] = useState(true);
+    const [submitting, setSubmitting] = useState(false);
+    const [decisionError, setDecisionError] = useState<string | null>(null);
 
     // RBAC
     const currentUserRole = getCurrentUserRole();
@@ -38,9 +39,10 @@ export default function EstimateApprovalPage() {
 
     useEffect(() => {
         const fetchData = async () => {
-            const [requests, vehicles] = await Promise.all([
+            const [requests, vehicles, garages] = await Promise.all([
                 getMaintenanceRequests(),
-                getVehicles()
+                getVehicles(),
+                getGarages().catch(() => []),
             ]);
 
             const foundRequest = requests.find(r => r.id === requestId) as EnhancedMaintenanceRequest;
@@ -49,8 +51,9 @@ export default function EstimateApprovalPage() {
                 return;
             }
 
-            // Check if request is in correct status
-            if (foundRequest.status !== MaintenanceStatus.PENDING_ESTIMATION_APPROVAL) {
+            // Check if request is in correct status (however the status is spelt)
+            const norm = (v: unknown) => String(v ?? '').replace(/[_-]+/g, ' ').trim().toLowerCase();
+            if (norm(foundRequest.status) !== norm(MaintenanceStatus.PENDING_ESTIMATION_APPROVAL)) {
                 alert('This request is not pending estimate approval');
                 router.push(`/maintenance/requests/${requestId}`);
                 return;
@@ -72,10 +75,29 @@ export default function EstimateApprovalPage() {
             const foundVehicle = vehicles.find(v => v.id === foundRequest.vehicleId);
             setVehicle(foundVehicle || null);
 
-            // Load quotations
-            if (foundRequest.vendorQuotations) {
-                setQuotations(foundRequest.vendorQuotations);
-            }
+            // The request's quotations as saved (the API returns them as
+            // `quotations`; this used to read a `vendorQuotations` field that
+            // doesn't exist, so no quotation could ever be chosen).
+            const garageName = (id: unknown) => garages.find(g => g.id === id)?.name ?? 'Garage';
+            const rows = ((foundRequest as unknown as { quotations?: Array<Record<string, unknown>> }).quotations ?? [])
+                .filter(q => !q.deletedAt);
+            const n = (v: unknown) => (v == null || v === '' ? 0 : Number(v));
+            setQuotations(rows.map(q => ({
+                id: String(q.id),
+                requestId: String(q.maintenanceRequestId ?? requestId),
+                garageId: String(q.garageId ?? ''),
+                garageName: garageName(q.garageId),
+                partsCost: n(q.partsCost),
+                laborCost: n(q.laborCost),
+                otherCharges: n(q.consumablesCost) + n(q.vatAmount),
+                totalCost: n(q.grandTotal ?? q.totalCost),
+                estimatedDuration: n(q.estimatedDuration),
+                validUntil: String(q.validUntil ?? q.quotationDate ?? q.createdAt ?? ''),
+                notes: typeof q.notes === 'string' ? q.notes : undefined,
+                submittedAt: String(q.quotationDate ?? q.createdAt ?? ''),
+                submittedBy: String(q.submittedBy ?? ''),
+                status: (String(q.status ?? 'SUBMITTED').toUpperCase() as VendorQuotation['status']),
+            })));
 
             setLoading(false);
         };
@@ -83,62 +105,37 @@ export default function EstimateApprovalPage() {
         fetchData();
     }, [requestId, token, router]);
 
+    /** Records the decision on the server, which checks the approval rules. */
+    const decide = async (payload: Record<string, unknown>) => {
+        setSubmitting(true);
+        setDecisionError(null);
+        try {
+            const res = await fetch(`/api/maintenance-requests/${requestId}/estimate-decision`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(json.error ?? `Could not record the decision (${res.status})`);
+            return json as { status: string; amount?: number; rule?: string | null };
+        } catch (e) {
+            setDecisionError(e instanceof Error ? e.message : 'Could not record the decision');
+            return null;
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
     const handleApproveEstimate = async () => {
         if (!selectedQuotationId) {
             alert('Please select a quotation to approve');
             return;
         }
-
         if (!request) return;
-
-        const selectedQuotation = quotations.find(q => q.id === selectedQuotationId);
-        if (!selectedQuotation) return;
-
-        // TRIPEXL: Create estimate approval record
-        const estimateApproval: EstimateApproval = {
-            id: `est-appr-${Date.now()}`,
-            requestId: request.id,
-            selectedQuotationId: selectedQuotationId,
-            approvedBy: isEmailApproval ? 'Fleet Manager (Email)' : 'fleet-manager-1',
-            approvedByName: isEmailApproval ? 'Fleet Manager' : 'Fleet Manager',
-            approvedByRole: UserRole.FLEET_MANAGER,
-            approvedAt: new Date().toISOString(),
-            approvedCost: selectedQuotation.totalCost,
-            comments: approvalComments,
-            approvalMethod: isEmailApproval ? 'EMAIL_LINK' : 'IN_APP'
-        };
-
-        // Update quotation status
-        const updatedQuotations = quotations.map(q => ({
-            ...q,
-            status: q.id === selectedQuotationId ? 'APPROVED' : 'REJECTED'
-        })) as VendorQuotation[];
-
-        // Record status transition
-        const statusTransition = {
-            from: request.status,
-            to: MaintenanceStatus.ESTIMATION_APPROVED,
-            transitionedAt: new Date().toISOString(),
-            transitionedBy: estimateApproval.approvedBy,
-            transitionedByName: estimateApproval.approvedByName,
-            comments: approvalComments,
-            automated: false
-        };
-
-        console.log('Estimate approved:', {
-            requestId: request.id,
-            quotationId: selectedQuotationId,
-            approvedCost: selectedQuotation.totalCost,
-            newStatus: MaintenanceStatus.ESTIMATION_APPROVED,
-            estimateApproval,
-            statusTransition
-        });
-
-        // TODO: Save to backend
-        alert(`Estimate approved! Total cost: ${formatCurrency(selectedQuotation.totalCost)}. Request status updated to Estimation Approved.`);
-
-        // Navigate to requests page
-        router.push('/maintenance/requests');
+        const result = await decide({ action: 'approve', quotationId: selectedQuotationId, comments: approvalComments });
+        if (!result) return;
+        alert(`Estimate approved: ${formatCurrency(result.amount ?? 0)}${result.rule ? ` (rule: ${result.rule})` : ''}. The request is now Estimation Approved.`);
+        router.push(`/maintenance/requests/${requestId}`);
     };
 
     const handleRejectEstimate = async () => {
@@ -146,38 +143,11 @@ export default function EstimateApprovalPage() {
             alert('Please provide a reason for rejection');
             return;
         }
-
         if (!request) return;
-
-        // TRIPEXL: Reject all quotations and send back to estimation
-        const updatedQuotations = quotations.map(q => ({
-            ...q,
-            status: 'REJECTED'
-        })) as VendorQuotation[];
-
-        // Record status transition - back to UNDER_ESTIMATION
-        const statusTransition = {
-            from: request.status,
-            to: MaintenanceStatus.UNDER_ESTIMATION,
-            transitionedAt: new Date().toISOString(),
-            transitionedBy: isEmailApproval ? 'Fleet Manager (Email)' : 'fleet-manager-1',
-            transitionedByName: isEmailApproval ? 'Fleet Manager' : 'Fleet Manager',
-            comments: rejectionReason,
-            automated: false
-        };
-
-        console.log('Estimate rejected:', {
-            requestId: request.id,
-            reason: rejectionReason,
-            newStatus: MaintenanceStatus.UNDER_ESTIMATION,
-            statusTransition
-        });
-
-        // TODO: Save to backend and send email to maintenance team
-        alert(`All estimates rejected. Request sent back to Under Estimation for new quotations.`);
-
-        // Navigate to requests page
-        router.push('/maintenance/requests');
+        const result = await decide({ action: 'reject', reason: rejectionReason });
+        if (!result) return;
+        alert('All estimates rejected. The request is back Under Estimation for new quotations.');
+        router.push(`/maintenance/requests/${requestId}`);
     };
 
     const openApprovalModal = (action: 'approve' | 'reject') => {
@@ -376,7 +346,7 @@ export default function EstimateApprovalPage() {
                         <div className="p-6 border-b border-[var(--border-subtle)]">
                             <div className="flex items-center justify-between">
                                 <h3 className="text-lg font-bold text-[var(--text-main)]">
-                                    {approvalAction === 'approve' ? 'Approve Estimate' : 'Reject All Estimates'}
+                                    {submitting ? 'Saving…' : approvalAction === 'approve' ? 'Approve Estimate' : 'Reject All Estimates'}
                                 </h3>
                                 <button onClick={() => setShowApprovalModal(false)} className="text-[var(--text-muted)] hover:text-[var(--text-muted)]">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
@@ -442,9 +412,10 @@ export default function EstimateApprovalPage() {
                             >
                                 Cancel
                             </button>
+                            {decisionError && <p className="mr-auto self-center text-sm text-red-400">{decisionError}</p>}
                             <button
-                                onClick={approvalAction === 'approve' ? handleApproveEstimate : handleRejectEstimate}
-                                disabled={approvalAction === 'reject' && !rejectionReason.trim()}
+                                onClick={() => void (approvalAction === 'approve' ? handleApproveEstimate() : handleRejectEstimate())}
+                                disabled={submitting || (approvalAction === 'reject' && !rejectionReason.trim())}
                                 className={`rounded-lg px-6 py-2 text-sm font-medium text-[var(--text-main)] ${approvalAction === 'approve'
                                     ? 'bg-green-600 hover:bg-green-700'
                                     : 'bg-red-600 hover:bg-red-700 disabled:bg-red-300'

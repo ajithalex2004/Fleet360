@@ -49,8 +49,9 @@ export async function POST(request: NextRequest) {
 
             const quotation = await tx.quotation.create({
                 data: {
-                    // TODO: read tenantId from request headers via getTenantContext()
-                    tenantId: '',
+                    // The signed-in tenant (was '', which row level security refuses,
+                    // so this create always failed).
+                    tenantId,
                     maintenanceRequestId: body.maintenanceRequestId || body.maintenance_request_id,
                     garageId: body.garageId || body.garage_id,
                     status: body.status || 'PENDING',

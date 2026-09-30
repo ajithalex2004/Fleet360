@@ -47,8 +47,9 @@ export async function POST(request: NextRequest) {
 
             const data = await tx.serviceRequest.create({
                 data: {
-                    // TODO: read tenantId from request headers via getTenantContext()
-                    tenantId: '',
+                    // The signed-in tenant (was '', which row level security refuses,
+                    // so this create always failed).
+                    tenantId,
                     requestorId: body.requestorId || body.requestor_id,
                     serviceType: body.serviceType || body.service_type,
                     vehicleId: body.vehicleId || body.vehicle_id,

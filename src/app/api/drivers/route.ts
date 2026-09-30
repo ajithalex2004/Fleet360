@@ -163,8 +163,9 @@ export async function POST(request: NextRequest) {
 
         const driver = await tx.driver.create({
           data: {
-            // TODO: read tenantId from request headers via getTenantContext()
-            tenantId:              '',
+            // The signed-in tenant (was '', which row level security refuses,
+            // so this create always failed).
+            tenantId,
             // Identity
             name:                  fullName,
             firstName:             body.firstName              ?? null,

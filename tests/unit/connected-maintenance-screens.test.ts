@@ -157,6 +157,7 @@ describe('connected screens', () => {
     ['maintenance/garage-performance', '/api/maintenance'],
     ['school-bus/analytics', '/api/school-bus/reports'],
     ['ai-platform/predictive', '/api/maintenance/risk-scores'],
+    ['maintenance/approvals/rules', '/api/maintenance/approval-rules'],
   ])('%s reads %s and has no Preview banner or sample array', (screen, api) => {
     const src = readFileSync(join(process.cwd(), 'src/app/(app)', screen, 'page.tsx'), 'utf8');
     expect(src).not.toMatch(/PreviewBanner|MOCK_|SEED_|RISK_ITEMS/);

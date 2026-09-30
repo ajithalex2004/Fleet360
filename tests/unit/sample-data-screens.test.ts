@@ -1,16 +1,13 @@
 /**
  * tests/unit/sample-data-screens.test.ts
  *
- * Screens that still show built-in example figures say so, and Driver
- * Feedback now files a real maintenance request.
- *  - every screen listed below renders the Preview banner; once a screen
- *    reads from the API, drop the banner and remove it from this list
+ * Driver Feedback files a real maintenance request. (Every screen that
+ * once showed example figures now reads the tenant's records; see
+ * connected-maintenance-screens.test.ts.)
  *  - driver reports: the request body, and reading a report back
  *  - maintenance requests refuse a vehicle that isn't the tenant's
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 
 vi.mock('next/server', async () => await import('next/server.js'));
 
@@ -28,21 +25,6 @@ vi.mock('@/lib/sentry', () => ({ captureException: () => {}, captureMessage: () 
 import { NextRequest } from 'next/server';
 import { driverReportRequest, parseDriverReport } from '@/lib/maintenance/driver-report';
 import { POST as createRequest } from '@/app/api/maintenance-requests/route';
-
-const PREVIEW_SCREENS = [
-  'maintenance/approvals/rules',
-];
-
-// Connected since (see connected-maintenance-screens.test.ts): maintenance
-// schedule, SLA, predictive alerts, garage assignments and performance;
-// school-bus analytics; ai-platform predictive.
-describe('screens with example figures', () => {
-  it.each(PREVIEW_SCREENS)('%s shows the Preview banner', (screen) => {
-    const src = readFileSync(join(process.cwd(), 'src/app/(app)', screen, 'page.tsx'), 'utf8');
-    expect(src).toMatch(/import PreviewBanner from '@\/components\/PreviewBanner'/);
-    expect(src).toMatch(/<PreviewBanner[\s/]/);
-  });
-});
 
 describe('driver reports', () => {
   const form = { vehicleId: 'v1', issue: '  Grinding noise when braking ', severity: 'High' as const, category: 'Brakes' };
