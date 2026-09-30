@@ -10,7 +10,6 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
  * Consolidated UAE FTA VAT Return with per-branch breakdown.
  *
  * Query params:
- *   tenantId   — required
  *   startDate  — YYYY-MM-DD
  *   endDate    — YYYY-MM-DD
  *   quarter    — e.g. "Q1-2026" (alternative to startDate/endDate)
@@ -43,12 +42,7 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     const { searchParams } = new URL(req.url);
-      const tenantId = searchParams.get('tenantId') ?? '';
       const quarter  = searchParams.get('quarter') ?? '';
-
-      if (!tenantId) {
-        return NextResponse.json({ error: 'tenantId is required' }, { status: 400 });
-      }
 
       let startDate = searchParams.get('startDate') ?? '';
       let endDate   = searchParams.get('endDate')   ?? '';

@@ -14,7 +14,7 @@ import { prisma }               from '@/lib/prisma';
 import { dispatch as agentDispatch } from '@/lib/agents/orchestrator';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-async function handle(token: string, action: string, reason: string | undefined, baseUrl: string) {
+async function handle(tenantId: string, token: string, action: string, reason: string | undefined, baseUrl: string) {
   if (!token)  return NextResponse.json({ error: 'token is required' },  { status: 400 });
   if (!action) return NextResponse.json({ error: 'action is required' }, { status: 400 });
   if (!['accept', 'reject', 'timeout'].includes(action)) {
@@ -34,16 +34,16 @@ async function handle(token: string, action: string, reason: string | undefined,
 
   // ── On rejection / timeout — re-run optimiser so a new driver is ranked immediately ──
   if ((action === 'reject' || action === 'timeout') && result.jobId) {
-    // Look up tenant_id from the job (needed for the agent's SQL filter)
+    // The job's tenant (needed for the agent's SQL filter); RLS scopes the
+    // lookup to the caller's tenant, which is also the fallback.
     prisma.$queryRawUnsafe<{ tenant_id: string }[]>(
       `SELECT tenant_id FROM dispatch_jobs WHERE id = $1::uuid LIMIT 1`,
       result.jobId,
     ).then(rows => {
-      const tenantId = rows[0]?.tenant_id ?? 'default';
       return agentDispatch({
         agent_id:   'dispatch-optimiser',
         event_type: 'dispatch.job_reassign',
-        tenant_id:  tenantId,
+        tenant_id:  rows[0]?.tenant_id ?? tenantId,
         entity_id:  result.jobId,
         payload:    { reason: reason ?? action },
       });
@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
   const token   = sp.get('token')  ?? '';
   const action  = sp.get('action') ?? '';
   const baseUrl = `${req.nextUrl.protocol}//${req.nextUrl.host}`;
-  return handle(token, action, undefined, baseUrl);
+  return handle(tenantId, token, action, undefined, baseUrl);
 }
 
 /** POST — in-app React Native driver response */
@@ -80,5 +80,5 @@ export async function POST(req: NextRequest) {
 
   const { token, action, reason } = await req.json().catch(() => ({} as any));
   const baseUrl = `${req.nextUrl.protocol}//${req.nextUrl.host}`;
-  return handle(String(token ?? ''), String(action ?? ''), reason, baseUrl);
+  return handle(tenantId, String(token ?? ''), String(action ?? ''), reason, baseUrl);
 }

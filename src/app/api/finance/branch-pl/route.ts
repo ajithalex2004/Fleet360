@@ -10,7 +10,6 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
  * Branch-level P&L segmented by cost center / emirate
  *
  * Query params:
- *   tenantId   — required
  *   branchId   — optional; if omitted returns all branches consolidated
  *   startDate  — YYYY-MM-DD (default: first day of current month)
  *   endDate    — YYYY-MM-DD (default: today)
@@ -38,14 +37,9 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     const { searchParams } = new URL(req.url);
-      const tenantId  = searchParams.get('tenantId') ?? '';
       const branchId  = searchParams.get('branchId') ?? '';
       const startDate = searchParams.get('startDate') ?? new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
       const endDate   = searchParams.get('endDate')   ?? new Date().toISOString().split('T')[0];
-
-      if (!tenantId) {
-        return NextResponse.json({ error: 'tenantId is required' }, { status: 400 });
-      }
 
       // ── Revenue by branch ────────────────────────────────────────────────────
       type RevRow = {

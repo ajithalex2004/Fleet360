@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
  * POST  /api/dispatch/availability            — driver checks in (start shift)
  * PATCH /api/dispatch/availability            — update status / shift info
  *
- * Query params (GET): tenantId, status, serviceType, zoneId, page, limit
+ * Query params (GET): status, serviceType, zoneId, page, limit
  * Body (POST): { driverId, vehicleId, zoneId?, serviceTypes?, shiftStartsAt? }
  * Body (PATCH): { driverId, status?, vehicleId?, zoneId?, shiftEndsAt? }
  */
@@ -48,7 +48,6 @@ export async function GET(req: NextRequest) {
         await ensureDispatchSchema();
 
         const sp          = new URL(req.url).searchParams;
-        const tenantId    = sp.get('tenantId')    ?? '';
         const status      = sp.get('status')      ?? '';       // AVAILABLE, BUSY, OFF_DUTY, BREAK
         const serviceType = sp.get('serviceType') ?? '';
         const zoneId      = sp.get('zoneId')      ?? '';

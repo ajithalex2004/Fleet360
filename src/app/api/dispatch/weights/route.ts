@@ -40,8 +40,6 @@ export async function GET(req: NextRequest) {
     try {
         await ensureDispatchSchema();
 
-        const sp       = new URL(req.url).searchParams;
-        const tenantId = sp.get('tenantId') ?? null;
 
         const rows = await tx.$queryRawUnsafe<Row[]>(`
           SELECT * FROM dispatch_weights
@@ -100,7 +98,6 @@ export async function PUT(req: NextRequest) {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const {
-          tenantId,
           serviceType,
           priority,
           weights,

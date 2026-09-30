@@ -133,18 +133,14 @@ function opsAssistantStats(s: Stats7d) {
 
 // ── Main handler ───────────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
-  let tenantId = 'default';
-  try {
-    const authz = requireAuthorizedTenant(
-      { headers: req.headers, nextUrl: req.nextUrl },
-      { allowPlatformSwitch: true },
-    );
-    if (authz.ok) {
-      tenantId = authz.tenantId;
-    }
-  } catch {
-    // Graceful fallback to default tenant
+  const authz = requireAuthorizedTenant(
+    { headers: req.headers, nextUrl: req.nextUrl },
+    { allowPlatformSwitch: true },
+  );
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
+  const { tenantId } = authz;
 
   const BATCH_IDS = [
     'predictive-maintenance',

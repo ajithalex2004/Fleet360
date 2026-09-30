@@ -16,7 +16,6 @@ export async function GET(request: NextRequest) {
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
             const { searchParams } = new URL(request.url);
-            const tenantId = searchParams.get('tenantId') ?? '';
             const activeOnly = searchParams.get('activeOnly') !== 'false';
 
             const plans = await tx.maintenancePlan.findMany({
@@ -55,7 +54,7 @@ export async function POST(request: NextRequest) {
 
             const plan = await tx.maintenancePlan.create({
                 data: {
-                    tenantId:         body.tenantId         ?? '',
+                    tenantId,
                     name:             body.name,
                     description:      body.description,
                     maintenanceType:  body.maintenanceType  ?? 'PREVENTIVE',

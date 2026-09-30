@@ -38,34 +38,20 @@ function fmt(n: number) { return `AED ${n.toLocaleString('en-AE', { minimumFract
 export default function BranchPLPage() {
   const [data,       setData]     = useState<PLData | null>(null);
   const [loading,    setLoading]  = useState(true);
-  const [tenantId,   setTenantId] = useState('');
-  const [tenants,    setTenants]  = useState<{ id: string; name: string; trn?: string }[]>([]);
   const [startDate,  setStart]    = useState(() => {
     const d = new Date(); d.setDate(1); return d.toISOString().split('T')[0];
   });
   const [endDate, setEnd] = useState(() => new Date().toISOString().split('T')[0]);
 
-  useEffect(() => {
-    fetch('/api/admin/tenants?limit=200')
-      .then(r => r.ok ? r.json() : [])
-      .then(d => {
-        const list = Array.isArray(d) ? d : (d.data ?? []);
-        setTenants(list);
-        if (list.length > 0 && !tenantId) setTenantId(list[0].id);
-      })
-      .catch(() => {});
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const load = useCallback(async () => {
-    if (!tenantId) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/finance/branch-pl?tenantId=${tenantId}&startDate=${startDate}&endDate=${endDate}`);
+      const res = await fetch(`/api/finance/branch-pl?startDate=${startDate}&endDate=${endDate}`);
       if (res.ok) setData(await res.json());
     } catch { /* silent */ }
     finally { setLoading(false); }
-  }, [tenantId, startDate, endDate]);
+  }, [startDate, endDate]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -83,16 +69,6 @@ export default function BranchPLPage() {
 
       {/* Controls */}
       <div className="flex flex-wrap gap-3 items-end">
-        <div>
-          <label className="block text-[var(--text-muted)] text-xs mb-1.5">Tenant</label>
-          <select
-            value={tenantId}
-            onChange={e => setTenantId(e.target.value)}
-            className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-4 py-2 text-[var(--text-main)] text-sm focus:outline-none min-w-48"
-          >
-            {tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
-        </div>
         <div>
           <label className="block text-[var(--text-muted)] text-xs mb-1.5">From</label>
           <input type="date" value={startDate} onChange={e => setStart(e.target.value)}

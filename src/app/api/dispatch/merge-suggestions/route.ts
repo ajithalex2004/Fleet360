@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 /**
- * GET /api/dispatch/merge-suggestions?tenantId=X[&status=PENDING]
+ * GET /api/dispatch/merge-suggestions[?status=PENDING]
  *
  * Lightweight endpoint polled by Command Centre every 30 seconds.
  * Returns persisted merge suggestions from dispatch_merge_suggestions,
@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic';
  *   { suggestions: MergeSuggestion[], total: number, expiredCount: number }
  *
  * PATCH /api/dispatch/merge-suggestions
- *   Body: { suggestionId, action: 'ACCEPT' | 'SKIP', tenantId }
+ *   Body: { suggestionId, action: 'ACCEPT' | 'SKIP' }
  *   Updates suggestion status and actioned_at timestamp.
  */
 
@@ -60,13 +60,9 @@ export async function GET(req: NextRequest) {
         await ensureDispatchSchema();
 
         const sp       = new URL(req.url).searchParams;
-        const tenantId = sp.get('tenantId') ?? '';
         const status   = sp.get('status')   ?? 'PENDING';
         const limit    = Math.min(50, parseInt(sp.get('limit') ?? '20'));
 
-        if (!tenantId) {
-          return NextResponse.json({ error: 'tenantId is required' }, { status: 400 });
-        }
 
         // ── On-read expiry cleanup (cheap — indexed updates) ──
         const [expiredTtl, expiredOrphan] = await Promise.all([
@@ -169,11 +165,11 @@ export async function PATCH(req: NextRequest) {
 
         const bodyRaw = await req.json();
     const body = stripTenantOwnershipFields(bodyRaw);
-    const { suggestionId, action, tenantId } = body;
+    const { suggestionId, action } = body;
 
-        if (!suggestionId || !action || !tenantId) {
+        if (!suggestionId || !action) {
           return NextResponse.json(
-            { error: 'suggestionId, action, and tenantId are required' },
+            { error: 'suggestionId and action are required' },
             { status: 400 },
           );
         }

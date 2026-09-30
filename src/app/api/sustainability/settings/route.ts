@@ -38,8 +38,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
-      const { searchParams } = new URL(req.url);
-      const tenantId = searchParams.get('tenantId') ?? 'default';
 
       const rows = await tx.$queryRawUnsafe<Row[]>(
         `SELECT * FROM sustainability_settings WHERE tenant_id = $1`,
@@ -84,7 +82,6 @@ export async function POST(req: NextRequest) {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const {
-          tenant_id = 'default',
           org_name = '',
           baseline_year = 2023,
           baseline_routing_improvement = 0.20,
@@ -121,7 +118,7 @@ export async function POST(req: NextRequest) {
              reporting_currency             = EXCLUDED.reporting_currency,
              vat_rate                       = EXCLUDED.vat_rate,
              updated_at                     = NOW()`,
-          tenant_id, org_name,
+          tenantId, org_name,
           Number(baseline_year), Number(baseline_routing_improvement),
           Number(private_car_km_assumption), Number(private_car_ef_kg_per_km),
           Number(diesel_ef_kg_per_litre), Number(petrol_ef_kg_per_litre),
