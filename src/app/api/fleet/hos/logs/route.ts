@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { runOutsideRlsScope } from '@/lib/rls-scope';
 import { ensureHosSchema } from '@/lib/fleet/hos-schema';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
@@ -246,7 +247,11 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async () => {
+  // Set when a log is saved; the violation check runs after the request's
+  // transaction has committed (see below).
+  let checkFor: { driverId: string; driverName: string | null } | null = null;
+
+  const response = await withTenantRls(prisma, tenantId, async () => {
     await ensureHosSchema();
     try {
       const body = await req.json();
@@ -287,10 +292,7 @@ export async function POST(req: NextRequest) {
         now,
       );
 
-      // Run violation check asynchronously (best-effort)
-      runViolationCheck(body.driver_id, body.driver_name ?? null).catch((e) =>
-        console.error('Violation check error:', e),
-      );
+      checkFor = { driverId: body.driver_id, driverName: body.driver_name ?? null };
 
       return NextResponse.json(ser(rows[0]), { status: 201 });
       } catch (e) {
@@ -298,4 +300,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to create HoS log' }, { status: 500 });
     }
   });
+
+  // Violation check, best-effort and not awaited. It runs after the log's
+  // transaction has committed, so it sees the new log, and in its own tenant
+  // transaction outside the request's scope: started inside that scope it
+  // would reuse the request's transaction, which closes when this handler
+  // returns, and its reads and inserts would then fail.
+  const pending = checkFor as { driverId: string; driverName: string | null } | null;
+  if (pending) {
+    void runOutsideRlsScope(() =>
+      withTenantRls(prisma, tenantId, () => runViolationCheck(pending.driverId, pending.driverName)),
+    ).catch((e) => console.error('Violation check error:', e));
+  }
+
+  return response;
 }
