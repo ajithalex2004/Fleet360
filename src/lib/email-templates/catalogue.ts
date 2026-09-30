@@ -35,11 +35,28 @@ export interface EmailTemplateDef {
   description: string;
   variables: TemplateVariable[];
   defaults: Record<EmailLocale, { subject: string; body: string }>;
+  /** Sent as one email carrying both languages (the tenant's language
+   *  first), each written from its own template. */
+  bilingual?: boolean;
+  /** Sent by the platform to tenants: only platform administrators see and
+   *  edit it, and it carries the platform's name, not the tenant's. */
+  platformOnly?: boolean;
 }
 
 /** Available in every template. */
 export const COMMON_VARIABLES: TemplateVariable[] = [
   { name: 'companyName', description: 'Your company name', sample: 'Acme Fleet Services' },
+];
+
+/** Shared by the overdue-payment notices (src/lib/finance/dunning-*). */
+const DUNNING_VARIABLES: TemplateVariable[] = [
+  { name: 'customerName', description: 'Customer name', sample: 'Gulf Trading LLC', fallback: { en: 'Valued Customer', ar: 'عميلنا العزيز' } },
+  { name: 'invoiceNo', description: 'Invoice number', sample: 'INV-2026-0311' },
+  { name: 'productName', description: 'What is billed (in the section language)', sample: 'Vehicle Lease' },
+  { name: 'dueDate', description: 'Invoice due date', sample: '01 Aug 2026' },
+  { name: 'daysOverdue', description: 'Days past due', sample: '32' },
+  { name: 'outstandingAmount', description: 'Outstanding amount', sample: 'AED 18,500.00' },
+  { name: 'invoiceDetails', description: 'Invoice, due date, days overdue and amount table', sample: '[invoice table]', block: true },
 ];
 
 export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
@@ -430,6 +447,152 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
           'تمت دعوتك إلى بوابة التأجير لدى {{companyName}} نيابةً عن **{{lesseeName}}**. قم بإعداد حسابك لعرض العقود والفواتير، وإجراء المدفوعات، وتوقيع التجديدات، ورفع المستندات، والإبلاغ عن المشكلات عبر الإنترنت.',
           '[إعداد حسابي]({{setupUrl}})',
           'تنتهي صلاحية هذا الرابط في {{expiresOn}}. إذا لم تكن تتوقع هذه الرسالة، يمكنك تجاهلها.',
+        ].join('\n\n'),
+      },
+    },
+  },
+  {
+    key: 'finance.dunning_reminder',
+    module: 'Finance',
+    name: "Overdue payment: reminder (30 days)",
+    description: "First reminder to a customer whose invoice is past due. Sent in English and Arabic together.",
+    bilingual: true,
+    variables: DUNNING_VARIABLES,
+    defaults: {
+      en: { subject: "Payment Reminder - {{invoiceNo}}", body: "**Friendly payment reminder**\n\nDear {{customerName}},\n\nThis is a friendly reminder that your {{productName}} invoice **{{invoiceNo}}** is now **{{daysOverdue}} days past due**. Please arrange settlement at your earliest convenience.\n\nIf you have already made the payment, please disregard this reminder.\n\n{{invoiceDetails}}\n\nKind regards,\n{{companyName}}" },
+      ar: { subject: "تذكير بالدفع - {{invoiceNo}}", body: "**تذكير ودي بالدفع**\n\nالسادة {{customerName}} المحترمين،\n\nهذا تذكير ودي بأن فاتورة {{productName}} رقم **{{invoiceNo}}** متأخرة الآن **{{daysOverdue}} يوماً**. يرجى تسوية المبلغ في أقرب وقت ممكن.\n\nإذا كنتم قد سددتم المبلغ، يرجى تجاهل هذا التذكير.\n\n{{invoiceDetails}}\n\nمع أطيب التحيات،\n{{companyName}}" },
+    },
+  },
+  {
+    key: 'finance.dunning_past_due',
+    module: 'Finance',
+    name: "Overdue payment: past-due notice (60 days)",
+    description: "Second notice to a customer whose invoice is significantly overdue. Sent in English and Arabic together.",
+    bilingual: true,
+    variables: DUNNING_VARIABLES,
+    defaults: {
+      en: { subject: "Past-Due Notice - {{invoiceNo}}", body: "**Your invoice is now significantly overdue**\n\nDear {{customerName}},\n\nWe have not received payment for your {{productName}} invoice **{{invoiceNo}}**, which is now **{{daysOverdue}} days past due**. Continued non-payment may affect your contract status and creditworthiness.\n\nPlease settle the outstanding balance immediately, or reply to this email to discuss a payment arrangement.\n\n{{invoiceDetails}}\n\nKind regards,\n{{companyName}}" },
+      ar: { subject: "إشعار تأخر سداد - {{invoiceNo}}", body: "**فاتورتكم متأخرة بشكل ملحوظ**\n\nالسادة {{customerName}} المحترمين،\n\nلم نستلم دفعة فاتورة {{productName}} رقم **{{invoiceNo}}**، وهي متأخرة الآن **{{daysOverdue}} يوماً**. قد يؤثر استمرار عدم السداد على حالة عقدكم وموقفكم الائتماني.\n\nيرجى تسوية المبلغ المستحق فوراً، أو الرد على هذا البريد الإلكتروني لمناقشة ترتيب الدفع.\n\n{{invoiceDetails}}\n\nمع أطيب التحيات،\n{{companyName}}" },
+    },
+  },
+  {
+    key: 'finance.dunning_final_notice',
+    module: 'Finance',
+    name: "Overdue payment: final notice (90 days)",
+    description: "Final notice before escalation. Sent in English and Arabic together.",
+    bilingual: true,
+    variables: DUNNING_VARIABLES,
+    defaults: {
+      en: { subject: "FINAL NOTICE - Action Required - {{invoiceNo}}", body: "**Final notice before escalation**\n\nDear {{customerName}},\n\n**This is a final notice.** Your {{productName}} invoice **{{invoiceNo}}** remains unpaid **{{daysOverdue}} days** after its due date.\n\nFailure to settle the outstanding balance within 7 days will result in suspension of services, contract review, and potential escalation to legal recovery proceedings.\n\nPlease contact us immediately to resolve this matter.\n\n{{invoiceDetails}}\n\nKind regards,\n{{companyName}}" },
+      ar: { subject: "إشعار نهائي - مطلوب إجراء - {{invoiceNo}}", body: "**إشعار نهائي قبل التصعيد**\n\nالسادة {{customerName}} المحترمين،\n\n**هذا إشعار نهائي.** فاتورة {{productName}} رقم **{{invoiceNo}}** لا تزال غير مسددة بعد **{{daysOverdue}} يوماً** من تاريخ الاستحقاق.\n\nعدم تسوية المبلغ المستحق خلال 7 أيام سيؤدي إلى إيقاف الخدمات، ومراجعة العقد، واحتمال التصعيد إلى إجراءات الاسترداد القانونية.\n\nيرجى التواصل معنا فوراً لتسوية هذا الأمر.\n\n{{invoiceDetails}}\n\nمع أطيب التحيات،\n{{companyName}}" },
+    },
+  },
+  {
+    key: 'finance.dunning_legal_referral',
+    module: 'Finance',
+    name: "Overdue payment: legal referral",
+    description: "Notice that the account has been referred for legal recovery (sent only after approval). Sent in English and Arabic together.",
+    bilingual: true,
+    variables: DUNNING_VARIABLES,
+    defaults: {
+      en: { subject: "NOTICE OF LEGAL REFERRAL - {{invoiceNo}}", body: "**Your account has been referred for legal recovery**\n\nDear {{customerName}},\n\nDespite prior notices, your {{productName}} invoice **{{invoiceNo}}** remains unpaid **{{daysOverdue}} days** after its due date.\n\nFormal legal recovery proceedings may now commence, which may result in additional legal costs being added to the outstanding balance.\n\nTo halt this process, settle the outstanding balance immediately or contact us without delay.\n\n{{invoiceDetails}}\n\nKind regards,\n{{companyName}}" },
+      ar: { subject: "إشعار إحالة قانونية - {{invoiceNo}}", body: "**تمت إحالة حسابكم للاسترداد القانوني**\n\nالسادة {{customerName}} المحترمين،\n\nعلى الرغم من الإشعارات السابقة، لا تزال فاتورة {{productName}} رقم **{{invoiceNo}}** غير مسددة بعد **{{daysOverdue}} يوماً** من تاريخ الاستحقاق.\n\nقد تبدأ الآن إجراءات الاسترداد القانونية الرسمية، والتي قد تؤدي إلى إضافة تكاليف قانونية إضافية إلى الرصيد المستحق.\n\nلوقف هذا الإجراء، يرجى تسوية الرصيد المستحق فوراً أو التواصل معنا دون تأخير.\n\n{{invoiceDetails}}\n\nمع أطيب التحيات،\n{{companyName}}" },
+    },
+  },
+  {
+    key: 'platform.billing_payment_failed',
+    module: 'Platform billing',
+    name: 'Subscription payment failed',
+    description: "Sent by the platform to a company when its subscription payment fails. Only platform administrators can edit it.",
+    platformOnly: true,
+    variables: [
+      { name: 'tenantName', description: 'Customer company', sample: 'Acme Fleet Services' },
+      { name: 'amount', description: 'Amount due', sample: '499.00 USD' },
+      { name: 'updateUrl', description: 'Link to update the payment method', sample: 'https://app.example/admin/subscription/upgrade' },
+      { name: 'invoiceUrl', description: 'Link to the invoice', sample: 'https://invoice.stripe.com/…' },
+    ],
+    defaults: {
+      en: {
+        subject: '{{companyName}} - Payment failed for {{tenantName}}',
+        body: [
+          'Hello,',
+          "We couldn't process your most recent {{companyName}} subscription payment (**{{amount}}**) for **{{tenantName}}**.",
+          '[Update payment method]({{updateUrl}})',
+          'You can also [view the invoice]({{invoiceUrl}}). The charge will be retried automatically over the next few days; until it succeeds, your subscription stays active but at risk of cancellation.',
+        ].join('\n\n'),
+      },
+      ar: {
+        subject: '{{companyName}} - تعذر الدفع لـ {{tenantName}}',
+        body: [
+          'مرحباً،',
+          'تعذرت معالجة آخر دفعة لاشتراككم في {{companyName}} (**{{amount}}**) لـ **{{tenantName}}**.',
+          '[تحديث طريقة الدفع]({{updateUrl}})',
+          'يمكنكم أيضاً [عرض الفاتورة]({{invoiceUrl}}). ستتم إعادة محاولة الدفع تلقائياً خلال الأيام القليلة القادمة، وحتى تنجح يبقى اشتراككم فعالاً لكنه معرض للإلغاء.',
+        ].join('\n\n'),
+      },
+    },
+  },
+  {
+    key: 'platform.billing_trial_ending',
+    module: 'Platform billing',
+    name: 'Trial ending soon',
+    description: "Sent by the platform to a company whose trial is about to end. Only platform administrators can edit it.",
+    platformOnly: true,
+    variables: [
+      { name: 'tenantName', description: 'Customer company', sample: 'Acme Fleet Services' },
+      { name: 'trialEndDate', description: 'Trial end date', sample: '14 October 2026' },
+      { name: 'upgradeUrl', description: 'Link to pick a plan', sample: 'https://app.example/admin/subscription/upgrade' },
+    ],
+    defaults: {
+      en: {
+        subject: '{{companyName}} - Your trial for {{tenantName}} ends soon',
+        body: [
+          'Hello,',
+          'Your {{companyName}} trial for **{{tenantName}}** ends on **{{trialEndDate}}**.',
+          'Pick a plan to keep your team running without interruption.',
+          '[Pick a plan]({{upgradeUrl}})',
+          'If you do nothing, the trial will expire and your subscription will be cancelled.',
+        ].join('\n\n'),
+      },
+      ar: {
+        subject: '{{companyName}} - تنتهي الفترة التجريبية لـ {{tenantName}} قريباً',
+        body: [
+          'مرحباً،',
+          'تنتهي الفترة التجريبية لـ **{{tenantName}}** في {{companyName}} بتاريخ **{{trialEndDate}}**.',
+          'اختاروا خطة للحفاظ على استمرارية عمل فريقكم دون انقطاع.',
+          '[اختيار خطة]({{upgradeUrl}})',
+          'إذا لم تقوموا بأي إجراء، ستنتهي الفترة التجريبية وسيتم إلغاء اشتراككم.',
+        ].join('\n\n'),
+      },
+    },
+  },
+  {
+    key: 'platform.billing_subscription_canceled',
+    module: 'Platform billing',
+    name: 'Subscription cancelled',
+    description: "Sent by the platform to a company when its subscription is cancelled. Only platform administrators can edit it.",
+    platformOnly: true,
+    variables: [
+      { name: 'tenantName', description: 'Customer company', sample: 'Acme Fleet Services' },
+      { name: 'reactivateUrl', description: 'Link to reactivate', sample: 'https://app.example/admin/subscription/upgrade' },
+    ],
+    defaults: {
+      en: {
+        subject: '{{companyName}} - Subscription cancelled for {{tenantName}}',
+        body: [
+          'Hello,',
+          "Your {{companyName}} subscription for **{{tenantName}}** has been cancelled. You've been moved to the read-only trial plan.",
+          '[Reactivate]({{reactivateUrl}})',
+          'Your data stays in place for 30 days while you decide.',
+        ].join('\n\n'),
+      },
+      ar: {
+        subject: '{{companyName}} - تم إلغاء اشتراك {{tenantName}}',
+        body: [
+          'مرحباً،',
+          'تم إلغاء اشتراك **{{tenantName}}** في {{companyName}}، وتم نقلكم إلى الخطة التجريبية للقراءة فقط.',
+          '[إعادة التفعيل]({{reactivateUrl}})',
+          'تبقى بياناتكم محفوظة لمدة 30 يوماً ريثما تتخذون قراركم.',
         ].join('\n\n'),
       },
     },

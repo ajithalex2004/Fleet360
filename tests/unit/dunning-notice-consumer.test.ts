@@ -24,8 +24,25 @@ const dispatch = vi.hoisted(() => ({
 
 const email = vi.hoisted(() => ({
   sendEmail: vi.fn(),
-  classifyEmailError: vi.fn(() => 'DEFINITE_FAILURE'),
+  classifySmtpError: vi.fn(() => 'DEFINITE_FAILURE'),
 }));
+
+const templates = vi.hoisted(() => {
+  const order: string[] = [];
+  const render = vi.fn<[unknown], { subject: string; html: string; text: string }>(() => ({ subject: 'Test subject', html: '<html><body style="x"><p>body</p></body></html>', text: 'body' }));
+  return {
+    order,
+    render,
+    loaded: [] as string[],
+    loadEmailTemplate: vi.fn(async ({ key }: { key: string }) => {
+      order.push('load');
+      templates.loaded.push(key);
+      return { locale: 'en', render: (args: unknown) => { templates.rendered.push(key); return render(args); } };
+    }),
+    tenantEmailContext: vi.fn(async () => ({ companyName: 'Acme', locale: 'en' })),
+    rendered: [] as string[],
+  };
+});
 
 vi.mock('@/lib/prisma', () => ({ prisma: {} }));
 
@@ -38,15 +55,18 @@ vi.mock('@/lib/sentry', () => ({
   captureException: vi.fn(),
 }));
 
-vi.mock('@/lib/finance/dunning-templates', () => ({
-  renderDunningEmail: vi.fn(() => ({
-    subject: 'Test subject', htmlBody: '<p>body</p>', textBody: 'body',
-  })),
+vi.mock('@/lib/email-templates', () => ({
+  loadEmailTemplate: templates.loadEmailTemplate,
+  tenantEmailContext: templates.tenantEmailContext,
+}));
+
+vi.mock('@/lib/tenant-contact', () => ({
+  tenantContact: vi.fn(async () => ({ email: 'finance@acme.test', name: 'Acme' })),
 }));
 
 vi.mock('@/lib/finance/dunning-dispatch', () => dispatch);
 
-vi.mock('@/services/email/emailService', () => email);
+vi.mock('@/lib/email', () => email);
 
 // Imported after the mocks above are registered (vi.mock calls are hoisted).
 import { DunningNoticeConsumer } from '@/events/consumers/dunning-notice.consumer';
@@ -92,6 +112,10 @@ describe('DunningNoticeConsumer', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    templates.order.length = 0;
+    templates.loaded.length = 0;
+    templates.rendered.length = 0;
+    dispatch.claimAttempt.mockImplementation(async () => { templates.order.push('claim'); return false; });
     process.env = { ...originalEnv, DUNNING_DISPATCH_ENABLED: 'true' };
     dispatch.isTransportAvailable.mockResolvedValue(true);
     dispatch.recordOutcome.mockResolvedValue({ applied: true });
@@ -182,27 +206,57 @@ describe('DunningNoticeConsumer', () => {
 
   describe('once claimed, rechecked, and prepared-evidence committed', () => {
     beforeEach(() => {
-      dispatch.claimAttempt.mockResolvedValue(true);
+      dispatch.claimAttempt.mockImplementation(async () => { templates.order.push('claim'); return true; });
       dispatch.preDispatchRecheck.mockResolvedValue(READY_RECHECK);
       dispatch.resolveDispatchRecipients.mockReturnValue(READY_RECIPIENTS);
       dispatch.commitPreparedEvidence.mockResolvedValue({ ok: true });
     });
 
     it('calls sendEmail exactly once, outside the claim transaction, with the resolved recipient', async () => {
-      email.sendEmail.mockResolvedValue({ status: 'SENT', id: 'msg-1' });
+      email.sendEmail.mockResolvedValue({ sent: true, id: 'msg-1' });
       await callHandle();
 
       expect(email.sendEmail).toHaveBeenCalledTimes(1);
       expect(email.sendEmail).toHaveBeenCalledWith({
-        to: [READY_RECIPIENTS.to],
+        to: 'customer@example.com',
         subject: 'Test subject',
-        htmlBody: '<p>body</p>',
-        textBody: 'body',
+        html: '<html><body style="x"><p>body</p></body></html>',
+        text: 'body',
+        replyTo: 'finance@acme.test',
       });
     });
 
+    it("loads the tenant's templates before the claim and renders the stage's one", async () => {
+      email.sendEmail.mockResolvedValue({ sent: true, id: 'msg-1' });
+      mockTx.leaseDunningNotice.findFirst.mockResolvedValue({ ...READY_NOTICE, collectionStage: 'LEGAL_REFERRAL' });
+      await callHandle();
+
+      expect(templates.order.indexOf('load')).toBeLessThan(templates.order.indexOf('claim'));
+      expect(templates.loaded).toEqual(expect.arrayContaining([
+        'finance.dunning_reminder', 'finance.dunning_past_due', 'finance.dunning_final_notice', 'finance.dunning_legal_referral',
+      ]));
+      expect(templates.rendered).toEqual(['finance.dunning_legal_referral']);
+      const args = templates.render.mock.calls[0][0] as unknown as {
+        values: (l: string) => Record<string, string>;
+        blocks: (l: string) => Record<string, { html: string }>;
+      };
+      expect(args.values('en')).toMatchObject({ customerName: 'Customer Co', invoiceNo: 'INV-001', outstandingAmount: 'AED 500.00' });
+      expect(args.values('ar').productName).toBe('إيجار المركبة');
+      expect(args.blocks('ar').invoiceDetails.html).toContain('المبلغ المستحق');
+    });
+
+    it('puts the staging redirect note inside the email body, escaped', async () => {
+      email.sendEmail.mockResolvedValue({ sent: true, id: 'msg-1' });
+      dispatch.resolveDispatchRecipients.mockReturnValue({ ...READY_RECIPIENTS, noteForBody: 'Redirected <staging>' });
+      await callHandle();
+
+      const sent = email.sendEmail.mock.calls[0][0] as { html: string; text: string };
+      expect(sent.html).toMatch(/^<html><body style="x"><p[^>]*>Redirected &lt;staging&gt;<\/p><p>body<\/p>/);
+      expect(sent.text).toBe('Redirected <staging>\n\nbody');
+    });
+
     it('a SENT result records SUBMITTED and writes the audit activity row', async () => {
-      email.sendEmail.mockResolvedValue({ status: 'SENT', id: 'msg-1' });
+      email.sendEmail.mockResolvedValue({ sent: true, id: 'msg-1' });
       await callHandle();
 
       expect(dispatch.recordOutcome).toHaveBeenCalledWith(
@@ -219,7 +273,7 @@ describe('DunningNoticeConsumer', () => {
     });
 
     it('a FAILED result below the send-attempt cap records FAILED, not FAILED_EXHAUSTED', async () => {
-      email.sendEmail.mockResolvedValue({ status: 'FAILED', errorClass: 'DEFINITE_FAILURE', errorMessage: 'RCPT rejected' });
+      email.sendEmail.mockResolvedValue({ sent: false, reason: 'smtp_error', errorClass: 'DEFINITE_FAILURE', error: 'RCPT rejected' });
       dispatch.getSendAttemptState.mockResolvedValue({ sendAttemptCount: 1, maxSendAttempts: 3 });
       await callHandle();
 
@@ -234,7 +288,7 @@ describe('DunningNoticeConsumer', () => {
     });
 
     it('a FAILED result at the send-attempt cap passes capReached: true', async () => {
-      email.sendEmail.mockResolvedValue({ status: 'FAILED', errorClass: 'DEFINITE_FAILURE', errorMessage: 'RCPT rejected' });
+      email.sendEmail.mockResolvedValue({ sent: false, reason: 'smtp_error', errorClass: 'DEFINITE_FAILURE', error: 'RCPT rejected' });
       dispatch.getSendAttemptState.mockResolvedValue({ sendAttemptCount: 3, maxSendAttempts: 3 });
       await callHandle();
 
@@ -245,7 +299,7 @@ describe('DunningNoticeConsumer', () => {
     });
 
     it('an UNCERTAIN result records DELIVERY_UNKNOWN, never FAILED', async () => {
-      email.sendEmail.mockResolvedValue({ status: 'UNCERTAIN', errorClass: 'UNCERTAIN', errorMessage: 'DATA timeout' });
+      email.sendEmail.mockResolvedValue({ sent: false, reason: 'smtp_error', errorClass: 'UNCERTAIN', error: 'DATA timeout' });
       await callHandle();
 
       expect(dispatch.recordOutcome).toHaveBeenCalledWith(
@@ -255,7 +309,7 @@ describe('DunningNoticeConsumer', () => {
 
     it('a synchronously thrown sendEmail error is caught, classified, and recorded — never propagated', async () => {
       email.sendEmail.mockRejectedValue(Object.assign(new Error('socket hang up'), { command: 'DATA' }));
-      email.classifyEmailError.mockReturnValue('UNCERTAIN');
+      email.classifySmtpError.mockReturnValue('UNCERTAIN');
 
       await expect(callHandle()).resolves.toBeUndefined();
 
@@ -266,8 +320,8 @@ describe('DunningNoticeConsumer', () => {
       );
     });
 
-    it('a MOCK_SENT status (transport gate raced away underneath) never maps to SUBMITTED', async () => {
-      email.sendEmail.mockResolvedValue({ status: 'MOCK_SENT' });
+    it('no transport (gate raced away underneath) never maps to SUBMITTED', async () => {
+      email.sendEmail.mockResolvedValue({ sent: false, reason: 'smtp_not_configured' });
       await callHandle();
 
       const outcome = (dispatch.recordOutcome.mock.calls[0] as unknown as unknown[] | undefined)?.[3];
@@ -275,7 +329,7 @@ describe('DunningNoticeConsumer', () => {
     });
 
     it('an audit-row failure is swallowed, not thrown', async () => {
-      email.sendEmail.mockResolvedValue({ status: 'SENT', id: 'msg-1' });
+      email.sendEmail.mockResolvedValue({ sent: true, id: 'msg-1' });
       mockTx.leaseDunningActivity.create.mockRejectedValue(new Error('constraint violation'));
 
       await expect(callHandle()).resolves.toBeUndefined();

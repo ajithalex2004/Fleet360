@@ -20,8 +20,13 @@ import type { DomainEventEnvelope } from '@/events/event-envelope';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls, type TxClient } from '@/lib/rls';
 import { captureException, captureMessage } from '@/lib/sentry';
-import { sendEmail, classifyEmailError } from '@/services/email/emailService';
-import { renderDunningEmail, type DunningStage } from '@/lib/finance/dunning-templates';
+import { sendEmail, classifySmtpError } from '@/lib/email';
+import { loadEmailTemplate, tenantEmailContext, type LoadedTemplate } from '@/lib/email-templates';
+import { escapeHtml } from '@/lib/email-templates/render';
+import {
+  DUNNING_FALLBACK_KEY, DUNNING_TEMPLATE_KEY, dunningInvoiceBlock, dunningValues,
+} from '@/lib/finance/dunning-templates';
+import { tenantContact } from '@/lib/tenant-contact';
 import {
   claimAttempt,
   preDispatchRecheck,
@@ -37,13 +42,6 @@ export interface DunningNoticeQueuedPayload {
   noticeId: string;
   attemptToken: string;
 }
-
-const TEMPLATE_STAGE: Record<string, DunningStage> = {
-  REMINDER: 'reminder_30',
-  OVERDUE: 'notice_60',
-  FINAL_NOTICE: 'final_90',
-  LEGAL_REFERRAL: 'legal_referral',
-};
 
 const ACTIVITY_TYPE: Record<string, string> = {
   REMINDER: 'EMAIL',
@@ -91,6 +89,7 @@ type ClaimResult =
       to: { email: string; name: string };
       noteForBody?: string;
       emailBody: { subject: string; htmlBody: string; textBody: string };
+      replyTo?: string;
       collectionStage: string;
       lesseeId: string;
       contractId: string | null;
@@ -120,6 +119,17 @@ export class DunningNoticeConsumer extends BaseEventConsumer<DunningNoticeQueued
       });
       return;
     }
+
+    // The tenant's notice wording (Admin > Email templates > Finance), name,
+    // language and reply-to address, loaded before the claim transaction so
+    // rendering inside it needs no further database access.
+    const context = await tenantEmailContext(tenantId);
+    const [templates, contact] = await Promise.all([
+      Promise.all([...new Set([...Object.values(DUNNING_TEMPLATE_KEY), DUNNING_FALLBACK_KEY])].map(
+        async (key) => [key, await loadEmailTemplate({ tenantId, key, context })] as const,
+      )).then((entries) => new Map<string, LoadedTemplate>(entries)),
+      tenantContact(tenantId),
+    ]);
 
     const claim = await withTenantRls(prisma, tenantId, async (tx): Promise<ClaimResult> => {
       const claimed = await claimAttempt(tx, tenantId, noticeId, attemptToken);
@@ -168,24 +178,26 @@ export class DunningNoticeConsumer extends BaseEventConsumer<DunningNoticeQueued
       }
 
       const daysOverdue = Math.max(0, Math.floor((Date.now() - recheck.dueDate.getTime()) / 86400000));
-      const templateStage = TEMPLATE_STAGE[notice.collectionStage] ?? 'final_90';
-      const email = renderDunningEmail({
-        stage: templateStage,
-        productName: 'Vehicle Lease',
-        lesseeName: recheck.recipientName,
+      const template = templates.get(DUNNING_TEMPLATE_KEY[notice.collectionStage] ?? DUNNING_FALLBACK_KEY)!;
+      const invoice = {
         invoiceNo: recheck.invoiceNo ?? recheck.invoiceId.slice(0, 8),
+        dueDate: recheck.dueDate,
+        daysOverdue,
         outstandingAmount: recheck.amount,
         currency: recheck.currency,
-        daysOverdue,
-        dueDate: recheck.dueDate,
         contractRef: null,
+      };
+      const email = template.render({
+        values: (locale) => dunningValues(invoice, recheck.recipientName, locale),
+        blocks: (locale) => ({ invoiceDetails: dunningInvoiceBlock(invoice, locale) }),
       });
-      const htmlBody = recipients.noteForBody
-        ? `<p style="font-size:12px;color:#6b7280;margin:0 0 12px 0">${recipients.noteForBody}</p>${email.htmlBody}`
-        : email.htmlBody;
+      const note = recipients.noteForBody
+        ? `<p style="font-size:12px;color:#6b7280;margin:0;padding:12px 32px;">${escapeHtml(recipients.noteForBody)}</p>`
+        : '';
+      const htmlBody = note ? email.html.replace(/<body[^>]*>/, (tag) => `${tag}${note}`) : email.html;
       const textBody = recipients.noteForBody
-        ? `${recipients.noteForBody}\n\n${email.textBody}`
-        : email.textBody;
+        ? `${recipients.noteForBody}\n\n${email.text}`
+        : email.text;
 
       return {
         kind: 'ready',
@@ -195,6 +207,7 @@ export class DunningNoticeConsumer extends BaseEventConsumer<DunningNoticeQueued
         to: recipients.to,
         noteForBody: recipients.noteForBody,
         emailBody: { subject: email.subject, htmlBody, textBody },
+        replyTo: contact?.email,
         collectionStage: notice.collectionStage,
         lesseeId: notice.lesseeId,
         contractId: notice.contractId,
@@ -207,14 +220,27 @@ export class DunningNoticeConsumer extends BaseEventConsumer<DunningNoticeQueued
     // ── Outside any held transaction: the actual transport call. ────────
     let sendResult: { status: string; errorClass?: string; errorMessage?: string; id?: string };
     try {
-      sendResult = await sendEmail({
-        to: [claim.to],
+      // The platform email sender (Admin > Settings > Notifications SMTP, or
+      // SendGrid). Replies go to the tenant's contact address.
+      const result = await sendEmail({
+        to: claim.to.email,
         subject: claim.emailBody.subject,
-        htmlBody: claim.emailBody.htmlBody,
-        textBody: claim.emailBody.textBody,
+        html: claim.emailBody.htmlBody,
+        text: claim.emailBody.textBody,
+        ...(claim.replyTo ? { replyTo: claim.replyTo } : {}),
       });
+      sendResult = result.sent
+        ? { status: 'SENT', id: result.id }
+        : result.errorClass
+          ? {
+              status: result.errorClass === 'DEFINITE_FAILURE' ? 'FAILED' : 'UNCERTAIN',
+              errorClass: result.errorClass,
+              errorMessage: result.error ?? result.reason,
+            }
+          // No transport (gate raced away) or quarantined: never SUBMITTED.
+          : { status: `NOT_SENT:${result.reason ?? 'unknown'}`, errorMessage: result.reason };
     } catch (err) {
-      const errorClass = classifyEmailError(err);
+      const errorClass = classifySmtpError(err);
       sendResult = {
         // Same classifier, same mapping as a normal sendEmail() return —
         // an UNCERTAIN-classified throw must land on DELIVERY_UNKNOWN, not

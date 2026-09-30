@@ -102,3 +102,22 @@ describe('catalogue', () => {
     expect(placeholdersIn('{a} {{ b }} {{a}}')).toEqual(['a', 'b']);
   });
 });
+
+describe('renderBilingualEmailContent', () => {
+  const sections = {
+    en: { subject: 'Reminder {{n}}', body: 'Dear {{name}}', values: { n: 'INV-1', name: 'Co' } },
+    ar: { subject: 'تذكير {{n}}', body: 'عزيزي {{name}}', values: { n: 'INV-1', name: 'الشركة' } },
+  };
+  it('puts the lead language first, joins the subjects and keeps each section in its direction', async () => {
+    const { renderBilingualEmailContent } = await import('@/lib/email-templates/render');
+    const ar = renderBilingualEmailContent({ lead: 'ar', sections, branding });
+    expect(ar.subject).toBe('تذكير INV-1 / Reminder INV-1');
+    expect(ar.html).toContain('<html lang="ar" dir="rtl">');
+    expect(ar.html.indexOf('عزيزي الشركة')).toBeLessThan(ar.html.indexOf('Dear Co'));
+    expect(ar.html).toMatch(/<td dir="rtl" lang="ar"[^>]*>.*عزيزي/s);
+    expect(ar.html).toMatch(/<td dir="ltr" lang="en"[^>]*>.*Dear Co/s);
+    expect(ar.text).toBe('عزيزي الشركة\n\n----------\n\nDear Co');
+    const en = renderBilingualEmailContent({ lead: 'en', sections, branding });
+    expect(en.subject).toBe('Reminder INV-1 / تذكير INV-1');
+  });
+});

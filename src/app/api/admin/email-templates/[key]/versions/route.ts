@@ -18,11 +18,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ key: stri
   }
   const { tenantId } = authz;
 
-  const def = templateFor((await props.params).key);
+  const def = templateFor((await props.params).key, req.headers);
   if (def instanceof NextResponse) return def;
   const locale = localeFrom(req.nextUrl.searchParams.get('locale'));
   if (locale instanceof NextResponse) return locale;
-  const scope = scopeFor(req.headers, tenantId, req.nextUrl.searchParams.get('scope') ?? undefined);
+  const scope = scopeFor(req.headers, tenantId, req.nextUrl.searchParams.get('scope') ?? undefined, def);
   if (scope instanceof NextResponse) return scope;
 
   try {

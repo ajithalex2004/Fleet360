@@ -11,7 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { isSuperAdmin } from '@/lib/admin-access';
 import { EMAIL_LOCALES, EMAIL_TEMPLATES, templateVariables } from '@/lib/email-templates/catalogue';
-import { listTemplateRows, tenantEmailContext, type TemplateRow } from '@/lib/email-templates';
+import { PLATFORM_NAME, listTemplateRows, tenantEmailContext, type TemplateRow } from '@/lib/email-templates';
 
 const saved = (row: TemplateRow | undefined) => row
   ? { subject: row.subject, body: row.body, version: row.version, updatedBy: row.updated_by, updatedAt: row.updated_at }
@@ -33,9 +33,14 @@ export async function GET(req: NextRequest) {
       defaultLocale: ctx.locale,
       // For the screen's live preview (rendered in the browser with render.ts).
       branding: { companyName: ctx.companyName, productName: ctx.productName, logoUrl: ctx.logoUrl, primaryColor: ctx.primaryColor },
+      // Platform-only emails carry the platform's name, not the tenant's.
+      platformBranding: { companyName: PLATFORM_NAME, productName: null, logoUrl: null, primaryColor: null },
       locales: EMAIL_LOCALES,
-      templates: EMAIL_TEMPLATES.map((def) => ({
+      // Emails the platform sends to tenants are for platform administrators only.
+      templates: EMAIL_TEMPLATES.filter((def) => !def.platformOnly || isSuperAdmin(req.headers)).map((def) => ({
         key: def.key,
+        bilingual: Boolean(def.bilingual),
+        platformOnly: Boolean(def.platformOnly),
         module: def.module,
         name: def.name,
         description: def.description,

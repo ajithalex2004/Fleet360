@@ -32,6 +32,31 @@ export interface EmailSendResult {
   status?: number;
   error?: string;
   transport?: 'sendgrid' | 'smtp' | 'quarantined';
+  /** For a failed send: DEFINITE_FAILURE when the message certainly was not
+   *  accepted (safe to retry), UNCERTAIN when it may have been. Callers that
+   *  must never send twice (dunning notices) rely on this. */
+  errorClass?: 'DEFINITE_FAILURE' | 'UNCERTAIN';
+  /** Provider message id of a sent message, when known. */
+  id?: string;
+}
+
+/**
+ * Whether a nodemailer failure happened before the message could have been
+ * accepted: at or before RCPT nothing was transmitted. Anything later, or
+ * unidentifiable, is UNCERTAIN.
+ */
+export function classifySmtpError(err: unknown): 'DEFINITE_FAILURE' | 'UNCERTAIN' {
+  const command = (err as { command?: string } | undefined)?.command;
+  return command === 'CONN' || command === 'AUTH' || command === 'MAIL' || command === 'RCPT'
+    ? 'DEFINITE_FAILURE'
+    : 'UNCERTAIN';
+}
+
+/** Whether sendEmail has a real transport (not quarantined, SendGrid or platform SMTP set up). */
+export async function isEmailTransportConfigured(): Promise<boolean> {
+  if (process.env.DISABLE_OUTBOUND_NOTIFICATIONS === 'true' || process.env.MOCK_NOTIFICATIONS === 'true') return false;
+  if (process.env.SENDGRID_API_KEY) return Boolean(process.env.EMAIL_FROM ?? process.env.SMTP_FROM);
+  return (await getSmtpConfig()) !== null;
 }
 
 export interface EmailMessage {
@@ -167,15 +192,17 @@ async function sendViaSendGrid(msg: EmailMessage, recipients: string[]): Promise
       body: JSON.stringify(body),
     });
     if (res.status >= 200 && res.status < 300) {
-      return { sent: true, status: res.status, transport: 'sendgrid' };
+      return { sent: true, status: res.status, transport: 'sendgrid', id: res.headers.get('x-message-id') ?? undefined };
     }
     const text = await res.text();
     const err = new Error(`SendGrid ${res.status}: ${text.slice(0, 300)}`);
     captureException(err, { context: 'email.send.sendgrid', tags: { status: String(res.status) } });
-    return { sent: false, reason: 'sendgrid_error', status: res.status, error: err.message, transport: 'sendgrid' };
+    // SendGrid answered and refused: nothing was accepted.
+    return { sent: false, reason: 'sendgrid_error', status: res.status, error: err.message, transport: 'sendgrid', errorClass: 'DEFINITE_FAILURE' };
   } catch (err) {
     captureException(err, { context: 'email.send.sendgrid' });
-    return { sent: false, reason: 'network_error', error: err instanceof Error ? err.message : String(err), transport: 'sendgrid' };
+    // No answer: SendGrid may have accepted the request.
+    return { sent: false, reason: 'network_error', error: err instanceof Error ? err.message : String(err), transport: 'sendgrid', errorClass: 'UNCERTAIN' };
   }
 }
 
@@ -204,7 +231,7 @@ async function sendViaSmtp(msg: EmailMessage, recipients: string[]): Promise<Ema
   try {
     const nodemailer = await import('nodemailer');
     const transporter = nodemailer.default.createTransport(transportOptions);
-    await transporter.sendMail({
+    const info = await transporter.sendMail({
       from: fromAddr,
       to: recipients.join(', '),
       subject: msg.subject,
@@ -212,7 +239,7 @@ async function sendViaSmtp(msg: EmailMessage, recipients: string[]): Promise<Ema
       html: msg.html,
       ...(msg.replyTo ? { replyTo: msg.replyTo } : {}),
     });
-    return { sent: true, transport: 'smtp' };
+    return { sent: true, transport: 'smtp', id: typeof info?.messageId === 'string' ? info.messageId : undefined };
   } catch (err) {
     const e = err instanceof Error ? err : new Error(String(err));
     console.error('[email] SMTP send failed:', e.message);
@@ -222,6 +249,7 @@ async function sendViaSmtp(msg: EmailMessage, recipients: string[]): Promise<Ema
       reason: 'smtp_error',
       error: e.message,
       transport: 'smtp',
+      errorClass: classifySmtpError(err),
     };
   }
 }
