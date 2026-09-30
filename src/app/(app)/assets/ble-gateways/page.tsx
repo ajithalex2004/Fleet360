@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 interface BLEGateway {
   id: string;
@@ -20,7 +20,17 @@ interface BLEGateway {
   alert_on_offline?: boolean;
   api_key_prefix?: string;
   api_key_created_at?: string;
+  /** Bus Ops device id; set on gateways registered from Bus Ops. */
+  gateway_id?: string | null;
 }
+
+// Bus Ops registers its in-bus gateways in the same table with only a device
+// id and a vehicle: no Assets code, name or location. Show them by device id
+// rather than as blank rows.
+const isBusGateway = (g: BLEGateway) => !g.gateway_code && !!g.gateway_id;
+const gatewayName = (g: BLEGateway) =>
+  g.name || (g.gateway_id ? `Bus gateway ${g.gateway_id}` : 'Unnamed gateway');
+const gatewayCode = (g: BLEGateway) => g.gateway_code || g.gateway_id || '—';
 
 interface KeygenResult {
   raw_key: string;
@@ -43,19 +53,6 @@ const EMPTY_FORM = {
   vehicle_id: '', lat: '', lng: '', ip_address: '', firmware_version: '',
   offline_threshold_min: 10, alert_on_offline: true,
 };
-
-function RssiBar({ rssi }: { rssi: number }) {
-  const pct = Math.max(0, Math.min(100, ((rssi + 100) / 60) * 100));
-  const color = pct > 66 ? 'bg-emerald-500' : pct > 33 ? 'bg-amber-500' : 'bg-red-500';
-  return (
-    <div className="flex items-center gap-2">
-      <div className="w-16 h-1.5 bg-[var(--bg-surface-hover)] rounded-full overflow-hidden">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
-      </div>
-      <span className="text-xs text-[var(--text-muted)]">{rssi} dBm</span>
-    </div>
-  );
-}
 
 function CodeBlock({ code, language = '' }: { code: string; language?: string }) {
   const [copied, setCopied] = useState(false);
@@ -204,8 +201,8 @@ export default function BLEGatewaysPage() {
       });
       const data = await res.json();
       setTestResult(JSON.stringify(data, null, 2));
-    } catch (e: any) {
-      setTestResult(`Error: ${e.message}`);
+    } catch (e: unknown) {
+      setTestResult(`Error: ${e instanceof Error ? e.message : String(e)}`);
     }
     setTestLoading(false);
   };
@@ -380,9 +377,9 @@ void sendDetection(String tagMac, int rssi, int battery) {
                       className={`hover:bg-[var(--bg-surface-hover)] transition-colors cursor-pointer ${isExpanded ? 'bg-yellow-300/5 border-b-0' : ''}`}
                       onClick={() => isExpanded ? setDrawerGateway(null) : openDrawer(g)}
                     >
-                      <td className="px-4 py-3 text-yellow-300 font-mono text-xs">{g.gateway_code}</td>
-                      <td className="px-4 py-3 text-[var(--text-main)] font-medium">{g.name}</td>
-                      <td className="px-4 py-3 text-[var(--text-muted)]">{g.location_type ?? '—'}</td>
+                      <td className="px-4 py-3 text-yellow-300 font-mono text-xs">{gatewayCode(g)}</td>
+                      <td className="px-4 py-3 text-[var(--text-main)] font-medium">{gatewayName(g)}</td>
+                      <td className="px-4 py-3 text-[var(--text-muted)]">{isBusGateway(g) ? 'BUS (Bus Ops)' : g.location_type ?? '—'}</td>
                       <td className="px-4 py-3 text-[var(--text-muted)]">{g.location_name ?? '—'}</td>
                       <td className="px-4 py-3 text-[var(--text-muted)]">{g.location_zone ?? '—'}</td>
                       <td className="px-4 py-3 text-[var(--text-muted)] font-medium">{g.tags_visible ?? 0}</td>
@@ -418,8 +415,13 @@ void sendDetection(String tagMac, int rssi, int battery) {
                           <div className="bg-[var(--bg-canvas)]/70 border-t border-yellow-500/20 border-b border-[var(--border-subtle)] p-6">
                             <div className="flex items-center gap-2 mb-4">
                               <span className="text-yellow-400 font-semibold text-sm">⚡ Hardware Integration Panel</span>
-                              <span className="text-[var(--text-faint)] text-xs">— {g.name} ({g.gateway_code})</span>
+                              <span className="text-[var(--text-faint)] text-xs">— {gatewayName(g)} ({gatewayCode(g)})</span>
                             </div>
+                            {isBusGateway(g) && (
+                              <p className="text-xs text-[var(--text-muted)] mb-4">
+                                Registered in Bus Ops. This gateway signs boarding events to /api/bus-ops/gateway/events with its Bus Ops secret; the Assets API key and ingest steps below do not apply to it.
+                              </p>
+                            )}
 
                             {/* Tabs */}
                             <div className="flex gap-1 mb-5 bg-[var(--bg-surface)] p-1 rounded-lg w-fit border border-[var(--border-subtle)]">
