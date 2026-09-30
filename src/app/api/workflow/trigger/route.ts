@@ -4,8 +4,7 @@ import { triggerWorkflow } from '@/lib/workflow-db';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { withAuditedAction } from '@/lib/audited-action';
 import { loadModuleAccess } from '@/lib/authz/module-access';
-import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin } from '@/lib/rls';
+import { sessionUser } from '@/lib/session-user';
 
 function errorMessage(e: unknown, fallback: string): string {
   return e instanceof Error ? e.message : fallback;
@@ -48,22 +47,17 @@ async function handlePOST(req: NextRequest) {
     }
 
     // The initiator is the signed-in user, not whatever the page sends.
-    const userId = req.headers.get('x-user-id');
-    const initiator = userId
-      ? await withPlatformAdmin(prisma, (tx) => tx.user.findUnique({
-          where: { id: userId }, select: { email: true, firstName: true, lastName: true },
-        }))
-      : null;
+    const initiator = await sessionUser(req.headers);
     const initiatedByEmail = initiator?.email ?? 'system';
-    const initiatedByName = [initiator?.firstName, initiator?.lastName].filter(Boolean).join(' ') || undefined;
+    const initiatedByName = initiator?.name;
 
     if (!referenceId) {
       return NextResponse.json({ error: 'referenceId is required' }, { status: 400 });
     }
     // At least one of the two keying paths must be supplied.
-    if (!(serviceTypeId && tenantId) && !(module && procedure)) {
+    if (!serviceTypeId && !(module && procedure)) {
       return NextResponse.json(
-        { error: 'Either (serviceTypeId + tenantId) or (module + procedure) is required to resolve a workflow.' },
+        { error: 'Either serviceTypeId or (module + procedure) is required to resolve a workflow.' },
         { status: 400 },
       );
     }

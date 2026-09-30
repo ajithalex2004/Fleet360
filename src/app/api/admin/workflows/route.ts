@@ -6,6 +6,7 @@ import { listWorkflows, createWorkflow } from '@/lib/workflow-db';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { isSuperAdmin } from '@/lib/admin-access';
+import { withWorkflowCaller } from '@/lib/admin-scope';
 import { withAuditedAction } from '@/lib/audited-action';
 
 function errorMessage(e: unknown, fallback: string): string {
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const { searchParams } = new URL(req.url);
-    const workflows = await listWorkflows({
+    const workflows = await withWorkflowCaller(req.headers, () => listWorkflows({
       module:        searchParams.get('module')        ?? undefined,
       // Phase 2 — canonical filters; the Workflow + Approval tabs use
       // serviceTypeId/tenantId so they only see workflows for the picked
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
       tenantId:      isSuperAdmin(req.headers)
         ? searchParams.get('tenantId') ?? undefined
         : tenantId,
-    });
+    }));
     return NextResponse.json(workflows);
   } catch (e) {
     return NextResponse.json({ error: errorMessage(e, 'Internal Error') }, { status: 500 });
@@ -57,12 +58,12 @@ async function handlePOST(req: NextRequest) {
     if (!name || !module || !procedure) {
       return NextResponse.json({ error: 'name, module and procedure are required' }, { status: 400 });
     }
-    const id = await createWorkflow({
+    const id = await withWorkflowCaller(req.headers, () => createWorkflow({
       name, module, procedure, description,
       serviceTypeId: serviceTypeId ?? null,
       tenantId:      ownerTenantId,
       scopeId:       scopeId ?? null,
-    });
+    }));
     return NextResponse.json({ id }, { status: 201 });
     } catch (e) {
     return NextResponse.json({ error: errorMessage(e, 'Internal Error') }, { status: 500 });

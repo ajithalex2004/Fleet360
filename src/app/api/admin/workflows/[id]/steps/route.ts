@@ -5,9 +5,9 @@ import { withTenantRls } from '@/lib/rls';
 import { listSteps, createStep } from '@/lib/workflow-db';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-import { checkWorkflowAccess } from '@/lib/admin-scope';
+import { checkWorkflowAccess, workflowRoute } from '@/lib/admin-scope';
 import { withAuditedAction } from '@/lib/audited-action';
-export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+async function handleGET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const authz = requireAuthorizedTenant({ headers: _req.headers, nextUrl: _req.nextUrl });
   if (!authz.ok) {
@@ -47,4 +47,7 @@ async function handlePOST(req: NextRequest, props: { params: Promise<{ id: strin
 }
 
 // Privileged writes are always audited (src/lib/audited-action.ts).
-export const POST = withAuditedAction(handlePOST);
+export const POST = withAuditedAction(workflowRoute(handlePOST));
+
+// Workflow tables are under RLS; platform admins work in platform context.
+export const GET = workflowRoute(handleGET);

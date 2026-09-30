@@ -69,8 +69,8 @@ type ViewMode = 'my' | 'all';
 
 export default function ApprovalsPage() {
   const [viewMode, setViewMode]             = useState<ViewMode>('my');
+  // The signed-in user, as reported by /api/my-approvals.
   const [email, setEmail]                   = useState('');
-  const [emailInput, setEmailInput]         = useState('');
   const [approvals, setApprovals]           = useState<PendingApproval[]>([]);
   const [allPending, setAllPending]         = useState<PendingApproval[]>([]);
   const [loading, setLoading]               = useState(false);
@@ -83,13 +83,13 @@ export default function ApprovalsPage() {
   const [actionMsg, setActionMsg]           = useState('');
   const [moduleFilter, setModuleFilter]     = useState('ALL');
 
-  const loadMyApprovals = useCallback(async (emailAddr: string) => {
-    if (!emailAddr) return;
+  const loadMyApprovals = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/my-approvals?email=${encodeURIComponent(emailAddr)}`);
+      const res = await fetch('/api/my-approvals');
       const data = await res.json();
-      setApprovals(Array.isArray(data) ? data : []);
+      setEmail(typeof data?.email === 'string' ? data.email : '');
+      setApprovals(Array.isArray(data?.approvals) ? data.approvals : []);
     } catch { setApprovals([]); }
     finally { setLoading(false); }
   }, []);
@@ -114,8 +114,8 @@ export default function ApprovalsPage() {
   };
 
   useEffect(() => {
-    if (email) loadMyApprovals(email);
-  }, [email, loadMyApprovals]);
+    loadMyApprovals();
+  }, [loadMyApprovals]);
 
   useEffect(() => {
     if (viewMode === 'all') loadAllPending();
@@ -132,15 +132,13 @@ export default function ApprovalsPage() {
         body: JSON.stringify({
           action,
           comments: actionComments,
-          actionedByEmail: email || 'admin@xlai.com',
-          currentStepOrder: null,
         }),
       });
       const data = await res.json();
       if (res.ok) {
         setActionMsg(action === 'APPROVE' ? 'Approved successfully!' : 'Rejected.');
         setActionComments('');
-        if (viewMode === 'my' && email) await loadMyApprovals(email);
+        if (viewMode === 'my') await loadMyApprovals();
         if (viewMode === 'all') await loadAllPending();
         if (selectedApproval) await loadHistory(selectedApproval.workflowInstanceId);
         setTimeout(() => { setSelectedApproval(null); setActionMsg(''); }, 1800);
@@ -229,31 +227,13 @@ export default function ApprovalsPage() {
       {/* MY APPROVALS VIEW */}
       {viewMode === 'my' && (
         <>
-          {!email ? (
-            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-8 max-w-md mx-auto mt-12">
-              <div className="text-center mb-6">
-                <div className="w-16 h-16 rounded-2xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center mx-auto mb-4">
-                  <span className="text-3xl font-bold text-violet-400">A</span>
-                </div>
-                <h2 className="text-[var(--text-main)] font-bold text-lg">Enter Your Email</h2>
-                <p className="text-[var(--text-muted)] text-sm mt-1">To see approvals assigned to you</p>
-              </div>
-              <div className="flex gap-2">
-                <input type="email" value={emailInput} onChange={e => setEmailInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && emailInput) setEmail(emailInput); }}
-                  placeholder="your.email@company.com"
-                  className="flex-1 px-3 py-2.5 bg-[var(--bg-canvas)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-violet-500/50" />
-                <button onClick={() => { if (emailInput) setEmail(emailInput); }}
-                  disabled={!emailInput}
-                  className="px-5 py-2.5 rounded-xl bg-violet-600 text-white font-semibold text-sm hover:bg-violet-500 transition-all disabled:opacity-50">
-                  View
-                </button>
-              </div>
-              <div className="mt-4 pt-4 border-t border-[var(--border-subtle)] text-center">
-                <button onClick={() => setViewMode('all')} className="text-violet-400 hover:text-violet-300 text-xs font-medium transition-colors">
-                  View All Pending Approvals (Admin)
-                </button>
-              </div>
+          {!email && !loading ? (
+            <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-8 max-w-md mx-auto mt-12 text-center">
+              <p className="text-[var(--text-main)] font-semibold">Could not load your approvals</p>
+              <button onClick={() => loadMyApprovals()}
+                className="mt-4 px-5 py-2.5 rounded-xl bg-violet-600 text-white font-semibold text-sm hover:bg-violet-500 transition-all">
+                Try again
+              </button>
             </div>
           ) : (
             <>
@@ -268,10 +248,8 @@ export default function ApprovalsPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <button onClick={() => loadMyApprovals(email)}
+                  <button onClick={() => loadMyApprovals()}
                     className="text-[var(--text-faint)] hover:text-[var(--text-muted)] text-xs transition-colors">Refresh</button>
-                  <button onClick={() => { setEmail(''); setEmailInput(''); setApprovals([]); setSelectedApproval(null); }}
-                    className="text-[var(--text-faint)] hover:text-[var(--text-muted)] text-xs font-medium transition-colors">Switch User</button>
                 </div>
               </div>
 
@@ -283,7 +261,7 @@ export default function ApprovalsPage() {
                     <div className="bg-[var(--bg-surface)] border border-dashed border-[var(--border-subtle)] rounded-2xl p-10 text-center">
                       <p className="text-4xl mb-3">&#10003;</p>
                       <p className="text-[var(--text-main)] font-semibold mb-1">All caught up!</p>
-                      <p className="text-[var(--text-faint)] text-sm">No pending approvals for this email.</p>
+                      <p className="text-[var(--text-faint)] text-sm">No approvals are waiting for you.</p>
                       <button onClick={() => setViewMode('all')} className="mt-4 text-violet-400 hover:text-violet-300 text-xs font-medium transition-colors">
                         Check All Pending
                       </button>
@@ -429,9 +407,9 @@ export default function ApprovalsPage() {
           {/* Action */}
           <div className="border-t border-[var(--border-subtle)] pt-4 space-y-3">
             <p className="text-xs font-semibold text-[var(--text-faint)] uppercase tracking-wider">Your Decision</p>
-            {viewMode === 'my' && !email && (
-              <p className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
-                Switch to &ldquo;My Approvals&rdquo; and enter your email to take action.
+            {viewMode === 'all' && (
+              <p className="text-xs text-[var(--text-faint)]">
+                Only this step&apos;s approver or a tenant administrator can approve or reject it.
               </p>
             )}
             <textarea value={actionComments} onChange={e => setActionComments(e.target.value)}

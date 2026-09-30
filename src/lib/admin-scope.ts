@@ -10,6 +10,7 @@ import { isSuperAdmin, SUPER_ADMIN } from '@/lib/admin-access';
 import { getStepWorkflowOwner, getWorkflowOwner } from '@/lib/workflow-db';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
+import { runAsTenant } from '@/lib/rls-scope';
 
 const notFound = () => NextResponse.json({ error: 'Not found' }, { status: 404 });
 const forbidden = (message: string) =>
@@ -37,6 +38,23 @@ export function checkOwnership(
   }
   // Another tenant's record: answer as if it doesn't exist.
   return notFound();
+}
+
+/**
+ * Runs workflow reads and writes for the caller. The workflow tables are
+ * under RLS, so a request only reaches its own tenant's rows (plus platform
+ * templates); platform admins manage every tenant's workflows, so their
+ * calls run in platform context.
+ */
+export function withWorkflowCaller<T>(headers: Headers, fn: () => Promise<T>): Promise<T> {
+  return isSuperAdmin(headers) ? runAsTenant('*', fn) : fn();
+}
+
+/** A route handler wrapped in withWorkflowCaller. */
+export function workflowRoute<A extends [Request, ...unknown[]], R>(
+  handler: (...args: A) => Promise<R>,
+): (...args: A) => Promise<R> {
+  return (...args: A) => withWorkflowCaller(args[0].headers, () => handler(...args));
 }
 
 export async function checkWorkflowAccess(
