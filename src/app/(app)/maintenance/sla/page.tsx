@@ -1,121 +1,16 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
     Clock, AlertTriangle, CheckCircle2, XCircle, TrendingUp,
     ChevronRight, Activity, Timer, Wrench, ShieldCheck,
 } from 'lucide-react';
 import {
-    MaintenanceStatus, MaintenancePriority, MaintenanceType,
     SLAStatus, SLAPhaseName, SLAPhaseSnapshot, SLASnapshot,
-    DEFAULT_SLA_RULES,
 } from '@/types/maintenance';
 import { computeSLASnapshot } from '@/lib/maintenance/sla-engine';
 import type { MaintenanceRequest } from '@/types/maintenance';
-import PreviewBanner from '@/components/PreviewBanner';
-
-// ── seed data ─────────────────────────────────────────────────────────────────
-
-function ago(minutes: number): string {
-    return new Date(Date.now() - minutes * 60_000).toISOString();
-}
-
-const SEED_MRS: MaintenanceRequest[] = [
-    {
-        id: 'mr-001', vehicleId: 'V-001', driverId: 'D-001',
-        requestDate: ago(20), description: 'Engine oil leak — urgent',
-        status: MaintenanceStatus.UNDER_MAINTENANCE,
-        priority: MaintenancePriority.CRITICAL,
-        maintenanceType: MaintenanceType.CORRECTIVE,
-        workOrderNo: 'WO-2608-001', comments: [],
-        statusTimeline: {
-            [MaintenanceStatus.REQUESTED]:  ago(20),
-            [MaintenanceStatus.SUBMITTED]:  ago(18),
-            [MaintenanceStatus.ACCEPTED]:   ago(15),
-            [MaintenanceStatus.UNDER_MAINTENANCE]: ago(10),
-        },
-    },
-    {
-        id: 'mr-002', vehicleId: 'V-002', driverId: 'D-002',
-        requestDate: ago(600), description: 'Brake pad replacement',
-        status: MaintenanceStatus.MAINTENANCE_COMPLETED,
-        priority: MaintenancePriority.HIGH,
-        maintenanceType: MaintenanceType.PREVENTIVE,
-        workOrderNo: 'WO-2608-002', comments: [],
-        statusTimeline: {
-            [MaintenanceStatus.REQUESTED]:  ago(600),
-            [MaintenanceStatus.SUBMITTED]:  ago(595),
-            [MaintenanceStatus.ACCEPTED]:   ago(590),
-            [MaintenanceStatus.UNDER_ESTIMATION]: ago(580),
-            [MaintenanceStatus.PENDING_ESTIMATION_APPROVAL]: ago(560),
-            [MaintenanceStatus.ESTIMATION_APPROVED]: ago(540),
-            [MaintenanceStatus.UNDER_MAINTENANCE]: ago(480),
-            [MaintenanceStatus.REPAIR_COMPLETED]: ago(60),
-            [MaintenanceStatus.MAINTENANCE_COMPLETED]: ago(30),
-        },
-    },
-    {
-        id: 'mr-003', vehicleId: 'V-003', driverId: 'D-003',
-        requestDate: ago(40), description: 'Tyre blowout on highway',
-        status: MaintenanceStatus.UNDER_MAINTENANCE,
-        priority: MaintenancePriority.CRITICAL,
-        maintenanceType: MaintenanceType.BREAKDOWN,
-        workOrderNo: 'WO-2608-003', comments: [],
-        statusTimeline: {
-            [MaintenanceStatus.REQUESTED]: ago(40),
-            [MaintenanceStatus.ACCEPTED]:  ago(35),
-            [MaintenanceStatus.UNDER_MAINTENANCE]: ago(20),
-        },
-    },
-    {
-        id: 'mr-004', vehicleId: 'V-004', driverId: 'D-004',
-        requestDate: ago(300), description: 'AC unit not cooling',
-        status: MaintenanceStatus.PENDING_ESTIMATION_APPROVAL,
-        priority: MaintenancePriority.MEDIUM,
-        maintenanceType: MaintenanceType.CORRECTIVE,
-        workOrderNo: 'WO-2608-004', comments: [],
-        statusTimeline: {
-            [MaintenanceStatus.REQUESTED]: ago(300),
-            [MaintenanceStatus.SUBMITTED]: ago(290),
-            [MaintenanceStatus.ACCEPTED]:  ago(270),
-            [MaintenanceStatus.UNDER_ESTIMATION]: ago(240),
-            [MaintenanceStatus.PENDING_ESTIMATION_APPROVAL]: ago(60),
-        },
-    },
-    {
-        id: 'mr-005', vehicleId: 'V-005', driverId: 'D-005',
-        requestDate: ago(3200), description: '60,000 km scheduled service',
-        status: MaintenanceStatus.CLOSED,
-        priority: MaintenancePriority.LOW,
-        maintenanceType: MaintenanceType.PREVENTIVE,
-        workOrderNo: 'WO-2608-005', comments: [],
-        statusTimeline: {
-            [MaintenanceStatus.REQUESTED]:  ago(3200),
-            [MaintenanceStatus.SUBMITTED]:  ago(3190),
-            [MaintenanceStatus.ACCEPTED]:   ago(3180),
-            [MaintenanceStatus.UNDER_ESTIMATION]: ago(3120),
-            [MaintenanceStatus.PENDING_ESTIMATION_APPROVAL]: ago(3000),
-            [MaintenanceStatus.ESTIMATION_APPROVED]: ago(2880),
-            [MaintenanceStatus.UNDER_MAINTENANCE]: ago(2700),
-            [MaintenanceStatus.REPAIR_COMPLETED]: ago(480),
-            [MaintenanceStatus.MAINTENANCE_COMPLETED]: ago(300),
-            [MaintenanceStatus.CLOSED]: ago(60),
-        },
-    },
-    {
-        id: 'mr-006', vehicleId: 'V-006', driverId: 'D-006',
-        requestDate: ago(50), description: 'Battery dead — vehicle won\'t start',
-        status: MaintenanceStatus.ACCEPTED,
-        priority: MaintenancePriority.HIGH,
-        maintenanceType: MaintenanceType.EMERGENCY,
-        workOrderNo: 'WO-2608-006', comments: [],
-        statusTimeline: {
-            [MaintenanceStatus.REQUESTED]: ago(50),
-            [MaintenanceStatus.SUBMITTED]: ago(45),
-            [MaintenanceStatus.ACCEPTED]:  ago(40),
-        },
-    },
-];
+import { isSlaMonitored, toSlaRequest, type SlaRequestRow } from '@/lib/maintenance/sla-requests';
 
 // ── config maps ───────────────────────────────────────────────────────────────
 
@@ -266,11 +161,28 @@ export default function SLADashboardPage() {
     const [tierFilter, setTierFilter]     = useState<'ALL' | string>('ALL');
     const [selectedId, setSelectedId]     = useState<string | null>(null);
 
-    // Compute snapshots once (seed data is static; in production this would
-    // come from the API endpoint GET /api/maintenance/[id]/sla).
-    const snapshots = useMemo<SLASnapshot[]>(() => {
-        return SEED_MRS.map(mr => computeSLASnapshot(mr));
+    const [requests, setRequests] = useState<MaintenanceRequest[]>([]);
+    const [loading, setLoading]   = useState(true);
+    const [error, setError]       = useState<string | null>(null);
+
+    // Open maintenance requests plus those finished in the last 30 days,
+    // with their status history as the SLA timeline.
+    useEffect(() => {
+        let cancelled = false;
+        fetch('/api/maintenance-requests', { cache: 'no-store' })
+            .then(async res => {
+                const json = await res.json().catch(() => null);
+                if (!res.ok) throw new Error(json?.error ?? `Could not load maintenance requests (${res.status})`);
+                const rows: SlaRequestRow[] = Array.isArray(json) ? json : [];
+                if (!cancelled) setRequests(rows.filter(r => isSlaMonitored(r)).map(toSlaRequest));
+            })
+            .catch(e => { if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load maintenance requests'); })
+            .finally(() => { if (!cancelled) setLoading(false); });
+        return () => { cancelled = true; };
     }, []);
+
+    const snapshots = useMemo<SLASnapshot[]>(() => requests.map(mr => computeSLASnapshot(mr)), [requests]);
+    const requestById = useMemo(() => new Map(requests.map(mr => [mr.id, mr])), [requests]);
 
     // KPI counts
     const breached = snapshots.filter(s => s.overallStatus === 'BREACHED').length;
@@ -287,7 +199,7 @@ export default function SLADashboardPage() {
     }, [snapshots, statusFilter, tierFilter]);
 
     const selected = selectedId ? snapshots.find(s => s.mrId === selectedId) ?? null : null;
-    const selectedMR = selected ? SEED_MRS.find(m => m.id === selected.mrId) ?? null : null;
+    const selectedMR = selected ? requestById.get(selected.mrId) ?? null : null;
 
     const STATUS_TABS: { key: StatusFilter; label: string; count: number }[] = [
         { key: 'ALL',      label: 'All',      count: snapshots.length },
@@ -298,7 +210,9 @@ export default function SLADashboardPage() {
 
     return (
         <div className="min-h-screen bg-[var(--bg-surface-hover)] p-6 space-y-6">
-            <PreviewBanner note="The SLA figures below are calculated from example maintenance requests, not your records." />
+            {error && (
+                <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">{error}</div>
+            )}
             {/* Header */}
             <div>
                 <h1 className="text-xl font-bold text-[var(--text-main)] flex items-center gap-2">
@@ -320,7 +234,7 @@ export default function SLADashboardPage() {
                 <KpiCard
                     icon={<XCircle className="w-4 h-4 text-red-600" />}
                     label="SLA breached" value={breached}
-                    sub={`${Math.round((breached / snapshots.length) * 100)}% of total`}
+                    sub={snapshots.length ? `${Math.round((breached / snapshots.length) * 100)}% of total` : 'None monitored'}
                     colorCls="bg-red-50"
                 />
                 <KpiCard
@@ -392,12 +306,12 @@ export default function SLADashboardPage() {
                                 {filtered.length === 0 && (
                                     <tr>
                                         <td colSpan={7} className="text-center py-10 text-[var(--text-muted)] text-sm">
-                                            No maintenance requests match the selected filters.
+                                            {loading ? 'Loading maintenance requests…' : snapshots.length === 0 ? 'No open or recently finished maintenance requests.' : 'No maintenance requests match the selected filters.'}
                                         </td>
                                     </tr>
                                 )}
                                 {filtered.map(snap => {
-                                    const mr = SEED_MRS.find(m => m.id === snap.mrId)!;
+                                    const mr = requestById.get(snap.mrId)!;
                                     const tierCfg = TIER_CFG[snap.tier];
                                     const isSelected = selectedId === snap.mrId;
                                     return (

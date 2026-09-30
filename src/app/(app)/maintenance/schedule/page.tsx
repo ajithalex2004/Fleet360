@@ -1,59 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { PMItemStatus, PMTriggerType } from '@/types/maintenance';
-import PreviewBanner from '@/components/PreviewBanner';
-
-// ── Mock data representing PM due calculations ────────────────────────────────
-
-interface MockDueItem {
-    id: string;
-    vehicleId: string;
-    vehiclePlate: string;
-    vehicleModel: string;
-    planId: string;
-    planName: string;
-    status: PMItemStatus;
-    triggeringFactor: 'ODOMETER' | 'CALENDAR' | 'BOTH' | 'NONE';
-    daysUntilDue?: number;
-    kmUntilDue?: number;
-    urgencyScore: number;
-    lastServiceDate?: string;
-    lastOdometerKm?: number;
-}
-
-const MOCK_ITEMS: MockDueItem[] = [
-    { id: 'i1', vehicleId: 'v1', vehiclePlate: 'DXB-A-12345', vehicleModel: 'Toyota Hilux 2022',
-      planId: 'plan-1', planName: 'Engine Oil Service',
-      status: PMItemStatus.OVERDUE, triggeringFactor: 'BOTH',
-      daysUntilDue: -12, kmUntilDue: -850, urgencyScore: 95,
-      lastServiceDate: '2026-01-15', lastOdometerKm: 42000 },
-    { id: 'i2', vehicleId: 'v2', vehiclePlate: 'DXB-B-67890', vehicleModel: 'Ford Transit 2023',
-      planId: 'plan-3', planName: 'Major Service',
-      status: PMItemStatus.OVERDUE, triggeringFactor: 'ODOMETER',
-      daysUntilDue: 30, kmUntilDue: -250, urgencyScore: 82,
-      lastServiceDate: '2025-08-01', lastOdometerKm: 98000 },
-    { id: 'i3', vehicleId: 'v3', vehiclePlate: 'SHJ-C-11111', vehicleModel: 'Nissan Patrol 2021',
-      planId: 'plan-2', planName: 'Brake Inspection',
-      status: PMItemStatus.DUE, triggeringFactor: 'ODOMETER',
-      daysUntilDue: 14, kmUntilDue: 280, urgencyScore: 55,
-      lastServiceDate: '2025-11-20', lastOdometerKm: 61000 },
-    { id: 'i4', vehicleId: 'v4', vehiclePlate: 'AUH-D-22222', vehicleModel: 'Mercedes Sprinter 2022',
-      planId: 'plan-1', planName: 'Engine Oil Service',
-      status: PMItemStatus.DUE, triggeringFactor: 'CALENDAR',
-      daysUntilDue: 6, kmUntilDue: 1200, urgencyScore: 48,
-      lastServiceDate: '2025-12-10', lastOdometerKm: 33000 },
-    { id: 'i5', vehicleId: 'v5', vehiclePlate: 'DXB-E-33333', vehicleModel: 'Isuzu D-Max 2023',
-      planId: 'plan-2', planName: 'Brake Inspection',
-      status: PMItemStatus.UPCOMING, triggeringFactor: 'ODOMETER',
-      daysUntilDue: 45, kmUntilDue: 3200, urgencyScore: 18,
-      lastServiceDate: '2026-03-01', lastOdometerKm: 22000 },
-    { id: 'i6', vehicleId: 'v6', vehiclePlate: 'SHJ-F-44444', vehicleModel: 'Toyota Land Cruiser 2024',
-      planId: 'plan-3', planName: 'Major Service',
-      status: PMItemStatus.UPCOMING, triggeringFactor: 'NONE',
-      daysUntilDue: 120, kmUntilDue: 18000, urgencyScore: 5,
-      lastServiceDate: '2025-06-15', lastOdometerKm: 15000 },
-];
+import { useCallback, useEffect, useState } from 'react';
+import { PMItemStatus } from '@/types/maintenance';
+import { NO_HISTORY, pmRequestBody, type ScheduleEntry, type ScheduleStatus } from '@/lib/pm/schedule';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -61,12 +10,12 @@ const STATUS_CONFIG = {
     [PMItemStatus.OVERDUE]:  { label: 'Overdue',  dot: 'bg-red-500',     badge: 'bg-red-500/15 text-red-400 border-red-500/30',     tab: 'border-red-500 text-red-400' },
     [PMItemStatus.DUE]:      { label: 'Due',       dot: 'bg-amber-400',   badge: 'bg-amber-400/15 text-amber-300 border-amber-400/30', tab: 'border-amber-400 text-amber-300' },
     [PMItemStatus.UPCOMING]: { label: 'Upcoming',  dot: 'bg-slate-500',   badge: 'bg-[var(--bg-surface-hover)]/60 text-[var(--text-muted)] border-[var(--border-strong)]/40', tab: 'border-slate-500 text-[var(--text-muted)]' },
-    [PMItemStatus.COMPLETED]:{ label: 'Completed', dot: 'bg-emerald-500', badge: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30', tab: 'border-emerald-500 text-emerald-400' },
-    [PMItemStatus.SNOOZED]:  { label: 'Snoozed',  dot: 'bg-purple-400',  badge: 'bg-purple-500/15 text-purple-400 border-purple-500/30', tab: 'border-purple-500 text-purple-400' },
+    [NO_HISTORY]:            { label: 'No service on record', dot: 'bg-sky-400', badge: 'bg-sky-500/15 text-sky-300 border-sky-500/30', tab: 'border-sky-400 text-sky-300' },
 };
 
-function dueLabel(item: MockDueItem): string {
+function dueLabel(item: ScheduleEntry): string {
     const { status, daysUntilDue, kmUntilDue, triggeringFactor } = item;
+    if (status === NO_HISTORY) return 'No completed service for this plan yet';
     if (status === PMItemStatus.OVERDUE) {
         const parts: string[] = [];
         if (daysUntilDue !== undefined && daysUntilDue < 0) parts.push(`${Math.abs(daysUntilDue)}d overdue`);
@@ -81,39 +30,99 @@ function dueLabel(item: MockDueItem): string {
     return parts.length ? parts.join(' / ') + ' remaining' : `${daysUntilDue ?? '?'}d remaining`;
 }
 
-const TABS = [PMItemStatus.OVERDUE, PMItemStatus.DUE, PMItemStatus.UPCOMING] as const;
-type TabStatus = typeof TABS[number];
+const TABS: ScheduleStatus[] = [PMItemStatus.OVERDUE, PMItemStatus.DUE, PMItemStatus.UPCOMING, NO_HISTORY];
+type TabStatus = ScheduleStatus;
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function PMSchedulePage() {
-    const [items, setItems]       = useState<MockDueItem[]>(MOCK_ITEMS);
+    const [items, setItems]         = useState<ScheduleEntry[]>([]);
+    const [planCount, setPlanCount] = useState<number | null>(null);
+    const [loading, setLoading]     = useState(true);
+    const [error, setError]         = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<TabStatus>(PMItemStatus.OVERDUE);
     const [generating, setGenerating] = useState(false);
+    const [creatingId, setCreatingId] = useState<string | null>(null);
     const [generated, setGenerated]   = useState(0);
 
-    const counts = {
+    const load = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const res = await fetch('/api/maintenance/pm-schedule', { cache: 'no-store' });
+            const json = await res.json().catch(() => null);
+            if (!res.ok) throw new Error(json?.error ?? `Could not load the schedule (${res.status})`);
+            setItems(Array.isArray(json?.entries) ? json.entries : []);
+            setPlanCount(typeof json?.plans === 'number' ? json.plans : null);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Could not load the schedule');
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => { void load(); }, [load]);
+
+    const counts: Record<TabStatus, number> = {
         [PMItemStatus.OVERDUE]:  items.filter(i => i.status === PMItemStatus.OVERDUE).length,
         [PMItemStatus.DUE]:      items.filter(i => i.status === PMItemStatus.DUE).length,
         [PMItemStatus.UPCOMING]: items.filter(i => i.status === PMItemStatus.UPCOMING).length,
+        [NO_HISTORY]:            items.filter(i => i.status === NO_HISTORY).length,
     };
 
     const visibleItems = items
         .filter(i => i.status === activeTab)
         .sort((a, b) => b.urgencyScore - a.urgencyScore);
 
-    function handleGenerateRequests() {
+    const actionable = items.filter(i => (i.status === PMItemStatus.OVERDUE || i.status === PMItemStatus.DUE) && !i.openRequestId);
+
+    async function createRequest(item: ScheduleEntry): Promise<boolean> {
+        const res = await fetch('/api/maintenance-requests', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(pmRequestBody(item)),
+        });
+        if (!res.ok) {
+            const json = await res.json().catch(() => ({}));
+            throw new Error(json.error ?? `Could not create the request (${res.status})`);
+        }
+        return true;
+    }
+
+    async function handleCreateOne(item: ScheduleEntry) {
+        setCreatingId(item.id);
+        setError(null);
+        try {
+            await createRequest(item);
+            setGenerated(1);
+            await load();
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Could not create the request');
+        } finally {
+            setCreatingId(null);
+        }
+    }
+
+    async function handleGenerateRequests() {
         setGenerating(true);
-        setTimeout(() => {
-            const actionable = items.filter(i => i.status === PMItemStatus.OVERDUE || i.status === PMItemStatus.DUE);
-            setGenerated(actionable.length);
+        setError(null);
+        let made = 0;
+        try {
+            for (const item of actionable) {
+                await createRequest(item);
+                made += 1;
+            }
+        } catch (e) {
+            setError(e instanceof Error ? e.message : 'Could not create every request');
+        } finally {
+            setGenerated(made);
             setGenerating(false);
-        }, 1200);
+            await load();
+        }
     }
 
     return (
         <div className="space-y-6">
-            <PreviewBanner note="These due and overdue services are examples. Your PM plans are saved on the PM Plans screen; this schedule is not yet connected to them." />
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
@@ -122,7 +131,7 @@ export default function PMSchedulePage() {
                 </div>
                 <button
                     onClick={handleGenerateRequests}
-                    disabled={generating || counts[PMItemStatus.OVERDUE] + counts[PMItemStatus.DUE] === 0}
+                    disabled={generating || actionable.length === 0}
                     className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                     {generating ? (
@@ -141,9 +150,18 @@ export default function PMSchedulePage() {
             {generated > 0 && (
                 <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-3 flex items-center justify-between">
                     <p className="text-sm text-emerald-400">
-                        <strong>{generated}</strong> maintenance request{generated !== 1 ? 's' : ''} created for DUE and OVERDUE items.
+                        <strong>{generated}</strong> preventive maintenance request{generated !== 1 ? 's' : ''} created.
                     </p>
                     <button onClick={() => setGenerated(0)} className="text-emerald-400/60 hover:text-emerald-400 text-xs">Dismiss</button>
+                </div>
+            )}
+
+            {error && (
+                <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">{error}</div>
+            )}
+            {!loading && planCount === 0 && (
+                <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-4 text-sm text-[var(--text-muted)]">
+                    No active PM plans yet. Create one on the PM Plans screen and its vehicles will appear here.
                 </div>
             )}
 
@@ -153,7 +171,7 @@ export default function PMSchedulePage() {
                     { label: 'Overdue',        value: counts[PMItemStatus.OVERDUE],  color: 'text-red-400' },
                     { label: 'Due soon',        value: counts[PMItemStatus.DUE],      color: 'text-amber-300' },
                     { label: 'Upcoming',        value: counts[PMItemStatus.UPCOMING], color: 'text-[var(--text-muted)]' },
-                    { label: 'Total tracked',   value: items.length,                  color: 'text-[var(--text-main)]' },
+                    { label: 'No service on record', value: counts[NO_HISTORY],       color: 'text-sky-300' },
                 ].map(kpi => (
                     <div key={kpi.label} className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5">
                         <p className="text-xs text-[var(--text-faint)] uppercase tracking-wide">{kpi.label}</p>
@@ -211,10 +229,10 @@ export default function PMSchedulePage() {
                                             </span>
                                         )}
                                     </div>
-                                    {(item.lastServiceDate || item.lastOdometerKm) && (
+                                    {(item.lastServiceDate || item.lastOdometerKm != null) && (
                                         <div className="mt-1.5 flex flex-wrap gap-x-4 text-xs text-[var(--text-faint)]">
                                             {item.lastServiceDate && <span>Last service: {new Date(item.lastServiceDate).toLocaleDateString('en-GB')}</span>}
-                                            {item.lastOdometerKm && <span>At: {item.lastOdometerKm.toLocaleString()} km</span>}
+                                            {item.lastOdometerKm != null && <span>At: {item.lastOdometerKm.toLocaleString()} km</span>}
                                         </div>
                                     )}
                                 </div>
@@ -226,9 +244,19 @@ export default function PMSchedulePage() {
                                             {item.urgencyScore}
                                         </p>
                                     </div>
-                                    <button className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] transition-colors">
-                                        Create request
-                                    </button>
+                                    {item.openRequestId ? (
+                                        <span className="rounded-lg px-3 py-1.5 text-xs font-medium text-emerald-400 border border-emerald-500/30">
+                                            Request open
+                                        </span>
+                                    ) : (
+                                        <button
+                                            onClick={() => void handleCreateOne(item)}
+                                            disabled={creatingId !== null || generating}
+                                            className="rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] transition-colors disabled:opacity-40"
+                                        >
+                                            {creatingId === item.id ? 'Creating…' : 'Create request'}
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -236,7 +264,7 @@ export default function PMSchedulePage() {
                 })}
                 {visibleItems.length === 0 && (
                     <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-12 text-center">
-                        <p className="text-[var(--text-faint)] text-sm">No {STATUS_CONFIG[activeTab].label.toLowerCase()} items.</p>
+                        <p className="text-[var(--text-faint)] text-sm">{loading ? 'Loading the schedule…' : `No ${STATUS_CONFIG[activeTab].label.toLowerCase()} items.`}</p>
                     </div>
                 )}
             </div>
