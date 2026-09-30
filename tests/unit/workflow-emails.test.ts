@@ -11,6 +11,10 @@
  *  - approving a step emails the next step's approver
  *  - tenant-supplied text is HTML-escaped in the email
  *  - a failed or unconfigured send never fails the approval
+ *  - role steps email every active holder of the role; multi-user steps
+ *    every listed address; each approver gets a personal copy
+ *  - {placeholders} in the step's subject and body are filled in, and the
+ *    workflow's default wording is used when the step has none
  *
  * The database is an in-memory model keyed on the SQL each call issues.
  */
@@ -20,6 +24,10 @@ const state = vi.hoisted(() => ({
   sent: [] as Array<{ to: string | string[]; subject: string; html?: string; text?: string }>,
   sendResult: { sent: true } as { sent: boolean; reason?: string },
   sendThrows: false,
+  steps: [] as Array<Record<string, unknown>>,
+  definition: {} as Record<string, unknown>,
+  roleHolders: [] as Array<{ user: { email: string; firstName: string | null; lastName: string | null } }>,
+  roleQueries: [] as unknown[],
 }));
 
 vi.mock('@/lib/email', () => ({
@@ -31,21 +39,28 @@ vi.mock('@/lib/email', () => ({
 }));
 
 const TENANT = 'aaaaaaaa-0000-4000-8000-000000000001';
-const definition = { id: 'wf1', name: 'Quote approval', module: 'LEASING', procedure: 'quote', tenantId: TENANT, isActive: true };
-const steps = [
-  { id: 's1', workflowId: 'wf1', stepOrder: 1, stepName: 'Manager <review>', stepType: 'APPROVAL', assigneeEmail: 'manager@a.test', emailSubject: null, emailBody: null, slaHours: 24 },
-  { id: 's2', workflowId: 'wf1', stepOrder: 2, stepName: 'Finance', stepType: 'APPROVAL', assigneeEmail: 'finance@a.test', emailSubject: null, emailBody: null, slaHours: 24 },
+const baseDefinition = { id: 'wf1', name: 'Quote approval', module: 'LEASING', procedure: 'quote', tenantId: TENANT, isActive: true, defaultEmailSubject: null, defaultEmailBody: null };
+const baseSteps = () => [
+  { id: 's1', workflowId: 'wf1', stepOrder: 1, stepName: 'Manager <review>', stepType: 'APPROVAL', assigneeType: 'SPECIFIC_USER', assigneeEmail: 'manager@a.test', assigneeRoleCode: null, multiApproverEmails: null, emailSubject: null, emailBody: null, slaHours: 24 },
+  { id: 's2', workflowId: 'wf1', stepOrder: 2, stepName: 'Finance', stepType: 'APPROVAL', assigneeType: 'SPECIFIC_USER', assigneeEmail: 'finance@a.test', assigneeRoleCode: null, multiApproverEmails: null, emailSubject: null, emailBody: null, slaHours: 24 },
 ];
+
+vi.mock('@/lib/rls-scope', () => ({ runOutsideRlsScope: <T>(fn: () => Promise<T>) => fn() }));
+vi.mock('@/lib/rls', () => ({
+  withPlatformAdmin: async (_p: unknown, fn: (tx: unknown) => Promise<unknown>) => fn({
+    userTenant: { findMany: async (args: unknown) => { state.roleQueries.push(args); return state.roleHolders; } },
+  }),
+}));
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     $queryRawUnsafe: async (sql: string) => {
-      if (sql.includes('FROM "WorkflowDefinition"') && sql.includes('module=$1')) return [definition];
+      if (sql.includes('FROM "WorkflowDefinition"')) return [state.definition];
       if (sql.includes('SELECT id FROM "WorkflowInstance"')) return [];
-      if (sql.includes('SELECT * FROM "WorkflowStep"')) return steps;
-      if (sql.includes('JOIN "WorkflowStep" ws')) return [steps[1]];
+      if (sql.includes('SELECT * FROM "WorkflowStep"')) return state.steps;
+      if (sql.includes('JOIN "WorkflowStep" ws')) return [state.steps[1]];
       if (sql.includes('SELECT * FROM "WorkflowInstance"')) {
-        return [{ id: 'i1', referenceNumber: 'Q-<1>', referenceType: 'LEASE_QUOTATION' }];
+        return [{ id: 'i1', workflowId: 'wf1', referenceNumber: 'Q-<1>', referenceType: 'LEASE_QUOTATION', initiatedByName: 'Sam Sales', initiatedByEmail: 'sales@a.test' }];
       }
       return [];
     },
@@ -53,18 +68,22 @@ vi.mock('@/lib/prisma', () => ({
   },
 }));
 
-import { triggerWorkflow, advanceWorkflow, buildWorkflowEmailHtml } from '@/lib/workflow-db';
+import { triggerWorkflow, advanceWorkflow, buildWorkflowEmailHtml, fillPlaceholders, parseEmailList } from '@/lib/workflow-db';
 
 const trigger = () => triggerWorkflow({
   tenantId: TENANT, module: 'LEASING', procedure: 'quote',
   referenceType: 'LEASE_QUOTATION', referenceId: 'q1', referenceNumber: 'Q-<1>',
-  initiatedByEmail: 'sales@a.test',
+  initiatedByEmail: 'sales@a.test', initiatedByName: 'Sam Sales',
 });
 
 beforeEach(() => {
   state.sent = [];
   state.sendResult = { sent: true };
   state.sendThrows = false;
+  state.steps = baseSteps();
+  state.definition = { ...baseDefinition };
+  state.roleHolders = [];
+  state.roleQueries = [];
   vi.spyOn(console, 'warn').mockImplementation(() => {});
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.spyOn(console, 'info').mockImplementation(() => {});
@@ -103,5 +122,50 @@ describe('workflow approval emails', () => {
     state.sendThrows = true;
     await expect(advanceWorkflow(TENANT, 'i1', 1, 'APPROVE', '', 'manager@a.test'))
       .resolves.toMatchObject({ status: 'IN_PROGRESS' });
+  });
+
+  it('emails every active holder of a role step, each with their own name', async () => {
+    Object.assign(state.steps[0], { assigneeType: 'ROLE', assigneeEmail: null, assigneeRoleCode: 'FINANCE_MANAGER' });
+    state.roleHolders = [
+      { user: { email: 'Fin1@a.test', firstName: 'Fatima', lastName: 'Ali' } },
+      { user: { email: 'fin2@a.test', firstName: null, lastName: null } },
+    ];
+    await trigger();
+    expect(state.sent.map((m) => m.to)).toEqual(['fin1@a.test', 'fin2@a.test']);
+    expect(state.sent[0].text).toContain('Dear Fatima Ali');
+    expect(state.sent[1].text).toContain('Dear Approver');
+    expect(state.roleQueries[0]).toMatchObject({
+      where: { tenantId: TENANT, role: { code: { equals: 'FINANCE_MANAGER', mode: 'insensitive' } } },
+    });
+  });
+
+  it('emails every address of a multi-user step once', async () => {
+    Object.assign(state.steps[0], { assigneeType: 'MULTI_USER', assigneeEmail: null, multiApproverEmails: 'a@a.test, B@a.test;a@a.test not-an-email' });
+    await trigger();
+    expect(state.sent.map((m) => m.to)).toEqual(['a@a.test', 'b@a.test']);
+  });
+
+  it('fills placeholders in the step wording, falling back to the workflow default', async () => {
+    Object.assign(state.steps[0], {
+      emailSubject: 'Approve {referenceNumber}\r\nBcc: x@evil.test',
+      emailBody: 'Hi {approverName}, {{submittedBy}} sent {referenceNumber} for {moduleLabel}. {unknown}',
+    });
+    await trigger();
+    expect(state.sent[0].subject).toBe('Approve Q-<1> Bcc: x@evil.test');
+    expect(state.sent[0].text).toContain('Hi Approver, Sam Sales sent Q-<1> for Leasing. {unknown}');
+
+    state.sent = [];
+    state.definition = { ...baseDefinition, defaultEmailSubject: 'Default: {stepName}' };
+    await advanceWorkflow(TENANT, 'i1', 1, 'APPROVE', '', 'manager@a.test');
+    expect(state.sent[0].subject).toBe('Default: Finance');
+  });
+});
+
+describe('placeholder and address helpers', () => {
+  it('fills both brace styles and keeps unknown names', () => {
+    expect(fillPlaceholders('{a} {{ b }} {c}', { a: '1', b: '2' })).toBe('1 2 {c}');
+  });
+  it('parses address lists', () => {
+    expect(parseEmailList(' X@a.test;y@a.test ,bad ')).toEqual(['x@a.test', 'y@a.test']);
   });
 });

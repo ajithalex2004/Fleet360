@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { randomUUID } from 'crypto';
+import { withPlatformAdmin } from '@/lib/rls';
+import { runOutsideRlsScope } from '@/lib/rls-scope';
 
 /**
  * Tenant isolation (prisma/migrations/20261018090000_workflow_tenant_isolation):
@@ -531,15 +533,11 @@ export async function triggerWorkflow(params: {
   }
 
   const firstStep = steps[0];
-  if (firstStep.assigneeEmail && firstStep.stepType === 'APPROVAL') {
-    await sendWorkflowEmail({
-      to: firstStep.assigneeEmail,
-      subject: firstStep.emailSubject ??
-        `Action Required: ${params.referenceNumber} awaiting your approval`,
-      body: firstStep.emailBody ??
-        `Dear Approver,\n\n${params.referenceNumber} (${params.referenceType}) has been submitted for your approval.\n\nStep: ${firstStep.stepName}\nSubmitted by: ${params.initiatedByEmail}\n\nPlease log in to Fleet360 to review and approve.`,
-      instanceId, referenceNumber: params.referenceNumber,
-      referenceType: params.referenceType, stepName: firstStep.stepName,
+  if (firstStep.stepType === 'APPROVAL') {
+    await notifyStepApprovers({
+      tenantId, instanceId, workflow: wf, step: firstStep,
+      referenceNumber: params.referenceNumber, referenceType: params.referenceType,
+      submittedBy: params.initiatedByName || params.initiatedByEmail,
     });
   }
   if (firstStep.stepType === 'NOTIFICATION') {
@@ -597,18 +595,17 @@ export async function advanceWorkflow(
     `UPDATE "WorkflowInstance" SET "currentStepOrder"=$1,"updatedAt"=NOW() WHERE id=$2 AND "tenantId"=$3`,
     nextStep.stepOrder, instanceId, tenantId);
 
-  if (nextStep.assigneeEmail && nextStep.stepType === 'APPROVAL') {
+  if (nextStep.stepType === 'APPROVAL') {
     const instance: WorkflowInstanceRow[] = await prisma.$queryRawUnsafe(
       `SELECT * FROM "WorkflowInstance" WHERE id=$1 AND "tenantId"=$2`, instanceId, tenantId);
-    if (instance.length) {
-      await sendWorkflowEmail({
-        to: nextStep.assigneeEmail,
-        subject: nextStep.emailSubject ??
-          `Action Required: ${instance[0].referenceNumber}  Step ${nextStep.stepOrder}: ${nextStep.stepName}`,
-        body: nextStep.emailBody ??
-          `Dear Approver,\n\n${instance[0].referenceNumber} requires your approval.\n\nStep: ${nextStep.stepName}\n\nPlease log in to Fleet360 to review.`,
-        instanceId, referenceNumber: instance[0].referenceNumber ?? '',
-        referenceType: instance[0].referenceType, stepName: nextStep.stepName,
+    const workflow: WorkflowDefinitionRow[] = instance.length
+      ? await prisma.$queryRawUnsafe(`SELECT * FROM "WorkflowDefinition" WHERE id=$1`, instance[0].workflowId)
+      : [];
+    if (instance.length && workflow.length) {
+      await notifyStepApprovers({
+        tenantId, instanceId, workflow: workflow[0], step: nextStep,
+        referenceNumber: instance[0].referenceNumber ?? '', referenceType: instance[0].referenceType,
+        submittedBy: instance[0].initiatedByName || instance[0].initiatedByEmail || '',
       });
     }
   }
@@ -636,7 +633,12 @@ interface PendingApprovalRow {
   procedure: string;
 }
 
-export async function getMyPendingApprovals(tenantId: string, email: string) {
+/**
+ * Pending steps `email` may act on in `tenantId`: assigned to that address,
+ * listed on a multi-user step, or on a role step whose role is one of
+ * `roleCodes` (the caller's roles in the tenant).
+ */
+export async function getMyPendingApprovals(tenantId: string, email: string, roleCodes: string[] = []) {
   return prisma.$queryRawUnsafe<PendingApprovalRow[]>(`
     SELECT
       wsi.id as "stepInstanceId",
@@ -656,10 +658,17 @@ export async function getMyPendingApprovals(tenantId: string, email: string) {
     FROM "WorkflowStepInstance" wsi
     JOIN "WorkflowInstance" wi ON wi.id = wsi."workflowInstanceId"
     JOIN "WorkflowDefinition" wd ON wd.id = wi."workflowId"
-    WHERE lower(wsi."assignedToEmail") = lower($1) AND wsi.status = 'PENDING'
+    LEFT JOIN "WorkflowStep" ws ON ws.id = wsi."stepId"
+    WHERE wsi.status = 'PENDING'
       AND wsi."tenantId" = $2
+      AND (
+        lower(wsi."assignedToEmail") = lower($1)
+        OR (ws."assigneeType" = 'MULTI_USER'
+            AND lower($1) = ANY(regexp_split_to_array(lower(coalesce(ws."multiApproverEmails", '')), '[,;[:space:]]+')))
+        OR (ws."assigneeType" = 'ROLE' AND upper(ws."assigneeRoleCode") = ANY($3::text[]))
+      )
     ORDER BY wsi."createdAt" DESC
-  `, email, tenantId);
+  `, email, tenantId, roleCodes.map((c) => c.toUpperCase()));
 }
 
 /** An approval with its steps, if it belongs to `tenantId` (any tenant when null: platform admins). */
@@ -673,8 +682,10 @@ export async function getWorkflowInstanceWithHistory(instanceId: string, tenantI
   `, instanceId, tenantId);
   if (!instances.length) return null;
   // Steps with their step definition's assignee role, for the approver check.
-  const stepInstances: Array<WorkflowStepInstanceRow & { assigneeRoleCode: string | null }> = await prisma.$queryRawUnsafe(
-    `SELECT wsi.*, ws."assigneeRoleCode"
+  const stepInstances: Array<WorkflowStepInstanceRow & {
+    assigneeType: string | null; assigneeRoleCode: string | null; multiApproverEmails: string | null;
+  }> = await prisma.$queryRawUnsafe(
+    `SELECT wsi.*, ws."assigneeType", ws."assigneeRoleCode", ws."multiApproverEmails"
        FROM "WorkflowStepInstance" wsi
        LEFT JOIN "WorkflowStep" ws ON ws.id = wsi."stepId"
       WHERE wsi."workflowInstanceId"=$1 AND wsi."tenantId" IS NOT DISTINCT FROM $2
@@ -691,6 +702,140 @@ export async function getInstancesForReference(tenantId: string, referenceId: st
     WHERE wi."referenceId"=$1 AND wi."tenantId"=$2
     ORDER BY wi."createdAt" DESC
   `, referenceId, tenantId);
+}
+
+//  Approvers
+/** Most approver emails a single step sends (a role can have many holders). */
+export const MAX_STEP_APPROVER_EMAILS = 25;
+
+const EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
+
+/** Emails in a comma / semicolon / whitespace separated list, lower-cased. */
+export function parseEmailList(value: string | null | undefined): string[] {
+  return (value ?? '').split(/[,;\s]+/).map((e) => e.trim().toLowerCase()).filter((e) => EMAIL_RE.test(e));
+}
+
+/**
+ * Members of `tenantId` with an active membership whose role in that tenant
+ * has `roleCode` (case-insensitive). Membership is what makes someone active
+ * in a tenant; "User" has no active flag on every install. Runs in platform context with an explicit tenant filter:
+ * users and memberships are read across the RLS boundary, like the session
+ * user lookup (src/lib/session-user.ts).
+ */
+export async function getRoleHolders(tenantId: string, roleCode: string, limit = MAX_STEP_APPROVER_EMAILS) {
+  const rows = await runOutsideRlsScope(() => withPlatformAdmin(prisma, (tx) => tx.userTenant.findMany({
+    where: {
+      tenantId,
+      isActive: { not: false },
+      role: { code: { equals: roleCode, mode: 'insensitive' } },
+    },
+    select: { user: { select: { email: true, firstName: true, lastName: true } } },
+    take: limit,
+  })));
+  return rows
+    .filter((r) => EMAIL_RE.test(r.user.email))
+    .map((r) => ({
+      email: r.user.email.toLowerCase(),
+      name: [r.user.firstName, r.user.lastName].filter(Boolean).join(' ') || undefined,
+    }));
+}
+
+/** Role codes `email` holds in `tenantId` (its membership role). */
+export async function getUserRoleCodes(tenantId: string, email: string): Promise<string[]> {
+  const rows = await runOutsideRlsScope(() => withPlatformAdmin(prisma, (tx) => tx.userTenant.findMany({
+    where: { tenantId, isActive: { not: false }, user: { email: { equals: email, mode: 'insensitive' } } },
+    select: { role: { select: { code: true } } },
+  })));
+  return rows.map((r) => r.role.code);
+}
+
+/**
+ * Who is asked to act on a step:
+ *   SPECIFIC_USER        its assignee email
+ *   MULTI_USER           every address in its approver list (plus the assignee)
+ *   ROLE                 every active member holding its role (plus the assignee)
+ *   DIRECT_MANAGER /
+ *   DEPARTMENT_HEAD      its assignee email only: no reporting lines are
+ *                        recorded yet to resolve these
+ * Capped at MAX_STEP_APPROVER_EMAILS, duplicates removed.
+ */
+export async function resolveStepApprovers(
+  tenantId: string,
+  step: Pick<WorkflowStepRow, 'assigneeType' | 'assigneeEmail' | 'assigneeRoleCode' | 'multiApproverEmails'>,
+): Promise<Array<{ email: string; name?: string }>> {
+  const found: Array<{ email: string; name?: string }> = parseEmailList(step.assigneeEmail).map((email) => ({ email }));
+  if (step.assigneeType === 'MULTI_USER') {
+    found.push(...parseEmailList(step.multiApproverEmails).map((email) => ({ email })));
+  }
+  if (step.assigneeType === 'ROLE' && step.assigneeRoleCode?.trim()) {
+    found.push(...await getRoleHolders(tenantId, step.assigneeRoleCode.trim()));
+  }
+  const seen = new Set<string>();
+  return found.filter((a) => !seen.has(a.email) && seen.add(a.email)).slice(0, MAX_STEP_APPROVER_EMAILS);
+}
+
+/**
+ * Fills {name} and {{name}} placeholders (the workflow screen documents the
+ * single-brace form). Unknown placeholders are left as written. Values are
+ * inserted as plain text; the HTML email escapes the result.
+ */
+export function fillPlaceholders(text: string, vars: Record<string, string>): string {
+  return text.replace(/\{\{?\s*([a-zA-Z][a-zA-Z0-9_]*)\s*\}?\}/g, (match, key: string) =>
+    Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : match);
+}
+
+const moduleLabel = (module: string) =>
+  module.toLowerCase().replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+/**
+ * Emails every approver of an approval step. Subject and body come from the
+ * step, else the workflow's defaults, else built-in wording; each approver
+ * gets their own copy with their name filled in. Best-effort: never throws.
+ */
+async function notifyStepApprovers(args: {
+  tenantId: string; instanceId: string;
+  workflow: Pick<WorkflowDefinitionRow, 'name' | 'module' | 'defaultEmailSubject' | 'defaultEmailBody'>;
+  step: WorkflowStepRow;
+  referenceNumber: string; referenceType: string; submittedBy: string;
+}) {
+  const { tenantId, instanceId, workflow, step } = args;
+  let approvers: Array<{ email: string; name?: string }> = [];
+  try {
+    approvers = await resolveStepApprovers(tenantId, step);
+  } catch (e) {
+    console.error('[Workflow] Could not resolve approvers:', e instanceof Error ? e.message : e);
+  }
+  if (!approvers.length) {
+    console.warn(`[Workflow] Step "${step.stepName}" of ${args.referenceNumber} has no approver to email (assignee type ${step.assigneeType}).`);
+    return;
+  }
+  const approvalUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/approvals`;
+  const subjectTemplate = step.emailSubject?.trim() || workflow.defaultEmailSubject?.trim()
+    || 'Action Required: {referenceNumber} awaiting your approval';
+  const bodyTemplate = step.emailBody?.trim() || workflow.defaultEmailBody?.trim()
+    || 'Dear {approverName},\n\n{referenceNumber} ({referenceType}) has been submitted for your approval.\n\nStep: {stepName}\nSubmitted by: {submittedBy}\n\nPlease log in to Fleet360 to review and approve.';
+  for (const approver of approvers) {
+    const vars: Record<string, string> = {
+      approverName: approver.name ?? 'Approver',
+      approverEmail: approver.email,
+      referenceNumber: args.referenceNumber,
+      referenceType: args.referenceType,
+      stepName: step.stepName,
+      stepOrder: String(step.stepOrder),
+      workflowName: workflow.name,
+      moduleLabel: moduleLabel(workflow.module),
+      submittedBy: args.submittedBy,
+      approvalUrl,
+    };
+    await sendWorkflowEmail({
+      to: approver.email,
+      // One line: a line break in a subject could start a new mail header.
+      subject: fillPlaceholders(subjectTemplate, vars).replace(/[\r\n]+/g, ' '),
+      body: fillPlaceholders(bodyTemplate, vars),
+      instanceId, referenceNumber: args.referenceNumber,
+      referenceType: args.referenceType, stepName: step.stepName,
+    });
+  }
 }
 
 //  Email Sender

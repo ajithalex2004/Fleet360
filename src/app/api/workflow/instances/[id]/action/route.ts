@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { advanceWorkflow, getWorkflowInstanceWithHistory } from '@/lib/workflow-db';
+import { advanceWorkflow, getUserRoleCodes, getWorkflowInstanceWithHistory, parseEmailList } from '@/lib/workflow-db';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { withAuditedAction } from '@/lib/audited-action';
@@ -15,8 +15,9 @@ const isTenantAdmin = (headers: Headers) =>
 
 /**
  * Approve or reject the current step of one of the caller's tenant's
- * approvals. Only the step's approver (its assigned email, or a holder of its
- * assignee role) or a tenant administrator may act, and the action is
+ * approvals. Only the step's approver (its assigned email, an address on a
+ * multi-user step, or a holder of a role step's role in this tenant) or a
+ * tenant administrator may act, and the action is
  * recorded under the signed-in user. The approver used to come from the
  * request body, and any instance id from any tenant was accepted.
  */
@@ -49,9 +50,13 @@ async function handlePOST(req: NextRequest, props: { params: Promise<{ id: strin
     const step = instance.steps.find((s) => s.stepOrder === instance.currentStepOrder && s.status === 'PENDING');
     if (!step) return NextResponse.json({ error: 'No step is awaiting approval' }, { status: 422 });
     const role = req.headers.get('x-user-role') ?? '';
+    const myEmail = me.email.toLowerCase();
+    const roleCode = step.assigneeType === 'ROLE' ? step.assigneeRoleCode?.trim().toUpperCase() : undefined;
     const isApprover =
-      (step.assignedToEmail != null && step.assignedToEmail.toLowerCase() === me.email.toLowerCase())
-      || (step.assigneeRoleCode != null && step.assigneeRoleCode === role);
+      (step.assignedToEmail != null && step.assignedToEmail.toLowerCase() === myEmail)
+      || (step.assigneeType === 'MULTI_USER' && parseEmailList(step.multiApproverEmails).includes(myEmail))
+      || (!!roleCode && (role.toUpperCase() === roleCode
+        || (await getUserRoleCodes(tenantId, me.email)).some((c) => c.toUpperCase() === roleCode)));
     if (!isApprover && !isTenantAdmin(req.headers)) {
       return NextResponse.json({ error: 'You are not the approver for this step' }, { status: 403 });
     }

@@ -28,6 +28,7 @@ const state = vi.hoisted(() => ({
   advanceCalls: [] as unknown[][],
   pendingCalls: [] as unknown[][],
   advanceResult: { status: 'IN_PROGRESS' } as { status: string },
+  roleCodes: [] as string[],
 }));
 
 vi.mock('@/lib/session-user', () => ({ sessionUser: async () => state.me }));
@@ -36,6 +37,8 @@ vi.mock('@/lib/workflow-db', () => ({
   getMyPendingApprovals: async (...args: unknown[]) => { state.pendingCalls.push(args); return [{ stepInstanceId: 'si1' }]; },
   getWorkflowInstanceWithHistory: async (...args: unknown[]) => { state.historyCalls.push(args); return state.instance; },
   advanceWorkflow: async (...args: unknown[]) => { state.advanceCalls.push(args); return state.advanceResult; },
+  getUserRoleCodes: async () => state.roleCodes,
+  parseEmailList: (v: string | null) => (v ?? '').split(/[,;\s]+/).map((e) => e.trim().toLowerCase()).filter(Boolean),
 }));
 
 import { GET as myApprovals } from '@/app/api/my-approvals/route';
@@ -58,11 +61,12 @@ beforeEach(() => {
     id: 'inst-1', status: 'IN_PROGRESS', currentStepOrder: 2,
     steps: [
       { stepOrder: 1, status: 'APPROVED', assignedToEmail: 'first@a.test', assigneeRoleCode: null },
-      { stepOrder: 2, status: 'PENDING', assignedToEmail: 'Approver@A.test', assigneeRoleCode: 'FINANCE_MANAGER' },
+      { stepOrder: 2, status: 'PENDING', assignedToEmail: 'Approver@A.test', assigneeType: 'ROLE', assigneeRoleCode: 'FINANCE_MANAGER', multiApproverEmails: null },
     ],
   };
   state.historyCalls = []; state.advanceCalls = []; state.pendingCalls = [];
   state.advanceResult = { status: 'IN_PROGRESS' };
+  state.roleCodes = [];
 });
 
 describe('my approvals', () => {
@@ -70,7 +74,7 @@ describe('my approvals', () => {
     const res = await myApprovals(new NextRequest('http://x/api/my-approvals?email=victim@b.test', { headers: headers() }));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ email: 'approver@a.test', approvals: [{ stepInstanceId: 'si1' }] });
-    expect(state.pendingCalls).toEqual([[TENANT_A, 'approver@a.test']]);
+    expect(state.pendingCalls).toEqual([[TENANT_A, 'approver@a.test', ['LEASING_OPERATOR']]]);
   });
 });
 
@@ -82,9 +86,20 @@ describe('approve / reject', () => {
     expect(state.advanceCalls).toEqual([[TENANT_A, 'inst-1', 2, 'APPROVE', 'ok', 'approver@a.test']]);
   });
 
-  it('lets a holder of the step role act', async () => {
+  it('lets a holder of the step role act, by session role or tenant membership', async () => {
     state.me = { email: 'fm@a.test' };
     expect((await post({ action: 'REJECT' }, 'FINANCE_MANAGER')).status).toBe(200);
+    state.roleCodes = ['finance_manager'];
+    expect((await post({ action: 'REJECT' })).status).toBe(200);
+  });
+
+  it('lets any address listed on a multi-user step act', async () => {
+    const steps = (state.instance as { steps: Array<Record<string, unknown>> }).steps;
+    Object.assign(steps[1], { assigneeType: 'MULTI_USER', assignedToEmail: null, assigneeRoleCode: null, multiApproverEmails: 'x@a.test; Listed@a.test' });
+    state.me = { email: 'listed@a.test' };
+    expect((await post({ action: 'APPROVE' })).status).toBe(200);
+    state.me = { email: 'notlisted@a.test' };
+    expect((await post({ action: 'APPROVE' })).status).toBe(403);
   });
 
   it('refuses anyone else, but lets a tenant admin act', async () => {
