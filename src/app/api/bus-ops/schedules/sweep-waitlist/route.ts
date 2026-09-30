@@ -17,7 +17,9 @@ export const dynamic = 'force-dynamic';
  *   Phase 2 — auto-fill from waitlist:
  *     For each trip in the window with at least one freed seat, promote
  *     the oldest WAITLISTED passenger to CONFIRMED. Best-effort WhatsApp +
- *     email confirmation to the promoted staff member.
+ *     email confirmation to the promoted staff member, in the tenant's
+ *     wording (email template staff_transport.seat_confirmed), sent after
+ *     the transaction commits.
  *
  * Idempotent — re-runnable. Auth: optional CRON_SECRET Bearer.
  *
@@ -40,11 +42,36 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { sendWhatsApp } from '@/lib/whatsapp';
 import { sendEmail } from '@/lib/email';
+import { loadEmailTemplate } from '@/lib/email-templates';
+import { SEAT_CONFIRMED_KEY, firstName, formatTripTime } from '@/lib/bus-ops/trip-notices';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
+
+interface Promotion {
+  tripId: string;
+  tripNumber: string | null;
+  promotedPassengerId: string;
+  staffMemberId: string;
+  staffName: string | null;
+  whatsappSent: boolean;
+  emailSent: boolean;
+}
+
+interface SweepSummary {
+  dryRun: boolean;
+  forDate: string;
+  runAt: string;
+  absenceRequestsProcessed: number;
+  seatsFreed: number;
+  tripsScanned: number;
+  promotionsApplied: number;
+  errors: string[];
+  freedSeats: unknown[];
+  promotions: Promotion[];
+}
 
 export async function POST(req: NextRequest) {
 
@@ -54,7 +81,17 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  // Seat confirmations to send once the transaction has committed.
+  const seatNotices: Array<{
+    promotion: Promotion;
+    name: string | null; phone: string | null; email: string | null;
+    tripNumber: string; routeName: string | null; departureDate: string; departureTime: string;
+  }> = [];
+  // Set by the transaction on success (an object, so TypeScript doesn't
+  // narrow it to null across the callback).
+  const outcome: { summary: SweepSummary | null } = { summary: null };
+
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
     const cronSecret = process.env.CRON_SECRET;
       if (cronSecret && !req.headers.get('x-tenant-id')) {
         const auth = req.headers.get('authorization');
@@ -154,15 +191,6 @@ export async function POST(req: NextRequest) {
 
         /* ── Phase 2: auto-fill waitlists ──────────────────────────────── */
 
-        interface Promotion {
-          tripId: string;
-          tripNumber: string | null;
-          promotedPassengerId: string;
-          staffMemberId: string;
-          staffName: string | null;
-          whatsappSent: boolean;
-          emailSent: boolean;
-        }
         const promotions: Promotion[] = [];
 
         // Trips that had a seat freed this run (Phase 1) plus any other trips
@@ -232,37 +260,25 @@ export async function POST(req: NextRequest) {
                 });
               }
 
-              let whatsappSent = false, emailSent = false;
-              if (!dryRun && staff) {
-                const fmtTime = trip.departureTime.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-                const body =
-                  `🎟️ Seat confirmed — Trip ${trip.tripNumber ?? trip.id.slice(0, 8)}\n\n` +
-                  `Hi ${staff.name?.split(' ')[0] ?? 'there'}, a seat opened up on ${trip.route?.name ?? 'your requested route'}.\n` +
-                  `Departure: ${target.toISOString().slice(0, 10)} ${fmtTime}\n\n` +
-                  `You\'ve been promoted from the waitlist. See you on board.\n— Staff Transport`;
-
-                if (staff.contactNumber) {
-                  const r = await sendWhatsApp({ to: staff.contactNumber, body });
-                  whatsappSent = r.sent;
-                }
-                if (staff.email) {
-                  const r = await sendEmail({
-                    to: staff.email,
-                    subject: `Seat confirmed — Trip ${trip.tripNumber ?? trip.id.slice(0, 8)}`,
-                    text: body,
-                  });
-                  emailSent = r.sent;
-                }
-              }
-
-              promotions.push({
+              const promotion: Promotion = {
                 tripId: tid,
                 tripNumber: trip.tripNumber,
                 promotedPassengerId: w.id,
                 staffMemberId: w.staffMemberId,
                 staffName: staff?.name ?? null,
-                whatsappSent, emailSent,
-              });
+                whatsappSent: false, emailSent: false,
+              };
+              promotions.push(promotion);
+              if (!dryRun && staff && (staff.contactNumber || staff.email)) {
+                seatNotices.push({
+                  promotion,
+                  name: staff.name, phone: staff.contactNumber, email: staff.email,
+                  tripNumber: trip.tripNumber ?? trip.id.slice(0, 8),
+                  routeName: trip.route?.name ?? null,
+                  departureDate: target.toISOString().slice(0, 10),
+                  departureTime: formatTripTime(trip.departureTime),
+                });
+              }
             }
           } catch (err) {
             errors.push(`promote on ${tid}: ${err instanceof Error ? err.message : 'failed'}`);
@@ -270,17 +286,7 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        if (!dryRun && (freedSeats.length > 0 || promotions.length > 0)) {
-          void logAudit({
-            userId: req.headers.get('x-user-id') ?? 'system:cron',
-            userRole: 'SYSTEM',
-            entityType: 'TripPassenger',
-            action: 'UPDATE',
-            details: `Waitlist sweep for ${target.toISOString().slice(0, 10)}: ${freedSeats.length} seats freed (absences), ${promotions.length} promoted from waitlist (${promotions.filter(p => p.whatsappSent).length} WA, ${promotions.filter(p => p.emailSent).length} email), ${errors.length} errors.`,
-          });
-        }
-
-        return NextResponse.json({
+        outcome.summary = {
           dryRun,
           forDate: target.toISOString().slice(0, 10),
           runAt: now.toISOString(),
@@ -290,11 +296,48 @@ export async function POST(req: NextRequest) {
           promotionsApplied: promotions.length,
           errors,
           freedSeats, promotions,
-        });
+        };
+        return null;
         } catch (err) {
         captureException(err, { context: 'bus-ops.sweep-waitlist' });
         return NextResponse.json({ error: 'Sweep failed' }, { status: 500 });
       }
   });
+  const summary = outcome.summary;
+  if (response || !summary) return response ?? NextResponse.json({ error: 'Sweep failed' }, { status: 500 });
+
+  if (seatNotices.length > 0) {
+    try {
+      const template = await loadEmailTemplate({ tenantId, key: SEAT_CONFIRMED_KEY });
+      for (const n of seatNotices) {
+        const msg = template.render({
+          values: {
+            staffName: firstName(n.name),
+            tripNumber: n.tripNumber,
+            routeName: n.routeName ?? '',
+            departureDate: n.departureDate,
+            departureTime: n.departureTime,
+          },
+        });
+        if (n.phone) n.promotion.whatsappSent = (await sendWhatsApp({ to: n.phone, body: msg.text })).sent;
+        if (n.email) n.promotion.emailSent = (await sendEmail({ to: n.email, subject: msg.subject, html: msg.html, text: msg.text })).sent;
+      }
+    } catch (err) {
+      captureException(err, { context: 'bus-ops.sweep-waitlist.notify', tags: { tenantId } });
+    }
+  }
+
+  const { promotions, errors } = summary;
+  if (!summary.dryRun && (summary.seatsFreed > 0 || promotions.length > 0)) {
+    await logAudit({
+      tenantId,
+      userId: req.headers.get('x-user-id') ?? 'system:cron',
+      userRole: 'SYSTEM',
+      entityType: 'TripPassenger',
+      action: 'UPDATE',
+      details: `Waitlist sweep for ${summary.forDate}: ${summary.seatsFreed} seats freed (absences), ${promotions.length} promoted from waitlist (${promotions.filter(p => p.whatsappSent).length} WA, ${promotions.filter(p => p.emailSent).length} email), ${errors.length} errors.`,
+    });
+  }
+  return NextResponse.json(summary);
 }
 

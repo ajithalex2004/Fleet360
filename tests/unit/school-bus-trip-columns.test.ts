@@ -75,7 +75,7 @@ vi.mock('@/lib/prisma-sweep', () => ({
 }));
 vi.mock('@/lib/school-bus-notify', () => ({
   loadStudentForNotify: vi.fn(async () => null),
-  notifyGuardians: vi.fn(async () => ({ ok: false })),
+  notifyGuardians: vi.fn(async () => []),
 }));
 vi.mock('@/lib/audit', () => ({ logAudit: vi.fn(async () => undefined) }));
 vi.mock('@/lib/sentry', () => ({ captureException: vi.fn() }));

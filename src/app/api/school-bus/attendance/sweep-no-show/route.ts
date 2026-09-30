@@ -21,7 +21,7 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { loadStudentForNotify, notifyGuardians } from '@/lib/school-bus-notify';
+import { notifyGuardians, type GuardianNotice } from '@/lib/school-bus-notify';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 import { runSweep } from '@/lib/prisma-sweep';
@@ -131,10 +131,12 @@ export async function POST(req: NextRequest) {
       }
 
       if (dryRun) {
-        return { tripsScanned: trips.length, candidates: assessments.length, notified: 0, errors: 0, assessments };
+        return { tripsScanned: trips.length, candidates: assessments.length, errors: 0, assessments, toNotify: [] as GuardianNotice[] };
       }
 
-      let notified = 0;
+      // Guardians are notified after this transaction commits (below), so
+      // WhatsApp and email sends never hold it open.
+      const toNotify: GuardianNotice[] = [];
       let errors = 0;
       for (const a of assessments) {
         try {
@@ -158,41 +160,44 @@ export async function POST(req: NextRequest) {
           ).catch(() => [] as Array<{ id: string }>);
           if (alreadyNotified.length > 0) continue;
 
-          const student = await loadStudentForNotify(a.studentId);
-          if (!student) continue;
-
-          const result = await notifyGuardians('NO_SHOW', student, {
+          toNotify.push({
+            studentId: a.studentId,
             stopName: a.stopName,
-            whenLabel: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+            time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
           });
-          if (result.ok) notified += 1;
         } catch (err) {
           errors += 1;
           captureException(err, { context: 'school-bus.sweep-no-show.apply', tags: { studentId: a.studentId, tenantId } });
         }
       }
 
-      return { tripsScanned: trips.length, candidates: assessments.length, notified, errors, assessments };
+      return { tripsScanned: trips.length, candidates: assessments.length, errors, assessments, toNotify };
     }, { tenantHeader: tenantHeader ?? undefined });
+
+    let notified = 0;
+    for (const r of perTenant) {
+      if (r.result.toNotify.length === 0) continue;
+      const results = await notifyGuardians(r.tenantId, 'NO_SHOW', r.result.toNotify);
+      notified += results.filter((n) => n.ok).length;
+    }
 
     const totals = perTenant.reduce(
       (acc, r) => {
         acc.tripsScanned += r.result.tripsScanned;
         acc.candidates    += r.result.candidates;
-        acc.notified       += r.result.notified;
         acc.errors         += r.result.errors;
         return acc;
       },
-      { tripsScanned: 0, candidates: 0, notified: 0, errors: 0 },
+      { tripsScanned: 0, candidates: 0, errors: 0 },
     );
 
-    if (!dryRun && totals.notified > 0) {
+    if (!dryRun && notified > 0) {
       void logAudit({
         userId: req.headers.get('x-user-id') ?? 'system:cron',
         userRole: 'SYSTEM',
         entityType: 'SchoolBusAttendance',
         action: 'UPDATE',
-        details: `No-show sweep: ${totals.tripsScanned} trips scanned across ${perTenant.length} tenant(s), ${totals.candidates} candidates, ${totals.notified} guardians notified, ${totals.errors} errors.`,
+        details: `No-show sweep: ${totals.tripsScanned} trips scanned across ${perTenant.length} tenant(s), ${totals.candidates} candidates, ${notified} guardians notified, ${totals.errors} errors.`,
       });
     }
 
@@ -201,6 +206,7 @@ export async function POST(req: NextRequest) {
       runAt: new Date().toISOString(),
       tenantsScanned: perTenant.length,
       ...totals,
+      notified,
       assessments: perTenant.flatMap(r => r.result.assessments),
     });
   } catch (err) {

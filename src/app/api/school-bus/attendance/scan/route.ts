@@ -177,15 +177,13 @@ export async function POST(req: NextRequest) {
           ).catch(() => {});
         }
 
-        // Fire guardian notification (re-uses school-bus-notify lib)
-        const { loadStudentForNotify, notifyGuardians } = await import('@/lib/school-bus-notify');
-        const studentForNotify = await loadStudentForNotify(student.id);
-        if (studentForNotify) {
-          void notifyGuardians(scanType === 'BOARDING' ? 'BOARDED' : 'ALIGHTED', studentForNotify, {
-            stopName,
-            whenLabel: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-          });
-        }
+        // Guardian notification: runs on its own, never blocks the scan.
+        const { notifyGuardians } = await import('@/lib/school-bus-notify');
+        void notifyGuardians(tenantId, scanType === 'BOARDING' ? 'BOARDED' : 'ALIGHTED', [{
+          studentId: student.id,
+          stopName,
+          time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+        }]);
 
         void logAudit({
           userId: scannedBy ?? req.headers.get('x-user-id') ?? 'driver:unknown',
