@@ -305,6 +305,15 @@ export const ALL_PERMISSIONS: readonly AppPermission[] = [
   { module: 'agents', action: 'delete', resource: '*', label: 'Delete AI Agents' },
   { module: 'agents', action: 'approve', resource: '*', label: 'Approve AI Agents' },
   { module: 'agents', action: 'export', resource: '*', label: 'Export AI Agents' },
+  // Appended 2026-09-30 (keep new entries at the end: claims are encoded by
+  // catalogue position). Routes already required these, but no role could
+  // hold them, so under AUTHZ_MODE=enforce even TENANT_ADMIN was refused.
+  { module: 'finance', action: 'edit', resource: '*', label: 'Edit Finance Records' },
+  { module: 'finance', action: 'delete', resource: '*', label: 'Delete Finance Records' },
+  { module: 'leasing', action: 'edit', resource: 'renewals', label: 'Edit Contract Renewals' },
+  { module: 'bus-ops', action: 'create', resource: 'route-consolidation', label: 'Run Route Consolidation' },
+  { module: 'bus-ops', action: 'edit', resource: 'incidents', label: 'Update Incidents' },
+  { module: 'reports', action: 'create', resource: '*', label: 'Schedule Reports' },
 ];
 
 // Helper: all modules view only permissions
@@ -353,6 +362,7 @@ export const SYSTEM_ROLES: {
       { module: 'finance', action: 'view', resource: '*' },
       { module: 'reports', action: 'view', resource: '*' },
       { module: 'reports', action: 'export', resource: '*' },
+      { module: 'reports', action: 'create', resource: '*' },
     ],
   },
   {
@@ -383,6 +393,11 @@ export const SYSTEM_ROLES: {
     permissions: [
       ...ALL_PERMISSIONS.filter(p => p.module === 'bus-ops' && !BUS_OPS_ADMIN_ONLY_RESOURCES.includes(p.resource)).map(p => ({ module: p.module, action: p.action, resource: p.resource })),
       { module: 'reports', action: 'view', resource: '*' },
+      // School Bus and Dispatch are part of the transport operation; vehicles
+      // and drivers are read so they can be assigned to routes and trips.
+      ...ALL_PERMISSIONS.filter(p => ['school-bus', 'dispatch'].includes(p.module)).map(p => ({ module: p.module, action: p.action, resource: p.resource })),
+      { module: 'fleet', action: 'view', resource: '*' },
+      { module: 'driver-mgmt', action: 'view', resource: '*' },
     ],
   },
   {
@@ -396,16 +411,27 @@ export const SYSTEM_ROLES: {
     // without it, this whitelist-by-action filter would silently drop
     // access to those 4 features even after removing their resource
     // names from BUS_OPS_ADMIN_ONLY_RESOURCES above.
-    permissions: ALL_PERMISSIONS.filter(p => p.module === 'bus-ops' && ['view','create','edit','approve','admin'].includes(p.action) && !BUS_OPS_ADMIN_ONLY_RESOURCES.includes(p.resource)).map(p => ({ module: p.module, action: p.action, resource: p.resource })),
+    permissions: [
+      ...ALL_PERMISSIONS.filter(p => p.module === 'bus-ops' && ['view','create','edit','approve','admin'].includes(p.action) && !BUS_OPS_ADMIN_ONLY_RESOURCES.includes(p.resource)).map(p => ({ module: p.module, action: p.action, resource: p.resource })),
+      // School Bus and Dispatch (no delete, as for bus-ops); vehicles and
+      // drivers read-only, to assign them to routes and trips.
+      ...ALL_PERMISSIONS.filter(p => ['school-bus', 'dispatch'].includes(p.module) && ['view','create','edit','approve'].includes(p.action)).map(p => ({ module: p.module, action: p.action, resource: p.resource })),
+      { module: 'fleet', action: 'view', resource: '*' },
+      { module: 'driver-mgmt', action: 'view', resource: '*' },
+    ],
   },
   {
     code: 'FLEET_MANAGER',
     name: 'Fleet Manager',
     description: 'Fleet + Maintenance + Drivers full access',
     permissions: [
-      ...ALL_PERMISSIONS.filter(p => ['fleet','maintenance','driver-mgmt'].includes(p.module)).map(p => ({ module: p.module, action: p.action, resource: p.resource })),
+      ...ALL_PERMISSIONS.filter(p => ['fleet','maintenance','driver-mgmt','assets'].includes(p.module)).map(p => ({ module: p.module, action: p.action, resource: p.resource })),
+      // Vehicle documents (document intelligence: extract, review, apply).
+      { module: 'compliance', action: 'view', resource: '*' },
+      { module: 'compliance', action: 'create', resource: '*' },
       { module: 'reports', action: 'view', resource: '*' },
       { module: 'reports', action: 'export', resource: '*' },
+      { module: 'reports', action: 'create', resource: '*' },
     ],
   },
   {
@@ -417,6 +443,7 @@ export const SYSTEM_ROLES: {
       ...ALL_MODULES_VIEW_ONLY,
       { module: 'reports', action: 'view', resource: '*' },
       { module: 'reports', action: 'export', resource: '*' },
+      { module: 'reports', action: 'create', resource: '*' },
       { module: 'leasing', action: 'view', resource: 'receivables' },
       { module: 'leasing', action: 'export', resource: '*' },
       // Dunning & collections is a finance-owned workflow — Finance Manager

@@ -1,6 +1,6 @@
 {
- "policyVersion": "2026-09-30.1",
- "catalogueVersion": "14e88206",
+ "policyVersion": "2026-09-30.2",
+ "catalogueVersion": "7deb1e4f",
  "catalogue": [
   "leasing:view:*",
   "leasing:create:inquiries",
@@ -164,7 +164,13 @@
   "agents:edit:*",
   "agents:delete:*",
   "agents:approve:*",
-  "agents:export:*"
+  "agents:export:*",
+  "finance:edit:*",
+  "finance:delete:*",
+  "leasing:edit:renewals",
+  "bus-ops:create:route-consolidation",
+  "bus-ops:edit:incidents",
+  "reports:create:*"
  ],
  "moduleAliases": {
   "rental": [
@@ -208,6 +214,39 @@
    "write": {
     "kind": "module",
     "module": "agents"
+   }
+  },
+  {
+   "prefix": "agents/anomalies",
+   "read": {
+    "kind": "module",
+    "module": "finance"
+   },
+   "write": {
+    "kind": "module",
+    "module": "finance"
+   }
+  },
+  {
+   "prefix": "agents/preventive-maintenance",
+   "read": {
+    "kind": "module",
+    "module": "maintenance"
+   },
+   "write": {
+    "kind": "module",
+    "module": "maintenance"
+   }
+  },
+  {
+   "prefix": "agents/route-results",
+   "read": {
+    "kind": "module",
+    "module": "school-bus"
+   },
+   "write": {
+    "kind": "module",
+    "module": "school-bus"
    }
   },
   {
@@ -311,12 +350,10 @@
   {
    "prefix": "branch-staff",
    "read": {
-    "kind": "module",
-    "module": "bus-ops"
+    "kind": "self"
    },
    "write": {
-    "kind": "module",
-    "module": "bus-ops"
+    "kind": "self"
    }
   },
   {
@@ -646,6 +683,16 @@
    },
    "write": {
     "kind": "external"
+   }
+  },
+  {
+   "prefix": "leasing/documents/upload",
+   "read": {
+    "kind": "module",
+    "module": "leasing"
+   },
+   "write": {
+    "kind": "self"
    }
   },
   {
@@ -1057,6 +1104,15 @@
    },
    "write": {
     "kind": "tenant-admin"
+   }
+  },
+  {
+   "prefix": "workflow/trigger",
+   "read": {
+    "kind": "tenant-admin"
+   },
+   "write": {
+    "kind": "self"
    }
   }
  ],

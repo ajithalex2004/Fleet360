@@ -695,8 +695,6 @@ export default function LeaseQuotationsPage() {
           referenceType: 'LEASE_QUOTATION',
           referenceId: quotationId,
           referenceNumber: quotationNumber,
-          initiatedByEmail: 'admin@xlai.com',
-          initiatedByName: 'System User',
         }),
       });
       const wf = await res.json();

@@ -5,6 +5,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { loadModuleAccess, branchStaffModules } from '@/lib/authz/module-access';
 
 // `catch (err)` is typed `unknown` under strict mode — `err.message` doesn't
 // compile without narrowing first.
@@ -36,12 +37,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  const access = await loadModuleAccess(req.headers, tenantId);
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
 
         const sp          = new URL(req.url).searchParams;
         const module      = sp.get('module');
+        const denied      = access(branchStaffModules(module), 'view', '/api/branch-staff');
+        if (denied) return denied;
         const branch_name = sp.get('branch_name');
         const role        = sp.get('role');
         const status      = sp.get('status');
@@ -137,6 +141,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  const access = await loadModuleAccess(req.headers, tenantId);
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
@@ -148,6 +153,8 @@ export async function POST(req: NextRequest) {
           emirate, start_date, end_date, status = 'ACTIVE',
           employee_id, nationality, notes,
         } = body;
+        const denied = access(branchStaffModules(module), 'create', '/api/branch-staff');
+        if (denied) return denied;
 
         if (!full_name || !phone || !role || !module || !branch_name || !start_date) {
           return NextResponse.json({ error: 'Missing required fields: full_name, phone, role, module, branch_name, start_date' }, { status: 400 });
@@ -185,6 +192,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  const access = await loadModuleAccess(req.headers, tenantId);
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
@@ -193,6 +201,16 @@ export async function PATCH(req: NextRequest) {
         const { id, ...fields } = body;
 
         if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+
+        // The record's module decides who may change it (and the new one,
+        // when the change moves it to another module).
+        const [current] = await tx.$queryRawUnsafe<Array<{ module: string }>>(
+          `SELECT module FROM branch_staff_assignments WHERE id::text = $1 AND deleted_at IS NULL`, String(id),
+        );
+        if (!current) return NextResponse.json({ error: 'Record not found' }, { status: 404 });
+        const denied = access(branchStaffModules(current.module), 'edit', '/api/branch-staff')
+          ?? ('module' in fields ? access(branchStaffModules(fields.module), 'edit', '/api/branch-staff') : null);
+        if (denied) return denied;
 
         // Build SET clause dynamically
         const allowed = ['full_name','email','phone','role','module','branch_id','branch_name',
@@ -239,11 +257,19 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  const access = await loadModuleAccess(req.headers, tenantId);
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
         const id = new URL(req.url).searchParams.get('id');
         if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+
+        const [current] = await tx.$queryRawUnsafe<Array<{ module: string }>>(
+          `SELECT module FROM branch_staff_assignments WHERE id::text = $1 AND deleted_at IS NULL`, id,
+        );
+        if (!current) return NextResponse.json({ error: 'Record not found' }, { status: 404 });
+        const denied = access(branchStaffModules(current.module), 'delete', '/api/branch-staff');
+        if (denied) return denied;
 
         await tx.$executeRawUnsafe(
           `UPDATE branch_staff_assignments SET deleted_at = NOW(), status = 'INACTIVE', updated_at = NOW() WHERE id = $1`,

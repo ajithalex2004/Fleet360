@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { triggerWorkflow } from '@/lib/workflow-db';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { withAuditedAction } from '@/lib/audited-action';
+import { loadModuleAccess } from '@/lib/authz/module-access';
+import { prisma } from '@/lib/prisma';
+import { withPlatformAdmin } from '@/lib/rls';
 
 function errorMessage(e: unknown, fallback: string): string {
   return e instanceof Error ? e.message : fallback;
@@ -14,21 +17,45 @@ async function handlePOST(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  const access = await loadModuleAccess(req.headers, tenantId);
 
   try {
-    const body = await req.json();
+    // tenantId comes from the session only: it used to be read from the body
+    // here, shadowing the session's, so a caller could name another tenant.
+    const body = stripTenantOwnershipFields(await req.json());
     const {
       // Phase 2 canonical keying — preferred for new callers. The engine
       // resolves these via the service-type / scope chain.
-      serviceTypeId, tenantId, scopeId,
+      serviceTypeId, scopeId,
       // Legacy keying — still accepted. Engine falls back to (module,
       // procedure) lookup when serviceTypeId isn't supplied or doesn't
       // resolve to an active workflow.
       module, procedure,
       referenceType, referenceId, referenceNumber,
-      initiatedByEmail, initiatedByName,
       contextData,
     } = body;
+
+    // Starting a module's workflow (e.g. a leasing quotation's approval) needs
+    // create permission in that module; the matrix lets this route through
+    // for any member ('workflow/trigger' in policy-matrix.ts). Without a
+    // module only tenant administrators may start one, as before.
+    const role = req.headers.get('x-user-role') ?? '';
+    const isTenantAdmin = role === 'TENANT_ADMIN' || role === 'SUPER_ADMIN';
+    const workflowModule = typeof module === 'string' && module ? module.toLowerCase().replace(/_/g, '-') : null;
+    if (workflowModule || !isTenantAdmin) {
+      const denied = access([workflowModule ?? 'workflow'], 'create', '/api/workflow/trigger');
+      if (denied) return denied;
+    }
+
+    // The initiator is the signed-in user, not whatever the page sends.
+    const userId = req.headers.get('x-user-id');
+    const initiator = userId
+      ? await withPlatformAdmin(prisma, (tx) => tx.user.findUnique({
+          where: { id: userId }, select: { email: true, firstName: true, lastName: true },
+        }))
+      : null;
+    const initiatedByEmail = initiator?.email ?? 'system';
+    const initiatedByName = [initiator?.firstName, initiator?.lastName].filter(Boolean).join(' ') || undefined;
 
     if (!referenceId) {
       return NextResponse.json({ error: 'referenceId is required' }, { status: 400 });
@@ -46,8 +73,8 @@ async function handlePOST(req: NextRequest) {
       module, procedure,
       referenceType: referenceType ?? module ?? 'UNKNOWN',
       referenceId, referenceNumber: referenceNumber ?? referenceId,
-      initiatedByEmail: initiatedByEmail ?? 'system',
-      initiatedByName: initiatedByName ?? null,
+      initiatedByEmail,
+      initiatedByName,
       contextData,
     });
 
