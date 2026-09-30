@@ -34,7 +34,12 @@ const tx = vi.hoisted(() => {
   return {
     $queryRawUnsafe: raw,
     $executeRawUnsafe: async (sql: string, ...args: unknown[]) => { await raw(sql, ...args); return 1; },
-    vehicleWarranty: model('vehicleWarranty'),
+    vehicleWarranty: {
+      ...model('vehicleWarranty'),
+      findUnique: async ({ where }: { where: { id: string } }) =>
+        ({ id: where.id, isActive: true, startDate: new Date('2026-01-01'), expiryDate: new Date('2030-01-01') }),
+    },
+    vehicle: { findFirst: async ({ where }: { where: { id: string } }) => ({ id: where.id }) },
     maintenancePlan: model('maintenancePlan'),
     warrantyClaim: model('warrantyClaim'),
   };
@@ -129,7 +134,7 @@ describe('maintenance records are created for the session tenant', () => {
       method: 'POST', body: { tenantId: OTHER, name: '10k service' },
     }))],
     ['warranty claim', 'warrantyClaim', () => claims.POST(req('maintenance/warranty-claims', {
-      method: 'POST', body: { tenantId: OTHER, warrantyId: 'w1', description: 'Sensor' },
+      method: 'POST', body: { tenantId: OTHER, warrantyId: 'w1', description: 'Sensor', claimDate: '2026-09-01' },
     }))],
   ])('%s', async (_name, model, call) => {
     const res = await call();
@@ -138,7 +143,7 @@ describe('maintenance records are created for the session tenant', () => {
   });
 
   it('publishes the claim event under the session tenant', async () => {
-    await claims.POST(req('maintenance/warranty-claims', { method: 'POST', body: { warrantyId: 'w1' } }));
+    await claims.POST(req('maintenance/warranty-claims', { method: 'POST', body: { warrantyId: 'w1', description: 'Sensor', claimDate: '2026-09-01' } }));
     expect(publishWarrantyClaimRaised).toHaveBeenCalledWith('warrantyClaim-1', TENANT, expect.objectContaining({ tenantId: TENANT }));
   });
 });

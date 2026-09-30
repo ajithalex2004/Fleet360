@@ -4,7 +4,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { parseWarrantyInput } from '@/lib/maintenance/warranty';
 // GET /api/maintenance/warranties
 // Query params: vehicleId?, activeOnly?
 export async function GET(request: NextRequest) {
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest) {
 
 // POST /api/maintenance/warranties
 // Body: { vehicleId, warrantyType, provider?, startDate, expiryDate,
-//         coverageDescription?, maxClaimAmount?, isActive? }
+//         coverageDescription?, maxClaimAmount? }
 export async function POST(request: NextRequest) {
 
     const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
@@ -56,20 +57,23 @@ export async function POST(request: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-            const body = await request.json();
+            const body = await request.json().catch(() => null);
+            if (!body || typeof body !== 'object') {
+                return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+            }
+            const input = parseWarrantyInput(body);
+            if (!input.ok) return NextResponse.json({ error: input.error }, { status: 400 });
+
+            // The vehicle must be one of this tenant's (RLS scopes the lookup).
+            const vehicle = await tx.vehicle.findFirst({
+                where: { id: input.data.vehicleId, deletedAt: null },
+                select: { id: true },
+            });
+            if (!vehicle) return NextResponse.json({ error: 'Vehicle not found' }, { status: 404 });
 
             const warranty = await tx.vehicleWarranty.create({
-                data: {
-                    tenantId,
-                    vehicleId:           body.vehicleId,
-                    warrantyType:        body.warrantyType,
-                    provider:            body.provider            ?? null,
-                    startDate:           new Date(body.startDate),
-                    expiryDate:          new Date(body.expiryDate),
-                    coverageDescription: body.coverageDescription ?? null,
-                    maxClaimAmount:      body.maxClaimAmount      ?? null,
-                    isActive:            body.isActive            ?? true,
-                },
+                data: { tenantId, ...input.data, isActive: true },
+                include: { claims: true },
             });
 
             return NextResponse.json(
