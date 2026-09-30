@@ -7,15 +7,17 @@
  * destination + recent tracking history, runs predictEta(), writes the new
  * ETA where the customer-tracking page already reads it (the latest tracking
  * event's metadata.etaAt), and — if the ETA has shifted materially since the
- * customer was last told — sends an SMS + email update.
+ * customer was last told — sends an SMS + email update. The email is the
+ * tenant's template logistics.eta_update (Admin > Email templates), sent in
+ * the tenant's name; the SMS names the tenant too.
  *
  * Every external call is best-effort: a failed notification or persist never
  * throws, so a flaky SMS gateway or a slow DB can't break GPS ingestion.
  */
 
 import { prisma } from '@/lib/prisma';
-import { sendEmail } from '@/lib/email';
 import { sendSms } from '@/lib/sms';
+import type { EmailLocale } from '@/lib/email-templates/catalogue';
 import {
   predictEta,
   etaDeltaMinutes,
@@ -82,30 +84,19 @@ function fmtLocalTime(iso: string): string {
   return `${day}, ${hh}:${mm} GST`;
 }
 
-export function formatEtaSms(args: { shipmentNo: string; destination: string | null; etaAt: string; deltaMinutes: number | null }): string {
+export function formatEtaSms(args: { shipmentNo: string; destination: string | null; etaAt: string; deltaMinutes: number | null; sender?: string }): string {
   const when = fmtLocalTime(args.etaAt);
   const dir = args.deltaMinutes == null ? '' : args.deltaMinutes > 0 ? ' (delayed)' : ' (earlier)';
   const dest = args.destination ? ` to ${args.destination}` : '';
-  return `Fleet360: Shipment ${args.shipmentNo}${dest} is now estimated to arrive ${when}${dir}.`;
+  return `${args.sender || 'Fleet360'}: Shipment ${args.shipmentNo}${dest} is now estimated to arrive ${when}${dir}.`;
 }
 
-export function formatEtaEmail(args: { shipmentNo: string; customerName: string | null; destination: string | null; etaAt: string; deltaMinutes: number | null }): { subject: string; text: string; html: string } {
-  const when = fmtLocalTime(args.etaAt);
-  const dir = args.deltaMinutes == null ? 'estimated' : args.deltaMinutes > 0 ? `delayed by ${args.deltaMinutes} min` : `arriving ${Math.abs(args.deltaMinutes)} min earlier`;
-  const dest = args.destination ? ` to ${args.destination}` : '';
-  const subject = `Updated ETA for shipment ${args.shipmentNo} — ${when}`;
-  const greeting = args.customerName ? `Hi ${args.customerName},` : 'Hello,';
-  const text =
-    `${greeting}\n\n` +
-    `The estimated arrival for your shipment ${args.shipmentNo}${dest} has updated.\n` +
-    `New ETA: ${when} (${dir}).\n\n` +
-    `You can track it live in your Fleet360 portal.\n\n— Fleet360`;
-  const html =
-    `<p>${greeting}</p>` +
-    `<p>The estimated arrival for your shipment <strong>${args.shipmentNo}</strong>${dest} has updated.</p>` +
-    `<p><strong>New ETA: ${when}</strong> (${dir}).</p>` +
-    `<p>You can track it live in your Fleet360 portal.</p><p>— Fleet360</p>`;
-  return { subject, text, html };
+/** How the ETA moved, for the email ("delayed by 25 min"). */
+export function etaChangeText(deltaMinutes: number | null, locale: EmailLocale): string {
+  if (deltaMinutes == null) return locale === 'ar' ? 'موعد تقديري' : 'estimated';
+  const mins = Math.abs(deltaMinutes);
+  if (locale === 'ar') return deltaMinutes > 0 ? `تأخير ${mins} دقيقة` : `أبكر بـ ${mins} دقيقة`;
+  return deltaMinutes > 0 ? `delayed by ${mins} min` : `arriving ${mins} min earlier`;
 }
 
 // ── Recompute service ────────────────────────────────────────────────────────
@@ -116,6 +107,7 @@ interface ShipmentEtaRow {
   cargo_owner_name: string | null;
   cargo_owner_email: string | null;
   cargo_owner_phone: string | null;
+  origin_name: string | null;
   delivery_window_to: string | null;
   metadata: Record<string, unknown> | null;
   dest_lat: string | number | null;
@@ -157,7 +149,7 @@ export async function recomputeShipmentEta(args: {
   // 1) Load the shipment + its delivery destination (coords from the last
   //    DELIVERY stop) + customer contact + last-notified ETA from metadata.
   const rows = await prisma.$queryRawUnsafe<ShipmentEtaRow[]>(
-    `SELECT s.shipment_no, s.destination_name,
+    `SELECT s.shipment_no, s.destination_name, s.origin_name,
             s.cargo_owner_name, s.cargo_owner_email, s.cargo_owner_phone,
             s.delivery_window_to::text, s.metadata,
             d.latitude::text  AS dest_lat,
@@ -248,23 +240,39 @@ export async function recomputeShipmentEta(args: {
 
   const channels = { email: false, sms: false };
   if (decision.notify && !args.suppressNotifications && prediction.etaAt) {
+    const etaAt = prediction.etaAt;
+    const shipmentNo = ship.shipment_no ?? args.shipmentOrderId.slice(0, 8);
+    // Loaded on use: the template library pulls in the email sender.
+    const { sendTemplatedEmail, tenantEmailContext } = await import('@/lib/email-templates');
+    const { tenantContact } = await import('@/lib/tenant-contact');
+    const { formatGst } = await import('@/lib/logistics/customer-notifications');
+    const context = await tenantEmailContext(args.tenantId);
     if (ship.cargo_owner_email) {
-      const { subject, text, html } = formatEtaEmail({
-        shipmentNo: ship.shipment_no ?? args.shipmentOrderId.slice(0, 8),
-        customerName: ship.cargo_owner_name,
-        destination: ship.destination_name,
-        etaAt: prediction.etaAt,
-        deltaMinutes: decision.deltaMinutes,
+      const contact = await tenantContact(args.tenantId);
+      const res = await sendTemplatedEmail({
+        tenantId: args.tenantId,
+        key: 'logistics.eta_update',
+        context,
+        to: ship.cargo_owner_email,
+        ...(contact ? { replyTo: contact.email } : {}),
+        values: (l) => ({
+          customerName: ship.cargo_owner_name ?? '',
+          shipmentNo,
+          origin: ship.origin_name ?? '',
+          destination: ship.destination_name ?? '',
+          etaTime: formatGst(etaAt, l),
+          etaChange: etaChangeText(decision.deltaMinutes, l),
+        }),
       });
-      const res = await sendEmail({ to: ship.cargo_owner_email, subject, text, html }).catch(() => ({ sent: false }));
-      channels.email = !!res?.sent;
+      channels.email = res.sent;
     }
     if (ship.cargo_owner_phone) {
       const body = formatEtaSms({
-        shipmentNo: ship.shipment_no ?? args.shipmentOrderId.slice(0, 8),
+        shipmentNo,
         destination: ship.destination_name,
-        etaAt: prediction.etaAt,
+        etaAt,
         deltaMinutes: decision.deltaMinutes,
+        sender: context.companyName,
       });
       const res = await sendSms({ to: ship.cargo_owner_phone, body }).catch(() => ({ sent: false }));
       channels.sms = !!res?.sent;

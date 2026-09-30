@@ -19,11 +19,11 @@
  *     metadata.routePolyline we use that instead and a tighter width.
  *   - Light de-dup: we skip raising an alert if an OPEN exception of the same
  *     type was raised in the last few minutes, so boundary jitter can't spam.
+ *   - A route deviation is emailed to the tenant's own team (its contact
+ *     email, template logistics.route_deviation), never to the customer.
  */
 
 import { prisma } from '@/lib/prisma';
-import { sendSms } from '@/lib/sms';
-import { sendEmail } from '@/lib/email';
 import { ensureGeofenceSchema } from './geofence-schema';
 import {
   evaluateGeofences,
@@ -74,12 +74,11 @@ export async function evaluateShipmentGeofences(args: {
 }): Promise<GeofenceResult> {
   await ensureGeofenceSchema();
 
-  // Shipment header (number + contact + metadata for route polyline).
+  // Shipment header (number + metadata for route polyline).
   const shipRows = await prisma.$queryRawUnsafe<Array<{
-    shipment_no: string | null; cargo_owner_email: string | null; cargo_owner_phone: string | null;
-    metadata: Record<string, unknown> | null;
+    shipment_no: string | null; metadata: Record<string, unknown> | null;
   }>>(
-    `SELECT shipment_no, cargo_owner_email, cargo_owner_phone, metadata
+    `SELECT shipment_no, metadata
        FROM logistics_shipment_orders
       WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL LIMIT 1`,
     args.shipmentOrderId, args.tenantId,
@@ -167,16 +166,20 @@ export async function evaluateShipmentGeofences(args: {
     ).catch(() => { /* non-fatal */ });
     raised += 1;
 
-    // Notify ops/customer for the actionable ones (route deviation).
+    // Alert the tenant's own team to a route deviation.
     if (ev.type === 'DEVIATION' && !args.suppressNotifications) {
-      const body = `Fleet360 alert: ${title}. Check the dispatch board.`;
-      if (ship.cargo_owner_phone) {
-        const r = await sendSms({ to: ship.cargo_owner_phone, body }).catch(() => ({ sent: false }));
-        if (r?.sent) notified += 1;
-      }
-      if (ship.cargo_owner_email) {
-        const r = await sendEmail({ to: ship.cargo_owner_email, subject: title, text: body }).catch(() => ({ sent: false }));
-        if (r?.sent) notified += 1;
+      // Loaded on use: the template library pulls in the email sender.
+      const { tenantContact } = await import('@/lib/tenant-contact');
+      const { appUrl, sendTemplatedEmail } = await import('@/lib/email-templates');
+      const ops = await tenantContact(args.tenantId);
+      if (ops) {
+        const r = await sendTemplatedEmail({
+          tenantId: args.tenantId,
+          key: 'logistics.route_deviation',
+          to: ops.email,
+          values: { shipmentNo, alert: title, controlTowerUrl: appUrl('/logistics/control-tower') },
+        });
+        if (r.sent) notified += 1;
       }
     }
   }

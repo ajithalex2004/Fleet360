@@ -6890,6 +6890,19 @@ export async function recordLogisticsFieldOpsEvent(input: LogisticsFieldOpsEvent
     after: { status: nextStatus, eventType: input.eventType, occurredAt: occurredAt.toISOString() },
   });
 
+  // Proof of delivery goes to the customer (best-effort, never blocks the POD).
+  if (input.eventType === 'DELIVERY_CONFIRMED' && input.recipientName?.trim()) {
+    const { notifyProofOfDelivery } = await import('@/lib/logistics/customer-notifications');
+    void notifyProofOfDelivery({
+      tenantId: input.tenantId,
+      shipmentOrderId: input.shipmentOrderId,
+      recipientName: input.recipientName.trim(),
+      deliveredAt: occurredAt,
+      note: input.remarks ?? null,
+      attachmentCount: (input.photoUrls?.length ?? 0) + (input.documentUrls?.length ?? 0),
+    });
+  }
+
   return listShipmentExecutionTimeline({ tenantId: input.tenantId, shipmentOrderId: input.shipmentOrderId });
 }
 

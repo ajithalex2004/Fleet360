@@ -61,6 +61,15 @@ const TRIP_VARIABLES: TemplateVariable[] = [
   { name: 'departureTime', description: 'Scheduled departure time', sample: '06:30' },
 ];
 
+/** Shared by the logistics shipment emails (src/lib/logistics/customer-notifications.ts). */
+const SHIPMENT_VARIABLES: TemplateVariable[] = [
+  { name: 'customerName', description: 'Customer name', sample: 'Gulf Trading LLC', fallback: { en: 'Valued Customer', ar: 'عميلنا العزيز' } },
+  { name: 'shipmentNo', description: 'Shipment number', sample: 'SHP-2026-0198' },
+  { name: 'origin', description: 'Pickup location', sample: 'Jebel Ali Free Zone', fallback: { en: 'the pickup point', ar: 'نقطة الاستلام' } },
+  { name: 'destination', description: 'Delivery location', sample: 'Al Quoz Industrial 3', fallback: { en: 'the delivery address', ar: 'عنوان التسليم' } },
+  { name: 'portalUrl', description: 'Shipper portal link (for customers with portal access)', sample: 'https://app.example/shipper-portal/shipments' },
+];
+
 /** Shared by the overdue-payment notices (src/lib/finance/dunning-*). */
 const DUNNING_VARIABLES: TemplateVariable[] = [
   { name: 'customerName', description: 'Customer name', sample: 'Gulf Trading LLC', fallback: { en: 'Valued Customer', ar: 'عميلنا العزيز' } },
@@ -852,6 +861,166 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
       ar: {
         subject: 'تم إرسال {{noticeType}} للرحلة {{tripNumber}}: {{reachedCount}}/{{passengerCount}}',
         body: 'أرسل {{sentBy}} إشعار **{{noticeType}}** للرحلة {{tripNumber}} ({{routeName}}).\n\n**الركاب الذين تم إبلاغهم:** {{reachedCount}} من {{passengerCount}}\n\nالرسالة التي تلقاها الركاب:\n\n{{passengerMessage}}',
+      },
+    },
+  },
+  {
+    key: 'logistics.shipment_confirmed',
+    module: 'Logistics',
+    name: 'Shipment confirmed (customer)',
+    description: "Sent to the shipment's customer contact when the shipment is approved.",
+    variables: [...SHIPMENT_VARIABLES],
+    defaults: {
+      en: {
+        subject: 'Shipment {{shipmentNo}} confirmed',
+        body: 'Dear {{customerName}},\n\nYour shipment **{{shipmentNo}}** from {{origin}} to {{destination}} has been confirmed. We will let you know when it is on its way.\n\nKind regards,\n{{companyName}}',
+      },
+      ar: {
+        subject: 'تم تأكيد الشحنة {{shipmentNo}}',
+        body: 'السادة {{customerName}} المحترمين،\n\nتم تأكيد شحنتكم **{{shipmentNo}}** من {{origin}} إلى {{destination}}. سنبلغكم عند انطلاقها.\n\nمع أطيب التحيات،\n{{companyName}}',
+      },
+    },
+  },
+  {
+    key: 'logistics.shipment_dispatched',
+    module: 'Logistics',
+    name: 'Shipment dispatched (customer)',
+    description: "Sent to the shipment's customer contact when the shipment is dispatched.",
+    variables: [
+      ...SHIPMENT_VARIABLES,
+      { name: 'driverName', description: 'Driver', sample: 'Rashid Ahmed', fallback: { en: 'Our driver', ar: 'سائقنا' } },
+      { name: 'vehiclePlate', description: 'Vehicle plate', sample: 'DXB K 48213', fallback: { en: 'to be confirmed', ar: 'سيتم تأكيدها' } },
+    ],
+    defaults: {
+      en: {
+        subject: 'Shipment {{shipmentNo}} is on its way',
+        body: 'Dear {{customerName}},\n\nYour shipment **{{shipmentNo}}** has been dispatched and is heading to {{origin}} for pickup.\n\n**Driver:** {{driverName}}\n**Vehicle:** {{vehiclePlate}}\n\nKind regards,\n{{companyName}}',
+      },
+      ar: {
+        subject: 'الشحنة {{shipmentNo}} في الطريق',
+        body: 'السادة {{customerName}} المحترمين،\n\nتم إرسال شحنتكم **{{shipmentNo}}** وهي في طريقها إلى {{origin}} للاستلام.\n\n**السائق:** {{driverName}}\n**المركبة:** {{vehiclePlate}}\n\nمع أطيب التحيات،\n{{companyName}}',
+      },
+    },
+  },
+  {
+    key: 'logistics.out_for_delivery',
+    module: 'Logistics',
+    name: 'Out for delivery (customer)',
+    description: "Sent to the shipment's customer contact when the cargo is on its way to the delivery address.",
+    variables: [
+      ...SHIPMENT_VARIABLES,
+      { name: 'etaTime', description: 'Estimated arrival', sample: '30 Sep, 14:30 GST', fallback: { en: 'to be confirmed', ar: 'سيتم تأكيده' } },
+    ],
+    defaults: {
+      en: {
+        subject: 'Shipment {{shipmentNo}} is out for delivery',
+        body: 'Dear {{customerName}},\n\nYour shipment **{{shipmentNo}}** has been collected and is now on its way to {{destination}}.\n\n**Estimated arrival:** {{etaTime}}\n\nKind regards,\n{{companyName}}',
+      },
+      ar: {
+        subject: 'الشحنة {{shipmentNo}} في طريقها للتسليم',
+        body: 'السادة {{customerName}} المحترمين،\n\nتم استلام شحنتكم **{{shipmentNo}}** وهي الآن في طريقها إلى {{destination}}.\n\n**موعد الوصول المتوقع:** {{etaTime}}\n\nمع أطيب التحيات،\n{{companyName}}',
+      },
+    },
+  },
+  {
+    key: 'logistics.eta_update',
+    module: 'Logistics',
+    name: 'Delivery time update (customer)',
+    description: "Sent to the shipment's customer contact when the estimated arrival moves materially from the last time they were told. The SMS carries a short version.",
+    variables: [
+      ...SHIPMENT_VARIABLES,
+      { name: 'etaTime', description: 'New estimated arrival', sample: '30 Sep, 15:10 GST' },
+      { name: 'etaChange', description: 'How it changed', sample: 'delayed by 40 min' },
+    ],
+    defaults: {
+      en: {
+        subject: 'Updated arrival time for shipment {{shipmentNo}}: {{etaTime}}',
+        body: 'Dear {{customerName}},\n\nThe estimated arrival of your shipment **{{shipmentNo}}** to {{destination}} has changed.\n\n**New estimated arrival:** {{etaTime}} ({{etaChange}})\n\nKind regards,\n{{companyName}}',
+      },
+      ar: {
+        subject: 'تحديث موعد وصول الشحنة {{shipmentNo}}: {{etaTime}}',
+        body: 'السادة {{customerName}} المحترمين،\n\nتغيّر موعد الوصول المتوقع لشحنتكم **{{shipmentNo}}** إلى {{destination}}.\n\n**موعد الوصول الجديد:** {{etaTime}} ({{etaChange}})\n\nمع أطيب التحيات،\n{{companyName}}',
+      },
+    },
+  },
+  {
+    key: 'logistics.shipment_delivered',
+    module: 'Logistics',
+    name: 'Shipment delivered (customer)',
+    description: "Sent to the shipment's customer contact when the shipment is marked delivered. When the driver records proof of delivery, the proof-of-delivery email is sent instead.",
+    variables: [...SHIPMENT_VARIABLES],
+    defaults: {
+      en: {
+        subject: 'Shipment {{shipmentNo}} delivered',
+        body: 'Dear {{customerName}},\n\nYour shipment **{{shipmentNo}}** has been delivered to {{destination}}.\n\nThank you for choosing {{companyName}}.\n\nKind regards,\n{{companyName}}',
+      },
+      ar: {
+        subject: 'تم تسليم الشحنة {{shipmentNo}}',
+        body: 'السادة {{customerName}} المحترمين،\n\nتم تسليم شحنتكم **{{shipmentNo}}** إلى {{destination}}.\n\nشكراً لاختياركم {{companyName}}.\n\nمع أطيب التحيات،\n{{companyName}}',
+      },
+    },
+  },
+  {
+    key: 'logistics.proof_of_delivery',
+    module: 'Logistics',
+    name: 'Proof of delivery (customer)',
+    description: "Sent to the shipment's customer contact when the driver or carrier records proof of delivery (recipient and signature).",
+    variables: [
+      ...SHIPMENT_VARIABLES,
+      { name: 'recipientName', description: 'Who received it', sample: 'Omar Hassan' },
+      { name: 'deliveredAt', description: 'Delivery time', sample: '30 Sep 2026, 14:42 GST' },
+      { name: 'deliveryNote', description: "Driver's remarks", sample: '2 pallets, no damage', fallback: { en: 'None', ar: 'لا توجد' } },
+      { name: 'attachmentCount', description: 'Photos and documents captured', sample: '3' },
+    ],
+    defaults: {
+      en: {
+        subject: 'Proof of delivery: shipment {{shipmentNo}}',
+        body: 'Dear {{customerName}},\n\nYour shipment **{{shipmentNo}}** has been delivered to {{destination}}.\n\n**Received by:** {{recipientName}}\n**Delivered at:** {{deliveredAt}}\n**Remarks:** {{deliveryNote}}\n**Photos and documents:** {{attachmentCount}}\n\nThe signed proof of delivery is kept on file; reply to this email if you need a copy.\n\nKind regards,\n{{companyName}}',
+      },
+      ar: {
+        subject: 'إثبات التسليم: الشحنة {{shipmentNo}}',
+        body: 'السادة {{customerName}} المحترمين،\n\nتم تسليم شحنتكم **{{shipmentNo}}** إلى {{destination}}.\n\n**المستلم:** {{recipientName}}\n**وقت التسليم:** {{deliveredAt}}\n**ملاحظات:** {{deliveryNote}}\n**الصور والمستندات:** {{attachmentCount}}\n\nنحتفظ بإثبات التسليم الموقّع؛ يرجى الرد على هذا البريد إذا احتجتم إلى نسخة.\n\nمع أطيب التحيات،\n{{companyName}}',
+      },
+    },
+  },
+  {
+    key: 'logistics.shipment_cancelled',
+    module: 'Logistics',
+    name: 'Shipment cancelled (customer)',
+    description: "Sent to the shipment's customer contact when the shipment is cancelled.",
+    variables: [
+      ...SHIPMENT_VARIABLES,
+      { name: 'reason', description: 'Reason given', sample: 'Requested by customer', fallback: { en: 'Not specified', ar: 'غير محدد' } },
+    ],
+    defaults: {
+      en: {
+        subject: 'Shipment {{shipmentNo}} cancelled',
+        body: 'Dear {{customerName}},\n\nYour shipment **{{shipmentNo}}** from {{origin}} to {{destination}} has been cancelled.\n\n**Reason:** {{reason}}\n\nPlease reply to this email if you have any questions.\n\nKind regards,\n{{companyName}}',
+      },
+      ar: {
+        subject: 'تم إلغاء الشحنة {{shipmentNo}}',
+        body: 'السادة {{customerName}} المحترمين،\n\nتم إلغاء شحنتكم **{{shipmentNo}}** من {{origin}} إلى {{destination}}.\n\n**السبب:** {{reason}}\n\nيرجى الرد على هذا البريد لأي استفسار.\n\nمع أطيب التحيات،\n{{companyName}}',
+      },
+    },
+  },
+  {
+    key: 'logistics.route_deviation',
+    module: 'Logistics',
+    name: 'Route deviation alert (operations)',
+    description: "Sent to your company contact email (Admin > Company profile) when a vehicle leaves a shipment's planned route. Customers are not told.",
+    variables: [
+      { name: 'shipmentNo', description: 'Shipment number', sample: 'SHP-2026-0198' },
+      { name: 'alert', description: 'What was detected', sample: 'Shipment SHP-2026-0198 deviated 2.4 km from its route' },
+      { name: 'controlTowerUrl', description: 'Link to the control tower', sample: 'https://app.example/logistics/control-tower' },
+    ],
+    defaults: {
+      en: {
+        subject: 'Route deviation: shipment {{shipmentNo}}',
+        body: '{{alert}}.\n\nPlease check with the driver.\n\n[Open control tower]({{controlTowerUrl}})',
+      },
+      ar: {
+        subject: 'انحراف عن المسار: الشحنة {{shipmentNo}}',
+        body: '{{alert}}.\n\nيرجى التواصل مع السائق.\n\n[فتح برج التحكم]({{controlTowerUrl}})',
       },
     },
   },

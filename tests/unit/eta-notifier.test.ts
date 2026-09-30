@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { decideNotify, formatEtaSms, formatEtaEmail } from '@/lib/logistics/eta-notifier';
+import { decideNotify, formatEtaSms, etaChangeText } from '@/lib/logistics/eta-notifier';
 import { formatSmsTo, sendSms, _setFetchForTests, _resetFetchForTests } from '@/lib/sms';
 import type { EtaPrediction } from '@/lib/logistics/eta-predictor';
 
@@ -92,12 +92,16 @@ describe('ETA message formatting', () => {
     expect(msg).toMatch(/earlier/i);
   });
 
-  it('email subject carries the shipment and a time', () => {
-    const { subject, text, html } = formatEtaEmail({ shipmentNo: 'LOG-9', customerName: 'Acme', destination: 'Sharjah', etaAt: '2026-06-22T10:00:00Z', deltaMinutes: 18 });
-    expect(subject).toContain('LOG-9');
-    expect(text).toContain('Acme');
-    expect(text).toMatch(/delayed by 18 min/);
-    expect(html).toContain('<strong>LOG-9</strong>');
+  it('SMS names the sending company', () => {
+    const msg = formatEtaSms({ shipmentNo: 'LOG-1', destination: null, etaAt: '2026-06-22T10:00:00Z', deltaMinutes: 5, sender: 'Acme Logistics' });
+    expect(msg.startsWith('Acme Logistics: Shipment LOG-1')).toBe(true);
+  });
+
+  it('describes the ETA change for the email, per language', () => {
+    expect(etaChangeText(18, 'en')).toBe('delayed by 18 min');
+    expect(etaChangeText(-20, 'en')).toBe('arriving 20 min earlier');
+    expect(etaChangeText(null, 'en')).toBe('estimated');
+    expect(etaChangeText(18, 'ar')).toBe('تأخير 18 دقيقة');
   });
 
   it('converts UTC to GST (UTC+4) in the displayed time', () => {
