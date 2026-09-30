@@ -30,16 +30,15 @@ import { driverReportRequest, parseDriverReport } from '@/lib/maintenance/driver
 import { POST as createRequest } from '@/app/api/maintenance-requests/route';
 
 const PREVIEW_SCREENS = [
-  'maintenance/sla',
-  'maintenance/schedule',
   'maintenance/garage-assignments',
   'maintenance/garage-performance',
   'maintenance/approvals/rules',
-  'maintenance/predictive-alerts',
   'school-bus/analytics',
   'ai-platform/predictive',
 ];
 
+// Connected since: maintenance/schedule, maintenance/sla and
+// maintenance/predictive-alerts (see connected-maintenance-screens.test.ts).
 describe('screens with example figures', () => {
   it.each(PREVIEW_SCREENS)('%s shows the Preview banner', (screen) => {
     const src = readFileSync(join(process.cwd(), 'src/app/(app)', screen, 'page.tsx'), 'utf8');

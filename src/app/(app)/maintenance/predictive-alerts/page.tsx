@@ -1,88 +1,117 @@
 /**
- * Predictive Alerts — read-only consumer view for the Maintenance module.
- * Shows AI-generated failure predictions relevant to maintenance scheduling.
- * The predictive engine is owned by the AI Platform at /ai-platform/predictive.
+ * Predictive Alerts — vehicles whose maintenance record points to a higher
+ * risk of failure, from /api/maintenance/risk-scores (overdue service,
+ * recent failures, repeat jobs, open defects, downtime, age, mileage,
+ * failed inspections, warranty). The full ranking is on the Risk screen.
  */
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Sparkles, ExternalLink, AlertTriangle } from 'lucide-react';
-import PreviewBanner from '@/components/PreviewBanner';
+import { ExternalLink, AlertTriangle } from 'lucide-react';
+import type { MaintenanceRiskScore, RiskBand } from '@/types/maintenance';
 
-const MOCK_ALERTS = [
-  { vehicle: 'Toyota Hilux – DXB-A-12345', component: 'Brake pads', risk: 'High', days: 8, confidence: 94, action: 'Schedule brake service immediately' },
-  { vehicle: 'Mitsubishi Canter – AUH-C-11111', component: 'Transmission fluid', risk: 'High', days: 12, confidence: 91, action: 'Book transmission service within 10 days' },
-  { vehicle: 'Ford F-150 – SHJ-B-67890', component: 'Engine oil', risk: 'Medium', days: 21, confidence: 87, action: 'Schedule oil change in next service cycle' },
-  { vehicle: 'Nissan Patrol – DXB-D-22222', component: 'Air filter', risk: 'Low', days: 45, confidence: 79, action: 'Include in next scheduled maintenance' },
-];
+const ALERT_BANDS: RiskBand[] = ['CRITICAL', 'HIGH', 'MEDIUM'];
 
-const riskStyle: Record<string, { badge: string; bg: string }> = {
-  High:   { badge: 'bg-red-500/20 text-red-300 border-red-500/30',    bg: 'bg-red-500/5' },
-  Medium: { badge: 'bg-amber-500/20 text-amber-300 border-amber-500/30', bg: 'bg-amber-500/5' },
-  Low:    { badge: 'bg-[var(--bg-surface-hover)]/40 text-[var(--text-muted)] border-[var(--border-subtle)]',   bg: '' },
+const bandStyle: Record<RiskBand, { label: string; badge: string; bg: string; action: string }> = {
+  CRITICAL: { label: 'Critical', badge: 'bg-red-500/20 text-red-300 border-red-500/30', bg: 'bg-red-500/5', action: 'Inspect this vehicle before its next trip' },
+  HIGH:     { label: 'High',     badge: 'bg-orange-500/20 text-orange-300 border-orange-500/30', bg: 'bg-orange-500/5', action: 'Book a service within the week' },
+  MEDIUM:   { label: 'Medium',   badge: 'bg-amber-500/20 text-amber-300 border-amber-500/30', bg: 'bg-amber-500/5', action: 'Include in the next scheduled service' },
+  LOW:      { label: 'Low',      badge: 'bg-[var(--bg-surface-hover)]/40 text-[var(--text-muted)] border-[var(--border-subtle)]', bg: '', action: '' },
 };
 
 export default function PredictiveAlertsPage() {
+  const [scores, setScores] = useState<MaintenanceRiskScore[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/maintenance/risk-scores', { cache: 'no-store' })
+      .then(async (res) => {
+        const json = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(json?.error ?? `Could not load risk scores (${res.status})`);
+        if (!cancelled) setScores(Array.isArray(json?.scores) ? json.scores : []);
+      })
+      .catch((e) => { if (!cancelled) { setError(e instanceof Error ? e.message : 'Could not load risk scores'); setScores([]); } });
+    return () => { cancelled = true; };
+  }, []);
+
+  const alerts = (scores ?? []).filter((s) => ALERT_BANDS.includes(s.band));
+
   return (
     <div className="space-y-6">
-      <PreviewBanner />
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-[var(--text-main)]">Predictive Alerts</h1>
-          <p className="text-xs mt-1 text-[var(--text-faint)]">AI-generated failure predictions for your fleet.</p>
+          <p className="text-xs mt-1 text-[var(--text-faint)]">
+            Vehicles whose maintenance record points to a higher risk of failure
+          </p>
         </div>
         <Link
-          href="/ai-platform/predictive"
+          href="/maintenance/risk"
           className="flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-main)] hover:border-[var(--border-strong)] transition-colors"
         >
-          AI Platform engine
+          Full risk ranking
           <ExternalLink className="h-3.5 w-3.5" />
         </Link>
       </div>
 
-      {/* Consumer view notice */}
-      <div className="rounded-xl border border-slate-500/30 bg-[var(--bg-surface)]/50 p-4 flex items-center gap-3">
-        <Sparkles className="h-5 w-5 text-[var(--text-muted)] flex-shrink-0" />
-        <p className="text-sm text-[var(--text-muted)]">
-          <span className="font-semibold text-[var(--text-muted)]">Read-only consumer view.</span>{' '}
-          Model configuration and full analytics are in{' '}
-          <Link href="/ai-platform/predictive" className="text-blue-400 underline hover:text-blue-300">
-            AI Platform → Predictive maintenance
-          </Link>.
-        </p>
-      </div>
+      {error && (
+        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">{error}</div>
+      )}
 
-      <div className="space-y-3">
-        {MOCK_ALERTS.map((alert, i) => {
-          const style = riskStyle[alert.risk] ?? riskStyle.Low;
-          return (
-            <div key={i} className={`rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5 ${style.bg}`}>
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm font-semibold text-[var(--text-main)]">{alert.vehicle}</span>
-                    <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${style.badge}`}>
-                      {alert.risk} Risk
-                    </span>
+      {scores === null ? (
+        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-12 text-center text-sm text-[var(--text-faint)]">
+          Loading risk scores…
+        </div>
+      ) : alerts.length === 0 && !error ? (
+        <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-12 text-center text-sm text-[var(--text-faint)]">
+          {scores.length === 0
+            ? 'No active vehicles to assess yet.'
+            : `No vehicles at medium risk or above. ${scores.length} vehicle${scores.length === 1 ? '' : 's'} assessed.`}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {alerts.map((s) => {
+            const style = bandStyle[s.band];
+            const reasons = s.factors.filter((f) => f.score > 0).sort((a, b) => b.score - a.score).slice(0, 3);
+            const name = [s.make, s.model].filter(Boolean).join(' ');
+            return (
+              <div key={s.vehicleId} className={`rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-5 ${style.bg}`}>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="text-sm font-semibold text-[var(--text-main)]">
+                        {[name, s.licensePlate || s.vehicleCode].filter(Boolean).join(' – ') || s.vehicleId}
+                      </span>
+                      <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${style.badge}`}>
+                        {style.label} Risk
+                      </span>
+                    </div>
+                    {reasons.length > 0 && (
+                      <ul className="mt-1 space-y-0.5 text-xs text-[var(--text-muted)]">
+                        {reasons.map((f) => (
+                          <li key={f.key}><span className="text-[var(--text-faint)]">{f.label}:</span> {f.description}</li>
+                        ))}
+                      </ul>
+                    )}
+                    <div className="mt-2 rounded-lg bg-blue-500/10 border border-blue-500/20 px-3 py-2">
+                      <p className="text-xs text-blue-300">
+                        <AlertTriangle className="inline h-3 w-3 mr-1" />
+                        {style.action}
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-xs text-[var(--text-faint)]">Component: <span className="text-[var(--text-muted)]">{alert.component}</span></p>
-                  <div className="mt-2 rounded-lg bg-blue-500/10 border border-blue-500/20 px-3 py-2">
-                    <p className="text-xs text-blue-300">
-                      <AlertTriangle className="inline h-3 w-3 mr-1" />
-                      {alert.action}
-                    </p>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-xs text-[var(--text-faint)]">Risk score</p>
+                    <p className="text-lg font-bold text-orange-300">{s.score}<span className="text-xs text-[var(--text-faint)]">/100</span></p>
                   </div>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <p className="text-xs text-[var(--text-faint)]">Predicted failure</p>
-                  <p className="text-lg font-bold text-orange-300">{alert.days}d</p>
-                  <p className="text-xs text-blue-400 mt-1">Confidence: {alert.confidence}%</p>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

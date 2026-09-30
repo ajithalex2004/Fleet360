@@ -23,6 +23,19 @@ import { computeRiskScore } from '@/lib/maintenance/risk-score';
 import type { RiskScoreInputs } from '@/types/maintenance';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+
+/**
+ * Requests store statuses as display text ("Under Maintenance", "Open")
+ * while these checks used enum-style codes ("UNDER_MAINTENANCE"), so they
+ * never matched and open defects and downtime always scored zero. Match
+ * either spelling, ignoring case.
+ */
+function statusIn(codes: string[]) {
+    return codes.flatMap(code => {
+        const words = code.replace(/_/g, ' ');
+        return [...new Set([code, words])].map(v => ({ status: { equals: v, mode: 'insensitive' as const } }));
+    });
+}
 export async function GET(req: NextRequest) {
 
     const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -95,7 +108,7 @@ export async function GET(req: NextRequest) {
                 tenantId,
                 vehicleId: { in: vehicleIds },
                 deletedAt: null,
-                status:    { in: ['REQUESTED', 'SUBMITTED', 'ACCEPTED'] },
+                OR:        statusIn(['OPEN', 'REQUESTED', 'SUBMITTED', 'ACCEPTED']),
             },
             select: { vehicleId: true },
         });
@@ -106,7 +119,7 @@ export async function GET(req: NextRequest) {
                 tenantId,
                 vehicleId:  { in: vehicleIds },
                 deletedAt:  null,
-                status:     'UNDER_MAINTENANCE',
+                OR:         statusIn(['UNDER_MAINTENANCE']),
                 createdAt:  { gte: ago90 },
             },
             select: {
