@@ -284,7 +284,7 @@ export default function AIPlatformDashboardPage() {
                 {roi?.roiMultiplier ? `${roi.roiMultiplier.toFixed(1)}x` : '12.4x'}
               </div>
               <p className="mt-1 text-xs text-emerald-300">
-                AED {roi?.netFinancialGainAed ? roi.netFinancialGainAed.toLocaleString() : '48,200'} Net Value Generated
+                AED {(roi?.netFinancialGainAed ?? 0).toLocaleString()} Net Value Generated
               </p>
             </div>
 
@@ -295,10 +295,10 @@ export default function AIPlatformDashboardPage() {
                 <Coins className="h-4 w-4 text-purple-400" />
               </div>
               <div className="text-3xl font-extrabold text-[var(--text-main)]">
-                AED {roi?.totalAvoidedCostAed ? roi.totalAvoidedCostAed.toLocaleString() : '52,450'}
+                AED {(roi?.totalAvoidedCostAed ?? 0).toLocaleString()}
               </div>
               <p className="mt-1 text-xs text-[var(--text-faint)]">
-                Incurred AI Spend: AED {roi?.totalCostAed ? roi.totalCostAed.toFixed(2) : '38.40'}
+                Incurred AI Spend: AED {(roi?.totalCostAed ?? 0).toFixed(2)}
               </p>
             </div>
 
@@ -309,10 +309,10 @@ export default function AIPlatformDashboardPage() {
                 <MapPin className="h-4 w-4 text-cyan-400" />
               </div>
               <div className="text-3xl font-extrabold text-[var(--text-main)]">
-                {roi?.matrixCacheHitRatePct ? `${roi.matrixCacheHitRatePct.toFixed(1)}%` : '84.2%'}
+                {roi?.matrixCacheHitRatePct != null ? `${roi.matrixCacheHitRatePct.toFixed(1)}%` : '—'}
               </div>
               <p className="mt-1 text-xs text-cyan-400">
-                Saved AED {roi?.savedRoutingCostAed ? roi.savedRoutingCostAed.toFixed(2) : '412.00'} in matrix API calls
+                Saved AED {(roi?.savedRoutingCostAed ?? 0).toFixed(2)} in matrix API calls
               </p>
             </div>
 
@@ -323,14 +323,18 @@ export default function AIPlatformDashboardPage() {
                 <Gauge className="h-4 w-4 text-indigo-400" />
               </div>
               <div className="text-3xl font-extrabold text-[var(--text-main)]">
-                {evalQuality?.latestDecisionQualityScore
+                {evalQuality?.latestDecisionQualityScore != null
                   ? `${(evalQuality.latestDecisionQualityScore * 100).toFixed(1)}%`
-                  : '96.5%'}
+                  : '—'}
               </div>
-              <div className="mt-1 flex items-center gap-1.5 text-xs text-emerald-400">
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                <span>Regression Gate: Optimal</span>
-              </div>
+              {evalQuality?.latestDecisionQualityScore != null ? (
+                <div className="mt-1 flex items-center gap-1.5 text-xs text-emerald-400">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span>From the latest evaluation run</span>
+                </div>
+              ) : (
+                <p className="mt-1 text-xs text-[var(--text-faint)]">No evaluation runs yet</p>
+              )}
             </div>
           </div>
 
@@ -618,7 +622,7 @@ export default function AIPlatformDashboardPage() {
 
             <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-4">
               <span className="text-xs text-[var(--text-muted)]">Daily AI Budget Quota</span>
-              <div className="text-xl font-bold text-[var(--text-main)] mt-1">AED {policy?.dailyBudgetAed?.toFixed(2) || '150.00'}</div>
+              <div className="text-xl font-bold text-[var(--text-main)] mt-1">{policy?.dailyBudgetAed != null ? `AED ${policy.dailyBudgetAed.toFixed(2)}` : '—'}</div>
               <p className="text-[11px] text-[var(--text-faint)] mt-1">
                 Automatic circuit breaker trips if daily cost exceeds this limit.
               </p>
@@ -626,7 +630,7 @@ export default function AIPlatformDashboardPage() {
 
             <div className="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40 p-4">
               <span className="text-xs text-[var(--text-muted)]">Human Sign-off Threshold</span>
-              <div className="text-xl font-bold text-[var(--text-main)] mt-1">AED {policy?.requireHumanApprovalThresholdAed?.toFixed(2) || '250.00'}</div>
+              <div className="text-xl font-bold text-[var(--text-main)] mt-1">{policy?.requireHumanApprovalThresholdAed != null ? `AED ${policy.requireHumanApprovalThresholdAed.toFixed(2)}` : '—'}</div>
               <p className="text-[11px] text-[var(--text-faint)] mt-1">
                 Mutations with financial impact over this value are held in queue.
               </p>
@@ -680,7 +684,7 @@ export default function AIPlatformDashboardPage() {
                     </td>
                     <td className="py-3">{a.totalRuns}</td>
                     <td className="py-3 text-emerald-400">
-                      {a.totalRuns > 0 ? `${((a.successfulRuns / a.totalRuns) * 100).toFixed(1)}%` : '100%'}
+                      {a.totalRuns > 0 ? `${((a.successfulRuns / a.totalRuns) * 100).toFixed(1)}%` : '—'}
                     </td>
                     <td className="py-3">{a.avgDurationMs} ms</td>
                     <td className="py-3">AED {a.totalCostAed.toFixed(2)}</td>

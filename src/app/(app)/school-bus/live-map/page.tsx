@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 /* ─────────────────────────── types ─────────────────────────── */
 interface VehiclePosition {
@@ -41,7 +41,7 @@ interface FleetSummary {
 /* ─────────────────────────── constants ──────────────────────── */
 const REFRESH_MS = 15_000;
 
-// Dubai bounding box for demo marker positions
+// Default map centre
 const DUBAI_CENTER = { lat: 25.2048, lng: 55.2708 };
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; border: string; label: string; dot: string }> = {
@@ -288,34 +288,6 @@ function DetailPanel({ v, onClose }: { v: VehiclePosition; onClose: () => void }
   );
 }
 
-/* ─────────────────────────── Demo seeder ────────────────────── */
-// Seeds demo positions so the live map isn't empty on first load
-async function seedDemoPositions() {
-  const buses = [
-    { vehicleId: 'BUS-001', vehiclePlate: 'Dubai A 12345', routeName: 'Marina Morning Route', lat: 25.080, lng: 55.140, speed: 45, status: 'EN_ROUTE', students: 28, driver: 'Ahmed Al Mansouri', attendant: 'Fatima Hassan', nextStop: 'Marina Mall Gate 3', heading: 45 },
-    { vehicleId: 'BUS-002', vehiclePlate: 'Dubai B 67890', routeName: 'JBR Afternoon Route',  lat: 25.085, lng: 55.133, speed: 0,  status: 'AT_STOP',   students: 22, driver: 'Mohammed Al Rashid', attendant: 'Aisha Al Zaabi', nextStop: 'JBR The Walk', heading: 180 },
-    { vehicleId: 'BUS-003', vehiclePlate: 'Dubai C 24680', routeName: 'Downtown Express',     lat: 25.197, lng: 55.274, speed: 60, status: 'EN_ROUTE',  students: 35, driver: 'Khalid Al Hamdan', attendant: 'Sara Al Khoury', nextStop: 'Burj Khalifa Metro', heading: 90 },
-    { vehicleId: 'BUS-004', vehiclePlate: 'Dubai D 13579', routeName: 'Deira North Route',    lat: 25.265, lng: 55.312, speed: 30, status: 'EN_ROUTE',  students: 18, driver: 'Omar Al Shamsi', attendant: 'Maryam Al Nuaimi', nextStop: 'Gold Souk Stop', heading: 270 },
-    { vehicleId: 'BUS-005', vehiclePlate: 'Dubai E 99001', routeName: null,                   lat: 25.150, lng: 55.220, speed: 0,  status: 'IDLE',      students: 0,  driver: 'Saeed Al Falasi', attendant: null, nextStop: null, heading: 0 },
-  ];
-
-  for (const b of buses) {
-    await fetch('/api/school-bus/fleet-positions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        vehicleId: b.vehicleId, vehiclePlate: b.vehiclePlate,
-        routeName: b.routeName,
-        driverName: b.driver, attendantName: b.attendant,
-        lat: b.lat, lng: b.lng,
-        speedKmh: b.speed, headingDeg: b.heading,
-        status: b.status,
-        nextStopName: b.nextStop,
-        studentsOnboard: b.students,
-      }),
-    }).catch(() => {});
-  }
-}
 
 /* ─────────────────────────── Page ──────────────────────────── */
 export default function LiveMapPage() {
@@ -325,7 +297,6 @@ export default function LiveMapPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [loading, setLoading]         = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
-  const seededRef = useRef(false);
 
   const fetchPositions = useCallback(async () => {
     try {
@@ -342,14 +313,7 @@ export default function LiveMapPage() {
   }, [filterStatus]);
 
   useEffect(() => {
-    const init = async () => {
-      if (!seededRef.current) {
-        seededRef.current = true;
-        await seedDemoPositions();
-      }
-      await fetchPositions();
-    };
-    init();
+    void fetchPositions();
     const id = setInterval(fetchPositions, REFRESH_MS);
     return () => clearInterval(id);
   }, [fetchPositions]);

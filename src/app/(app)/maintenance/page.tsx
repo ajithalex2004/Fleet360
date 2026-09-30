@@ -139,10 +139,10 @@ export default function MaintenanceDashboard() {
       {/* Top Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: 'Vehicles Scanned', value: summary.totalForecasts || 18, sub: 'Continuously monitored', tone: 'from-blue-500 to-indigo-600' },
-          { label: 'Due Soon (≤7 Days)', value: summary.dueSoonCount || 3, sub: 'Optimal slots computed', tone: 'from-amber-500 to-orange-600' },
-          { label: 'Upcoming (8–21 Days)', value: summary.upcomingCount || 7, sub: 'Projected burn-down tracking', tone: 'from-cyan-500 to-blue-600' },
-          { label: 'Operational Uptime', value: '99.4%', sub: 'Zero cancelled bus routes', tone: 'from-emerald-500 to-teal-600' },
+          { label: 'Vehicles Scanned', value: summary?.totalForecasts ?? 0, sub: 'Continuously monitored', tone: 'from-blue-500 to-indigo-600' },
+          { label: 'Overdue', value: summary?.overdueCount ?? 0, sub: 'Past their service threshold', tone: 'from-rose-500 to-red-600' },
+          { label: 'Due Soon (≤7 Days)', value: summary?.dueSoonCount ?? 0, sub: 'Optimal slots computed', tone: 'from-amber-500 to-orange-600' },
+          { label: 'Upcoming (8–21 Days)', value: summary?.upcomingCount ?? 0, sub: 'Projected burn-down tracking', tone: 'from-cyan-500 to-blue-600' },
         ].map((card) => (
           <div key={card.label} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${card.tone} p-5 shadow-sm`}>
             <p className="text-sm font-medium text-white/80">{card.label}</p>

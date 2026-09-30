@@ -17,6 +17,7 @@ import {
   Search, AlertCircle, CheckCircle2, Clock,
 } from 'lucide-react';
 import { TrackingVisibilityModal } from '@/components/TrackingVisibilityModal';
+import { usePermissions } from '@/contexts/PermissionContext';
 import type { TrackingLevel } from '@/lib/shipper-portal/visibility';
 
 interface CustomerRow {
@@ -301,11 +302,15 @@ export default function ShipperPortalConfigPage() {
 }
 
 // ── Seed-demo button (dev/QA convenience) ─────────────────────────────
+// It writes a demo customer and shipments into the tenant's real data, so
+// only the platform super admin sees it.
 
 function SeedDemoButton({ onSeeded }: { onSeeded: () => void }) {
+  const { user } = usePermissions();
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ setupUrl: string; shipments: number } | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  if (user?.roleCode !== 'SUPER_ADMIN') return null;
 
   const seed = async () => {
     setBusy(true); setErr(null);

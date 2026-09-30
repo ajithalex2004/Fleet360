@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import { usePermissions } from '@/contexts/PermissionContext';
 
 /* ─────────────────────────── types ─────────────────────────── */
 interface DriverScore {
@@ -214,6 +215,10 @@ export default function DriverScoresPage() {
   const [period, setPeriod]     = useState(new Date().toISOString().slice(0, 7));
   const [filterRAG, setFilterRAG] = useState('');
   const [showSeed, setShowSeed] = useState(false);
+  // Demo drivers are written into the tenant's real scores, so only the
+  // platform super admin (setting up a demo tenant) sees the seed buttons.
+  const { user } = usePermissions();
+  const canSeedDemo = user?.roleCode === 'SUPER_ADMIN';
 
   const fetch_ = useCallback(async () => {
     setLoading(true);
@@ -247,10 +252,12 @@ export default function DriverScoresPage() {
           <p className="text-[var(--text-muted)] text-xs mt-0.5">RAG scoring · speeding · harsh braking · geofence · incident tracking</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setShowSeed(true)}
-            className="bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] text-sm px-4 py-2 rounded-lg border border-[var(--border-subtle)] transition-colors">
-            + Demo Data
-          </button>
+          {canSeedDemo && (
+            <button onClick={() => setShowSeed(true)}
+              className="bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-muted)] text-sm px-4 py-2 rounded-lg border border-[var(--border-subtle)] transition-colors">
+              + Demo Data
+            </button>
+          )}
           <button onClick={fetch_} className="bg-[var(--bg-surface)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] text-sm px-4 py-2 rounded-lg border border-[var(--border-subtle)] transition-colors">
             ⟳ Recalculate
           </button>
@@ -342,11 +349,13 @@ export default function DriverScoresPage() {
         <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-16 text-center">
           <p className="text-4xl mb-4">🎯</p>
           <p className="text-[var(--text-muted)] font-semibold mb-1">No scores for {period}</p>
-          <p className="text-[var(--text-faint)] text-sm mb-4">Scores auto-compute from trip telemetry. Seed demo data to see the engine in action.</p>
-          <button onClick={() => setShowSeed(true)}
-            className="bg-yellow-500 hover:bg-yellow-400 text-white font-bold px-6 py-2 rounded-xl text-sm transition-colors">
-            Seed Demo Drivers
-          </button>
+          <p className="text-[var(--text-faint)] text-sm mb-4">Scores are calculated from completed trips and their telemetry.</p>
+          {canSeedDemo && (
+            <button onClick={() => setShowSeed(true)}
+              className="bg-yellow-500 hover:bg-yellow-400 text-white font-bold px-6 py-2 rounded-xl text-sm transition-colors">
+              Seed Demo Drivers
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-4">
@@ -359,7 +368,7 @@ export default function DriverScoresPage() {
         </div>
       )}
 
-      {showSeed && (
+      {showSeed && canSeedDemo && (
         <SeedModal period={period} onDone={fetch_} onClose={() => setShowSeed(false)} />
       )}
     </div>

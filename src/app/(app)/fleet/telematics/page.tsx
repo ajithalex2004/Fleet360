@@ -967,7 +967,7 @@ export default function TelematicsPage() {
               <p className="text-xs text-[var(--text-muted)] font-medium">Fleet Driver Safety Index</p>
               <div className="flex items-center gap-2">
                 <p className="text-2xl font-bold text-emerald-400">
-                  {analyticsData?.averageSafetyScore ?? 100} / 100
+                  {analyticsData?.averageSafetyScore ?? '—'} / 100
                 </p>
                 <Award className="w-5 h-5 text-amber-400" />
               </div>

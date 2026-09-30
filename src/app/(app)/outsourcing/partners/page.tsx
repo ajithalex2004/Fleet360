@@ -143,7 +143,7 @@ export default function EnterprisePartnerDirectoryPage() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Truck className="w-3.5 h-3.5 text-slate-400" />
-                  <span>{p.vehicles?.length || 12} Registered Vehicles</span>
+                  <span>{p.vehicles?.length ?? 0} Registered Vehicles</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
