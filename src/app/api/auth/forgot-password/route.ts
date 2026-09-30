@@ -15,11 +15,11 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { generateResetToken } from '@/lib/password-policy';
-import { sendEmail } from '@/lib/email';
+import { appUrl, NO_TENANT, sendTemplatedEmail } from '@/lib/email-templates';
+import { runAsTenant } from '@/lib/rls-scope';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 const TOKEN_TTL_MIN = 60;
@@ -69,30 +69,20 @@ export async function POST(req: NextRequest) {
       user.id, hash, expiresAt,
     );
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-    const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
+    const resetUrl = appUrl(`/reset-password?token=${encodeURIComponent(token)}`);
 
-    const sendResult = await sendEmail({
+    // In the language of the user's organisation (English if they have none).
+    const membership = await runAsTenant('*', () => prisma.$queryRawUnsafe<Array<{ tenant_id: string }>>(
+      `SELECT tenant_id::text FROM user_tenants WHERE user_id = $1 AND COALESCE(is_active, TRUE) = TRUE
+        ORDER BY created_at ASC LIMIT 1`,
+      user.id,
+    )).catch(() => [] as Array<{ tenant_id: string }>);
+
+    const sendResult = await sendTemplatedEmail({
+      tenantId: membership[0]?.tenant_id ?? NO_TENANT,
+      key: 'account.password_reset',
       to: email,
-      subject: 'Reset your Fleet360 password',
-      text: [
-        `Hi ${user.username},`,
-        '',
-        'You (or someone using your email) requested a password reset for Fleet360.',
-        '',
-        `Reset your password here (valid for ${TOKEN_TTL_MIN} minutes):`,
-        resetUrl,
-        '',
-        'If you did not request this, ignore this email — your password remains unchanged.',
-        '',
-        '— Fleet360',
-      ].join('\n'),
-      html:
-        `<p>Hi ${escapeHtml(user.username)},</p>` +
-        `<p>You (or someone using your email) requested a password reset for Fleet360.</p>` +
-        `<p><a href="${resetUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:white;border-radius:8px;text-decoration:none">Reset password</a></p>` +
-        `<p style="color:#666;font-size:12px">Or copy this link: <code>${resetUrl}</code><br/>Valid for ${TOKEN_TTL_MIN} minutes.</p>` +
-        `<p style="color:#666;font-size:12px">If you did not request this, ignore this email — your password remains unchanged.</p>`,
+      values: { userName: user.username, resetUrl, validMinutes: String(TOKEN_TTL_MIN) },
     });
 
     void logAudit({
@@ -109,8 +99,4 @@ export async function POST(req: NextRequest) {
     captureException(err, { context: 'auth.forgot-password' });
     return generic(); // still generic — never leak existence
   }
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 }

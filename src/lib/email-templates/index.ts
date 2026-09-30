@@ -107,6 +107,13 @@ export type TemplateSource = 'override' | 'tenant' | 'platform' | 'default';
 /** The platform's own name, on emails the platform sends to tenants. */
 export const PLATFORM_NAME = process.env.NEXT_PUBLIC_APP_NAME || 'Fleet360';
 
+/**
+ * The tenantId to send a platform-only email with when no tenant is
+ * involved yet (sign-up, a user with no organisation): the platform's
+ * wording, in English.
+ */
+export const NO_TENANT = '*';
+
 type PerLocale<T> = T | ((locale: EmailLocale) => T);
 const forLocale = <T>(v: PerLocale<T>, locale: EmailLocale): T =>
   typeof v === 'function' ? (v as (l: EmailLocale) => T)(locale) : v;

@@ -1025,6 +1025,116 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
     },
   },
   {
+    key: 'account.user_invitation',
+    module: 'Account',
+    name: 'User invitation',
+    description: 'Sent to a person invited to join your organisation (Admin > Users > Invite), with their link to create an account.',
+    variables: [
+      { name: 'roleName', description: 'Role they will have', sample: 'Fleet Manager' },
+      { name: 'invitedBy', description: 'Who invited them', sample: 'Sara Khan', fallback: { en: 'Your administrator', ar: 'المسؤول لديكم' } },
+      { name: 'acceptUrl', description: 'Link to accept and create the account', sample: 'https://app.example/invitation/…' },
+      { name: 'validDays', description: 'Days the link stays valid', sample: '7' },
+    ],
+    defaults: {
+      en: {
+        subject: "You're invited to join {{companyName}}",
+        body: "Hello,\n\n{{invitedBy}} has invited you to join **{{companyName}}** as **{{roleName}}**.\n\n[Accept invitation]({{acceptUrl}})\n\nThis link is valid for {{validDays}} days. If you didn't expect this invitation, you can ignore this email.",
+      },
+      ar: {
+        subject: 'دعوة للانضمام إلى {{companyName}}',
+        body: 'مرحباً،\n\nقام {{invitedBy}} بدعوتك للانضمام إلى **{{companyName}}** بصفة **{{roleName}}**.\n\n[قبول الدعوة]({{acceptUrl}})\n\nهذا الرابط صالح لمدة {{validDays}} أيام. إذا لم تكن تتوقع هذه الدعوة، يمكنك تجاهل هذا البريد.',
+      },
+    },
+  },
+  {
+    key: 'account.password_reset',
+    module: 'Account',
+    name: 'Password reset',
+    description: 'Sent when someone asks to reset their password. Only platform administrators can change it, since it carries a sign-in link.',
+    platformOnly: true,
+    variables: [
+      { name: 'userName', description: 'User name', sample: 'fatima.ali', fallback: { en: 'there', ar: 'عزيزي المستخدم' } },
+      { name: 'resetUrl', description: 'Link to choose a new password', sample: 'https://app.example/reset-password?token=…' },
+      { name: 'validMinutes', description: 'Minutes the link stays valid', sample: '60' },
+    ],
+    defaults: {
+      en: {
+        subject: 'Reset your {{companyName}} password',
+        body: "Hi {{userName}},\n\nWe received a request to reset your {{companyName}} password.\n\n[Reset password]({{resetUrl}})\n\nThis link is valid for {{validMinutes}} minutes and can be used once. If you didn't ask for this, ignore this email; your password stays the same.",
+      },
+      ar: {
+        subject: 'إعادة تعيين كلمة المرور في {{companyName}}',
+        body: 'مرحباً {{userName}}،\n\nتلقينا طلباً لإعادة تعيين كلمة المرور الخاصة بك في {{companyName}}.\n\n[إعادة تعيين كلمة المرور]({{resetUrl}})\n\nهذا الرابط صالح لمدة {{validMinutes}} دقيقة ويمكن استخدامه مرة واحدة. إذا لم تطلب ذلك، تجاهل هذا البريد؛ ستبقى كلمة المرور كما هي.',
+      },
+    },
+  },
+  {
+    key: 'account.domain_verification_code',
+    module: 'Account',
+    name: 'Domain verification code (sign-up)',
+    description: 'Sent while a new organisation signs up, with the code that proves it owns its email domain.',
+    platformOnly: true,
+    variables: [
+      { name: 'code', description: 'The 6-digit code', sample: '482915' },
+      { name: 'domain', description: 'Domain being verified', sample: 'acme.ae' },
+      { name: 'validMinutes', description: 'Minutes the code stays valid', sample: '15' },
+    ],
+    defaults: {
+      en: {
+        subject: '{{code}} is your {{companyName}} verification code',
+        body: "You're registering **{{domain}}** on {{companyName}}. Enter this code to confirm you own the domain:\n\n**{{code}}**\n\nThe code expires in {{validMinutes}} minutes. If you didn't request it, you can ignore this email.",
+      },
+      ar: {
+        subject: 'رمز التحقق الخاص بك في {{companyName}}: {{code}}',
+        body: 'أنت تسجّل النطاق **{{domain}}** في {{companyName}}. أدخل هذا الرمز لتأكيد ملكيتك للنطاق:\n\n**{{code}}**\n\nتنتهي صلاحية الرمز خلال {{validMinutes}} دقيقة. إذا لم تطلبه، يمكنك تجاهل هذا البريد.',
+      },
+    },
+  },
+  {
+    key: 'account.domain_verification_link',
+    module: 'Account',
+    name: 'Verify your domain (new organisation)',
+    description: "Sent to a new organisation's administrator after sign-up when its domain was not verified during sign-up.",
+    platformOnly: true,
+    variables: [
+      { name: 'organisationName', description: 'New organisation', sample: 'Acme Fleet Services' },
+      { name: 'verifyUrl', description: 'Verification link', sample: 'https://app.example/api/tenants/verify-domain?token=…' },
+    ],
+    defaults: {
+      en: {
+        subject: 'Verify your domain for {{organisationName}}',
+        body: 'Welcome to {{companyName}}.\n\n**{{organisationName}}** is almost ready. Verify your email domain to activate all features:\n\n[Verify domain]({{verifyUrl}})',
+      },
+      ar: {
+        subject: 'تحقق من نطاق {{organisationName}}',
+        body: 'مرحباً بكم في {{companyName}}.\n\n**{{organisationName}}** جاهزة تقريباً. تحقق من نطاق بريدكم الإلكتروني لتفعيل جميع الميزات:\n\n[التحقق من النطاق]({{verifyUrl}})',
+      },
+    },
+  },
+  {
+    key: 'exchange.partner_invitation',
+    module: 'Exchange',
+    name: 'Partner portal invitation',
+    description: "Sent to a transport partner's user invited to the Exchange partner portal, with their link to set up the account.",
+    platformOnly: true,
+    variables: [
+      { name: 'partnerName', description: 'Transport partner', sample: 'Desert Haulage LLC' },
+      { name: 'organisationName', description: 'Organisation the account is created under', sample: 'Acme Fleet Services' },
+      { name: 'acceptUrl', description: 'Link to accept and set a password', sample: 'https://app.example/invitation/…' },
+      { name: 'validDays', description: 'Days the link stays valid', sample: '7' },
+    ],
+    defaults: {
+      en: {
+        subject: "You're invited to act for {{partnerName}} on {{companyName}}",
+        body: "Hello,\n\nYou've been invited to use the {{companyName}} Exchange partner portal for **{{partnerName}}**. Your account will be created under {{organisationName}}.\n\n[Accept invitation]({{acceptUrl}})\n\nThis link is valid for {{validDays}} days. If you didn't expect this, you can ignore this email.",
+      },
+      ar: {
+        subject: 'دعوة للعمل نيابةً عن {{partnerName}} في {{companyName}}',
+        body: 'مرحباً،\n\nتمت دعوتك لاستخدام بوابة شركاء Exchange في {{companyName}} نيابةً عن **{{partnerName}}**. سيتم إنشاء حسابك ضمن {{organisationName}}.\n\n[قبول الدعوة]({{acceptUrl}})\n\nهذا الرابط صالح لمدة {{validDays}} أيام. إذا لم تكن تتوقع ذلك، يمكنك تجاهل هذا البريد.',
+      },
+    },
+  },
+  {
     key: 'shipper.portal_invitation',
     module: 'Logistics',
     name: 'Shipper portal invitation',

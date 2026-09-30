@@ -6,7 +6,7 @@ import { isSuperAdmin } from '@/lib/admin-access';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { logAudit } from '@/lib/audit';
-import { sendEmail } from '@/lib/email';
+import { appUrl, sendTemplatedEmail } from '@/lib/email-templates';
 import { requireUnderQuota } from '@/lib/plan-limits';
 import { generateInvitationToken, INVITATION_TTL_DAYS } from '@/lib/invitations';
 import { notProvisionedAware, PARTNER_ROLES } from '@/lib/exchange/partner-auth';
@@ -165,25 +165,19 @@ async function handlePOST(req: NextRequest, props: Params) {
   if ('error' in result) return NextResponse.json({ error: result.error }, { status: result.status });
 
   const { partner, tenant, role, token } = result;
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-  const acceptUrl = `${baseUrl}/invitation/${encodeURIComponent(token)}`;
-  const send = await sendEmail({
+  const acceptUrl = appUrl(`/invitation/${encodeURIComponent(token)}`);
+  // Platform wording (Admin > Email templates > Exchange), in the language
+  // of the tenant the account is created under.
+  const send = await sendTemplatedEmail({
+    tenantId: tenant.id,
+    key: 'exchange.partner_invitation',
     to: email,
-    subject: `You've been invited to act for ${partner.legalName} on Fleet360`,
-    text: [
-      `You've been invited to use the Fleet360 Exchange partner portal for ${partner.legalName}.`,
-      `Your account will be created under ${tenant.name}.`,
-      '',
-      `Accept the invitation and set your password (valid for ${INVITATION_TTL_DAYS} days):`,
+    values: {
+      partnerName: partner.legalName,
+      organisationName: tenant.name,
       acceptUrl,
-      '',
-      'If you didn\'t expect this, you can ignore the email.',
-    ].join('\n'),
-    html:
-      `<p>You&rsquo;ve been invited to use the Fleet360 Exchange partner portal for <strong>${escapeHtml(partner.legalName)}</strong>.</p>` +
-      `<p>Your account will be created under ${escapeHtml(tenant.name)}.</p>` +
-      `<p><a href="${acceptUrl}" style="display:inline-block;padding:10px 18px;background:#0891b2;color:white;border-radius:8px;text-decoration:none">Accept invitation</a></p>` +
-      `<p style="color:#666;font-size:12px">Valid for ${INVITATION_TTL_DAYS} days. If you didn&rsquo;t expect this, ignore the email.</p>`,
+      validDays: String(INVITATION_TTL_DAYS),
+    },
   });
 
   await logAudit({
@@ -228,10 +222,6 @@ async function handleDELETE(req: NextRequest, props: Params) {
     userId: req.headers.get('x-user-id') ?? undefined,
   });
   return NextResponse.json({ ok: true });
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 }
 
 // Privileged writes are always audited (src/lib/audited-action.ts).
