@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 /**
- * GET  /api/school-bus/allocations?tenantId=X&routeId=X&studentId=X&status=ACTIVE
+ * GET  /api/school-bus/allocations?routeId=X&studentId=X&status=ACTIVE
  *   Returns seat allocations (student-to-route assignments) with current capacity checks.
  *
  * POST /api/school-bus/allocations
@@ -43,7 +43,6 @@ export async function GET(req: NextRequest) {
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
         const sp        = new URL(req.url).searchParams;
-        const tenantId  = sp.get('tenantId')  ?? 'default';
         const routeId   = sp.get('routeId')   ?? '';
         const studentId = sp.get('studentId') ?? '';
         const status    = sp.get('status')    ?? '';
@@ -110,7 +109,6 @@ export async function POST(req: NextRequest) {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const {
-          tenantId = 'default',
           studentName, studentGrade, studentSection, studentEmiratesId,
           parentName, parentPhone, parentEmail,
           routeId, routeName,

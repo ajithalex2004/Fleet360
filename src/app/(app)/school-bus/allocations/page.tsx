@@ -38,7 +38,6 @@ interface AllocSummary {
   dropOnly: number;
 }
 
-const TENANTID = 'default';
 
 const BUS_MODES = ['TWO_WAY', 'ONE_WAY_PICKUP', 'ONE_WAY_DROP'];
 const STATUSES  = ['ACTIVE', 'SUSPENDED', 'PENDING_APPROVAL', 'WITHDRAWN'];
@@ -359,7 +358,7 @@ export default function AllocationsPage() {
   const fetch_ = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ tenantId: TENANTID });
+      const params = new URLSearchParams();
       if (filterStatus) params.set('status', filterStatus);
       if (filterMode)   params.set('busMode', filterMode);
       if (search)       params.set('search', search);
@@ -378,7 +377,7 @@ export default function AllocationsPage() {
     const isEdit = !!editing;
     const url    = isEdit ? `/api/school-bus/allocations/${editing!.id}` : '/api/school-bus/allocations';
     const method = isEdit ? 'PATCH' : 'POST';
-    const body   = isEdit ? data : { ...data, tenantId: TENANTID };
+    const body   = data;
 
     const res = await fetch(url, {
       method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),

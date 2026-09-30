@@ -72,7 +72,6 @@ export async function POST(
     );
     if (!trip) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
 
-    const tenantId   = String(trip.tenant_id ?? 'default');
     const routeName  = String(trip.route_name ?? 'Unknown Route');
     const tripCode   = String(trip.trip_code  ?? tripId);
     const now        = new Date().toISOString();

@@ -25,7 +25,6 @@ export async function GET(req: NextRequest) {
 
   const sp = new URL(req.url).searchParams;
   const params = new URLSearchParams({ module: 'SCHOOL_BUS' });
-  if (sp.get('tenantId')) params.set('tenantId', sp.get('tenantId')!);
   if (sp.get('status'))   params.set('status',   sp.get('status')!);
   if (sp.get('search'))   params.set('q',         sp.get('search')!);
   return NextResponse.redirect(

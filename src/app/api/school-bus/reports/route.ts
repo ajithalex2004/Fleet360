@@ -7,7 +7,6 @@ export const dynamic = 'force-dynamic';
  *   overview, routeUtilization, tripEfficiency, areaDistribution, feeAnalysis
  *
  * Query params:
- *   tenantId  string — defaults to 'default'
  *   months    number — revenue look-back window (default 1)
  */
 import { NextRequest, NextResponse } from 'next/server';
@@ -52,8 +51,6 @@ export async function GET(req: NextRequest) {
   const { tenantId } = authz;
 
   try {
-    const sp       = new URL(req.url).searchParams;
-    const tenantId = sp.get('tenantId') ?? 'default';
 
     /* ── 1. ROUTES ─────────────────────────────────────────────── */
     const routes = await q<Row>(`

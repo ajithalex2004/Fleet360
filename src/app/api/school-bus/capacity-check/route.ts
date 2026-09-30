@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 /**
- * GET /api/school-bus/capacity-check?tenantId=X
+ * GET /api/school-bus/capacity-check
  *
  * Returns capacity guard status for all active school bus routes.
  * Cross-references:
@@ -28,8 +28,6 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        const sp       = new URL(req.url).searchParams;
-        const tenantId = sp.get('tenantId') ?? 'default';
 
         type CapRow = Row & { route_id: string; route_name: string; seat_capacity: number; enrolled: bigint };
 

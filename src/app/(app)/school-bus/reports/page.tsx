@@ -859,7 +859,7 @@ export default function SchoolBusReportsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res  = await fetch('/api/school-bus/reports?tenantId=default');
+      const res  = await fetch('/api/school-bus/reports');
       const json = await res.json();
       if (json.error) { setError(json.error); return; }
       setData(json as ReportData);

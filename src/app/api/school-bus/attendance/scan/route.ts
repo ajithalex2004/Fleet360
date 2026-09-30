@@ -157,7 +157,7 @@ export async function POST(req: NextRequest) {
              lat, lng, stop_name, student_id, student_name, description, metadata)
           VALUES ($1, $2::uuid, $3, NOW(), $4, $5, $6, $7::uuid, $8, $9, $10::jsonb)
         `,
-          trip.tenant_id ?? 'default', tripId, scanType,
+          tenantId, tripId, scanType,
           body?.lat ?? null, body?.lng ?? null, stopName,
           student.id, `${student.first_name} ${student.last_name}`,
           `Scan via ${rfidCard ? 'RFID' : 'CODE'} by ${scannedBy ?? 'attendant'}`,

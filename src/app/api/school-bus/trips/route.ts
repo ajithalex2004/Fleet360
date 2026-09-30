@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 /**
- * GET  /api/school-bus/trips?tenantId=X&date=YYYY-MM-DD&status=X&routeId=X
+ * GET  /api/school-bus/trips?date=YYYY-MM-DD&status=X&routeId=X
  *   Returns trip records (today's by default).
  *
  * POST /api/school-bus/trips
@@ -38,7 +38,6 @@ export async function GET(req: NextRequest) {
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
         const sp       = new URL(req.url).searchParams;
-        const tenantId = sp.get('tenantId') ?? 'default';
         const date     = sp.get('date')     ?? new Date().toISOString().slice(0, 10);
         const status   = sp.get('status')   ?? '';
         const routeId  = sp.get('routeId')  ?? '';
@@ -99,7 +98,7 @@ export async function POST(req: NextRequest) {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const {
-          tenantId = 'default', routeId, routeName, routeCode,
+          routeId, routeName, routeCode,
           vehicleId, vehiclePlate, driverId, driverName, attendantId, attendantName,
           direction = 'PICKUP', session = 'MORNING',
           scheduledDate, scheduledStart,

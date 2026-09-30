@@ -35,7 +35,6 @@ export async function GET(req: NextRequest) {
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
         const sp       = new URL(req.url).searchParams;
-        const tenantId = sp.get('tenantId') ?? '';
         const status   = sp.get('status')   ?? '';
         const search   = sp.get('search')   ?? '';
         const routeId  = sp.get('routeId')  ?? '';
@@ -94,7 +93,7 @@ export async function POST(req: NextRequest) {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const {
-          tenantId = 'default', firstName, lastName, gender = 'Female',
+          firstName, lastName, gender = 'Female',
           nationality, phone, email, emiratesId, emiratesIdExpiry,
           certificationNo, certificationExpiry, routeId, routeName,
           assignedVehicleId, joiningDate, notes,

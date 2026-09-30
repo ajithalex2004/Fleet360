@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 /**
- * GET  /api/school-bus/driver-scores?tenantId=X&period=YYYY-MM
+ * GET  /api/school-bus/driver-scores?period=YYYY-MM
  *   Returns the RAG (Red/Amber/Green) safety scores for all school bus drivers
  *   for the given month. Aggregates from school_bus_trip_events.
  *
@@ -74,7 +74,6 @@ export async function GET(req: NextRequest) {
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
         const sp       = new URL(req.url).searchParams;
-        const tenantId = sp.get('tenantId') ?? 'default';
         const period   = sp.get('period')   ?? new Date().toISOString().slice(0, 7);
         const ragStatus= sp.get('ragStatus') ?? '';
 
@@ -191,7 +190,7 @@ export async function POST(req: NextRequest) {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const {
-          tenantId = 'default', driverId, driverName, period,
+          driverId, driverName, period,
           tripsTotal = 0, tripsCompleted = 0, totalDistanceKm = 0, totalStudents = 0,
           speedingEvents = 0, harshBraking = 0, geofenceExits = 0, incidents = 0, lateDepartures = 0,
           manualOverride = false, overrideReason, overrideBy, notes,
