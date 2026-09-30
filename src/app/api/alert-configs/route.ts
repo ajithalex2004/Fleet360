@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { withAuditedAction } from '@/lib/audited-action';
+import { parseAlertConfigInput } from '@/lib/alerts/alert-config';
 export async function GET(req: NextRequest) {
 
     const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -39,21 +40,25 @@ async function handlePOST(request: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-            const body = await request.json();
+            const input = parseAlertConfigInput(stripTenantOwnershipFields(await request.json().catch(() => null)), false);
+            if (!input.ok) return NextResponse.json({ error: input.error }, { status: 400 });
+            const d = input.data;
 
+            // Saved under the signed-in tenant. This used tenantId '' (a
+            // leftover TODO), which row level security refuses, so no rule
+            // could ever be created.
             const config = await tx.alertConfig.create({
                 data: {
-                    // TODO: read tenantId from request headers via getTenantContext()
-                    tenantId: '',
-                    alertFor: body.alertFor || body.alert_for,
-                    alertType: body.alertType || body.alert_type,
-                    frequency: body.frequency,
-                    frequencyValue: body.frequencyValue != null ? BigInt(body.frequencyValue) : null,
-                    dueAlertThreshold: body.dueAlertThreshold || body.due_alert_threshold,
-                    thresholdValue: body.thresholdValue != null ? BigInt(body.thresholdValue) : null,
-                    notificationEnabled: body.notificationEnabled ?? body.notification_enabled ?? false,
-                    whatsappEnabled: body.whatsappEnabled ?? body.whatsapp_enabled ?? false,
-                    assignedIds: body.assignedIds || body.assigned_ids || [],
+                    tenantId,
+                    alertFor:            d.alertFor,
+                    alertType:           d.alertType,
+                    frequency:           d.frequency,
+                    frequencyValue:      BigInt(d.frequencyValue!),
+                    dueAlertThreshold:   d.dueAlertThreshold,
+                    thresholdValue:      BigInt(d.thresholdValue!),
+                    notificationEnabled: d.notificationEnabled,
+                    whatsappEnabled:     d.whatsappEnabled,
+                    assignedIds:         [],
                 }
             });
 

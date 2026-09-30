@@ -5,6 +5,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { parsePmPlanInput } from '@/lib/maintenance/pm-plan';
 export async function GET(
     _request: NextRequest,
     props: { params: Promise<{ id: string }> },
@@ -23,7 +24,7 @@ export async function GET(
                 where: { id: params.id },
                 include: { triggers: true },
             });
-            if (!plan) {
+            if (!plan || plan.deletedAt) {
                 return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
             }
             return NextResponse.json(JSON.parse(JSON.stringify(plan)));
@@ -52,35 +53,20 @@ export async function PUT(
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-            const body = await request.json();
+            const input = parsePmPlanInput(stripTenantOwnershipFields(await request.json().catch(() => null)), true);
+            if (!input.ok) return NextResponse.json({ error: input.error }, { status: 400 });
+            const { triggers, ...fields } = input.data;
 
-            // Replace triggers: delete existing, re-create from body
+            // RLS scopes the lookup: another tenant's plan is simply not found.
+            const existing = await tx.maintenancePlan.findFirst({ where: { id: params.id, deletedAt: null }, select: { id: true } });
+            if (!existing) return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
+
+            // Triggers sent replace the plan's triggers; absent, they are kept.
             const plan = await tx.maintenancePlan.update({
                 where: { id: params.id },
                 data: {
-                    name:             body.name,
-                    description:      body.description,
-                    maintenanceType:  body.maintenanceType,
-                    applicability:    body.applicability,
-                    gracePeriodDays:  body.gracePeriodDays,
-                    earlyWindowDays:  body.earlyWindowDays,
-                    earlyWindowKm:    body.earlyWindowKm,
-                    isActive:         body.isActive,
-                    notifyDaysBefore: body.notifyDaysBefore,
-                    ...(body.triggers !== undefined ? {
-                        triggers: {
-                            deleteMany: {},
-                            create: body.triggers.map((t: {
-                                triggerType: string;
-                                intervalValue: number;
-                                intervalUnit: string;
-                            }) => ({
-                                triggerType:   t.triggerType,
-                                intervalValue: t.intervalValue,
-                                intervalUnit:  t.intervalUnit,
-                            })),
-                        },
-                    } : {}),
+                    ...fields,
+                    ...(triggers !== undefined ? { triggers: { deleteMany: {}, create: triggers } } : {}),
                 },
                 include: { triggers: true },
             });
@@ -111,6 +97,8 @@ export async function DELETE(
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
+            const existing = await tx.maintenancePlan.findFirst({ where: { id: params.id, deletedAt: null }, select: { id: true } });
+            if (!existing) return NextResponse.json({ error: 'Plan not found' }, { status: 404 });
             await tx.maintenancePlan.update({
                 where: { id: params.id },
                 data:  { deletedAt: new Date() },

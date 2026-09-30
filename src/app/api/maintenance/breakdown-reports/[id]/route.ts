@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { runAsTenant } from '@/lib/rls-scope';
 import { publishRecoveryCompleted } from '@/lib/maintenance/publish-event';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
@@ -66,7 +67,8 @@ export async function PATCH(
     }
     const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  const pending: { publish: (() => Promise<unknown>) | null } = { publish: null };
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
     try {
             const { id } = params;
             const body   = await request.json();
@@ -124,13 +126,13 @@ export async function PATCH(
 
             // Publish RecoveryCompleted when vehicle reaches workshop
             if (newStatus === 'RECOVERY_COMPLETED') {
-                publishRecoveryCompleted(id, updated.tenantId, {
+                pending.publish = () => publishRecoveryCompleted(id, updated.tenantId, {
                     reportId:             id,
                     vehicleId:            updated.vehicleId ?? '',
                     tenantId:             updated.tenantId,
                     maintenanceRequestId: updated.maintenanceRequestId,
                     completedAt:          now.toISOString(),
-                }).catch(err => console.warn('[maintenance] recovery_completed publish failed:', err));
+                });
             }
 
             return NextResponse.json(JSON.parse(JSON.stringify(updated)));
@@ -142,5 +144,13 @@ export async function PATCH(
             );
         }
   });
+  // Published after the transaction commits, as the tenant, so a slow or
+  // failing publish can't touch the closed transaction.
+  const publish = pending.publish;
+  if (publish) {
+    void runAsTenant(tenantId, publish)
+      .catch(err => console.warn('[maintenance] breakdown event publish failed:', err));
+  }
+  return response;
 }
 

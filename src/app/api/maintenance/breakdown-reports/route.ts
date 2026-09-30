@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { runAsTenant } from '@/lib/rls-scope';
 import { publishBreakdownReported } from '@/lib/maintenance/publish-event';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
@@ -96,7 +97,8 @@ export async function POST(request: NextRequest) {
     }
     const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  const pending: { publish: (() => Promise<unknown>) | null } = { publish: null };
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
     try {
             const bodyRaw = await request.json();
             const body = stripTenantOwnershipFields(bodyRaw);
@@ -104,6 +106,13 @@ export async function POST(request: NextRequest) {
             if (!body.vehicleId) {
                 return NextResponse.json({ error: 'vehicleId is required' }, { status: 400 });
             }
+
+            // The vehicle must be one of this tenant's (RLS scopes the lookup).
+            const vehicle = await tx.vehicle.findFirst({
+                where: { id: String(body.vehicleId), deletedAt: null },
+                select: { id: true },
+            });
+            if (!vehicle) return NextResponse.json({ error: 'Vehicle not found' }, { status: 404 });
 
             // The authenticated tenantId from authz above is used as-is. This
             // line previously read `const tenantId = body.tenantId ?? ''`,
@@ -160,7 +169,7 @@ export async function POST(request: NextRequest) {
             });
 
             // Publish event (fire-and-forget)
-            publishBreakdownReported(linked.id, tenantId, {
+            pending.publish = () => publishBreakdownReported(linked.id, tenantId, {
                 reportId:             linked.id,
                 reportNo:             linked.reportNo,
                 vehicleId:            linked.vehicleId ?? '',
@@ -171,7 +180,7 @@ export async function POST(request: NextRequest) {
                 location:             linked.location,
                 reportedAt:           linked.reportedAt.toISOString(),
                 maintenanceRequestId: linked.maintenanceRequestId,
-            }).catch(err => console.warn('[maintenance] breakdown_reported publish failed:', err));
+            });
 
             return NextResponse.json(JSON.parse(JSON.stringify(linked)), { status: 201 });
             } catch (e) {
@@ -182,5 +191,13 @@ export async function POST(request: NextRequest) {
             );
         }
   });
+  // Published after the transaction commits, as the tenant, so a slow or
+  // failing publish can't touch the closed transaction.
+  const publish = pending.publish;
+  if (publish) {
+    void runAsTenant(tenantId, publish)
+      .catch(err => console.warn('[maintenance] breakdown event publish failed:', err));
+  }
+  return response;
 }
 
