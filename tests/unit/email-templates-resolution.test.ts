@@ -86,4 +86,34 @@ describe('renderEmail', () => {
     expect(lookup[0]).toContain('(tenant_id = $3 OR tenant_id IS NULL)');
     expect(lookup.slice(1)).toEqual(['workflow.approval_request', 'en', TENANT]);
   });
+
+  it('a platform-only email ignores tenant wording and carries the platform name', async () => {
+    const key = 'platform.billing_trial_ending';
+    state.rows = [
+      { tenant_id: TENANT, template_key: key, locale: 'en', subject: 'Tenant edit', body: 't', version: 1 },
+      { tenant_id: null, template_key: key, locale: 'en', subject: 'Platform {{tenantName}}', body: 'p', version: 1 },
+    ];
+    const r = await renderEmail({ tenantId: TENANT, key, values: { tenantName: 'Acme Fleet' } });
+    expect([r.source, r.subject]).toEqual(['platform', 'Platform Acme Fleet']);
+    expect(r.html).toContain('Fleet360');
+    expect(r.html).not.toContain('#0f766e');
+    state.rows = [];
+    const d = await renderEmail({ tenantId: TENANT, key, values: { tenantName: 'Acme Fleet' } });
+    expect(d.subject).toBe('Fleet360 - Your trial for Acme Fleet ends soon');
+  });
+
+  it('a bilingual email renders both languages, each from its own wording and values', async () => {
+    const key = 'finance.dunning_reminder';
+    state.language = 'ar';
+    state.rows = [{ tenant_id: TENANT, template_key: key, locale: 'ar', subject: 'تذكير خاص {{invoiceNo}}', body: 'نص {{productName}}', version: 1 }];
+    const r = await renderEmail({
+      tenantId: TENANT, key,
+      values: (l) => ({ invoiceNo: 'INV-7', productName: l === 'ar' ? 'إيجار' : 'Lease' }),
+    });
+    expect(r.subject).toBe('تذكير خاص INV-7 / Payment Reminder - INV-7');
+    expect(r.source).toBe('tenant');
+    expect(r.text).toContain('نص إيجار');
+    expect(r.text).toContain('Lease invoice **INV-7**'.replace(/\*\*/g, ''));
+    expect(r.text).toContain('Dear Valued Customer');
+  });
 });

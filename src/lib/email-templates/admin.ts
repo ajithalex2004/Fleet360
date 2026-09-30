@@ -12,9 +12,13 @@ import { getTemplateDef, isEmailLocale, type EmailLocale, type EmailTemplateDef 
 
 export type TemplateScope = 'tenant' | 'platform';
 
-export function templateFor(key: string): EmailTemplateDef | NextResponse {
-  return getTemplateDef(decodeURIComponent(key))
-    ?? NextResponse.json({ error: 'Unknown email template' }, { status: 404 });
+/** The template a request names; platform-only ones exist only for platform administrators. */
+export function templateFor(key: string, headers: Headers): EmailTemplateDef | NextResponse {
+  const def = getTemplateDef(decodeURIComponent(key));
+  if (!def || (def.platformOnly && !isSuperAdmin(headers))) {
+    return NextResponse.json({ error: 'Unknown email template' }, { status: 404 });
+  }
+  return def;
 }
 
 export function localeFrom(value: unknown): EmailLocale | NextResponse {
@@ -28,9 +32,12 @@ export function localeFrom(value: unknown): EmailLocale | NextResponse {
  * default (platform administrators only). `run` executes the storage call in
  * the matching database context.
  */
-export function scopeFor(headers: Headers, tenantId: string, scope: unknown):
+export function scopeFor(headers: Headers, tenantId: string, scope: unknown, def?: EmailTemplateDef):
   | { owner: string | null; run: <T>(fn: () => Promise<T>) => Promise<T> }
   | NextResponse {
+  if (def?.platformOnly && scope !== 'platform') {
+    return NextResponse.json({ error: 'This email is sent by the platform: edit it as the platform default (scope=platform).' }, { status: 400 });
+  }
   if (scope === 'platform') {
     if (!isSuperAdmin(headers)) {
       return NextResponse.json({ error: 'Only a platform administrator can change the platform defaults.' }, { status: 403 });

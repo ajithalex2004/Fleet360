@@ -4,24 +4,17 @@
  *
  * Recipient is resolved via getTenantBilling(tenantId).billingEmail (which
  * falls back to tenants.contact_email). No-ops cleanly when no email is
- * available or SendGrid isn't configured.
+ * available or no email transport is configured.
+ *
+ * Wording: the platform-only email templates (Admin > Email templates >
+ * Platform billing, editable by platform administrators only), in the
+ * tenant's language, carrying the platform's name.
  */
 
 import type Stripe from 'stripe';
-import { sendEmail } from '@/lib/email';
+import { appUrl, sendTemplatedEmail } from '@/lib/email-templates';
 import { getTenantBilling } from '@/lib/billing';
 import { prisma } from '@/lib/prisma';
-
-const APP = 'Fleet360';
-
-function appUrl(path = ''): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-  return base.replace(/\/$/, '') + path;
-}
-
-function escape(s: string): string {
-  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
-}
 
 async function tenantInfo(stripeCustomerId: string | null): Promise<{
   tenantId: string; tenantName: string; billingEmail: string | null;
@@ -48,36 +41,15 @@ export async function emailPaymentFailed(invoice: Stripe.Invoice): Promise<void>
   const info = await tenantInfo(customerId);
   if (!info?.billingEmail) return;
 
-  const amount = (invoice.amount_due / 100).toFixed(2);
-  const currency = invoice.currency.toUpperCase();
   const updateUrl = appUrl('/admin/subscription/upgrade');
-  const hosted = invoice.hosted_invoice_url ?? null;
-
-  await sendEmail({
-    to: info.billingEmail,
-    subject: `${APP} — Payment failed for ${info.tenantName}`,
-    text: [
-      `Hi,`,
-      ``,
-      `We weren't able to process your most recent ${APP} subscription payment` +
-      ` (${amount} ${currency}) for ${info.tenantName}.`,
-      ``,
-      `Please update your payment method here:`,
+  await sendTemplatedEmail({
+    tenantId: info.tenantId, key: 'platform.billing_payment_failed', to: info.billingEmail,
+    values: {
+      tenantName: info.tenantName,
+      amount: `${(invoice.amount_due / 100).toFixed(2)} ${invoice.currency.toUpperCase()}`,
       updateUrl,
-      hosted ? `\nView the invoice: ${hosted}` : '',
-      ``,
-      `Stripe will retry the charge automatically over the next few days.` +
-      ` Until it succeeds, your subscription remains active but at risk of cancellation.`,
-      ``,
-      `— ${APP}`,
-    ].filter(Boolean).join('\n'),
-    html:
-      `<p>Hi,</p>` +
-      `<p>We couldn't process your most recent ${escape(APP)} subscription payment ` +
-      `(<strong>${escape(amount)} ${escape(currency)}</strong>) for <strong>${escape(info.tenantName)}</strong>.</p>` +
-      `<p><a href="${updateUrl}" style="display:inline-block;padding:10px 18px;background:#dc2626;color:#fff;border-radius:8px;text-decoration:none">Update payment method</a></p>` +
-      (hosted ? `<p style="color:#666;font-size:12px">Or view the invoice: <a href="${hosted}">${escape(hosted)}</a></p>` : '') +
-      `<p style="color:#666;font-size:12px">Stripe will retry the charge automatically over the next few days. Until it succeeds, your subscription stays active but at risk of cancellation.</p>`,
+      invoiceUrl: invoice.hosted_invoice_url ?? appUrl('/admin/billing'),
+    },
   });
 }
 
@@ -87,29 +59,15 @@ export async function emailTrialEnding(sub: Stripe.Subscription): Promise<void> 
   if (!info?.billingEmail) return;
 
   const trialEnd = sub.trial_end ? new Date(sub.trial_end * 1000) : null;
-  const upgradeUrl = appUrl('/admin/subscription/upgrade');
-
-  await sendEmail({
-    to: info.billingEmail,
-    subject: `${APP} — Your trial for ${info.tenantName} ends soon`,
-    text: [
-      `Hi,`,
-      ``,
-      `Your ${APP} trial for ${info.tenantName} ends ${trialEnd ? `on ${trialEnd.toDateString()}` : 'soon'}.`,
-      ``,
-      `Pick a plan to keep your team running without interruption:`,
-      upgradeUrl,
-      ``,
-      `If you do nothing, the trial will expire and your subscription will be canceled.`,
-      ``,
-      `— ${APP}`,
-    ].join('\n'),
-    html:
-      `<p>Hi,</p>` +
-      `<p>Your ${escape(APP)} trial for <strong>${escape(info.tenantName)}</strong> ends ` +
-      `${trialEnd ? `on <strong>${escape(trialEnd.toDateString())}</strong>` : 'soon'}.</p>` +
-      `<p><a href="${upgradeUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#fff;border-radius:8px;text-decoration:none">Pick a plan</a></p>` +
-      `<p style="color:#666;font-size:12px">If you do nothing, the trial will expire and your subscription will be canceled.</p>`,
+  await sendTemplatedEmail({
+    tenantId: info.tenantId, key: 'platform.billing_trial_ending', to: info.billingEmail,
+    values: (locale) => ({
+      tenantName: info.tenantName,
+      trialEndDate: trialEnd
+        ? trialEnd.toLocaleDateString(locale === 'ar' ? 'ar-AE' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+        : (locale === 'ar' ? 'قريباً' : 'soon'),
+      upgradeUrl: appUrl('/admin/subscription/upgrade'),
+    }),
   });
 }
 
@@ -118,29 +76,8 @@ export async function emailSubscriptionCanceled(sub: Stripe.Subscription): Promi
   const info = await tenantInfo(customerId);
   if (!info?.billingEmail) return;
 
-  const upgradeUrl = appUrl('/admin/subscription/upgrade');
-
-  await sendEmail({
-    to: info.billingEmail,
-    subject: `${APP} — Subscription canceled for ${info.tenantName}`,
-    text: [
-      `Hi,`,
-      ``,
-      `Your ${APP} subscription for ${info.tenantName} has been canceled.` +
-      ` You've been moved to the read-only TRIAL plan.`,
-      ``,
-      `Want to come back? Reactivate any time:`,
-      upgradeUrl,
-      ``,
-      `Your data stays put for 30 days while you decide.`,
-      ``,
-      `— ${APP}`,
-    ].join('\n'),
-    html:
-      `<p>Hi,</p>` +
-      `<p>Your ${escape(APP)} subscription for <strong>${escape(info.tenantName)}</strong> has been canceled.` +
-      ` You've been moved to the read-only TRIAL plan.</p>` +
-      `<p><a href="${upgradeUrl}" style="display:inline-block;padding:10px 18px;background:#2563eb;color:#fff;border-radius:8px;text-decoration:none">Reactivate</a></p>` +
-      `<p style="color:#666;font-size:12px">Your data stays put for 30 days while you decide.</p>`,
+  await sendTemplatedEmail({
+    tenantId: info.tenantId, key: 'platform.billing_subscription_canceled', to: info.billingEmail,
+    values: { tenantName: info.tenantName, reactivateUrl: appUrl('/admin/subscription/upgrade') },
   });
 }

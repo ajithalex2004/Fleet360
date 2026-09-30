@@ -26,12 +26,12 @@ async function handlePUT(req: NextRequest, props: Ctx) {
   }
   const { tenantId } = authz;
 
-  const def = templateFor((await props.params).key);
+  const def = templateFor((await props.params).key, req.headers);
   if (def instanceof NextResponse) return def;
   const body = await req.json().catch(() => ({}));
   const locale = localeFrom(body.locale);
   if (locale instanceof NextResponse) return locale;
-  const scope = scopeFor(req.headers, tenantId, body.scope);
+  const scope = scopeFor(req.headers, tenantId, body.scope, def);
   if (scope instanceof NextResponse) return scope;
 
   const subject = typeof body.subject === 'string' ? body.subject : '';
@@ -58,11 +58,11 @@ async function handleDELETE(req: NextRequest, props: Ctx) {
   }
   const { tenantId } = authz;
 
-  const def = templateFor((await props.params).key);
+  const def = templateFor((await props.params).key, req.headers);
   if (def instanceof NextResponse) return def;
   const locale = localeFrom(req.nextUrl.searchParams.get('locale'));
   if (locale instanceof NextResponse) return locale;
-  const scope = scopeFor(req.headers, tenantId, req.nextUrl.searchParams.get('scope') ?? undefined);
+  const scope = scopeFor(req.headers, tenantId, req.nextUrl.searchParams.get('scope') ?? undefined, def);
   if (scope instanceof NextResponse) return scope;
 
   try {

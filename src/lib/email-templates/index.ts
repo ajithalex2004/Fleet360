@@ -26,7 +26,7 @@ import type { EmailSendResult } from '@/lib/email';
 import {
   getTemplateDef, templateVariables, type EmailLocale, type EmailTemplateDef,
 } from './catalogue';
-import { renderEmailContent, type EmailBlock, type RenderedEmail } from './render';
+import { renderBilingualEmailContent, renderEmailContent, type EmailBlock, type RenderedEmail } from './render';
 
 export interface TemplateRow {
   id: string;
@@ -104,47 +104,101 @@ function withFallbacks(def: EmailTemplateDef, locale: EmailLocale, values: Recor
 
 export type TemplateSource = 'override' | 'tenant' | 'platform' | 'default';
 
-/**
- * Renders an email for `tenantId`. `values` fill the template's variables
- * (companyName is added from the tenant); `blocks` are its block variables.
- */
-export async function renderEmail(args: {
-  tenantId: string;
-  key: string;
-  values: Record<string, string>;
-  blocks?: Record<string, EmailBlock>;
+/** The platform's own name, on emails the platform sends to tenants. */
+export const PLATFORM_NAME = process.env.NEXT_PUBLIC_APP_NAME || 'Fleet360';
+
+type PerLocale<T> = T | ((locale: EmailLocale) => T);
+const forLocale = <T>(v: PerLocale<T>, locale: EmailLocale): T =>
+  typeof v === 'function' ? (v as (l: EmailLocale) => T)(locale) : v;
+
+/** The saved or built-in wording of one template in one language. */
+async function wordingFor(def: EmailTemplateDef, tenantId: string, locale: EmailLocale) {
+  let saved: TemplateRow | null = null;
+  let source: TemplateSource = 'default' as TemplateSource;
+  try {
+    const rows = await findTemplateRows(tenantId, def.key, locale);
+    // A tenant's own row never applies to a platform-only email.
+    saved = (def.platformOnly ? null : rows.tenant) ?? rows.platform;
+    if (saved) source = saved === rows.tenant ? 'tenant' : 'platform';
+  } catch (e) {
+    console.error(`[email-templates] could not load ${def.key}; using built-in wording:`, e instanceof Error ? e.message : e);
+  }
+  return {
+    subject: saved?.subject ?? def.defaults[locale].subject,
+    body: saved?.body ?? def.defaults[locale].body,
+    source,
+  };
+}
+
+export type RenderArgs = {
+  values: PerLocale<Record<string, string>>;
+  blocks?: PerLocale<Record<string, EmailBlock>>;
   override?: { subject?: string | null; body?: string | null };
-  locale?: EmailLocale;
-  context?: TenantEmailContext;
-}): Promise<RenderedEmail & { locale: EmailLocale; source: TemplateSource }> {
+};
+export type LoadedTemplate = {
+  locale: EmailLocale;
+  /** Renders with no database access (safe inside a transaction). */
+  render: (args: RenderArgs) => RenderedEmail & { locale: EmailLocale; source: TemplateSource };
+};
+
+/**
+ * Loads a template's wording and the tenant's name, language and branding,
+ * and returns a renderer that needs no database access, for callers that
+ * must render inside a transaction (dunning notices record the exact email
+ * as evidence before sending it). `values` fill the variables (companyName
+ * is added: the tenant's name, or the platform's for a platform-only
+ * email); `blocks` are block variables. Either may be a function of the
+ * language (a bilingual email renders each language from its own values).
+ */
+export async function loadEmailTemplate(args: {
+  tenantId: string; key: string; locale?: EmailLocale; context?: TenantEmailContext;
+}): Promise<LoadedTemplate> {
   const def = getTemplateDef(args.key);
   if (!def) throw new Error(`Unknown email template: ${args.key}`);
   const ctx = args.context ?? await tenantEmailContext(args.tenantId);
   const locale = args.locale ?? ctx.locale;
+  const companyName = def.platformOnly ? PLATFORM_NAME : ctx.companyName;
+  const branding = def.platformOnly
+    ? { companyName }
+    : { companyName, productName: ctx.productName, logoUrl: ctx.logoUrl, primaryColor: ctx.primaryColor };
+  const locales: EmailLocale[] = def.bilingual ? ['en', 'ar'] : [locale];
+  const wordings = Object.fromEntries(await Promise.all(
+    locales.map(async (l) => [l, await wordingFor(def, args.tenantId, l)] as const),
+  )) as Partial<Record<EmailLocale, Awaited<ReturnType<typeof wordingFor>>>>;
 
-  let saved: TemplateRow | null = null;
-  let source: TemplateSource = 'default';
-  try {
-    const rows = await findTemplateRows(args.tenantId, def.key, locale);
-    saved = rows.tenant ?? rows.platform;
-    if (saved) source = rows.tenant ? 'tenant' : 'platform';
-  } catch (e) {
-    console.error(`[email-templates] could not load ${def.key}; using built-in wording:`, e instanceof Error ? e.message : e);
-  }
-  let subject = saved?.subject ?? def.defaults[locale].subject;
-  let body = saved?.body ?? def.defaults[locale].body;
-  if (args.override?.subject?.trim()) { subject = args.override.subject; source = 'override'; }
-  if (args.override?.body?.trim()) { body = args.override.body; source = 'override'; }
+  const render = (r: RenderArgs) => {
+    const valuesFor = (l: EmailLocale) => withFallbacks(def, l, { companyName, ...forLocale(r.values, l) });
+    const blocksFor = (l: EmailLocale) => (r.blocks ? forLocale(r.blocks, l) : undefined);
+    if (def.bilingual) {
+      const en = wordings.en!, ar = wordings.ar!;
+      const rendered = renderBilingualEmailContent({
+        lead: locale,
+        sections: {
+          en: { subject: en.subject, body: en.body, values: valuesFor('en'), blocks: blocksFor('en') },
+          ar: { subject: ar.subject, body: ar.body, values: valuesFor('ar'), blocks: blocksFor('ar') },
+        },
+        branding,
+      });
+      return { ...rendered, locale, source: (locale === 'ar' ? ar : en).source };
+    }
+    let { subject, body, source } = wordings[locale]!;
+    if (r.override?.subject?.trim()) { subject = r.override.subject; source = 'override'; }
+    if (r.override?.body?.trim()) { body = r.override.body; source = 'override'; }
+    const rendered = renderEmailContent({ subject, body, values: valuesFor(locale), blocks: blocksFor(locale), locale, branding });
+    return { ...rendered, locale, source };
+  };
+  return { locale, render };
+}
 
-  const values = withFallbacks(def, locale, { companyName: ctx.companyName, ...args.values });
-  const rendered = renderEmailContent({
-    subject, body, values, blocks: args.blocks, locale,
-    branding: {
-      companyName: values.companyName, productName: ctx.productName,
-      logoUrl: ctx.logoUrl, primaryColor: ctx.primaryColor,
-    },
-  });
-  return { ...rendered, locale, source };
+/** Loads and renders an email for `tenantId` in one step (see loadEmailTemplate). */
+export async function renderEmail(args: {
+  tenantId: string;
+  key: string;
+  locale?: EmailLocale;
+  context?: TenantEmailContext;
+} & RenderArgs): Promise<RenderedEmail & { locale: EmailLocale; source: TemplateSource }> {
+  const loaded = await loadEmailTemplate(args);
+  return loaded.render(args);
 }
 
 /** An absolute link into the app. */

@@ -15,10 +15,11 @@ interface Saved { subject: string; body: string; version: number; updatedBy: str
 interface Variable { name: string; description: string; sample: string; block?: boolean }
 interface TemplateInfo {
   key: string; module: string; name: string; description: string; variables: Variable[];
+  bilingual: boolean; platformOnly: boolean;
   entries: Record<Locale, { tenant: Saved | null; platform: Saved | null; builtIn: { subject: string; body: string } }>;
 }
 interface Branding { companyName: string; productName: string | null; logoUrl: string | null; primaryColor: string | null }
-interface ListResponse { canEditPlatform: boolean; defaultLocale: Locale; branding: Branding; templates: TemplateInfo[] }
+interface ListResponse { canEditPlatform: boolean; defaultLocale: Locale; branding: Branding; platformBranding: Branding; templates: TemplateInfo[] }
 interface Version { id: string; version: number; subject: string; body: string; savedBy: string | null; savedAt: string; reason: string }
 
 const LOCALE_LABEL: Record<Locale, string> = { en: 'English', ar: 'العربية' };
@@ -62,8 +63,10 @@ export default function EmailTemplatesPage() {
   useEffect(() => { load(); }, [load]);
 
   const template = useMemo(() => data?.templates.find((t) => t.key === selectedKey) ?? null, [data, selectedKey]);
-  const current = template ? effective(template, locale, scope) : null;
-  const hasOwn = template ? Boolean(scope === 'tenant' ? template.entries[locale].tenant : template.entries[locale].platform) : false;
+  // Emails the platform sends to tenants only have a platform version.
+  const editScope: Scope = template?.platformOnly ? 'platform' : scope;
+  const current = template ? effective(template, locale, editScope) : null;
+  const hasOwn = template ? Boolean(editScope === 'tenant' ? template.entries[locale].tenant : template.entries[locale].platform) : false;
   const dirty = current ? subject !== current.subject || body !== current.body : false;
 
   // Load the effective wording whenever the template, language or scope changes.
@@ -74,14 +77,15 @@ export default function EmailTemplatesPage() {
     setVersions(null);
     setMessage(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedKey, locale, scope, data]);
+  }, [selectedKey, locale, editScope, data]);
 
   // Live preview, rendered here with the same code the server sends with.
   const preview = useMemo(() => {
     if (!template || !data) return null;
-    const { values, blocks } = sampleValues(template.variables, data.branding.companyName);
+    const branding = template.platformOnly ? data.platformBranding : data.branding;
+    const { values, blocks } = sampleValues(template.variables, branding.companyName);
     return {
-      ...renderEmailContent({ subject, body, values, blocks, locale, branding: data.branding }),
+      ...renderEmailContent({ subject, body, values, blocks, locale, branding }),
       errors: validateTemplate({ subject, body }, template.variables),
     };
   }, [template, data, subject, body, locale]);
@@ -115,21 +119,21 @@ export default function EmailTemplatesPage() {
   const save = async () => {
     if (await call(() => fetch(url(), {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ locale, scope, subject, body }),
+      body: JSON.stringify({ locale, scope: editScope, subject, body }),
     }), 'Saved.')) await load();
   };
   const reset = async () => {
-    if (!confirm(scope === 'platform'
+    if (!confirm(editScope === 'platform'
       ? 'Remove the platform default? Tenants without their own wording go back to the built-in text.'
       : 'Go back to the default wording? Your current version is kept in History.')) return;
-    if (await call(() => fetch(url(`?locale=${locale}&scope=${scope}`), { method: 'DELETE' }), 'Back to the default wording.')) await load();
+    if (await call(() => fetch(url(`?locale=${locale}&scope=${editScope}`), { method: 'DELETE' }), 'Back to the default wording.')) await load();
   };
   const sendTest = () => call(() => fetch(url('/test'), {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ locale, subject, body }),
   }), 'Test email sent to {to}.');
   const loadVersions = async () => {
-    const res = await fetch(url(`/versions?locale=${locale}&scope=${scope}`));
+    const res = await fetch(url(`/versions?locale=${locale}&scope=${editScope}`));
     setVersions(res.ok ? await res.json() : []);
   };
 
@@ -177,6 +181,16 @@ export default function EmailTemplatesPage() {
               <div>
                 <h2 className="text-[var(--text-main)] font-semibold">{template.name}</h2>
                 <p className="text-xs text-[var(--text-muted)] mt-1">{template.description}</p>
+                {template.bilingual && (
+                  <p className="text-xs text-blue-300 bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-2 mt-2">
+                    Sent in English and Arabic together in one email (your company&apos;s language first). Edit each language here.
+                  </p>
+                )}
+                {template.platformOnly && (
+                  <p className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 mt-2">
+                    Sent by the platform to your customer companies. Only platform administrators see and edit it.
+                  </p>
+                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
@@ -186,7 +200,7 @@ export default function EmailTemplatesPage() {
                     {LOCALE_LABEL[l]}
                   </button>
                 ))}
-                {data.canEditPlatform && (
+                {data.canEditPlatform && !template.platformOnly && (
                   <select value={scope} onChange={(e) => setScope(e.target.value as Scope)}
                     className="ml-auto px-2 py-2 rounded-lg text-sm bg-[var(--bg-canvas)] border border-[var(--border-subtle)] text-[var(--text-main)]">
                     <option value="tenant">Editing: my company</option>

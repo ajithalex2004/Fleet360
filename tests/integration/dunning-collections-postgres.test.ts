@@ -45,8 +45,8 @@ const hasDb = Boolean(process.env.DATABASE_URL);
 // contacted. Real gate logic (isTransportAvailable, the dispatch switch,
 // the staging recipient override) all runs for real.
 const sendEmailMock = vi.hoisted(() => vi.fn());
-vi.mock('@/services/email/emailService', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/services/email/emailService')>();
+vi.mock('@/lib/email', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/email')>();
   return { ...actual, sendEmail: sendEmailMock };
 });
 
@@ -59,8 +59,9 @@ const contractA = crypto.randomUUID();
 let disabledIntegrationConfigId: string | null = null;
 const originalEnv = {
   DUNNING_DISPATCH_ENABLED: process.env.DUNNING_DISPATCH_ENABLED,
-  SMTP_HOST: process.env.SMTP_HOST,
-  SMTP_USER: process.env.SMTP_USER,
+  SENDGRID_API_KEY: process.env.SENDGRID_API_KEY,
+  EMAIL_FROM: process.env.EMAIL_FROM,
+  DISABLE_OUTBOUND_NOTIFICATIONS: process.env.DISABLE_OUTBOUND_NOTIFICATIONS,
   DUNNING_STAGING_RECIPIENT_OVERRIDE: process.env.DUNNING_STAGING_RECIPIENT_OVERRIDE,
   APP_ENV: process.env.APP_ENV,
 };
@@ -72,13 +73,16 @@ function resetEnv() {
   }
 }
 
+// The platform sender's transport check (isEmailTransportConfigured):
+// SendGrid settings make it available; the outbound kill switch closes it
+// whatever SMTP settings the database holds.
 function enableTransport() {
-  process.env.SMTP_HOST = 'smtp.dunning-test.local';
-  process.env.SMTP_USER = 'dunning-test';
+  delete process.env.DISABLE_OUTBOUND_NOTIFICATIONS;
+  process.env.SENDGRID_API_KEY = 'SG.dunning-test';
+  process.env.EMAIL_FROM = 'dunning-test@example.test';
 }
 function disableTransport() {
-  delete process.env.SMTP_HOST;
-  delete process.env.SMTP_USER;
+  process.env.DISABLE_OUTBOUND_NOTIFICATIONS = 'true';
 }
 
 function jobCtx(tenantId: string): JobContext {
@@ -201,7 +205,7 @@ describe.skipIf(!hasDb)('Dunning & Collections — PostgreSQL Integration', () =
 
     // IntegrationConfig is a global (non-tenant-scoped) table. If some
     // other suite/admin left an enabled EMAIL config, isTransportAvailable()
-    // would see a real transport regardless of the SMTP_HOST/SMTP_USER env
+    // would see a real transport regardless of the transport env
     // vars this suite controls — disable it for the duration, restore after.
     const existingEmailConfig = await basePrisma.integrationConfig.findFirst({ where: { type: 'EMAIL', isEnabled: true } });
     if (existingEmailConfig) {
@@ -295,7 +299,7 @@ describe.skipIf(!hasDb)('Dunning & Collections — PostgreSQL Integration', () =
     expect(attempt2?.attemptSeq).toBe(2); // occurrence sequencing advanced...
     // ...while send-attempt counting is still 0 going into the first real send.
 
-    sendEmailMock.mockResolvedValue({ status: 'SENT', id: 'msg-1' });
+    sendEmailMock.mockResolvedValue({ sent: true, id: 'msg-1' });
     const delivered2 = await deliverNextDunningEvent(tenantA, noticeId);
     expect(delivered2).toBe(true);
     expect(sendEmailMock).toHaveBeenCalledTimes(1);
@@ -324,7 +328,7 @@ describe.skipIf(!hasDb)('Dunning & Collections — PostgreSQL Integration', () =
     const reconResult = await runDunningReconciliation(jobCtx(tenantA));
     expect((reconResult.data as any).deferredRecovered).toBeGreaterThanOrEqual(1);
 
-    sendEmailMock.mockResolvedValue({ status: 'SENT', id: 'msg-2' });
+    sendEmailMock.mockResolvedValue({ sent: true, id: 'msg-2' });
     const delivered2 = await deliverNextDunningEvent(tenantA, noticeId);
     expect(delivered2).toBe(true);
     expect(sendEmailMock).toHaveBeenCalledTimes(1);
@@ -374,7 +378,7 @@ describe.skipIf(!hasDb)('Dunning & Collections — PostgreSQL Integration', () =
   it('4. Reach the send limit: no further automatic transport call occurs', async () => {
     process.env.DUNNING_DISPATCH_ENABLED = 'true';
     enableTransport();
-    sendEmailMock.mockResolvedValue({ status: 'FAILED', errorClass: 'DEFINITE_FAILURE', errorMessage: 'RCPT rejected' });
+    sendEmailMock.mockResolvedValue({ sent: false, reason: 'smtp_error', errorClass: 'DEFINITE_FAILURE', error: 'RCPT rejected' });
 
     const invoice = await withTenantRls(basePrisma, tenantA, (tx) => createInvoice(tx, { daysOverdue: 20, label: 'CAP' }));
     const { noticeId } = await withTenantRls(basePrisma, tenantA, (tx) => queueNotice(tx, invoice.id, 'REMINDER'));

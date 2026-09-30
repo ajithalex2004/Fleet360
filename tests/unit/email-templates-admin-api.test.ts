@@ -35,6 +35,7 @@ vi.mock('@/lib/email-templates', () => ({
   saveTemplate: async (args: Record<string, unknown>) => { state.saves.push({ ...args, acting: state.acting }); return { version: 1, updated_at: new Date() }; },
   resetTemplate: async (args: Record<string, unknown>) => { state.resets.push({ ...args, acting: state.acting }); return true; },
   tenantEmailContext: async () => ({ companyName: 'Acme', locale: 'en', productName: null, logoUrl: null, primaryColor: null }),
+  PLATFORM_NAME: 'Fleet360',
 }));
 
 import { PUT, DELETE } from '@/app/api/admin/email-templates/[key]/route';
@@ -89,5 +90,14 @@ describe('email templates admin API', () => {
     expect(res.status).toBe(200);
     expect(state.mails).toEqual([expect.objectContaining({ to: 'admin@a.test' })]);
     expect(String(state.mails[0].subject)).toMatch(/^\[Test\] Approve /);
+  });
+
+  it('keeps platform-only emails away from tenant admins and on the platform scope', async () => {
+    const key = 'platform.billing_payment_failed';
+    const body = { locale: 'en', subject: 'Payment failed {{tenantName}}', body: 'b', scope: 'platform' };
+    expect((await put(body, 'TENANT_ADMIN', key)).status).toBe(404);
+    expect((await put({ ...body, scope: 'tenant' }, 'SUPER_ADMIN', key)).status).toBe(400);
+    expect((await put(body, 'SUPER_ADMIN', key)).status).toBe(200);
+    expect(state.saves).toEqual([expect.objectContaining({ tenantId: null, key, acting: '*' })]);
   });
 });

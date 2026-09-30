@@ -12,7 +12,7 @@ import { sessionUser } from '@/lib/session-user';
 import { sendEmail } from '@/lib/email';
 import { templateVariables } from '@/lib/email-templates/catalogue';
 import { renderEmailContent, sampleValues, validateTemplate } from '@/lib/email-templates/render';
-import { tenantEmailContext } from '@/lib/email-templates';
+import { PLATFORM_NAME, tenantEmailContext } from '@/lib/email-templates';
 import { localeFrom, templateFor } from '@/lib/email-templates/admin';
 
 async function handlePOST(req: NextRequest, props: { params: Promise<{ key: string }> }) {
@@ -22,7 +22,7 @@ async function handlePOST(req: NextRequest, props: { params: Promise<{ key: stri
   }
   const { tenantId } = authz;
 
-  const def = templateFor((await props.params).key);
+  const def = templateFor((await props.params).key, req.headers);
   if (def instanceof NextResponse) return def;
   const body = await req.json().catch(() => ({}));
   const locale = localeFrom(body.locale);
@@ -36,11 +36,11 @@ async function handlePOST(req: NextRequest, props: { params: Promise<{ key: stri
   if (!me) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const ctx = await tenantEmailContext(tenantId);
-  const { values, blocks } = sampleValues(templateVariables(def), ctx.companyName);
-  const rendered = renderEmailContent({
-    subject, body: text, values, blocks, locale,
-    branding: { companyName: ctx.companyName, productName: ctx.productName, logoUrl: ctx.logoUrl, primaryColor: ctx.primaryColor },
-  });
+  const branding = def.platformOnly
+    ? { companyName: PLATFORM_NAME }
+    : { companyName: ctx.companyName, productName: ctx.productName, logoUrl: ctx.logoUrl, primaryColor: ctx.primaryColor };
+  const { values, blocks } = sampleValues(templateVariables(def), branding.companyName);
+  const rendered = renderEmailContent({ subject, body: text, values, blocks, locale, branding });
   const result = await sendEmail({ to: me.email, subject: `[Test] ${rendered.subject}`, html: rendered.html, text: rendered.text });
   if (!result.sent) {
     const reason = result.reason === 'smtp_not_configured' || result.reason === 'not_configured'

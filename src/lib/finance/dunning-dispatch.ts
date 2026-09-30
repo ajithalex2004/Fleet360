@@ -25,9 +25,9 @@
 
 import crypto from 'crypto';
 import type { TxClient } from '@/lib/rls';
-import { prisma } from '@/lib/prisma';
 import { captureMessage } from '@/lib/sentry';
 import { getInvoiceOutstandingBalance } from '@/lib/leasing/invoice-balance';
+import { isEmailTransportConfigured } from '@/lib/email';
 
 export const DUNNING_NOTICE_QUEUED_EVENT = 'finance.dunningNoticeQueued';
 
@@ -343,14 +343,11 @@ export function mapOutcomeToNoticeStatus(
 // Gates and prechecks used by the consumer.
 // ============================================================
 
-/** Mirrors emailService.ts's own resolution order — a real transport must
- *  actually be resolvable before the consumer ever attempts a claim. */
+/** Whether the platform email sender (src/lib/email.ts) has a real
+ *  transport — SMTP under Admin > Settings > Notifications, or SendGrid —
+ *  before the consumer ever attempts a claim. */
 export async function isTransportAvailable(): Promise<boolean> {
-  const dbConfig = await prisma.integrationConfig
-    .findFirst({ where: { type: 'EMAIL', isEnabled: true } })
-    .catch(() => null);
-  if (dbConfig && dbConfig.host && dbConfig.username) return true;
-  return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER);
+  return isEmailTransportConfigured();
 }
 
 /** APP_ENV, not NODE_ENV — a production-built Next.js app runs

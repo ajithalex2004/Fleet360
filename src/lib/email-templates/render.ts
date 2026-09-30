@@ -103,22 +103,14 @@ function paragraphText(raw: string, values: Record<string, string>): string {
 const colorOr = (value: string | null | undefined, fallback: string) =>
   value && /^#[0-9a-fA-F]{3,8}$/.test(value) ? value : fallback;
 
-/**
- * Renders subject, HTML and plain text. `values` are the variable values
- * (unknown placeholders are left as written); `blocks` are block variables.
- */
-export function renderEmailContent(args: {
-  subject: string;
-  body: string;
-  values: Record<string, string>;
-  blocks?: Record<string, EmailBlock>;
-  locale: EmailLocale;
-  branding: EmailBranding;
-}): RenderedEmail {
-  const { values, blocks = {}, locale, branding } = args;
-  const color = colorOr(branding.primaryColor, '#4f46e5');
-  const rtl = locale === 'ar';
+/** One language's subject and body, rendered but not yet laid out. */
+interface RenderedSection { locale: EmailLocale; subject: string; html: string; text: string }
 
+function renderSection(args: {
+  subject: string; body: string; values: Record<string, string>;
+  blocks?: Record<string, EmailBlock>; locale: EmailLocale; color: string;
+}): RenderedSection {
+  const { values, blocks = {}, locale, color } = args;
   const subject = fill(args.subject, values, (v) => v)
     .replace(/[\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim().slice(0, 250);
 
@@ -142,29 +134,75 @@ export function renderEmailContent(args: {
     htmlParts.push(`<p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">${paragraphHtml(p, values, color)}</p>`);
     textParts.push(paragraphText(p, values));
   }
+  return { locale, subject, html: htmlParts.join('\n'), text: textParts.join('\n\n') };
+}
 
+/** Wraps rendered sections (one per language, first one leading) in the branded layout. */
+function layout(sections: RenderedSection[], subject: string, branding: EmailBranding, color: string): string {
+  const lead = sections[0].locale;
+  const leadRtl = lead === 'ar';
   const logo = branding.logoUrl && /^https:\/\//i.test(branding.logoUrl)
     ? `<img src="${escapeHtml(branding.logoUrl)}" alt="${escapeHtml(branding.companyName)}" style="max-height:40px;max-width:200px;display:block;">`
     : `<div style="color:#ffffff;font-size:18px;font-weight:700;">${escapeHtml(branding.companyName)}</div>`;
-  const footer = rtl
+  const footer = leadRtl
     ? `مرسلة من ${escapeHtml(branding.companyName)}`
     : `Sent by ${escapeHtml(branding.companyName)}`;
-
-  const html = `<!DOCTYPE html>
-<html lang="${locale}" dir="${rtl ? 'rtl' : 'ltr'}">
+  const body = sections.map((sec, i) => {
+    const rtl = sec.locale === 'ar';
+    const border = i > 0 ? 'border-top:1px solid #e5e7eb;' : '';
+    return `<tr><td dir="${rtl ? 'rtl' : 'ltr'}" lang="${sec.locale}" style="padding:32px;${border}text-align:${rtl ? 'right' : 'left'};">${sec.html}</td></tr>`;
+  }).join('\n');
+  return `<!DOCTYPE html>
+<html lang="${lead}" dir="${leadRtl ? 'rtl' : 'ltr'}">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${escapeHtml(subject)}</title></head>
 <body style="margin:0;padding:0;background:#f3f4f6;font-family:'Segoe UI',Tahoma,Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 16px;"><tr><td align="center">
-<table width="640" cellpadding="0" cellspacing="0" dir="${rtl ? 'rtl' : 'ltr'}" style="max-width:640px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;text-align:${rtl ? 'right' : 'left'};">
+<table width="640" cellpadding="0" cellspacing="0" dir="${leadRtl ? 'rtl' : 'ltr'}" style="max-width:640px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;text-align:${leadRtl ? 'right' : 'left'};">
 <tr><td style="background:${color};padding:20px 32px;">${logo}</td></tr>
-<tr><td style="padding:32px;">${htmlParts.join('\n')}</td></tr>
+${body}
 <tr><td style="background:#f9fafb;padding:16px 32px;color:#9ca3af;font-size:12px;">${footer}</td></tr>
 </table>
 </td></tr></table>
 </body>
 </html>`;
+}
 
-  return { subject, html, text: textParts.join('\n\n') };
+/**
+ * Renders subject, HTML and plain text. `values` are the variable values
+ * (unknown placeholders are left as written); `blocks` are block variables.
+ */
+export function renderEmailContent(args: {
+  subject: string;
+  body: string;
+  values: Record<string, string>;
+  blocks?: Record<string, EmailBlock>;
+  locale: EmailLocale;
+  branding: EmailBranding;
+}): RenderedEmail {
+  const color = colorOr(args.branding.primaryColor, '#4f46e5');
+  const section = renderSection({ ...args, color });
+  return { subject: section.subject, html: layout([section], section.subject, args.branding, color), text: section.text };
+}
+
+/**
+ * One email carrying two languages (e.g. formal notices): each language's
+ * section rendered from its own template, the `lead` language first. The
+ * subject joins both subjects; the plain text holds both, separated.
+ */
+export function renderBilingualEmailContent(args: {
+  lead: EmailLocale;
+  sections: Record<EmailLocale, { subject: string; body: string; values: Record<string, string>; blocks?: Record<string, EmailBlock> }>;
+  branding: EmailBranding;
+}): RenderedEmail {
+  const color = colorOr(args.branding.primaryColor, '#4f46e5');
+  const order: EmailLocale[] = args.lead === 'ar' ? ['ar', 'en'] : ['en', 'ar'];
+  const sections = order.map((locale) => renderSection({ ...args.sections[locale], locale, color }));
+  const subject = sections.map((s) => s.subject).join(' / ').slice(0, 250);
+  return {
+    subject,
+    html: layout(sections, subject, args.branding, color),
+    text: sections.map((s) => s.text).join('\n\n----------\n\n'),
+  };
 }
 
 /**
