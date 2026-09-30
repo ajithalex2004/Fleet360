@@ -31,6 +31,7 @@ import {
   UserCheck,
   FileCheck,
   KeyRound,
+  Mail,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -645,6 +646,7 @@ export const MODULES: ModuleDef[] = [
       { label: 'Passkeys',                href: '/admin/security/passkeys',     icon: KeyRound },
       { label: 'Platform settings',       href: '/admin/settings',              icon: Settings },
       { label: 'Notifications (Email/SMS)', href: '/admin/settings/notifications', icon: Bell },
+      { label: 'Email templates',         href: '/admin/email-templates',       icon: Mail },
       { label: 'Integrations',            href: '/admin/settings/integrations', icon: Sliders },
       { label: 'Alert engine',            href: '/admin/alerts',                icon: Bell },
       { label: 'WhatsApp console',        href: '/admin/whatsapp',              icon: MessageCircle },
