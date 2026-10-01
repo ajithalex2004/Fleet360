@@ -16,6 +16,7 @@ import { buildPmSchedule, NO_HISTORY, planApplies, pmRequestBody, type ScheduleP
 import { isSlaMonitored, toMaintenanceStatus, toSlaRequest } from '@/lib/maintenance/sla-requests';
 import { computeSLASnapshot } from '@/lib/maintenance/sla-engine';
 import { MaintenanceStatus, PMItemStatus } from '@/types/maintenance';
+import { scoreGarages, type GarageJob } from '@/lib/maintenance/garage-performance';
 
 const now = new Date('2026-09-30T12:00:00Z');
 const plan = (o: Partial<SchedulePlan> = {}): SchedulePlan => ({
@@ -115,10 +116,71 @@ describe('SLA from real requests', () => {
   });
 });
 
+describe('garage performance', () => {
+  const job = (o: Partial<GarageJob>): GarageJob => ({
+    garageId: 'g1', garageName: 'Autopro', requestDate: new Date('2026-09-01T08:00:00Z'), createdAt: null,
+    completionDate: null, expectedEndDate: null, estimatedCost: null, actualCost: null, histories: [], inspections: [], ...o,
+  });
+
+  it('scores each garage from its own jobs', () => {
+    const [g] = scoreGarages([
+      job({ completionDate: new Date('2026-09-03T08:00:00Z'), expectedEndDate: new Date('2026-09-04T00:00:00Z'),
+        estimatedCost: 1000, actualCost: 900, histories: [{ status: 'ACCEPTED', date: new Date('2026-09-01T10:00:00Z') }],
+        inspections: [
+          { overallResult: 'FAIL', inspectedAt: new Date('2026-09-02T00:00:00Z'), createdAt: new Date('2026-09-02T00:00:00Z') },
+          { overallResult: 'PASS', inspectedAt: new Date('2026-09-03T00:00:00Z'), createdAt: new Date('2026-09-03T00:00:00Z') },
+        ] }),
+      job({ completionDate: new Date('2026-09-10T08:00:00Z'), expectedEndDate: new Date('2026-09-05T00:00:00Z'),
+        estimatedCost: 1000, actualCost: 1300, histories: [{ status: 'Accepted', date: new Date('2026-09-01T12:00:00Z') }],
+        inspections: [{ overallResult: 'PASS', inspectedAt: null, createdAt: new Date('2026-09-09T00:00:00Z') }] }),
+      job({}),
+    ]);
+    expect(g).toMatchObject({
+      garageName: 'Autopro', totalJobs: 3, completedJobs: 2, avgCompletionDays: 5.5, avgActualCost: 1100,
+      costVariancePct: 10, onTimeRate: 50, qcFirstPassRate: 50, responseHours: 3, overallScore: 50,
+    });
+  });
+
+  it('leaves unmeasurable figures empty instead of inventing them', () => {
+    const [g] = scoreGarages([job({})]);
+    expect(g).toMatchObject({ completedJobs: 0, avgCompletionDays: null, avgActualCost: null, costVariancePct: null,
+      onTimeRate: null, qcFirstPassRate: null, responseHours: null, overallScore: null });
+  });
+});
+
 describe('connected screens', () => {
-  it.each(['maintenance/schedule', 'maintenance/sla', 'maintenance/predictive-alerts'])('%s has no Preview banner or sample array', (screen) => {
+  it.each([
+    ['maintenance/schedule', '/api/maintenance'],
+    ['maintenance/sla', '/api/maintenance'],
+    ['maintenance/predictive-alerts', '/api/maintenance'],
+    ['maintenance/garage-assignments', '/api/maintenance'],
+    ['maintenance/garage-performance', '/api/maintenance'],
+    ['school-bus/analytics', '/api/school-bus/reports'],
+    ['ai-platform/predictive', '/api/maintenance/risk-scores'],
+    ['maintenance/approvals/rules', '/api/maintenance/approval-rules'],
+  ])('%s reads %s and has no Preview banner or sample array', (screen, api) => {
     const src = readFileSync(join(process.cwd(), 'src/app/(app)', screen, 'page.tsx'), 'utf8');
-    expect(src).not.toMatch(/PreviewBanner|MOCK_|SEED_/);
-    expect(src).toMatch(/fetch\('\/api\/maintenance/);
+    expect(src).not.toMatch(/PreviewBanner|MOCK_|SEED_|RISK_ITEMS/);
+    expect(src).toContain(api);
+  });
+});
+
+describe('school bus reports query', () => {
+  // These column names don't exist (school_bus_routes has no vehicle_reg or
+  // driver_name; vehicles has license_plate / seating_capacity; allocations
+  // have no seat_type; finance_invoices has payment_status and a uuid
+  // reference_id). Each made a query fail silently and the report go empty.
+  const src = readFileSync(join(process.cwd(), 'src/app/api/school-bus/reports/route.ts'), 'utf8');
+  const sql = (src.match(/`[\s\S]*?`/g) ?? []).join('\n').replace(/--[^\n]*/g, '');
+
+  it('uses the real column names', () => {
+    for (const bad of ['r.vehicle_reg', 'r.driver_name', 'v.registration_number', 'v.capacity', 'v.ownership_type', 'a.seat_type', 'i.metadata', 'i.status', "COALESCE(i.reference_id, '')"]) {
+      expect(sql, bad).not.toContain(bad);
+    }
+  });
+
+  it('runs in the tenant scope and invents no seats, staff or revenue', () => {
+    expect(src).toMatch(/withTenantRls\(prisma, tenantId/);
+    expect(src).not.toMatch(/,\s*40\)|\|\|\s*40\b|\? 5 : 0|Distribute evenly/);
   });
 });

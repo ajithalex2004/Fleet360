@@ -118,6 +118,28 @@ model MaintenancePlan {
   @@schema("public")
 }
 
+/// Estimate approval rules for maintenance requests (see
+/// src/lib/maintenance/approval-rules.ts). maxCost null = no upper limit;
+/// requiredRoles are role codes, empty = anyone who may approve.
+model MaintenanceApprovalRule {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id")
+  name          String
+  minCost       Decimal   @default(0) @map("min_cost") @db.Decimal(14, 2)
+  maxCost       Decimal?  @map("max_cost") @db.Decimal(14, 2)
+  requiredRoles String[]  @default([]) @map("required_roles")
+  autoApprove   Boolean   @default(false) @map("auto_approve")
+  isActive      Boolean   @default(true) @map("is_active")
+  createdBy     String?   @map("created_by")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@index([tenantId], map: "idx_maintenance_approval_rules_tenant")
+  @@map("maintenance_approval_rules")
+  @@schema("public")
+}
+
 model PMTrigger {
   id            String        @id @default(uuid())
   createdAt     DateTime?     @default(now()) @map("created_at") @db.Timestamptz(6)

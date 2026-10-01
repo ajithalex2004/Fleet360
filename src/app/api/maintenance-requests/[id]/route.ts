@@ -3,6 +3,10 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma }       from '@/lib/prisma';
+import {
+    autoApproveRule, checkApprover, statusKey, ESTIMATION_APPROVED, PENDING_ESTIMATION_APPROVAL,
+} from '@/lib/maintenance/approval-rules';
+import { callerRoleCodes, loadApprovalRules } from '@/lib/maintenance/approval-rules-db';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import {
   publishMaintenanceApproved,
@@ -70,7 +74,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
 
             const before = await tx.maintenanceRequest.findFirst({
                 where: { tenantId, id: params.id, deletedAt: null },
-                select: { status: true },
+                select: { status: true, estimatedCost: true },
             });
             if (!before) {
                 return NextResponse.json({ error: 'Request not found' }, { status: 404 });
@@ -104,6 +108,27 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
             if (body.estimateApproval !== undefined) data.estimateApproval = body.estimateApproval;
             if (body.candidateGarageIds !== undefined) data.candidateGarageIds = body.candidateGarageIds;
 
+            // ── Estimate approval rules (src/lib/maintenance/approval-rules.ts) ──
+            // Approving an estimate needs a role the tenant's rule for its
+            // amount names; submitting one inside an auto-approve band
+            // approves it straight away. No rule for the amount: unchanged.
+            let ruleNote: string | null = null;
+            if (typeof data.status === 'string' && statusKey(data.status) !== statusKey(before.status)) {
+                const cost = body.estimatedCost !== undefined ? Number(body.estimatedCost) : before.estimatedCost == null ? null : Number(before.estimatedCost);
+                if (statusKey(data.status) === statusKey(ESTIMATION_APPROVED)) {
+                    const rules = await loadApprovalRules(tx, tenantId);
+                    const check = checkApprover(rules, cost, await callerRoleCodes(tx, tenantId, authz.userId, authz.role));
+                    if (!check.ok) return NextResponse.json({ error: check.error, rule: check.rule.name }, { status: 403 });
+                    if (check.rule) ruleNote = `Approved under rule "${check.rule.name}"`;
+                } else if (statusKey(data.status) === statusKey(PENDING_ESTIMATION_APPROVAL)) {
+                    const auto = autoApproveRule(await loadApprovalRules(tx, tenantId), cost);
+                    if (auto) {
+                        data.status = ESTIMATION_APPROVED;
+                        ruleNote = `Auto-approved under rule "${auto.name}"`;
+                    }
+                }
+            }
+
             const updated = await tx.maintenanceRequest.update({
                 where: { id: params.id },
                 data,
@@ -133,7 +158,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
                         maintenanceRequestId: params.id,
                         status: data.status,
                         date: new Date(),
-                        note: (typeof body.historyNote === 'string' ? body.historyNote : lastEntry?.note) ?? null,
+                        note: ruleNote ?? (typeof body.historyNote === 'string' ? body.historyNote : lastEntry?.note) ?? null,
                         actor: (typeof lastEntry?.actor === 'string' ? lastEntry.actor : null) ?? authz.userId ?? 'system',
                     },
                 });
