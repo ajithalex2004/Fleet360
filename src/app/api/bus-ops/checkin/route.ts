@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { requireBusOpsRequest, ownsBusOpsEmployee } from '@/lib/bus-ops/access';
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { verifyQrToken, normaliseNfcUid, normaliseBleUuid } from '@/lib/bus-checkin';
@@ -22,7 +22,8 @@ export async function POST(req: NextRequest) {
   if (refusal) return refusal;
   const auth = requireAuthorizedTenant(req);
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
-  const parsed = input.safeParse(await req.json().catch(() => null));
+  const bodyRaw = await req.json().catch(() => null);
+  const parsed = input.safeParse(bodyRaw && typeof bodyRaw === 'object' && !Array.isArray(bodyRaw) ? stripTenantOwnershipFields(bodyRaw) : bodyRaw);
   if (!parsed.success) return NextResponse.json({ error: 'Invalid check-in request' }, { status: 400 });
   const b = parsed.data;
   const performedAt = b.performedAt ? new Date(b.performedAt) : new Date();

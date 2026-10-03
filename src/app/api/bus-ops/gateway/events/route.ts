@@ -99,7 +99,7 @@ interface IngestSummary {
 }
 
 export async function POST(req: NextRequest) {
-  // No requireAuthorizedTenant(): gateways have no operator session, and the
+  // Gateways authenticate with their device signature and have no operator session; the
   // middleware strips identity headers from unauthenticated requests, so the
   // old session check 401'd every real device before its signature was
   // looked at. The HMAC below is the credential; the tenant comes from the

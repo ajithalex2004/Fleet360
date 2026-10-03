@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireBusOpsRequest } from '@/lib/bus-ops/access';
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { inspectionAllowsDeparture } from '@/lib/bus-ops/safety';
@@ -20,7 +20,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
   // No implicit emergency bypass. A future approved override must be a separate audited command.
   if (req.headers.get('x-skip-pretrip-check') === '1') return NextResponse.json({ error: 'Safety override is not permitted' }, { status: 403 });
-  const parsed = z.object({ startMileage: z.number().nonnegative().optional(), notes: z.string().max(10000).optional() }).strict().safeParse(await req.json().catch(() => null));
+  const bodyRaw = await req.json().catch(() => null);
+  const parsed = z.object({ startMileage: z.number().nonnegative().optional(), notes: z.string().max(10000).optional() }).strict().safeParse(bodyRaw && typeof bodyRaw === 'object' && !Array.isArray(bodyRaw) ? stripTenantOwnershipFields(bodyRaw) : bodyRaw);
   if (!parsed.success) return NextResponse.json({ error: 'Invalid departure request' }, { status: 400 });
   const { id } = await props.params;
   const afterCommit: { run?: () => Promise<void> } = {};

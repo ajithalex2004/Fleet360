@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('next/server',async()=>await import('next/server.js'));
 const mocks = vi.hoisted(()=>({tenant:vi.fn(),user:vi.fn(),revocations:vi.fn(),permissions:vi.fn(),session:vi.fn(),auth:vi.fn(),stepup:vi.fn()}));
 vi.mock('@/lib/prisma',()=>({prisma:{}}));
-vi.mock('@/lib/rls',()=>({withPlatformAdmin:async (_:unknown,fn:Function)=>fn({tenant:{findUnique:mocks.tenant},user:{findUnique:mocks.user},$queryRawUnsafe:mocks.revocations})}));
+vi.mock('@/lib/rls',()=>({withPlatformAdmin:async (_:unknown,fn: (tx: unknown) => Promise<unknown>)=>fn({tenant:{findUnique:mocks.tenant},user:{findUnique:mocks.user},$queryRawUnsafe:mocks.revocations})}));
 vi.mock('@/lib/authz/session-permissions',()=>({resolveSessionPermissions:mocks.permissions}));
 vi.mock('@/lib/tenant-context',()=>({requireAuthorizedTenant:mocks.auth}));
 vi.mock('@/lib/tenant-session',()=>({getVerifiedRequestSession:mocks.session}));

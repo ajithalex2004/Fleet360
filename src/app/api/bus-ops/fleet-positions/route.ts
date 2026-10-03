@@ -23,7 +23,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
-import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { serialize, upsertFleetPosition, type Row } from '@/lib/bus-ops/fleet-positions';
 
 export async function GET(req: NextRequest) {
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
 
   try {
-    const b = await req.json();
+    const b = stripTenantOwnershipFields(await req.json());
     if (!b.vehicleId) return NextResponse.json({ error: 'vehicleId is required' }, { status: 400 });
     if (typeof b.lat !== 'number' || typeof b.lng !== 'number') {
       return NextResponse.json({ error: 'lat and lng are required numbers' }, { status: 400 });
