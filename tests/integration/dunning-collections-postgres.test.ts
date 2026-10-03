@@ -429,7 +429,19 @@ describe.skipIf(!hasDb)('Dunning & Collections — PostgreSQL Integration', () =
     enableTransport();
 
     const invoice = await withTenantRls(basePrisma, tenantA, (tx) => createInvoice(tx, { daysOverdue: 20, label: 'RACE-OUTCOME' }));
-    const { noticeId, attemptId, attemptToken } = await withTenantRls(basePrisma, tenantA, (tx) => queueNotice(tx, invoice.id, 'REMINDER'));
+    const { noticeId, attemptId, attemptToken } = await withTenantRls(basePrisma, tenantA, async (tx) => {
+      const queued = await queueNotice(tx, invoice.id, 'REMINDER');
+      // This case races only the two outcome writers. Close its synthetic
+      // outbox event in the same transaction that creates it, so a publisher
+      // sharing the CI database cannot dispatch it as a third contender.
+      await tx.$executeRawUnsafe(
+        `UPDATE event_outbox SET published_at = NOW()
+          WHERE tenant_id = $1::uuid AND event_type = $2 AND aggregate_id = $3
+            AND payload->>'attemptToken' = $4`,
+        tenantA, DUNNING_NOTICE_QUEUED_EVENT, queued.noticeId, queued.attemptToken,
+      );
+      return queued;
+    });
 
     await withTenantRls(basePrisma, tenantA, async (tx) => {
       const claimed = await claimAttempt(tx, tenantA, noticeId, attemptToken);
