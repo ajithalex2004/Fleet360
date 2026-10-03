@@ -305,7 +305,16 @@ describe.skipIf(!hasDb)('Dunning & Collections — PostgreSQL Integration', () =
     expect(sendEmailMock).toHaveBeenCalledTimes(1);
 
     const finalNotice = await withTenantRls(basePrisma, tenantA, (tx) => tx.leaseDunningNotice.findFirst({ where: { id: noticeId } }));
-    expect(finalNotice?.dispatchStatus).toBe('SUBMITTED');
+    const finalAttempt = await withTenantRls(basePrisma, tenantA, (tx) =>
+      tx.leaseDunningDispatchAttempt.findFirst({ where: { id: attempt2?.id } }),
+    );
+    expect(finalNotice?.dispatchStatus, JSON.stringify({
+      currentToken: finalNotice?.currentAttemptToken,
+      expectedToken: attempt2?.attemptToken,
+      attemptOutcome: finalAttempt?.outcome,
+      attemptResolution: finalAttempt?.resolution,
+      sendCalls: sendEmailMock.mock.calls.length,
+    })).toBe('SUBMITTED');
     expect(finalNotice?.sendAttemptCount).toBe(1);
   });
 
@@ -391,7 +400,7 @@ describe.skipIf(!hasDb)('Dunning & Collections — PostgreSQL Integration', () =
         // the test doesn't need to wait — the eligibility/cap mechanism
         // under test is identical either way.
         const reserved = await withTenantRls(basePrisma, tenantA, (tx) => reserveNextAttempt(tx, tenantA, noticeId, 'FAILED', { immediate: true }));
-        expect(reserved.noOp).toBe(false);
+        expect(reserved.noOp, reserved.noOp ? reserved.reason : undefined).toBe(false);
       }
     }
 
