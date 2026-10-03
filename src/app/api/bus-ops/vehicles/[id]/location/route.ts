@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -67,6 +68,8 @@ interface VisitRow { stop_id: string; approached_at: Date | null; entered_at: Da
 interface PassengerRow { id: string; employee_name: string | null; contact_number: string | null; email: string | null }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   const { id: vehicleId } = await params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -80,6 +83,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
+      const vehicle = await tx.vehicle.findFirst({ where: { id: vehicleId, tenantId, deletedAt: null } });
+      if (!vehicle) return NextResponse.json({ error: 'Vehicle not found' }, { status: 404 });
 
       let bodyRaw: SinglePingBody & BatchBody;
       try {
@@ -96,18 +101,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
              scheduleId: body.scheduleId, speedKmh: body.speedKmh, headingDeg: body.headingDeg,
              accuracyM: body.accuracyM, source: body.source }];
 
+      if (rawPings.length > 100) return NextResponse.json({ error: 'Maximum 100 pings per request' }, { status: 413 });
       const scheduleId = body.scheduleId ?? rawPings[0]?.scheduleId ?? null;
+      if (scheduleId) {
+        const ownedTrip = await tx.tripSchedule.findFirst({ where: { id: scheduleId, tenantId, vehicleId, deletedAt: null, status: { in: ['SCHEDULED','STARTED','EN_ROUTE','DEPARTED','IN_TRANSIT'] } } });
+        if (!ownedTrip) return NextResponse.json({ error: 'Vehicle/trip assignment mismatch' }, { status: 404 });
+      }
 
       const validPings: Array<Required<Pick<SinglePingBody, 'latitude' | 'longitude'>> & SinglePingBody> = [];
       for (const p of rawPings) {
         if (typeof p.latitude !== 'number' || typeof p.longitude !== 'number') continue;
         if (!Number.isFinite(p.latitude) || !Number.isFinite(p.longitude)) continue;
+        if (Math.abs(p.latitude) > 90 || Math.abs(p.longitude) > 180 || (p.occurredAt && (!Number.isFinite(Date.parse(p.occurredAt)) || Math.abs(Date.parse(p.occurredAt) - Date.now()) > 5 * 60_000))) return NextResponse.json({ error: 'Invalid coordinates or ping time' }, { status: 400 });
         validPings.push({ ...p, latitude: p.latitude, longitude: p.longitude });
       }
       if (validPings.length === 0) {
         return NextResponse.json({ error: 'At least one ping with valid latitude+longitude is required' }, { status: 400 });
       }
 
+      validPings.sort((a,b) => Date.parse(a.occurredAt ?? new Date().toISOString()) - Date.parse(b.occurredAt ?? new Date().toISOString()));
       try {
         // ensureBusGpsTables() removed — tables live in fleet schema now
 

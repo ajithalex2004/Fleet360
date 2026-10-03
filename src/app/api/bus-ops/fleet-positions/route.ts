@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -26,6 +27,8 @@ import { requireAuthorizedTenant } from '@/lib/tenant-context';
 import { serialize, upsertFleetPosition, type Row } from '@/lib/bus-ops/fleet-positions';
 
 export async function GET(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
@@ -90,6 +93,8 @@ export async function GET(req: NextRequest) {
 
 
 export async function POST(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
@@ -106,6 +111,13 @@ export async function POST(req: NextRequest) {
     if (typeof b.lat !== 'number' || typeof b.lng !== 'number') {
       return NextResponse.json({ error: 'lat and lng are required numbers' }, { status: 400 });
     }
+    if (!Number.isFinite(b.lat) || !Number.isFinite(b.lng) || Math.abs(b.lat) > 90 || Math.abs(b.lng) > 180) return NextResponse.json({ error: 'Invalid coordinates' }, { status: 400 });
+    const owned = await withTenantRls(prisma, tenantId, async tx => {
+      const vehicle = await tx.vehicle.findFirst({ where: { id: String(b.vehicleId), tenantId, deletedAt: null } });
+      const trip = b.tripId ? await tx.tripSchedule.findFirst({ where: { id: b.tripId, tenantId, vehicleId: String(b.vehicleId), deletedAt: null } }) : null;
+      return Boolean(vehicle && (!b.tripId || trip));
+    });
+    if (!owned) return NextResponse.json({ error: 'Vehicle or trip not found' }, { status: 404 });
     const row = await upsertFleetPosition({
       tenantId, // stamped from header — never trust body
       vehicleId: String(b.vehicleId),

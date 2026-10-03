@@ -1,10 +1,11 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import type { Prisma } from '@prisma/client';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
-import { cacheRead, privateCacheControl, revalidateCache } from '@/lib/server-cache';
+import { revalidateCache } from '@/lib/server-cache';
 import { expandRosterToTrip } from '@/lib/bus-ops/expand-roster';
 import { resolveVariantVersionForTrip } from '@/lib/bus-ops/resolve-variant-version';
 import { raiseAlert } from '@/lib/alerts/raise';
@@ -18,15 +19,8 @@ import {
 
 const CACHE_TAG = 'bus-ops:schedules';
 
-// Runs inside unstable_cache (via cacheRead), which strips Next.js request
-// context - next/headers() is unavailable there, so the plain prisma client's
-// header-based auto-scoping middleware never engages and RLS (force-applied
-// to fleet360_app regardless of the WHERE clause) filters out every row for
-// every tenant. withTenantRls sets app.tenant_id explicitly from the
-// argument instead of relying on headers, matching the pattern already used
-// correctly in src/app/api/bus-ops/plan/route.ts.
-const getSchedules = cacheRead(
-  async (
+// Dispatch reads must reflect committed attendance and trip state immediately.
+const getSchedules = async (
     tenantId: string,
     status: string | null,
     routeId: string | null,
@@ -56,12 +50,11 @@ const getSchedules = cacheRead(
       },
       orderBy: { departureTime: 'asc' },
     }));
-  },
-  [CACHE_TAG],
-  30,
-);
+  };
 
 export async function GET(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   try {
     const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
@@ -79,7 +72,7 @@ export async function GET(req: NextRequest) {
 
     const schedules = await getSchedules(tenantId, status, routeId, dateStr);
     return NextResponse.json(schedules, {
-      headers: { 'Cache-Control': privateCacheControl(30, 120) },
+      headers: { 'Cache-Control': 'private, no-store' },
     });
     } catch (e) {
     console.error('Error fetching schedules:', e);
@@ -88,6 +81,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   try {
     const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -163,7 +158,7 @@ export async function POST(req: NextRequest) {
 
         if (isValidationEnabled()) {
           const estimatedRoster = body.routeId
-            ? await estimateRosterCountForTrip({ tenantId, routeId: body.routeId, tripDate: departureTime })
+            ? await estimateRosterCountForTrip({ tenantId, routeId: body.routeId, tripDate: departureTime }, tx)
             : 0;
 
           const txResult = await withAssignmentLocks(
@@ -207,6 +202,7 @@ export async function POST(req: NextRequest) {
               });
               return { verdict: v.verdict, validation: v, schedule: s };
             },
+            tx,
           );
 
           if (txResult.verdict === 'BLOCK') {

@@ -104,7 +104,7 @@ async function applyTransition(
   direction: BoardingDirection,
 ): Promise<AttendanceResult> {
   const passenger = await db.tripPassenger.findFirst({
-    where: { id: ctx.passengerId, tripId: ctx.scheduleId },
+    where: { id: ctx.passengerId, tripId: ctx.scheduleId, tenantId: ctx.tenantId, deletedAt: null },
     select: { id: true, status: true },
   });
   if (!passenger) {
@@ -211,7 +211,7 @@ export function recordAbsence(db: Db, ctx: AttendanceContext): Promise<Attendanc
  */
 export async function logAlightEvent(db: Db, ctx: AttendanceContext): Promise<AttendanceResult> {
   const passenger = await db.tripPassenger.findFirst({
-    where: { id: ctx.passengerId, tripId: ctx.scheduleId },
+    where: { id: ctx.passengerId, tripId: ctx.scheduleId, tenantId: ctx.tenantId, deletedAt: null },
     select: { id: true, status: true },
   });
   if (!passenger) {

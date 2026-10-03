@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -16,6 +17,8 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 export const runtime = 'nodejs';
 
 export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(_req);
+  if (policyError) return policyError;
   const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: _req.headers, nextUrl: _req.nextUrl });
@@ -25,6 +28,8 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
+    const parent = await tx.vehicle.findFirst({ where: { id: params.id, tenantId, deletedAt: null }, select: { id: true } });
+    if (!parent) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     const beacon = await tx.vehicleBeacon.findUnique({ where: { vehicleId: params.id } });
       return beacon ? NextResponse.json(beacon) : NextResponse.json({ error: 'No beacon registered' }, { status: 404 });
   });
@@ -32,6 +37,8 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
 
 
 export async function PUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -41,6 +48,8 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
+    const parent = await tx.vehicle.findFirst({ where: { id: params.id, tenantId, deletedAt: null }, select: { id: true } });
+    if (!parent) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
       const bleUuid = normaliseBleUuid(String(body?.bleUuid ?? ''));
@@ -56,6 +65,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
           notes: body?.notes ?? null,
         },
         create: {
+          tenantId,
           vehicleId: params.id,
           bleUuid,
           major: body?.major ?? null,
@@ -81,6 +91,8 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
 
 
 export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -90,6 +102,8 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
+    const parent = await tx.vehicle.findFirst({ where: { id: params.id, tenantId, deletedAt: null }, select: { id: true } });
+    if (!parent) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     await tx.vehicleBeacon.update({
         where: { vehicleId: params.id },
         data: { isActive: false },

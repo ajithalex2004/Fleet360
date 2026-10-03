@@ -378,7 +378,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // enforce answers 403. Runs before the Go shim, so proxied routes are
   // decided the same way.
   if (pathname.startsWith('/api/')) {
-    const mode = authzMode();
+    const mode = pathname.startsWith('/api/bus-ops/') ? 'enforce' : authzMode();
     if (mode !== 'off') {
       const decision = decide(
         { pathname, method: request.method, requestedTenantId: request.nextUrl.searchParams.get('tenantId') },

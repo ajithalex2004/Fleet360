@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -19,6 +20,8 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 const ACTIONS = new Set(['BLOCK', 'WARN', 'PENALTY']);
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
@@ -32,7 +35,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   return withTenantRls(prisma, tenantId, async (tx) => {
 
-      const permError = requireBusOpsAdminAccess(req, 'planning-constraints');
+      const permError = await requireBusOpsAdminAccess(req, 'planning-constraints');
       if (permError) return permError;
       const { id } = await ctx.params;
 
@@ -46,6 +49,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
@@ -59,7 +64,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
   return withTenantRls(prisma, tenantId, async (tx) => {
 
-      const permError = requireBusOpsAdminAccess(req, 'planning-constraints');
+      const permError = await requireBusOpsAdminAccess(req, 'planning-constraints');
       if (permError) return permError;
       const updatedBy = req.headers.get('x-user-id') ?? null;
       const { id } = await ctx.params;
@@ -111,6 +116,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
 
 
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
@@ -124,7 +131,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
 
   return withTenantRls(prisma, tenantId, async (tx) => {
 
-      const permError = requireBusOpsAdminAccess(req, 'planning-constraints');
+      const permError = await requireBusOpsAdminAccess(req, 'planning-constraints');
       if (permError) return permError;
       const { id } = await ctx.params;
 

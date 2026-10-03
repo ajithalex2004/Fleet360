@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -13,14 +14,16 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
-import { assessChecklist, PRETRIP_CHECKLIST } from '@/lib/bus-pretrip-checklist';
-import { logAudit } from '@/lib/audit';
+import { assessChecklist, PRETRIP_CHECKLIST, ChecklistValidationError } from '@/lib/bus-pretrip-checklist';
+import { writeRequiredAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(_req);
+  if (policyError) return policyError;
   const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: _req.headers, nextUrl: _req.nextUrl });
@@ -44,6 +47,8 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
 
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -52,13 +57,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   }
   const { tenantId } = authz;
 
-  // Built inside the transaction, written after it commits — auditing from
-  // inside one either loses the entry (fire-and-forget promise abandoned on
-  // return) or holds this transaction's connection while logAudit checks out
-  // a second one from the same pool.
-  let audit: Parameters<typeof logAudit>[0] | null = null;
-  const response = await withTenantRls(prisma, tenantId, async (tx) => {
-    try {
+  try {
+    return await withTenantRls(prisma, tenantId, async (tx) => {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const items = Array.isArray(body?.items) ? body.items : [];
@@ -69,11 +69,13 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         // findFirst with tenantId, not findUnique on the id alone: this
         // previously accepted any schedule id and recorded a pre-trip safety
         // check against another organisation's trip.
+        await tx.$queryRawUnsafe('SELECT id FROM trip_schedules WHERE id::text = $1 AND tenant_id = $2 FOR UPDATE', params.id, tenantId);
         const schedule = await tx.tripSchedule.findFirst({
           where: { id: params.id, tenantId, deletedAt: null },
         });
         if (!schedule) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
 
+        if (schedule.status !== 'SCHEDULED') return NextResponse.json({ error: 'Inspection requires a scheduled trip' }, { status: 409 });
         const assessment = assessChecklist(items);
 
         const check = await tx.busPreTripCheck.create({
@@ -82,7 +84,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             scheduleId: params.id,
             vehicleId: schedule.vehicleId ?? null,
             driverId: schedule.driverId ?? null,
-            performedBy: req.headers.get('x-user-id') ?? body.performedBy ?? null,
+            performedBy: authz.userId,
             checkItems: items,
             overallPass: assessment.overallPass,
             failCount: assessment.failCount,
@@ -99,24 +101,21 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           });
         }
 
-        audit = {
-          tenantId: req.headers.get('x-tenant-id') ?? undefined,
-          userId: req.headers.get('x-user-id') ?? 'system',
+        await writeRequiredAudit({
+          tenantId,
+          userId: authz.userId ?? undefined,
           userRole: req.headers.get('x-user-role') ?? 'DRIVER',
           entityType: 'TripSchedule',
           entityId: params.id,
           action: 'UPDATE',
           details: `Pre-trip check ${assessment.overallPass ? 'PASS' : `FAIL (${assessment.blockingFailures.length} blocking)`} — ${items.filter((i: { ok: boolean }) => i.ok).length}/${items.length} items OK.`,
-        };
+        }, tx);
 
         return NextResponse.json({ check, assessment }, { status: 201 });
-        } catch (err) {
-        captureException(err, { context: 'bus-ops.pretrip-check.create', tags: { scheduleId: params.id } });
-        return NextResponse.json({ error: 'Failed to record check' }, { status: 500 });
-      }
-  });
-  if (audit) await logAudit(audit);
-  return response;
-
+    });
+  } catch (err) {
+    if (err instanceof ChecklistValidationError) return NextResponse.json({ error: err.message }, { status: 400 });
+    captureException(err, { context: 'bus-ops.pretrip-check.create', tags: { scheduleId: params.id } });
+    return NextResponse.json({ error: 'Failed to record check' }, { status: 500 });
+  }
 }
-

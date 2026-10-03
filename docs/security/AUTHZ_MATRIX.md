@@ -4,7 +4,7 @@ Generated from `src/lib/authz/policy-matrix.ts` and `SYSTEM_ROLES` by `tests/uni
 Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-policy-matrix.test.ts`.
 
 - Policy version: `2026-09-30.2`
-- Permission catalogue version: `7deb1e4f` (169 permissions)
+- Permission catalogue version: `83f16c6e` (224 permissions)
 
 ## API areas
 
@@ -62,8 +62,8 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `leasing/documents/upload` | 1 | module `leasing` | self |
 | `logistics` | 63 | module `logistics` | module `logistics` |
 | `logistics/rates/quote` | 0 | self | self |
-| `maintenance` | 16 | module `maintenance` | module `maintenance` |
-| `maintenance-requests` | 2 | module `maintenance` | module `maintenance` |
+| `maintenance` | 23 | module `maintenance` | module `maintenance` |
+| `maintenance-requests` | 3 | module `maintenance` | module `maintenance` |
 | `mobile` | 1 | external | external |
 | `my-approvals` | 1 | self | self |
 | `notifications` | 3 | self | self |

@@ -2646,6 +2646,8 @@ model BleGatewayPresence {
 }
 
 model VehicleBeacon {
+  tenantId String @map("tenant_id")
+  @@index([tenantId])
   id        String    @id @default(uuid())
   createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   vehicleId String    @unique @map("vehicle_id")
@@ -2661,6 +2663,8 @@ model VehicleBeacon {
 }
 
 model StaffRfidTag {
+  tenantId String @map("tenant_id")
+  @@index([tenantId])
   id            String    @id @default(uuid())
   createdAt     DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   staffMemberId String    @unique @map("staff_member_id")

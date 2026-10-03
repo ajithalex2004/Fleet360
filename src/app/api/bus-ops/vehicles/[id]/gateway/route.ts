@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -6,6 +7,7 @@ export const dynamic = 'force-dynamic';
  * DELETE /api/bus-ops/vehicles/[id]/gateway — soft-disable
  */
 
+import { gatewayView } from '@/lib/bus-ops/gateway-view';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
@@ -15,6 +17,8 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -28,16 +32,20 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
+    const parent = await tx.vehicle.findFirst({ where: { id: params.id, tenantId, deletedAt: null }, select: { id: true } });
+    if (!parent) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
       // Use findFirst so we can include tenantId in the where clause — findUnique
       // only accepts the unique key field(s), not extra filters.
       const gw = await tx.bleGateway.findFirst({ where: { vehicleId: params.id, tenantId } });
-      return gw ? NextResponse.json(gw) : NextResponse.json({ error: 'No gateway registered' }, { status: 404 });
+      return gw ? NextResponse.json(gatewayView(gw)) : NextResponse.json({ error: 'No gateway registered' }, { status: 404 });
   });
 }
 
 
 export async function PUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -51,6 +59,8 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
+    const parent = await tx.vehicle.findFirst({ where: { id: params.id, tenantId, deletedAt: null }, select: { id: true } });
+    if (!parent) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
@@ -96,12 +106,14 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
         details: `Gateway ${gatewayId} registered for vehicle ${params.id} (${body?.model ?? 'no model'})`,
       });
 
-      return NextResponse.json(gw);
+      return NextResponse.json(gatewayView(gw));
   });
 }
 
 
 export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -115,6 +127,8 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
+    const parent = await tx.vehicle.findFirst({ where: { id: params.id, tenantId, deletedAt: null }, select: { id: true } });
+    if (!parent) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
       const existing = await tx.bleGateway.findFirst({ where: { vehicleId: params.id, tenantId } });
       if (!existing) return NextResponse.json({ error: 'No gateway registered' }, { status: 404 });

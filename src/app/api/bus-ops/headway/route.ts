@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -72,13 +73,15 @@ function shapeRule(r: RuleRow) {
 }
 
 export async function GET(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const permError = requireBusOpsAdminAccess(req, HEADWAY_RESOURCE);
+  const permError = await requireBusOpsAdminAccess(req, HEADWAY_RESOURCE);
   if (permError) return permError;
   const sp = new URL(req.url).searchParams;
   const routeId = sp.get('routeId');
@@ -113,13 +116,15 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const permError = requireBusOpsAdminAccess(req, HEADWAY_RESOURCE);
+  const permError = await requireBusOpsAdminAccess(req, HEADWAY_RESOURCE);
   if (permError) return permError;
   try {
     const bodyRaw = await req.json() as { routeId: string; dayMask?: string;
@@ -159,13 +164,15 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const permError = requireBusOpsAdminAccess(req, HEADWAY_RESOURCE);
+  const permError = await requireBusOpsAdminAccess(req, HEADWAY_RESOURCE);
   if (permError) return permError;
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });

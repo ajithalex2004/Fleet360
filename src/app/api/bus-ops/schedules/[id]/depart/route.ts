@@ -1,156 +1,74 @@
 export const dynamic = 'force-dynamic';
-
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls, runSequential } from '@/lib/rls';
-import { prisma }         from '@/lib/prisma';
-import { getEventBus }    from '@/events/event-bus';
-import { TRIP_DEPARTED }  from '@/events/registry';
-import { assertTripTransition, normalizeTripStatus, TripTransitionError } from '@/lib/bus-ops/state-machines';
-import { raiseAlert }     from '@/lib/alerts/raise';
-
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
-/**
- * How many minutes late is "late" — a soft tolerance so a 30-second slip
- * from the scheduled departure doesn't page ops. Configurable per tenant
- * via AlertRule.escalation_levels later (Phase 2b).
- */
+import { z } from 'zod';
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { withTenantRls } from '@/lib/rls';
+import { prisma } from '@/lib/prisma';
+import { inspectionAllowsDeparture } from '@/lib/bus-ops/safety';
+import { getEventBus } from '@/events/event-bus';
+import { TRIP_DEPARTED } from '@/events/registry';
+import { writeRequiredAudit } from '@/lib/audit';
+import { revalidateCache } from '@/lib/server-cache';
+import { raiseAlert } from '@/lib/alerts/raise';
 const LATE_DEPARTURE_TOLERANCE_MIN = 5;
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
-  const params = await props.params;
-
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
-
-  if (!authz.ok) {
-
-    return NextResponse.json({ error: authz.error }, { status: authz.status });
-
-  }
-
-  const { tenantId } = authz;
-
-  return withTenantRls(prisma, tenantId, async (tx) => {
-
-      try {
-        const bodyRaw = await req.json();
-      const body = stripTenantOwnershipFields(bodyRaw);
-        const schedule = await tx.tripSchedule.findFirst({ where: { id: params.id, tenantId } });
-        if (!schedule) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-        try {
-          assertTripTransition(normalizeTripStatus(schedule.status), 'STARTED');
-        } catch (e) {
-          if (e instanceof TripTransitionError) return NextResponse.json({ error: e.message }, { status: 409 });
-          throw e;
-        }
-
-        // Pre-trip safety check enforcement: a passing check must exist for THIS
-        // schedule today. Override with x-skip-pretrip-check header for emergencies
-        // (admin only — UI never sends this; emergency override leaves an audit trail).
-        const skipPretrip = req.headers.get('x-skip-pretrip-check') === '1';
-        if (!skipPretrip) {
-          const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-          const passingCheck = await tx.busPreTripCheck.findFirst({
-            where: {
-              // Schedule already resolved within the tenant above.
-              tenantId,
-              scheduleId: params.id,
-              performedAt: { gte: todayStart },
-              overallPass: true,
-            },
-            orderBy: { performedAt: 'desc' },
-          });
-          if (!passingCheck) {
-            return NextResponse.json(
-              { error: 'Pre-trip safety check required (or did not pass). Complete the checklist before departing.' },
-              { status: 412 },
-            );
-          }
-        }
-
-        // Depart transaction:
-        //   1. flip schedule to DEPARTED
-        //   2. create the trip log entry
-        //   3. auto-mark any CONFIRMED-but-not-BOARDED passenger as NO_SHOW.
-        //      Before this, no-shows had to be flipped by hand — meaning most
-        //      trips left them stuck at CONFIRMED forever and downstream
-        //      attendance / occupancy stats were wrong. The gate is intentionally
-        //      strict (status = 'CONFIRMED') so we don't stomp on an ABSENT flag
-        //      the passenger set earlier or a manual override the driver made.
-        // `as const` so TypeScript infers a tuple rather than an array of the
-        // union of the three result types — without it, destructuring gives
-        // every binding `TripSchedule | TripLog | BatchPayload` and each
-        // property access below fails.
-        const [updated, tripLog, noShowResult] = await runSequential([
-          tx.tripSchedule.update({
-            where: { id: params.id },
-            data: { status: 'STARTED', updatedAt: new Date() },
-          }),
-          tx.tripLog.create({
-            data: {
-              tenantId,
-              scheduleId: params.id,
-              actualDepartureTime: body.departureTime ? new Date(body.departureTime) : new Date(),
-              startMileage: body.startMileage ?? null,
-              loggedBy: body.loggedBy ?? null,
-              notes: body.notes ?? null,
-            },
-          }),
-          tx.tripPassenger.updateMany({
-            where: { tripId: params.id, tenantId, status: 'CONFIRMED', deletedAt: null },
-            data: { status: 'NO_SHOW', updatedAt: new Date() },
-          }),
-        ] as const);
-
-        // Publish to outbox — downstream consumers pick this up asynchronously.
-        // tenantId from the schedule row; null is safe (NULL::uuid in event_outbox).
-        getEventBus().publish({
-          eventType:     TRIP_DEPARTED,
-          aggregateType: 'TripSchedule',
-          aggregateId:   schedule.id,
-          sourceModule:  'bus-ops',
-          tenantId:      schedule.tenantId ?? null,
-          payload: {
-            scheduleId:          schedule.id,
-            tripNumber:          schedule.tripNumber  ?? null,
-            vehicleId:           schedule.vehicleId   ?? null,
-            driverId:            schedule.driverId    ?? null,
-            tripLogId:           tripLog.id,
-            actualDepartureTime: (tripLog.actualDepartureTime ?? new Date()).toISOString(),
-            startMileage:        body.startMileage ?? null,
-            noShowsMarked:       noShowResult.count,
-          },
-        }).catch(err => console.warn('[bus-ops depart] outbox publish failed:', err));
-
-        // Alert Engine Phase 2 — two conditions detectable at depart time.
-        // Both raiseAlert calls are best-effort by default and don't block
-        // the HTTP response.
+  const refusal = await requireBusOpsRequest(req);
+  if (refusal) return refusal;
+  const auth = requireAuthorizedTenant(req);
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  // No implicit emergency bypass. A future approved override must be a separate audited command.
+  if (req.headers.get('x-skip-pretrip-check') === '1') return NextResponse.json({ error: 'Safety override is not permitted' }, { status: 403 });
+  const parsed = z.object({ startMileage: z.number().nonnegative().optional(), notes: z.string().max(10000).optional() }).strict().safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: 'Invalid departure request' }, { status: 400 });
+  const { id } = await props.params;
+  const afterCommit: { run?: () => Promise<void> } = {};
+  try {
+    const response = await withTenantRls(prisma, auth.tenantId, async tx => {
+      await tx.$queryRawUnsafe(`SELECT id FROM trip_schedules WHERE id::text = $1 AND tenant_id = $2 FOR UPDATE`, id, auth.tenantId);
+      const schedule = await tx.tripSchedule.findFirst({ where: { id, tenantId: auth.tenantId, deletedAt: null } });
+      if (!schedule) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      if (schedule.status !== 'SCHEDULED') return NextResponse.json({ error: 'Trip is not scheduled' }, { status: 409 });
+      const skew = Date.now() - schedule.departureTime.getTime();
+      if (skew > 24 * 60 * 60_000 || skew < -2 * 60 * 60_000) return NextResponse.json({ error: 'Trip is outside the departure window' }, { status: 409 });
+      const latest = await tx.busPreTripCheck.findFirst({ where: { tenantId: auth.tenantId, scheduleId: id, deletedAt: null }, orderBy: [{ performedAt: 'desc' }, { id: 'desc' }] });
+      if (!inspectionAllowsDeparture(latest, schedule)) return NextResponse.json({ error: 'A complete, current, passing inspection for this vehicle and driver is required' }, { status: 412 });
+      const now = new Date();
+      const updated = await tx.tripSchedule.update({ where: { id }, data: { status: 'STARTED', updatedAt: now } });
+      const log = await tx.tripLog.create({ data: { tenantId: auth.tenantId, scheduleId: id, actualDepartureTime: now, startMileage: parsed.data.startMileage ?? null, notes: parsed.data.notes ?? null, loggedBy: auth.userId } });
+      const noShows = await tx.tripPassenger.updateMany({ where: { tenantId: auth.tenantId, tripId: id, status: 'CONFIRMED', deletedAt: null }, data: { status: 'NO_SHOW', updatedAt: now } });
+      await getEventBus().publish({ eventType: TRIP_DEPARTED, aggregateType: 'TripSchedule', aggregateId: id, sourceModule: 'bus-ops', tenantId: auth.tenantId, actor: auth.userId,
+        payload: { scheduleId: id, tripNumber: schedule.tripNumber, vehicleId: schedule.vehicleId, driverId: schedule.driverId, tripLogId: log.id, actualDepartureTime: now.toISOString(), startMileage: parsed.data.startMileage ?? null, noShowsMarked: noShows.count } }, tx);
+      await writeRequiredAudit({ tenantId: auth.tenantId, userId: auth.userId ?? undefined, entityType: 'TripSchedule', entityId: id, action: 'DEPART', details: `Inspection ${latest!.id}; ${noShows.count} no-shows` }, tx);
+      afterCommit.run = async () => {
         if (schedule.tenantId) {
           // PASSENGER_ABSENT — one alert per trip summarising how many
           // CONFIRMED passengers rolled over to NO_SHOW. The Alert Engine
           // dedups on scheduleId so a re-depart (unusual but possible)
           // doesn't spam.
-          if (noShowResult.count > 0) {
-            void raiseAlert({
+          if (noShows.count > 0) {
+            await raiseAlert({
               tenantId:     schedule.tenantId,
               code:         'PASSENGER_ABSENT',
               sourceModule: 'bus-ops',
               subjectType:  'TripSchedule',
               subjectId:    schedule.id,
-              title:        `Trip ${schedule.tripNumber ?? schedule.id.slice(0, 8)} · ${noShowResult.count} no-show${noShowResult.count === 1 ? '' : 's'}`,
-              description:  `${noShowResult.count} passenger${noShowResult.count === 1 ? '' : 's'} did not board and were auto-marked NO_SHOW at departure.`,
+              title:        `Trip ${schedule.tripNumber ?? schedule.id.slice(0, 8)} · ${noShows.count} no-show${noShows.count === 1 ? '' : 's'}`,
+              description:  `${noShows.count} passenger${noShows.count === 1 ? '' : 's'} did not board and were auto-marked NO_SHOW at departure.`,
               context: {
                 scheduleId:    schedule.id,
                 tripNumber:    schedule.tripNumber,
-                noShowsMarked: noShowResult.count,
+                noShowsMarked: noShows.count,
               },
             });
           }
 
           // LATE_DEPARTURE — actual > scheduled + tolerance.
-          const actualDeparture = tripLog.actualDepartureTime ?? new Date();
+          const actualDeparture = log.actualDepartureTime ?? new Date();
           const delayMin = Math.round((actualDeparture.getTime() - schedule.departureTime.getTime()) / 60_000);
           if (delayMin > LATE_DEPARTURE_TOLERANCE_MIN) {
-            void raiseAlert({
+            await raiseAlert({
               tenantId:     schedule.tenantId,
               code:         'LATE_DEPARTURE',
               sourceModule: 'bus-ops',
@@ -172,10 +90,14 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
           }
         }
 
-        return NextResponse.json({ ...updated, noShowsMarked: noShowResult.count });
-        } catch (e) {
-        return NextResponse.json({ error: 'Failed to depart' }, { status: 500 });
-      }
-  });
+      };
+      return NextResponse.json({ ...updated, noShowsMarked: noShows.count });
+    });
+    if (response.ok) await revalidateCache(['bus-ops:schedules']).catch(() => console.warn('[bus-ops depart] cache invalidation failed'));
+    if (response.ok && afterCommit.run) await afterCommit.run().catch(() => console.warn('[bus-ops depart] alert delivery failed'));
+    return response;
+  } catch (error) {
+    console.error('[bus-ops depart] transaction failed', error instanceof Error ? error.name : 'unknown');
+    return NextResponse.json({ error: 'Failed to depart' }, { status: 500 });
+  }
 }
-

@@ -1,3 +1,4 @@
+import { ownsBusOpsEmployee, requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -25,6 +26,8 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   // Audit risk #13 — tenant scoping. Both the trip and the staff member must
   // be resolved *inside the caller's tenant* so an authenticated user for one
@@ -52,15 +55,17 @@ export async function POST(req: NextRequest) {
         const staffMemberId = String(body?.staffMemberId ?? '').trim();
         const tripId = String(body?.tripId ?? '').trim();
         if (!staffMemberId || !tripId) {
+
           return NextResponse.json({ error: 'staffMemberId and tripId are required' }, { status: 400 });
         }
 
+        await tx.$queryRawUnsafe(`SELECT id FROM trip_schedules WHERE id::text = $1 AND tenant_id = $2 FOR UPDATE`, tripId, tenantId);
         const trip = await tx.tripSchedule.findFirst({
           where: { id: tripId, tenantId },
           select: { id: true, status: true, deletedAt: true },
         });
         if (!trip || trip.deletedAt) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
-        if (['COMPLETED', 'CANCELLED'].includes(trip.status ?? '')) {
+        if (trip.status !== 'SCHEDULED') {
           return NextResponse.json({ error: `Trip is ${trip.status}` }, { status: 409 });
         }
 
@@ -69,9 +74,12 @@ export async function POST(req: NextRequest) {
           select: { id: true, name: true, employeeId: true, department: true, deletedAt: true },
         });
         if (!staff || staff.deletedAt) return NextResponse.json({ error: 'Staff not found' }, { status: 404 });
+      if (!await ownsBusOpsEmployee(req, staff.employeeId)) return NextResponse.json({ error: 'Employee is not owned by this account' }, { status: 403 });
+
 
         // staffMemberId is resolved within the tenant above, but tripId comes
         // from the request body unchecked.
+
         const existing = await tx.tripPassenger.findFirst({
           where: { tripId, staffMemberId, tenantId },
           select: { id: true, status: true },

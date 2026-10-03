@@ -25,6 +25,8 @@ vi.mock('next/server', async () => await import('next/server.js'));
 const state = vi.hoisted(() => ({
   gateways: [] as Array<{ gatewayId: string; tenantId: string | null; isActive: boolean; secret: string | null; vehicleId: string | null }>,
   scopedTenants: [] as string[],
+  receipts: new Set<string>(),
+  tenantActive: true,
 }));
 
 vi.mock('@/lib/prisma', () => ({ prisma: {} }));
@@ -41,11 +43,16 @@ vi.mock('@/lib/rls', () => {
       identify: (tx: unknown) => Promise<string | null>,
       handle: (ctx: { tx: unknown; tenantId: string }) => Promise<unknown>,
     ) => {
-      const platformTx = { bleGateway: { findUnique: async ({ where }: { where: { gatewayId: string } }) => find(where.gatewayId, null) } };
+      const platformTx = { tenant: { findUnique: async () => ({isActive:state.tenantActive,modules:[{module:'bus-ops',isEnabled:true}]}) }, bleGateway: { findUnique: async ({ where }: { where: { gatewayId: string } }) => find(where.gatewayId, null) } };
       const tenantId = await identify(platformTx);
       if (!tenantId) return null;
       state.scopedTenants.push(tenantId);
       const tenantTx = {
+        $executeRawUnsafe: async (sql:string,_tenant:string,_gateway:string,hash:string) => {
+          if (sql.startsWith('DELETE')) return 0;
+          if (state.receipts.has(hash)) return 0;
+          state.receipts.add(hash); return 1;
+        },
         bleGateway: {
           findUnique: async ({ where }: { where: { gatewayId: string } }) => find(where.gatewayId, tenantId),
           update: async () => ({}),
@@ -80,9 +87,23 @@ beforeEach(() => {
   delete process.env.BLE_GATEWAY_SHARED_SECRET;
   state.gateways = [{ gatewayId: 'GW-BUS-1', tenantId: TENANT_A, isActive: true, secret: SECRET, vehicleId: 'veh-1' }];
   state.scopedTenants = [];
+  state.receipts.clear();
+  state.tenantActive = true;
 });
 
 describe('bus gateway events device authentication', () => {
+  it('rejects signed body replay and stale timestamps before attendance changes', async () => {
+    const batch = {gatewayId:'GW-BUS-1',events:[{tagId:'tag',kind:'BOARD',occurredAt:new Date().toISOString()}]};
+    await send(batch);
+    expect((await send(batch)).status).toBe(409);
+    expect((await send({...batch,events:[{...batch.events[0],occurredAt:'2020-01-01T00:00:00Z'}]})).status).toBe(400);
+  });
+  it('refuses a suspended tenant even with a valid gateway signature', async () => {
+    state.tenantActive = false;
+    expect((await send(emptyBatch())).status).toBe(401);
+    expect(state.scopedTenants).toEqual([]);
+  });
+
   it('accepts a signed request with no session and runs under the gateway tenant', async () => {
     const res = await send(emptyBatch());
     expect(res.status).toBe(200);

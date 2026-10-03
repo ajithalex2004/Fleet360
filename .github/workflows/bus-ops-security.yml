@@ -1,0 +1,38 @@
+name: Bus Ops security gates
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  policy-and-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql://test:test@127.0.0.1:1/fleet360_test
+      DIRECT_URL: postgresql://test:test@127.0.0.1:1/fleet360_test
+      SESSION_SECRET: ci-only-session-secret-not-a-production-credential
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --legacy-peer-deps
+      - run: npx prisma generate
+      - run: npx tsc --noEmit --pretty false
+      - name: Policy, isolation and safety regressions
+        run: >-
+          npx vitest run
+          tests/unit/bus-ops-authoritative-access.test.ts
+          tests/unit/bus-ops-enterprise-policy.test.ts
+          tests/unit/bus-ops-device-parent-isolation.test.ts
+          tests/unit/bus-gateway-events-auth.test.ts
+          tests/unit/bus-ops-state-machines.test.ts
+          tests/unit/bus-ops-admin-resources.test.ts
+          tests/unit/validate-assignment.test.ts
+          tests/unit/authz-policy-matrix.test.ts
+          tests/unit/permissions.test.ts
+          --maxWorkers=2 --minWorkers=1

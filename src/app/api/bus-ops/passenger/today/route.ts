@@ -1,3 +1,4 @@
+import { ownsBusOpsEmployee, requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -17,6 +18,8 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   // Audit risk #13 — tenant scoping. Middleware already gated the request at
   // 401, but this handler was looking up the employee by employeeId with no
@@ -50,6 +53,8 @@ export async function GET(req: NextRequest) {
         },
       });
       if (!staff) return NextResponse.json({ error: 'Staff member not found' }, { status: 404 });
+      if (!await ownsBusOpsEmployee(req, staff.employeeId)) return NextResponse.json({ error: 'Employee is not owned by this account' }, { status: 403 });
+
 
       // Today's window — TripPassenger does not store its own date, so we filter
       // by the related TripSchedule.departureTime.

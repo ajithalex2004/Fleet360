@@ -22,6 +22,7 @@ import { middleware } from '@/middleware';
 import { signSession } from '@/lib/tenant-session';
 import { ALL_PERMISSIONS, SYSTEM_ROLES } from '@/lib/permissions';
 import { AREAS, GO_ONLY_AREAS, areaOf, POLICY_VERSION, type Rule } from '@/lib/authz/policy-matrix';
+import { busOpsCapability } from '@/lib/authz/bus-ops-routes';
 import { authzMode, decide } from '@/lib/authz/policy';
 import { CATALOGUE_VERSION, decodePermissionClaim, encodePermissionClaim } from '@/lib/authz/permission-claim';
 import { permissionsForEffectiveRole, systemRolePermissions } from '@/lib/authz/session-permissions';
@@ -169,6 +170,8 @@ function expectedAllow(code: string, rule: Rule, pathname: string, method: strin
     case 'tenant-admin': return code === 'SUPER_ADMIN' || code === 'TENANT_ADMIN';
     case 'admin-level': return true; // checked against ADMIN_ROUTE_POLICY in admin-access.test.ts
     case 'module': {
+      if (rule.module === 'bus-ops' && busOpsCapability(pathname,method)?.action === 'external') return true;
+      if (!required) return false;
       const [module, action, resource] = required!.split(':');
       return expectedModuleAllow(code, module, action, resource);
     }
@@ -294,6 +297,11 @@ describe('middleware', () => {
     const token = await signSession({ userId: 'user-1', tenantId: TENANT, plan: 'ENTERPRISE', role, permissions });
     return middleware(new NextRequest(`http://localhost${pathname}`, { method, headers: { cookie: `xl-session=${token}` } }));
   }
+
+  it('always enforces Bus Ops even when global authorization is off', async () => {
+    process.env.AUTHZ_MODE = 'off';
+    expect((await call('/api/bus-ops/schedules/x/depart', 'POST', 'VIEWER', systemRolePermissions('VIEWER'))).status).toBe(403);
+  });
 
   it('defaults to report mode', () => {
     expect(authzMode(undefined)).toBe('report');

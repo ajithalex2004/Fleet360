@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -88,12 +89,14 @@ function planRow(p: {
 }
 
 export async function POST(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
-  const permError = requireBusOpsAdminAccess(req, 'planning-core');
+  const permError = await requireBusOpsAdminAccess(req, 'planning-core');
   if (permError) return permError;
   try {
     // Accept both {leftId, rightId} (internal) and {planIdA, planIdB} (test/UI).

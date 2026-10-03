@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -18,6 +19,8 @@ const CACHE_TAG = 'bus-ops:routes';
 type IdCtx = { params: Promise<{ id: string }> };
 
 export async function GET(req: NextRequest, { params }: IdCtx) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   const { id } = await params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -55,6 +58,8 @@ export async function GET(req: NextRequest, { params }: IdCtx) {
 
 
 export async function PATCH(req: NextRequest, { params }: IdCtx) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   const { id } = await params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -134,6 +139,8 @@ export async function PATCH(req: NextRequest, { params }: IdCtx) {
 
 
 export async function DELETE(req: NextRequest, { params }: IdCtx) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   const { id } = await params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });

@@ -1,210 +1,81 @@
-export const dynamic = 'force-dynamic';
-
-/**
- * POST /api/bus-ops/checkin
- *
- * Unified multi-method boarding endpoint. Accepts:
- *
- * QR (driver displays trip QR; passenger scans):
- *   { method:'QR', token:'<scheduleId>.<expiry>.<sig>', staffMemberId, direction }
- *
- * QR (passenger displays personal QR; driver scans):
- *   { method:'QR', token:'<scheduleId>.<expiry>.<sig>', staffEmployeeId, direction }
- *
- * NFC (Web NFC reads RFID tag UID):
- *   { method:'NFC', scheduleId, tagUid, direction }
- *
- * BLE (Web Bluetooth detects vehicle beacon proximity):
- *   { method:'BLE', scheduleId, beaconUuid, staffMemberId, rssi?, direction }
- *
- * MANUAL (passenger self-tap or driver tap):
- *   { method:'MANUAL', scheduleId, staffMemberId|passengerId, direction }
- *
- * Server validates the method-specific identifier and:
- *   1. Creates an immutable BoardingEvent row.
- *   2. Updates TripPassenger.status (BOARD → BOARDED, ALIGHT → keeps).
- *   3. Returns the event + denormalised passenger snapshot.
- */
-
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls, runSequential } from '@/lib/rls';
+import { z } from 'zod';
 import { Prisma } from '@prisma/client';
+import { requireBusOpsRequest, ownsBusOpsEmployee } from '@/lib/bus-ops/access';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
-import {
-  verifyQrToken,
-  normaliseBleUuid,
-  normaliseNfcUid,
-  type CheckinMethod,
-  type CheckinDirection,
-} from '@/lib/bus-checkin';
-import { logAudit } from '@/lib/audit';
-import { captureException } from '@/lib/sentry';
-
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { verifyQrToken, normaliseNfcUid, normaliseBleUuid } from '@/lib/bus-checkin';
+import { recordBoarding, recordAlighting } from '@/lib/bus-ops/passenger-attendance';
+import { writeRequiredAudit } from '@/lib/audit';
+export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
-
-const METHODS: CheckinMethod[] = ['QR', 'NFC', 'BLE', 'MANUAL'];
-
+const input = z.object({
+  method: z.enum(['QR','NFC','BLE','MANUAL']), direction: z.enum(['BOARD','ALIGHT']).default('BOARD'),
+  token: z.string().max(4096).optional(), scheduleId: z.string().min(1).optional(),
+  staffMemberId: z.string().min(1).optional(), staffEmployeeId: z.string().min(1).optional(), passengerId: z.string().min(1).optional(),
+  tagUid: z.string().max(200).optional(), beaconUuid: z.string().max(200).optional(), rssi: z.number().finite().optional(),
+  stopId: z.string().min(1).optional(), performedAt: z.iso.datetime({ offset: true }).optional(),
+}).strict();
 export async function POST(req: NextRequest) {
-
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
-  if (!authz.ok) {
-    return NextResponse.json({ error: authz.error }, { status: authz.status });
-  }
-  const { tenantId } = authz;
-
-  return withTenantRls(prisma, tenantId, async (tx) => {
-    try {
-        const bodyRaw = await req.json();
-      const body = stripTenantOwnershipFields(bodyRaw);
-        const method = String(body?.method ?? '').toUpperCase() as CheckinMethod;
-        if (!METHODS.includes(method)) {
-          return NextResponse.json({ error: `method must be one of: ${METHODS.join(', ')}` }, { status: 400 });
-        }
-        const direction: CheckinDirection = body?.direction === 'ALIGHT' ? 'ALIGHT' : 'BOARD';
-
-        let scheduleId: string | null = null;
-        let staffMemberId: string | null = body?.staffMemberId ?? null;
-        let identifier: string | null = null;
-        let resolvedNote = '';
-
-        /* ── Resolve schedule + identity by method ──────────────────────────── */
-
-        if (method === 'QR') {
-          const token = String(body?.token ?? '');
-          const verify = verifyQrToken(token);
-          if (!verify.ok) {
-            return NextResponse.json({ error: `QR ${verify.reason}` }, { status: 400 });
-          }
-          scheduleId = verify.scheduleId!;
-          identifier = token;
-          // Caller may pass either staffMemberId OR staffEmployeeId.
-          if (!staffMemberId && body?.staffEmployeeId) {
-            // StaffMember.employeeId has no unique constraint (it's a plain
-            // nullable column), so findUnique() on it alone was never valid
-            // — findFirst, scoped to this tenant, is the real equivalent.
-            const m = await tx.staffMember.findFirst({
-              where: { employeeId: String(body.staffEmployeeId), tenantId },
-              select: { id: true },
-            });
-            staffMemberId = m?.id ?? null;
-          }
-        }
-        else if (method === 'NFC') {
-          scheduleId = body?.scheduleId ?? null;
-          const tagUid = normaliseNfcUid(String(body?.tagUid ?? ''));
-          if (!scheduleId || !tagUid) {
-            return NextResponse.json({ error: 'scheduleId and tagUid are required for NFC' }, { status: 400 });
-          }
-          const tag = await tx.staffRfidTag.findUnique({
-            where: { tagUid },
-            select: { staffMemberId: true, isActive: true },
-          });
-          if (!tag || tag.isActive === false) {
-            return NextResponse.json({ error: 'Unknown or inactive RFID tag' }, { status: 404 });
-          }
-          staffMemberId = tag.staffMemberId;
-          identifier = tagUid;
-        }
-        else if (method === 'BLE') {
-          scheduleId = body?.scheduleId ?? null;
-          const beaconUuid = normaliseBleUuid(String(body?.beaconUuid ?? ''));
-          if (!scheduleId || !beaconUuid || !staffMemberId) {
-            return NextResponse.json({ error: 'scheduleId, beaconUuid, and staffMemberId are required for BLE' }, { status: 400 });
-          }
-          // Beacon must match the trip's assigned vehicle.
-          const sched = await tx.tripSchedule.findUnique({
-            where: { id: scheduleId },
-            select: { vehicleId: true, status: true },
-          });
-          if (!sched?.vehicleId) {
-            return NextResponse.json({ error: 'Trip has no vehicle assigned — cannot validate BLE beacon' }, { status: 412 });
-          }
-          const beacon = await tx.vehicleBeacon.findUnique({
-            where: { vehicleId: sched.vehicleId },
-            select: { bleUuid: true, isActive: true },
-          });
-          if (!beacon || beacon.isActive === false || beacon.bleUuid.toLowerCase() !== beaconUuid) {
-            return NextResponse.json({ error: 'Beacon UUID does not match trip vehicle' }, { status: 403 });
-          }
-          identifier = beaconUuid;
-          resolvedNote = ` rssi=${body?.rssi ?? '—'}`;
-        }
-        else if (method === 'MANUAL') {
-          scheduleId = body?.scheduleId ?? null;
-          if (!scheduleId) {
-            return NextResponse.json({ error: 'scheduleId is required for MANUAL' }, { status: 400 });
-          }
-          // staffMemberId or passengerId — either works.
-        }
-
-        if (!scheduleId) {
-          return NextResponse.json({ error: 'Could not resolve scheduleId' }, { status: 400 });
-        }
-
-        /* ── Resolve TripPassenger (the link to denormalise status onto) ──── */
-
-        let passengerId: string | null = body?.passengerId ?? null;
-        if (!passengerId && staffMemberId) {
-          const p = await tx.tripPassenger.findFirst({
-            where: { tripId: scheduleId, staffMemberId, tenantId },
-            select: { id: true },
-          });
-          passengerId = p?.id ?? null;
-        }
-        if (!passengerId && staffMemberId === null) {
-          return NextResponse.json({ error: 'Could not identify staff member or passenger' }, { status: 400 });
-        }
-        if (!passengerId) {
-          return NextResponse.json({ error: `Staff member is not a passenger on this trip` }, { status: 404 });
-        }
-
-        /* ── Persist immutable event + denormalise status ──────────────────── */
-
-        const performedBy = req.headers.get('x-user-id') ?? body?.performedBy ?? null;
-        const performedAt = body?.performedAt ? new Date(body.performedAt) : new Date();
-
-        const [event, passenger] = await runSequential([
-          tx.boardingEvent.create({
-            data: {
-              tenantId,
-              scheduleId,
-              passengerId,
-              staffMemberId,
-              method,
-              direction,
-              identifier,
-              stopId: body?.stopId ?? null,
-              performedAt,
-              performedBy,
-              rawPayload: body && typeof body === 'object'
-                ? (body as unknown as Prisma.InputJsonValue)
-                : Prisma.JsonNull,
-            },
-          }),
-          tx.tripPassenger.update({
-            where: { id: passengerId },
-            data: direction === 'BOARD'
-              ? { status: 'BOARDED', boardedAt: performedAt }
-              : { /* ALIGHT — preserve BOARDED status, no fields to mutate */ status: 'BOARDED' },
-          }),
-        ]);
-
-        void logAudit({
-          tenantId: req.headers.get('x-tenant-id') ?? undefined,
-          userId: performedBy ?? `method:${method}`,
-          userRole: req.headers.get('x-user-role') ?? 'STAFF',
-          entityType: 'TripPassenger',
-          entityId: passengerId,
-          action: 'UPDATE',
-          details: `${direction} via ${method}${identifier ? ` (${identifier.slice(0, 16)})` : ''}${resolvedNote} on schedule ${scheduleId.slice(0, 8)}.`,
-        });
-
-        return NextResponse.json({ ok: true, event, passenger });
-        } catch (err) {
-        captureException(err, { context: 'bus-ops.checkin' });
-        return NextResponse.json({ error: err instanceof Error ? err.message : 'Check-in failed' }, { status: 500 });
+  const refusal = await requireBusOpsRequest(req);
+  if (refusal) return refusal;
+  const auth = requireAuthorizedTenant(req);
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  const parsed = input.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: 'Invalid check-in request' }, { status: 400 });
+  const b = parsed.data;
+  const performedAt = b.performedAt ? new Date(b.performedAt) : new Date();
+  if (Math.abs(performedAt.getTime() - Date.now()) > 5 * 60_000) return NextResponse.json({ error: 'Check-in timestamp is outside the allowed window' }, { status: 400 });
+  try {
+    return await withTenantRls(prisma, auth.tenantId, async tx => {
+      let scheduleId = b.scheduleId, staffMemberId = b.staffMemberId;
+      let identifier: string | null = null;
+      if (b.method === 'QR') {
+        const verified = verifyQrToken(b.token ?? '');
+        if (!verified.ok) return NextResponse.json({ error: 'Invalid QR token' }, { status: 400 });
+        if (scheduleId && scheduleId !== verified.scheduleId) return NextResponse.json({ error: 'QR trip mismatch' }, { status: 400 });
+        scheduleId = verified.scheduleId!;
+        identifier = b.token ?? null;
       }
-  });
+      if (!scheduleId) return NextResponse.json({ error: 'Trip is required' }, { status: 400 });
+      await tx.$queryRawUnsafe('SELECT id FROM trip_schedules WHERE id::text = $1 AND tenant_id = $2 FOR UPDATE', scheduleId, auth.tenantId);
+      const trip = await tx.tripSchedule.findFirst({ where: { id: scheduleId, tenantId: auth.tenantId, deletedAt: null, status: { in: ['SCHEDULED','STARTED','EN_ROUTE','DEPARTED','IN_TRANSIT'] } } });
+      if (!trip) return NextResponse.json({ error: 'Eligible trip not found' }, { status: 404 });
+      if (b.method === 'NFC') {
+        identifier = normaliseNfcUid(b.tagUid ?? '');
+        const tag = await tx.staffRfidTag.findFirst({ where: { tagUid: identifier, tenantId: auth.tenantId, isActive: true } });
+        if (!tag || (staffMemberId && staffMemberId !== tag.staffMemberId)) return NextResponse.json({ error: 'Tag not found' }, { status: 404 });
+        staffMemberId = tag.staffMemberId;
+      }
+      if (b.staffEmployeeId) {
+        const employee = await tx.staffMember.findFirst({ where: { tenantId: auth.tenantId, employeeId: b.staffEmployeeId, deletedAt: null, isActive: true } });
+        if (!employee || (staffMemberId && staffMemberId !== employee.id)) return NextResponse.json({ error: 'Employee mismatch' }, { status: 404 });
+        staffMemberId = employee.id;
+      }
+      if (!b.passengerId && !staffMemberId) return NextResponse.json({ error: 'Passenger identity is required' }, { status: 400 });
+      const passenger = await tx.tripPassenger.findFirst({ where: { tenantId: auth.tenantId, tripId: scheduleId, deletedAt: null,
+        ...(b.passengerId ? { id: b.passengerId } : {}), ...(staffMemberId ? { staffMemberId } : {}) } });
+      if (!passenger?.staffMemberId) return NextResponse.json({ error: 'Passenger not found on this trip' }, { status: 404 });
+      const employee = await tx.staffMember.findFirst({ where: { id: passenger.staffMemberId, tenantId: auth.tenantId, deletedAt: null, isActive: true } });
+      if (!employee || !await ownsBusOpsEmployee(req, employee.employeeId)) return NextResponse.json({ error: 'Passenger identity is not authorized' }, { status: 403 });
+      if (b.method === 'BLE') {
+        identifier = normaliseBleUuid(b.beaconUuid ?? '');
+        const beacon = trip.vehicleId ? await tx.vehicleBeacon.findFirst({ where: { vehicleId: trip.vehicleId, tenantId: auth.tenantId, isActive: true, bleUuid: identifier } }) : null;
+        if (!beacon) return NextResponse.json({ error: 'Beacon does not match trip' }, { status: 403 });
+      }
+      if (b.stopId && !await tx.routeStop.findFirst({ where: { id: b.stopId, routeId: trip.routeId, tenantId: auth.tenantId } })) return NextResponse.json({ error: 'Stop does not belong to trip route' }, { status: 400 });
+      await tx.$queryRawUnsafe(`SELECT id FROM trip_passengers WHERE id::text = $1 AND tenant_id = $2 FOR UPDATE`, passenger.id, auth.tenantId);
+      const context = { tenantId: auth.tenantId, scheduleId, passengerId: passenger.id, staffMemberId: employee.id, source: b.method,
+        occurredAt: performedAt, performedBy: auth.userId, identifier, stopId: b.stopId, rawPayload: b as Prisma.InputJsonValue };
+      const result = await (b.direction === 'BOARD' ? recordBoarding : recordAlighting)(tx, context);
+      if (!result.applied && result.reason !== 'already in target state') return NextResponse.json({ error: result.reason }, { status: 409 });
+      if (result.applied) await writeRequiredAudit({ tenantId: auth.tenantId, userId: auth.userId ?? undefined, entityType: 'TripPassenger', entityId: passenger.id, action: b.direction, details: `${b.method}; trip ${scheduleId}` }, tx);
+      const updated = await tx.tripPassenger.findFirst({ where: { id: passenger.id, tenantId: auth.tenantId } });
+      return NextResponse.json({ ok: true, applied: result.applied, passenger: updated });
+    });
+  } catch (error) {
+    console.error('[bus-ops check-in] transaction failed', error instanceof Error ? error.name : 'unknown');
+    return NextResponse.json({ error: 'Check-in failed' }, { status: 500 });
+  }
 }
-

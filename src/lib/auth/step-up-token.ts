@@ -88,7 +88,7 @@ export async function verifyStepUp(token: string | null | undefined, subject: St
   if (dot <= 0) return false;
   try {
     const body = token.slice(0, dot);
-    const ok = await crypto.subtle.verify('HMAC', await key(), fromB64url(token.slice(dot + 1)), enc.encode(body));
+    const ok = await crypto.subtle.verify('HMAC', await key(), new Uint8Array(fromB64url(token.slice(dot + 1))), enc.encode(body));
     if (!ok) return false;
     const c = JSON.parse(new TextDecoder().decode(fromB64url(body))) as Partial<StepUpClaims>;
     return c.typ === 'step-up'

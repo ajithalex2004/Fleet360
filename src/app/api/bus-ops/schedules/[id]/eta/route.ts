@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -47,6 +48,8 @@ interface StopRow { id: string; sequence: number; stop_name: string; gps_lat: nu
 interface VisitRow { stop_id: string; entered_at: Date | null }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   const { id: scheduleId } = await params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });

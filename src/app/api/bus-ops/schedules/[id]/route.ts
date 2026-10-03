@@ -1,5 +1,7 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
+import { z } from 'zod';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
@@ -32,6 +34,8 @@ function touchesAssignment(body: Record<string, unknown>): boolean {
 }
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -65,6 +69,8 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
 
 
 export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -83,19 +89,36 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         // Load full existing row so we can build an effective-merged
         // schedule for validation. Any assignment-affecting field NOT in
         // the patch retains its committed value.
+        await tx.$queryRawUnsafe('SELECT id FROM trip_schedules WHERE id::text = $1 AND tenant_id = $2 FOR UPDATE', params.id, tenantId);
         const existing = await tx.tripSchedule.findFirst({
           where: { id: params.id, tenantId, deletedAt: null },
           select: {
             id: true, vehicleId: true, driverId: true,
             departureTime: true, arrivalTime: true, routeId: true,
-            confirmedCount: true, capacity: true,
+            confirmedCount: true, capacity: true, status: true,
           },
         });
         if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-        const { route, passengers, tripLogs, ...data } = body;
+        const parsed = z.object({
+          routeId: z.string().min(1).optional(),
+          vehicleId: z.string().min(1).nullable().optional(),
+          driverId: z.string().min(1).nullable().optional(),
+          departureTime: z.iso.datetime({ offset: true }).optional(),
+          arrivalTime: z.iso.datetime({ offset: true }).nullable().optional(),
+          latestArrivalTime: z.iso.datetime({ offset: true }).nullable().optional(),
+          capacity: z.number().int().positive().max(200).optional(),
+          frequency: z.enum(['DAILY', 'WEEKLY', 'ONCE']).optional(),
+          shiftType: z.enum(['MORNING', 'EVENING', 'NIGHT', 'SPLIT']).optional(),
+          direction: z.enum(['INBOUND', 'OUTBOUND']).optional(),
+          notes: z.string().max(10000).nullable().optional(),
+        }).strict().safeParse(body);
+        if (!parsed.success) return NextResponse.json({ error: 'Invalid schedule update', issues: parsed.error.issues }, { status: 400 });
+        const data = parsed.data;
+        if (touchesAssignment(body) && existing.status !== 'SCHEDULED') return NextResponse.json({ error: 'Only scheduled trips may be reassigned' }, { status: 409 });
+        if (data.capacity !== undefined && data.capacity < (existing.confirmedCount ?? 0)) return NextResponse.json({ error: 'Capacity is below confirmed passenger count' }, { status: 409 });
 
         // Only revalidate when an assignment-affecting field was actually
         // changed. Pure status flips / notes edits skip the check to avoid
@@ -137,6 +160,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
               });
               return { verdict: v.verdict, validation: v, schedule: s };
             },
+            tx,
           );
 
           if (txResult.verdict === 'BLOCK') {
@@ -164,6 +188,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
 
 export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });

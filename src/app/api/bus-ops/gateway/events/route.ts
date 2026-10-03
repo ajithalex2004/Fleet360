@@ -34,14 +34,9 @@ export const dynamic = 'force-dynamic';
  * signature check here IS the trust boundary — not a second layer
  * behind one.
  *
- * NOT replay-protected. The previous version of this comment claimed
- * bodies were, which was never true: nothing binds a request to a time
- * window or a nonce, so a captured body can be re-sent. The per-event
- * dedup below absorbs an immediate resend, but a replay far enough
- * later resolves a DIFFERENT active trip and would apply the events
- * there. Fixing that needs a signed timestamp plus a freshness window,
- * which is a protocol change on the firmware side — tracked separately
- * rather than silently assumed to be handled.
+ * Signed event/scan timestamps must be within five minutes. A transactional
+ * receipt keyed by tenant, gateway and signed body hash blocks replay.
+ * Empty heartbeat bodies do not change attendance and need no receipt.
  *
  * Idempotency: per-event dedup on
  * (scheduleId, passengerId, direction, method) within ±5s of
@@ -49,6 +44,9 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { createHash } from 'node:crypto';
+import { freshGatewayBatch } from '@/lib/bus-ops/gateway-freshness';
+import { resolveModuleKey } from '@/lib/modules';
 import { withWebhookTenant, type TxClient } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import {
@@ -156,9 +154,21 @@ export async function POST(req: NextRequest) {
         found.tenantId != null &&
         found.isActive !== false &&
         verifyGatewaySignatureWithSecret(rawBody, sig, resolveGatewaySecret(found.secret));
-      return authOk ? found.tenantId : null;
+      if (!authOk) return null;
+      const tenant = await tx.tenant.findUnique({ where: { id: found!.tenantId! }, include: { modules: true } });
+      return tenant?.isActive && tenant.modules.some(m => m.isEnabled && resolveModuleKey(m.module) === 'bus-ops') ? found!.tenantId : null;
     },
-    ({ tx, tenantId }) => ingest(tx, tenantId, gatewayId, payload),
+    async ({ tx, tenantId }) => {
+      if (payload.scanWindow && (!Array.isArray(payload.scanWindow.observations) || payload.scanWindow.observations.length > 500)) return NextResponse.json({ ok: false, error: 'Invalid scan size' }, { status: 400 });
+      if (!freshGatewayBatch(payload)) return NextResponse.json({ ok: false, error: 'Stale or invalid signed timestamps' }, { status: 400 });
+      if (payload.events?.length || payload.scanWindow) {
+        const hash = createHash('sha256').update(rawBody).digest('hex');
+        await tx.$executeRawUnsafe('DELETE FROM bus_gateway_ingest_receipts WHERE tenant_id = $1 AND expires_at < now()', tenantId);
+        const inserted = await tx.$executeRawUnsafe(`INSERT INTO bus_gateway_ingest_receipts (tenant_id,gateway_id,body_hash,expires_at) VALUES ($1,$2,$3,now()+interval '10 minutes') ON CONFLICT DO NOTHING`, tenantId,gatewayId,hash);
+        if (inserted !== 1) return NextResponse.json({ ok: false, error: 'Replay rejected' }, { status: 409 });
+      }
+      return ingest(tx, tenantId, gatewayId, payload);
+    },
   );
 
   return result ?? NextResponse.json({ ok: false, error: 'Unauthorized' }, { status: 401 });
@@ -220,7 +230,7 @@ async function ingest(
         status: { in: ['SCHEDULED', 'STARTED', 'EN_ROUTE', 'DEPARTED', 'IN_TRANSIT'] },
         // Trip is "active" if it's within ±2h of departure, or currently in
         // transit. Simple heuristic — adjust if shifts are longer than 4h.
-        departureTime: { lte: new Date(now.getTime() + 2 * 60 * 60 * 1000) },
+        departureTime: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000), lte: new Date(now.getTime() + 2 * 60 * 60 * 1000) },
       },
       orderBy: { departureTime: 'desc' },
       select: { id: true, status: true },

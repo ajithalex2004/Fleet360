@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -16,6 +17,8 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 export const runtime = 'nodejs';
 
 export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(_req);
+  if (policyError) return policyError;
   const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: _req.headers, nextUrl: _req.nextUrl });
@@ -25,6 +28,8 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
   const { tenantId } = authz;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
+    const parent = await tx.staffMember.findFirst({ where: { id: params.id, tenantId, deletedAt: null }, select: { id: true } });
+    if (!parent) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     const tag = await tx.staffRfidTag.findUnique({ where: { staffMemberId: params.id } });
       return tag ? NextResponse.json(tag) : NextResponse.json({ error: 'No tag registered' }, { status: 404 });
   });
@@ -32,6 +37,8 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
 
 
 export async function PUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -47,6 +54,8 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
   let audit: Parameters<typeof logAudit>[0] | null = null;
 
   const response = await withTenantRls(prisma, tenantId, async (tx) => {
+    const parent = await tx.staffMember.findFirst({ where: { id: params.id, tenantId, deletedAt: null }, select: { id: true } });
+    if (!parent) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
       const tagUid = normaliseNfcUid(String(body?.tagUid ?? ''));
@@ -61,7 +70,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
       const tag = await tx.staffRfidTag.upsert({
         where: { staffMemberId: params.id },
         update: { tagUid, isActive: body?.isActive ?? true, notes: body?.notes ?? null },
-        create: { staffMemberId: params.id, tagUid, isActive: body?.isActive ?? true, notes: body?.notes ?? null },
+        create: { tenantId, staffMemberId: params.id, tagUid, isActive: body?.isActive ?? true, notes: body?.notes ?? null },
       });
 
       audit = {
@@ -83,6 +92,8 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
 
 
 export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -95,6 +106,8 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
   let audit: Parameters<typeof logAudit>[0] | null = null;
 
   const response = await withTenantRls(prisma, tenantId, async (tx) => {
+    const parent = await tx.staffMember.findFirst({ where: { id: params.id, tenantId, deletedAt: null }, select: { id: true } });
+    if (!parent) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     await tx.staffRfidTag.update({
         where: { staffMemberId: params.id },
         data: { isActive: false },

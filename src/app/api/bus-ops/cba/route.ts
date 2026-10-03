@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -75,13 +76,15 @@ function shape(r: RuleSetRow) {
 }
 
 export async function GET(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const permError = requireBusOpsAdminAccess(req, CBA_RESOURCE);
+  const permError = await requireBusOpsAdminAccess(req, CBA_RESOURCE);
   if (permError) return permError;
   const sp = new URL(req.url).searchParams;
   const id      = sp.get('id');
@@ -119,13 +122,15 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const permError = requireBusOpsAdminAccess(req, CBA_RESOURCE);
+  const permError = await requireBusOpsAdminAccess(req, CBA_RESOURCE);
   if (permError) return permError;
   try {
     const bodyRaw = await req.json() as { name: string; description?: string;
@@ -158,13 +163,15 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const permError = requireBusOpsAdminAccess(req, CBA_RESOURCE);
+  const permError = await requireBusOpsAdminAccess(req, CBA_RESOURCE);
   if (permError) return permError;
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
@@ -200,13 +207,15 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const permError = requireBusOpsAdminAccess(req, CBA_RESOURCE);
+  const permError = await requireBusOpsAdminAccess(req, CBA_RESOURCE);
   if (permError) return permError;
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
