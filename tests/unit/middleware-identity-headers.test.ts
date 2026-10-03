@@ -175,6 +175,7 @@ describe('middleware — other paths', () => {
       tenantId: TENANT_A,
       plan: 'STANDARD',
       role: 'DISPATCHER',
+      permissions: ['bus-ops:view:trips'],
     });
     const res = await middleware(req('/api/bus-ops/schedules', {
       ...FORGED,
