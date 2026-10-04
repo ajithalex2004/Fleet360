@@ -90,7 +90,7 @@ export function PageHeader({ title, subtitle, icon: Icon, accent = 'default', ac
           {translatedSubtitle && <p className="text-xs text-[var(--text-muted)] mt-1 max-w-3xl leading-relaxed">{translatedSubtitle}</p>}
         </div>
       </div>
-      {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
+      {actions && <div className="flex max-w-full flex-wrap items-center gap-2">{actions}</div>}
     </div>
   );
 }
