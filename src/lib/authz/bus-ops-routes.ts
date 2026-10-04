@@ -421,6 +421,12 @@ export const BUS_OPS_ROUTES: Record<string, Partial<Record<string, BusOpsCapabil
       "resource": "route-consolidation"
     }
   },
+  "route-consolidation/evidence": {
+    "POST": {
+      "action": "view",
+      "resource": "route-consolidation"
+    }
+  },
   "route-consolidation/apply/preview": {
     "POST": {
       "action": "create",

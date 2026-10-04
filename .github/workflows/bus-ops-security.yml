@@ -27,6 +27,7 @@ jobs:
         run: >-
           npx vitest run
           tests/unit/bus-ops-passenger-journey.test.ts
+          tests/unit/consolidation-evidence.test.ts
           tests/unit/bus-ops-en-route-command.test.ts
           tests/unit/bus-ops-disruptions.test.ts
           tests/unit/bus-rider-notifications.test.ts
