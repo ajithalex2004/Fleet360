@@ -455,7 +455,7 @@ export default function BusOpsDispatchPage() {
             ))}
           </div>
         ) : (
-          <div className="flex gap-4 overflow-x-auto pb-4" style={{ minWidth: `${visibleStages.length * 220}px` }}>
+          <div className="flex gap-4 overflow-x-auto pb-4">
             {cols.map(col => (
               <div key={col.status} className="flex-shrink-0 w-52 space-y-3">
                 {/* Column header */}
@@ -478,7 +478,7 @@ export default function BusOpsDispatchPage() {
                       />
                     ))
                   )}
-                </div>
+          /div>
               </div>
             ))}
           </div>

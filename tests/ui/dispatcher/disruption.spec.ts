@@ -126,3 +126,12 @@ test('Trip Monitor displays a blocked departure and keeps the trip scheduled',as
  const f=await fixture(page,{tripStatus:'SCHEDULED',commandError:'Resolve the reported disruption with an inspected substitute before departure'});await page.goto('/bus-ops/dispatch');await page.getByRole('button',{name:/Start$/,exact:false}).click();
  await expect(page.getByRole('alert')).toContainText('inspected substitute');expect(f.trip.status).toBe('SCHEDULED');expect(f.tripPosts[0].url).toBe('/api/bus-ops/schedules/synthetic-trip/depart');
 });
+for(const theme of ['light','dark'])for(const mobile of [false,true])test(`${theme} ${mobile?'mobile':'desktop'} Trip Monitor and trip detail layout`,async({page},testInfo)=>{
+ await page.setViewportSize(mobile?{width:390,height:844}:{width:1440,height:1000});await fixture(page,{initial:'REPORTED'});await page.goto(`/bus-ops/dispatch?theme=${theme}`);
+ await expect(page.getByRole('link',{name:'Details & recovery'})).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+ await page.screenshot({path:testInfo.outputPath(`${theme}-${mobile?'mobile':'desktop'}-monitor.png`),fullPage:true});
+ await page.goto(`/bus-ops/trips/synthetic-trip?theme=${theme}`);await expect(page.getByText('REPORTED: Synthetic bus engine breakdown')).toBeVisible();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+ await page.screenshot({path:testInfo.outputPath(`${theme}-${mobile?'mobile':'desktop'}-detail.png`),fullPage:true});
+});
