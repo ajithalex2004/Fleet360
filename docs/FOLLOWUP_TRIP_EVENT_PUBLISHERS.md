@@ -1,14 +1,13 @@
 # Trip event publishers and delivery status
 
-Local implementation in progress (2026-10-04): five additional publishers now
-write transactional outbox events. This code is not in PR #172's GitHub head or
-deployed. Apply `20261004080000_bus_ops_stop_delay_marker` before running it.
+Draft PR #172 implementation (2026-10-04): five additional publishers now
+write transactional outbox events. The candidate is published to PR #172 but is not deployed. Apply `20261004080000_bus_ops_stop_delay_marker` before running it.
 The next local increment replaces the global trip notification consumer with
 opt-in tenant rules and actual passenger employee contacts. It queues durable
 per-event / passenger / channel deliveries, and the `bus-rider-notifications`
 worker sends email, SMS or WhatsApp. Apply
 `20261004090000_bus_rider_notifications` before running the consumer or worker.
-This work remains local, unpushed and undeployed.
+This work is published in draft PR #172 and remains undeployed.
 
 ### Configuration and delivery
 
@@ -46,8 +45,11 @@ This work remains local, unpushed and undeployed.
 
 Local unit, TypeScript, schema, runtime-DDL and tenant policy checks cover this
 increment. The workflow includes a separate fresh PostgreSQL 16 service for six
-real RLS / locking / claim tests. It has not run in this workspace because no
-PostgreSQL server is installed; installing one failed at the package source.
+real RLS / locking / claim tests. The initial GitHub PostgreSQL run passed six tests. The first full fresh replay
+exposed a missing legacy trip_stop_visits table; the delay-marker migration now
+creates it when absent and preserves data when present. A seventh PostgreSQL
+regression covers replay preservation and forced RLS. The corrected candidate
+requires another CI run. No PostgreSQL server is installed in this workspace.
 No production database or actual passenger channel was used.
 
 Before release: run that PostgreSQL CI job, apply both migrations to isolated

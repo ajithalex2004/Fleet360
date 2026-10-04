@@ -16,6 +16,12 @@ async function scoped<T>(tenant:string,fn:(tx:Prisma.TransactionClient)=>Promise
   return fn(tx);
  });
 }
+async function applyStopMigration(){
+ const sql=readFileSync('prisma/migrations/20261004080000_bus_ops_stop_delay_marker/migration.sql','utf8');
+ const block=sql.indexOf('DO $$');
+ for(const statement of sql.slice(0,block).split(';').map(s=>s.trim()).filter(Boolean)) await db.$executeRawUnsafe(statement);
+ await db.$executeRawUnsafe(sql.slice(block));
+}
 async function insert(id:string,tenant:string,status='PENDING'){
  await db.$executeRaw`INSERT INTO bus_rider_deliveries(id,tenant_id,event_id,event_type,schedule_id,passenger_id,staff_member_id,channel,recipient,subject,body,status,expires_at)
  VALUES(${id},${tenant},'event1','trip.arriving','trip1','passenger1','staff1','EMAIL','synthetic@example.test','Update','Body',${status},now()+interval '1 hour')`;
@@ -30,11 +36,12 @@ suite('rider delivery PostgreSQL isolation and claims',()=>{
   if(exists[0].name) throw new Error('Use a fresh isolated database for this test');
   const migration=readFileSync('prisma/migrations/20261004090000_bus_rider_notifications/migration.sql','utf8');
   for(const sql of migration.split(';').map(s=>s.trim()).filter(Boolean)) await db.$executeRawUnsafe(sql);
+  await applyStopMigration();
   await db.$executeRawUnsafe('CREATE ROLE fleet360_rider_test_role NOLOGIN');
   await db.$executeRawUnsafe('GRANT USAGE ON SCHEMA public TO fleet360_rider_test_role');
-  await db.$executeRawUnsafe('GRANT SELECT,INSERT,UPDATE,DELETE ON bus_rider_deliveries,bus_rider_notification_rules TO fleet360_rider_test_role');
+  await db.$executeRawUnsafe('GRANT SELECT,INSERT,UPDATE,DELETE ON bus_rider_deliveries,bus_rider_notification_rules,trip_stop_visits TO fleet360_rider_test_role');
  });
- beforeEach(async()=>{await db.$executeRawUnsafe('TRUNCATE bus_rider_deliveries,bus_rider_notification_rules');});
+ beforeEach(async()=>{await db.$executeRawUnsafe('TRUNCATE bus_rider_deliveries,bus_rider_notification_rules,trip_stop_visits');});
  afterAll(async()=>{if(db) await db.$disconnect();});
  it('forces RLS for reads and rejects cross-tenant writes',async()=>{
   await insert('a','tenant-a');await insert('b','tenant-b');
@@ -72,4 +79,18 @@ suite('rider delivery PostgreSQL isolation and claims',()=>{
    WHERE id='a' AND tenant_id='tenant-a' AND status='SENDING' AND claim_token='stale-token'`);
   expect(changed).toBe(0);expect(claim.claim_token).toBeTruthy();
  });
+ it('provisions legacy stop visits on a fresh database and preserves markers on replay',async()=>{
+  await scoped('tenant-a',tx=>tx.$executeRaw`INSERT INTO trip_stop_visits(id,tenant_id,schedule_id,stop_id,approach_notified_at,delay_notified_at)
+   VALUES('visit-a','tenant-a','trip-a','stop-a',now(),now())`);
+  await scoped('tenant-b',tx=>tx.$executeRaw`INSERT INTO trip_stop_visits(id,tenant_id,schedule_id,stop_id)
+   VALUES('visit-b','tenant-b','trip-b','stop-b')`);
+  const [before]=await scoped('tenant-a',tx=>tx.$queryRaw<Array<{approach_notified_at:Date;delay_notified_at:Date}>>`SELECT approach_notified_at,delay_notified_at FROM trip_stop_visits`);
+  await applyStopMigration();
+  const rows=await scoped('tenant-a',tx=>tx.$queryRaw<Array<{id:string;approach_notified_at:Date;delay_notified_at:Date}>>`SELECT id,approach_notified_at,delay_notified_at FROM trip_stop_visits`);
+  expect(rows).toHaveLength(1);expect(rows[0].id).toBe('visit-a');
+  expect(rows[0].approach_notified_at).toEqual(before.approach_notified_at);expect(rows[0].delay_notified_at).toEqual(before.delay_notified_at);
+  await expect(scoped('tenant-a',tx=>tx.$executeRaw`INSERT INTO trip_stop_visits(id,tenant_id,schedule_id,stop_id)
+   VALUES('forged','tenant-b','trip-forged','stop-forged')`)).rejects.toThrow();
+ });
+
 });

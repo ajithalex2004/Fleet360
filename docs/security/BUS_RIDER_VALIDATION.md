@@ -1,6 +1,6 @@
 # Item 1 rider notifications: validation record
 
-Validation attempted on 2026-10-04. This document records evidence, not release approval.
+Validation attempted on 2026-10-04. The table below records the initial pre-publication attempt; the publication and CI update follows it. This document is not release approval.
 
 ## Candidate
 
@@ -57,3 +57,23 @@ performed. The two migration files remain unapplied by this session:
 6. Keep rules disabled for live tenants and keep PR #172 draft until acceptance
    evidence is complete. Passing mocked sends proves application handling, not
    actual provider delivery receipts.
+
+## Publication and first PostgreSQL CI run
+
+The user explicitly authorized publication to draft PR #172. Commit
+`a74b1569839cfc6613d9049dde8a0758037faf70` was fast-forwarded onto the existing
+branch; the PR remained draft. The initial six PostgreSQL tests passed without
+skips in job `111369474643`, run `37179663437`.
+
+Migration Safety run `37179663386` failed with PostgreSQL `42P01` at
+`20261004080000_bus_ops_stop_delay_marker`: the fresh migration history never
+created the legacy `public.trip_stop_visits` table. The correction provisions
+that table with its existing schema when absent, adds the delay marker, and
+enables/forces tenant RLS. Existing visit markers and policies are preserved.
+A seventh isolated PostgreSQL test now checks fresh creation, marker preservation
+on replay and cross-tenant denial. The corrected candidate must pass the fresh
+replay and PostgreSQL jobs on its new head before those gates are considered
+complete.
+
+Railway staging access remains blocked. No staging or production migration,
+live passenger notification, merge or deployment has been performed.
