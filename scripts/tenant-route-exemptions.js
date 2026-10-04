@@ -12,6 +12,14 @@
 
 const RULE_EXEMPTIONS = [
   {
+    file: 'src/app/api/bus-ops/schedules/[id]/en-route/route.ts', method: 'POST', type: 'missing_sanitization',
+    reason: 'This command accepts only an empty object through a strict Zod schema. Every body field, including tenant ownership and direct status fields, is rejected before any database transaction; no body data reaches a write.',
+    authMechanism: 'requireBusOpsRequest + requireAuthorizedTenant',
+    dataScope: 'Locked trip in the authorized tenant through withTenantRls and explicit tenant filters',
+    owner: 'Bus Ops Engineering',
+    test: 'tests/unit/bus-ops-en-route-command.test.ts',
+  },
+  {
     file: 'src/app/api/push/subscribe/route.ts', method: 'POST', type: 'missing_auth',
     reason: 'Verifies xl-session and resolves active tenant membership and account-linked staff under RLS.',
     authMechanism: 'getVerifiedRequestSession + resolvePushStaff',
