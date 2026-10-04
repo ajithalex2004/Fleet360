@@ -101,3 +101,26 @@ jobs:
       - run: npm ci --legacy-peer-deps
       - run: npx prisma generate
       - run: npx vitest run tests/integration/bus-disruption-postgres.test.ts --maxWorkers=1 --minWorkers=1
+
+  dispatcher-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DISABLE_OUTBOUND_NOTIFICATIONS: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --legacy-peer-deps
+      - name: Browser runtime
+        run: google-chrome --version
+      - name: Dispatcher UI browser regressions
+        run: npx playwright test --config tests/ui/dispatcher/playwright.config.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dispatcher-ui-evidence
+          path: test-results/dispatcher-ui
+          retention-days: 7
