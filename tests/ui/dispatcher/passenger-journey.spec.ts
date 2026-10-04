@@ -1,6 +1,6 @@
 import {test,expect,type Page} from '@playwright/test';
 const iso=()=>new Date().toISOString();
-const trip={id:'trip-one',tripNumber:'BUS-1',departureTime:new Date(Date.now()-1800000).toISOString(),arrivalTime:new Date(Date.now()+1800000).toISOString(),shiftType:'MORNING',direction:'INBOUND',status:'EN_ROUTE',vehicleId:'bus-one',route:{name:'Synthetic route',origin:'Camp',destination:'Office'},bleBeaconUuid:null};
+const trip={id:'trip-one',tripNumber:'BUS-1',departureTime:new Date(Date.now()-3600000).toISOString(),arrivalTime:new Date(Date.now()+1800000).toISOString(),shiftType:'MORNING',direction:'INBOUND',status:'EN_ROUTE',vehicleId:'bus-one',route:{name:'Synthetic route',origin:'Camp',destination:'Office'},bleBeaconUuid:null};
 const today={staff:{id:'staff-one',name:'Synthetic Rider',employeeId:'E-1',department:'Operations',defaultStopName:'Camp'},trips:[{passengerId:'passenger-one',status:'CONFIRMED',boardedAt:null,boardingStop:'Camp',alightingStop:'Office',trip}],rfidTag:null};
 const journey=(changes:Record<string,unknown>={})=>({asOf:iso(),passengerStatus:'CONFIRMED',tripStatus:'EN_ROUTE',phase:'pickup',target:{id:'pickup',name:'Camp'},plannedAt:new Date(Date.now()+600000).toISOString(),revisedDestinationArrivalAt:null,occupancy:{onboard:12,reserved:22,capacity:30,seatsNotOccupied:18,overCapacity:false,source:'attendance'},state:'live',reason:'Observed GPS',etaAt:new Date(Date.now()+180000).toISOString(),lastGpsAt:iso(),confidence:'high',method:'observed-speed',...changes});
 async function fixture(page:Page,data:Record<string,unknown>){
@@ -29,6 +29,7 @@ test('stale GPS and disruptions never masquerade as approaching',async({page})=>
 });
 test('mobile rider app uses current journey rather than a session-cached trip ETA',async({page})=>{
  const f=await fixture(page,journey({passengerStatus:'BOARDED',phase:'dropoff',target:{id:'drop',name:'Office'},occupancy:{onboard:13,reserved:22,capacity:30,seatsNotOccupied:17,overCapacity:false,source:'attendance'}}));await page.goto('/bus-ops/passenger/app');
+ await expect(page.getByText('Active and upcoming today')).toBeVisible();
  await expect(page.getByText('Drop-off: Office')).toBeVisible();await expect(page.getByText('13 / 30 recorded aboard · 22 reserved')).toBeVisible();expect(f.errors).toEqual([]);
 });
 for(const theme of ['light','dark'])for(const screen of ['mobile','desktop'])test(`${theme} ${screen} passenger journey layout`,async({page},testInfo)=>{

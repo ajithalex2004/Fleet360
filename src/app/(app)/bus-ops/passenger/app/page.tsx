@@ -330,8 +330,8 @@ function TodayTab({
 
   if (!today) return <Splash label="Loading today's trips…" />;
   const now = new Date();
-  const upcoming = today.trips.filter((t) => new Date(t.trip.departureTime).getTime() > now.getTime() - 30 * 60_000);
-  const past    = today.trips.filter((t) => new Date(t.trip.departureTime).getTime() <= now.getTime() - 30 * 60_000);
+  const upcoming = today.trips.filter((t) => ['STARTED','EN_ROUTE','DEPARTED','IN_TRANSIT'].includes(t.trip.status ?? '') || new Date(t.trip.departureTime).getTime() > now.getTime() - 30 * 60_000);
+  const past    = today.trips.filter((t) => !upcoming.includes(t));
 
   const pendingAdhoc = adhocRequests.filter((r) => r.status === 'PENDING');
   const activeAdhoc = adhocRequests.filter((r) => r.status === 'FULFILLED');
@@ -344,7 +344,7 @@ function TodayTab({
           <div>
             <p className="text-xs uppercase tracking-wider opacity-80">Today</p>
             <h2 className="text-2xl font-bold mt-1">
-              {upcoming.length > 0 ? `${upcoming.length} upcoming trip${upcoming.length === 1 ? '' : 's'}` : 'No scheduled trips'}
+              {upcoming.length > 0 ? `${upcoming.length} active or upcoming trip${upcoming.length === 1 ? '' : 's'}` : 'No scheduled trips'}
             </h2>
             {today.staff.defaultStopName && (
               <p className="text-sm opacity-90 mt-1 flex items-center gap-1.5">
@@ -427,7 +427,7 @@ function TodayTab({
       {/* Upcoming Trips */}
       {upcoming.length > 0 && (
         <div className="space-y-3">
-          <h2 className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Upcoming today</h2>
+          <h2 className="text-xs uppercase tracking-wider text-slate-400 font-semibold">Active and upcoming today</h2>
           {upcoming.map((t) => (
             <TripCard
               key={t.passengerId}
