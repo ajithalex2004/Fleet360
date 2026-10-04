@@ -2226,6 +2226,7 @@ model TripStopVisit {
   leftAt             DateTime? @map("left_at") @db.Timestamptz(6)
   // Whether the approach notification was successfully queued (best-effort).
   approachNotifiedAt DateTime? @map("approach_notified_at") @db.Timestamptz(6)
+  delayNotifiedAt    DateTime? @map("delay_notified_at") @db.Timestamptz(6)
 
   @@unique([scheduleId, stopId], map: "uniq_trip_stop_visit")
   @@map("trip_stop_visits")
@@ -7406,4 +7407,46 @@ model StepUpChallenge {
   @@index([userId, kind], map: "idx_step_up_challenges_user")
   @@map("step_up_challenges")
   @@schema("public")
+}
+
+/// Tenant-owned opt-in rider event rules; legacy global notification rules are not used.
+model BusRiderNotificationRule {
+ tenantId String @map("tenant_id")
+ eventType String @map("event_type")
+ enabled Boolean @default(false)
+ channels String[] @default(["EMAIL"])
+ subject String
+ body String
+ updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+ @@id([tenantId,eventType])
+ @@map("bus_rider_notification_rules")
+ @@schema("public")
+}
+/// Durable per-event / passenger / channel delivery evidence, with exclusive sender claims.
+model BusRiderDelivery {
+ id String @id
+ tenantId String @map("tenant_id")
+ eventId String @map("event_id")
+ eventType String @map("event_type")
+ scheduleId String @map("schedule_id")
+ passengerId String @map("passenger_id")
+ staffMemberId String @map("staff_member_id")
+ channel String
+ recipient String
+ subject String
+ body String
+ status String @default("PENDING")
+ attempts Int @default(0)
+ nextAttemptAt DateTime @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+ expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+ claimToken String? @map("claim_token")
+ claimedAt DateTime? @map("claimed_at") @db.Timestamptz(6)
+ providerId String? @map("provider_id")
+ lastError String? @map("last_error")
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+ updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+ @@unique([tenantId,eventId,passengerId,channel])
+ @@index([tenantId,status,nextAttemptAt],map:"bus_rider_deliveries_due")
+ @@map("bus_rider_deliveries")
+ @@schema("public")
 }

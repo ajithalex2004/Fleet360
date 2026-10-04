@@ -62,6 +62,7 @@ import { runAutoCloseTrips }         from '@/lib/jobs/auto-close-trips';
 import { runDunningSweep }           from '@/lib/jobs/dunning-sweep';
 import { runDunningReconciliation }  from '@/lib/jobs/dunning-reconciliation';
 import { runFleetDocumentsSweep }    from '@/lib/jobs/fleet-documents-sweep';
+import { runBusRiderNotifications } from '@/lib/jobs/bus-rider-notifications';
 import { runOutboxPublisher }        from '@/lib/jobs/outbox-publisher';
 import { runBusOpsGenerateScheduleTemplates } from '@/lib/jobs/bus-ops-generate-schedule-templates';
 import { runAlertTripOverdue }       from '@/lib/jobs/alert-trip-overdue';
@@ -80,6 +81,7 @@ import {
 // ── Registry ──────────────────────────────────────────────────────────────────
 
 export const JOB_REGISTRY: JobDef[] = [
+  { name: 'bus-rider-notifications', description: 'Deliver tenant rider messages with durable claims and bounded retries', handler: runBusRiderNotifications, maxDurationSec: 120, allowedRoles: ['SUPER_ADMIN'] },
   {
     name:           'auto-close-trips',
     description:    'Auto-close bus/school trips still IN_PROGRESS 4h past scheduled arrival',

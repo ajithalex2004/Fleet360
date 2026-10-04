@@ -1,4 +1,61 @@
-# Follow-up: Trip event publishers not wired yet
+# Trip event publishers and delivery status
+
+Local implementation in progress (2026-10-04): five additional publishers now
+write transactional outbox events. This code is not in PR #172's GitHub head or
+deployed. Apply `20261004080000_bus_ops_stop_delay_marker` before running it.
+The next local increment replaces the global trip notification consumer with
+opt-in tenant rules and actual passenger employee contacts. It queues durable
+per-event / passenger / channel deliveries, and the `bus-rider-notifications`
+worker sends email, SMS or WhatsApp. Apply
+`20261004090000_bus_rider_notifications` before running the consumer or worker.
+This work remains local, unpushed and undeployed.
+
+### Configuration and delivery
+
+- **Bus Ops → Settings → Automatic rider notifications**: enable events, select
+  channels and edit plain-text templates. All eight rules default to disabled;
+  existing global rules do not activate this pipeline.
+- Settings and delivery history use `/api/bus-ops/rider-notifications`, protected
+  by tenant membership and Bus Ops `admin:planning-core`. Writes are audited.
+- Approach events target only CONFIRMED riders at the specified boarding stop.
+  Missed-boarding events target one ABSENT passenger. Completion targets BOARDED
+  or ALIGHTED riders. Other events target CONFIRMED or BOARDED riders.
+- Contacts are resolved only from active, nondeleted employees in the event's
+  tenant. Riders without a linked active employee or a selected-channel contact
+  are skipped. The worker rechecks tenant/module, rule, trip, rider and unchanged
+  contact before each send.
+- Unique `(tenant, event, passenger, channel)` keys prevent replay fanout.
+  `FOR UPDATE SKIP LOCKED` and sender tokens prevent concurrent claims and stale
+  outcome updates. No transaction is held during a provider call.
+- Proven retryable rejections use exponential backoff (60 seconds initially,
+  maximum five attempts). Network ambiguity, a timeout or a crashed sender lease
+  becomes UNCERTAIN and is never automatically resent. Missing configuration and
+  staging quarantine become BLOCKED. SENT means provider acceptance, not a
+  passenger delivery receipt.
+- Operators can retry unexpired BLOCKED or FAILED deliveries after resolving the
+  cause. SENT and UNCERTAIN deliveries cannot be retried through this API.
+- Approach messages expire after 15 minutes, delays after an hour, other events
+  after 24 hours. Rules apply to future events; enabling a rule does not replay
+  events already consumed while it was disabled.
+- The Railway process scheduler runs the worker every minute. The authenticated
+  job endpoint is `/api/jobs/run?job=bus-rider-notifications`; `dryRun=true`
+  makes no claims or sends. Standalone Vercel deployments must schedule both
+  outbox publication and this worker explicitly.
+
+### Validation and remaining release gates
+
+Local unit, TypeScript, schema, runtime-DDL and tenant policy checks cover this
+increment. The workflow includes a separate fresh PostgreSQL 16 service for six
+real RLS / locking / claim tests. It has not run in this workspace because no
+PostgreSQL server is installed; installing one failed at the package source.
+No production database or actual passenger channel was used.
+
+Before release: run that PostgreSQL CI job, apply both migrations to isolated
+staging, and validate the full event → consumer → worker flow with synthetic
+riders and controlled transports. Then configure each tenant's channels and
+rules. Delivery receipts, passenger channel preferences and provider-specific
+WhatsApp approved templates are not implemented by this increment. Delayed
+trip publishing still depends on ETA polling.
 
 The event contracts, registry entries, `NotificationEvent` enum values,
 and `TripNotificationDispatchConsumer` for the full trip-lifecycle event
@@ -10,14 +67,16 @@ endpoints:
 | `trip.cancelled` | [/api/bus-ops/schedules/[id]/cancel](../src/app/api/bus-ops/schedules/[id]/cancel/route.ts) | ✅ live |
 | `trip.departed` | [/api/bus-ops/schedules/[id]/depart](../src/app/api/bus-ops/schedules/[id]/depart/route.ts) | ✅ live |
 | `trip.completed` | [/api/bus-ops/schedules/[id]/complete](../src/app/api/bus-ops/schedules/[id]/complete/route.ts) | ✅ live |
-| `trip.arriving` | — | ⏳ not built |
-| `trip.delayed` | — | ⏳ not built |
-| `vehicle.changed` | — | ⏳ not built |
-| `driver.changed` | — | ⏳ not built |
-| `boarding.missed` | — | ⏳ not built |
+| `trip.arriving` | GPS approach / live ETA | Local publisher + recipient worker; acceptance pending |
+| `trip.delayed` | Live ETA | Local outbox publisher; requires migration and polling |
+| `vehicle.changed` | Schedule PATCH | Local outbox publisher; scheduled trips only |
+| `driver.changed` | Schedule PATCH | Local outbox publisher; scheduled trips only |
+| `boarding.missed` | GPS stop exit | Local attendance + recipient worker; acceptance pending |
 
-The 5 remaining need real trigger logic — none of them are a
-side-effect of a single HTTP endpoint. Each is a mini-feature:
+The sections below are the original design notes. Their proposed trigger
+locations and delivery instructions are superseded by the local implementation
+status above; revisit them when completing recipient delivery and operational
+acceptance.
 
 ## `trip.arriving`
 

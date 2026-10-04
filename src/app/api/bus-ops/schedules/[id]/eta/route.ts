@@ -31,6 +31,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { predictEta, type TrackingPoint } from '@/lib/logistics/eta-predictor';
 import { raiseAlert } from '@/lib/alerts/raise';
+import { queueStopEventOnce } from '@/lib/bus-ops/trip-notification-events';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
@@ -62,7 +63,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  try {
+    return await withTenantRls(prisma, tenantId, async (tx) => {
 
       try {
         // ensureBusGpsTables() removed — tables live in fleet schema now
@@ -71,6 +73,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           where: { id: scheduleId, tenantId },
           select: {
             id: true, routeId: true, departureTime: true, status: true,
+            tripNumber: true, vehicleId: true, driverId: true,
             // Route versioning Phase 2 — snapshotted variant version wins.
             routeVariantVersionId: true,
           },
@@ -155,6 +158,41 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           plannedArrivalAt,
         });
 
+        // Predictions based only on a timetable must never become a live
+        // approaching/delay notice. The stop markers and outbox are atomic.
+        const lastPing = pingRows[0]?.occurred_at;
+        const live = ['STARTED', 'EN_ROUTE'].includes(schedule.status ?? '') &&
+          lastPing && Date.now() - new Date(lastPing).getTime() <= 2 * 60_000 &&
+          prediction.etaAt && prediction.method !== 'planned';
+        if (live && prediction.etaAt) {
+          const minutes = (new Date(prediction.etaAt).getTime() - Date.now()) / 60_000;
+          if (minutes >= 0 && minutes <= 5) {
+            await queueStopEventOnce(tx, tenantId, schedule.id, nextStop.id, {
+              kind: 'arriving', payload: {
+                scheduleId: schedule.id, tripNumber: schedule.tripNumber,
+                vehicleId: schedule.vehicleId, driverId: schedule.driverId,
+                routeId: schedule.routeId, stopId: nextStop.id, stopName: nextStop.stop_name,
+                etaAt: prediction.etaAt, distanceM: prediction.remainingKm == null ? null : prediction.remainingKm * 1000,
+                minutesToArrival: Math.ceil(minutes),
+              },
+            });
+          }
+          if (plannedArrivalAt) {
+            const delayMinutes = (new Date(prediction.etaAt).getTime() - new Date(plannedArrivalAt).getTime()) / 60_000;
+            if (delayMinutes > LATE_ARRIVAL_TOLERANCE_MIN) {
+              await queueStopEventOnce(tx, tenantId, schedule.id, nextStop.id, {
+                kind: 'delayed', payload: {
+                  scheduleId: schedule.id, tripNumber: schedule.tripNumber,
+                  vehicleId: schedule.vehicleId, driverId: schedule.driverId,
+                  routeId: schedule.routeId, stopId: nextStop.id, stopName: nextStop.stop_name,
+                  scheduledAt: plannedArrivalAt, predictedAt: prediction.etaAt,
+                  delayMinutes: Math.ceil(delayMinutes), reason: 'unknown',
+                },
+              });
+            }
+          }
+        }
+
         // Alert Engine — LATE_ARRIVAL. Dedup key includes the stop id so
         // the passenger sees one alert per stop, not per ETA poll (this
         // endpoint is polled every ~15s during a live trip). The Alert
@@ -200,9 +238,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           reason: prediction.reason,
         }, { headers: { 'Cache-Control': 'no-store' } });
         } catch (e) {
-        console.error('[bus-ops/schedules/:id/eta GET]', e);
-        return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to compute ETA' }, { status: 500 });
-      }
-  });
+          throw e;
+        }
+    });
+  } catch (e) {
+    console.error('[bus-ops/schedules/:id/eta GET]', e);
+    return NextResponse.json({ error: 'Failed to compute ETA' }, { status: 500 });
+  }
 }
-

@@ -2,6 +2,7 @@
 export type BusOpsAction = 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'export' | 'admin' | 'external';
 export interface BusOpsCapability { action: BusOpsAction; resource: string }
 export const BUS_OPS_ROUTES: Record<string, Partial<Record<string, BusOpsCapability>>> = {
+ "rider-notifications": { GET: {action:'admin',resource:'planning-core'}, PUT: {action:'admin',resource:'planning-core'}, POST: {action:'admin',resource:'planning-core'} },
   "adhoc-requests/[id]/fulfill": {
     "POST": {
       "action": "approve",

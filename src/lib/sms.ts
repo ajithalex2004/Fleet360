@@ -15,6 +15,7 @@
 export interface SmsSendResult {
   sent: boolean;
   sid?: string;
+  status?: number;
   reason?: 'not_configured' | 'no_phone' | 'twilio_error' | 'network_error' | 'quarantined_in_staging';
   error?: string;
 }
@@ -61,6 +62,7 @@ export async function sendSms(opts: { to: string; body: string }): Promise<SmsSe
   try {
     const res = await fetchImpl(url, {
       method: 'POST',
+      signal: AbortSignal.timeout(20_000),
       headers: {
         Authorization: `Basic ${auth}`,
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -69,7 +71,7 @@ export async function sendSms(opts: { to: string; body: string }): Promise<SmsSe
     });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
-      return { sent: false, reason: 'twilio_error', error: `Twilio ${res.status}: ${text.slice(0, 200)}` };
+      return { sent: false, reason: 'twilio_error', status: res.status, error: `Twilio ${res.status}: ${text.slice(0, 200)}` };
     }
     const json = (await res.json()) as { sid?: string };
     return { sent: true, sid: json.sid };

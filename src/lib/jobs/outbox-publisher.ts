@@ -56,8 +56,11 @@ interface OutboxRow {
  * Called once at the start of each job run so that the consumer modules
  * are only loaded in the worker context (not in every API route).
  */
+const consumerRegistrations = new WeakMap<ReturnType<typeof getEventBus>, Set<string>>();
 async function initEventConsumers(): Promise<void> {
   const bus = getEventBus();
+  const registeredConsumers = consumerRegistrations.get(bus) ?? new Set<string>();
+  consumerRegistrations.set(bus, registeredConsumers);
   // Dynamic imports keep consumer code out of the API bundle
   const [
     { FinanceTripConsumer },
@@ -125,7 +128,8 @@ async function initEventConsumers(): Promise<void> {
 
   for (const consumer of consumers) {
     // Guard: only register once per process lifetime
-    if (bus.getHandlers(consumer.eventType).length === 0) {
+    if (!registeredConsumers.has(consumer.consumerName)) {
+      registeredConsumers.add(consumer.consumerName);
       bus.subscribe(consumer.eventType, async (envelope) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const ok = await consumer.process(envelope as DomainEventEnvelope<any>);

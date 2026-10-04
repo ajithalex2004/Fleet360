@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { RiderNotificationSettings } from '@/components/bus-ops/rider-notification-settings';
 import { ArrowLeft, Save, Info } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
 
@@ -125,6 +126,7 @@ export default function BusOpsTelemetrySettingsPage() {
         </Link>
       </div>
 
+      <RiderNotificationSettings />
       <PageHeader
         title="Telemetry settings"
         subtitle="Auto Start / Complete from GPS · per tenant · shadow mode recommended first"

@@ -16,6 +16,7 @@ import { captureException } from './sentry';
 export interface WhatsAppSendResult {
   sent: boolean;
   sid?: string;
+  status?: number;
   reason?: 'not_configured' | 'no_phone' | 'twilio_error' | 'network_error' | 'quarantined_in_staging';
   error?: string;
 }
@@ -87,6 +88,7 @@ export async function sendWhatsApp(opts: { to: string; body: string }): Promise<
   try {
     const res = await fetch(url, {
       method: 'POST',
+      signal: AbortSignal.timeout(20_000),
       headers: {
         Authorization: `Basic ${auth}`,
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -97,7 +99,7 @@ export async function sendWhatsApp(opts: { to: string; body: string }): Promise<
       const text = await res.text();
       const err = new Error(`Twilio ${res.status}: ${text.slice(0, 300)}`);
       captureException(err, { context: 'whatsapp.send', tags: { status: String(res.status) } });
-      return { sent: false, reason: 'twilio_error', error: err.message };
+      return { sent: false, reason: 'twilio_error', status: res.status, error: err.message };
     }
     const json = (await res.json()) as { sid?: string };
     return { sent: true, sid: json.sid };

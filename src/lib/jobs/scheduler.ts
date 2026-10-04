@@ -9,6 +9,7 @@ const TIMEZONE = 'Asia/Dubai';
 
 const DEFAULT_SCHEDULES: Record<string, string> = {
   // Frequent — near-real-time operational sweeps.
+  'bus-rider-notifications': '* * * * *',
   'outbox-publisher': '* * * * *',
   'auto-close-trips': '*/15 * * * *',
   'alert-trip-overdue': '*/15 * * * *',

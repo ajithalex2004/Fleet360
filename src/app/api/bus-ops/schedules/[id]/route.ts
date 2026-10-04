@@ -8,6 +8,9 @@ import { prisma } from '@/lib/prisma';
 import { validateResourceAssignment } from '@/lib/bus-ops/validate-assignment';
 import { isValidationEnabled, withAssignmentLocks } from '@/lib/bus-ops/assignment-txn';
 import { logAudit } from '@/lib/audit';
+import { getEventBus } from '@/events/event-bus';
+import { VEHICLE_CHANGED, DRIVER_CHANGED } from '@/events/contracts/trip.events';
+import type { Prisma } from '@prisma/client';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 /**
@@ -31,6 +34,30 @@ const ASSIGNMENT_AFFECTING_FIELDS = [
 
 function touchesAssignment(body: Record<string, unknown>): boolean {
   return ASSIGNMENT_AFFECTING_FIELDS.some(f => Object.prototype.hasOwnProperty.call(body, f));
+}
+
+async function publishResourceChanges(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  actor: string | null,
+  prior: { id: string; tripNumber: string | null; vehicleId: string | null; driverId: string | null },
+  next: { vehicleId: string | null; driverId: string | null },
+) {
+  const changedAt = new Date().toISOString();
+  if (prior.vehicleId !== next.vehicleId) {
+    await getEventBus().publish({ eventType: VEHICLE_CHANGED, aggregateType: 'TripSchedule', aggregateId: prior.id,
+      sourceModule: 'bus-ops', tenantId, actor,
+      payload: { scheduleId: prior.id, tripNumber: prior.tripNumber, previousVehicleId: prior.vehicleId,
+        newVehicleId: next.vehicleId, driverId: next.driverId, reason: null, changedAt },
+    }, tx);
+  }
+  if (prior.driverId !== next.driverId) {
+    await getEventBus().publish({ eventType: DRIVER_CHANGED, aggregateType: 'TripSchedule', aggregateId: prior.id,
+      sourceModule: 'bus-ops', tenantId, actor,
+      payload: { scheduleId: prior.id, tripNumber: prior.tripNumber, vehicleId: next.vehicleId,
+        previousDriverId: prior.driverId, newDriverId: next.driverId, reason: null, changedAt },
+    }, tx);
+  }
 }
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -83,7 +110,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  try {
+    return await withTenantRls(prisma, tenantId, async (tx) => {
 
       try {
         // Load full existing row so we can build an effective-merged
@@ -93,7 +121,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         const existing = await tx.tripSchedule.findFirst({
           where: { id: params.id, tenantId, deletedAt: null },
           select: {
-            id: true, vehicleId: true, driverId: true,
+            id: true, tripNumber: true, vehicleId: true, driverId: true,
             departureTime: true, arrivalTime: true, routeId: true,
             confirmedCount: true, capacity: true, status: true,
           },
@@ -158,6 +186,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
                 data:  { ...data, updatedAt: new Date() },
                 include: { route: true },
               });
+              await publishResourceChanges(tx, tenantId, authz.userId ?? null, existing, s);
               return { verdict: v.verdict, validation: v, schedule: s };
             },
             tx,
@@ -179,11 +208,16 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           data:  { ...data, updatedAt: new Date() },
           include: { route: true },
         });
+        await publishResourceChanges(tx, tenantId, authz.userId ?? null, existing, schedule);
         return NextResponse.json(schedule);
       } catch (e) {
-        return NextResponse.json({ error: 'Failed to update' }, { status: 500 });
+        throw e;
       }
-  });
+    });
+  } catch (e) {
+    console.error('[bus-ops/schedules/:id PATCH]', e);
+    return NextResponse.json({ error: 'Failed to update' }, { status: 500 });
+  }
 }
 
 
@@ -265,4 +299,3 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
 
   return response;
 }
-

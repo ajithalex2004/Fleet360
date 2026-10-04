@@ -14,8 +14,8 @@
  *   boarding.missed      — Passenger's stop passed without a BOARDED event
  *
  * The Notification Engine (src/events/consumers/trip-notification.consumer.ts)
- * turns these into Push / SMS / WhatsApp / Email / In-app messages via the
- * NotificationRule table.
+ * queues tenant-specific rider email / SMS / WhatsApp deliveries via
+ * bus_rider_notification_rules. Rules are opt-in; the sender worker records outcomes.
  */
 
 export const TRIP_COMPLETED  = 'trip.completed'  as const;

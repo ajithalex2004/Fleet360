@@ -32,6 +32,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { randomUUID } from 'crypto';
+import type { Prisma } from '@prisma/client';
 import {
   // ensureBusGpsTables — removed; tables in prisma/raw/*.sql migrations
   evaluateStopTransitions,
@@ -40,9 +41,11 @@ import {
   type PriorVisit,
   type StopTransition,
 } from '@/lib/bus-gps';
-import { sendWhatsApp } from '@/lib/whatsapp';
 import { recordAbsence } from '@/lib/bus-ops/passenger-attendance';
 import { upsertFleetPosition } from '@/lib/bus-ops/fleet-positions';
+import { queueStopEventOnce } from '@/lib/bus-ops/trip-notification-events';
+import { getEventBus } from '@/events/event-bus';
+import { BOARDING_MISSED } from '@/events/contracts/trip.events';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
@@ -65,7 +68,6 @@ interface BatchBody {
 
 interface StopRow { id: string; sequence: number; stop_name: string; gps_lat: number | null; gps_lng: number | null; geofence_radius_m: number | null }
 interface VisitRow { stop_id: string; approached_at: Date | null; entered_at: Date | null; left_at: Date | null; approach_notified_at: Date | null }
-interface PassengerRow { id: string; employee_name: string | null; contact_number: string | null; email: string | null }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const policyError = await requireBusOpsRequest(req);
@@ -82,7 +84,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  try {
+    return await withTenantRls(prisma, tenantId, async (tx) => {
       const vehicle = await tx.vehicle.findFirst({ where: { id: vehicleId, tenantId, deletedAt: null } });
       if (!vehicle) return NextResponse.json({ error: 'Vehicle not found' }, { status: 404 });
 
@@ -121,6 +124,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
       validPings.sort((a,b) => Date.parse(a.occurredAt ?? new Date().toISOString()) - Date.parse(b.occurredAt ?? new Date().toISOString()));
       try {
+        // Serialize visit and attendance transitions for this trip. The
+        // unique visit row alone does not serialize passenger state changes.
+        if (scheduleId) await tx.$queryRawUnsafe(
+          'SELECT id FROM trip_schedules WHERE id::text = $1 AND tenant_id = $2 FOR UPDATE',
+          scheduleId, tenantId,
+        );
         // ensureBusGpsTables() removed — tables live in fleet schema now
 
         // Persist every ping. Batched insert would be cleaner but N pings per call
@@ -160,7 +169,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         const schedule = await tx.tripSchedule.findFirst({
           where: { id: scheduleId, tenantId },
           select: {
-            id: true, routeId: true, vehicleId: true, driverId: true,
+            id: true, routeId: true, vehicleId: true, driverId: true, tripNumber: true,
             status: true, confirmedCount: true,
             route:   { select: { name: true } },
           },
@@ -206,7 +215,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           latitude: latest.latitude, longitude: latest.longitude,
           occurredAt: latest.occurredAt ?? nowIso,
         };
-        const { transitions, visitPatches } = evaluateStopTransitions(latestPing, stops, priorVisits);
+        // A pre-trip GPS warm-up must not consume a stop's one-time visit
+        // markers before the bus starts service.
+        const activeTrip = schedule.status === 'STARTED' || schedule.status === 'EN_ROUTE';
+        const { transitions, visitPatches } = activeTrip
+          ? evaluateStopTransitions(latestPing, stops, priorVisits)
+          : { transitions: [] as StopTransition[], visitPatches: [] };
 
         // Persist visit patches — upsert per (schedule, stop). Doing this with an
         // INSERT ... ON CONFLICT is a bit noisy but bulletproof under concurrent
@@ -227,23 +241,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           );
         }
 
-        // Approach notifications (Gap E). Fire once per (schedule, stop) — the
-        // approach_notified_at column is the idempotency gate. Best-effort: a
-        // WhatsApp send failure logs but doesn't fail the ingest.
+        // Queue a durable event once per stop. The marker and outbox commit
+        // together; a concurrent ping cannot notify twice.
         const approaches = transitions.filter((t): t is Extract<StopTransition, { type: 'APPROACH' }> => t.type === 'APPROACH');
         let approachNotifiedCount = 0;
         for (const t of approaches) {
-          const prior = priorVisits.find(v => v.stopId === t.stopId);
-          if (prior?.approachNotifiedAt) continue; // already sent for this visit
-          try {
-            approachNotifiedCount += await notifyApproachingPassengers(scheduleId, t.stopId, t.stopName);
-            await tx.$executeRawUnsafe(
-              `UPDATE trip_stop_visits SET approach_notified_at = NOW() WHERE schedule_id = $1 AND stop_id = $2`,
-              scheduleId, t.stopId,
-            );
-          } catch (err) {
-            console.warn('[bus-ops/location] approach notify failed', { scheduleId, stopId: t.stopId, err });
-          }
+          const speedKmh = Math.max(15, Math.min(80, latest.speedKmh ?? 30));
+          const minutes = Math.max(1, Math.ceil(t.distanceM / (speedKmh * 1000 / 60)));
+          if (await queueStopEventOnce(tx, tenantId, scheduleId, t.stopId, {
+            kind: 'arriving', payload: {
+              scheduleId, tripNumber: schedule.tripNumber, vehicleId, driverId: schedule.driverId,
+              routeId: schedule.routeId, stopId: t.stopId, stopName: t.stopName,
+              etaAt: new Date(Date.now() + minutes * 60_000).toISOString(),
+              distanceM: t.distanceM, minutesToArrival: minutes,
+            },
+          })) approachNotifiedCount++;
         }
 
         // Stop-exit absence marking. When the vehicle leaves a stop's
@@ -261,16 +273,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         // recordAbsence only accepts CONFIRMED → ABSENT, so an out-of-order
         // or replayed EXIT cannot mark an already-boarded rider absent.
         //
-        // Best-effort, exactly like the approach notifications above: a
-        // failure here must never fail GPS ingest.
+        // Attendance, missed-boarding event and stop exit commit together.
         const exits = transitions.filter((t): t is Extract<StopTransition, { type: 'EXIT' }> => t.type === 'EXIT');
         let markedAbsent = 0;
         for (const t of exits) {
-          try {
-            markedAbsent += await markAbsentAtStop(scheduleId, t.stopId, new Date(t.occurredAt), tenantId);
-          } catch (err) {
-            console.warn('[bus-ops/location] stop-exit absence marking failed', { scheduleId, stopId: t.stopId, err });
-          }
+          markedAbsent += await markAbsentAtStop(tx, scheduleId, t.stopId, t.stopName, new Date(t.occurredAt), tenantId, schedule.tripNumber, vehicleId);
         }
 
         // Live-map feed — best-effort. Any failure here is logged and swallowed
@@ -330,10 +337,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           markedAbsent,
         });
       } catch (e) {
-        console.error('[bus-ops/vehicles/:id/location POST]', e);
-        return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to ingest location' }, { status: 500 });
+        // An outbox or attendance failure must roll back the ping, visit
+        // marker and rider transition rather than committing half the trip.
+        throw e;
       }
-  });
+    });
+  } catch (e) {
+    console.error('[bus-ops/vehicles/:id/location POST]', e);
+    return NextResponse.json({ error: 'Failed to ingest location' }, { status: 500 });
+  }
 }
 
 
@@ -342,7 +354,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
  * because the vehicle has just left that stop without them.
  *
  * Returns how many were actually marked. Each goes through
- * recordAbsence so the transition is validated and a boarding_events row
+ * recordAbsence in the GPS transaction so a boarding_events row
  * is written alongside the status change — that row is what lets
  * attendance reporting say "missed their assigned stop" even after the
  * rider catches the bus at a later stop and returns to BOARDED.
@@ -351,12 +363,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
  * rejected by the state machine anyway; both layers agree, deliberately.
  */
 async function markAbsentAtStop(
+  tx: Prisma.TransactionClient,
   scheduleId: string,
   stopId: string,
+  stopName: string,
   occurredAt: Date,
   tenantId: string,
+  tripNumber: string | null,
+  vehicleId: string,
 ): Promise<number> {
-  const rows = await prisma.tripPassenger.findMany({
+  const rows = await tx.tripPassenger.findMany({
     where: {
       // tenantId is already a parameter of this helper — it was passed in and
       // then not used, so the query matched passengers across tenants.
@@ -366,16 +382,13 @@ async function markAbsentAtStop(
       status: 'CONFIRMED',
       deletedAt: null,
     },
-    select: { id: true, staffMemberId: true },
+    select: { id: true, staffMemberId: true, employeeId: true, employeeName: true },
   });
   if (rows.length === 0) return 0;
 
   let marked = 0;
   for (const row of rows) {
-    // One transaction per passenger rather than one for the batch: a
-    // single rejected transition must not roll back the others.
-    const result = await prisma.$transaction((tx) =>
-      recordAbsence(tx, {
+    const result = await recordAbsence(tx, {
         scheduleId,
         passengerId:   row.id,
         staffMemberId: row.staffMemberId,
@@ -387,45 +400,17 @@ async function markAbsentAtStop(
         source:      'GEOFENCE',
         occurredAt,
         performedBy: 'system:stop-exit',
-      }),
-    ).catch((err) => {
-      console.warn('[bus-ops/location] recordAbsence failed', { passengerId: row.id, err });
-      return { applied: false } as const;
-    });
-    if (result.applied) marked += 1;
-  }
-  return marked;
-}
-
-/**
- * Send an approach-notification (WhatsApp) to every CONFIRMED passenger whose
- * boarding stop matches. Returns the count actually sent. Silent per-passenger
- * failures — we don't want one bad phone number to block the trip.
- */
-async function notifyApproachingPassengers(scheduleId: string, stopId: string, stopName: string): Promise<number> {
-  const passengers = await prisma.$queryRawUnsafe<PassengerRow[]>(
-    `SELECT tp.id, tp.employee_name, sm.contact_number, sm.email
-       FROM trip_passengers tp
-       LEFT JOIN workforce.employees sm ON sm.id = tp.staff_member_id
-      WHERE tp.trip_id = $1
-        AND tp.boarding_stop_id = $2
-        AND tp.status = 'CONFIRMED'
-        AND tp.deleted_at IS NULL`,
-    scheduleId, stopId,
-  ).catch(() => [] as PassengerRow[]);
-
-  let sent = 0;
-  for (const p of passengers) {
-    if (!p.contact_number) continue;
-    try {
-      await sendWhatsApp({
-        to: p.contact_number,
-        body: `🚌 Your staff bus is approaching ${stopName}. Please be ready at the stop.`,
       });
-      sent++;
-    } catch (err) {
-      console.warn('[bus-ops/location] whatsapp send failed', { passengerId: p.id, err });
+    if (result.applied) {
+      await getEventBus().publish({
+        eventType: BOARDING_MISSED, aggregateType: 'TripPassenger', aggregateId: row.id,
+        sourceModule: 'bus-ops', tenantId,
+        payload: { scheduleId, tripNumber, vehicleId, passengerId: row.id,
+          staffMemberId: row.staffMemberId, employeeId: row.employeeId,
+          employeeName: row.employeeName, stopId, stopName, missedAt: occurredAt.toISOString() },
+      }, tx);
+      marked++;
     }
   }
-  return sent;
+  return marked;
 }

@@ -38,7 +38,9 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       const now = new Date();
       const updated = await tx.tripSchedule.update({ where: { id }, data: { status: 'STARTED', updatedAt: now } });
       const log = await tx.tripLog.create({ data: { tenantId: auth.tenantId, scheduleId: id, actualDepartureTime: now, startMileage: parsed.data.startMileage ?? null, notes: parsed.data.notes ?? null, loggedBy: auth.userId } });
-      const noShows = await tx.tripPassenger.updateMany({ where: { tenantId: auth.tenantId, tripId: id, status: 'CONFIRMED', deletedAt: null }, data: { status: 'NO_SHOW', updatedAt: now } });
+      // Riders assigned to a later boarding stop must remain CONFIRMED until
+      // that stop is passed. Only unassigned-stop riders are due at departure.
+      const noShows = await tx.tripPassenger.updateMany({ where: { tenantId: auth.tenantId, tripId: id, status: 'CONFIRMED', deletedAt: null, boardingStopId: null }, data: { status: 'NO_SHOW', updatedAt: now } });
       await getEventBus().publish({ eventType: TRIP_DEPARTED, aggregateType: 'TripSchedule', aggregateId: id, sourceModule: 'bus-ops', tenantId: auth.tenantId, actor: auth.userId,
         payload: { scheduleId: id, tripNumber: schedule.tripNumber, vehicleId: schedule.vehicleId, driverId: schedule.driverId, tripLogId: log.id, actualDepartureTime: now.toISOString(), startMileage: parsed.data.startMileage ?? null, noShowsMarked: noShows.count } }, tx);
       await writeRequiredAudit({ tenantId: auth.tenantId, userId: auth.userId ?? undefined, entityType: 'TripSchedule', entityId: id, action: 'DEPART', details: `Inspection ${latest!.id}; ${noShows.count} no-shows` }, tx);
