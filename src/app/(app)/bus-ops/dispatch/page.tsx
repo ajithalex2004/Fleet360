@@ -478,7 +478,7 @@ export default function BusOpsDispatchPage() {
                       />
                     ))
                   )}
-          /div>
+                </div>
               </div>
             ))}
           </div>
