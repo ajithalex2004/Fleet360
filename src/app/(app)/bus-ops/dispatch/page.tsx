@@ -219,8 +219,8 @@ function TripCard({ schedule, onTransition, onAssign, isMoving }: {
             onClick={() => onTransition(schedule.id, 'CANCELLED')}
             className="text-xs text-[var(--text-faint)] hover:text-red-400 px-1.5 transition-colors">✕</button>
         )}
-        <Link href={`/bus-ops/schedules`}
-          className="text-xs text-[var(--text-faint)] hover:text-[var(--text-muted)] px-1.5 transition-colors" title="View details">⏱</Link>
+        <Link href={`/bus-ops/trips/${encodeURIComponent(schedule.id)}`}
+          className="text-xs text-[var(--text-faint)] hover:text-[var(--text-muted)] px-1.5 transition-colors" title="Trip details and disruption response">Details & recovery</Link>
       </div>
     </div>
   );
