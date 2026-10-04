@@ -105,6 +105,37 @@ jobs:
       - run: npx prisma generate
       - run: npx vitest run tests/integration/bus-disruption-postgres.test.ts --maxWorkers=1 --minWorkers=1
 
+  consolidation-evidence-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: fleet360_bus_evidence_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:test@127.0.0.1:5432/fleet360_bus_evidence_test
+      DIRECT_URL: postgresql://postgres:test@127.0.0.1:5432/fleet360_bus_evidence_test
+      TEST_BUS_EVIDENCE_DATABASE_URL: postgresql://postgres:test@127.0.0.1:5432/fleet360_bus_evidence_test
+      DISABLE_OUTBOUND_NOTIFICATIONS: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --legacy-peer-deps
+      - run: npx prisma generate
+      - run: npx vitest run tests/integration/bus-consolidation-evidence-postgres.test.ts --maxWorkers=1 --minWorkers=1
+
   dispatcher-ui:
     runs-on: ubuntu-latest
     timeout-minutes: 10
