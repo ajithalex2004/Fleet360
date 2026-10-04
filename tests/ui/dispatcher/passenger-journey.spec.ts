@@ -21,6 +21,7 @@ test('passenger home shows live pickup ETA and aggregate occupancy',async({page}
  await expect(page.getByText(/Pickup: Camp/)).toBeVisible();
  await expect(page.getByText(/Live estimate:/)).toBeVisible();
  await expect(page.getByText('12 / 30 recorded aboard · 22 reserved')).toBeVisible();
+ await expect(page.getByRole('link',{name:/Board/})).toHaveCSS('color','rgb(255, 255, 255)');
  expect(f.reads()).toBeGreaterThan(0);expect(f.errors).toEqual([]);
 });
 test('stale GPS and disruptions never masquerade as approaching',async({page})=>{

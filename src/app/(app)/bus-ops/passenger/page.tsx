@@ -33,10 +33,10 @@ interface Today {
 }
 
 const STATUS_PILL: Record<string, string> = {
-  CONFIRMED: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
-  BOARDED:   'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
-  ABSENT:    'bg-amber-500/20 text-amber-300 border-amber-500/40',
-  NO_SHOW:   'bg-rose-500/20 text-rose-300 border-rose-500/40',
+  CONFIRMED: 'bg-blue-500/20 text-blue-700 dark:text-blue-300 border-blue-500/40',
+  BOARDED:   'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border-emerald-500/40',
+  ABSENT:    'bg-amber-500/20 text-amber-800 dark:text-amber-300 border-amber-500/40',
+  NO_SHOW:   'bg-rose-500/20 text-rose-700 dark:text-rose-300 border-rose-500/40',
 };
 
 function fmtTime(iso: string) {
@@ -137,21 +137,21 @@ function PassengerHomeInner() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-cyan-300">{trip.tripNumber ?? trip.id.slice(0, 8)}</span>
+                      <span className="font-mono text-cyan-700 dark:text-cyan-300">{trip.tripNumber ?? trip.id.slice(0, 8)}</span>
                       <span className={`px-2 py-0.5 rounded-full text-[10px] border ${STATUS_PILL[status]}`}>{status}</span>
-                      <span className="text-[10px] text-slate-400 uppercase tracking-wide">{trip.shiftType ?? '—'} · {trip.direction ?? '—'}</span>
+                      <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wide">{trip.shiftType ?? '—'} · {trip.direction ?? '—'}</span>
                     </div>
                     <div className="text-base font-semibold mt-1 truncate">{trip.route?.name ?? 'Route'}</div>
-                    <div className="text-xs text-slate-400 mt-0.5 truncate">
+                    <div className="text-xs text-[var(--text-muted)] mt-0.5 truncate">
                       {trip.route?.origin} → {trip.route?.destination}
                     </div>
                     {t.boardingStop && (
-                      <div className="text-xs text-slate-400 mt-1">📍 Stop: <span className="text-slate-200">{t.boardingStop}</span></div>
+                      <div className="text-xs text-[var(--text-muted)] mt-1">📍 Stop: <span className="text-[var(--text-main)]">{t.boardingStop}</span></div>
                     )}
                   </div>
                   <div className="text-right shrink-0">
                     <div className="text-2xl font-bold">{fmtTime(trip.departureTime)}</div>
-                    <div className="text-[10px] text-slate-500 uppercase">{relativeFromNow(trip.departureTime)}</div>
+                    <div className="text-[10px] text-[var(--text-muted)] uppercase">{relativeFromNow(trip.departureTime)}</div>
                   </div>
                 </div>
 
@@ -161,7 +161,8 @@ function PassengerHomeInner() {
                   {canBoard ? (
                     <Link
                       href={`/bus-ops/passenger/board?passengerId=${t.passengerId}&scheduleId=${trip.id}${trip.bleBeaconUuid ? `&beacon=${trip.bleBeaconUuid}` : ''}`}
-                      className="flex-1 text-center py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold"
+                      className="flex-1 text-center py-3 rounded-xl bg-emerald-700 hover:bg-emerald-600 font-semibold"
+                      style={{color:'#fff'}}
                     >
                       ✓ Board
                     </Link>
