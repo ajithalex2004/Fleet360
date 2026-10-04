@@ -1,4 +1,4 @@
-import { ownsBusOpsEmployee, requireBusOpsRequest } from '@/lib/bus-ops/access';
+import { busOpsAccessFor, ownsBusOpsEmployee, requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -38,9 +38,9 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
 
-      const employeeId = req.nextUrl.searchParams.get('employeeId');
+      const employeeId = req.nextUrl.searchParams.get('employeeId') || (await busOpsAccessFor(req)).access?.employeeId;
       if (!employeeId) {
-        return NextResponse.json({ error: 'employeeId is required' }, { status: 400 });
+        return NextResponse.json({ error: 'Link an employee to your account or select an authorized employee ID' }, { status: 400 });
       }
 
       const staff = await tx.staffMember.findFirst({
@@ -64,6 +64,7 @@ export async function GET(req: NextRequest) {
       const passengers = await tx.tripPassenger.findMany({
         where: {
           staffMemberId: staff.id,
+          tenantId, deletedAt: null,
           trip: { tenantId, departureTime: { gte: start, lt: end }, deletedAt: null },
         },
         include: {
@@ -133,7 +134,7 @@ export async function GET(req: NextRequest) {
           ? { tagUid: rfidTag.tagUid }
           : null,
         transportRequests: staff.transportRequests,
-      });
+      }, { headers: { 'Cache-Control': 'private, no-store' } });
   });
 }
 

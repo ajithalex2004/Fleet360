@@ -3,6 +3,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { usePassengerToday } from '@/hooks/use-passenger-today';
+import { PassengerJourneyPanel } from '@/components/bus-ops/passenger-journey-panel';
 
 interface Trip {
   passengerId: string;
@@ -30,25 +32,6 @@ interface Today {
   rfidTag: { tagUid: string } | null;
 }
 
-// Shape of GET /api/bus-ops/schedules/:id/eta. Polled every ETA_POLL_MS for
-// each active trip. `etaAt` is ISO; the UI renders it as "in Xm" for humans.
-interface EtaInfo {
-  stopId: string | null;
-  stopName: string | null;
-  etaAt: string | null;
-  method: 'observed-speed' | 'lane-average' | 'default-speed' | 'planned' | 'arrived';
-  confidence: 'high' | 'medium' | 'low';
-  remainingKm: number | null;
-  reason: string;
-}
-
-const ETA_POLL_MS = 15_000;
-// Trip statuses during which the ETA is meaningful. Before STARTED the bus
-// is at the depot; after COMPLETED it's parked. Polling outside this set
-// wastes bandwidth and returns 'planned' / low-confidence. Includes the
-// legacy DEPARTED/IN_TRANSIT strings STARTED/EN_ROUTE were renamed from.
-const ETA_TRACKED_STATUSES = new Set(['STARTED', 'EN_ROUTE', 'DEPARTED', 'IN_TRANSIT']);
-
 const STATUS_PILL: Record<string, string> = {
   CONFIRMED: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
   BOARDED:   'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
@@ -73,33 +56,9 @@ function PassengerHomeInner() {
   const router = useRouter();
   const sp = useSearchParams() ?? new URLSearchParams();
   const incomingQr = sp.get('qr');
-  const [today, setToday] = useState<Today | null>(null);
   const [employeeId, setEmployeeId] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async (eid: string) => {
-    if (!eid) { setLoading(false); return; }
-    setLoading(true); setError(null);
-    try {
-      const res = await fetch(`/api/bus-ops/passenger/today?employeeId=${encodeURIComponent(eid)}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Lookup failed');
-      setToday(data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Lookup failed');
-      setToday(null);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const eid = localStorage.getItem('busPassengerEmployeeId') ?? '';
-    setEmployeeId(eid);
-    load(eid);
-  }, [load]);
+  const {data:today,loading,error} = usePassengerToday<Today>(employeeId);
+  useEffect(() => { setEmployeeId(localStorage.getItem('busPassengerEmployeeId') ?? ''); }, []);
 
   // QR-scan deep link: ?qr=<token>. Once we have the staff loaded, find the
   // matching passenger row and route into the board flow with the token.
@@ -114,49 +73,11 @@ function PassengerHomeInner() {
     }
   }, [incomingQr, today, router]);
 
-  /* ── Live ETA polling ─────────────────────────────────────────────────────
-   * For each active trip (DEPARTED / IN_TRANSIT) we poll the ETA endpoint
-   * every 15s. Each trip gets its own interval so a slow response for one
-   * doesn't stall the others. Store keyed by scheduleId so re-renders don't
-   * lose fresh values while the fetch is in flight.
-   */
-  const [etas, setEtas] = useState<Record<string, EtaInfo | null>>({});
-
-  useEffect(() => {
-    if (!today) return;
-    const activeTrips = today.trips.filter(t => ETA_TRACKED_STATUSES.has((t.trip.status ?? '').toUpperCase()));
-    if (activeTrips.length === 0) return;
-
-    const controllers: AbortController[] = [];
-    const intervals: ReturnType<typeof setInterval>[] = [];
-
-    const pollOne = async (scheduleId: string) => {
-      const ac = new AbortController();
-      controllers.push(ac);
-      try {
-        const res = await fetch(`/api/bus-ops/schedules/${scheduleId}/eta`, { signal: ac.signal });
-        if (!res.ok) return;
-        const data = (await res.json()) as EtaInfo;
-        setEtas(prev => ({ ...prev, [scheduleId]: data }));
-      } catch { /* swallow: aborted or transient network */ }
-    };
-
-    for (const t of activeTrips) {
-      pollOne(t.trip.id); // immediate first read so the chip appears fast
-      intervals.push(setInterval(() => pollOne(t.trip.id), ETA_POLL_MS));
-    }
-
-    return () => {
-      intervals.forEach(clearInterval);
-      controllers.forEach(c => c.abort());
-    };
-  }, [today]);
-
-  if (!employeeId) {
+  if (!employeeId && !today && !loading && !error) {
     return (
       <div className="space-y-4">
         <h1 className="text-2xl font-bold">My Bus</h1>
-        <div className="rounded-2xl bg-slate-800/60 border border-white/10 p-5">
+        <div className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-5">
           <p className="text-sm text-slate-300 mb-3">
             Pin your employee ID first so this app can find your trips. Stored on this device only.
           </p>
@@ -210,9 +131,9 @@ function PassengerHomeInner() {
             const trip = t.trip;
             const tStatus = (trip.status ?? 'SCHEDULED').toUpperCase();
             const canBoard = ['CONFIRMED'].includes(status) && ['SCHEDULED', 'STARTED', 'EN_ROUTE', 'DEPARTED', 'IN_TRANSIT'].includes(tStatus);
-            const eta = etas[trip.id];
+
             return (
-              <div key={t.passengerId} className="rounded-2xl bg-slate-800/60 border border-white/10 p-4 space-y-3">
+              <div key={t.passengerId} className="rounded-2xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] p-4 space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -234,30 +155,7 @@ function PassengerHomeInner() {
                   </div>
                 </div>
 
-                {/* Live ETA — rendered only when the trip is active AND the
-                    endpoint returned a usable value. Uses the same relative-
-                    time formatter as the departure time so passengers can
-                    directly compare "bus was scheduled for 07:30" against
-                    "🚌 approaching Stop 3 at 07:34 (in 3m)". */}
-                {eta && eta.stopName && eta.etaAt && (
-                  <div className="rounded-xl bg-cyan-500/10 border border-cyan-500/30 px-3 py-2 flex items-center gap-2 text-xs">
-                    <span aria-hidden="true">🚌</span>
-                    <span className="text-cyan-200">
-                      Approaching <span className="font-semibold">{eta.stopName}</span>
-                    </span>
-                    <span className="text-slate-300">·</span>
-                    <span className="text-white font-mono">{fmtTime(eta.etaAt)}</span>
-                    <span className="text-slate-400">({relativeFromNow(eta.etaAt)})</span>
-                    {eta.confidence === 'low' && (
-                      <span className="ml-auto text-[10px] text-slate-500 italic">estimate</span>
-                    )}
-                  </div>
-                )}
-                {eta && eta.method === 'arrived' && !eta.stopName && (
-                  <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/30 px-3 py-2 text-xs text-emerald-200">
-                    ✓ Bus has completed all stops on this route.
-                  </div>
-                )}
+                <PassengerJourneyPanel passengerId={t.passengerId}/>
 
                 <div className="flex gap-2">
                   {canBoard ? (
@@ -279,7 +177,7 @@ function PassengerHomeInner() {
         </div>
       )}
 
-      <div className="bg-slate-800/30 border border-white/5 rounded-xl p-4 text-xs text-slate-400">
+      <div className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl p-4 text-xs text-slate-400">
         Boarding methods: BLE auto-detect → QR scan → manual tap. Need to skip a day? <Link href="/bus-ops/passenger/absence" className="text-cyan-400">Mark absence</Link>.
       </div>
     </div>

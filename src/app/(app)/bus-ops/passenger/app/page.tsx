@@ -16,7 +16,8 @@ import {
   Play, SkipForward, Hourglass, Navigation, Zap, QrCode, Send, Ticket, Car,
   Crosshair, LocateFixed, CheckSquare, Square,
 } from 'lucide-react';
-import { useFetchedData, fetchOnce } from '@/hooks/useFetchedData';
+import { usePassengerToday } from '@/hooks/use-passenger-today';
+import { PassengerJourneyPanel } from '@/components/bus-ops/passenger-journey-panel';
 
 type Tab = 'today' | 'trips' | 'board' | 'profile';
 
@@ -96,7 +97,7 @@ export default function MobilePassengerApp() {
   }, []);
 
   // Data: today's trips
-  const todayRes = useFetchedData<Today>('/api/bus-ops/passenger/today');
+  const todayRes = usePassengerToday<Today>();
   const today = todayRes.data;
 
   // Notification reminders
@@ -199,6 +200,7 @@ export default function MobilePassengerApp() {
           )}
         </div>
       </header>
+      {todayRes.error && <p role="alert" className="p-4 text-sm text-rose-200">{todayRes.error}</p>}
 
       {/* Feedback toast */}
       {actionFeedback && (
@@ -210,7 +212,7 @@ export default function MobilePassengerApp() {
       {/* Offline banner */}
       {!online && (
         <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2 text-[11px] text-amber-200 flex items-center gap-2">
-          <WifiOff className="w-3.5 h-3.5" /> You&apos;re offline. Showing the last cached version of your trips.
+          <WifiOff className="w-3.5 h-3.5" /> You&apos;re offline. Journey updates will resume when connected.
         </div>
       )}
 
@@ -522,6 +524,7 @@ function TripCard({
         </div>
       </div>
 
+      <div className="mb-3"><PassengerJourneyPanel passengerId={trip.passengerId}/></div>
       {isCancellable && isFuture && (
         <div className="grid grid-cols-3 gap-2">
           <button onClick={() => onAction(trip.passengerId, 'late', t)}
