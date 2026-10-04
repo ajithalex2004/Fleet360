@@ -15,6 +15,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Users, RefreshCw } from 'lucide-react';
+import { TripDisruptionPanel } from '@/components/bus-ops/trip-disruption-panel';
 import { PageHeader } from '@/components/bus-ops/theme';
 import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
 type PassengerStatus = 'CONFIRMED' | 'BOARDED' | 'ALIGHTED' | 'ABSENT' | 'NO_SHOW' | 'CANCELLED' | 'WAITLISTED';
@@ -201,6 +202,8 @@ export default function TripDetailPage() {
               </div>
             ))}
           </div>
+
+          <TripDisruptionPanel scheduleId={trip.id} tripStatus={trip.status} onChanged={load} />
 
           {/* Passenger manifest */}
           <div>

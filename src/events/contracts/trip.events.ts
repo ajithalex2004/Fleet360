@@ -158,3 +158,11 @@ export interface BoardingMissedPayload {
   /** When the bus left the stop without boarding this passenger. */
   missedAt:    string;    // ISO 8601
 }
+
+/** Dispatcher report, inspected recovery and closure share one recipient-scoped update. */
+export const TRIP_DISRUPTION_UPDATED = 'trip.disruption_updated' as const;
+export interface TripDisruptionUpdatedPayload {
+ scheduleId:string; tripNumber:string|null; disruptionId:string;
+ stage:'REPORTED'|'RECOVERED'|'RESOLVED'; updateText:string;
+ vehicleId?:string; driverId?:string; revisedEta?:string;
+}

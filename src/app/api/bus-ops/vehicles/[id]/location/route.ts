@@ -1,3 +1,4 @@
+import { hasUnrecoveredDisruption } from '@/lib/bus-ops/disruptions';
 import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
@@ -130,6 +131,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           'SELECT id FROM trip_schedules WHERE id::text = $1 AND tenant_id = $2 FOR UPDATE',
           scheduleId, tenantId,
         );
+        if (scheduleId) {
+          const current=await tx.tripSchedule.findFirst({where:{id:scheduleId,tenantId,vehicleId,deletedAt:null,status:{in:['SCHEDULED','STARTED','EN_ROUTE','DEPARTED','IN_TRANSIT']}}});
+          if(!current) return NextResponse.json({error:'Vehicle/trip assignment changed'},{status:409});
+          if(await hasUnrecoveredDisruption(tx,tenantId,scheduleId)) return NextResponse.json({error:'Trip disruption awaiting substitute; stop and attendance automation paused'},{status:409});
+        }
         // ensureBusGpsTables() removed — tables live in fleet schema now
 
         // Persist every ping. Batched insert would be cleaner but N pings per call

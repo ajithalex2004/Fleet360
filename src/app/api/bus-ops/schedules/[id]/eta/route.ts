@@ -1,3 +1,4 @@
+import { hasUnrecoveredDisruption } from '@/lib/bus-ops/disruptions';
 import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
@@ -69,8 +70,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       try {
         // ensureBusGpsTables() removed — tables live in fleet schema now
 
+        await tx.$queryRawUnsafe('SELECT id FROM trip_schedules WHERE id::text=$1 AND tenant_id=$2 FOR UPDATE',scheduleId,tenantId);
         const schedule = await tx.tripSchedule.findFirst({
-          where: { id: scheduleId, tenantId },
+          where: { id: scheduleId, tenantId, deletedAt:null },
           select: {
             id: true, routeId: true, departureTime: true, status: true,
             tripNumber: true, vehicleId: true, driverId: true,
@@ -80,6 +82,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         });
         if (!schedule) return NextResponse.json({ error: 'Schedule not found' }, { status: 404 });
 
+        if(await hasUnrecoveredDisruption(tx,tenantId,scheduleId)) return NextResponse.json({stopId:null,stopName:null,etaAt:null,method:'disrupted',confidence:'low',remainingKm:null,reason:'Awaiting inspected substitute assignment'},{headers:{'Cache-Control':'private, no-store'}});
         // Prefer the trip's snapshotted variant version so a route edit
         // published *after* this trip started can't change the ETA target.
         // Falls back to the flat routeId list (pre-version rows have
@@ -114,10 +117,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           tx.$queryRawUnsafe<PingRow[]>(
             `SELECT latitude, longitude, occurred_at
                FROM fleet.bus_gps_pings
-              WHERE schedule_id = $1
+              WHERE schedule_id = $1 AND vehicle_id = $2 AND tenant_id = $3
               ORDER BY occurred_at DESC
               LIMIT 10`,
-            scheduleId,
+            scheduleId, schedule.vehicleId, tenantId,
           ),
         ]);
 

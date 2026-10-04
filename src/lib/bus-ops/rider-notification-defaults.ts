@@ -1,7 +1,8 @@
-export const RIDER_EVENTS = ['trip.cancelled','trip.departed','trip.arriving','trip.delayed','trip.completed','vehicle.changed','driver.changed','boarding.missed'] as const;
+export const RIDER_EVENTS = ['trip.cancelled','trip.departed','trip.arriving','trip.delayed','trip.completed','vehicle.changed','driver.changed','boarding.missed','trip.disruption_updated'] as const;
 export const RIDER_CHANNELS = ['EMAIL','SMS','WHATSAPP'] as const;
 export interface RiderRule { event_type: string; enabled: boolean; channels: string[]; subject: string; body: string }
 export const defaultRules: RiderRule[] = RIDER_EVENTS.map(event_type => ({ event_type, enabled: false, channels: ['EMAIL'], subject: 'Trip {{tripNumber}} update', body: ({
+ 'trip.disruption_updated': 'Trip {{tripNumber}}: {{updateText}}',
  'trip.cancelled': 'Your trip {{tripNumber}} has been cancelled. {{reason}}',
  'trip.departed': 'Your trip {{tripNumber}} has departed.',
  'trip.arriving': 'Your bus for trip {{tripNumber}} is approaching {{stopName}} in approximately {{minutesToArrival}} minutes.',

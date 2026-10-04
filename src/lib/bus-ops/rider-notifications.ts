@@ -38,6 +38,10 @@ export async function enqueueRiderNotifications(tx: Prisma.TransactionClient, ev
  if (!rule) return 0;
  const schedule = await tx.tripSchedule.findFirst({where:{id:data.scheduleId,tenantId:event.tenantId,deletedAt:null}});
  if (!schedule) return 0;
+ if(event.eventType==='trip.disruption_updated'){
+  const current=await tx.busTripDisruption.findFirst({where:{id:typeof data.disruptionId==='string'?data.disruptionId:'',tenantId:event.tenantId,scheduleId:schedule.id}});
+  if(!current || current.status!==data.stage) return 0;
+ }
  const scope: Prisma.TripPassengerWhereInput = {tenantId:event.tenantId,tripId:schedule.id,deletedAt:null};
  if (event.eventType === 'boarding.missed') {
   if (typeof data.passengerId !== 'string') throw new Error('Missing passenger scope');

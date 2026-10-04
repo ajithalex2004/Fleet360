@@ -13,7 +13,7 @@
 import {
   TRIP_COMPLETED, TRIP_DEPARTED, TRIP_CANCELLED,
   TRIP_ARRIVING, TRIP_DELAYED,
-  VEHICLE_CHANGED, DRIVER_CHANGED, BOARDING_MISSED,
+  VEHICLE_CHANGED, DRIVER_CHANGED, BOARDING_MISSED, TRIP_DISRUPTION_UPDATED,
 } from '@/events/contracts/trip.events';
 import { FUEL_FILLED }              from '@/events/contracts/fuel.events';
 import {
@@ -54,6 +54,7 @@ export {
   VEHICLE_CHANGED,
   DRIVER_CHANGED,
   BOARDING_MISSED,
+  TRIP_DISRUPTION_UPDATED,
   FUEL_FILLED,
   MAINTENANCE_COMPLETED,
   MAINTENANCE_REPAIR_COMPLETED,
@@ -98,6 +99,7 @@ export interface EventRegistryEntry {
 }
 
 export const FLEET360_EVENTS: EventRegistryEntry[] = [
+  {type:TRIP_DISRUPTION_UPDATED,sourceModule:"bus-ops",aggregateType:"TripSchedule",version:"1",description:"Dispatcher disruption report, inspected substitute assignment and resolution"},
   {
     type:          TRIP_COMPLETED,
     sourceModule:  'bus-ops',

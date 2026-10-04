@@ -13,6 +13,7 @@ const tenant='tenant-a';
 const event:DomainEventEnvelope<unknown>={eventId:'e1',eventType:'trip.arriving',eventVersion:'1',occurredAt:new Date().toISOString(),tenantId:tenant,aggregateType:'TripSchedule',aggregateId:'trip-a',sourceModule:'bus-ops',correlationId:null,causationId:null,actor:null,data:{scheduleId:'trip-a',stopId:'stop-a',stopName:'Gate',minutesToArrival:3}};
 const rule={...defaultRules.find(r=>r.event_type==='trip.arriving')!,enabled:true,channels:['EMAIL','SMS']};
 function fixture(){return {
+ busTripDisruption:{findFirst:vi.fn().mockResolvedValue({id:'disruption',status:'RECOVERED'})},
  tenant:{findUnique:vi.fn().mockResolvedValue({isActive:true,modules:[{isEnabled:true,module:'bus-ops'}]})},
  tripSchedule:{findFirst:vi.fn().mockResolvedValue({id:'trip-a',tripNumber:'T1',status:'EN_ROUTE'})},
  tripPassenger:{findMany:vi.fn().mockResolvedValue([{id:'rider-a',staffMemberId:'staff-a'}]),findFirst:vi.fn().mockResolvedValue({status:'CONFIRMED'})},
@@ -116,4 +117,27 @@ describe('sender claims and outcomes',()=>{
   expect(result.data).toEqual({SUPPRESSED:1});expect(mocks.email).not.toHaveBeenCalled();
  });
 
+});
+
+describe('disruption notification freshness',()=>{
+ it('suppresses pre-breakdown approach messages while substitute recovery is pending',async()=>{
+  const f=fixture();f.busTripDisruption.findFirst.mockResolvedValue({id:'disruption',status:'REPORTED'});
+  expect(await canSendRiderDelivery(asTx(f),row)).toBe(false);
+ });
+ it('queues one consolidated rider update for the current disruption phase',async()=>{
+  const f=fixture();f.$queryRaw.mockResolvedValue([{...defaultRules.find(r=>r.event_type==='trip.disruption_updated')!,enabled:true,channels:['EMAIL','SMS']}]);
+  expect(await enqueueRiderNotifications(asTx(f),{...event,eventType:'trip.disruption_updated',data:{scheduleId:'trip-a',disruptionId:'disruption',stage:'RECOVERED',updateText:'Replacement bus TEST-BUS; destination arrival 12:30 UTC.'}})).toBe(2);
+  expect(f.$executeRaw.mock.calls[0]).toContain('Trip T1: Replacement bus TEST-BUS; destination arrival 12:30 UTC.');
+ });
+ it('suppresses a delayed report after recovery before fanout',async()=>{
+  const f=fixture();f.$queryRaw.mockResolvedValue([{...defaultRules.find(r=>r.event_type==='trip.disruption_updated')!,enabled:true,channels:['EMAIL','SMS']}]);
+  expect(await enqueueRiderNotifications(asTx(f),{...event,eventType:'trip.disruption_updated',data:{scheduleId:'trip-a',disruptionId:'disruption',stage:'REPORTED'}})).toBe(0);
+  expect(f.$executeRaw).not.toHaveBeenCalled();
+ });
+ it('rechecks the event phase before transport and suppresses superseded events',async()=>{
+  const f=fixture();f.$queryRaw.mockResolvedValue([{...defaultRules.find(r=>r.event_type==='trip.disruption_updated')!,enabled:true,channels:['EMAIL','SMS']}]);
+  expect(await canSendRiderDelivery(asTx(f),{...row,event_type:'trip.disruption_updated',event_id:'recovery-event'})).toBe(true);
+  expect(f.busTripDisruption.findFirst.mock.calls[0][0].where).toMatchObject({tenantId:tenant,scheduleId:'trip-a',OR:expect.arrayContaining([{status:'RECOVERED',recoveryEventId:'recovery-event'}])});
+  f.busTripDisruption.findFirst.mockResolvedValue(null);expect(await canSendRiderDelivery(asTx(f),{...row,event_type:'trip.disruption_updated',event_id:'report-event'})).toBe(false);
+ });
 });

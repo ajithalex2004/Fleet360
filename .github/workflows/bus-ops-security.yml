@@ -26,6 +26,7 @@ jobs:
       - name: Policy, isolation and safety regressions
         run: >-
           npx vitest run
+          tests/unit/bus-ops-disruptions.test.ts
           tests/unit/bus-rider-notifications.test.ts
           tests/unit/bus-ops-trip-notification-events.test.ts
           tests/unit/bus-ops-authoritative-access.test.ts
@@ -69,3 +70,34 @@ jobs:
       - run: npm ci --legacy-peer-deps
       - run: npx prisma generate
       - run: npx vitest run tests/integration/bus-rider-delivery-postgres.test.ts --maxWorkers=1 --minWorkers=1
+
+  disruption-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: fleet360_disruption_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:test@127.0.0.1:5432/fleet360_disruption_test
+      DIRECT_URL: postgresql://postgres:test@127.0.0.1:5432/fleet360_disruption_test
+      TEST_DISRUPTION_DATABASE_URL: postgresql://postgres:test@127.0.0.1:5432/fleet360_disruption_test
+      DISABLE_OUTBOUND_NOTIFICATIONS: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --legacy-peer-deps
+      - run: npx prisma generate
+      - run: npx vitest run tests/integration/bus-disruption-postgres.test.ts --maxWorkers=1 --minWorkers=1

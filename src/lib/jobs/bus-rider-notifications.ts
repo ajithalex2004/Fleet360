@@ -10,7 +10,7 @@ import type { JobContext, JobResult } from '@/lib/jobs/registry';
 export interface RiderDelivery {
  id:string; tenant_id:string; event_type:string; schedule_id:string; passenger_id:string;
  staff_member_id:string; channel:string; recipient:string; subject:string; body:string;
- attempts:number; claim_token:string; expires_at:Date;
+ event_id?:string; attempts:number; claim_token:string; expires_at:Date;
 }
 interface SendResult { sent:boolean; reason?:string; status?:number; errorClass?:string; sid?:string; id?:string }
 /** Accepted means provider acceptance. Ambiguous transport outcomes are never automatically resent. */
@@ -38,6 +38,14 @@ export async function canSendRiderDelivery(tx:Prisma.TransactionClient,row:Rider
  if (!rule?.enabled || !rule.channels.includes(row.channel)) return false;
  const schedule=await tx.tripSchedule.findFirst({where:{id:row.schedule_id,tenantId:row.tenant_id,deletedAt:null}});
  if (!schedule || (schedule.status==='CANCELLED' && row.event_type!=='trip.cancelled')) return false;
+ if(['trip.arriving','trip.delayed','trip.departed'].includes(row.event_type)){
+  const held=await tx.busTripDisruption.findFirst({where:{tenantId:row.tenant_id,scheduleId:row.schedule_id,status:'REPORTED'}});
+  if(held?.status==='REPORTED')return false;
+ }
+ if(row.event_type==='trip.disruption_updated'){
+  const current=await tx.busTripDisruption.findFirst({where:{tenantId:row.tenant_id,scheduleId:row.schedule_id,OR:[{status:'REPORTED',reportEventId:row.event_id ?? ''},{status:'RECOVERED',recoveryEventId:row.event_id ?? ''},{status:'RESOLVED',resolutionEventId:row.event_id ?? ''}]}});
+  if(!current)return false;
+ }
  const passenger=await tx.tripPassenger.findFirst({where:{id:row.passenger_id,tripId:row.schedule_id,tenantId:row.tenant_id,staffMemberId:row.staff_member_id,deletedAt:null}});
  if (!passenger) return false;
  if (row.event_type==='trip.arriving' && passenger.status!=='CONFIRMED') return false;

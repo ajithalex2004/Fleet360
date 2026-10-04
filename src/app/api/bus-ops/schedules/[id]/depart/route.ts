@@ -5,6 +5,7 @@ import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
+import { hasUnrecoveredDisruption } from '@/lib/bus-ops/disruptions';
 import { inspectionAllowsDeparture } from '@/lib/bus-ops/safety';
 import { getEventBus } from '@/events/event-bus';
 import { TRIP_DEPARTED } from '@/events/registry';
@@ -31,6 +32,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       const schedule = await tx.tripSchedule.findFirst({ where: { id, tenantId: auth.tenantId, deletedAt: null } });
       if (!schedule) return NextResponse.json({ error: 'Not found' }, { status: 404 });
       if (schedule.status !== 'SCHEDULED') return NextResponse.json({ error: 'Trip is not scheduled' }, { status: 409 });
+      if (await hasUnrecoveredDisruption(tx, auth.tenantId, id)) return NextResponse.json({error:'Resolve the reported disruption with an inspected substitute before departure'},{status:409});
       const skew = Date.now() - schedule.departureTime.getTime();
       if (skew > 24 * 60 * 60_000 || skew < -2 * 60 * 60_000) return NextResponse.json({ error: 'Trip is outside the departure window' }, { status: 409 });
       const latest = await tx.busPreTripCheck.findFirst({ where: { tenantId: auth.tenantId, scheduleId: id, deletedAt: null }, orderBy: [{ performedAt: 'desc' }, { id: 'desc' }] });
