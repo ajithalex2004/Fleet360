@@ -2,6 +2,7 @@
 export type BusOpsAction = 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'export' | 'admin' | 'external';
 export interface BusOpsCapability { action: BusOpsAction; resource: string }
 export const BUS_OPS_ROUTES: Record<string, Partial<Record<string, BusOpsCapability>>> = {
+ "schedules/[id]/en-route": {POST:{action:"approve",resource:"trips"}},
  "schedules/[id]/disruptions": {GET:{action:"view",resource:"trips"},POST:{action:"approve",resource:"trips"}},
  "schedules/[id]/disruptions/[disruptionId]": {POST:{action:"approve",resource:"trips"}},
  "rider-notifications": { GET: {action:'admin',resource:'planning-core'}, PUT: {action:'admin',resource:'planning-core'}, POST: {action:'admin',resource:'planning-core'} },

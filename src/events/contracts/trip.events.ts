@@ -166,3 +166,6 @@ export interface TripDisruptionUpdatedPayload {
  stage:'REPORTED'|'RECOVERED'|'RESOLVED'; updateText:string;
  vehicleId?:string; driverId?:string; revisedEta?:string;
 }
+
+/** Started bus is moving between stops; no extra rider message is required. */
+export const TRIP_EN_ROUTE = 'trip.en_route' as const;

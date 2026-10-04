@@ -5,17 +5,30 @@ test.afterEach(({page})=>{expect(browserErrors.get(page)).toEqual([]);});
 const base='/api/bus-ops/schedules/synthetic-trip/disruptions';
 const recoveryLabel='Validate, assign substitute and queue rider update';
 const reported={id:'response-1',status:'REPORTED',version:1,reason:'Synthetic bus engine breakdown',location:'Synthetic depot',reportedAt:'2026-10-04T07:00:00Z',revisedEta:null as string|null,recoveryNotes:null as string|null,resolutionNotes:null as string|null,reportEventId:'report-event',recoveryEventId:null as string|null,resolutionEventId:null as string|null};
-async function fixture(page:Page,options:{initial?:'REPORTED'|'RECOVERED';enabled?:boolean;failure?:'conflict'|'validation'|'outage';delay?:boolean}={}){
+async function fixture(page:Page,options:{initial?:'REPORTED'|'RECOVERED';enabled?:boolean;failure?:'conflict'|'validation'|'outage';delay?:boolean;tripStatus?:string;commandError?:string}={}){
  const posts:Array<{url:string;body:Record<string,unknown>}>=[];
  const data={disruptions:(options.initial?[{...reported,status:options.initial,version:options.initial==='RECOVERED'?2:1,revisedEta:options.initial==='RECOVERED'?'2026-10-04T15:30:00Z':null}]:[]) as typeof reported[],
   notificationsEnabled:options.enabled ?? false,deliveries:[] as Array<{event_id:string;status:string;count:number}>,
   vehicles:[{id:'bus-1',licensePlate:'SYNTHETIC-101',plateNumber:null,seatingCapacity:30,status:'ACTIVE'},{id:'bus-2',licensePlate:'SYNTHETIC-102',plateNumber:null,seatingCapacity:40,status:'ACTIVE'}],
   drivers:[{id:'driver-1',name:'Synthetic Driver One',firstName:null,lastName:null},{id:'driver-2',name:'Synthetic Driver Two',firstName:null,lastName:null}]};
+ const trip={id:'synthetic-trip',tripNumber:'SYNTHETIC-TRIP',tenantId:'synthetic-tenant',routeId:'synthetic-route',route:{id:'synthetic-route',name:'Synthetic route',origin:'Synthetic origin',destination:'Synthetic destination',totalDistanceKm:10,estimatedDurationMins:30,stops:[]},vehicleId:'bus-1',driverId:'driver-1',departureTime:'2026-10-04T07:00:00Z',arrivalTime:'2026-10-04T15:30:00Z',shiftType:'MORNING',direction:'INBOUND',capacity:30,confirmedCount:0,status:options.tripStatus ?? 'STARTED',notes:null,passengers:[],tripLogs:[]};
+ const tripPosts:Array<{url:string;method:string;body:unknown}>=[];
  let release:(()=>void)|undefined;
  await page.route('**/*',async route=>{
   const url=new URL(route.request().url());
   if(url.origin!=='http://127.0.0.1:4173')return route.abort();
   if(!url.pathname.startsWith('/api/'))return route.continue();
+  if(url.pathname==='/api/bus-ops/routes')return route.fulfill({json:[trip.route]});
+  if(url.pathname==='/api/bus-ops/drivers')return route.fulfill({json:data.drivers});
+  if(url.pathname==='/api/vehicles')return route.fulfill({json:data.vehicles});
+  if(url.pathname==='/api/bus-ops/schedules')return route.fulfill({json:[trip]});
+  if(url.pathname==='/api/bus-ops/schedules/synthetic-trip' && route.request().method()==='GET')return route.fulfill({json:trip});
+  if(url.pathname.match(/\/(depart|en-route|complete|cancel)$/)){
+   tripPosts.push({url:url.pathname,method:route.request().method(),body:route.request().postDataJSON()});
+   if(options.commandError)return route.fulfill({status:412,json:{error:options.commandError}});
+   trip.status=url.pathname.endsWith('/en-route')?'EN_ROUTE':url.pathname.endsWith('/depart')?'STARTED':url.pathname.endsWith('/complete')?'COMPLETED':'CANCELLED';
+   return route.fulfill({json:trip});
+  }
   if(!url.pathname.startsWith(base))return route.fulfill({status:404,json:{error:'Unexpected test endpoint'}});
   if(route.request().method()==='GET')return route.fulfill({json:data});
   const body=route.request().postDataJSON();posts.push({url:url.pathname,body});
@@ -28,11 +41,11 @@ async function fixture(page:Page,options:{initial?:'REPORTED'|'RECOVERED';enable
   if(body.action==='resolve')Object.assign(data.disruptions[0],{status:'RESOLVED',version:3,resolutionNotes:body.notes,resolutionEventId:'resolve-event'});
   return route.fulfill({json:data.disruptions[0]});
  });
- return {data,posts,release:()=>release?.()};
+ return {data,trip,tripPosts,posts,release:()=>release?.()};
 }
 async function fillRecovery(page:Page){
  await page.getByLabel('Substitute bus').selectOption('bus-1');
- await page.getByLabel('Driver',{exact:true}).selectOption('driver-1');
+ await page.getByRole('combobox',{name:/^Driver/}).selectOption('driver-1');
  await page.getByLabel('Revised destination arrival (your local time)').fill('2026-10-04T19:30');
  await page.getByLabel('Recovery notes').fill('Synthetic substitute inspected and riders transferred');
  for(const box of await page.getByRole('checkbox').all())await box.check();
@@ -62,7 +75,7 @@ test('substitute changes invalidate previous inspection confirmations',async({pa
  await page.getByLabel('Substitute bus').selectOption('bus-2');
  await expect(page.getByRole('checkbox').first()).not.toBeChecked();await expect(page.getByRole('button',{name:recoveryLabel})).toBeDisabled();
  for(const box of await page.getByRole('checkbox').all())await box.check();
- await page.getByLabel('Driver',{exact:true}).selectOption('driver-2');
+ await page.getByRole('combobox',{name:/^Driver/}).selectOption('driver-2');
  await expect(page.getByRole('checkbox').first()).not.toBeChecked();await expect(page.getByRole('button',{name:recoveryLabel})).toBeDisabled();
 });
 test('blocked assignment shows actionable validation and retains operator input',async({page})=>{
@@ -96,4 +109,20 @@ for(const theme of ['light','dark'])for(const mobile of [false,true])test(`${the
  const layout=await page.evaluate(()=>({width:document.documentElement.clientWidth,scroll:document.documentElement.scrollWidth,bg:getComputedStyle(document.querySelector('section')!).backgroundColor,color:getComputedStyle(document.querySelector('section')!).color}));
  expect(layout.scroll).toBeLessThanOrEqual(layout.width+1);expect(layout.bg).not.toBe(layout.color);
  await page.screenshot({path:testInfo.outputPath(`${theme}-${mobile?'mobile':'desktop'}.png`),fullPage:true});
+});
+
+test('Trip Monitor details link opens the real trip detail recovery panel',async({page})=>{
+ await fixture(page,{initial:'REPORTED'});await page.goto('/bus-ops/dispatch');
+ await expect(page.getByRole('heading',{name:'Trip Monitor'})).toBeVisible();
+ const details=page.getByRole('link',{name:'Details & recovery'});await expect(details).toHaveAttribute('href','/bus-ops/trips/synthetic-trip');await details.click();
+ await expect(page.getByRole('heading',{name:'Trip SYNTHETIC-TRIP'})).toBeVisible();await expect(page.getByRole('heading',{name:'Disruption response'})).toBeVisible();await expect(page.getByText('REPORTED: Synthetic bus engine breakdown')).toBeVisible();
+});
+test('Trip Monitor moves a started trip through the dedicated en-route command',async({page})=>{
+ const f=await fixture(page);await page.goto('/bus-ops/dispatch');await page.getByRole('button',{name:/En Route/}).click();
+ await expect.poll(()=>f.tripPosts.length).toBe(1);expect(f.tripPosts[0]).toEqual({url:'/api/bus-ops/schedules/synthetic-trip/en-route',method:'POST',body:{}});
+ await expect(page.getByRole('button',{name:/Complete/})).toBeVisible();
+});
+test('Trip Monitor displays a blocked departure and keeps the trip scheduled',async({page})=>{
+ const f=await fixture(page,{tripStatus:'SCHEDULED',commandError:'Resolve the reported disruption with an inspected substitute before departure'});await page.goto('/bus-ops/dispatch');await page.getByRole('button',{name:/Start$/,exact:false}).click();
+ await expect(page.getByRole('alert')).toContainText('inspected substitute');expect(f.trip.status).toBe('SCHEDULED');expect(f.tripPosts[0].url).toBe('/api/bus-ops/schedules/synthetic-trip/depart');
 });

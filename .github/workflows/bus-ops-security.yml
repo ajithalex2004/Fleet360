@@ -26,6 +26,7 @@ jobs:
       - name: Policy, isolation and safety regressions
         run: >-
           npx vitest run
+          tests/unit/bus-ops-en-route-command.test.ts
           tests/unit/bus-ops-disruptions.test.ts
           tests/unit/bus-rider-notifications.test.ts
           tests/unit/bus-ops-trip-notification-events.test.ts

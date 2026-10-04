@@ -27,7 +27,7 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `bookings` | 2 | module `booking-portal` | module `booking-portal` |
 | `branch-staff` | 1 | self | self |
 | `branding` | 1 | external | external |
-| `bus-ops` | 109 | module `bus-ops` | module `bus-ops` |
+| `bus-ops` | 110 | module `bus-ops` | module `bus-ops` |
 | `bus-ops/gateway` | 1 | external | external |
 | `carrier-portal` | 8 | external | external |
 | `chat` | 1 | self | self |
