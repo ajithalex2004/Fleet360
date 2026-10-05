@@ -29,6 +29,40 @@ const EXEMPT_PATTERNS = [
 const { RULE_EXEMPTIONS } = require('./tenant-route-exemptions');
 const { unwrapAuditedHandlers } = require('./route-handler-source');
 
+/**
+ * `source` with its // and /* *\/ comments blanked out. String and template
+ * literals are kept as they are, so a URL like 'https://…' is not mistaken
+ * for a comment.
+ */
+function stripComments(source) {
+  let out = '';
+  let quote = null;
+  for (let i = 0; i < source.length; i++) {
+    const c = source[i];
+    const next = source[i + 1];
+    if (quote) {
+      out += c;
+      if (c === '\\') { out += next ?? ''; i++; }
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (c === "'" || c === '"' || c === '`') { quote = c; out += c; continue; }
+    if (c === '/' && next === '/') {
+      while (i < source.length && source[i] !== '\n') i++;
+      out += '\n';
+      continue;
+    }
+    if (c === '/' && next === '*') {
+      const end = source.indexOf('*/', i + 2);
+      i = end === -1 ? source.length : end + 1;
+      out += ' ';
+      continue;
+    }
+    out += c;
+  }
+  return out;
+}
+
 function ruleExemptionFor(relativePath, method) {
   return RULE_EXEMPTIONS.find(
     e => e.file === relativePath && e.method === method && e.type === 'missing_auth',
@@ -114,7 +148,9 @@ function analyzeRouteFile(filePath) {
 
     if (match) {
       const handlerBody = match[1];
-      const hasAuthzCall = /requireAuthorizedTenant\s*\(/.test(handlerBody);
+      // Comments don't count: a note like "No requireAuthorizedTenant(): …"
+      // explaining why a handler is public used to pass as a call.
+      const hasAuthzCall = /requireAuthorizedTenant\s*\(/.test(stripComments(handlerBody));
 
       if (!hasAuthzCall) {
         const exemption = ruleExemptionFor(relativePath, method);
