@@ -160,9 +160,12 @@ const requestTypeFor = (wf: { module: string; procedure: string } | null) =>
 
 // Fields only some procedures have (src/lib/workflow/subjects.ts): a vehicle
 // transfer's branches and emirates (branch names are compared as entered on
-// the transfer, ignoring case); a rental renewal's extension and rates.
+// the transfer, ignoring case); a rental renewal's extension and rates; a
+// payable's source, vendor and cost centre (Finance > Accounts Payable).
 type ProcedureField = { value: string; label: string; choices?: { value: string; label: string }[]; text?: boolean };
 const EMIRATE_CHOICES = opts(['ABU_DHABI', 'DUBAI', 'SHARJAH', 'AJMAN', 'UMM_AL_QUWAIN', 'RAS_AL_KHAIMAH', 'FUJAIRAH'], titleCase);
+// As Finance > Accounts Payable records them.
+const PAYABLE_MODULES = opts(['MAINTENANCE', 'LOGISTICS', 'LEASING', 'GENERAL'], titleCase);
 const PROCEDURE_FIELDS: Record<string, ProcedureField[]> = {
   'RAC.TRANSFER_APPROVAL': [
     { value: 'fromBranch',   label: 'From Branch', text: true },
@@ -173,6 +176,18 @@ const PROCEDURE_FIELDS: Record<string, ProcedureField[]> = {
       { value: 'SAME_EMIRATE',  label: 'Within one emirate' },
       { value: 'CROSS_EMIRATE', label: 'Between emirates' },
     ] },
+  ],
+  'FINANCE.PAYABLE_APPROVAL': [
+    { value: 'sourceModule', label: 'Source Module', choices: PAYABLE_MODULES },
+    { value: 'sourceType',   label: 'Source Type', choices: [
+      { value: 'MAINTENANCE_REQUEST',  label: 'Maintenance Request' },
+      { value: 'MAINTENANCE_ESTIMATE', label: 'Maintenance Estimate' },
+      { value: 'QUOTATION_APPROVAL',   label: 'Garage Quotation' },
+      { value: 'VENDOR_INVOICE',       label: 'Vendor Invoice' },
+      { value: 'MANUAL',               label: 'Manual Entry' },
+    ] },
+    { value: 'vendor',     label: 'Vendor',      text: true },
+    { value: 'costCentre', label: 'Cost Centre', text: true },
   ],
   'RAC.RENEWAL_APPROVAL': [
     { value: 'extensionDays', label: 'Extension (days)' },
@@ -1090,7 +1105,7 @@ export default function WorkflowsPage() {
                                 {conditionChoices(condField, selectedWf)!.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                               </select>
                             ) : (
-                              <input value={condVal} onChange={e => setCondVal(e.target.value)} placeholder={isTextField(condField, selectedWf) ? 'Name as entered on the transfer' : 'e.g. 100000'}
+                              <input value={condVal} onChange={e => setCondVal(e.target.value)} placeholder={isTextField(condField, selectedWf) ? 'Name, exactly as entered on the record' : 'e.g. 100000'}
                                 className="w-full px-3 py-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-amber-500/50" />
                             )}
                           </div>

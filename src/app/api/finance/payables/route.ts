@@ -15,11 +15,13 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import type { Prisma } from '@prisma/client';
+import { payableTotals } from '@/lib/finance/payable-totals';
 type Row = Record<string, unknown>;
 
 
-async function nextPayableNumber(tenantId: string): Promise<string> {
-  const [row] = await prisma.$queryRawUnsafe<{ count: string }[]>(
+async function nextPayableNumber(tx: Prisma.TransactionClient, tenantId: string): Promise<string> {
+  const [row] = await tx.$queryRawUnsafe<{ count: string }[]>(
     `SELECT COUNT(*)::text AS count FROM finance_payables WHERE tenant_id = $1`,
     tenantId,
   ).catch(() => [{ count: '0' }]);
@@ -45,6 +47,7 @@ export async function GET(req: NextRequest) {
       const paymentStatus = sp.get('paymentStatus');
       const module  = sp.get('module');
       const vendor  = sp.get('vendor');
+      const search  = sp.get('search')?.trim();
       const from    = sp.get('from');
       const to      = sp.get('to');
       const overdue = sp.get('overdue');
@@ -61,13 +64,17 @@ export async function GET(req: NextRequest) {
       if (paymentStatus)    { where += ` AND payment_status = $${pi++}`;     params.push(paymentStatus); }
       if (module)           { where += ` AND module = $${pi++}`;             params.push(module); }
       if (vendor)           { where += ` AND vendor_name ILIKE $${pi++}`;    params.push(`%${vendor}%`); }
+      if (search) {
+        where += ` AND (payable_number ILIKE $${pi} OR vendor_name ILIKE $${pi} OR description ILIKE $${pi})`;
+        params.push(`%${search}%`); pi++;
+      }
       if (from)             { where += ` AND issue_date >= $${pi++}::date`;        params.push(from); }
       if (to)               { where += ` AND issue_date <= $${pi++}::date`;        params.push(to); }
       if (overdue === 'true') {
         where += ` AND due_date < CURRENT_DATE AND payment_status NOT IN ('PAID','VOID')`;
       }
 
-      const [rows, summary] = await Promise.all([
+      const [rows, summary, statusSummary] = await Promise.all([
         tx.$queryRawUnsafe<Row[]>(
           `SELECT * FROM finance_payables ${where}
            ORDER BY created_at DESC LIMIT $${pi} OFFSET $${pi + 1}`,
@@ -83,9 +90,20 @@ export async function GET(req: NextRequest) {
             GROUP BY payment_status`,
           tenantId,
         ).catch(() => []),
+
+        tx.$queryRawUnsafe<{ status: string; count: string; total: string; overdue: string }[]>(
+          `SELECT status,
+                  COUNT(*)::text                      AS count,
+                  COALESCE(SUM(total_amount),0)::text AS total,
+                  COUNT(*) FILTER (WHERE due_date < CURRENT_DATE AND payment_status NOT IN ('PAID','VOID'))::text AS overdue
+             FROM finance_payables
+            WHERE deleted_at IS NULL AND tenant_id = $1
+            GROUP BY status`,
+          tenantId,
+        ).catch(() => []),
       ]);
 
-      return NextResponse.json({ data: rows, summary, page, limit });
+      return NextResponse.json({ data: rows, summary, statusSummary, page, limit });
   });
 }
 
@@ -104,13 +122,20 @@ export async function POST(req: NextRequest) {
 
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-      const payableNumber = await nextPayableNumber(tenantId);
+      if (!String(body.vendorName ?? '').trim()) {
+        return NextResponse.json({ error: 'Vendor name is required' }, { status: 400 });
+      }
+      const payableNumber = await nextPayableNumber(tx, tenantId);
 
-      const lineItems  = body.lineItems ?? [];
-      const subtotal   = parseFloat(body.subtotal  ?? '0') ||
-        lineItems.reduce((s: number, l: { amount?: number }) => s + (l.amount ?? 0), 0);
-      const vatAmount  = parseFloat(body.vatAmount  ?? '0') || Math.round(subtotal * 0.05 * 100) / 100;
-      const total      = subtotal + vatAmount;
+      // Lines set the amounts (VAT 5% unless given); without lines, the subtotal given.
+      const fromLines  = payableTotals(body.lineItems, body.vatAmount);
+      const lineItems  = fromLines?.lineItems ?? [];
+      const subtotal   = fromLines?.subtotal ?? (parseFloat(body.subtotal ?? '0') || 0);
+      const vatAmount  = fromLines?.vatAmount ?? (parseFloat(body.vatAmount ?? '0') || Math.round(subtotal * 0.05 * 100) / 100);
+      const total      = fromLines?.total ?? Math.round((subtotal + vatAmount) * 100) / 100;
+      if (!(total > 0)) {
+        return NextResponse.json({ error: 'Add at least one line with an amount' }, { status: 400 });
+      }
 
       const [row] = await tx.$queryRawUnsafe<Row[]>(
         `INSERT INTO finance_payables

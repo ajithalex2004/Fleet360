@@ -156,7 +156,10 @@ export const APPROVAL_SUBJECTS: Record<string, ApprovalSubject> = {
       const r = await rowIn(tx, 'finance_payables', tenantId, id, ['SUBMITTED']);
       return r && {
         referenceNumber: String(r.payable_number ?? id),
-        context: { amount: num(r.total_amount), vendor: r.vendor_name, sourceModule: r.module },
+        context: {
+          amount: num(r.total_amount), vendor: r.vendor_name, sourceModule: r.module,
+          sourceType: r.source_type, costCentre: r.cost_centre,
+        },
       };
     },
     async apply(tx, o) {

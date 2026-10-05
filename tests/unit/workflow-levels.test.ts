@@ -133,6 +133,16 @@ describe('approval level conditions', () => {
     expect(subjects).toMatch(/dailyRate: num\(r\.daily_rate\), depositTopUp: num\(r\.deposit_top_up\)/);
   });
 
+  it('applies a level to payables from one module, source or vendor', () => {
+    expect(conditionApplies(cond('sourceModule', 'EQ', 'MAINTENANCE'), { sourceModule: 'MAINTENANCE', amount: 500 })).toBe(true);
+    expect(conditionApplies(cond('sourceModule', 'EQ', 'MAINTENANCE'), { sourceModule: 'GENERAL', amount: 500 })).toBe(false);
+    expect(conditionApplies(cond('vendor', 'EQ', 'Al Futtaim Motors'), { vendor: 'al futtaim motors' })).toBe(true);
+    const subjects = readFileSync('src/lib/workflow/subjects.ts', 'utf8');
+    expect(subjects).toMatch(/sourceType: r\.source_type, costCentre: r\.cost_centre/);
+    const admin = readFileSync('src/app/(app)/admin/workflows/page.tsx', 'utf8');
+    for (const f of ['sourceModule', 'sourceType', 'vendor', 'costCentre']) expect(admin).toContain(`value: '${f}'`);
+  });
+
   it('compares text for equality, case-insensitively', () => {
     expect(conditionApplies(cond('category', 'EQ', 'Fuel'), { category: 'FUEL' })).toBe(true);
     expect(conditionApplies(cond('category', 'NEQ', 'Fuel'), { category: 'fuel' })).toBe(false);
