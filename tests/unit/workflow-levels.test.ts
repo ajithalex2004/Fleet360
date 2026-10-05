@@ -36,6 +36,17 @@ describe('approval level conditions', () => {
     expect(conditionApplies(cond('amount', 'GT', 100), { totalValue: 500 })).toBe(true);
   });
 
+  it('applies a level to one booking service type, or to all but one', () => {
+    const executiveOnly = cond('serviceType', 'EQ', 'EXECUTIVE');
+    const notRental = cond('serviceType', 'NEQ', 'RENTAL');
+    expect(conditionApplies(executiveOnly, { serviceType: 'EXECUTIVE', amount: 300 })).toBe(true);
+    expect(conditionApplies(executiveOnly, { serviceType: 'RENTAL', amount: 300 })).toBe(false);
+    expect(conditionApplies(notRental, { serviceType: 'RENTAL' })).toBe(false);
+    expect(conditionApplies(notRental, { serviceType: 'STAFF_TRANSPORT' })).toBe(true);
+    // A booking without a service type keeps the level.
+    expect(conditionApplies(executiveOnly, { amount: 300 })).toBe(true);
+  });
+
   it('compares text for equality, case-insensitively', () => {
     expect(conditionApplies(cond('category', 'EQ', 'Fuel'), { category: 'FUEL' })).toBe(true);
     expect(conditionApplies(cond('category', 'NEQ', 'Fuel'), { category: 'fuel' })).toBe(false);
