@@ -128,6 +128,47 @@ const CONDITION_CHOICES: Record<string, { value: string; label: string }[]> = {
 };
 const TEXT_OPERATORS = new Set(['EQ', 'NEQ']);
 
+// A record's request type (context.requestType in src/lib/workflow/subjects.ts),
+// for the procedures that have one: its label and values as the module stores them.
+const opts = (values: string[], label = (v: string) => v) => values.map(v => ({ value: v, label: label(v) }));
+const titleCase = (v: string) => v.toLowerCase().split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+const REQUEST_TYPES: Record<string, { label: string; choices: { value: string; label: string }[] }> = {
+  'MAINTENANCE.ESTIMATE_APPROVAL': {
+    label: 'Maintenance Request Type',
+    choices: opts(['PREVENTIVE', 'CORRECTIVE', 'EMERGENCY', 'INSPECTION', 'BREAKDOWN'], titleCase),
+  },
+  'FINANCE.EXPENSE_APPROVAL': {
+    label: 'Expense Category',
+    choices: opts(['FUEL', 'TOLL', 'MAINTENANCE', 'INSURANCE', 'DRIVER_ALLOWANCE', 'OFFICE', 'REPAIRS', 'OTHER'], titleCase),
+  },
+  'LEASING.AMENDMENT_APPROVAL': {
+    label: 'Amendment Type',
+    choices: opts(['MILEAGE_UPGRADE', 'VEHICLE_SWAP', 'TERM_EXTENSION', 'RATE_CHANGE', 'ADDITIONAL_SERVICE', 'OTHER'], titleCase),
+  },
+  // The booking portal stores the option text itself.
+  'BOOKING.BOOKING_APPROVAL': {
+    label: 'Booking Trip / Request Type',
+    choices: [
+      ...opts(['Airport Transfer (Arrival)', 'Airport Transfer (Departure)', 'City Transfer', 'Event / Function', 'Road Show', 'Full Day', 'Multi-Day'], v => `Executive · ${v}`),
+      ...opts(['Morning (06:00–14:00)', 'Afternoon (14:00–22:00)', 'Night (22:00–06:00)', 'Standard (09:00–18:00)', 'Split Shift'], v => `Staff Transport · ${v}`),
+      ...opts(['FTL – Full Truck Load', 'LTL – Less than Truck Load', 'FCL – Full Container Load', 'LCL – Less than Container Load', 'REEFER – Temperature Controlled', 'SPECIAL – Oversized / Project Cargo'], v => `Logistics · ${v}`),
+    ],
+  },
+};
+const requestTypeFor = (wf: { module: string; procedure: string } | null) =>
+  wf ? REQUEST_TYPES[`${wf.module}.${wf.procedure}`] : undefined;
+
+/** The condition fields for a workflow: Request Type only where its procedure has one. */
+function conditionFields(wf: { module: string; procedure: string } | null) {
+  const rt = requestTypeFor(wf);
+  return rt ? [...CONDITION_FIELDS, { value: 'requestType', label: rt.label }] : CONDITION_FIELDS;
+}
+
+/** A text field's values, or undefined for a number field. */
+function conditionChoices(field: string, wf: { module: string; procedure: string } | null) {
+  return field === 'requestType' ? requestTypeFor(wf)?.choices : CONDITION_CHOICES[field];
+}
+
 //  Interfaces 
 interface Workflow {
   id: string; name: string; module: string; procedure: string;
@@ -659,7 +700,7 @@ export default function WorkflowsPage() {
                                     {step.isOptional && <span className="text-xs text-[var(--text-faint)] italic">optional</span>}
                                     {cond && (
                                       <span className="px-2 py-0.5 rounded-full text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                                        IF {CONDITION_FIELDS.find(f => f.value === cond.field)?.label ?? cond.field} {CONDITION_OPERATORS.find(o => o.value === cond.operator)?.label.toLowerCase() ?? cond.operator} {CONDITION_CHOICES[cond.field]?.find(c => c.value === cond.value)?.label ?? cond.value}
+                                        IF {conditionFields(selectedWf).find(f => f.value === cond.field)?.label ?? (cond.field === 'requestType' ? 'Request Type' : cond.field)} {CONDITION_OPERATORS.find(o => o.value === cond.operator)?.label.toLowerCase() ?? cond.operator} {conditionChoices(cond.field, selectedWf)?.find(c => c.value === cond.value)?.label ?? cond.value}
                                       </span>
                                     )}
                                   </div>
@@ -988,14 +1029,15 @@ export default function WorkflowsPage() {
                                 const field = e.target.value;
                                 setCondField(field);
                                 // A text field takes a value from its list and compares by equality.
-                                if (CONDITION_CHOICES[field]) {
+                                const choices = conditionChoices(field, selectedWf);
+                                if (choices) {
                                   if (!TEXT_OPERATORS.has(condOp)) setCondOp('EQ');
-                                  if (!CONDITION_CHOICES[field].some(c => c.value === condVal)) setCondVal('');
+                                  if (!choices.some(c => c.value === condVal)) setCondVal('');
                                 }
                               }}
                               className="w-full px-3 py-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-amber-500/50">
                               <option value="">Select field...</option>
-                              {CONDITION_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                              {conditionFields(selectedWf).map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                             </select>
                           </div>
                           <div>
@@ -1003,17 +1045,17 @@ export default function WorkflowsPage() {
                             <select value={condOp} onChange={e => setCondOp(e.target.value)}
                               className="w-full px-3 py-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-amber-500/50">
                               {CONDITION_OPERATORS
-                                .filter(o => !CONDITION_CHOICES[condField] || TEXT_OPERATORS.has(o.value))
+                                .filter(o => !conditionChoices(condField, selectedWf) || TEXT_OPERATORS.has(o.value))
                                 .map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                             </select>
                           </div>
                           <div>
                             <label className="block text-xs text-[var(--text-faint)] mb-1">Value</label>
-                            {CONDITION_CHOICES[condField] ? (
+                            {conditionChoices(condField, selectedWf) ? (
                               <select value={condVal} onChange={e => setCondVal(e.target.value)}
                                 className="w-full px-3 py-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-amber-500/50">
                                 <option value="">Select...</option>
-                                {CONDITION_CHOICES[condField].map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                                {conditionChoices(condField, selectedWf)!.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                               </select>
                             ) : (
                               <input value={condVal} onChange={e => setCondVal(e.target.value)} placeholder="e.g. 100000"
@@ -1023,7 +1065,7 @@ export default function WorkflowsPage() {
                         </div>
                         {condField && condVal && (
                           <p className="text-amber-400/80 text-xs">
-                            This step will only be activated if <strong>{CONDITION_FIELDS.find(f => f.value === condField)?.label}</strong> is <strong>{CONDITION_OPERATORS.find(o => o.value === condOp)?.label.toLowerCase()}</strong> <strong>{CONDITION_CHOICES[condField]?.find(c => c.value === condVal)?.label ?? condVal}</strong>.
+                            This step will only be activated if <strong>{conditionFields(selectedWf).find(f => f.value === condField)?.label}</strong> is <strong>{CONDITION_OPERATORS.find(o => o.value === condOp)?.label.toLowerCase()}</strong> <strong>{conditionChoices(condField, selectedWf)?.find(c => c.value === condVal)?.label ?? condVal}</strong>.
                             Otherwise the step is automatically skipped. If no step applies, the record is approved automatically.
                           </p>
                         )}

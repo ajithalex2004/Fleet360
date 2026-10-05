@@ -91,7 +91,10 @@ export const APPROVAL_SUBJECTS: Record<string, ApprovalSubject> = {
       if (!chosen) return null;
       return {
         referenceNumber: mr.workOrderNo || `MR-${id.slice(0, 8).toUpperCase()}`,
-        context: { amount: chosen.amount, quotationId: chosen.id, garageId: chosen.garageId, vehicleId: mr.vehicleId },
+        context: {
+          amount: chosen.amount, quotationId: chosen.id, garageId: chosen.garageId, vehicleId: mr.vehicleId,
+          requestType: mr.maintenanceType,
+        },
       };
     },
     async apply(tx, o) {
@@ -128,7 +131,7 @@ export const APPROVAL_SUBJECTS: Record<string, ApprovalSubject> = {
       const r = await rowIn(tx, 'finance_expenses', tenantId, id, ['SUBMITTED']);
       return r && {
         referenceNumber: String(r.expense_no ?? id),
-        context: { amount: num(r.total_amount), category: r.category, costCentre: r.cost_centre },
+        context: { amount: num(r.total_amount), category: r.category, requestType: r.category, costCentre: r.cost_centre },
       };
     },
     async apply(tx, o) {
@@ -204,7 +207,10 @@ export const APPROVAL_SUBJECTS: Record<string, ApprovalSubject> = {
       const impact = num(r?.total_impact);
       return r && {
         referenceNumber: String(r.amendment_no ?? id),
-        context: { amount: impact === undefined ? undefined : Math.abs(impact), amendmentType: r.amendment_type },
+        context: {
+          amount: impact === undefined ? undefined : Math.abs(impact),
+          amendmentType: r.amendment_type, requestType: r.amendment_type,
+        },
       };
     },
     async apply(tx, o) {
@@ -279,6 +285,9 @@ export const APPROVAL_SUBJECTS: Record<string, ApprovalSubject> = {
         context: {
           amount: num(notes.totalFareAed), serviceType: b.serviceType, vehicleCategory: b.vehicleCategory,
           costCenter: notes.costCenter,
+          // The portal service's own sub-type: an Executive trip, a Staff
+          // Transport shift, a Logistics shipment.
+          requestType: notes.tripType ?? notes.shiftType ?? notes.shipmentType,
         },
       };
     },
@@ -327,7 +336,12 @@ export const APPROVAL_SUBJECTS: Record<string, ApprovalSubject> = {
   },
 };
 
-/** Workflow procedures modules start approvals under, by module, for Admin > Workflows. */
+/**
+ * Workflow procedures modules start approvals under, by module, for Admin >
+ * Workflows. A level's Request Type condition reads context.requestType: a
+ * maintenance request's type, an expense's category, a lease amendment's
+ * type, a booking's trip / shift / shipment type.
+ */
 export const SUBJECT_PROCEDURES = Object.values(APPROVAL_SUBJECTS).map((s) => ({ module: s.module, procedure: s.procedure, label: s.label }));
 
 /**
