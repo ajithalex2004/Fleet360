@@ -22,7 +22,7 @@ const CONNECTED = new Set([
   'MAINTENANCE.ESTIMATE_APPROVAL', 'FINANCE.EXPENSE_APPROVAL', 'FINANCE.PAYABLE_APPROVAL', 'FINANCE.JOURNAL_APPROVAL',
   'LEASING.QUOTATION_APPROVAL', 'LEASING.CREDIT_APPROVAL', 'LEASING.PO_REQUEST', 'LEASING.AMENDMENT_APPROVAL',
   'LEASING.CONTRACT_APPROVAL', 'LEASING.EARLY_TERMINATION', 'LEASING.VEHICLE_ADDITION',
-  'RAC.TRANSFER_APPROVAL', 'RAC.RENEWAL_APPROVAL', 'RAC.REFUND_APPROVAL', 'BOOKING.BOOKING_APPROVAL',
+  'RAC.TRANSFER_APPROVAL', 'RAC.RENEWAL_APPROVAL', 'RAC.REFUND_APPROVAL', 'RAC.DAMAGE_CLAIM', 'BOOKING.BOOKING_APPROVAL',
 ]);
 
 const PROCEDURES: Record<string, { key: string; label: string; description: string }[]> = {
@@ -37,7 +37,7 @@ const PROCEDURES: Record<string, { key: string; label: string; description: stri
   ],
   RAC: [
     { key: 'BOOKING_APPROVAL',      label: 'Booking Approval',        description: 'Approval for new rental bookings above threshold' },
-    { key: 'DAMAGE_CLAIM',          label: 'Damage Claim',            description: 'Assessment and approval of vehicle damage claims' },
+    { key: 'DAMAGE_CLAIM',          label: 'Damage Claim',            description: 'Assessed damage claims, before they are billed or closed' },
     { key: 'REFUND_APPROVAL',       label: 'Refund Approval',         description: 'Security deposit refunds (rental and leasing), before they are recorded and paid' },
     { key: 'RATE_OVERRIDE',         label: 'Rate Override',           description: 'Approval when rates are discounted below standard' },
     { key: 'TRANSFER_APPROVAL',     label: 'Vehicle Transfer',        description: 'Requested vehicle transfers between branches' },
@@ -239,6 +239,16 @@ const PROCEDURE_FIELDS: Record<string, ProcedureField[]> = {
       { value: 'BUS_TRIP_COMPLETION',     label: 'School bus trip' },
       { value: 'BUS_OPS_RECHARGE',        label: 'Bus operations recharge' },
     ] },
+  ],
+  // Amount is the claim's actual cost (else its estimate).
+  'RAC.DAMAGE_CLAIM': [
+    { value: 'estimatedCost',       label: 'Estimated Cost (AED)' },
+    { value: 'actualCost',          label: 'Actual Cost (AED)' },
+    { value: 'costOverEstimatePct', label: 'Actual Over Estimate (%)' },
+    { value: 'chargeCustomer',      label: 'Charged to Customer', choices: [{ value: 'YES', label: 'Yes' }, { value: 'NO', label: 'No (written off)' }] },
+    { value: 'insuranceClaim',      label: 'Insurance Claim', choices: [{ value: 'YES', label: 'Yes' }, { value: 'NO', label: 'No' }] },
+    { value: 'customerType',        label: 'Customer Type', choices: opts(['INDIVIDUAL', 'CORPORATE', 'AIRLINE', 'INSURANCE'], titleCase) },
+    { value: 'vehicleCategory',     label: 'Vehicle Category', text: true },
   ],
   // Amount is the refund requested.
   'RAC.REFUND_APPROVAL': [

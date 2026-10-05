@@ -221,6 +221,18 @@ describe('approval level conditions', () => {
     expect(conditionApplies(cond('contractType', 'EQ', 'RENTAL'), { contractType: 'LEASE' })).toBe(false);
   });
 
+  it('connects damage claim approval, with cost and write-off conditions', () => {
+    const subjects = readFileSync('src/lib/workflow/subjects.ts', 'utf8');
+    expect(subjects).toMatch(/rental_damage_claim: \{\s*module: 'RAC', procedure: 'DAMAGE_CLAIM'/);
+    const admin = readFileSync('src/app/(app)/admin/workflows/page.tsx', 'utf8');
+    const connected = admin.slice(admin.indexOf('const CONNECTED'), admin.indexOf(']);', admin.indexOf('const CONNECTED')));
+    expect(connected).toContain("'RAC.DAMAGE_CLAIM'");
+    const page = readFileSync('src/app/(app)/rental/damage-claims/page.tsx', 'utf8');
+    expect(page).toContain('cData?.data');
+    expect(conditionApplies(cond('chargeCustomer', 'EQ', 'NO'), { chargeCustomer: 'NO', amount: 2000 })).toBe(true);
+    expect(conditionApplies(cond('costOverEstimatePct', 'GT', 25), { costOverEstimatePct: 66.7 })).toBe(true);
+  });
+
   it('compares text for equality, case-insensitively', () => {
     expect(conditionApplies(cond('category', 'EQ', 'Fuel'), { category: 'FUEL' })).toBe(true);
     expect(conditionApplies(cond('category', 'NEQ', 'Fuel'), { category: 'fuel' })).toBe(false);
