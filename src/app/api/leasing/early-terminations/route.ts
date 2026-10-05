@@ -61,6 +61,8 @@ export async function POST(req: NextRequest) {
     if (!contract) {
       return NextResponse.json({ error: 'Contract not found' }, { status: 404 });
     }
+    const { status: _s, approvedBy: _b, approvedAt: _a, id: _i, terminationNo: _n, ...rest } = body;
+    void _s; void _b; void _a; void _i; void _n;
     const penaltyPct = parseFloat(body.penaltyPct || '20');
     const monthlyRate = parseFloat(body.monthlyRate || '0');
     const remainingMonths = parseInt(body.remainingMonths || '0');
@@ -78,7 +80,8 @@ export async function POST(req: NextRequest) {
       const count = await tx.leaseEarlyTermination.count({ where: { tenantId } });
       const terminationNo = `ET-${String(count + 1).padStart(5, '0')}`;
       return tx.leaseEarlyTermination.create({
-        data: { ...body, requestDate, effectiveDate, terminationNo, penaltyAmount, totalSettlement, tenantId } as Prisma.LeaseEarlyTerminationUncheckedCreateInput,
+        // A new request is always a draft: approval comes from its actions.
+        data: { ...rest, requestDate, effectiveDate, terminationNo, penaltyAmount, totalSettlement, tenantId, status: 'DRAFT' } as Prisma.LeaseEarlyTerminationUncheckedCreateInput,
       });
     });
     return NextResponse.json(et, { status: 201 });

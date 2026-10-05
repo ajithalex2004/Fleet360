@@ -21,7 +21,7 @@ const MODULES = [
 const CONNECTED = new Set([
   'MAINTENANCE.ESTIMATE_APPROVAL', 'FINANCE.EXPENSE_APPROVAL', 'FINANCE.PAYABLE_APPROVAL', 'FINANCE.JOURNAL_APPROVAL',
   'LEASING.QUOTATION_APPROVAL', 'LEASING.CREDIT_APPROVAL', 'LEASING.PO_REQUEST', 'LEASING.AMENDMENT_APPROVAL',
-  'LEASING.CONTRACT_APPROVAL',
+  'LEASING.CONTRACT_APPROVAL', 'LEASING.EARLY_TERMINATION',
   'RAC.TRANSFER_APPROVAL', 'RAC.RENEWAL_APPROVAL', 'BOOKING.BOOKING_APPROVAL',
 ]);
 
@@ -31,7 +31,7 @@ const PROCEDURES: Record<string, { key: string; label: string; description: stri
     { key: 'CONTRACT_APPROVAL',     label: 'Contract Approval',       description: 'Lease contracts submitted for approval, before they can be activated' },
     { key: 'CREDIT_APPROVAL',       label: 'Credit Approval',         description: 'Credit risk assessment and approval workflow' },
     { key: 'PO_REQUEST',            label: 'Purchase Order Request',  description: 'Internal PO creation and procurement workflow' },
-    { key: 'EARLY_TERMINATION',     label: 'Early Termination',       description: 'Approval for early contract termination requests' },
+    { key: 'EARLY_TERMINATION',     label: 'Early Termination',       description: 'Submitted early termination requests, by settlement and penalty' },
     { key: 'VEHICLE_ADDITION',      label: 'Vehicle Addition',        description: 'Approval to add vehicles to an active lease contract' },
     { key: 'AMENDMENT_APPROVAL',    label: 'Contract Amendment',      description: 'Submitted lease amendments, by their financial impact' },
   ],
@@ -192,6 +192,16 @@ const PROCEDURE_FIELDS: Record<string, ProcedureField[]> = {
   'LEASING.QUOTATION_APPROVAL': QUOTATION_FIELDS,
   'LEASING.CREDIT_APPROVAL':    QUOTATION_FIELDS,
   'LEASING.PO_REQUEST':         QUOTATION_FIELDS,
+  // Amount is the customer's total settlement.
+  'LEASING.EARLY_TERMINATION':  [
+    { value: 'penaltyPct',          label: 'Penalty (%)' },
+    { value: 'penaltyAmount',       label: 'Penalty (AED)' },
+    { value: 'remainingMonths',     label: 'Remaining Months' },
+    { value: 'outstandingPayments', label: 'Outstanding Payments (AED)' },
+    { value: 'depositRefund',       label: 'Deposit Refund (AED)' },
+    { value: 'agreementType',       label: 'Agreement Type', choices: opts(['MASTER', 'INDIVIDUAL'], titleCase) },
+    ...QUOTATION_FIELDS.filter(f => f.value === 'leaseType' || f.value === 'customerType'),
+  ],
   'LEASING.CONTRACT_APPROVAL':  [
     { value: 'agreementType', label: 'Agreement Type', choices: opts(['MASTER', 'INDIVIDUAL'], titleCase) },
     ...QUOTATION_FIELDS.filter(f => f.value !== 'markupPct'),

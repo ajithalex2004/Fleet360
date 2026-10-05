@@ -358,6 +358,49 @@ export const APPROVAL_SUBJECTS: Record<string, ApprovalSubject> = {
     },
   },
 
+  leasing_early_termination: {
+    module: 'LEASING', procedure: 'EARLY_TERMINATION', label: 'Early termination',
+    async load(tx, tenantId, id) {
+      const t = await tx.leaseEarlyTermination.findFirst({
+        where: { id, tenantId, status: 'PENDING_APPROVAL' },
+        select: {
+          terminationNo: true, remainingMonths: true, monthlyRate: true, penaltyPct: true, penaltyAmount: true,
+          outstandingPayments: true, depositRefund: true, totalSettlement: true,
+          contract: { select: { leaseType: true, agreementType: true, lessee: { select: { type: true } } } },
+        },
+      });
+      if (!t) return null;
+      return {
+        referenceNumber: t.terminationNo ?? id,
+        context: {
+          // What the customer settles (penalty + outstanding − deposit refund).
+          amount: num(t.totalSettlement), totalSettlement: num(t.totalSettlement),
+          penaltyAmount: num(t.penaltyAmount), penaltyPct: num(t.penaltyPct), remainingMonths: t.remainingMonths,
+          monthlyRate: num(t.monthlyRate), outstandingPayments: num(t.outstandingPayments), depositRefund: num(t.depositRefund),
+          leaseType: t.contract?.leaseType, agreementType: t.contract?.agreementType, customerType: t.contract?.lessee?.type,
+        },
+      };
+    },
+    async apply(tx, o) {
+      if (o.status === 'APPROVED') {
+        await tx.leaseEarlyTermination.updateMany({
+          where: { id: o.referenceId, tenantId: o.tenantId, status: 'PENDING_APPROVAL' },
+          data: { status: 'APPROVED', approvedBy: o.actorEmail, approvedAt: new Date() },
+        });
+        return;
+      }
+      const t = await tx.leaseEarlyTermination.findFirst({ where: { id: o.referenceId, tenantId: o.tenantId }, select: { notes: true } });
+      const note = `Rejected by ${o.actorEmail}: ${reasonOf(o)}`;
+      await tx.leaseEarlyTermination.updateMany({
+        where: { id: o.referenceId, tenantId: o.tenantId, status: 'PENDING_APPROVAL' },
+        data: { status: 'CANCELLED', notes: t?.notes ? `${t.notes}\n${note}` : note },
+      });
+    },
+    async row(tx, tenantId, id) {
+      return tx.leaseEarlyTermination.findFirst({ where: { id, tenantId } }) as Promise<Row | null>;
+    },
+  },
+
   LEASE_QUOTATION: {
     module: 'LEASING', procedure: 'QUOTATION_APPROVAL', label: 'Lease quotation',
     async load(tx, tenantId, id) {
