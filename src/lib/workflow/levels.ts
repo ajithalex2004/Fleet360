@@ -85,6 +85,25 @@ export function conditionApplies(conditionJson: string | null | undefined, ctx: 
   return true; // an ordering on text: keep the level
 }
 
+// The booking portal field holding each service's sub-type.
+const BOOKING_SUBTYPE_FIELD: Record<string, string> = {
+  EXECUTIVE: 'tripType', STAFF_TRANSPORT: 'shiftType', LOGISTICS: 'shipmentType',
+};
+
+/**
+ * A booking's request type for level conditions: its service's own sub-type
+ * (an Executive trip, a Staff Transport shift, a Logistics shipment), else
+ * its service type. Never empty when the booking has a service type, so a
+ * level limited to one trip type skips a Rental booking rather than keeping it.
+ */
+export function bookingRequestType(serviceType: unknown, notes: Record<string, unknown>): string | undefined {
+  const service = typeof serviceType === 'string' ? serviceType.trim().toUpperCase() : '';
+  const field = BOOKING_SUBTYPE_FIELD[service];
+  const sub = field ? notes[field] : undefined;
+  if (typeof sub === 'string' && sub.trim()) return sub.trim();
+  return service || undefined;
+}
+
 /** One approver's decision on a level. */
 export interface LevelDecision {
   email: string;

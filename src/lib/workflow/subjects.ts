@@ -15,7 +15,7 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { runAsTenant } from '@/lib/rls-scope';
-import type { WorkflowContext } from './levels';
+import { bookingRequestType, type WorkflowContext } from './levels';
 import {
   loadPendingEstimate, quotationForApproval, recordEstimateApproval, recordEstimateRejection,
   type EstimationApprovedPayload,
@@ -285,9 +285,7 @@ export const APPROVAL_SUBJECTS: Record<string, ApprovalSubject> = {
         context: {
           amount: num(notes.totalFareAed), serviceType: b.serviceType, vehicleCategory: b.vehicleCategory,
           costCenter: notes.costCenter,
-          // The portal service's own sub-type: an Executive trip, a Staff
-          // Transport shift, a Logistics shipment.
-          requestType: notes.tripType ?? notes.shiftType ?? notes.shipmentType,
+          requestType: bookingRequestType(b.serviceType, notes),
         },
       };
     },
@@ -340,7 +338,7 @@ export const APPROVAL_SUBJECTS: Record<string, ApprovalSubject> = {
  * Workflow procedures modules start approvals under, by module, for Admin >
  * Workflows. A level's Request Type condition reads context.requestType: a
  * maintenance request's type, an expense's category, a lease amendment's
- * type, a booking's trip / shift / shipment type.
+ * type, a booking's trip / shift / shipment type (else its service type).
  */
 export const SUBJECT_PROCEDURES = Object.values(APPROVAL_SUBJECTS).map((s) => ({ module: s.module, procedure: s.procedure, label: s.label }));
 
