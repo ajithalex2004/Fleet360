@@ -161,7 +161,8 @@ const requestTypeFor = (wf: { module: string; procedure: string } | null) =>
 // Fields only some procedures have (src/lib/workflow/subjects.ts): a vehicle
 // transfer's branches and emirates (branch names are compared as entered on
 // the transfer, ignoring case); a rental renewal's extension and rates; a
-// payable's source, vendor and cost centre (Finance > Accounts Payable).
+// payable's source, vendor and cost centre (Finance > Accounts Payable); a
+// journal entry's source (journal-service sourceType values).
 type ProcedureField = { value: string; label: string; choices?: { value: string; label: string }[]; text?: boolean };
 const EMIRATE_CHOICES = opts(['ABU_DHABI', 'DUBAI', 'SHARJAH', 'AJMAN', 'UMM_AL_QUWAIN', 'RAS_AL_KHAIMAH', 'FUJAIRAH'], titleCase);
 // As Finance > Accounts Payable records them.
@@ -188,6 +189,19 @@ const PROCEDURE_FIELDS: Record<string, ProcedureField[]> = {
     ] },
     { value: 'vendor',     label: 'Vendor',      text: true },
     { value: 'costCentre', label: 'Cost Centre', text: true },
+  ],
+  'FINANCE.JOURNAL_APPROVAL': [
+    { value: 'sourceType', label: 'Source Type', choices: [
+      { value: 'MANUAL',                  label: 'Manual entry' },
+      { value: 'AP_PAYABLE',              label: 'Accounts payable' },
+      { value: 'MAINTENANCE_REQUEST',     label: 'Maintenance request' },
+      { value: 'MAINTENANCE_ESTIMATE',    label: 'Maintenance estimate' },
+      { value: 'QUOTATION_APPROVAL',      label: 'Garage quotation' },
+      { value: 'LOGISTICS_SETTLEMENT',    label: 'Logistics settlement' },
+      { value: 'LOGISTICS_DRIVER_PAYOUT', label: 'Logistics driver payout' },
+      { value: 'BUS_TRIP_COMPLETION',     label: 'School bus trip' },
+      { value: 'BUS_OPS_RECHARGE',        label: 'Bus operations recharge' },
+    ] },
   ],
   'RAC.RENEWAL_APPROVAL': [
     { value: 'extensionDays', label: 'Extension (days)' },

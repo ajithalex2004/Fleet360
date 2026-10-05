@@ -143,6 +143,21 @@ describe('approval level conditions', () => {
     for (const f of ['sourceModule', 'sourceType', 'vendor', 'costCentre']) expect(admin).toContain(`value: '${f}'`);
   });
 
+  it('applies a level to journal entries from one source', () => {
+    const manualOnly = cond('sourceType', 'EQ', 'MANUAL');
+    expect(conditionApplies(manualOnly, { sourceType: 'MANUAL', amount: 1200 })).toBe(true);
+    expect(conditionApplies(manualOnly, { sourceType: 'AP_PAYABLE', amount: 1200 })).toBe(false);
+    const admin = readFileSync('src/app/(app)/admin/workflows/page.tsx', 'utf8');
+    const block = admin.slice(admin.indexOf("'FINANCE.JOURNAL_APPROVAL': ["), admin.indexOf("'RAC.RENEWAL_APPROVAL': ["));
+    expect(block).toContain("value: 'MANUAL'");
+  });
+
+  it('posts a journal entry only once it is approved, and can return a submitted one', () => {
+    const route = readFileSync('src/app/api/finance/journal-entries/[id]/route.ts', 'utf8');
+    expect(route).toMatch(/case 'post':[\s\S]*?if \(current\.status !== 'APPROVED'\)/);
+    expect(route).toMatch(/case 'reject':/);
+  });
+
   it('compares text for equality, case-insensitively', () => {
     expect(conditionApplies(cond('category', 'EQ', 'Fuel'), { category: 'FUEL' })).toBe(true);
     expect(conditionApplies(cond('category', 'NEQ', 'Fuel'), { category: 'fuel' })).toBe(false);

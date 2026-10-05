@@ -12,6 +12,7 @@ import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { approvalGate, approvalInProgress, withApprovalStart } from '@/lib/workflow/approvals';
+import { sessionUser } from '@/lib/session-user';
 import { nextJournalNumber } from '@/lib/finance/journal-service';
 type JeRow = Record<string, unknown>;
 
@@ -74,12 +75,13 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   const body = stripTenantOwnershipFields(await req.json());
   const { action } = body;
   // A company's journal approval workflow (Admin > Workflows) decides
-  // submitted entries: approve goes to the level that is waiting, and the
-  // entry can't be posted or voided until the workflow has decided.
-  if (action === 'approve') {
+  // submitted entries: approve / reject go to the level that is waiting, and
+  // the entry can't be posted or voided until the workflow has decided.
+  if (action === 'approve' || action === 'reject') {
     const gated = await approvalGate({
       headers: req.headers, tenantId, referenceType: 'finance_journal', referenceId: params.id,
-      action: 'APPROVE', comments: String(body.notes ?? ''),
+      action: action === 'reject' ? 'REJECT' : 'APPROVE',
+      comments: String((action === 'reject' ? body.reason : body.notes) ?? ''),
     });
     if (gated) return gated;
   } else if (action === 'post' || action === 'void') {
@@ -128,8 +130,24 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
           sqlParams = [params.id, body.approvedBy ?? req.headers.get('x-user-id') ?? 'Finance Manager', now, tenantId];
           break;
 
+        case 'reject': {
+          // Back to the preparer as a draft, with the reason in its notes.
+          if (current.status !== 'SUBMITTED') {
+            return NextResponse.json({ error: 'Only SUBMITTED entries can be returned' }, { status: 400 });
+          }
+          const by = (await sessionUser(req.headers))?.email ?? 'Finance Manager';
+          sql = `UPDATE finance_journal_entries
+                    SET status = 'DRAFT', updated_at = $2::timestamptz,
+                        notes = concat_ws(E'\n', NULLIF(notes, ''), $3::text)
+                  WHERE id::text = $1 AND tenant_id = $4
+                  RETURNING *`;
+          sqlParams = [params.id, now, `Returned by ${by}: ${String(body.reason ?? '').trim() || 'No reason given'}`, tenantId];
+          break;
+        }
+
         case 'post':
-          if (!['APPROVED', 'SUBMITTED'].includes(current.status)) {
+          // Only once approved: a submitted entry has not been.
+          if (current.status !== 'APPROVED') {
             return NextResponse.json({ error: 'Entry must be APPROVED before posting' }, { status: 400 });
           }
           sql = `UPDATE finance_journal_entries

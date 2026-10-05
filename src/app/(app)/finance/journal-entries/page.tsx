@@ -8,7 +8,7 @@ interface JournalEntry {
   is_balanced: boolean; prepared_by: string | null; approved_by: string | null;
   posted_by: string | null; approved_at: string | null; posted_at: string | null;
   reversed_je_id: string | null; reversal_je_id: string | null;
-  lines: JeLine[] | null; created_at: string;
+  lines: JeLine[] | null; created_at: string; notes?: string | null;
 }
 
 interface CoaAccount { account_code: string; account_name: string; account_type: string; is_header: boolean; }
@@ -182,20 +182,33 @@ function JEDrawer({ je, onClose, onUpdate }: { je: JournalEntry; onClose: () => 
   const lines: JeLine[] = Array.isArray(je.lines) ? je.lines : [];
 
   const doAction = async (action: string, extra: Record<string, string> = {}) => {
+    if (action === 'reject') {
+      const reason = prompt('Why is this entry being returned? It goes back to Draft for the preparer to correct.');
+      if (reason === null) return;
+      extra = { ...extra, reason: reason.trim() || 'Review required' };
+    }
     setActioning(true);
     const res = await fetch(`/api/finance/journal-entries/${je.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action, ...extra }),
     });
     setActioning(false);
-    if (res.ok) { onUpdate(); onClose(); }
-    else { const d = await res.json(); alert(d.error ?? 'Action failed'); }
+    const d = await res.json().catch(() => null);
+    if (!res.ok) return alert(d?.error ?? 'Action failed');
+    // Where an approval workflow has the entry now.
+    const wf = d?.workflow;
+    const note = d?.message
+      ?? (wf?.status === 'IN_PROGRESS' ? `Sent for approval through "${wf.name}"${wf.level ? `, waiting for "${wf.level}"` : ''}.` : null)
+      ?? (wf?.status === 'APPROVED' ? `"${wf.name}": no approval level applies, so the entry is approved.` : null);
+    if (note) alert(note);
+    onUpdate(); onClose();
   };
 
   const ACTIONS: { action: string; label: string; color: string; forStatus: string[] }[] = [
     { action: 'submit',  label: '📤 Submit for Approval', color: 'bg-blue-600',    forStatus: ['DRAFT'] },
     { action: 'approve', label: '✓ Approve',              color: 'bg-amber-600',   forStatus: ['SUBMITTED'] },
-    { action: 'post',    label: '📌 Post to GL',           color: 'bg-emerald-600', forStatus: ['APPROVED','SUBMITTED'] },
+    { action: 'reject',  label: '↩ Return to Draft',      color: 'bg-slate-600',   forStatus: ['SUBMITTED'] },
+    { action: 'post',    label: '📌 Post to GL',           color: 'bg-emerald-600', forStatus: ['APPROVED'] },
     { action: 'reverse', label: '↩ Create Reversal',      color: 'bg-purple-600',  forStatus: ['POSTED'] },
     { action: 'void',    label: '🗑 Void',                 color: 'bg-red-700',     forStatus: ['DRAFT','SUBMITTED','APPROVED'] },
   ];
@@ -219,6 +232,13 @@ function JEDrawer({ je, onClose, onUpdate }: { je: JournalEntry; onClose: () => 
             <p className="text-sm text-[var(--text-main)] font-medium">{je.narration}</p>
             {je.reference && <p className="text-xs text-[var(--text-muted)] mt-1">Ref: {je.reference}</p>}
           </div>
+
+          {je.notes && (
+            <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl p-4">
+              <p className="text-[11px] text-[var(--text-faint)] uppercase tracking-wide">Notes</p>
+              <p className="text-sm text-[var(--text-muted)] mt-1 whitespace-pre-wrap">{je.notes}</p>
+            </div>
+          )}
 
           {/* Lines */}
           <div className="bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-xl overflow-hidden">
