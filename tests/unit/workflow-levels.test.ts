@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'fs';
 import {
-  bookingRequestType, conditionApplies, levelOutcome, parseDecisions, parseStepCondition, positiveHours,
+  bookingRequestType, conditionApplies, levelOutcome, transferScope, parseDecisions, parseStepCondition, positiveHours,
 } from '@/lib/workflow/levels';
 
 const cond = (field: string, operator: string, value: string | number) => JSON.stringify({ field, operator, value });
@@ -93,6 +93,34 @@ describe('approval level conditions', () => {
     expect(conditionApplies(multiDay, { serviceType: 'RENTAL', requestType: bookingRequestType('RENTAL', {}) })).toBe(false);
     expect(conditionApplies(multiDay, { requestType: bookingRequestType('STAFF_TRANSPORT', {}) })).toBe(false);
     expect(conditionApplies(multiDay, { requestType: bookingRequestType('EXECUTIVE', { tripType: 'Multi-Day' }) })).toBe(true);
+  });
+
+  it('tells a transfer within one emirate from one between emirates', () => {
+    expect(transferScope('DUBAI', 'dubai')).toBe('SAME_EMIRATE');
+    expect(transferScope('DUBAI', 'ABU_DHABI')).toBe('CROSS_EMIRATE');
+    expect(transferScope('DUBAI', null)).toBeUndefined();
+    expect(transferScope('', 'SHARJAH')).toBeUndefined();
+    const crossOnly = cond('emirateScope', 'EQ', 'CROSS_EMIRATE');
+    expect(conditionApplies(crossOnly, { emirateScope: transferScope('DUBAI', 'FUJAIRAH') })).toBe(true);
+    expect(conditionApplies(crossOnly, { emirateScope: transferScope('DUBAI', 'DUBAI') })).toBe(false);
+  });
+
+  it('applies a level to transfers from or to one branch or emirate', () => {
+    expect(conditionApplies(cond('toBranch', 'EQ', 'Dubai Airport'), { toBranch: ' dubai airport ' })).toBe(true);
+    expect(conditionApplies(cond('toBranch', 'EQ', 'Dubai Airport'), { toBranch: 'Deira' })).toBe(false);
+    expect(conditionApplies(cond('fromEmirate', 'NEQ', 'DUBAI'), { fromEmirate: 'SHARJAH' })).toBe(true);
+    expect(conditionApplies(cond('toEmirate', 'EQ', 'ABU_DHABI'), { toEmirate: 'DUBAI' })).toBe(false);
+  });
+
+  it('offers the emirates vehicle transfers store', () => {
+    const admin = readFileSync('src/app/(app)/admin/workflows/page.tsx', 'utf8');
+    const transfers = readFileSync('src/app/(app)/rental/transfers/page.tsx', 'utf8');
+    const line = admin.split('\n').find((l) => l.startsWith('const EMIRATE_CHOICES')) ?? '';
+    const codes = [...line.matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]);
+    expect(codes).toHaveLength(7);
+    for (const c of codes) expect(transfers).toContain(`value: '${c}'`);
+    const subjects = readFileSync('src/lib/workflow/subjects.ts', 'utf8');
+    expect(subjects).toMatch(/emirateScope: transferScope\(r\.from_emirate, r\.to_emirate\)/);
   });
 
   it('compares text for equality, case-insensitively', () => {
