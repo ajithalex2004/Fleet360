@@ -5,6 +5,9 @@
  * /api/files handler.
  */
 export function storedFileKey(pathname: string): string | null {
+  // Storage API commands must continue through authentication and the Go
+  // proxy; treating them as file keys rewrites POST upload to a GET-only route.
+  if (pathname === '/api/files/upload' || pathname === '/api/files/sign') return null;
   for (const prefix of ['/uploads/', '/api/files/']) {
     if (pathname.startsWith(prefix)) return pathname.slice(prefix.length);
   }
