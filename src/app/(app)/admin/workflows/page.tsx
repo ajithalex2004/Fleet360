@@ -22,7 +22,7 @@ const CONNECTED = new Set([
   'MAINTENANCE.ESTIMATE_APPROVAL', 'FINANCE.EXPENSE_APPROVAL', 'FINANCE.PAYABLE_APPROVAL', 'FINANCE.JOURNAL_APPROVAL',
   'LEASING.QUOTATION_APPROVAL', 'LEASING.CREDIT_APPROVAL', 'LEASING.PO_REQUEST', 'LEASING.AMENDMENT_APPROVAL',
   'LEASING.CONTRACT_APPROVAL', 'LEASING.EARLY_TERMINATION', 'LEASING.VEHICLE_ADDITION',
-  'RAC.TRANSFER_APPROVAL', 'RAC.RENEWAL_APPROVAL', 'RAC.REFUND_APPROVAL', 'RAC.DAMAGE_CLAIM', 'BOOKING.BOOKING_APPROVAL',
+  'RAC.TRANSFER_APPROVAL', 'RAC.RENEWAL_APPROVAL', 'RAC.REFUND_APPROVAL', 'RAC.DAMAGE_CLAIM', 'RAC.BOOKING_APPROVAL', 'BOOKING.BOOKING_APPROVAL',
 ]);
 
 const PROCEDURES: Record<string, { key: string; label: string; description: string }[]> = {
@@ -36,7 +36,7 @@ const PROCEDURES: Record<string, { key: string; label: string; description: stri
     { key: 'AMENDMENT_APPROVAL',    label: 'Contract Amendment',      description: 'Submitted lease amendments, by their financial impact' },
   ],
   RAC: [
-    { key: 'BOOKING_APPROVAL',      label: 'Booking Approval',        description: 'Approval for new rental bookings above threshold' },
+    { key: 'BOOKING_APPROVAL',      label: 'Booking Approval',        description: 'New rental bookings, before they are confirmed or handed over' },
     { key: 'DAMAGE_CLAIM',          label: 'Damage Claim',            description: 'Assessed damage claims, before they are billed or closed' },
     { key: 'REFUND_APPROVAL',       label: 'Refund Approval',         description: 'Security deposit refunds (rental and leasing), before they are recorded and paid' },
     { key: 'RATE_OVERRIDE',         label: 'Rate Override',           description: 'Approval when rates are discounted below standard' },
@@ -239,6 +239,15 @@ const PROCEDURE_FIELDS: Record<string, ProcedureField[]> = {
       { value: 'BUS_TRIP_COMPLETION',     label: 'School bus trip' },
       { value: 'BUS_OPS_RECHARGE',        label: 'Bus operations recharge' },
     ] },
+  ],
+  // Amount is the booking's total.
+  'RAC.BOOKING_APPROVAL': [
+    { value: 'dailyRate',       label: 'Daily Rate (AED)' },
+    { value: 'rentalDays',      label: 'Rental Days' },
+    { value: 'channel',         label: 'Channel', choices: opts(['DIRECT', 'CORPORATE', 'AGENCY', 'ONLINE'], titleCase) },
+    { value: 'customerType',    label: 'Customer Type', choices: opts(['INDIVIDUAL', 'CORPORATE', 'AIRLINE', 'INSURANCE'], titleCase) },
+    { value: 'vehicleCategory', label: 'Vehicle Category', text: true },
+    { value: 'oneWay',          label: 'One-way Rental', choices: [{ value: 'YES', label: 'Yes' }, { value: 'NO', label: 'No' }] },
   ],
   // Amount is the claim's actual cost (else its estimate).
   'RAC.DAMAGE_CLAIM': [

@@ -233,6 +233,31 @@ describe('approval level conditions', () => {
     expect(conditionApplies(cond('costOverEstimatePct', 'GT', 25), { costOverEstimatePct: 66.7 })).toBe(true);
   });
 
+  it('connects RAC booking approval: confirm and hand-over wait for it', () => {
+    const subjects = readFileSync('src/lib/workflow/subjects.ts', 'utf8');
+    expect(subjects).toMatch(/rental_booking: \{\s*module: 'RAC', procedure: 'BOOKING_APPROVAL'/);
+    const admin = readFileSync('src/app/(app)/admin/workflows/page.tsx', 'utf8');
+    const connected = admin.slice(admin.indexOf('const CONNECTED'), admin.indexOf(']);', admin.indexOf('const CONNECTED')));
+    expect(connected).toContain("'RAC.BOOKING_APPROVAL'");
+    expect(readFileSync('src/app/api/rental/bookings/route.ts', 'utf8')).toContain("referenceType: 'rental_booking'");
+    for (const action of ['confirm', 'activate']) {
+      expect(readFileSync(`src/app/api/rental/bookings/[id]/${action}/route.ts`, 'utf8')).toContain('requireApproved(');
+    }
+    expect(readFileSync('src/app/api/rental/bookings/[id]/cancel/route.ts', 'utf8')).toContain("withdrawApproval(tenantId, 'rental_booking'");
+    expect(conditionApplies(cond('oneWay', 'EQ', 'YES'), { oneWay: 'YES' })).toBe(true);
+    expect(conditionApplies(cond('rentalDays', 'GT', 28), { rentalDays: 3 })).toBe(false);
+  });
+
+  it("refunds a rental agreement's deposit through a refund request", () => {
+    const route = readFileSync('src/app/api/rental/agreements/[id]/refund-deposit/route.ts', 'utf8');
+    expect(route).toContain('startRefundRequest(');
+    expect(route).toContain("referenceType: 'finance_deposit_refund'");
+    expect(readFileSync('src/app/api/rental/agreements/[id]/route.ts', 'utf8')).toContain('Request the deposit refund instead');
+    const page = readFileSync('src/app/(app)/rental/agreements/page.tsx', 'utf8');
+    expect(page).toContain('/refund-deposit`');
+    expect(page).not.toContain("payload.depositStatus = 'REFUNDED'");
+  });
+
   it('compares text for equality, case-insensitively', () => {
     expect(conditionApplies(cond('category', 'EQ', 'Fuel'), { category: 'FUEL' })).toBe(true);
     expect(conditionApplies(cond('category', 'NEQ', 'Fuel'), { category: 'fuel' })).toBe(false);

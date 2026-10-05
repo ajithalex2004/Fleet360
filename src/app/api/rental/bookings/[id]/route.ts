@@ -52,6 +52,11 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     const bodyRaw = await req.json();
   const body = stripTenantOwnershipFields(bodyRaw);
     const { customer, inspections, damageClaims, agreement, ...data } = body;
+    // Status changes go through confirm / activate / complete / cancel, which
+    // check them (and the booking's approval, when the company has a workflow).
+    if ('status' in data) {
+      return NextResponse.json({ error: 'Change a booking\'s status with confirm, activate, complete or cancel' }, { status: 400 });
+    }
     const booking = await withTenantRls(prisma, tenantId, async (tx) =>
       tx.rentalBooking.update({
       where: { id: params.id, tenantId },

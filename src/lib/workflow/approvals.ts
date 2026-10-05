@@ -16,6 +16,8 @@
  *   withApprovalStart    a module's submit response, with the workflow started.
  *   approvalRequired     whether the company has its own workflow for a kind
  *                        of record (a step a module may otherwise skip).
+ *   requireApproved      for a step that needs the record approved first
+ *                        (when the company has a workflow for it).
  */
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -25,6 +27,7 @@ import { isSuperAdmin } from '@/lib/admin-access';
 import { sessionUser } from '@/lib/session-user';
 import {
   advanceWorkflow, cancelActiveInstancesForReference, getActiveInstanceForReference, getUserRoleCodes, getWorkflowInstanceWithHistory,
+  latestInstanceStatusForReference,
   hasTenantWorkflow, parseEmailList, triggerWorkflow, type AdvanceResult, type WorkflowInstanceStatus,
 } from '@/lib/workflow-db';
 import { APPROVAL_SUBJECTS } from './subjects';
@@ -68,6 +71,32 @@ export async function approvalRequired(tenantId: string, referenceType: string):
   const subject = APPROVAL_SUBJECTS[referenceType];
   if (!subject) return false;
   return runAsTenant(tenantId, () => hasTenantWorkflow(tenantId, subject.module, subject.procedure));
+}
+
+/**
+ * For a step that needs the record approved first, when the company has a
+ * workflow for it: null when it may go ahead (no workflow, or approved), a
+ * 409 while its approval runs, and otherwise (never sent, e.g. created
+ * before the workflow existed) it is sent for approval now and a 409 says so.
+ */
+export async function requireApproved(args: {
+  headers: Headers; tenantId: string; referenceType: string; referenceId: string;
+}): Promise<NextResponse | null> {
+  const { tenantId, referenceType, referenceId } = args;
+  if (!(await approvalRequired(tenantId, referenceType))) return null;
+  const busy = await approvalInProgress(tenantId, referenceType, referenceId);
+  if (busy) return busy;
+  const latest = await runAsTenant(tenantId, () => latestInstanceStatusForReference(tenantId, referenceType, referenceId));
+  if (latest === 'APPROVED') return null;
+  const me = await sessionUser(args.headers).catch(() => null);
+  const start = await startApproval({ tenantId, referenceType, referenceId, initiator: me ? { email: me.email, name: me.name } : null });
+  if (start.started && start.status === 'APPROVED') return null;
+  return NextResponse.json({
+    error: start.started
+      ? `This needs approval first: sent through "${start.workflowName}"${start.nextStep ? `, waiting for "${start.nextStep}"` : ''}.`
+      : 'This needs approval first, and the approval could not be started.',
+    workflow: start.started ? { instanceId: start.instanceId, name: start.workflowName, status: start.status, level: start.nextStep ?? null } : undefined,
+  }, { status: 409 });
 }
 
 const isTenantAdmin = (headers: Headers) =>

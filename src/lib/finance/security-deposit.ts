@@ -236,6 +236,58 @@ export async function requestRefund(
   return rows[0];
 }
 
+/**
+ * A refund requested from Finance > Security Deposits or a rental agreement:
+ * reserves the amount (default: all that's available), notes how it is to
+ * be paid, and, when no approval is needed, records and pays it at once.
+ * With an approval, the caller starts it (finance_deposit_refund); the
+ * workflow records the refund when approved, or cancels the request.
+ */
+export async function startRefundRequest(
+  tx: TxClient,
+  tenantId: string,
+  depositId: string,
+  args: { amount?: number | null; method?: string | null; reference?: string | null; date?: string | null; actor: string; payNow: boolean },
+): Promise<Record<string, unknown>> {
+  const row = await lockDepositRow(tx, tenantId, depositId);
+  if (row.refund_status === 'REQUESTED' || row.refund_status === 'RECORDED') {
+    throw new SecurityDepositError('A refund is already in progress for this deposit');
+  }
+  const amount = args.amount != null && Number.isFinite(args.amount) ? args.amount : availableBalance(row);
+  if (!(amount > 0)) throw new SecurityDepositError('Refund amount must be more than zero');
+  const method = args.method || 'BANK_TRANSFER';
+  await requestRefund(tx, tenantId, depositId, amount, args.actor);
+  await tx.$executeRawUnsafe(
+    `UPDATE finance_security_deposits SET refund_method = $3, refund_reference = $4, refund_date = $5::date
+      WHERE id = $1::uuid AND tenant_id = $2`,
+    depositId, tenantId, method, args.reference ?? null, args.date || null,
+  );
+  if (args.payNow) {
+    await recordRefundDetails(tx, tenantId, depositId, { method, reference: args.reference ?? undefined, recordedBy: args.actor });
+    return executeRefund(tx, tenantId, depositId, args.actor);
+  }
+  const rows = await tx.$queryRawUnsafe<Record<string, unknown>[]>(
+    `SELECT * FROM finance_security_deposits WHERE id = $1::uuid AND tenant_id = $2`, depositId, tenantId,
+  );
+  return rows[0];
+}
+
+/**
+ * A rental deposit's agreement follows its refund: REFUND_REQUESTED while
+ * it is requested, REFUNDED once paid, back to PAID when the request is
+ * cancelled. Deposits record their rental agreement by id or number.
+ */
+async function syncRentalAgreementDeposit(tx: TxClient, tenantId: string, depositId: string, depositStatus: string, onlyFrom?: string) {
+  await tx.$executeRawUnsafe(
+    `UPDATE rental_agreements ra SET deposit_status = $3, updated_at = NOW()
+       FROM finance_security_deposits d
+      WHERE d.id = $1::uuid AND d.tenant_id = $2 AND d.contract_type = 'RENTAL'
+        AND ra.tenant_id = d.tenant_id AND (ra.id::text = d.contract_id OR ra.agreement_no = d.contract_id)
+        AND ($4::text IS NULL OR ra.deposit_status = $4)`,
+    depositId, tenantId, depositStatus, onlyFrom ?? null,
+  );
+}
+
 /** Records how a previously-requested refund was (or will be) sent. */
 export async function recordRefundDetails(
   tx: TxClient,
@@ -310,6 +362,8 @@ export async function executeRefund(
     executedBy,
   );
 
+  await syncRentalAgreementDeposit(tx, tenantId, depositId, 'REFUNDED');
+
   // Hook back to contract closure: a closure record sitting at
   // PENDING_REFUND because it was waiting on exactly this deposit's
   // refund now finalizes.
@@ -355,5 +409,6 @@ export async function cancelRefundRequest(
     args.cancelledBy,
     args.reason ?? null,
   );
+  await syncRentalAgreementDeposit(tx, tenantId, depositId, 'PAID', 'REFUND_REQUESTED');
   return rows[0];
 }

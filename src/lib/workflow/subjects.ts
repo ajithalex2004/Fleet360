@@ -543,6 +543,48 @@ export const APPROVAL_SUBJECTS: Record<string, ApprovalSubject> = {
     },
   },
 
+  rental_booking: {
+    module: 'RAC', procedure: 'BOOKING_APPROVAL', label: 'Rental booking',
+    async load(tx, tenantId, id) {
+      const b = await tx.rentalBooking.findFirst({
+        where: { id, tenantId, status: 'PENDING', deletedAt: null },
+        select: {
+          bookingRef: true, totalAmount: true, dailyRate: true, totalDays: true, channel: true, vehicleCategory: true,
+          pickupLocation: true, dropoffLocation: true, customer: { select: { customerType: true } },
+        },
+      });
+      if (!b) return null;
+      const pick = (b.pickupLocation ?? '').trim().toLowerCase();
+      const drop = (b.dropoffLocation ?? '').trim().toLowerCase();
+      return {
+        referenceNumber: b.bookingRef ?? id,
+        context: {
+          amount: num(b.totalAmount), dailyRate: num(b.dailyRate), rentalDays: b.totalDays ?? undefined,
+          channel: b.channel, vehicleCategory: b.vehicleCategory, customerType: b.customer?.customerType,
+          // Collected in one place and returned in another.
+          oneWay: pick && drop ? (pick === drop ? 'NO' : 'YES') : undefined,
+        },
+      };
+    },
+    async apply(tx, o) {
+      const b = await tx.rentalBooking.findFirst({ where: { id: o.referenceId, tenantId: o.tenantId }, select: { notes: true } });
+      const note = o.status === 'APPROVED'
+        ? `[Approved by ${o.actorEmail}]`
+        : `CANCELLED: not approved by ${o.actorEmail}: ${reasonOf(o)}`;
+      await tx.rentalBooking.updateMany({
+        where: { id: o.referenceId, tenantId: o.tenantId, status: 'PENDING' },
+        data: {
+          notes: b?.notes ? `${note}\n${b.notes}` : note,
+          ...(o.status === 'APPROVED' ? {} : { status: 'CANCELLED' }),
+          updatedAt: new Date(),
+        },
+      });
+    },
+    async row(tx, tenantId, id) {
+      return tx.rentalBooking.findFirst({ where: { id, tenantId } }) as Promise<Row | null>;
+    },
+  },
+
   LEASE_QUOTATION: {
     module: 'LEASING', procedure: 'QUOTATION_APPROVAL', label: 'Lease quotation',
     async load(tx, tenantId, id) {
