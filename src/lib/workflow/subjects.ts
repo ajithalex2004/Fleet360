@@ -15,7 +15,7 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { runAsTenant } from '@/lib/rls-scope';
-import { bookingRequestType, type WorkflowContext } from './levels';
+import { bookingRequestType, transferScope, type WorkflowContext } from './levels';
 import {
   loadPendingEstimate, quotationForApproval, recordEstimateApproval, recordEstimateRejection,
   type EstimationApprovedPayload,
@@ -235,7 +235,10 @@ export const APPROVAL_SUBJECTS: Record<string, ApprovalSubject> = {
       const r = await rowIn(tx, 'rental_vehicle_transfers', tenantId, id, ['REQUESTED'], false);
       return r && {
         referenceNumber: String(r.transfer_no ?? id),
-        context: { fromBranch: r.from_branch_name, toBranch: r.to_branch_name, fromEmirate: r.from_emirate, toEmirate: r.to_emirate },
+        context: {
+          fromBranch: r.from_branch_name, toBranch: r.to_branch_name, fromEmirate: r.from_emirate, toEmirate: r.to_emirate,
+          emirateScope: transferScope(r.from_emirate, r.to_emirate),
+        },
       };
     },
     async apply(tx, o) {

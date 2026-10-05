@@ -158,16 +158,45 @@ const REQUEST_TYPES: Record<string, { label: string; choices: { value: string; l
 const requestTypeFor = (wf: { module: string; procedure: string } | null) =>
   wf ? REQUEST_TYPES[`${wf.module}.${wf.procedure}`] : undefined;
 
-/** The condition fields for a workflow: Request Type only where its procedure has one. */
+// Fields only some procedures have: a vehicle transfer's branches and emirates
+// (src/lib/workflow/subjects.ts). Branch names are compared as entered on the
+// transfer, ignoring case.
+type ProcedureField = { value: string; label: string; choices?: { value: string; label: string }[]; text?: boolean };
+const EMIRATE_CHOICES = opts(['ABU_DHABI', 'DUBAI', 'SHARJAH', 'AJMAN', 'UMM_AL_QUWAIN', 'RAS_AL_KHAIMAH', 'FUJAIRAH'], titleCase);
+const PROCEDURE_FIELDS: Record<string, ProcedureField[]> = {
+  'RAC.TRANSFER_APPROVAL': [
+    { value: 'fromBranch',   label: 'From Branch', text: true },
+    { value: 'toBranch',     label: 'To Branch',   text: true },
+    { value: 'fromEmirate',  label: 'From Emirate', choices: EMIRATE_CHOICES },
+    { value: 'toEmirate',    label: 'To Emirate',   choices: EMIRATE_CHOICES },
+    { value: 'emirateScope', label: 'Transfer Scope', choices: [
+      { value: 'SAME_EMIRATE',  label: 'Within one emirate' },
+      { value: 'CROSS_EMIRATE', label: 'Between emirates' },
+    ] },
+  ],
+};
+const procedureFieldsFor = (wf: { module: string; procedure: string } | null) =>
+  wf ? PROCEDURE_FIELDS[`${wf.module}.${wf.procedure}`] ?? [] : [];
+
+/** The condition fields for a workflow: Request Type and the procedure's own fields where it has them. */
 function conditionFields(wf: { module: string; procedure: string } | null) {
   const rt = requestTypeFor(wf);
-  return rt ? [...CONDITION_FIELDS, { value: 'requestType', label: rt.label }] : CONDITION_FIELDS;
+  return [
+    ...CONDITION_FIELDS,
+    ...(rt ? [{ value: 'requestType', label: rt.label }] : []),
+    ...procedureFieldsFor(wf).map(f => ({ value: f.value, label: f.label })),
+  ];
 }
 
-/** A text field's values, or undefined for a number field. */
+/** A text field's values, or undefined for a number field or free text. */
 function conditionChoices(field: string, wf: { module: string; procedure: string } | null) {
-  return field === 'requestType' ? requestTypeFor(wf)?.choices : CONDITION_CHOICES[field];
+  if (field === 'requestType') return requestTypeFor(wf)?.choices;
+  return procedureFieldsFor(wf).find(f => f.value === field)?.choices ?? CONDITION_CHOICES[field];
 }
+
+/** Whether a field compares text (equal / not equal only). */
+const isTextField = (field: string, wf: { module: string; procedure: string } | null) =>
+  !!conditionChoices(field, wf) || !!procedureFieldsFor(wf).find(f => f.value === field)?.text;
 
 //  Interfaces 
 interface Workflow {
@@ -1030,10 +1059,8 @@ export default function WorkflowsPage() {
                                 setCondField(field);
                                 // A text field takes a value from its list and compares by equality.
                                 const choices = conditionChoices(field, selectedWf);
-                                if (choices) {
-                                  if (!TEXT_OPERATORS.has(condOp)) setCondOp('EQ');
-                                  if (!choices.some(c => c.value === condVal)) setCondVal('');
-                                }
+                                if (isTextField(field, selectedWf) && !TEXT_OPERATORS.has(condOp)) setCondOp('EQ');
+                                if (choices && !choices.some(c => c.value === condVal)) setCondVal('');
                               }}
                               className="w-full px-3 py-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-amber-500/50">
                               <option value="">Select field...</option>
@@ -1045,7 +1072,7 @@ export default function WorkflowsPage() {
                             <select value={condOp} onChange={e => setCondOp(e.target.value)}
                               className="w-full px-3 py-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-amber-500/50">
                               {CONDITION_OPERATORS
-                                .filter(o => !conditionChoices(condField, selectedWf) || TEXT_OPERATORS.has(o.value))
+                                .filter(o => !isTextField(condField, selectedWf) || TEXT_OPERATORS.has(o.value))
                                 .map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                             </select>
                           </div>
@@ -1058,7 +1085,7 @@ export default function WorkflowsPage() {
                                 {conditionChoices(condField, selectedWf)!.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                               </select>
                             ) : (
-                              <input value={condVal} onChange={e => setCondVal(e.target.value)} placeholder="e.g. 100000"
+                              <input value={condVal} onChange={e => setCondVal(e.target.value)} placeholder={isTextField(condField, selectedWf) ? 'Name as entered on the transfer' : 'e.g. 100000'}
                                 className="w-full px-3 py-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-amber-500/50" />
                             )}
                           </div>

@@ -104,6 +104,17 @@ export function bookingRequestType(serviceType: unknown, notes: Record<string, u
   return service || undefined;
 }
 
+/**
+ * Whether a vehicle transfer stays within one emirate or crosses between
+ * emirates, for level conditions. Undefined unless both emirates are known.
+ */
+export function transferScope(fromEmirate: unknown, toEmirate: unknown): 'SAME_EMIRATE' | 'CROSS_EMIRATE' | undefined {
+  const from = typeof fromEmirate === 'string' ? fromEmirate.trim().toUpperCase() : '';
+  const to = typeof toEmirate === 'string' ? toEmirate.trim().toUpperCase() : '';
+  if (!from || !to) return undefined;
+  return from === to ? 'SAME_EMIRATE' : 'CROSS_EMIRATE';
+}
+
 /** One approver's decision on a level. */
 export interface LevelDecision {
   email: string;
