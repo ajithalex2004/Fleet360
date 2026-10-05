@@ -14,6 +14,8 @@
  *   approvalInProgress   a 409 for other changes that would settle a record
  *                        a workflow is still deciding.
  *   withApprovalStart    a module's submit response, with the workflow started.
+ *   approvalRequired     whether the company has its own workflow for a kind
+ *                        of record (a step a module may otherwise skip).
  */
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
@@ -59,6 +61,13 @@ export async function startApproval(args: {
       status: result.status, nextStep: result.nextStep,
     };
   });
+}
+
+/** Whether the company has an active workflow of its own for `referenceType` records. */
+export async function approvalRequired(tenantId: string, referenceType: string): Promise<boolean> {
+  const subject = APPROVAL_SUBJECTS[referenceType];
+  if (!subject) return false;
+  return runAsTenant(tenantId, () => hasTenantWorkflow(tenantId, subject.module, subject.procedure));
 }
 
 const isTenantAdmin = (headers: Headers) =>

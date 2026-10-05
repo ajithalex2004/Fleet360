@@ -311,6 +311,53 @@ export const APPROVAL_SUBJECTS: Record<string, ApprovalSubject> = {
     },
   },
 
+  leasing_contract: {
+    module: 'LEASING', procedure: 'CONTRACT_APPROVAL', label: 'Lease contract',
+    async load(tx, tenantId, id) {
+      const c = await tx.leaseContract2.findFirst({
+        where: { id, tenantId, deletedAt: null, status: 'PENDING_APPROVAL' },
+        select: {
+          contractNumber: true, totalContractValue: true, monthlyRate: true, startDate: true, endDate: true,
+          leaseType: true, agreementType: true, securityDeposit: true, _count: { select: { vehicles: true } },
+          lessee: { select: { type: true, creditAssessments: {
+            where: { tenantId, status: 'ACTIVE' }, orderBy: { assessmentDate: 'desc' }, take: 1,
+            select: { creditScore: true, riskRating: true },
+          } } },
+        },
+      });
+      if (!c) return null;
+      const months = Math.max(1, Math.round((c.endDate.getTime() - c.startDate.getTime()) / (30.44 * 86400000)));
+      const total = num(c.totalContractValue) ?? Math.round(Number(c.monthlyRate) * months * 100) / 100;
+      const credit = c.lessee?.creditAssessments[0];
+      return {
+        referenceNumber: c.contractNumber ?? id,
+        context: {
+          amount: total, totalValue: total, monthlyRate: num(c.monthlyRate), duration: months,
+          vehicleCount: c._count.vehicles, leaseType: c.leaseType, agreementType: c.agreementType,
+          securityDeposit: num(c.securityDeposit), customerType: c.lessee?.type,
+          creditScore: credit?.creditScore ?? undefined, riskRating: credit?.riskRating,
+        },
+      };
+    },
+    async apply(tx, o) {
+      await tx.leaseContract2.updateMany({
+        where: { id: o.referenceId, tenantId: o.tenantId, status: 'PENDING_APPROVAL', deletedAt: null },
+        data: o.status === 'APPROVED'
+          ? { status: 'APPROVED', approvedBy: o.actorEmail, approvedAt: new Date() }
+          : { status: 'DRAFT' },
+      });
+      if (o.status !== 'APPROVED') {
+        await tx.$executeRawUnsafe(
+          `UPDATE lease_contracts_v2 SET notes = concat_ws(E'\n', NULLIF(notes, ''), $1::text)
+            WHERE id::text = $2 AND tenant_id = $3`,
+          `Returned by ${o.actorEmail}: ${reasonOf(o)}`, o.referenceId, o.tenantId);
+      }
+    },
+    async row(tx, tenantId, id) {
+      return tx.leaseContract2.findFirst({ where: { id, tenantId } }) as Promise<Row | null>;
+    },
+  },
+
   LEASE_QUOTATION: {
     module: 'LEASING', procedure: 'QUOTATION_APPROVAL', label: 'Lease quotation',
     async load(tx, tenantId, id) {
