@@ -939,7 +939,7 @@ export default function WorkflowsPage() {
                       <input type="number" min="1" value={editingStep.escalationHours ?? 48}
                         onChange={e => setEditingStep(p => ({ ...p!, escalationHours: parseInt(e.target.value) || 48 }))}
                         className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-violet-500/50" />
-                      <p className="text-[var(--text-faint)] text-xs mt-1">Hours before escalating to backup approver</p>
+                      <p className="text-[var(--text-faint)] text-xs mt-1">Hours this level waits, from when it opens, before its escalation contact is emailed (once)</p>
                     </div>
                   </div>
                   <div>
@@ -1201,11 +1201,11 @@ export default function WorkflowsPage() {
                       <p className="text-[var(--text-faint)] text-xs mt-1">Steps become overdue after this many hours</p>
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Default Escalation (hours after SLA)</label>
+                      <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Default Escalation (hours after a level opens)</label>
                       <input type="number" min="1" value={editWfForm.defaultEscalationHours}
                         onChange={e => setEditWfForm(p => ({ ...p, defaultEscalationHours: parseInt(e.target.value) || 48 }))}
                         className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-amber-500/50" />
-                      <p className="text-[var(--text-faint)] text-xs mt-1">Hours before escalating to the backup approver</p>
+                      <p className="text-[var(--text-faint)] text-xs mt-1">For levels without their own: the escalation contact is emailed once a level has waited this long (counted from when it opened)</p>
                     </div>
                   </div>
                   <div>
@@ -1221,7 +1221,9 @@ export default function WorkflowsPage() {
                       {[
                         { label: 'Pending', hours: editWfForm.defaultSlaHours, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
                         { label: 'Overdue', hours: editWfForm.defaultSlaHours, color: 'text-rose-400', bg: 'bg-rose-500/10 border-rose-500/20' },
-                        { label: 'Escalated', hours: editWfForm.defaultSlaHours + editWfForm.defaultEscalationHours, color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/20' },
+                        // Escalation counts from when the level opens, like the SLA
+                        // (src/lib/jobs/workflow-escalation.ts), not from the end of the SLA.
+                        { label: 'Escalated', hours: editWfForm.defaultEscalationHours, color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/20' },
                       ].map(s => (
                         <div key={s.label} className={`rounded-xl p-3 border ${s.bg}`}>
                           <p className={`text-lg font-bold ${s.color}`}>{s.hours}h</p>
