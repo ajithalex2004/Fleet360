@@ -6,7 +6,9 @@ import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { nextDocumentNumber } from '@/lib/finance/document-number';
-import { addDeduction, forfeitDeposit, recordRefundDetails, executeRefund, cancelRefundRequest, SecurityDepositError } from '@/lib/finance/security-deposit';
+import { addDeduction, forfeitDeposit, recordRefundDetails, executeRefund, cancelRefundRequest, requestRefund, SecurityDepositError } from '@/lib/finance/security-deposit';
+import { approvalGate, approvalInProgress, approvalRequired, withApprovalStart, withdrawApproval } from '@/lib/workflow/approvals';
+import { sessionUser } from '@/lib/session-user';
 function toStr(v: unknown) {
   if (v instanceof Buffer) return v.toString('hex');
   if (typeof v === 'string') return v;
@@ -158,12 +160,72 @@ export async function PATCH(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
-      const bRaw = await req.json();
-  const b = stripTenantOwnershipFields(bRaw);
-      const { id, action } = b;
-      if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
-      const actor = req.headers.get('x-user-id') ?? 'staff';
+  const b = stripTenantOwnershipFields(await req.json());
+  const { id, action } = b;
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+
+  // A company's Refund Approval workflow (Admin > Workflows) decides refund
+  // requests: approve / reject go to the level that is waiting, and the
+  // refund can't be recorded, paid or cancelled here while it decides. With
+  // a workflow, a refund starts as a request (request_refund); without one,
+  // request_refund records and pays it at once, like the one-step refund.
+  if (action === 'approve_refund' || action === 'reject_refund') {
+    const gated = await approvalGate({
+      headers: req.headers, tenantId, referenceType: 'finance_deposit_refund', referenceId: String(id),
+      action: action === 'reject_refund' ? 'REJECT' : 'APPROVE', comments: String(b.reason ?? ''),
+    });
+    return gated ?? NextResponse.json({ error: 'This refund is not waiting for an approval' }, { status: 400 });
+  }
+  if (['record_refund_details', 'execute_refund', 'refund'].includes(action)) {
+    const busy = await approvalInProgress(tenantId, 'finance_deposit_refund', String(id));
+    if (busy) return busy;
+  }
+  const needsApproval = ['request_refund', 'refund'].includes(action)
+    ? await approvalRequired(tenantId, 'finance_deposit_refund') : false;
+  if (action === 'refund' && needsApproval) {
+    return NextResponse.json({ error: 'Refunds need approval: request the refund instead' }, { status: 409 });
+  }
+  const actorEmail = action === 'request_refund' || action === 'cancel_refund_request'
+    ? (await sessionUser(req.headers).catch(() => null))?.email : undefined;
+
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
+      const actor = actorEmail ?? req.headers.get('x-user-id') ?? 'staff';
+
+      // ── Request a refund (approval workflow), or refund at once ─────────────────
+      if (action === 'request_refund') {
+        try {
+          const current = await tx.$queryRawUnsafe<Record<string, unknown>[]>(
+            `SELECT collected_amount, total_deducted, reserved_amount, refund_status FROM finance_security_deposits WHERE id = $1::uuid AND tenant_id = $2`,
+            id, tenantId,
+          );
+          if (!current.length) return NextResponse.json({ error: 'not found' }, { status: 404 });
+          if (['REQUESTED', 'RECORDED'].includes(String(current[0].refund_status ?? ''))) {
+            return NextResponse.json({ error: 'A refund is already in progress for this deposit' }, { status: 409 });
+          }
+          const available = Number(current[0].collected_amount) - Number(current[0].total_deducted) - Number(current[0].reserved_amount);
+          const amount = b.refund_amount != null && b.refund_amount !== '' ? Number(b.refund_amount) : available;
+          if (!(amount > 0)) return NextResponse.json({ error: 'Refund amount must be more than zero' }, { status: 400 });
+          await requestRefund(tx, tenantId, id, amount, actor);
+          // How it is to be paid, for recording once approved.
+          await tx.$executeRawUnsafe(
+            `UPDATE finance_security_deposits SET refund_method = $3, refund_reference = $4, refund_date = $5::date
+              WHERE id = $1::uuid AND tenant_id = $2`,
+            id, tenantId, b.refund_method ?? 'BANK_TRANSFER', b.refund_reference ?? null, b.refund_date ?? null,
+          );
+          if (!needsApproval) {
+            await recordRefundDetails(tx, tenantId, id, { method: b.refund_method ?? 'BANK_TRANSFER', reference: b.refund_reference, recordedBy: actor });
+            const paid = await executeRefund(tx, tenantId, id, actor);
+            return NextResponse.json(row(paid));
+          }
+          const rows = await tx.$queryRawUnsafe<Record<string, unknown>[]>(
+            `SELECT * FROM finance_security_deposits WHERE id = $1::uuid AND tenant_id = $2`, id, tenantId,
+          );
+          return NextResponse.json(row(rows[0]));
+        } catch (e) {
+          if (e instanceof SecurityDepositError) return NextResponse.json({ error: e.message }, { status: 400 });
+          throw e;
+        }
+      }
 
       // ── Add Deduction ─────────────────────────────────────────────────────────
       if (action === 'add_deduction') {
@@ -273,5 +335,13 @@ export async function PATCH(req: NextRequest) {
       if (!rows.length) return NextResponse.json({ error: 'not found' }, { status: 404 });
       return NextResponse.json(row(rows[0]));
   });
+
+  if (action === 'request_refund' && needsApproval) {
+    return withApprovalStart(response, { headers: req.headers, tenantId, referenceType: 'finance_deposit_refund', referenceId: String(id) });
+  }
+  if (action === 'cancel_refund_request' && response.ok) {
+    await withdrawApproval(tenantId, 'finance_deposit_refund', String(id), 'Refund request cancelled');
+  }
+  return response;
 }
 

@@ -208,6 +208,19 @@ describe('approval level conditions', () => {
     expect(conditionApplies(cond('rateDiscountPct', 'GT', 10), { rateDiscountPct: 4 })).toBe(false);
   });
 
+  it('connects security deposit refund approval, with deduction conditions', () => {
+    const subjects = readFileSync('src/lib/workflow/subjects.ts', 'utf8');
+    expect(subjects).toMatch(/finance_deposit_refund: \{\s*module: 'RAC', procedure: 'REFUND_APPROVAL'/);
+    expect(subjects).toContain("row: sqlRow('finance_security_deposits', false)");
+    const admin = readFileSync('src/app/(app)/admin/workflows/page.tsx', 'utf8');
+    const connected = admin.slice(admin.indexOf('const CONNECTED'), admin.indexOf(']);', admin.indexOf('const CONNECTED')));
+    expect(connected).toContain("'RAC.REFUND_APPROVAL'");
+    const route = readFileSync('src/app/api/finance/deposits/route.ts', 'utf8');
+    expect(route).toContain("'Refunds need approval: request the refund instead'");
+    expect(conditionApplies(cond('deductionPct', 'GT', 20), { deductionPct: 30 })).toBe(true);
+    expect(conditionApplies(cond('contractType', 'EQ', 'RENTAL'), { contractType: 'LEASE' })).toBe(false);
+  });
+
   it('compares text for equality, case-insensitively', () => {
     expect(conditionApplies(cond('category', 'EQ', 'Fuel'), { category: 'FUEL' })).toBe(true);
     expect(conditionApplies(cond('category', 'NEQ', 'Fuel'), { category: 'fuel' })).toBe(false);
