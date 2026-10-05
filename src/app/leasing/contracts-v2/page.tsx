@@ -632,7 +632,10 @@ export default function ContractsV2Page() {
                     });
                     const data = await res.json();
                     if (res.ok) {
-                      setAddVehicleMsg('Vehicle added successfully!');
+                      // On a running contract with a Vehicle Addition workflow, it waits for approval.
+                      setAddVehicleMsg(data.status === 'PENDING_APPROVAL'
+                        ? `Vehicle added, pending approval${data.workflow?.level ? `: waiting for "${data.workflow.level}"` : ''}. It is allocated once approved.`
+                        : 'Vehicle added successfully!');
                       // Update the contract in state
                       setContracts(prev => prev.map(c => c.id === showAddVehicle.id ? {
                         ...c,

@@ -272,7 +272,8 @@ vi.mock('@/lib/prisma', () => {
               for (const v of store.contractVehicles.values()) {
                 if (v.tenantId !== where.tenantId) continue;
                 if (where.vehicleId && v.vehicleId !== where.vehicleId) continue;
-                if (where.status && v.status !== where.status) continue;
+                if (typeof where.status === 'string' && v.status !== where.status) continue;
+                if (where.status?.in && !where.status.in.includes(v.status)) continue;
                 return v;
               }
               return null;

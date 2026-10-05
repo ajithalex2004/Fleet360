@@ -196,6 +196,18 @@ describe('approval level conditions', () => {
     expect(conditionApplies(cond('remainingMonths', 'GT', 12), { remainingMonths: 18 })).toBe(true);
   });
 
+  it('connects vehicle addition approval for running contracts', () => {
+    const subjects = readFileSync('src/lib/workflow/subjects.ts', 'utf8');
+    expect(subjects).toMatch(/leasing_vehicle_addition: \{\s*module: 'LEASING', procedure: 'VEHICLE_ADDITION'/);
+    const admin = readFileSync('src/app/(app)/admin/workflows/page.tsx', 'utf8');
+    const connected = admin.slice(admin.indexOf('const CONNECTED'), admin.indexOf(']);', admin.indexOf('const CONNECTED')));
+    expect(connected).toContain("'LEASING.VEHICLE_ADDITION'");
+    const route = readFileSync('src/app/api/leasing/contracts-v2/[id]/vehicles/route.ts', 'utf8');
+    expect(route).toContain("status: { in: ['ACTIVE', 'PENDING_APPROVAL'] }");
+    expect(conditionApplies(cond('rateDiscountPct', 'GT', 10), { rateDiscountPct: 30 })).toBe(true);
+    expect(conditionApplies(cond('rateDiscountPct', 'GT', 10), { rateDiscountPct: 4 })).toBe(false);
+  });
+
   it('compares text for equality, case-insensitively', () => {
     expect(conditionApplies(cond('category', 'EQ', 'Fuel'), { category: 'FUEL' })).toBe(true);
     expect(conditionApplies(cond('category', 'NEQ', 'Fuel'), { category: 'fuel' })).toBe(false);

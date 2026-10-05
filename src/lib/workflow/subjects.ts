@@ -401,6 +401,65 @@ export const APPROVAL_SUBJECTS: Record<string, ApprovalSubject> = {
     },
   },
 
+  leasing_vehicle_addition: {
+    module: 'LEASING', procedure: 'VEHICLE_ADDITION', label: 'Vehicle added to a lease contract',
+    async load(tx, tenantId, id) {
+      const v = await tx.leaseContractVehicle.findFirst({
+        where: { id, tenantId, status: 'PENDING_APPROVAL' },
+        select: {
+          vehicleType: true, make: true, model: true, licensePlate: true, monthlyRate: true,
+          contract: { select: {
+            contractNumber: true, monthlyRate: true, endDate: true, leaseType: true, agreementType: true,
+            _count: { select: { vehicles: { where: { status: { in: ['ACTIVE', 'PENDING_APPROVAL'] } } } } },
+            lessee: { select: { type: true, creditAssessments: {
+              where: { tenantId, status: 'ACTIVE' }, orderBy: { assessmentDate: 'desc' }, take: 1,
+              select: { creditScore: true, riskRating: true },
+            } } },
+          } },
+        },
+      });
+      if (!v) return null;
+      const rate = num(v.monthlyRate) ?? 0;
+      const remainingMonths = Math.max(0, Math.round((v.contract.endDate.getTime() - Date.now()) / (30.44 * 86400000)));
+      const contractRate = num(v.contract.monthlyRate);
+      const credit = v.contract.lessee?.creditAssessments[0];
+      return {
+        referenceNumber: `${v.contract.contractNumber ?? 'Contract'} + ${v.licensePlate ?? v.vehicleType}`,
+        context: {
+          // What the addition adds to the contract: its rate for the rest of the term.
+          amount: Math.round(rate * remainingMonths * 100) / 100, monthlyRate: rate, remainingMonths,
+          rateDiscountPct: contractRate && contractRate > 0 ? Math.round((1 - rate / contractRate) * 1000) / 10 : undefined,
+          vehicleType: v.vehicleType, vehicleCount: v.contract._count.vehicles,
+          leaseType: v.contract.leaseType, agreementType: v.contract.agreementType,
+          customerType: v.contract.lessee?.type, creditScore: credit?.creditScore ?? undefined, riskRating: credit?.riskRating,
+        },
+      };
+    },
+    async apply(tx, o) {
+      const v = await tx.leaseContractVehicle.findFirst({
+        where: { id: o.referenceId, tenantId: o.tenantId, status: 'PENDING_APPROVAL' },
+        select: { id: true, contractId: true, vehicleId: true },
+      });
+      if (!v) return;
+      if (o.status !== 'APPROVED') {
+        await tx.leaseContractVehicle.updateMany({ where: { id: v.id, tenantId: o.tenantId }, data: { status: 'REJECTED' } });
+        return;
+      }
+      await tx.leaseContractVehicle.updateMany({ where: { id: v.id, tenantId: o.tenantId }, data: { status: 'ACTIVE' } });
+      // Allocate the fleet vehicle, as an addition without approval does.
+      const fleet = v.vehicleId ? await tx.vehicle.findFirst({ where: { id: v.vehicleId, tenantId: o.tenantId }, select: { id: true } }) : null;
+      if (fleet) {
+        await tx.vehicle.update({ where: { id: fleet.id }, data: { status: 'RESERVED', lifecycleStage: 'ALLOCATED' } });
+        await tx.leaseAllocationOccurrence.create({
+          data: { tenantId: o.tenantId, contractId: v.contractId, contractVehicleId: v.id, vehicleId: fleet.id, sequenceNo: 1, startedAt: new Date(), status: 'ACTIVE' },
+        });
+      }
+    },
+    async row(tx, tenantId, id) {
+      return tx.leaseContractVehicle.findFirst({ where: { id, tenantId } }) as Promise<Row | null>;
+    },
+  },
+
   LEASE_QUOTATION: {
     module: 'LEASING', procedure: 'QUOTATION_APPROVAL', label: 'Lease quotation',
     async load(tx, tenantId, id) {
