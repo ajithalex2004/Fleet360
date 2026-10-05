@@ -9,6 +9,7 @@ import { useSearchParams } from 'next/navigation';
 import { Plus, Eye, Check, Send, FileText, X, ArrowRight, Mail, History, MessageSquare, Workflow } from 'lucide-react';
 import WorkflowModal from '@/components/leasing/WorkflowModal';
 import { getQuotationAction, getQuotationStatusStyles } from '@/services/leasingWorkflow';
+import { nextQuotationStatus } from '@/lib/leasing/quotation-stages';
 
 interface Vehicle {
   vehicleType: string;
@@ -159,7 +160,6 @@ export default function LeaseQuotationsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [prefilling, setPrefilling]     = useState(false);
   const [viewQuotation, setViewQuotation] = useState<LeaseQuotation | null>(null);
-  const [updatingStatus, setUpdatingStatus] = useState(false);
   const [saving, setSaving]             = useState(false);
   const [submitMode, setSubmitMode]     = useState<'draft'|'submit'>('draft');
   const [submitResult, setSubmitResult] = useState<{success:boolean;message:string}|null>(null);
@@ -957,32 +957,37 @@ export default function LeaseQuotationsPage() {
                       {quotation.currency}
                     </td>
                     <td className="px-3 py-3 text-sm whitespace-nowrap">
-                      <select
-                        value={quotation.status}
-                        disabled={updatingStatus}
-                        onChange={async (e) => {
-                          const newStatus = e.target.value as LeaseQuotation['status'];
-                          setUpdatingStatus(true);
-                          try {
-                            const res = await fetch(`/api/leasing/quotations/${quotation.id}`, {
-                              method: 'PATCH',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ status: newStatus }),
-                            });
-                            if (res.ok) {
-                              setQuotations(prev => prev.map(q => q.id === quotation.id ? { ...q, status: newStatus } : q));
-                            }
-                          } catch {} finally {
-                            setUpdatingStatus(false);
-                          }
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        className={`text-xs px-2 py-1.5 rounded-lg border font-medium cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-wait ${getStatusColor(quotation.status)} bg-[var(--bg-surface)]`}
-                      >
-                        {STATUS_PIPELINE.map(s => (
-                          <option key={s} value={s} className="bg-[var(--bg-surface)] text-[var(--text-main)]">{s.replace(/_/g, ' ')}</option>
-                        ))}
-                      </select>
+                      {(() => {
+                        // Only the next stage: the move goes through the approve
+                        // endpoint like the detail view's actions (stage emails,
+                        // approval workflows), so no stage can be skipped. This used
+                        // to PATCH a route that doesn't exist, failing silently.
+                        const next = nextQuotationStatus(quotation.status);
+                        const busy = processingActionId === quotation.id;
+                        if (!next) {
+                          return (
+                            <span className={`text-xs px-2 py-1.5 rounded-lg border font-medium ${getStatusColor(quotation.status)}`}>
+                              {String(quotation.status ?? '').replace(/_/g, ' ')}
+                            </span>
+                          );
+                        }
+                        return (
+                          <select
+                            value={quotation.status}
+                            disabled={busy}
+                            title={busy ? 'Updating…' : `Move to ${next.replace(/_/g, ' ')}`}
+                            onChange={async (e) => {
+                              if (e.target.value !== next) return;
+                              await handleWorkflowAction(quotation.id, `Moved to ${next.replace(/_/g, ' ')}`);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className={`text-xs px-2 py-1.5 rounded-lg border font-medium cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-wait ${getStatusColor(quotation.status)} bg-[var(--bg-surface)]`}
+                          >
+                            <option value={quotation.status} className="bg-[var(--bg-surface)] text-[var(--text-main)]">{String(quotation.status ?? '').replace(/_/g, ' ')}</option>
+                            <option value={next} className="bg-[var(--bg-surface)] text-[var(--text-main)]">→ {next.replace(/_/g, ' ')}</option>
+                          </select>
+                        );
+                      })()}
                     </td>
                     <td className="px-3 py-3 text-sm text-[var(--text-main)]">
                       {quotation.validUntil}

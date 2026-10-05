@@ -19,6 +19,7 @@ import { parseEmailList } from '@/lib/workflow-db';
 import { sessionUser } from '@/lib/session-user';
 import { approvalGate, withApprovalStart } from '@/lib/workflow/approvals';
 import { quotationApprovalStage } from '@/lib/workflow/subjects';
+import { nextQuotationStatus } from '@/lib/leasing/quotation-stages';
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -81,20 +82,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         if (requestedTarget) {
           nextStatus = requestedTarget;
         } else {
-          const statusMap: Record<string, string> = {
-            DRAFT:                   'APPROVED',
-            NEW:                     'PENDING_APPROVAL',
-            PENDING_APPROVAL:        'DRAFT_APPROVED',
-            DRAFT_APPROVED:          'SENT_TO_CUSTOMER',
-            SENT_TO_CUSTOMER:        'CUSTOMER_APPROVED',
-            CUSTOMER_APPROVED:       'PENDING_CREDIT_APPROVAL',
-            PENDING_CREDIT_APPROVAL: 'CREDIT_APPROVED',
-            CREDIT_APPROVED:         'PO_PREPARATION',
-            PO_PREPARATION:          'PO_PREPARED',
-            PO_PREPARED:             'DELIVERY_IN_PROGRESS',
-            DELIVERY_IN_PROGRESS:    'DELIVERED',
-          };
-          nextStatus = statusMap[nextStatus] ?? nextStatus;
+          nextStatus = nextQuotationStatus(nextStatus) ?? nextStatus;
         }
       } else {
         nextStatus = 'REJECTED';
