@@ -16,6 +16,29 @@ interface Termination {
   depositRefund: number;
   settlementTotal: number;
   status: string;
+  contractNumber?: string | null;
+  notes?: string | null;
+  approvedBy?: string | null;
+}
+
+// The API's row (amounts as decimals, the settlement as totalSettlement) as the table shows it.
+type TerminationRow = Partial<Omit<Termination, 'contractNumber'>> & {
+  id: string; status?: string | null; totalSettlement?: unknown;
+  contract?: { contractNumber?: string | null } | null;
+};
+const toNum = (v: unknown) => { const n = Number(v ?? 0); return Number.isFinite(n) ? n : 0; };
+const toDate = (v: unknown) => (v ? String(v).slice(0, 10) : '—');
+function toTermination(r: TerminationRow): Termination {
+  return {
+    id: r.id, terminationNo: r.terminationNo ?? '—', contractId: r.contractId ?? '',
+    contractNumber: r.contract?.contractNumber ?? null,
+    requestDate: toDate(r.requestDate), effectiveDate: toDate(r.effectiveDate),
+    remainingMonths: toNum(r.remainingMonths), monthlyRate: toNum(r.monthlyRate),
+    penaltyPct: toNum(r.penaltyPct), penaltyAmount: toNum(r.penaltyAmount),
+    outstandingPayments: toNum(r.outstandingPayments), depositRefund: toNum(r.depositRefund),
+    settlementTotal: toNum(r.totalSettlement ?? r.settlementTotal),
+    status: (r.status ?? 'DRAFT').toUpperCase(), notes: r.notes ?? null, approvedBy: r.approvedBy ?? null,
+  };
 }
 
 interface FormData {
@@ -62,7 +85,7 @@ export default function EarlyTerminationsPage() {
       const response = await fetch('/api/leasing/early-terminations');
       if (response.ok) {
         const data = await response.json();
-        setTerminations(data);
+        setTerminations(Array.isArray(data) ? data.map(toTermination) : []);
       }
     } catch (error) {
       console.error('Failed to fetch terminations:', error);
@@ -138,16 +161,30 @@ export default function EarlyTerminationsPage() {
     }
   };
 
-  const handleStatusChange = async (id: string, newStatus: string) => {
+  // Submit / approve / reject / execute. With an Early Termination workflow,
+  // approve and reject act on its waiting level; the reply says where it is.
+  const handleAction = async (id: string, action: 'submit' | 'approve' | 'reject' | 'execute') => {
+    let reason: string | undefined;
+    if (action === 'reject') {
+      const r = prompt('Why is this termination request being rejected?');
+      if (r === null) return;
+      reason = r.trim() || 'Not approved';
+    }
+    if (action === 'execute' && !confirm('Execute this termination? The contract is marked TERMINATED.')) return;
     try {
       const response = await fetch(`/api/leasing/early-terminations/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ action, reason }),
       });
-      if (response.ok) {
-        fetchTerminations();
-      }
+      const d = await response.json().catch(() => null);
+      if (!response.ok) { alert(d?.error ?? 'Action failed'); return; }
+      const wf = d?.workflow;
+      const note = d?.message
+        ?? (wf?.status === 'IN_PROGRESS' ? `Sent for approval through "${wf.name}"${wf.level ? `, waiting for "${wf.level}"` : ''}.` : null)
+        ?? (wf?.status === 'APPROVED' ? `"${wf.name}": no approval level applies, so the request is approved.` : null);
+      if (note) alert(note);
+      fetchTerminations();
     } catch (error) {
       console.error('Failed to update termination:', error);
     }
@@ -337,7 +374,7 @@ export default function EarlyTerminationsPage() {
             {filteredTerminations.map((term) => (
               <tr key={term.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
                 <td className="px-6 py-4 text-sm font-medium text-[var(--text-main)]">{term.terminationNo}</td>
-                <td className="px-6 py-4 text-sm text-[var(--text-main)]">{term.contractId}</td>
+                <td className="px-6 py-4 text-sm text-[var(--text-main)]">{term.contractNumber ?? term.contractId}</td>
                 <td className="px-6 py-4 text-sm text-[var(--text-main)]">{term.requestDate}</td>
                 <td className="px-6 py-4 text-sm text-[var(--text-main)]">{term.effectiveDate}</td>
                 <td className="px-6 py-4 text-sm text-[var(--text-main)]">{term.remainingMonths}</td>
@@ -359,11 +396,12 @@ export default function EarlyTerminationsPage() {
                   <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(term.status)}`}>
                     {term.status}
                   </span>
+                  {term.notes && <p className="text-xs text-[var(--text-faint)] mt-1 max-w-[220px] whitespace-pre-wrap">{term.notes}</p>}
                 </td>
                 <td className="px-6 py-4 text-sm space-x-2">
                   {term.status === 'DRAFT' && (
                     <button
-                      onClick={() => handleStatusChange(term.id, 'PENDING_APPROVAL')}
+                      onClick={() => handleAction(term.id, 'submit')}
                       className="text-blue-400 hover:text-blue-300 transition-colors text-xs"
                     >
                       Submit
@@ -372,13 +410,13 @@ export default function EarlyTerminationsPage() {
                   {term.status === 'PENDING_APPROVAL' && (
                     <>
                       <button
-                        onClick={() => handleStatusChange(term.id, 'APPROVED')}
+                        onClick={() => handleAction(term.id, 'approve')}
                         className="text-emerald-400 hover:text-emerald-300 transition-colors text-xs"
                       >
                         Approve
                       </button>
                       <button
-                        onClick={() => handleStatusChange(term.id, 'CANCELLED')}
+                        onClick={() => handleAction(term.id, 'reject')}
                         className="text-rose-400 hover:text-rose-300 transition-colors text-xs"
                       >
                         Reject
@@ -387,7 +425,7 @@ export default function EarlyTerminationsPage() {
                   )}
                   {term.status === 'APPROVED' && (
                     <button
-                      onClick={() => handleStatusChange(term.id, 'EXECUTED')}
+                      onClick={() => handleAction(term.id, 'execute')}
                       className="text-emerald-400 hover:text-emerald-300 transition-colors text-xs"
                     >
                       Execute

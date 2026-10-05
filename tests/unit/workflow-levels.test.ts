@@ -183,6 +183,19 @@ describe('approval level conditions', () => {
     expect(route).toContain("approvalRequired(tenantId, 'leasing_contract')");
   });
 
+  it('connects early termination approval, with penalty and settlement conditions', () => {
+    const subjects = readFileSync('src/lib/workflow/subjects.ts', 'utf8');
+    expect(subjects).toMatch(/leasing_early_termination: \{\s*module: 'LEASING', procedure: 'EARLY_TERMINATION'/);
+    const admin = readFileSync('src/app/(app)/admin/workflows/page.tsx', 'utf8');
+    const connected = admin.slice(admin.indexOf('const CONNECTED'), admin.indexOf(']);', admin.indexOf('const CONNECTED')));
+    expect(connected).toContain("'LEASING.EARLY_TERMINATION'");
+    // A waived penalty goes to finance; a full one doesn't.
+    const waiver = cond('penaltyPct', 'LT', 20);
+    expect(conditionApplies(waiver, { penaltyPct: 10, amount: 9000 })).toBe(true);
+    expect(conditionApplies(waiver, { penaltyPct: 20, amount: 9000 })).toBe(false);
+    expect(conditionApplies(cond('remainingMonths', 'GT', 12), { remainingMonths: 18 })).toBe(true);
+  });
+
   it('compares text for equality, case-insensitively', () => {
     expect(conditionApplies(cond('category', 'EQ', 'Fuel'), { category: 'FUEL' })).toBe(true);
     expect(conditionApplies(cond('category', 'NEQ', 'Fuel'), { category: 'fuel' })).toBe(false);
