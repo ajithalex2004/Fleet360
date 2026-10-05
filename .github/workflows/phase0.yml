@@ -342,14 +342,43 @@ jobs:
             echo "through the actual route handlers."
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # Runs on its own throwaway Postgres, not the shared PHASE0_DATABASE_URL:
+  # its claim/retry tests (attempt tokens, the send cap, reconciliation) read
+  # and change shared dispatch state, and on the shared database runs of other
+  # commits and PRs worked the same rows at the same time, so it failed on
+  # varying assertions while passing in isolation.
+  #
+  # Still proves RLS: the schema is built from the migrations by the same
+  # fresh-install runner as migration-safety.yml, and the suite connects as a
+  # fleet360_app role created NOSUPERUSER NOBYPASSRLS (the container's
+  # superuser is used only to build the schema). The preflight below fails
+  # the job if that role could bypass RLS.
   dunning-collections-integration:
     name: Dunning & collections dispatch (Postgres)
-    needs: [leasing-return-workflow-integration]
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fleet360_dunning_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
 
     env:
       PHASE0_EXPECTED_ROLE: fleet360_app
+      # Schema build only (superuser of the throwaway container).
+      MIGRATE_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/fleet360_dunning_ci?schema=public
+      # Everything the suite does: the restricted application role.
+      APP_DATABASE_URL: postgresql://fleet360_app:test@localhost:5432/fleet360_dunning_ci
 
     steps:
       - name: Checkout
@@ -367,26 +396,36 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
-      # Deliberately not an `if:` — a conditional step that does not run
-      # reports success, which is the failure mode this whole workflow
-      # exists to remove. See rls-isolation-ts above for the same pattern.
-      - name: Require the database secret
-        env:
-          PHASE0_DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+      - name: Install postgresql-client
         run: |
-          if [ -z "$PHASE0_DATABASE_URL" ]; then
-            echo "::error title=PHASE0_DATABASE_URL is not configured::The dunning & collections integration suite cannot run without it. Failing rather than reporting green for a suite that never executed."
-            exit 1
-          fi
-          echo "secret present (${#PHASE0_DATABASE_URL} chars)"
+          sudo apt-get update -qq
+          sudo apt-get install -yqq postgresql-client
 
-      # Proves the connection can actually enforce RLS BEFORE the suite
-      # runs — same preflight rls-isolation-ts and leasing-return-workflow-
-      # integration use, run again here because each job gets a fresh
-      # runner/connection.
+      - name: Create the restricted runtime role (fleet360_app)
+        run: |
+          PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d fleet360_dunning_ci -v ON_ERROR_STOP=1 -c "
+            DO \$\$
+            BEGIN
+              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'fleet360_app') THEN
+                CREATE ROLE fleet360_app WITH LOGIN PASSWORD 'test' NOSUPERUSER NOBYPASSRLS;
+              END IF;
+              ALTER ROLE fleet360_app SET search_path = \"\$user\", public, finance, ai, fleet, operations, spatial, workforce;
+            END
+            \$\$;
+          "
+
+      - name: Build the schema from the migrations
+        env:
+          DATABASE_URL: ${{ env.MIGRATE_DATABASE_URL }}
+          DIRECT_URL: ${{ env.MIGRATE_DATABASE_URL }}
+          BOOTSTRAP_RUNTIME_DATABASE_URL: ${{ env.APP_DATABASE_URL }}
+          CONFIRM_FRESH_INSTALL: "1"
+        run: node scripts/fresh-install-migrate.cjs --fresh-install
+
+      # Proves the connection the suite uses enforces RLS before it runs.
       - name: Assert the role enforces RLS
         env:
-          DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+          DATABASE_URL: ${{ env.APP_DATABASE_URL }}
         run: node scripts/check-rls-enforcement.mjs
 
       # No production dispatch here or anywhere else in CI: the suite only
@@ -396,29 +435,21 @@ jobs:
       # protocol (the five decisive tests from the design plan), the sweep's
       # stage transitions, RLS on the five new tables, and append-only
       # enforcement on lease_dunning_stage_transitions against real Postgres.
-      # --testTimeout=120000: the default (30s) isn't enough for the
-      # heaviest tests here under GitHub Actions' network latency to Neon —
-      # test 4 and the reopening test each make several sequential
-      # real-Postgres round trips (multiple transactions per
-      # deliverNextDunningEvent/runDunningSweep call). Confirmed locally at
-      # ~134-180s total for all 11 tests; 120s per test leaves real margin.
       - name: Dunning & collections integration suite
         env:
-          DATABASE_URL: ${{ secrets.PHASE0_DATABASE_URL }}
+          DATABASE_URL: ${{ env.APP_DATABASE_URL }}
         run: npx vitest run tests/integration/dunning-collections-postgres.test.ts --testTimeout=120000
 
       - name: Record the evidence
         if: always()
-        env:
-          SECRET_PRESENT: ${{ secrets.PHASE0_DATABASE_URL != '' }}
         run: |
           {
             echo "### Dunning & collections dispatch — PostgreSQL integration"
             echo ""
             echo "| check | value |"
             echo "|---|---|"
-            echo "| expected role | \`$PHASE0_EXPECTED_ROLE\` |"
-            echo "| secret configured | $SECRET_PRESENT |"
+            echo "| database | throwaway postgres:16 for this job only, schema built from the migrations |"
+            echo "| role | \`$PHASE0_EXPECTED_ROLE\` (NOSUPERUSER NOBYPASSRLS) |"
             echo "| enforcement asserted before the suite | yes |"
             echo "| DUNNING_DISPATCH_ENABLED in this job | never set at the job level — only toggled transiently inside the test process for synthetic tenants |"
             echo ""
