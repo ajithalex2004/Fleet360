@@ -135,6 +135,14 @@ describe('storage keys', () => {
     expect(storedFileKey('/api/leasing/documents')).toBeNull();
     expect(storedFileKey('/uploadsx/a')).toBeNull();
   });
+
+  it('keeps storage API commands out of the stored-file rewrite', () => {
+    expect(storedFileKey('/api/files/upload')).toBeNull();
+    expect(storedFileKey('/api/files/sign')).toBeNull();
+    expect(storedFileKey('/api/files')).toBeNull();
+    expect(storedFileKey('/uploads/upload')).toBe('upload');
+    expect(storedFileKey('/api/files/upload/document.pdf')).toBe('upload/document.pdf');
+  });
 });
 
 describe('middleware routes stored files to the authorizer', () => {
