@@ -16,6 +16,7 @@ import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { runAsTenant } from '@/lib/rls-scope';
 import { bookingRequestType, transferScope, type WorkflowContext } from './levels';
+import { cancelRefundRequest, recordRefundDetails } from '@/lib/finance/security-deposit';
 import {
   loadPendingEstimate, quotationForApproval, recordEstimateApproval, recordEstimateRejection,
   type EstimationApprovedPayload,
@@ -458,6 +459,48 @@ export const APPROVAL_SUBJECTS: Record<string, ApprovalSubject> = {
     async row(tx, tenantId, id) {
       return tx.leaseContractVehicle.findFirst({ where: { id, tenantId } }) as Promise<Row | null>;
     },
+  },
+
+  finance_deposit_refund: {
+    module: 'RAC', procedure: 'REFUND_APPROVAL', label: 'Security deposit refund',
+    async load(tx, tenantId, id) {
+      const rows = await tx.$queryRawUnsafe<Row[]>(
+        `SELECT deposit_no, contract_type, customer_name, branch, collected_amount, total_deducted,
+                refund_requested_amount, refund_method
+           FROM finance_security_deposits WHERE id::text = $1 AND tenant_id = $2 AND refund_status = 'REQUESTED'`,
+        id, tenantId);
+      const r = rows[0];
+      if (!r) return null;
+      const collected = num(r.collected_amount) ?? 0;
+      const deducted = num(r.total_deducted) ?? 0;
+      return {
+        referenceNumber: String(r.deposit_no ?? id),
+        context: {
+          amount: num(r.refund_requested_amount), depositAmount: collected, deductions: deducted,
+          deductionPct: collected > 0 ? Math.round((deducted / collected) * 1000) / 10 : undefined,
+          contractType: r.contract_type, branch: r.branch, refundMethod: r.refund_method, customer: r.customer_name,
+        },
+      };
+    },
+    async apply(tx, o) {
+      // Approved: the refund is recorded with how it is to be paid (set when
+      // requested), ready for finance to pay; rejected: the request is
+      // cancelled and its amount released.
+      const rows = await tx.$queryRawUnsafe<Row[]>(
+        `SELECT refund_status, refund_method, refund_reference FROM finance_security_deposits WHERE id::text = $1 AND tenant_id = $2`,
+        o.referenceId, o.tenantId);
+      if (rows[0]?.refund_status !== 'REQUESTED') return;
+      if (o.status === 'APPROVED') {
+        await recordRefundDetails(tx, o.tenantId, o.referenceId, {
+          method: String(rows[0].refund_method ?? 'BANK_TRANSFER'),
+          reference: rows[0].refund_reference ? String(rows[0].refund_reference) : undefined,
+          recordedBy: o.actorEmail,
+        });
+      } else {
+        await cancelRefundRequest(tx, o.tenantId, o.referenceId, { reason: `rejected: ${reasonOf(o)}`, cancelledBy: o.actorEmail });
+      }
+    },
+    row: sqlRow('finance_security_deposits', false),
   },
 
   LEASE_QUOTATION: {

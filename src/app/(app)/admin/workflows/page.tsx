@@ -22,7 +22,7 @@ const CONNECTED = new Set([
   'MAINTENANCE.ESTIMATE_APPROVAL', 'FINANCE.EXPENSE_APPROVAL', 'FINANCE.PAYABLE_APPROVAL', 'FINANCE.JOURNAL_APPROVAL',
   'LEASING.QUOTATION_APPROVAL', 'LEASING.CREDIT_APPROVAL', 'LEASING.PO_REQUEST', 'LEASING.AMENDMENT_APPROVAL',
   'LEASING.CONTRACT_APPROVAL', 'LEASING.EARLY_TERMINATION', 'LEASING.VEHICLE_ADDITION',
-  'RAC.TRANSFER_APPROVAL', 'RAC.RENEWAL_APPROVAL', 'BOOKING.BOOKING_APPROVAL',
+  'RAC.TRANSFER_APPROVAL', 'RAC.RENEWAL_APPROVAL', 'RAC.REFUND_APPROVAL', 'BOOKING.BOOKING_APPROVAL',
 ]);
 
 const PROCEDURES: Record<string, { key: string; label: string; description: string }[]> = {
@@ -38,7 +38,7 @@ const PROCEDURES: Record<string, { key: string; label: string; description: stri
   RAC: [
     { key: 'BOOKING_APPROVAL',      label: 'Booking Approval',        description: 'Approval for new rental bookings above threshold' },
     { key: 'DAMAGE_CLAIM',          label: 'Damage Claim',            description: 'Assessment and approval of vehicle damage claims' },
-    { key: 'REFUND_APPROVAL',       label: 'Refund Approval',         description: 'Customer refund request approval workflow' },
+    { key: 'REFUND_APPROVAL',       label: 'Refund Approval',         description: 'Security deposit refunds (rental and leasing), before they are recorded and paid' },
     { key: 'RATE_OVERRIDE',         label: 'Rate Override',           description: 'Approval when rates are discounted below standard' },
     { key: 'TRANSFER_APPROVAL',     label: 'Vehicle Transfer',        description: 'Requested vehicle transfers between branches' },
     { key: 'RENEWAL_APPROVAL',      label: 'Rental Renewal',          description: 'Rental agreement extensions, by their amount' },
@@ -239,6 +239,15 @@ const PROCEDURE_FIELDS: Record<string, ProcedureField[]> = {
       { value: 'BUS_TRIP_COMPLETION',     label: 'School bus trip' },
       { value: 'BUS_OPS_RECHARGE',        label: 'Bus operations recharge' },
     ] },
+  ],
+  // Amount is the refund requested.
+  'RAC.REFUND_APPROVAL': [
+    { value: 'contractType',  label: 'Contract Type', choices: [{ value: 'RENTAL', label: 'Rental' }, { value: 'LEASE', label: 'Lease' }] },
+    { value: 'depositAmount', label: 'Deposit Collected (AED)' },
+    { value: 'deductions',    label: 'Deductions (AED)' },
+    { value: 'deductionPct',  label: 'Deducted (% of deposit)' },
+    { value: 'refundMethod',  label: 'Refund Method', choices: opts(['BANK_TRANSFER', 'CHEQUE', 'CASH'], titleCase) },
+    { value: 'branch',        label: 'Branch', text: true },
   ],
   'RAC.RENEWAL_APPROVAL': [
     { value: 'extensionDays', label: 'Extension (days)' },

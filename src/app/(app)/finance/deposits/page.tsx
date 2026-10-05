@@ -33,6 +33,10 @@ interface Deposit {
   held_days: number;
   forfeiture_reason: string | null;
   notes: string | null;
+  refund_status?: string | null;
+  refund_requested_amount?: number | null;
+  refund_requested_by?: string | null;
+  refund_reference?: string | null;
 }
 
 interface Kpi {
@@ -179,17 +183,30 @@ function DepositDetailModal({ deposit, onClose, onRefresh }: { deposit: Deposit;
     setDeduction({ description: '', amount: '', category: 'DAMAGE', date: new Date().toISOString().split('T')[0] });
   }
 
-  async function processRefund() {
+  // A refund is requested; with a Refund Approval workflow it waits for
+  // approval (the reply says where), without one it is recorded and paid at once.
+  async function refundAction(action: string, extra: Record<string, unknown> = {}) {
     setSaving(true);
-    await fetch('/api/finance/deposits', {
+    const res = await fetch('/api/finance/deposits', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: deposit.id, action: 'refund', ...refund, refund_amount: Number(refund.refund_amount) }),
+      body: JSON.stringify({ id: deposit.id, action, ...extra }),
     });
     setSaving(false);
+    const d = await res.json().catch(() => null);
+    if (!res.ok) return alert(d?.error ?? 'Action failed');
+    const wf = d?.workflow;
+    const note = d?.message
+      ?? (wf?.status === 'IN_PROGRESS' ? `Refund requested and sent for approval through "${wf.name}"${wf.level ? `, waiting for "${wf.level}"` : ''}.` : null)
+      ?? (wf?.status === 'APPROVED' ? `"${wf.name}": no approval level applies, so the refund is approved and ready to pay.` : null);
+    if (note) alert(note);
     onRefresh();
     onClose();
   }
+
+  const processRefund = () => refundAction('request_refund', { ...refund, refund_amount: Number(refund.refund_amount) });
+  const askReason = (q: string) => { const r = prompt(q); return r === null ? null : r.trim() || 'No reason given'; };
+  const refundInProgress = deposit.refund_status === 'REQUESTED' || deposit.refund_status === 'RECORDED';
 
   async function forfeit() {
     setSaving(true);
@@ -310,7 +327,33 @@ function DepositDetailModal({ deposit, onClose, onRefresh }: { deposit: Deposit;
           {/* Refund */}
           {tab === 'refund' && (
             <div className="space-y-3">
-              {['FULLY_REFUNDED','FORFEITED'].includes(deposit.status) ? (
+              {refundInProgress ? (
+                <div className="space-y-3">
+                  <div className={`rounded-lg p-3 text-sm border ${deposit.refund_status === 'REQUESTED' ? 'bg-amber-900/20 border-amber-500/30 text-amber-300' : 'bg-blue-900/20 border-blue-500/30 text-blue-300'}`}>
+                    {deposit.refund_status === 'REQUESTED'
+                      ? <>Refund of <strong>{fmt(Number(deposit.refund_requested_amount ?? 0))}</strong> requested{deposit.refund_requested_by ? ` by ${deposit.refund_requested_by}` : ''}, awaiting approval.</>
+                      : <>Refund of <strong>{fmt(Number(deposit.refund_requested_amount ?? 0))}</strong> approved: {deposit.refund_method ?? 'Bank transfer'}{deposit.refund_reference ? ` · ${deposit.refund_reference}` : ''}. Mark it paid once sent.</>}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {deposit.refund_status === 'REQUESTED' ? (
+                      <>
+                        <button onClick={() => refundAction('approve_refund')} disabled={saving}
+                          className="py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium disabled:opacity-40">✓ Approve</button>
+                        <button onClick={() => { const reason = askReason('Why is this refund being rejected?'); if (reason !== null) refundAction('reject_refund', { reason }); }} disabled={saving}
+                          className="py-2 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 text-sm disabled:opacity-40">✕ Reject</button>
+                      </>
+                    ) : (
+                      <button onClick={() => refundAction('execute_refund')} disabled={saving}
+                        className="col-span-2 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-medium disabled:opacity-40">💸 Mark refund paid</button>
+                    )}
+                  </div>
+                  <button onClick={() => { const reason = askReason('Why is this refund request being cancelled?'); if (reason !== null) refundAction('cancel_refund_request', { reason }); }} disabled={saving}
+                    className="w-full py-2 rounded-lg border border-[var(--border-subtle)] text-[var(--text-muted)] hover:text-red-400 text-sm disabled:opacity-40">Cancel refund request</button>
+                  {deposit.refund_status === 'REQUESTED' && (
+                    <p className="text-xs text-[var(--text-faint)]">With a Refund Approval workflow, each level&apos;s approvers also see it in their Approvals Inbox.</p>
+                  )}
+                </div>
+              ) : ['FULLY_REFUNDED','FORFEITED'].includes(deposit.status) ? (
                 <p className="text-[var(--text-muted)] text-sm text-center py-6">This deposit has already been closed.</p>
               ) : (
                 <>
