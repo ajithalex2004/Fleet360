@@ -30,7 +30,12 @@ interface Contract {
   insurance: boolean;
   maintenance: boolean;
   driver: boolean;
-  status: 'Active' | 'Draft' | 'Pending Approval' | 'Expired' | 'Terminated';
+  status: string;
+  /** The stored status (DRAFT, PENDING_APPROVAL, …); `status` is its label. */
+  statusCode: string;
+  notes?: string | null;
+  approvedBy?: string | null;
+  approvedAt?: string | null;
   branch: string;
   vehicles?: Vehicle[];
 }
@@ -67,47 +72,12 @@ function ContractParamsReader({ onFromQuotation }: { onFromQuotation: (id: strin
   return null;
 }
 
-const MOCK_CONTRACTS: Contract[] = [
-  {
-    id: '1', contractNumber: 'LC-V2-001', agreementType: 'MASTER',
-    lessee: 'Global Logistics LLC', leaseType: 'LONG_TERM',
-    vehicleCount: 3, startDate: '2024-01-15', endDate: '2027-01-15',
-    monthlyRate: 15000, insurance: true, maintenance: true, driver: false,
-    status: 'Active', branch: 'Dubai HQ',
-    vehicles: [
-      { id: 'v1', type: 'Van', make: 'Mercedes', model: 'Sprinter', licensePlate: 'DXB-001', driver: 'Ahmed', monthlyRate: 5000, status: 'Active' },
-      { id: 'v2', type: 'SUV', make: 'BMW', model: 'X5', licensePlate: 'DXB-002', driver: 'Fatima', monthlyRate: 5500, status: 'Active' },
-      { id: 'v3', type: 'Sedan', make: 'Toyota', model: 'Camry', licensePlate: 'DXB-003', driver: 'Mohammed', monthlyRate: 4500, status: 'Active' },
-    ],
-  },
-  {
-    id: '2', contractNumber: 'LC-V2-002', agreementType: 'INDIVIDUAL',
-    lessee: 'Ahmed Al-Mansouri', leaseType: 'SHORT_TERM',
-    vehicleCount: 1, startDate: '2024-06-01', endDate: '2024-12-01',
-    monthlyRate: 3500, insurance: true, maintenance: false, driver: false,
-    status: 'Active', branch: 'Abu Dhabi',
-    vehicles: [
-      { id: 'v4', type: 'SUV', make: 'BMW', model: 'X7', licensePlate: 'AUH-001', driver: 'N/A', monthlyRate: 3500, status: 'Active' },
-    ],
-  },
-  {
-    id: '3', contractNumber: 'LC-V2-003', agreementType: 'INDIVIDUAL',
-    lessee: 'Fatima Al-Nakhli', leaseType: 'MONTHLY',
-    vehicleCount: 1, startDate: '2025-02-01', endDate: '2025-03-01',
-    monthlyRate: 2500, insurance: false, maintenance: false, driver: false,
-    status: 'Draft', branch: 'Dubai HQ',
-    vehicles: [
-      { id: 'v5', type: 'Sedan', make: 'Toyota', model: 'Corolla', licensePlate: 'DXB-005', driver: 'N/A', monthlyRate: 2500, status: 'Draft' },
-    ],
-  },
-  {
-    id: '4', contractNumber: 'LC-V2-004', agreementType: 'MASTER',
-    lessee: 'Enterprise Corp', leaseType: 'LONG_TERM',
-    vehicleCount: 5, startDate: '2024-03-01', endDate: '2026-03-01',
-    monthlyRate: 22000, insurance: true, maintenance: true, driver: true,
-    status: 'Pending Approval', branch: 'Dubai HQ', vehicles: [],
-  },
-];
+// Contract statuses as stored, and how the list shows them.
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: 'Draft', PENDING_APPROVAL: 'Pending Approval', APPROVED: 'Approved', ACTIVE: 'Active',
+  EXTENDED: 'Extended', SUSPENDED: 'Suspended', TERMINATED: 'Terminated', CLOSED: 'Closed', COMPLETED: 'Completed', EXPIRED: 'Expired',
+};
+const statusCodeOf = (s: string | null | undefined) => (s ?? 'DRAFT').trim().toUpperCase().replace(/\s+/g, '_');
 
 export default function ContractsV2Page() {
   const [contracts, setContracts] = useState<Contract[]>([]);
@@ -126,6 +96,34 @@ export default function ContractsV2Page() {
   const [addVehicleMsg, setAddVehicleMsg] = useState('');
   const [saving, setSaving] = useState(false);
   const [lessees, setLessees] = useState<{ id: string; name: string }[]>([]);
+  const [loadError, setLoadError] = useState('');
+  const [acting, setActing] = useState(false);
+
+  // Submit / approve / return / activate. With a Contract Approval workflow,
+  // approve and return act on its waiting level; the reply says where it is.
+  const contractAction = async (c: Contract, action: 'submit' | 'approve' | 'reject' | 'activate') => {
+    let reason: string | undefined;
+    if (action === 'reject') {
+      const r = prompt('Why is this contract being returned? It goes back to Draft for correction.');
+      if (r === null) return;
+      reason = r.trim() || 'Review required';
+    }
+    if (action === 'activate' && !confirm(`Activate ${c.contractNumber}? Billing and operations start from activation.`)) return;
+    setActing(true);
+    const res = await fetch(`/api/leasing/contracts-v2/${c.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, reason }),
+    });
+    setActing(false);
+    const d = await res.json().catch(() => null);
+    if (!res.ok) return alert(d?.error ?? 'Action failed');
+    const wf = d?.workflow;
+    const note = d?.message
+      ?? (wf?.status === 'IN_PROGRESS' ? `Sent for approval through "${wf.name}"${wf.level ? `, waiting for "${wf.level}"` : ''}.` : null)
+      ?? (wf?.status === 'APPROVED' ? `"${wf.name}": no approval level applies, so the contract is approved.` : null);
+    if (note) alert(note);
+    setSelectedContract(null);
+    loadContracts();
+  };
 
   const [newContractForm, setNewContractForm] = useState<NewContractForm>({
     step: 1, lessee: '', agreementType: 'INDIVIDUAL', masterContractId: '',
@@ -142,8 +140,12 @@ export default function ContractsV2Page() {
   const loadContracts = useCallback(() => {
     fetch('/api/leasing/contracts-v2')
       .then(r => r.ok ? r.json() : Promise.reject(r))
-      .then(data => setContracts(Array.isArray(data) ? data : MOCK_CONTRACTS))
-      .catch(() => setContracts(MOCK_CONTRACTS))
+      .then(data => {
+        const rows = Array.isArray(data) ? data : [];
+        setContracts(rows.map((c: Contract) => ({ ...c, statusCode: statusCodeOf(c.status), status: STATUS_LABELS[statusCodeOf(c.status)] ?? c.status })));
+        setLoadError('');
+      })
+      .catch(() => { setContracts([]); setLoadError('Contracts could not be loaded. Refresh to try again.'); })
       .finally(() => setLoading(false));
   }, []);
 
@@ -189,7 +191,7 @@ export default function ContractsV2Page() {
     const map: Record<string, Record<string, string>> = {
       agreement: { MASTER: 'bg-amber-500/20 text-amber-400 border-amber-500/30', INDIVIDUAL: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
       lease: { LONG_TERM: 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30', SHORT_TERM: 'bg-teal-500/20 text-teal-400 border-teal-500/30', DAILY: 'bg-orange-500/20 text-orange-400 border-orange-500/30', MONTHLY: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' },
-      status: { Active: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', Draft: 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30', 'Pending Approval': 'bg-amber-500/20 text-amber-400 border-amber-500/30', Expired: 'bg-rose-500/20 text-rose-400 border-rose-500/30', Terminated: 'bg-red-500/20 text-red-400 border-red-500/30' },
+      status: { Approved: 'bg-sky-500/20 text-sky-400 border-sky-500/30', Active: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', Draft: 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30', 'Pending Approval': 'bg-amber-500/20 text-amber-400 border-amber-500/30', Expired: 'bg-rose-500/20 text-rose-400 border-rose-500/30', Terminated: 'bg-red-500/20 text-red-400 border-red-500/30' },
     };
     return map[type]?.[value] ?? 'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30';
   };
@@ -304,7 +306,7 @@ export default function ContractsV2Page() {
             className="w-full px-3 py-2 bg-[var(--bg-surface)]/60 border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-blue-500/50" />
         </div>
         {[
-          { label: 'Status', val: filterStatus, setVal: setFilterStatus, opts: [['', 'All Status'], ['Active', 'Active'], ['Draft', 'Draft'], ['Pending Approval', 'Pending Approval'], ['Expired', 'Expired']] },
+          { label: 'Status', val: filterStatus, setVal: setFilterStatus, opts: [['', 'All Status'], ['Active', 'Active'], ['Draft', 'Draft'], ['Pending Approval', 'Pending Approval'], ['Approved', 'Approved'], ['Expired', 'Expired'], ['Terminated', 'Terminated']] },
           { label: 'Agreement Type', val: filterAgreementType, setVal: setFilterAgreementType, opts: [['', 'All Types'], ['MASTER', 'Master'], ['INDIVIDUAL', 'Individual']] },
           { label: 'Lease Type', val: filterLeaseType, setVal: setFilterLeaseType, opts: [['', 'All Lease Types'], ['LONG_TERM', 'Long Term'], ['SHORT_TERM', 'Short Term'], ['DAILY', 'Daily'], ['MONTHLY', 'Monthly']] },
         ].map(({ label, val, setVal, opts }) => (
@@ -427,6 +429,10 @@ export default function ContractsV2Page() {
         </table>
       </div>
 
+      {loadError && (
+        <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3">{loadError}</p>
+      )}
+
       {/*  VIEW CONTRACT MODAL  */}
       {selectedContract && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
@@ -486,6 +492,43 @@ export default function ContractsV2Page() {
               )}
             </div>
             <div className="p-6 border-t border-[var(--border-subtle)] space-y-3">
+              {(selectedContract.notes || selectedContract.approvedBy) && (
+                <div className="bg-[var(--bg-surface-hover)]/30 border border-[var(--border-subtle)] rounded-xl p-3 text-xs space-y-1">
+                  {selectedContract.approvedBy && (
+                    <p className="text-[var(--text-muted)]">Approved by <span className="text-[var(--text-main)]">{selectedContract.approvedBy}</span>{selectedContract.approvedAt ? ` on ${new Date(selectedContract.approvedAt).toLocaleDateString('en-AE')}` : ''}</p>
+                  )}
+                  {selectedContract.notes && <p className="text-[var(--text-muted)] whitespace-pre-wrap">{selectedContract.notes}</p>}
+                </div>
+              )}
+              {['DRAFT', 'PENDING_APPROVAL', 'APPROVED'].includes(selectedContract.statusCode) && (
+                <div>
+                  <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Approval</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {selectedContract.statusCode === 'DRAFT' && (
+                      <button onClick={() => contractAction(selectedContract, 'submit')} disabled={acting}
+                        className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold disabled:opacity-50">Submit for approval</button>
+                    )}
+                    {selectedContract.statusCode === 'PENDING_APPROVAL' && (
+                      <>
+                        <button onClick={() => contractAction(selectedContract, 'approve')} disabled={acting}
+                          className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold disabled:opacity-50">✓ Approve</button>
+                        <button onClick={() => contractAction(selectedContract, 'reject')} disabled={acting}
+                          className="px-4 py-2 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 text-xs font-semibold disabled:opacity-50">↩ Return to Draft</button>
+                      </>
+                    )}
+                    {selectedContract.statusCode === 'APPROVED' && (
+                      <button onClick={() => contractAction(selectedContract, 'activate')} disabled={acting}
+                        className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold disabled:opacity-50">▶ Activate contract</button>
+                    )}
+                  </div>
+                  {selectedContract.statusCode === 'PENDING_APPROVAL' && (
+                    <p className="text-xs text-[var(--text-faint)] mt-2">With an approval workflow, each level&apos;s approvers also see it in their Approvals Inbox.</p>
+                  )}
+                  {selectedContract.statusCode === 'APPROVED' && (
+                    <p className="text-xs text-[var(--text-faint)] mt-2">Activation needs at least one allocated vehicle.</p>
+                  )}
+                </div>
+              )}
               <div>
                 <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Contract actions</p>
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-2">

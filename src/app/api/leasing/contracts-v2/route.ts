@@ -63,6 +63,13 @@ export async function GET(req: NextRequest) {
         branch:
           (c as { openingBranch?: { name?: string | null } }).openingBranch
             ?.name ?? null,
+        totalValue: c.totalContractValue != null ? Number(c.totalContractValue) : null,
+        insurance: !!c.insuranceIncluded,
+        maintenance: !!c.maintenanceIncluded,
+        driver: !!c.driverIncluded,
+        notes: c.notes ?? null,
+        approvedBy: c.approvedBy ?? null,
+        approvedAt: c.approvedAt ?? null,
       })),
     );
   } catch (e) {

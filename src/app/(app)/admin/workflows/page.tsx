@@ -21,13 +21,14 @@ const MODULES = [
 const CONNECTED = new Set([
   'MAINTENANCE.ESTIMATE_APPROVAL', 'FINANCE.EXPENSE_APPROVAL', 'FINANCE.PAYABLE_APPROVAL', 'FINANCE.JOURNAL_APPROVAL',
   'LEASING.QUOTATION_APPROVAL', 'LEASING.CREDIT_APPROVAL', 'LEASING.PO_REQUEST', 'LEASING.AMENDMENT_APPROVAL',
+  'LEASING.CONTRACT_APPROVAL',
   'RAC.TRANSFER_APPROVAL', 'RAC.RENEWAL_APPROVAL', 'BOOKING.BOOKING_APPROVAL',
 ]);
 
 const PROCEDURES: Record<string, { key: string; label: string; description: string }[]> = {
   LEASING: [
     { key: 'QUOTATION_APPROVAL',    label: 'Quotation Approval',      description: 'Internal sign-off on lease quotations before sending to customer' },
-    { key: 'CONTRACT_APPROVAL',     label: 'Contract Approval',       description: 'Approval of final lease contract before execution' },
+    { key: 'CONTRACT_APPROVAL',     label: 'Contract Approval',       description: 'Lease contracts submitted for approval, before they can be activated' },
     { key: 'CREDIT_APPROVAL',       label: 'Credit Approval',         description: 'Credit risk assessment and approval workflow' },
     { key: 'PO_REQUEST',            label: 'Purchase Order Request',  description: 'Internal PO creation and procurement workflow' },
     { key: 'EARLY_TERMINATION',     label: 'Early Termination',       description: 'Approval for early contract termination requests' },
@@ -191,6 +192,10 @@ const PROCEDURE_FIELDS: Record<string, ProcedureField[]> = {
   'LEASING.QUOTATION_APPROVAL': QUOTATION_FIELDS,
   'LEASING.CREDIT_APPROVAL':    QUOTATION_FIELDS,
   'LEASING.PO_REQUEST':         QUOTATION_FIELDS,
+  'LEASING.CONTRACT_APPROVAL':  [
+    { value: 'agreementType', label: 'Agreement Type', choices: opts(['MASTER', 'INDIVIDUAL'], titleCase) },
+    ...QUOTATION_FIELDS.filter(f => f.value !== 'markupPct'),
+  ],
   'FINANCE.PAYABLE_APPROVAL': [
     { value: 'sourceModule', label: 'Source Module', choices: PAYABLE_MODULES },
     { value: 'sourceType',   label: 'Source Type', choices: [

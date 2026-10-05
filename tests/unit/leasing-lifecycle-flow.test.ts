@@ -101,6 +101,7 @@ function resetStore() {
 vi.mock('@/lib/workflow/approvals', () => ({
   approvalGate: async () => null,
   approvalInProgress: async () => null,
+  approvalRequired: async () => false,
   withApprovalStart: async (res: unknown) => res,
   withdrawApproval: async () => {},
 }));
@@ -258,6 +259,12 @@ vi.mock('@/lib/prisma', () => {
               const c = store.contracts.get(where.id);
               if (c) Object.assign(c, data);
               return c;
+            }),
+            updateMany: vi.fn().mockImplementation(async ({ where, data }) => {
+              const c = store.contracts.get(where.id);
+              if (!c || c.tenantId !== where.tenantId || (where.status && c.status !== where.status)) return { count: 0 };
+              Object.assign(c, data);
+              return { count: 1 };
             }),
           },
           leaseContractVehicle: {

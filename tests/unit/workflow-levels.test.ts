@@ -171,6 +171,18 @@ describe('approval level conditions', () => {
     for (const p of ['QUOTATION_APPROVAL', 'CREDIT_APPROVAL', 'PO_REQUEST']) expect(admin).toContain(`'LEASING.${p}':`);
   });
 
+  it('connects lease contract approval, with agreement and credit conditions', () => {
+    const subjects = readFileSync('src/lib/workflow/subjects.ts', 'utf8');
+    expect(subjects).toMatch(/leasing_contract: \{\s*module: 'LEASING', procedure: 'CONTRACT_APPROVAL'/);
+    const admin = readFileSync('src/app/(app)/admin/workflows/page.tsx', 'utf8');
+    const connected = admin.slice(admin.indexOf('const CONNECTED'), admin.indexOf(']);', admin.indexOf('const CONNECTED')));
+    expect(connected).toContain("'LEASING.CONTRACT_APPROVAL'");
+    expect(admin).toMatch(/'LEASING.CONTRACT_APPROVAL':\s+\[\s*\{ value: 'agreementType'/);
+    expect(conditionApplies(cond('agreementType', 'EQ', 'MASTER'), { agreementType: 'MASTER' })).toBe(true);
+    const route = readFileSync('src/app/api/leasing/contracts-v2/[id]/route.ts', 'utf8');
+    expect(route).toContain("approvalRequired(tenantId, 'leasing_contract')");
+  });
+
   it('compares text for equality, case-insensitively', () => {
     expect(conditionApplies(cond('category', 'EQ', 'Fuel'), { category: 'FUEL' })).toBe(true);
     expect(conditionApplies(cond('category', 'NEQ', 'Fuel'), { category: 'fuel' })).toBe(false);
