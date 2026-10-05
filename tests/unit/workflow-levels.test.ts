@@ -158,6 +158,19 @@ describe('approval level conditions', () => {
     expect(route).toMatch(/case 'reject':/);
   });
 
+  it("applies a level to lease quotations by lease type, margin and the customer's credit", () => {
+    const c = { amount: 420000, leaseType: 'LONG_TERM', markupPct: 6.5, customerType: 'corporate', creditScore: 610, riskRating: 'HIGH' };
+    expect(conditionApplies(cond('riskRating', 'EQ', 'HIGH'), c)).toBe(true);
+    expect(conditionApplies(cond('creditScore', 'LT', 650), c)).toBe(true);
+    expect(conditionApplies(cond('customerType', 'EQ', 'CORPORATE'), c)).toBe(true);
+    expect(conditionApplies(cond('markupPct', 'LT', 5), c)).toBe(false);
+    expect(conditionApplies(cond('leaseType', 'EQ', 'SHORT_TERM'), c)).toBe(false);
+    const subjects = readFileSync('src/lib/workflow/subjects.ts', 'utf8');
+    expect(subjects).toMatch(/creditScore: credit\?\.creditScore \?\? undefined, riskRating: credit\?\.riskRating/);
+    const admin = readFileSync('src/app/(app)/admin/workflows/page.tsx', 'utf8');
+    for (const p of ['QUOTATION_APPROVAL', 'CREDIT_APPROVAL', 'PO_REQUEST']) expect(admin).toContain(`'LEASING.${p}':`);
+  });
+
   it('compares text for equality, case-insensitively', () => {
     expect(conditionApplies(cond('category', 'EQ', 'Fuel'), { category: 'FUEL' })).toBe(true);
     expect(conditionApplies(cond('category', 'NEQ', 'Fuel'), { category: 'fuel' })).toBe(false);
