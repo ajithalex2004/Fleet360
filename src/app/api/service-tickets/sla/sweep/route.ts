@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { bearerToken, secretsEqual } from '@/lib/secure-compare';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { runAsTenant } from '@/lib/rls-scope';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import {
@@ -131,12 +132,14 @@ export async function POST(req: NextRequest) {
       }
 
       // Sweep across all active tenants with open tickets
-      const distinctTenants = await prisma.$queryRawUnsafe<Array<{ tenant_id: string }>>(
+      // Platform context: a scheduled call has no tenant, and service_tickets
+      // is under forced RLS, so without it this found no tenants to sweep.
+      const distinctTenants = await runAsTenant('*', () => prisma.$queryRawUnsafe<Array<{ tenant_id: string }>>(
         `SELECT DISTINCT tenant_id
          FROM service_tickets
          WHERE deleted_at IS NULL
            AND status NOT IN ('Resolved', 'Completed', 'Closed', 'Rejected')`
-      ).catch(() => []);
+      )).catch(() => []);
 
       const sweepResults: Record<string, any> = {};
       for (const row of distinctTenants) {

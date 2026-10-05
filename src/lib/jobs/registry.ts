@@ -76,6 +76,8 @@ import {
   runBookingsSweepPenalties,
   runAttendanceSweepNoShow,
   runPushScheduler,
+  runServiceTicketSlaSweep,
+  runDocumentLifecycleSweep,
 } from '@/lib/jobs/sweep-adapters';
 
 // ── Registry ──────────────────────────────────────────────────────────────────
@@ -199,6 +201,20 @@ export const JOB_REGISTRY: JobDef[] = [
     handler:        runWorkflowEscalation,
     maxDurationSec: 120,
     allowedRoles:   ['SUPER_ADMIN'],
+  },
+  {
+    name:           'service-tickets-sla-sweep',
+    description:    'Escalates open service tickets past their SLA (all tenants on a scheduled run)',
+    handler:        runServiceTicketSlaSweep,
+    maxDurationSec: 120,
+    allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN', 'OPERATIONS'],
+  },
+  {
+    name:           'document-lifecycle-sweep',
+    description:    'Marks extracted documents EXPIRING / EXPIRED by their expiry date (Document Intelligence)',
+    handler:        runDocumentLifecycleSweep,
+    maxDurationSec: 120,
+    allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN'],
   },
 ];
 
