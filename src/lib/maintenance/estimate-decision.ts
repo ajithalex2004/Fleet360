@@ -15,7 +15,7 @@ export type EstimationApprovedPayload = Parameters<typeof publishEstimationAppro
 export async function loadPendingEstimate(tx: Tx, tenantId: string, requestId: string) {
   const mr = await tx.maintenanceRequest.findFirst({
     where: { id: requestId, tenantId, deletedAt: null },
-    select: { id: true, status: true, vehicleId: true, estimatedCost: true, workOrderNo: true },
+    select: { id: true, status: true, vehicleId: true, estimatedCost: true, workOrderNo: true, maintenanceType: true },
   });
   if (!mr || statusKey(mr.status) !== statusKey(PENDING_ESTIMATION_APPROVAL)) return { mr, quotations: [] as QuotationAmount[] };
   const rows = await tx.quotation.findMany({

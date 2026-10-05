@@ -36,6 +36,45 @@ describe('approval level conditions', () => {
     expect(conditionApplies(cond('amount', 'GT', 100), { totalValue: 500 })).toBe(true);
   });
 
+  it('applies a level to one booking service type, or to all but one', () => {
+    const executiveOnly = cond('serviceType', 'EQ', 'EXECUTIVE');
+    const notRental = cond('serviceType', 'NEQ', 'RENTAL');
+    expect(conditionApplies(executiveOnly, { serviceType: 'EXECUTIVE', amount: 300 })).toBe(true);
+    expect(conditionApplies(executiveOnly, { serviceType: 'RENTAL', amount: 300 })).toBe(false);
+    expect(conditionApplies(notRental, { serviceType: 'RENTAL' })).toBe(false);
+    expect(conditionApplies(notRental, { serviceType: 'STAFF_TRANSPORT' })).toBe(true);
+    // A booking without a service type keeps the level.
+    expect(conditionApplies(executiveOnly, { amount: 300 })).toBe(true);
+  });
+
+  it('applies a level to one request type', () => {
+    const breakdown = cond('requestType', 'EQ', 'BREAKDOWN');
+    expect(conditionApplies(breakdown, { requestType: 'BREAKDOWN', amount: 900 })).toBe(true);
+    expect(conditionApplies(breakdown, { requestType: 'PREVENTIVE', amount: 900 })).toBe(false);
+    const airport = cond('requestType', 'EQ', 'Airport Transfer (Arrival)');
+    expect(conditionApplies(airport, { serviceType: 'EXECUTIVE', requestType: 'Airport Transfer (Arrival)' })).toBe(true);
+    expect(conditionApplies(airport, { serviceType: 'EXECUTIVE', requestType: 'City Transfer' })).toBe(false);
+    expect(conditionApplies(cond('requestType', 'NEQ', 'FUEL'), { requestType: 'TOLL' })).toBe(true);
+    // A record without a request type keeps the level.
+    expect(conditionApplies(breakdown, { amount: 900 })).toBe(true);
+  });
+
+  it('offers the request types the modules store', () => {
+    const admin = readFileSync('src/app/(app)/admin/workflows/page.tsx', 'utf8');
+    const portal = readFileSync('src/app/booking-portal/new/page.tsx', 'utf8');
+    const block = admin.slice(admin.indexOf("'BOOKING.BOOKING_APPROVAL': {"), admin.indexOf('const requestTypeFor'));
+    const values = [...block.matchAll(/opts\(\[([^\]]+)\]/g)].flatMap((m) => [...m[1].matchAll(/'([^']+)'/g)].map((v) => v[1]));
+    expect(values.length).toBe(18);
+    for (const v of values) expect(portal).toContain(`'${v}'`);
+    const amendments = readFileSync('src/app/leasing/amendments/page.tsx', 'utf8');
+    for (const v of ['MILEAGE_UPGRADE', 'VEHICLE_SWAP', 'TERM_EXTENSION', 'RATE_CHANGE', 'ADDITIONAL_SERVICE']) expect(amendments).toContain(v);
+    const subjects = readFileSync('src/lib/workflow/subjects.ts', 'utf8');
+    expect(subjects).toMatch(/requestType: mr\.maintenanceType/);
+    expect(subjects).toMatch(/requestType: r\.category/);
+    expect(subjects).toMatch(/requestType: r\.amendment_type/);
+    expect(subjects).toMatch(/requestType: notes\.tripType \?\? notes\.shiftType \?\? notes\.shipmentType/);
+  });
+
   it('compares text for equality, case-insensitively', () => {
     expect(conditionApplies(cond('category', 'EQ', 'Fuel'), { category: 'FUEL' })).toBe(true);
     expect(conditionApplies(cond('category', 'NEQ', 'Fuel'), { category: 'fuel' })).toBe(false);
