@@ -503,6 +503,46 @@ export const APPROVAL_SUBJECTS: Record<string, ApprovalSubject> = {
     row: sqlRow('finance_security_deposits', false),
   },
 
+  rental_damage_claim: {
+    module: 'RAC', procedure: 'DAMAGE_CLAIM', label: 'Damage claim',
+    async load(tx, tenantId, id) {
+      const c = await tx.damageClaim.findFirst({
+        where: { id, tenantId, status: 'PENDING_APPROVAL' },
+        select: {
+          estimatedCost: true, actualCost: true, insuranceClaim: true, billedToCustomer: true,
+          booking: { select: { bookingRef: true, vehicleCategory: true, customer: { select: { customerType: true } } } },
+        },
+      });
+      if (!c) return null;
+      const estimated = num(c.estimatedCost);
+      const actual = num(c.actualCost);
+      return {
+        referenceNumber: `Damage ${c.booking?.bookingRef ?? id.slice(0, 8)}`,
+        context: {
+          amount: actual ?? estimated, estimatedCost: estimated, actualCost: actual,
+          costOverEstimatePct: actual !== undefined && estimated ? Math.round(((actual - estimated) / estimated) * 1000) / 10 : undefined,
+          insuranceClaim: c.insuranceClaim ? 'YES' : 'NO', chargeCustomer: c.billedToCustomer ? 'YES' : 'NO',
+          customerType: c.booking?.customer?.customerType, vehicleCategory: c.booking?.vehicleCategory,
+        },
+      };
+    },
+    async apply(tx, o) {
+      if (o.status === 'APPROVED') {
+        await tx.damageClaim.updateMany({ where: { id: o.referenceId, tenantId: o.tenantId, status: 'PENDING_APPROVAL' }, data: { status: 'APPROVED' } });
+        return;
+      }
+      const c = await tx.damageClaim.findFirst({ where: { id: o.referenceId, tenantId: o.tenantId }, select: { description: true } });
+      const note = `[Returned by ${o.actorEmail}: ${reasonOf(o)}]`;
+      await tx.damageClaim.updateMany({
+        where: { id: o.referenceId, tenantId: o.tenantId, status: 'PENDING_APPROVAL' },
+        data: { status: 'ASSESSED', description: c?.description ? `${c.description}\n${note}` : note },
+      });
+    },
+    async row(tx, tenantId, id) {
+      return tx.damageClaim.findFirst({ where: { id, tenantId } }) as Promise<Row | null>;
+    },
+  },
+
   LEASE_QUOTATION: {
     module: 'LEASING', procedure: 'QUOTATION_APPROVAL', label: 'Lease quotation',
     async load(tx, tenantId, id) {

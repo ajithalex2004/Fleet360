@@ -33,6 +33,7 @@ const getClaims = cacheRead(
     const [data, total] = await withTenantRls(prisma, tenantId, (tx) => runSequential([
       tx.damageClaim.findMany({
         where,
+        include: { booking: { select: { bookingRef: true, customer: { select: { fullName: true } } } } },
         orderBy: { createdAt: 'desc' },
         take,
         skip,
@@ -74,7 +75,8 @@ export async function POST(req: NextRequest) {
   const { tenantId } = authz;
   try {
     const bodyRaw = await req.json();
-    const body = { ...stripTenantOwnershipFields((bodyRaw && typeof bodyRaw === 'object' ? bodyRaw : {}) as Record<string, unknown>), tenantId };
+    // A new claim is always OPEN: its status changes through its actions.
+    const body = { ...stripTenantOwnershipFields((bodyRaw && typeof bodyRaw === 'object' ? bodyRaw : {}) as Record<string, unknown>), tenantId, status: 'OPEN' };
     // body is untyped JSON plus an explicit tenantId, which sharpens the
     // inferred literal shape enough that it stops matching Prisma's
     // Checked/Unchecked create-input union.
