@@ -158,9 +158,9 @@ const REQUEST_TYPES: Record<string, { label: string; choices: { value: string; l
 const requestTypeFor = (wf: { module: string; procedure: string } | null) =>
   wf ? REQUEST_TYPES[`${wf.module}.${wf.procedure}`] : undefined;
 
-// Fields only some procedures have: a vehicle transfer's branches and emirates
-// (src/lib/workflow/subjects.ts). Branch names are compared as entered on the
-// transfer, ignoring case.
+// Fields only some procedures have (src/lib/workflow/subjects.ts): a vehicle
+// transfer's branches and emirates (branch names are compared as entered on
+// the transfer, ignoring case); a rental renewal's extension and rates.
 type ProcedureField = { value: string; label: string; choices?: { value: string; label: string }[]; text?: boolean };
 const EMIRATE_CHOICES = opts(['ABU_DHABI', 'DUBAI', 'SHARJAH', 'AJMAN', 'UMM_AL_QUWAIN', 'RAS_AL_KHAIMAH', 'FUJAIRAH'], titleCase);
 const PROCEDURE_FIELDS: Record<string, ProcedureField[]> = {
@@ -173,6 +173,11 @@ const PROCEDURE_FIELDS: Record<string, ProcedureField[]> = {
       { value: 'SAME_EMIRATE',  label: 'Within one emirate' },
       { value: 'CROSS_EMIRATE', label: 'Between emirates' },
     ] },
+  ],
+  'RAC.RENEWAL_APPROVAL': [
+    { value: 'extensionDays', label: 'Extension (days)' },
+    { value: 'dailyRate',     label: 'Daily Rate (AED)' },
+    { value: 'depositTopUp',  label: 'Deposit Top-up (AED)' },
   ],
 };
 const procedureFieldsFor = (wf: { module: string; procedure: string } | null) =>

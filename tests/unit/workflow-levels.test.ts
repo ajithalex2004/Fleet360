@@ -123,6 +123,16 @@ describe('approval level conditions', () => {
     expect(subjects).toMatch(/emirateScope: transferScope\(r\.from_emirate, r\.to_emirate\)/);
   });
 
+  it('applies a level to long or high-rate rental renewals', () => {
+    const longExtension = cond('extensionDays', 'GT', 30);
+    expect(conditionApplies(longExtension, { extensionDays: 45, amount: 9000 })).toBe(true);
+    expect(conditionApplies(longExtension, { extensionDays: 7, amount: 1400 })).toBe(false);
+    expect(conditionApplies(cond('dailyRate', 'LT', 150), { dailyRate: 120 })).toBe(true);
+    expect(conditionApplies(cond('depositTopUp', 'GT', 0), { depositTopUp: 0 })).toBe(false);
+    const subjects = readFileSync('src/lib/workflow/subjects.ts', 'utf8');
+    expect(subjects).toMatch(/dailyRate: num\(r\.daily_rate\), depositTopUp: num\(r\.deposit_top_up\)/);
+  });
+
   it('compares text for equality, case-insensitively', () => {
     expect(conditionApplies(cond('category', 'EQ', 'Fuel'), { category: 'FUEL' })).toBe(true);
     expect(conditionApplies(cond('category', 'NEQ', 'Fuel'), { category: 'fuel' })).toBe(false);
