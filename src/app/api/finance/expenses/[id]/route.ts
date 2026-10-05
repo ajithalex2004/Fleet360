@@ -11,6 +11,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { approvalGate, withApprovalStart } from '@/lib/workflow/approvals';
 type ExpRow = Record<string, unknown>;
 
 const EDITABLE = ['DRAFT', 'REJECTED'];
@@ -52,10 +53,20 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
-    const bodyRaw = await req.json();
-      const body = stripTenantOwnershipFields(bodyRaw);
-      const { action } = body;
+  const body = stripTenantOwnershipFields(await req.json());
+  const { action } = body;
+  // A company's expense approval workflow (Admin > Workflows) decides
+  // submitted expenses: approve / reject go to the level that is waiting.
+  if (action === 'approve' || action === 'reject') {
+    const gated = await approvalGate({
+      headers: req.headers, tenantId, referenceType: 'finance_expense', referenceId: params.id,
+      action: action === 'approve' ? 'APPROVE' : 'REJECT',
+      comments: action === 'reject' ? String(body.rejectionReason ?? '') : String(body.notes ?? ''),
+    });
+    if (gated) return gated;
+  }
+
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
       const now = new Date().toISOString();
 
       const [current] = await tx.$queryRawUnsafe<{ status: string }[]>(
@@ -129,6 +140,9 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
       if (!row) return NextResponse.json({ error: 'Update failed' }, { status: 500 });
       return NextResponse.json(row);
   });
+  return action === 'submit'
+    ? withApprovalStart(response, { headers: req.headers, tenantId, referenceType: 'finance_expense', referenceId: params.id })
+    : response;
 }
 
 

@@ -19,6 +19,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { approvalGate, withApprovalStart } from '@/lib/workflow/approvals';
 import { prisma } from '@/lib/prisma';
 
 type AmendmentRow = {
@@ -286,16 +287,28 @@ export async function PATCH(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
-    try {
-        const id = req.nextUrl.searchParams.get('id');
-        if (!id) {
-          return NextResponse.json({ error: 'id query param required' }, { status: 400 });
-        }
+  const id = req.nextUrl.searchParams.get('id');
+  if (!id) {
+    return NextResponse.json({ error: 'id query param required' }, { status: 400 });
+  }
+  const body = stripTenantOwnershipFields(await req.json());
+  const { action, approvedBy, rejectedBy, rejectionReason } = body;
+  // A company's amendment approval workflow (Admin > Workflows) decides
+  // submitted amendments: approve / reject go to the level that is waiting.
+  if (action === 'APPROVE' || action === 'REJECT') {
+    if (action === 'REJECT' && !String(rejectionReason ?? '').trim()) {
+      return NextResponse.json({ error: 'rejection_reason is required' }, { status: 400 });
+    }
+    const gated = await approvalGate({
+      headers: req.headers, tenantId, referenceType: 'leasing_amendment', referenceId: id,
+      action, comments: action === 'REJECT' ? String(rejectionReason).trim() : '',
+      mapRow: (row) => mapAmendment(row as unknown as AmendmentRow),
+    });
+    if (gated) return gated;
+  }
 
-        const bodyRaw = await req.json();
-      const body = stripTenantOwnershipFields(bodyRaw);
-        const { action, approvedBy, rejectedBy, rejectionReason } = body;
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
+    try {
 
         const [current] = await tx.$queryRawUnsafe<AmendmentRow[]>(
           `SELECT * FROM leasing_amendments WHERE id = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
@@ -355,5 +368,11 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: 'Failed to update amendment' }, { status: 500 });
       }
   });
+  return action === 'SUBMIT'
+    ? withApprovalStart(response, {
+      headers: req.headers, tenantId, referenceType: 'leasing_amendment', referenceId: id,
+      mapRow: (row) => mapAmendment(row as unknown as AmendmentRow),
+    })
+    : response;
 }
 

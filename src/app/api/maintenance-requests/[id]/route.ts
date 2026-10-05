@@ -7,6 +7,9 @@ import {
     autoApproveRule, checkApprover, statusKey, ESTIMATION_APPROVED, PENDING_ESTIMATION_APPROVAL,
 } from '@/lib/maintenance/approval-rules';
 import { callerRoleCodes, loadApprovalRules } from '@/lib/maintenance/approval-rules-db';
+import { approvalInProgress, withApprovalStart } from '@/lib/workflow/approvals';
+import { hasTenantWorkflow } from '@/lib/workflow-db';
+import { runAsTenant } from '@/lib/rls-scope';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import {
   publishMaintenanceApproved,
@@ -68,9 +71,21 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
     }
     const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+    // Approval workflow (Admin > Workflows, Maintenance > Estimate Approval):
+    // while one is deciding the estimate, the request's status is the
+    // workflow's to change; a company with a workflow sends each estimate
+    // submitted for approval through it instead of the approval rules.
+    const body = await request.json();
+    if (body.status !== undefined && statusKey(body.status) !== statusKey(PENDING_ESTIMATION_APPROVAL)) {
+        const busy = await approvalInProgress(tenantId, 'maintenance_estimate', params.id);
+        if (busy) return busy;
+    }
+    const workflowDefined = body.status !== undefined
+        && await runAsTenant(tenantId, () => hasTenantWorkflow(tenantId, 'MAINTENANCE', 'ESTIMATE_APPROVAL'));
+    let startWorkflow = false;
+
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
     try {
-            const body = await request.json();
 
             const before = await tx.maintenanceRequest.findFirst({
                 where: { tenantId, id: params.id, deletedAt: null },
@@ -121,7 +136,8 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
                     if (!check.ok) return NextResponse.json({ error: check.error, rule: check.rule.name }, { status: 403 });
                     if (check.rule) ruleNote = `Approved under rule "${check.rule.name}"`;
                 } else if (statusKey(data.status) === statusKey(PENDING_ESTIMATION_APPROVAL)) {
-                    const auto = autoApproveRule(await loadApprovalRules(tx, tenantId), cost);
+                    const auto = workflowDefined ? null : autoApproveRule(await loadApprovalRules(tx, tenantId), cost);
+                    startWorkflow = workflowDefined;
                     if (auto) {
                         data.status = ESTIMATION_APPROVED;
                         ruleNote = `Auto-approved under rule "${auto.name}"`;
@@ -324,6 +340,9 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
             return NextResponse.json({ error: 'Internal Server Error', details: String(e) }, { status: 500 });
         }
   });
+    return startWorkflow
+        ? withApprovalStart(response, { headers: request.headers, tenantId, referenceType: 'maintenance_estimate', referenceId: params.id })
+        : response;
 }
 
 

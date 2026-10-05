@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { triggerWorkflow } from '@/lib/workflow-db';
+import { APPROVAL_SUBJECTS } from '@/lib/workflow/subjects';
+import { prisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { withAuditedAction } from '@/lib/audited-action';
@@ -31,7 +34,6 @@ async function handlePOST(req: NextRequest) {
       // resolve to an active workflow.
       module, procedure,
       referenceType, referenceId, referenceNumber,
-      contextData,
     } = body;
 
     // Starting a module's workflow (e.g. a leasing quotation's approval) needs
@@ -62,6 +64,15 @@ async function handlePOST(req: NextRequest) {
       );
     }
 
+    // What is being approved (its amount, …) decides which levels apply, so
+    // it is read from the record, never taken from the request (a page could
+    // send a small amount to skip levels). Records no module describes start
+    // with no context: every level applies.
+    const subject = APPROVAL_SUBJECTS[referenceType ?? ''];
+    const loaded = subject
+      ? await withTenantRls(prisma, tenantId, (tx) => subject.load(tx, tenantId, String(referenceId)))
+      : null;
+
     const result = await triggerWorkflow({
       serviceTypeId, tenantId, scopeId,
       module, procedure,
@@ -69,7 +80,7 @@ async function handlePOST(req: NextRequest) {
       referenceId, referenceNumber: referenceNumber ?? referenceId,
       initiatedByEmail,
       initiatedByName,
-      contextData,
+      contextData: loaded?.context ?? {},
     });
 
     if ('error' in result) {

@@ -16,6 +16,7 @@ import { prisma } from '@/lib/prisma';
 import { createDraftJournalEntry } from '@/lib/finance/journal-service';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { approvalGate, withApprovalStart } from '@/lib/workflow/approvals';
 type Row = Record<string, unknown>;
 
 
@@ -78,11 +79,19 @@ export async function PATCH(
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  const body = stripTenantOwnershipFields(await req.json());
+  const action = body.action as string | undefined; // submit | approve | post | void
+  // A company's purchase / payable approval workflow (Admin > Workflows)
+  // decides submitted payables: approve goes to the level that is waiting.
+  if (action === 'approve') {
+    const gated = await approvalGate({
+      headers: req.headers, tenantId, referenceType: 'finance_payable', referenceId: params.id,
+      action: 'APPROVE', comments: String(body.notes ?? ''),
+    });
+    if (gated) return gated;
+  }
 
-      const bodyRaw = await req.json();
-      const body = stripTenantOwnershipFields(bodyRaw);
-      const action = body.action as string | undefined; // submit | approve | post | void
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
       const now    = new Date().toISOString();
 
       // Fetch current row
@@ -221,6 +230,9 @@ export async function PATCH(
       ).catch(() => []);
       return NextResponse.json(updated);
   });
+  return action === 'submit'
+    ? withApprovalStart(response, { headers: req.headers, tenantId, referenceType: 'finance_payable', referenceId: params.id })
+    : response;
 }
 
 

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { approvalGate } from '@/lib/workflow/approvals';
 import {
   evaluateBookingApprovalPolicy,
   BookingPolicyContext,
@@ -123,10 +124,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+  const body = stripTenantOwnershipFields(await req.json().catch(() => ({})));
+  // A company's booking approval workflow (Admin > Workflows) replaces the
+  // built-in tiers: any approve is a decision on the level waiting.
+  if (body?.bookingId && typeof body.action === 'string') {
+    const gated = await approvalGate({
+      headers: req.headers, tenantId, referenceType: 'booking', referenceId: String(body.bookingId),
+      action: body.action === 'REJECT' ? 'REJECT' : 'APPROVE', comments: typeof body.remarks === 'string' ? body.remarks : '',
+    });
+    if (gated) return gated;
+  }
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {
-      const rawBody = await req.json();
-      const body = stripTenantOwnershipFields(rawBody);
       const {
         bookingId,
         action, // 'APPROVE_TIER_1' | 'APPROVE_TIER_2' | 'APPROVE_TIER_3' | 'REJECT'

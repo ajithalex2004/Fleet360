@@ -10,7 +10,19 @@ const MODULES = [
   { key: 'LOGISTICS',      label: 'Logistics',            icon: 'G', color: 'from-rose-500 to-pink-600',      light: 'bg-rose-500/20 text-rose-300 border-rose-500/30' },
   { key: 'INCIDENT',       label: 'Incident / Ambulance', icon: 'I', color: 'from-red-500 to-rose-600',       light: 'bg-red-500/20 text-red-300 border-red-500/30' },
   { key: 'BOOKING',        label: 'Booking & Dispatch',   icon: 'D', color: 'from-cyan-500 to-sky-600',       light: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' },
+  { key: 'MAINTENANCE',    label: 'Maintenance',          icon: 'M', color: 'from-slate-500 to-zinc-600',     light: 'bg-slate-500/20 text-slate-300 border-slate-500/30' },
+  { key: 'FINANCE',        label: 'Finance',              icon: 'F', color: 'from-lime-500 to-green-600',     light: 'bg-lime-500/20 text-lime-300 border-lime-500/30' },
 ];
+
+// Procedures a module starts by itself when the record is submitted, once the
+// company has an active workflow for it (src/lib/workflow/subjects.ts). The
+// module's own Approve / Reject then decides the level that is waiting, and
+// the record changes when the last level passes or one rejects.
+const CONNECTED = new Set([
+  'MAINTENANCE.ESTIMATE_APPROVAL', 'FINANCE.EXPENSE_APPROVAL', 'FINANCE.PAYABLE_APPROVAL', 'FINANCE.JOURNAL_APPROVAL',
+  'LEASING.QUOTATION_APPROVAL', 'LEASING.CREDIT_APPROVAL', 'LEASING.PO_REQUEST', 'LEASING.AMENDMENT_APPROVAL',
+  'RAC.TRANSFER_APPROVAL', 'RAC.RENEWAL_APPROVAL', 'BOOKING.BOOKING_APPROVAL',
+]);
 
 const PROCEDURES: Record<string, { key: string; label: string; description: string }[]> = {
   LEASING: [
@@ -20,12 +32,15 @@ const PROCEDURES: Record<string, { key: string; label: string; description: stri
     { key: 'PO_REQUEST',            label: 'Purchase Order Request',  description: 'Internal PO creation and procurement workflow' },
     { key: 'EARLY_TERMINATION',     label: 'Early Termination',       description: 'Approval for early contract termination requests' },
     { key: 'VEHICLE_ADDITION',      label: 'Vehicle Addition',        description: 'Approval to add vehicles to an active lease contract' },
+    { key: 'AMENDMENT_APPROVAL',    label: 'Contract Amendment',      description: 'Submitted lease amendments, by their financial impact' },
   ],
   RAC: [
     { key: 'BOOKING_APPROVAL',      label: 'Booking Approval',        description: 'Approval for new rental bookings above threshold' },
     { key: 'DAMAGE_CLAIM',          label: 'Damage Claim',            description: 'Assessment and approval of vehicle damage claims' },
     { key: 'REFUND_APPROVAL',       label: 'Refund Approval',         description: 'Customer refund request approval workflow' },
     { key: 'RATE_OVERRIDE',         label: 'Rate Override',           description: 'Approval when rates are discounted below standard' },
+    { key: 'TRANSFER_APPROVAL',     label: 'Vehicle Transfer',        description: 'Requested vehicle transfers between branches' },
+    { key: 'RENEWAL_APPROVAL',      label: 'Rental Renewal',          description: 'Rental agreement extensions, by their amount' },
   ],
   STAFF_TRANSPORT: [
     { key: 'ROUTE_APPROVAL',        label: 'Route Approval',          description: 'New route creation or change approval' },
@@ -56,6 +71,14 @@ const PROCEDURES: Record<string, { key: string; label: string; description: stri
     { key: 'DRIVER_DISPATCH',       label: 'Driver Dispatch',         description: 'Driver dispatch authorization workflow' },
     { key: 'JOURNEY_COMPLETION',    label: 'Journey Completion',      description: 'Journey sign-off and billing trigger' },
   ],
+  MAINTENANCE: [
+    { key: 'ESTIMATE_APPROVAL',     label: 'Estimate Approval',       description: 'Repair estimates submitted for approval, by amount. Without a workflow, Maintenance > Approval Rules apply' },
+  ],
+  FINANCE: [
+    { key: 'EXPENSE_APPROVAL',      label: 'Expense Approval',        description: 'Submitted operational expenses, by amount' },
+    { key: 'PAYABLE_APPROVAL',      label: 'Purchase / Payable Approval', description: 'Submitted vendor bills and purchases, by amount' },
+    { key: 'JOURNAL_APPROVAL',      label: 'Journal Entry Approval',  description: 'Submitted manual journal entries, by amount' },
+  ],
 };
 
 const STEP_TYPES = [
@@ -67,8 +90,8 @@ const STEP_TYPES = [
 const ASSIGNEE_TYPES = [
   { value: 'SPECIFIC_USER',    label: 'Specific User',     desc: 'Route to a named email address' },
   { value: 'ROLE',             label: 'By Role',           desc: 'Any user with the specified role' },
-  { value: 'DIRECT_MANAGER',   label: 'Direct Manager',    desc: "Route to submitter's direct manager" },
-  { value: 'DEPARTMENT_HEAD',  label: 'Department Head',   desc: "Route to submitter's department head" },
+  { value: 'DIRECT_MANAGER',   label: 'Direct Manager',    desc: "Submitter's manager (Admin > Users); else the assignee email" },
+  { value: 'DEPARTMENT_HEAD',  label: 'Department Head',   desc: "Submitter's department head (Admin > Users); else the assignee email" },
   { value: 'MULTI_USER',       label: 'Multiple Users',    desc: 'Send to multiple approvers' },
 ];
 
@@ -82,6 +105,7 @@ const CONDITION_OPERATORS = [
 ];
 
 const CONDITION_FIELDS = [
+  { value: 'amount',         label: 'Amount (AED)' },
   { value: 'totalValue',     label: 'Total Contract Value (AED)' },
   { value: 'monthlyRate',    label: 'Monthly Rate (AED)' },
   { value: 'vehicleCount',   label: 'Number of Vehicles' },
@@ -435,7 +459,12 @@ export default function WorkflowsPage() {
                 return (
                   <div key={proc.key} className="px-3 py-2 rounded-xl flex items-center justify-between gap-2 hover:bg-[var(--bg-surface-hover)] transition-all">
                     <div className="flex-1 min-w-0">
-                      <p className="text-[var(--text-muted)] text-xs font-semibold">{proc.label}</p>
+                      <p className="text-[var(--text-muted)] text-xs font-semibold">
+                        {proc.label}
+                        {CONNECTED.has(`${activeModule}.${proc.key}`) && (
+                          <span title="Started automatically when a record is submitted" className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/15 text-blue-400 border border-blue-500/20">Auto-start</span>
+                        )}
+                      </p>
                       <p className="text-[var(--text-faint)] text-xs truncate">{proc.description}</p>
                     </div>
                     {hasWf
@@ -838,6 +867,14 @@ export default function WorkflowsPage() {
                         onChange={e => setEditingStep(p => ({ ...p!, assigneeRoleCode: e.target.value }))}
                         placeholder="e.g. LEASE_MANAGER, CREDIT_OFFICER, FINANCE_HEAD"
                         className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-violet-500/50" />
+                      <label className="flex items-center gap-3 cursor-pointer mt-3">
+                        <input type="checkbox" checked={editingStep.requireAllApprovers ?? false}
+                          onChange={e => setEditingStep(p => ({ ...p!, requireAllApprovers: e.target.checked }))} className="w-4 h-4 accent-violet-500" />
+                        <div>
+                          <span className="text-[var(--text-muted)] text-sm">Require ALL holders of this role</span>
+                          <p className="text-[var(--text-faint)] text-xs">If unchecked, any one holder of the role can approve</p>
+                        </div>
+                      </label>
                     </div>
                   )}
                   {editingStep.assigneeType === 'MULTI_USER' && (

@@ -13,6 +13,7 @@ import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { userScopeDenied } from '@/lib/admin/user-scope';
 import { withAuditedAction } from '@/lib/audited-action';
 function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -52,6 +53,11 @@ async function handlePOST(request: NextRequest) {
       if (!user) {
         return NextResponse.json({ error: 'User not found' }, { status: 404 });
       }
+      // A company administrator sets passwords only for accounts that belong
+      // to their company alone (src/lib/admin/user-scope.ts): this used to
+      // accept any user id on the platform, platform administrators included.
+      const denied = await userScopeDenied(tx, request.headers, tenantId, userId, 'account');
+      if (denied) return denied;
 
       // The `password_hash` column was added out-of-band. The "ADD COLUMN IF
       // NOT EXISTS" used to run on every call — it's a no-op once the column

@@ -60,13 +60,22 @@ vi.mock('@/lib/rls', () => ({
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    $queryRawUnsafe: async (sql: string) => {
+    $queryRawUnsafe: async (sql: string, ...args: unknown[]) => {
       if (sql.includes('FROM "WorkflowDefinition"')) return [state.definition];
       if (sql.includes('SELECT id FROM "WorkflowInstance"')) return [];
       if (sql.includes('SELECT * FROM "WorkflowStep"')) return state.steps;
-      if (sql.includes('JOIN "WorkflowStep" ws')) return [state.steps[1]];
-      if (sql.includes('SELECT * FROM "WorkflowInstance"')) {
-        return [{ id: 'i1', workflowId: 'wf1', referenceNumber: 'Q-<1>', referenceType: 'LEASE_QUOTATION', initiatedByName: 'Sam Sales', initiatedByEmail: 'sales@a.test' }];
+      // A decision on a level: recorded, and (one approver) it decides the level.
+      if (sql.includes('SET approvals')) {
+        return [{ id: 'si1', approvals: JSON.parse(String(args[0])), approverEmails: [], requireAll: false }];
+      }
+      // The next level waiting after the given step order (the first when null).
+      if (sql.includes(`wsi.status='WAITING'`)) {
+        const after = args[2] as number | null;
+        return state.steps.filter((s) => after == null || (s.stepOrder as number) > after).slice(0, 1)
+          .map((s) => ({ ...s, stepInstanceId: `si-${String(s.id)}` }));
+      }
+      if (sql.includes('FROM "WorkflowInstance" WHERE id=$1')) {
+        return [{ id: 'i1', workflowId: 'wf1', referenceNumber: 'Q-<1>', referenceType: 'LEASE_QUOTATION', initiatedByName: 'Sam Sales', initiatedByEmail: 'sales@a.test', status: 'IN_PROGRESS', contextJson: {} }];
       }
       return [];
     },

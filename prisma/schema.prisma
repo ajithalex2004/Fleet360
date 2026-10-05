@@ -4587,6 +4587,10 @@ model UserTenant {
   tenantId  String    @map("tenant_id")
   roleId    String    @map("role_id")
   isActive  Boolean?  @default(true) @map("is_active")
+  /// Reporting lines in this company (user ids), for the Direct Manager and
+  /// Department Head workflow approvers.
+  managerUserId        String? @map("manager_user_id")
+  departmentHeadUserId String? @map("department_head_user_id")
   user      User      @relation(fields: [userId], references: [id])
   tenant    Tenant    @relation(fields: [tenantId], references: [id])
   role      Role      @relation(fields: [roleId], references: [id])
