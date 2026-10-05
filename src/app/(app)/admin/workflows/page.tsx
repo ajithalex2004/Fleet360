@@ -167,6 +167,16 @@ type ProcedureField = { value: string; label: string; choices?: { value: string;
 const EMIRATE_CHOICES = opts(['ABU_DHABI', 'DUBAI', 'SHARJAH', 'AJMAN', 'UMM_AL_QUWAIN', 'RAS_AL_KHAIMAH', 'FUJAIRAH'], titleCase);
 // As Finance > Accounts Payable records them.
 const PAYABLE_MODULES = opts(['MAINTENANCE', 'LOGISTICS', 'LEASING', 'GENERAL'], titleCase);
+// A lease quotation at each of its approval stages (amount, rate, duration,
+// vehicles and credit score are general fields): its lease type, markup and
+// deposit, the customer's type and their current credit assessment's risk.
+const QUOTATION_FIELDS: ProcedureField[] = [
+  { value: 'leaseType',       label: 'Lease Type', choices: opts(['LONG_TERM', 'SHORT_TERM', 'MONTHLY', 'DAILY'], titleCase) },
+  { value: 'markupPct',       label: 'Markup (%)' },
+  { value: 'securityDeposit', label: 'Security Deposit (AED)' },
+  { value: 'customerType',    label: 'Customer Type', choices: opts(['CORPORATE', 'INDIVIDUAL'], titleCase) },
+  { value: 'riskRating',      label: 'Credit Risk Rating', choices: opts(['LOW', 'MEDIUM', 'HIGH'], titleCase) },
+];
 const PROCEDURE_FIELDS: Record<string, ProcedureField[]> = {
   'RAC.TRANSFER_APPROVAL': [
     { value: 'fromBranch',   label: 'From Branch', text: true },
@@ -178,6 +188,9 @@ const PROCEDURE_FIELDS: Record<string, ProcedureField[]> = {
       { value: 'CROSS_EMIRATE', label: 'Between emirates' },
     ] },
   ],
+  'LEASING.QUOTATION_APPROVAL': QUOTATION_FIELDS,
+  'LEASING.CREDIT_APPROVAL':    QUOTATION_FIELDS,
+  'LEASING.PO_REQUEST':         QUOTATION_FIELDS,
   'FINANCE.PAYABLE_APPROVAL': [
     { value: 'sourceModule', label: 'Source Module', choices: PAYABLE_MODULES },
     { value: 'sourceType',   label: 'Source Type', choices: [

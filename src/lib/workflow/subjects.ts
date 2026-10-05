@@ -316,16 +316,27 @@ export const APPROVAL_SUBJECTS: Record<string, ApprovalSubject> = {
     async load(tx, tenantId, id) {
       const q = await tx.leaseQuotation.findFirst({
         where: { id, tenantId, deletedAt: null },
-        select: { quotationNumber: true, status: true, totalContractValue: true, totalMonthlyRate: true, durationMonths: true, _count: { select: { vehicles: true } } },
+        select: {
+          quotationNumber: true, status: true, totalContractValue: true, totalMonthlyRate: true, durationMonths: true,
+          leaseType: true, markupPct: true, securityDeposit: true, _count: { select: { vehicles: true } },
+          // The customer, and their current credit assessment.
+          lessee: { select: { type: true, creditAssessments: {
+            where: { tenantId, status: 'ACTIVE' }, orderBy: { assessmentDate: 'desc' }, take: 1,
+            select: { creditScore: true, riskRating: true },
+          } } },
+        },
       });
       const stage = quotationApprovalStage(q?.status);
       if (!q || !stage) return null;
+      const credit = q.lessee?.creditAssessments[0];
       return {
         procedure: stage.procedure,
         referenceNumber: q.quotationNumber ?? id,
         context: {
           stage: q.status, amount: num(q.totalContractValue), totalValue: num(q.totalContractValue),
           monthlyRate: num(q.totalMonthlyRate), duration: num(q.durationMonths), vehicleCount: q._count.vehicles,
+          leaseType: q.leaseType, markupPct: num(q.markupPct), securityDeposit: num(q.securityDeposit),
+          customerType: q.lessee?.type, creditScore: credit?.creditScore ?? undefined, riskRating: credit?.riskRating,
         },
       };
     },
