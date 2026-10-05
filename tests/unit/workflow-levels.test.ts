@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'fs';
 import {
-  conditionApplies, levelOutcome, parseDecisions, parseStepCondition, positiveHours,
+  bookingRequestType, conditionApplies, levelOutcome, parseDecisions, parseStepCondition, positiveHours,
 } from '@/lib/workflow/levels';
 
 const cond = (field: string, operator: string, value: string | number) => JSON.stringify({ field, operator, value });
@@ -72,7 +72,27 @@ describe('approval level conditions', () => {
     expect(subjects).toMatch(/requestType: mr\.maintenanceType/);
     expect(subjects).toMatch(/requestType: r\.category/);
     expect(subjects).toMatch(/requestType: r\.amendment_type/);
-    expect(subjects).toMatch(/requestType: notes\.tripType \?\? notes\.shiftType \?\? notes\.shipmentType/);
+    expect(subjects).toMatch(/requestType: bookingRequestType\(b\.serviceType, notes\)/);
+  });
+
+  it("reads a booking's request type from its own service's field, else its service type", () => {
+    expect(bookingRequestType('EXECUTIVE', { tripType: 'Multi-Day' })).toBe('Multi-Day');
+    expect(bookingRequestType('STAFF_TRANSPORT', { shiftType: 'Split Shift' })).toBe('Split Shift');
+    expect(bookingRequestType('LOGISTICS', { shipmentType: 'FTL – Full Truck Load' })).toBe('FTL – Full Truck Load');
+    // A field left over from another service is not this booking's type.
+    expect(bookingRequestType('LOGISTICS', { tripType: 'Multi-Day', shipmentType: 'LCL – Less than Container Load' }))
+      .toBe('LCL – Less than Container Load');
+    expect(bookingRequestType('EXECUTIVE', { shiftType: 'Split Shift' })).toBe('EXECUTIVE');
+    expect(bookingRequestType('STAFF_TRANSPORT', { shiftType: '  ' })).toBe('STAFF_TRANSPORT');
+    expect(bookingRequestType('RENTAL', { tripType: 'Full Day' })).toBe('RENTAL');
+    expect(bookingRequestType(null, {})).toBeUndefined();
+  });
+
+  it('skips trip-type levels for a booking without a trip type', () => {
+    const multiDay = cond('requestType', 'EQ', 'Multi-Day');
+    expect(conditionApplies(multiDay, { serviceType: 'RENTAL', requestType: bookingRequestType('RENTAL', {}) })).toBe(false);
+    expect(conditionApplies(multiDay, { requestType: bookingRequestType('STAFF_TRANSPORT', {}) })).toBe(false);
+    expect(conditionApplies(multiDay, { requestType: bookingRequestType('EXECUTIVE', { tripType: 'Multi-Day' }) })).toBe(true);
   });
 
   it('compares text for equality, case-insensitively', () => {
