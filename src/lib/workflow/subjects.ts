@@ -263,7 +263,10 @@ export const APPROVAL_SUBJECTS: Record<string, ApprovalSubject> = {
       const r = await rowIn(tx, 'rental_renewals', tenantId, id, ['PENDING']);
       return r && {
         referenceNumber: String(r.renewal_no ?? id),
-        context: { amount: num(r.total_amount), extensionDays: num(r.extension_days), duration: num(r.extension_days) },
+        context: {
+          amount: num(r.total_amount), extensionDays: num(r.extension_days), duration: num(r.extension_days),
+          dailyRate: num(r.daily_rate), depositTopUp: num(r.deposit_top_up),
+        },
       };
     },
     async apply(tx, o) {
