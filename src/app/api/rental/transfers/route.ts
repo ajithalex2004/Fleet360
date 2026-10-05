@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { approvalGate, withApprovalStart, withdrawApproval } from '@/lib/workflow/approvals';
 import { prisma } from '@/lib/prisma';
 
 /**
@@ -177,7 +178,8 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  let createdId: string | null = null;
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
     try {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
@@ -246,12 +248,20 @@ export async function POST(req: NextRequest) {
           notes          || null
         );
 
+        createdId = row.id;
         return NextResponse.json({ id: row.id, transferNo: row.transfer_no }, { status: 201 });
         } catch (err) {
         console.error('[rental/transfers POST]', err);
         return NextResponse.json({ error: 'Failed to create transfer' }, { status: 500 });
       }
   });
+  // A company's transfer approval workflow (Admin > Workflows) starts here.
+  return createdId
+    ? withApprovalStart(response, {
+      headers: req.headers, tenantId, referenceType: 'rental_transfer', referenceId: createdId,
+      mapRow: (r) => mapTransfer(r as unknown as TransferRow),
+    })
+    : response;
 }
 
 
@@ -263,14 +273,22 @@ export async function PATCH(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
-    try {
-        const id = req.nextUrl.searchParams.get('id');
-        if (!id) return NextResponse.json({ error: 'id query param required' }, { status: 400 });
+  const id = req.nextUrl.searchParams.get('id');
+  if (!id) return NextResponse.json({ error: 'id query param required' }, { status: 400 });
+  const body = stripTenantOwnershipFields(await req.json());
+  const { action, approvedBy, cancelledReason } = body;
+  // A company's transfer approval workflow (Admin > Workflows) decides
+  // requested transfers: approve goes to the level that is waiting.
+  if (action === 'APPROVE') {
+    const gated = await approvalGate({
+      headers: req.headers, tenantId, referenceType: 'rental_transfer', referenceId: id,
+      action: 'APPROVE', comments: '', mapRow: (row) => mapTransfer(row as unknown as TransferRow),
+    });
+    if (gated) return gated;
+  }
 
-        const bodyRaw = await req.json();
-      const body = stripTenantOwnershipFields(bodyRaw);
-        const { action, approvedBy, cancelledReason } = body;
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
+    try {
 
         const [current] = await tx.$queryRawUnsafe<TransferRow[]>(
           `SELECT * FROM rental_vehicle_transfers WHERE id = $1`, id
@@ -330,5 +348,8 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: 'Failed to update transfer' }, { status: 500 });
       }
   });
+  // A cancelled request no longer needs approving.
+  if (action === 'CANCEL' && response.ok) await withdrawApproval(tenantId, 'rental_transfer', id, 'the transfer was cancelled');
+  return response;
 }
 

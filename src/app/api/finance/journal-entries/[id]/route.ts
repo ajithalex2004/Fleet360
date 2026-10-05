@@ -11,6 +11,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { approvalGate, approvalInProgress, withApprovalStart } from '@/lib/workflow/approvals';
 import { nextJournalNumber } from '@/lib/finance/journal-service';
 type JeRow = Record<string, unknown>;
 
@@ -70,10 +71,23 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
-      const bodyRaw = await req.json();
-      const body = stripTenantOwnershipFields(bodyRaw);
-      const { action } = body;
+  const body = stripTenantOwnershipFields(await req.json());
+  const { action } = body;
+  // A company's journal approval workflow (Admin > Workflows) decides
+  // submitted entries: approve goes to the level that is waiting, and the
+  // entry can't be posted or voided until the workflow has decided.
+  if (action === 'approve') {
+    const gated = await approvalGate({
+      headers: req.headers, tenantId, referenceType: 'finance_journal', referenceId: params.id,
+      action: 'APPROVE', comments: String(body.notes ?? ''),
+    });
+    if (gated) return gated;
+  } else if (action === 'post' || action === 'void') {
+    const busy = await approvalInProgress(tenantId, 'finance_journal', params.id);
+    if (busy) return busy;
+  }
+
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
       const now = new Date().toISOString();
 
       // Fetch current JE — enforce tenant ownership.
@@ -238,6 +252,9 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
       if (!row) return NextResponse.json({ error: 'Update failed' }, { status: 500 });
       return NextResponse.json(row);
   });
+  return action === 'submit'
+    ? withApprovalStart(response, { headers: req.headers, tenantId, referenceType: 'finance_journal', referenceId: params.id })
+    : response;
 }
 
 

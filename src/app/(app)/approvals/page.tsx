@@ -43,6 +43,9 @@ interface WorkflowHistory {
     actionedAt: string | null;
     actionedByEmail: string | null;
     dueAt: string | null;
+    approverEmails?: string[] | null;
+    approvals?: Array<{ email: string; action: 'APPROVE' | 'REJECT'; at?: string; override?: boolean }> | null;
+    requireAllApprovers?: boolean | null;
   }[];
 }
 
@@ -63,6 +66,7 @@ const STATUS_STYLES: Record<string, string> = {
   WAITING:     'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30',
   IN_PROGRESS: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
   CANCELLED:   'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30',
+  SKIPPED:     'bg-slate-500/10 text-[var(--text-faint)] border-slate-500/20',
 };
 
 type ViewMode = 'my' | 'all';
@@ -136,12 +140,14 @@ export default function ApprovalsPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        setActionMsg(action === 'APPROVE' ? 'Approved successfully!' : 'Rejected.');
+        // Where the approval stands now: the next level, who an all-approvers
+        // level still waits for, or the final outcome.
+        setActionMsg(data.message ?? (action === 'APPROVE' ? 'Approved successfully!' : 'Rejected.'));
         setActionComments('');
         if (viewMode === 'my') await loadMyApprovals();
         if (viewMode === 'all') await loadAllPending();
         if (selectedApproval) await loadHistory(selectedApproval.workflowInstanceId);
-        setTimeout(() => { setSelectedApproval(null); setActionMsg(''); }, 1800);
+        setTimeout(() => { setSelectedApproval(null); setActionMsg(''); }, 3500);
       } else {
         setActionMsg(`Error: ${data.error ?? 'Action failed'}`);
       }
@@ -394,7 +400,16 @@ export default function ApprovalsPage() {
                         <p className={`text-sm font-semibold truncate ${s.status === 'PENDING' ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)]'}`}>{s.stepName}</p>
                         <span className={`px-2 py-0.5 rounded-full text-xs border flex-shrink-0 ${STATUS_STYLES[s.status] ?? STATUS_STYLES.WAITING}`}>{s.status}</span>
                       </div>
-                      {s.assignedToEmail && <p className="text-xs text-[var(--text-faint)] mt-0.5">{s.assignedToEmail}</p>}
+                      {s.approverEmails && s.approverEmails.length > 1 ? (
+                        // Each approver of the level, ticked once they have decided.
+                        <p className="text-xs text-[var(--text-faint)] mt-0.5">
+                          {s.requireAllApprovers ? 'All of: ' : 'Any of: '}
+                          {s.approverEmails.map((e, i) => {
+                            const d = s.approvals?.find(a => a.email.toLowerCase() === e.toLowerCase());
+                            return <span key={e}>{i > 0 && ', '}{e}{d ? (d.action === 'APPROVE' ? ' ✓' : ' ✗') : ''}</span>;
+                          })}
+                        </p>
+                      ) : s.assignedToEmail && <p className="text-xs text-[var(--text-faint)] mt-0.5">{s.assignedToEmail}</p>}
                       {s.actionedAt && <p className="text-xs text-[var(--text-faint)] mt-0.5">{fmt(s.actionedAt)} by {s.actionedByEmail}</p>}
                       {s.comments && <p className="text-xs text-[var(--text-muted)] mt-1 italic">&#34;{s.comments}&#34;</p>}
                     </div>

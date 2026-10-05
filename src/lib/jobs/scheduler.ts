@@ -13,6 +13,7 @@ const DEFAULT_SCHEDULES: Record<string, string> = {
   'auto-close-trips': '*/15 * * * *',
   'alert-trip-overdue': '*/15 * * * *',
   'push-scheduler': '*/5 * * * *',
+  'workflow-escalation': '*/15 * * * *',
   // Daily batch sweeps
   'document-expiry-sweep': '0 1 * * *',
   'insurance-expiry-sweep': '15 1 * * *',

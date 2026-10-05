@@ -6,6 +6,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { withApprovalStart } from '@/lib/workflow/approvals';
 export async function GET(req: NextRequest) {
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -53,7 +54,8 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  let createdId: string | null = null;
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
     try {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
@@ -66,11 +68,17 @@ export async function POST(req: NextRequest) {
             requestorId: (body as { requestorId?: string }).requestorId ?? req.headers.get('x-user-id'),
           },
         });
+        if (booking.status === 'PENDING') createdId = booking.id;
         return NextResponse.json(booking, { status: 201 });
         } catch (e) {
         console.error('Error creating booking:', e);
         return NextResponse.json({ error: 'Failed to create booking' }, { status: 500 });
       }
   });
+  // A company's booking approval workflow (Admin > Workflows) starts for a
+  // booking created pending.
+  return createdId
+    ? withApprovalStart(response, { headers: req.headers, tenantId, referenceType: 'booking', referenceId: createdId })
+    : response;
 }
 

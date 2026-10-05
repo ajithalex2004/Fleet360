@@ -5,6 +5,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { approvalGate, approvalInProgress, withdrawApproval } from '@/lib/workflow/approvals';
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
 
@@ -72,10 +73,29 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  const body = stripTenantOwnershipFields(await req.json() as Record<string, unknown>);
+  // While a company's booking approval workflow (Admin > Workflows) decides
+  // a booking: confirming it is an approval of the level waiting, cancelling
+  // it withdraws the approval, and other status changes wait.
+  const status = typeof body.status === 'string' ? body.status : null;
+  let withdraw = false;
+  if (status && status !== 'PENDING') {
+    if (status === 'CONFIRMED' || status === 'APPROVED') {
+      const gated = await approvalGate({
+        headers: req.headers, tenantId, referenceType: 'booking', referenceId: params.id,
+        action: 'APPROVE', comments: typeof body.notes === 'string' ? body.notes : '',
+      });
+      if (gated) return gated;
+    } else if (status === 'CANCELLED') {
+      withdraw = true;
+    } else {
+      const busy = await approvalInProgress(tenantId, 'booking', params.id);
+      if (busy) return busy;
+    }
+  }
+
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
     try {
-        const bodyRaw = await req.json() as Record<string, unknown>;
-  const body = stripTenantOwnershipFields(bodyRaw);
 
         // Whitelist patchable fields for dispatch actions
         const allowed = ['status', 'vehicleId', 'notes', 'approvedBy', 'approvedAt'];
@@ -98,6 +118,8 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         return NextResponse.json({ error: 'Failed to patch' }, { status: 500 });
       }
   });
+  if (withdraw && response.ok) await withdrawApproval(tenantId, 'booking', params.id, 'the booking was cancelled');
+  return response;
 }
 
 

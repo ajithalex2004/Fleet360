@@ -65,6 +65,7 @@ import { runFleetDocumentsSweep }    from '@/lib/jobs/fleet-documents-sweep';
 import { runOutboxPublisher }        from '@/lib/jobs/outbox-publisher';
 import { runBusOpsGenerateScheduleTemplates } from '@/lib/jobs/bus-ops-generate-schedule-templates';
 import { runAlertTripOverdue }       from '@/lib/jobs/alert-trip-overdue';
+import { runWorkflowEscalation }     from '@/lib/jobs/workflow-escalation';
 import {
   runFuelSweepBill,
   runTrafficFinesSweepBill,
@@ -191,6 +192,13 @@ export const JOB_REGISTRY: JobDef[] = [
     handler:        runBusOpsGenerateScheduleTemplates,
     maxDurationSec: 300,
     allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN', 'OPERATIONS', 'DISPATCHER'],
+  },
+  {
+    name:           'workflow-escalation',
+    description:    'Emails the escalation contact of approval levels waiting longer than their escalation time (Admin > Workflows)',
+    handler:        runWorkflowEscalation,
+    maxDurationSec: 120,
+    allowedRoles:   ['SUPER_ADMIN'],
   },
 ];
 

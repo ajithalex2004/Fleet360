@@ -117,7 +117,7 @@ export default function EstimateApprovalPage() {
             });
             const json = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(json.error ?? `Could not record the decision (${res.status})`);
-            return json as { status: string; amount?: number; rule?: string | null };
+            return json as { status?: string; amount?: number; rule?: string | null; message?: string; workflow?: { status: string } };
         } catch (e) {
             setDecisionError(e instanceof Error ? e.message : 'Could not record the decision');
             return null;
@@ -134,7 +134,9 @@ export default function EstimateApprovalPage() {
         if (!request) return;
         const result = await decide({ action: 'approve', quotationId: selectedQuotationId, comments: approvalComments });
         if (!result) return;
-        alert(`Estimate approved: ${formatCurrency(result.amount ?? 0)}${result.rule ? ` (rule: ${result.rule})` : ''}. The request is now Estimation Approved.`);
+        // Decided through the company's approval workflow: say where it stands.
+        if (result.workflow) alert(result.message ?? 'Your decision is recorded.');
+        else alert(`Estimate approved: ${formatCurrency(result.amount ?? 0)}${result.rule ? ` (rule: ${result.rule})` : ''}. The request is now Estimation Approved.`);
         router.push(`/maintenance/requests/${requestId}`);
     };
 
@@ -146,7 +148,9 @@ export default function EstimateApprovalPage() {
         if (!request) return;
         const result = await decide({ action: 'reject', reason: rejectionReason });
         if (!result) return;
-        alert('All estimates rejected. The request is back Under Estimation for new quotations.');
+        alert(result.workflow
+            ? `${result.message ?? 'Rejected.'} The request is back Under Estimation for new quotations.`
+            : 'All estimates rejected. The request is back Under Estimation for new quotations.');
         router.push(`/maintenance/requests/${requestId}`);
     };
 

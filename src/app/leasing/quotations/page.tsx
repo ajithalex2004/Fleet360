@@ -671,48 +671,20 @@ export default function LeaseQuotationsPage() {
 
   //  Workflow Engine Integration 
   // Maps status transitions to workflow procedures
-  const WORKFLOW_TRIGGER_MAP: Record<string, { procedure: string; label: string }> = {
-    PENDING_APPROVAL:        { procedure: 'QUOTATION_APPROVAL',  label: 'Internal Approval' },
-    PENDING_CREDIT_APPROVAL: { procedure: 'CREDIT_APPROVAL',     label: 'Credit Approval' },
-    PO_PREPARATION:          { procedure: 'PO_REQUEST',          label: 'PO Request' },
-  };
 
   const showWfToast = (type: 'success'|'warn'|'error', msg: string) => {
     setWfToast({ type, msg });
     setTimeout(() => setWfToast(null), 5000);
   };
 
-  const triggerWorkflowIfNeeded = async (quotationId: string, newStatus: string, quotationNumber: string) => {
-    const trigger = WORKFLOW_TRIGGER_MAP[newStatus];
-    if (!trigger) return;
-    try {
-      const res = await fetch('/api/workflow/trigger', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          module: 'LEASING',
-          procedure: trigger.procedure,
-          referenceType: 'LEASE_QUOTATION',
-          referenceId: quotationId,
-          referenceNumber: quotationNumber,
-        }),
-      });
-      const wf = await res.json();
-      if (res.ok) {
-        if (wf.reused) {
-          showWfToast('warn', `Workflow already in progress for ${quotationNumber}. Check Approvals Inbox.`);
-        } else {
-          showWfToast('success', `Workflow started: "${wf.workflowName}"  sent to Approvals Inbox.`);
-        }
-      } else {
-        const errMsg = wf?.error ?? 'Workflow trigger failed';
-        showWfToast('warn', errMsg);
-        console.warn('[Workflow]', errMsg);
-      }
-    } catch (e) {
-      showWfToast('error', 'Could not trigger workflow  check console for details.');
-      console.warn('Workflow trigger failed:', e);
-    }
+  // The server starts the company's approval workflow when a quotation
+  // enters an approval stage (src/app/api/leasing/quotations/[id]/approve),
+  // and decides its levels through the same Approve / Reject.
+  const showWorkflowOutcome = (res: { message?: string; workflow?: { name?: string; status?: string; level?: string | null } }) => {
+    if (!res.workflow) return;
+    if (res.message) showWfToast('success', res.message);
+    else if (res.workflow.status === 'IN_PROGRESS') showWfToast('success', `Sent for approval: "${res.workflow.name}"${res.workflow.level ? `, waiting for "${res.workflow.level}"` : ''}. See the Approvals Inbox.`);
+    else showWfToast('success', `Approval "${res.workflow.name}": ${res.workflow.status}`);
   };
 
   const handleWorkflowAction = async (quotationId: string, actionLabel: string, targetStatus?: string, comment?: string, email?: string) => {
@@ -740,13 +712,13 @@ export default function LeaseQuotationsPage() {
             setQuotationHistory(hData.history || []);
           }
         }
-        // Trigger workflow engine for approval-gated transitions
-        await triggerWorkflowIfNeeded(quotationId, updated.status, updated.quotationNumber ?? quotationId);
+        showWorkflowOutcome(updated);
         setShowCommentModal(false);
         setWorkflowComment('');
         setRecipientEmail('');
       } else {
-        alert('Failed to process workflow action');
+        const err = await res.json().catch(() => null);
+        alert(err?.error ?? 'Failed to process workflow action');
       }
     } catch (err) {
       console.error(err);
@@ -999,7 +971,6 @@ export default function LeaseQuotationsPage() {
                             });
                             if (res.ok) {
                               setQuotations(prev => prev.map(q => q.id === quotation.id ? { ...q, status: newStatus } : q));
-                              await triggerWorkflowIfNeeded(quotation.id, newStatus, quotation.quotationNumber ?? quotation.id);
                             }
                           } catch {} finally {
                             setUpdatingStatus(false);

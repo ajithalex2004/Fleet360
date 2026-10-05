@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { approvalGate, withApprovalStart, withdrawApproval } from '@/lib/workflow/approvals';
 import { prisma } from '@/lib/prisma';
 
 type Row = Record<string, unknown>;
@@ -113,7 +114,8 @@ export async function POST(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  let createdId: string | null = null;
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
       const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
       const renewalNo = await nextNo();
@@ -161,8 +163,14 @@ export async function POST(req: NextRequest) {
         .catch(() => []);
 
       if (!row) return NextResponse.json({ error: 'Failed to create renewal' }, { status: 500 });
+      createdId = String(row.id);
       return NextResponse.json(row, { status: 201 });
   });
+  // A company's renewal approval workflow (Admin > Workflows) starts for a
+  // renewal created pending approval.
+  return createdId
+    ? withApprovalStart(response, { headers: req.headers, tenantId, referenceType: 'rental_renewal', referenceId: createdId })
+    : response;
 }
 
 /* ─── PATCH ─── */
@@ -174,12 +182,20 @@ export async function PATCH(req: NextRequest) {
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
-      const bodyRaw = await req.json();
-      const body = stripTenantOwnershipFields(bodyRaw);
-      const { id, status, approvedBy, notes, ...rest } = body;
+  const body = stripTenantOwnershipFields(await req.json());
+  const { id, status, approvedBy, notes, ...rest } = body;
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+  // A company's renewal approval workflow (Admin > Workflows) decides pending
+  // renewals: approving / rejecting goes to the level that is waiting.
+  if (status === 'APPROVED' || status === 'REJECTED') {
+    const gated = await approvalGate({
+      headers: req.headers, tenantId, referenceType: 'rental_renewal', referenceId: String(id),
+      action: status === 'APPROVED' ? 'APPROVE' : 'REJECT', comments: typeof notes === 'string' ? notes : '',
+    });
+    if (gated) return gated;
+  }
 
-      if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
 
       const sets: string[] = [];
       const params: unknown[] = [];
@@ -238,5 +254,10 @@ export async function PATCH(req: NextRequest) {
       if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 });
       return NextResponse.json(row);
   });
+  // Moved out of pending some other way (cancelled, …): no approval needed.
+  if (status && status !== 'PENDING' && response.ok) {
+    await withdrawApproval(tenantId, 'rental_renewal', String(id), `the renewal is now ${status}`);
+  }
+  return response;
 }
 

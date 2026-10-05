@@ -52,6 +52,15 @@ vi.mock('@/lib/rls', () => ({
     },
   }),
 }));
+// No approval workflow configured: the module decides approvals itself (the
+// workflow path is covered by tests/unit/workflow-*.test.ts).
+vi.mock('@/lib/workflow/approvals', () => ({
+  approvalGate: async () => null,
+  approvalInProgress: async () => null,
+  withApprovalStart: async (res: unknown) => res,
+  withdrawApproval: async () => {},
+}));
+
 vi.mock('@/lib/prisma', () => ({
   prisma: { tenant: { findUnique: async () => state.contact } },
 }));
