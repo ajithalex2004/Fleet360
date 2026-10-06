@@ -40,12 +40,6 @@ type area struct {
 	Write  Rule   `json:"write"`
 }
 
-type stepUpRoute struct {
-	Template string   `json:"template"`
-	Methods  []string `json:"methods"`
-	re       *regexp.Regexp
-}
-
 type adminRoute struct {
 	Template string            `json:"template"`
 	Methods  map[string]string `json:"methods"`
@@ -63,7 +57,6 @@ type Policy struct {
 	TenantAdminRole  string              `json:"tenantAdminRole"`
 	Areas            []area              `json:"areas"`
 	AdminRoutes      []adminRoute        `json:"adminRoutes"`
-	StepUpRoutes     []stepUpRoute       `json:"stepUpRoutes"`
 
 	resources map[string]map[string]bool // module → catalogue resources (not '*')
 }
@@ -81,9 +74,6 @@ func Parse(data []byte) (*Policy, error) {
 	sort.SliceStable(p.Areas, func(i, j int) bool { return len(p.Areas[i].Prefix) > len(p.Areas[j].Prefix) })
 	for i := range p.AdminRoutes {
 		p.AdminRoutes[i].re = templateToRegexp(p.AdminRoutes[i].Template)
-	}
-	for i := range p.StepUpRoutes {
-		p.StepUpRoutes[i].re = templateToRegexp(p.StepUpRoutes[i].Template)
 	}
 	p.resources = map[string]map[string]bool{}
 	for _, key := range p.Catalogue {
@@ -284,23 +274,6 @@ func (p *Policy) RequiredAdminLevel(pathname, method string) string {
 		}
 	}
 	return "platform"
-}
-
-// StepUpRequired reports whether an /api/admin action needs a passkey
-// step-up (STEP_UP_ROUTES and GO_STEP_UP_ROUTES in
-// src/lib/auth/step-up-policy.ts): any matching template listing the method.
-func (p *Policy) StepUpRequired(pathname, method string) bool {
-	const prefix = "/api/admin/"
-	if !strings.HasPrefix(pathname, prefix) {
-		return false
-	}
-	rel, upper := pathname[len(prefix):], strings.ToUpper(method)
-	for _, r := range p.StepUpRoutes {
-		if r.re.MatchString(rel) && contains(r.Methods, upper) {
-			return true
-		}
-	}
-	return false
 }
 
 // RoleSatisfies mirrors roleSatisfies in src/lib/admin-access.ts.

@@ -15,7 +15,6 @@ import { TRIAL_FREE_MODULES } from '@/lib/access-control';
 import { ADMIN_ROUTE_POLICY, SUPER_ADMIN, TENANT_ADMIN } from '@/lib/admin-access';
 import { CATALOGUE_VERSION } from '@/lib/authz/permission-claim';
 import { AREAS, POLICY_VERSION, type Rule } from '@/lib/authz/policy-matrix';
-import { GO_STEP_UP_ROUTES, STEP_UP_ROUTES } from '@/lib/auth/step-up-policy';
 
 export interface GoPolicyDocument {
   policyVersion: string;
@@ -31,8 +30,6 @@ export interface GoPolicyDocument {
   areas: Array<{ prefix: string; read: Rule; write: Rule }>;
   /** /api/admin/ templates in match order → level per method (unlisted: platform). */
   adminRoutes: Array<{ template: string; methods: Record<string, string> }>;
-  /** /api/admin/ templates → methods needing a passkey step-up (Next.js and Go-only). */
-  stepUpRoutes: Array<{ template: string; methods: string[] }>;
 }
 
 export function goPolicyDocument(): GoPolicyDocument {
@@ -55,8 +52,5 @@ export function goPolicyDocument(): GoPolicyDocument {
       template,
       methods: methods as Record<string, string>,
     })),
-    stepUpRoutes: Object.entries({ ...STEP_UP_ROUTES, ...GO_STEP_UP_ROUTES })
-      .map(([template, methods]) => ({ template, methods: [...methods] }))
-      .sort((a, b) => a.template.localeCompare(b.template)),
   };
 }

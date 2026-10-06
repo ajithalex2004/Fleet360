@@ -7423,8 +7423,8 @@ model SessionRevocation {
   @@schema("public")
 }
 
-/// Staff passkey (WebAuthn) for step-up before high-impact admin actions.
-/// Platform context only (src/lib/auth/passkeys.ts).
+/// Staff passkey (WebAuthn). Retired with the passkey step-up; the table is
+/// kept so existing rows are not dropped. Nothing reads or writes it.
 model StaffPasskey {
   id          String    @id
   userId      String    @map("user_id")
@@ -7441,7 +7441,8 @@ model StaffPasskey {
   @@schema("public")
 }
 
-/// Single-use WebAuthn challenge for passkey registration or step-up.
+/// Single-use WebAuthn challenge for staff passkeys. Retired with the passkey
+/// step-up; kept so existing rows are not dropped.
 model StepUpChallenge {
   challenge  String   @id
   userId     String   @map("user_id")

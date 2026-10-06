@@ -168,7 +168,7 @@ export interface VerifiedSession {
   dataResidency?: string;
   /** Effective permissions from the signed claim; null when the session carries none. */
   permissions: string[] | null;
-  /** When the session was issued (ms); binds a passkey step-up to this session. */
+  /** When the session was issued (ms). */
   issuedAt: number;
 }
 

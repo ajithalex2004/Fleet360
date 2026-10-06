@@ -121,7 +121,7 @@ export async function main(argv = process.argv.slice(2), { env = process.env, fe
         const d = await dryRun(s, p.method, probePath(p.path, s.tenant.id, other), http);
         if (d.answered) {
           answered++;
-          if (!meta.deployedPolicy) Object.assign(meta, { deployedPolicy: d.policy, authzMode: d.mode, stepUpMode: d.stepUpMode });
+          if (!meta.deployedPolicy) Object.assign(meta, { deployedPolicy: d.policy, authzMode: d.mode });
         }
         if (d.allow) {
           const area = p.label.split(':')[0];
@@ -130,9 +130,6 @@ export async function main(argv = process.argv.slice(2), { env = process.env, fe
         // Invariants, whatever the role's configuration.
         if (d.allow && p.path.includes('{other}') && role !== 'SUPER_ADMIN') {
           results.add('roles', `${s.label}: naming another tenant is refused`, 'fail', `${p.method} ${p.path} allowed`);
-        }
-        if (plan.stepUp[p.i] === '1' && d.answered && d.stepUp !== 'required') {
-          results.add('roles', `${s.label}: ${p.id} needs a passkey step-up`, 'fail', `x-step-up: ${d.stepUp}`);
         }
         if (expected && expected[p.i] !== d.allow) drift.push(`${p.id}: live ${d.allow ? 'allow' : 'deny'} (${d.reason ?? d.status}), policy ${expected[p.i] ? 'allow' : 'deny'}`);
         // Enforcement proof: a denied read really answers 403 (reads are safe to send).
@@ -158,9 +155,6 @@ export async function main(argv = process.argv.slice(2), { env = process.env, fe
     }
     if (meta.authzMode && meta.authzMode !== 'enforce') {
       results.add('roles', 'AUTHZ_MODE is enforce', 'warn', `AUTHZ_MODE is ${meta.authzMode}: denials are logged, not refused`);
-    }
-    if (meta.stepUpMode && meta.stepUpMode !== 'enforce') {
-      results.add('roles', 'STEP_UP_MODE is enforce', 'warn', `STEP_UP_MODE is ${meta.stepUpMode}`);
     }
   }
 

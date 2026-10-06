@@ -8,8 +8,6 @@ import { resolveSessionPermissions } from '@/lib/authz/session-permissions';
 import { busOpsCapability } from '@/lib/authz/bus-ops-routes';
 import { hasPermission } from '@/lib/permissions';
 import { resolveModuleKey } from '@/lib/modules';
-import { verifyStepUp } from '@/lib/auth/step-up-token';
-import { STEP_UP_COOKIE, STEP_UP_REQUIRED_BODY } from '@/lib/auth/step-up-policy';
 
 export interface BusOpsAccess {
   tenantId: string; userId: string; permissions: string[]; employeeId: string | null;
@@ -47,9 +45,6 @@ async function load(req: NextRequest): Promise<Result> {
     if (!capability || capability.action === 'external') return deny(403, 'Unmapped Bus Ops action');
     if (loaded.tenant.plan === 'TRIAL' && capability.action !== 'view') return deny(403, 'Trial tenant is read-only');
     if (!hasPermission(loaded.permissions, 'bus-ops', capability.action, capability.resource)) return deny(403, 'Missing Bus Ops permission');
-    if (capability.resource === 'device-credentials' && !await verifyStepUp(req.cookies.get(STEP_UP_COOKIE)?.value, session)) {
-      return { access: null, refusal: NextResponse.json(STEP_UP_REQUIRED_BODY, { status: 403 }) };
-    }
     return { access: { tenantId: auth.tenantId, userId: session.userId, permissions: loaded.permissions, employeeId: loaded.user.employeeId }, refusal: null };
   } catch (error) {
     console.error('[bus-ops policy] authoritative check failed', error instanceof Error ? error.name : 'unknown');

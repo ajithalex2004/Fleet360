@@ -1,12 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('next/server',async()=>await import('next/server.js'));
-const mocks = vi.hoisted(()=>({tenant:vi.fn(),user:vi.fn(),revocations:vi.fn(),permissions:vi.fn(),session:vi.fn(),auth:vi.fn(),stepup:vi.fn()}));
+const mocks = vi.hoisted(()=>({tenant:vi.fn(),user:vi.fn(),revocations:vi.fn(),permissions:vi.fn(),session:vi.fn(),auth:vi.fn()}));
 vi.mock('@/lib/prisma',()=>({prisma:{}}));
 vi.mock('@/lib/rls',()=>({withPlatformAdmin:async (_:unknown,fn: (tx: unknown) => Promise<unknown>)=>fn({tenant:{findUnique:mocks.tenant},user:{findUnique:mocks.user},$queryRawUnsafe:mocks.revocations})}));
 vi.mock('@/lib/authz/session-permissions',()=>({resolveSessionPermissions:mocks.permissions}));
 vi.mock('@/lib/tenant-context',()=>({requireAuthorizedTenant:mocks.auth}));
 vi.mock('@/lib/tenant-session',()=>({getVerifiedRequestSession:mocks.session}));
-vi.mock('@/lib/auth/step-up-token',()=>({verifyStepUp:mocks.stepup}));
 import { NextRequest } from 'next/server';
 import { busOpsAccessFor, ownsBusOpsEmployee } from '@/lib/bus-ops/access';
 const request=(path='schedules',method='GET')=>new NextRequest('https://fleet.test/api/bus-ops/'+path,{method});
@@ -50,11 +49,10 @@ describe('current database policy',()=>{
     mocks.session.mockResolvedValueOnce({tenantId:'other',userId:'u'});
     expect((await busOpsAccessFor(request())).refusal?.status).toBe(401);
   });
-  it('requires a current step-up for credential rotation',async()=>{
+  it('allows credential rotation on the permission alone (no passkey step-up)',async()=>{
     mocks.permissions.mockResolvedValue(['bus-ops:admin:device-credentials']);
-    mocks.stepup.mockResolvedValue(false);
-    expect((await busOpsAccessFor(request('gateways/g/rotate-secret','POST'))).refusal?.status).toBe(403);
-    mocks.stepup.mockResolvedValue(true);
     expect((await busOpsAccessFor(request('gateways/g/rotate-secret','POST'))).refusal).toBeNull();
+    mocks.permissions.mockResolvedValue(['bus-ops:view:trips']);
+    expect((await busOpsAccessFor(request('gateways/g/rotate-secret','POST'))).refusal?.status).toBe(403);
   });
 });

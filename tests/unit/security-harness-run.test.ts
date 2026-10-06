@@ -12,7 +12,6 @@ import { SYSTEM_ROLES } from '@/lib/permissions';
 import { decide, POLICY_VERSION } from '@/lib/authz/policy';
 import { dryRunHeaders } from '@/lib/authz/dry-run';
 import { isAdminApiPath, requiredAdminLevel, roleSatisfies } from '@/lib/admin-access';
-import { goStepUpRequired, stepUpRouteFor } from '@/lib/auth/step-up-policy';
 import { main } from '../../scripts/security-harness/run.mjs';
 import { extractIds, leaks, parseDryRun, stable, totp } from '../../scripts/security-harness/lib.mjs';
 import { totpNow } from '@/lib/totp';
@@ -68,8 +67,7 @@ function fakeDeployment(faults: Faults = {}) {
     if (headers.get('x-authz-dry-run') === '1') {
       const level = isAdminApiPath(pathname) ? requiredAdminLevel(pathname, method) : null;
       const gate = !faults.adminDrift && level && !roleSatisfies(who.role, level) ? level : null;
-      const route = isGo ? (goStepUpRequired(pathname, method) ? 'x' : null) : stepUpRouteFor(pathname, method);
-      const h = dryRunHeaders({ policyVersion: POLICY_VERSION, mode, decision: d, adminGateRefusal: isGo ? null : gate, stepUpRoute: route, stepUpSatisfied: false, stepUpMode: 'enforce' });
+      const h = dryRunHeaders({ policyVersion: POLICY_VERSION, mode, decision: d, adminGateRefusal: isGo ? null : gate });
       if (isGo) {
         h['x-authz-backend'] = 'go';
         if (faults.goDiffers && pathname === '/api/fleet/vehicles' && method === 'POST') h['x-authz-decision'] = h['x-authz-decision'] === 'allow' ? 'deny' : 'allow';

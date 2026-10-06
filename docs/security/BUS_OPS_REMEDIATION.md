@@ -6,7 +6,7 @@ Base: `fe2a0891524d999859c75bb5458cfc592dcaa06d`. This change is a draft impleme
 
 Every current human Bus Ops route invokes an authoritative service guard. It verifies the signed session, current tenant and user status, database revocation records, effective membership permissions and the enabled module assignment. An unavailable authority denies access with 503. Exact route/method capabilities replace broad HTTP heuristics within `/api/bus-ops/`; unknown actions deny access. Bus Ops middleware enforcement cannot be disabled by `AUTHZ_MODE`. Other modules and the separate route-optimizer API retain their existing policies.
 
-Credential rotation requires a dedicated capability and session-bound step-up. Ordinary gateway responses use a credential-free DTO. Device writes and reads resolve the parent within the tenant; the device migration backfills tenant ownership, forces RLS and checks parent ownership with database triggers.
+Credential rotation requires a dedicated capability. Ordinary gateway responses use a credential-free DTO. Device writes and reads resolve the parent within the tenant; the device migration backfills tenant ownership, forces RLS and checks parent ownership with database triggers.
 
 Departure requires all ten checklist items, the latest passing inspection, the current assigned vehicle and driver, and evidence no older than 24 hours. Failed or reassigned inspections block departure. Arbitrary header overrides are refused. Schedule PATCH accepts business fields only; status, identifiers, counters and deletion metadata cannot bypass commands. Assignment validation is mandatory. Assignment transactions use tenant RLS and reuse an existing transaction instead of nesting one.
 
@@ -21,7 +21,7 @@ Signed gateway event/scan timestamps must be within five minutes. A tenant/devic
 | Finding | Status | Delivered / remaining |
 |---|---|---|
 | F01 | Implemented; migration pending | Parent checks, tenant columns, RLS, parent consistency triggers. Exercise real database isolation and backfill before release. |
-| F02 | Implemented | Credential-free reads; separate stepped-up rotation, no-store secret response, required audit. |
+| F02 | Implemented | Credential-free reads; separate rotation capability, no-store secret response, required audit. |
 | F03 | Implemented | Header override denied. Any emergency override needs a separate approval workflow. |
 | F04 | Implemented with bounded freshness | Complete latest inspection bound to current vehicle/driver. Tenant service-day semantics remain F28. |
 | F05 | Implemented | Strict PATCH allowlist and scheduled-state assignment gate. |
@@ -55,7 +55,7 @@ Signed gateway event/scan timestamps must be within five minutes. A tenant/devic
 - Final CI security selection: 414 passing tests across nine files.
 - Bus Ops regression selection: 411 passing tests across 15 files. The trip-completed consumer suite logs that its live server/database path is unavailable, so this count is not proof of database integration.
 - Global authorization matrix: 37 passing tests after regenerating its documentation and preserving the separate route-optimizer policy.
-- New tests cover exact route capabilities, malformed safety evidence, custom role grants, suspension/module denial, revocations, authority outage, step-up, parent isolation, signed-body replay and stale timestamps.
+- New tests cover exact route capabilities, malformed safety evidence, custom role grants, suspension/module denial, revocations, authority outage, parent isolation, signed-body replay and stale timestamps.
 - Clean-install dry run succeeds after adding missing optional resolver/WASM entries to package-lock.json. No package versions were deliberately upgraded.
 - Live PostgreSQL migration, FORCE RLS under the application role, race/rollback fault injection, end-to-end UI and production build were not executed here. They are release blockers, not implied passes.
 

@@ -33,7 +33,7 @@
  */
 import type { ModuleKey } from '@/lib/modules';
 
-export const POLICY_VERSION = '2026-10-06.2';
+export const POLICY_VERSION = '2026-10-06.3';
 
 export type Rule =
   | { kind: 'module'; module: ModuleKey; action?: 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'export' }

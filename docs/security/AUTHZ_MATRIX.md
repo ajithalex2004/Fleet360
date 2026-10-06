@@ -3,14 +3,14 @@
 Generated from `src/lib/authz/policy-matrix.ts` and `SYSTEM_ROLES` by `tests/unit/authz-policy-matrix.test.ts`.
 Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-policy-matrix.test.ts`.
 
-- Policy version: `2026-10-06.2`
+- Policy version: `2026-10-06.3`
 - Permission catalogue version: `83f16c6e` (224 permissions)
 
 ## API areas
 
 | Area (`/api/…`) | Routes | Reads (GET) | Writes (POST/PUT/PATCH/DELETE) |
 |---|---:|---|---|
-| `admin` | 88 | ADMIN_ROUTE_POLICY | ADMIN_ROUTE_POLICY |
+| `admin` | 87 | ADMIN_ROUTE_POLICY | ADMIN_ROUTE_POLICY |
 | `agents` | 11 | module `agents` | module `agents` |
 | `agents/anomalies` | 1 | module `finance` | module `finance` |
 | `agents/preventive-maintenance` | 3 | module `maintenance` | module `maintenance` |
@@ -22,7 +22,7 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `approval-link` | 1 | external | external |
 | `assets` | 33 | module `assets` | module `assets` |
 | `assets/ble/ingest` | 1 | external | external |
-| `auth` | 22 | self | self |
+| `auth` | 16 | self | self |
 | `billing` | 2 | tenant-admin | tenant-admin |
 | `booking-portal` | 4 | module `booking-portal` | module `booking-portal` |
 | `bookings` | 2 | module `booking-portal` | module `booking-portal` |

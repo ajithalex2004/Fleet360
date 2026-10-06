@@ -20,7 +20,7 @@ people) and `results.json` (every check).
 | Phase | Proves | Needs |
 |---|---|---|
 | `identity` | The deployed commit (`/api/health` release), and that every test account signs in | accounts |
-| `roles` | Each account's live decision, for all 460 probes, equals what the policy gives its role. Naming another tenant is always refused. Every passkey action asks for a passkey. With `AUTHZ_MODE=enforce`, every denied read really answers 403 | accounts |
+| `roles` | Each account's live decision, for all 460 probes, equals what the policy gives its role. Naming another tenant is always refused. With `AUTHZ_MODE=enforce`, every denied read really answers 403 | accounts |
 | `go` | The Go backend decides every Go route exactly as Next.js does (or as the policy says, where Next.js has no dry-run answer) | `--go` |
 | `cross-tenant` | Tenant A cannot see tenant B's records, for every tenant-owned list/detail pair the harness discovers. It tries A's own list, `?tenantId=B`, spoofed `x-tenant-id` headers, and read by id. With `--writes`, it also tries to edit them | an account in each tenant; records in tenant B |
 | `database` | Connected as the runtime role (not a superuser, no `BYPASSRLS`), and for every table with `tenant_id`: RLS is on (forced where the role owns the table); tenant A sees no row of tenant B; nothing is visible without a tenant context; B's rows cannot be updated; a row cannot be inserted for B or moved to B | `HARNESS_DB_URL` (the app's runtime role, never the owner) |
@@ -33,7 +33,7 @@ given.
 
 - **Role probes are dry runs.** Each request carries `x-authz-dry-run: 1`
   (`src/lib/authz/dry-run.ts`, `backend/authz`). The middleware answers
-  the admin gate, passkey and policy decision in headers and returns 204:
+  the admin gate and policy decision in headers and returns 204:
   no handler, proxy or database write runs. It reveals only the caller's
   own authorization.
 - **Enforcement proof uses reads only.** Real requests are sent only as
@@ -47,8 +47,6 @@ given.
 - **No secrets in files or reports.** Passwords (and TOTP secrets, for test
   accounts with MFA) come from environment variables named in the accounts
   file. Reports mask email addresses.
-- **What it cannot automate.** It never performs a passkey step-up; it only
-  verifies step-ups are required.
 
 ## Setting up
 

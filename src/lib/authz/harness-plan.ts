@@ -9,7 +9,6 @@
  *              (src/lib/authz/dry-run.ts), so nothing is executed
  *   expected   per system role and plan: one character per probe,
  *              1 = allow, 0 = deny
- *   stepUp     the same for "needs a passkey step-up"
  *   resources  list and detail endpoints for the cross-tenant tests
  *              (discovered from the route files by the generator)
  *
@@ -20,7 +19,6 @@ import { SYSTEM_ROLES } from '@/lib/permissions';
 import { ADMIN_ROUTE_POLICY } from '@/lib/admin-access';
 import { decide } from '@/lib/authz/policy';
 import { AREAS, GO_ONLY_AREAS, POLICY_VERSION, type Rule } from '@/lib/authz/policy-matrix';
-import { goStepUpRequired, stepUpRouteFor } from '@/lib/auth/step-up-policy';
 import { GO_ROUTES } from '@/lib/authz/go-routes';
 
 export interface Probe {
@@ -48,8 +46,6 @@ export interface HarnessPlan {
   probes: Probe[];
   /** role → plan → one character per probe (same order): 1 allow, 0 deny. */
   expected: Record<string, Record<string, string>>;
-  /** One character per probe: 1 = needs a passkey step-up. */
-  stepUp: string;
   resources: Resource[];
 }
 
@@ -133,12 +129,6 @@ export function buildHarnessPlan(resources: Resource[]): HarnessPlan {
     policyVersion: POLICY_VERSION,
     probes,
     expected,
-    stepUp: bits(probes.map((p) => {
-      const url = new URL(probePath(p.path, PLAN_TENANT, PLAN_OTHER), 'http://x');
-      return p.backend === 'go'
-        ? goStepUpRequired(url.pathname, p.method)
-        : stepUpRouteFor(url.pathname, p.method) !== null;
-    })),
     resources,
   };
 }

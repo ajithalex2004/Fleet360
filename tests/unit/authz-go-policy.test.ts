@@ -17,7 +17,6 @@ import { encodePermissionClaim, type PermissionClaim } from '@/lib/authz/permiss
 import { goPolicyDocument } from '@/lib/authz/go-policy';
 import { GO_ROUTES as GO_ROUTE_LIST } from '@/lib/authz/go-routes';
 import { areaOf, GO_ONLY_AREAS } from '@/lib/authz/policy-matrix';
-import { goStepUpRequired } from '@/lib/auth/step-up-policy';
 
 const BACKEND = path.resolve(__dirname, '../../backend/authz');
 const POLICY_FILE = path.join(BACKEND, 'policy.json');
@@ -71,14 +70,12 @@ function buildVectors() {
   }
   requests.push({ method: 'GET', pathname: '/api/fleet/vehicles', requestedTenantId: OTHER_TENANT });
   requests.push({ method: 'GET', pathname: '/api/fleet/vehicles', requestedTenantId: TENANT });
-  // Whether Go needs a passkey step-up: the Next.js list and the Go-only admin actions.
-  const stepUp = requests.map((r) => goStepUpRequired(r.pathname, r.method));
   const cases: Array<[number, number, boolean, string, string | null, string | null]> = [];
   requests.forEach((r, ri) => subjects.forEach((s, si) => {
     const d = decide(r, { role: s.role, tenantId: TENANT, plan: s.plan, permissions: s.permissions });
     cases.push([ri, si, d.allow, d.reason, d.area, d.required ?? null]);
   }));
-  return { tenantId: TENANT, subjects, requests: requests.map((r, i) => ({ ...r, stepUp: stepUp[i] })), cases };
+  return { tenantId: TENANT, subjects, requests, cases };
 }
 
 const serialize = (v: unknown) => `${JSON.stringify(v, null, 1)}\n`;
@@ -111,14 +108,6 @@ describe('Go policy', () => {
       expect(reasons.has(r), r).toBe(true);
     }
     expect([...reasons].some((r) => r.startsWith('admin-level:'))).toBe(true);
-    const steps = vectors.requests.filter((r) => r.stepUp).map((r) => `${r.method} ${r.pathname}`);
-    expect(steps).toEqual(expect.arrayContaining([
-      'POST /api/admin/tenants', `PATCH /api/admin/tenants/${TENANT}`, `POST /api/admin/tenants/${TENANT}/suspend`,
-      `POST /api/admin/tenants/${TENANT}/offboard`, `POST /api/admin/tenants/${TENANT}/invitations`,
-      'POST /api/admin/users/set-password', 'PUT /api/admin/roles/r1/permissions', 'POST /api/admin/roles/override',
-    ]));
-    expect(steps).not.toContain('GET /api/admin/roles/r1/permissions');
-    expect(steps).not.toContain('POST /api/admin/users/u1/revoke-sessions');
     checkOrWrite(VECTORS_FILE, serialize(vectors));
   });
 });
