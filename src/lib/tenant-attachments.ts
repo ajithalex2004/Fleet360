@@ -1,5 +1,5 @@
 /**
- * Tenant attachments: the Attachment Type master (attachment_types) and the
+ * Tenant attachments: the Attachment Type master (tenant_attachment_types) and the
  * documents uploaded for a tenant (tenant_attachments). Tables come from
  * migration 20261022090000_tenant_attachments.
  *
@@ -52,7 +52,7 @@ export class AttachmentsNotMigratedError extends Error {
 
 function isMissingTable(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e);
-  return msg.includes('42P01') || /relation "(attachment_types|tenant_attachments)" does not exist/.test(msg);
+  return msg.includes('42P01') || /relation "(tenant_attachment_types|tenant_attachments)" does not exist/.test(msg);
 }
 
 async function guardMissing<T>(run: () => Promise<T>): Promise<T> {
@@ -65,7 +65,7 @@ export async function listAttachmentTypes(tx: TxClient, opts: { activeOnly?: boo
     `SELECT id::text, code, name, description,
             is_mandatory AS "isMandatory", requires_expiry AS "requiresExpiry",
             is_active AS "isActive", sort_order AS "sortOrder"
-       FROM attachment_types
+       FROM tenant_attachment_types
       ${opts.activeOnly ? 'WHERE is_active = true' : ''}
       ORDER BY sort_order, name`,
   ));
@@ -79,7 +79,7 @@ export async function listTenantAttachments(tx: TxClient, tenantId: string): Pro
             to_char(a.expiry_date, 'YYYY-MM-DD') AS "expiryDate", a.uploaded_by AS "uploadedBy",
             a.created_at AS "createdAt"
        FROM tenant_attachments a
-       JOIN attachment_types t ON t.id = a.attachment_type_id
+       JOIN tenant_attachment_types t ON t.id = a.attachment_type_id
       WHERE a.tenant_id = $1 AND a.deleted_at IS NULL
       ORDER BY t.sort_order, t.name, a.created_at DESC`,
     tenantId,

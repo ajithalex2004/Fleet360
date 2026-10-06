@@ -5201,7 +5201,7 @@ model TenantFeatureOverride {
 /// can be asked for. Platform-wide, not tenant-scoped.
 model TenantAttachmentType {
   id             String             @id @default(uuid()) @db.Uuid
-  code           String             @unique(map: "attachment_types_code_key")
+  code           String             @unique(map: "tenant_attachment_types_code_key")
   name           String
   description    String?
   isMandatory    Boolean            @default(false) @map("is_mandatory")
@@ -5213,7 +5213,7 @@ model TenantAttachmentType {
   updatedAt      DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   attachments    TenantAttachment[]
 
-  @@map("attachment_types")
+  @@map("tenant_attachment_types")
   @@schema("public")
 }
 

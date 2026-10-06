@@ -26,7 +26,7 @@ const st = vi.hoisted(() => ({
 
 const tx = vi.hoisted(() => ({
   $queryRawUnsafe: async (sql: string) => {
-    if (sql.includes('FROM attachment_types')) {
+    if (sql.includes('FROM tenant_attachment_types')) {
       return sql.includes('is_active = true') ? TYPES.filter((t) => t.isActive) : TYPES;
     }
     if (sql.includes('FROM tenant_attachments')) return st.attachmentRows;

@@ -37,7 +37,7 @@ async function handlePATCH(req: NextRequest, props: { params: Promise<{ id: stri
     const n = await withPlatformAdmin(prisma, async (tx) => {
       await listAttachmentTypes(tx); // surfaces a missing migration as 503
       return tx.$executeRawUnsafe(
-        `UPDATE attachment_types SET ${sets}, updated_at = now() WHERE id = $1::uuid`,
+        `UPDATE tenant_attachment_types SET ${sets}, updated_at = now() WHERE id = $1::uuid`,
         id, ...entries.map(([, v]) => v),
       );
     });

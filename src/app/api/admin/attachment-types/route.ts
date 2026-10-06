@@ -44,7 +44,7 @@ async function handlePOST(req: NextRequest) {
     const rows = await withPlatformAdmin(prisma, async (tx) => {
       await listAttachmentTypes(tx); // surfaces a missing migration as 503
       return tx.$queryRawUnsafe<{ id: string }[]>(
-        `INSERT INTO attachment_types (code, name, description, is_mandatory, requires_expiry, is_active, sort_order, created_by)
+        `INSERT INTO tenant_attachment_types (code, name, description, is_mandatory, requires_expiry, is_active, sort_order, created_by)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id::text`,
         v.code, v.name, v.description ?? null, v.isMandatory ?? false, v.requiresExpiry ?? false,
         v.isActive ?? true, v.sortOrder ?? 100, authz.userId,
@@ -53,7 +53,7 @@ async function handlePOST(req: NextRequest) {
     return NextResponse.json({ id: rows[0]?.id }, { status: 201 });
   } catch (e) {
     if (e instanceof AttachmentsNotMigratedError) return NextResponse.json({ error: e.message }, { status: 503 });
-    if (String(e).includes('attachment_types_code_key')) {
+    if (String(e).includes('tenant_attachment_types_code_key')) {
       return NextResponse.json({ error: `An attachment type with code ${v.code} already exists` }, { status: 409 });
     }
     console.error('[attachment-types POST]', e);
