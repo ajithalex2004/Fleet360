@@ -6,7 +6,7 @@ import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { nextDocumentNumber } from '@/lib/finance/document-number';
-import { addDeduction, forfeitDeposit, recordRefundDetails, executeRefund, cancelRefundRequest, requestRefund, SecurityDepositError } from '@/lib/finance/security-deposit';
+import { addDeduction, forfeitDeposit, recordRefundDetails, executeRefund, cancelRefundRequest, startRefundRequest, SecurityDepositError } from '@/lib/finance/security-deposit';
 import { approvalGate, approvalInProgress, approvalRequired, withApprovalStart, withdrawApproval } from '@/lib/workflow/approvals';
 import { sessionUser } from '@/lib/session-user';
 function toStr(v: unknown) {
@@ -194,35 +194,15 @@ export async function PATCH(req: NextRequest) {
       // ── Request a refund (approval workflow), or refund at once ─────────────────
       if (action === 'request_refund') {
         try {
-          const current = await tx.$queryRawUnsafe<Record<string, unknown>[]>(
-            `SELECT collected_amount, total_deducted, reserved_amount, refund_status FROM finance_security_deposits WHERE id = $1::uuid AND tenant_id = $2`,
-            id, tenantId,
-          );
-          if (!current.length) return NextResponse.json({ error: 'not found' }, { status: 404 });
-          if (['REQUESTED', 'RECORDED'].includes(String(current[0].refund_status ?? ''))) {
-            return NextResponse.json({ error: 'A refund is already in progress for this deposit' }, { status: 409 });
-          }
-          const available = Number(current[0].collected_amount) - Number(current[0].total_deducted) - Number(current[0].reserved_amount);
-          const amount = b.refund_amount != null && b.refund_amount !== '' ? Number(b.refund_amount) : available;
-          if (!(amount > 0)) return NextResponse.json({ error: 'Refund amount must be more than zero' }, { status: 400 });
-          await requestRefund(tx, tenantId, id, amount, actor);
-          // How it is to be paid, for recording once approved.
-          await tx.$executeRawUnsafe(
-            `UPDATE finance_security_deposits SET refund_method = $3, refund_reference = $4, refund_date = $5::date
-              WHERE id = $1::uuid AND tenant_id = $2`,
-            id, tenantId, b.refund_method ?? 'BANK_TRANSFER', b.refund_reference ?? null, b.refund_date ?? null,
-          );
-          if (!needsApproval) {
-            await recordRefundDetails(tx, tenantId, id, { method: b.refund_method ?? 'BANK_TRANSFER', reference: b.refund_reference, recordedBy: actor });
-            const paid = await executeRefund(tx, tenantId, id, actor);
-            return NextResponse.json(row(paid));
-          }
-          const rows = await tx.$queryRawUnsafe<Record<string, unknown>[]>(
-            `SELECT * FROM finance_security_deposits WHERE id = $1::uuid AND tenant_id = $2`, id, tenantId,
-          );
-          return NextResponse.json(row(rows[0]));
+          const updated = await startRefundRequest(tx, tenantId, id, {
+            amount: b.refund_amount != null && b.refund_amount !== '' ? Number(b.refund_amount) : null,
+            method: b.refund_method, reference: b.refund_reference, date: b.refund_date, actor, payNow: !needsApproval,
+          });
+          return NextResponse.json(row(updated));
         } catch (e) {
-          if (e instanceof SecurityDepositError) return NextResponse.json({ error: e.message }, { status: 400 });
+          if (e instanceof SecurityDepositError) {
+            return NextResponse.json({ error: e.message }, { status: e.message.includes('already in progress') ? 409 : 400 });
+          }
           throw e;
         }
       }

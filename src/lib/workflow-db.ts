@@ -797,6 +797,19 @@ export async function getActiveInstanceForReference(tenantId: string, referenceT
   return rows[0] ?? null;
 }
 
+/** Whether a record's latest approval (any status) was approved. */
+export async function latestInstanceStatusForReference(tenantId: string, referenceType: string, referenceId: string): Promise<string | null> {
+  const rows = await prisma.$queryRawUnsafe<Array<{ status: string }>>(
+    `SELECT status FROM "WorkflowInstance"
+      WHERE "tenantId"=$1 AND "referenceType"=$2 AND "referenceId"=$3
+      ORDER BY "initiatedAt" DESC LIMIT 1`,
+    tenantId, referenceType, referenceId).catch((e) => {
+    if (isMissingWorkflowColumn(e)) return [];
+    throw e;
+  });
+  return rows[0]?.status ?? null;
+}
+
 /**
  * Withdraws the approval running for a record that was cancelled in its
  * module: it ends CANCELLED (no outcome to apply) and leaves the approvers'

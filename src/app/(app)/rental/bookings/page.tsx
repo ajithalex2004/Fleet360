@@ -111,9 +111,11 @@ export default function BookingsPage() {
           dailyRate: formData.dailyRate ? parseFloat(formData.dailyRate) : undefined,
         }),
       });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.error ?? 'Failed to create booking');
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error ?? 'Failed to create booking');
+      // With a Booking Approval workflow the booking waits for it before it can be confirmed.
+      if (d.workflow?.status === 'IN_PROGRESS') {
+        alert(`Booking ${d.bookingRef ?? ''} sent for approval through "${d.workflow.name}"${d.workflow.level ? `, waiting for "${d.workflow.level}"` : ''}. It can be confirmed once approved.`);
       }
       setShowModal(false);
       setFormData({

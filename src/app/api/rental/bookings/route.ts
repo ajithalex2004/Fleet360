@@ -6,6 +6,7 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 import { withTenantRls, runSequential } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { paginate, paginatedResponse } from '@/lib/pagination';
+import { withApprovalStart } from '@/lib/workflow/approvals';
 
 // Not cached: booking status changes through confirm, activate, complete,
 // cancel, extend, the penalty sweep, channel webhooks and the counter, and a
@@ -139,7 +140,11 @@ export async function POST(req: NextRequest) {
     if (!booking) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 400 });
     }
-    return NextResponse.json(booking, { status: 201 });
+    // With a Booking Approval workflow (Admin > Workflows), a new booking
+    // waits for it before it can be confirmed or handed over.
+    return withApprovalStart(NextResponse.json(booking, { status: 201 }), {
+      headers: req.headers, tenantId, referenceType: 'rental_booking', referenceId: booking.id,
+    });
   } catch (e) {
     console.error('Error creating booking:', e);
     return NextResponse.json({ error: 'Failed to create booking' }, { status: 500 });

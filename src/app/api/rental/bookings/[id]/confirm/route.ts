@@ -5,6 +5,7 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 import { prisma } from '@/lib/prisma';
 import { withTenantRls, runSequential } from '@/lib/rls';
 import { sendBookingConfirmedWhatsApp } from '@/lib/whatsapp';
+import { requireApproved } from '@/lib/workflow/approvals';
 
 // POST /api/rental/bookings/[id]/confirm
 // Confirms a PENDING booking and generates a RentalAgreement
@@ -16,6 +17,10 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+
+  // With a Booking Approval workflow, only an approved booking is confirmed.
+  const gate = await requireApproved({ headers: req.headers, tenantId, referenceType: 'rental_booking', referenceId: params.id });
+  if (gate) return gate;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {

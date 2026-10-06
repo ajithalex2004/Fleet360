@@ -45,6 +45,11 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     const bodyRaw = await req.json();
   const body = stripTenantOwnershipFields(bodyRaw);
     const { booking, payments, extensions, charges, ...data } = body;
+    // A deposit is refunded through /refund-deposit (Finance > Security
+    // Deposits, with its approval), not by setting the status here.
+    if (['REFUNDED', 'REFUND_REQUESTED'].includes(String(data.depositStatus ?? '').toUpperCase())) {
+      return NextResponse.json({ error: 'Request the deposit refund instead (Refund Security Deposit)' }, { status: 400 });
+    }
     const agreement = await withTenantRls(prisma, tenantId, async (tx) =>
       tx.rentalAgreement.update({
       where: { id: params.id, tenantId },
