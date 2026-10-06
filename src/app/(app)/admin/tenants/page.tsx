@@ -6,6 +6,10 @@ import { defaultFeatureFlags, activeFeatureKeys, type FeatureFlagMap } from '@/l
 import { ModuleFeaturePicker, ALL_MODULE_KEYS } from '@/components/ModuleFeaturePicker';
 import { EditTenantModal, type TenantForEdit } from '@/components/EditTenantModal';
 import { HardDeleteConfirm } from '@/components/HardDeleteConfirm';
+import {
+  TenantAttachmentFields, attachmentDraftProblems, appendAttachmentDrafts,
+  type AttachmentDrafts, type AttachmentTypeOption,
+} from '@/components/TenantAttachmentFields';
 import { useFetchedData, invalidate, invalidatePrefix } from '@/hooks/useFetchedData';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -287,6 +291,12 @@ export default function TenantsPage() {
   const [editingTenant,   setEditingTenant]   = useState<TenantForEdit | null>(null);
   const [deletingTenant,  setDeletingTenant]  = useState<TenantRow | null>(null);
   const [form,      setForm]      = useState(emptyForm);
+  // Attachments step: the active types from the Attachment Type master and
+  // the file chosen for each.
+  const [attachmentTypes, setAttachmentTypes]   = useState<AttachmentTypeOption[] | null>(null);
+  const [attachmentTypesError, setAttachmentTypesError] = useState('');
+  const [attachmentDrafts, setAttachmentDrafts] = useState<AttachmentDrafts>({});
+  const [showAttachmentErrors, setShowAttachmentErrors] = useState(false);
   // which service-type panels are expanded
   const [expanded,  setExpanded]  = useState<Record<string, boolean>>({
     mobility: true,
@@ -344,6 +354,15 @@ export default function TenantsPage() {
   const openModal = () => {
     setForm(emptyForm()); setActiveTab('basic');
     setExpanded({ mobility: true }); setError(''); setShowModal(true);
+    setAttachmentDrafts({}); setShowAttachmentErrors(false);
+    setAttachmentTypes(null); setAttachmentTypesError('');
+    fetch('/api/admin/attachment-types?active=true', { cache: 'no-store' })
+      .then(async (r) => {
+        const d = await r.json().catch(() => null);
+        if (!r.ok) throw new Error(d?.error ?? `Could not load attachment types (HTTP ${r.status})`);
+        setAttachmentTypes(d as AttachmentTypeOption[]);
+      })
+      .catch((e: unknown) => setAttachmentTypesError(e instanceof Error ? e.message : 'Could not load attachment types'));
   };
   const closeModal = () => setShowModal(false);
 
@@ -351,6 +370,13 @@ export default function TenantsPage() {
   const handleSubmit = async () => {
     const resolvedName = form.localizedName_en.trim() || form.name.trim();
     if (!resolvedName) { setError('Tenant Name (English) is required'); setActiveTab('basic'); return; }
+    if (!attachmentTypes) {
+      setError(attachmentTypesError || 'Attachment types are still loading'); setActiveTab('attachments'); return;
+    }
+    const attachmentProblems = attachmentDraftProblems(attachmentTypes, attachmentDrafts, { requireMandatory: true });
+    if (attachmentProblems.length > 0) {
+      setShowAttachmentErrors(true); setError(attachmentProblems[0]); setActiveTab('attachments'); return;
+    }
     setSaving(true); setError('');
     try {
       const payload = {
@@ -371,10 +397,12 @@ export default function TenantsPage() {
         enabledModules: form.enabledModules,
         featureFlags:   form.featureFlags,
       };
-      const res = await fetch('/api/admin/tenants', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
+      // Multipart: the tenant fields as JSON plus the attachment files, so the
+      // server creates the tenant and stores its documents together.
+      const body = new FormData();
+      body.append('payload', JSON.stringify(payload));
+      appendAttachmentDrafts(body, attachmentDrafts);
+      const res = await fetch('/api/admin/tenants', { method: 'POST', body });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.error ?? 'Failed to create tenant');
@@ -810,19 +838,25 @@ export default function TenantsPage() {
               {/* ── TAB 4: Attachments ───────────────────────────────────── */}
               {activeTab === 'attachments' && (
                 <div className="h-full flex flex-col gap-4">
-                  <Section icon="📎" iconBg="bg-[var(--bg-surface-hover)]/30" title="Branding & Attachments"
-                    desc="Upload logo, documents, and other files">
-                    {/* Empty state — intentionally compact, no py-16 */}
-                    <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)]/40
-                                    flex flex-col items-center justify-center gap-3
-                                    py-10 px-6 text-center">
-                      <span className="text-5xl opacity-20">📎</span>
-                      <p className="text-[var(--text-muted)] text-sm font-medium">No attachments yet</p>
-                      <p className="text-[var(--text-faint)] text-xs max-w-xs">
-                        Attachments can be added after saving. Once the tenant is created,
-                        open the tenant detail page to upload logos and documents.
-                      </p>
-                    </div>
+                  <Section icon="📎" iconBg="bg-[var(--bg-surface-hover)]/30" title="Attachments"
+                    desc="Company documents for this tenant. Mandatory documents must be attached before the tenant can be created.">
+                    {attachmentTypesError ? (
+                      <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-rose-300 text-sm">
+                        {attachmentTypesError}
+                      </div>
+                    ) : !attachmentTypes ? (
+                      <div className="text-[var(--text-muted)] text-sm animate-pulse">Loading attachment types…</div>
+                    ) : attachmentTypes.length === 0 ? (
+                      <p className="text-[var(--text-muted)] text-sm">No attachment types are active. Add them under Admin → Attachment Types.</p>
+                    ) : (
+                      <TenantAttachmentFields
+                        types={attachmentTypes}
+                        drafts={attachmentDrafts}
+                        onChange={(next) => { setAttachmentDrafts(next); if (error) setError(''); }}
+                        showErrors={showAttachmentErrors}
+                      />
+                    )}
+                    <p className="text-[11px] text-[var(--text-faint)] mt-2">The logo is uploaded after creation, on the tenant&apos;s Branding page.</p>
                   </Section>
 
                   <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
@@ -840,6 +874,12 @@ export default function TenantsPage() {
                       <span className="text-[var(--text-main)]">{selectedModuleCount} of {ALL_MODULE_KEYS.length} enabled</span>
                       <span>Feature Flags</span>
                       <span className="text-[var(--text-main)]">{activeFlagCount} active</span>
+                      <span>Attachments</span>
+                      <span className="text-[var(--text-main)]">
+                        {Object.values(attachmentDrafts).filter(Boolean).length} attached
+                        {attachmentTypes && attachmentTypes.some(t => t.isMandatory && !attachmentDrafts[t.id]) &&
+                          <span className="text-rose-300"> · missing {attachmentTypes.filter(t => t.isMandatory && !attachmentDrafts[t.id]).map(t => t.name).join(', ')}</span>}
+                      </span>
                       <span>Booking Types</span>
                       <span className="text-[var(--text-main)]">{totalBookingSelected} request types across {Object.keys(form.bookingTypes).filter(k => (form.bookingTypes[k]?.length ?? 0) > 0).length} services</span>
                     </div>

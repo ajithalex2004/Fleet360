@@ -4493,6 +4493,7 @@ model Tenant {
   invitations        TenantInvitation[]
   offboardings       TenantOffboarding[]
   featureOverrides   TenantFeatureOverride[]
+  attachments        TenantAttachment[]
   ssoConfigs         SsoConfig[]
   scimTokens         ScimToken[]
   ipAllowlists       IpAllowlist[]
@@ -5191,6 +5192,51 @@ model TenantFeatureOverride {
 
   @@unique([tenantId, featureKey])
   @@map("tenant_feature_overrides")
+  @@schema("public")
+}
+
+// --- Tenant attachments (20261022090000_tenant_attachments) ---
+
+/// Attachment Type master (Admin > Attachment Types): the documents a tenant
+/// can be asked for. Platform-wide, not tenant-scoped.
+model TenantAttachmentType {
+  id             String             @id @default(uuid()) @db.Uuid
+  code           String             @unique(map: "attachment_types_code_key")
+  name           String
+  description    String?
+  isMandatory    Boolean            @default(false) @map("is_mandatory")
+  requiresExpiry Boolean            @default(false) @map("requires_expiry")
+  isActive       Boolean            @default(true) @map("is_active")
+  sortOrder      Int                @default(100) @map("sort_order")
+  createdBy      String?            @map("created_by")
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  attachments    TenantAttachment[]
+
+  @@map("attachment_types")
+  @@schema("public")
+}
+
+/// A document uploaded for a tenant (trade license, VAT certificate, …).
+model TenantAttachment {
+  id               String         @id @default(uuid()) @db.Uuid
+  tenantId         String         @map("tenant_id")
+  attachmentTypeId String         @map("attachment_type_id") @db.Uuid
+  fileUrl          String         @map("file_url")
+  originalName     String         @map("original_name")
+  mimeType         String         @map("mime_type")
+  sizeBytes        Int            @map("size_bytes")
+  documentNumber   String?        @map("document_number")
+  expiryDate       DateTime?      @map("expiry_date") @db.Date
+  uploadedBy       String?        @map("uploaded_by")
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt        DateTime?      @map("deleted_at") @db.Timestamptz(6)
+  tenant           Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  attachmentType   TenantAttachmentType @relation(fields: [attachmentTypeId], references: [id])
+
+  @@index([tenantId], map: "idx_tenant_attachments_tenant")
+  @@index([fileUrl], map: "idx_tenant_attachments_file_url")
+  @@map("tenant_attachments")
   @@schema("public")
 }
 

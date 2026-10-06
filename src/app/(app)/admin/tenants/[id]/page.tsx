@@ -7,6 +7,7 @@ import PasswordInput from '@/components/ui/PasswordInput';
 import { MODULES, resolveModuleKey } from '@/lib/modules';
 import { MODULE_FEATURES, defaultFeatureFlags, type FeatureFlagMap } from '@/lib/module-features';
 import { ModuleFeaturePicker, TenantModuleFeatureSummary } from '@/components/ModuleFeaturePicker';
+import { TenantAttachmentsPanel } from '@/components/TenantAttachmentsPanel';
 
 /* ─────────────────────────────────────────────────────────
    Modules & feature flags — every registry module (src/lib/modules.ts)
@@ -846,7 +847,7 @@ export default function TenantDetailPage() {
   // allUsers is loaded lazily on demand (only when Add User modal opens)
   const [allUsers, setAllUsers]     = useState<any[]>([]);
   const [allUsersLoading, setAllUsersLoading] = useState(false);
-  const [tab, setTab]               = useState<'modules'|'features'|'users'|'roles'|'branches'|'admin-access'>('modules');
+  const [tab, setTab]               = useState<'modules'|'features'|'attachments'|'users'|'roles'|'branches'|'admin-access'>('modules');
 
   // Admin Access tab state
   const TOGGLEABLE_NAV = [
@@ -1087,6 +1088,7 @@ export default function TenantDetailPage() {
         {([
           ['modules',      '🧩 Modules & Feature Flags'],
           ['features',     '⚙️ Feature Settings'],
+          ['attachments',  '📎 Attachments'],
           ['admin-access', '🔐 Admin Access'],
           ['users',        `Users (${users.length})`],
           ['roles',        `Roles (${roles.length})`],
@@ -1142,6 +1144,9 @@ export default function TenantDetailPage() {
           </section>
         </div>
       )}
+
+      {/* ── ATTACHMENTS ── */}
+      {tab === 'attachments' && <TenantAttachmentsPanel tenantId={id} tenantName={tenant.name} />}
 
       {/* ── FEATURE SETTINGS ── */}
       {tab === 'features' && (

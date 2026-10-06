@@ -39,6 +39,9 @@ export const ADMIN_ROUTE_POLICY: Record<string, Partial<Record<Method, AdminLeve
   // Own tenant's audit trail for admins; any user may record client-side
   // audit events for their own tenant (src/lib/platform-audit-log.ts).
   'audit-logs':                                  { GET: 'admin', POST: 'member' },
+  // Attachment Type master: the Create Tenant modal reads it; only platform admins edit it.
+  'attachment-types':                            { GET: 'admin', POST: 'platform' },
+  'attachment-types/[id]':                       { PATCH: 'platform' },
   'billing':                                     { GET: 'member' },   // SubscriptionBanner
   'billing/checkout':                            { POST: 'admin' },
   'billing/portal':                              { POST: 'admin' },
@@ -112,6 +115,10 @@ export const ADMIN_ROUTE_POLICY: Record<string, Partial<Record<Method, AdminLeve
   // PATCH writes any Tenant column (plan, residency, CORS origins, …).
   'tenants/[id]':                                { GET: 'member', PATCH: 'platform', DELETE: 'platform' },
   'tenants/[id]/api-keys':                       { GET: 'admin', POST: 'admin' },
+  // Trade license, VAT certificate, ...: the tenant's admins can read them;
+  // only platform admins add or remove them.
+  'tenants/[id]/attachments':                    { GET: 'admin', POST: 'platform' },
+  'tenants/[id]/attachments/[id]':               { DELETE: 'platform' },
   'tenants/[id]/api-keys/[id]/revoke':           { POST: 'admin' },
   'tenants/[id]/branding':                       { GET: 'admin', PUT: 'admin' },
   'tenants/[id]/branding/logo':                  { POST: 'admin' },
