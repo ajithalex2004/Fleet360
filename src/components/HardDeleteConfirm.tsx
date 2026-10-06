@@ -18,7 +18,7 @@
  *    platform_audit_log.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface TableCount { name: string; rowCount: number; }
 interface PreviewState {
@@ -65,6 +65,11 @@ export function HardDeleteConfirm({ title, target, description, onDone, onCancel
   const [typed, setTyped]     = useState('');
   const [loading, setLoading] = useState(false);
   const [executing, setExecuting] = useState(false);
+
+  // The error box sits at the top of the scrolling body, above the preview
+  // table; bring it into view so a failed delete is not mistaken for no-op.
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (error) errorRef.current?.scrollIntoView({ block: 'nearest' }); }, [error]);
 
   // Auto-load the dry-run preview on mount.
   useEffect(() => { void loadPreview(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -147,7 +152,7 @@ export function HardDeleteConfirm({ title, target, description, onDone, onCancel
         {/* Body */}
         <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-4">
           {error && (
-            <div className="p-3 rounded-lg bg-red-950/40 border border-red-500/30 text-red-300 text-sm">
+            <div ref={errorRef} role="alert" className="p-3 rounded-lg bg-red-950/40 border border-red-500/30 text-red-300 text-sm">
               {error}
             </div>
           )}
