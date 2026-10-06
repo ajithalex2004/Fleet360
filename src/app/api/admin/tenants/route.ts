@@ -11,6 +11,13 @@ import { withAuditedAction } from '@/lib/audited-action';
 import { normalizeTenantModules } from '@/lib/modules';
 import { defaultFeatureFlags, parseFeatureFlags } from '@/lib/module-features';
 import { writeTenantFeatureFlags } from '@/lib/tenant-features';
+import { randomUUID } from 'node:crypto';
+import type { StoredFile } from '@/lib/storage';
+import {
+  AttachmentsNotMigratedError, attachmentUploadProblem, insertTenantAttachments,
+  listAttachmentTypes, removeStoredFiles, storeAttachmentFiles, uploadsFromFormData,
+  type AttachmentUpload,
+} from '@/lib/tenant-attachments';
 
 /**
  * Modules a tenant created here gets when the request names none. Pinned:
@@ -82,10 +89,25 @@ async function handlePOST(req: NextRequest) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
-
+  let stored: StoredFile[] = [];
   try {
-    const body = stripTenantOwnershipFields(await req.json());
+    // JSON, or multipart/form-data from the Create Tenant modal: a `payload`
+    // JSON field plus the attachment files (see uploadsFromFormData).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- fields are checked below, as with req.json()
+    let raw: any;
+    let uploads: AttachmentUpload[] = [];
+    if ((req.headers.get('content-type') ?? '').includes('multipart/form-data')) {
+      const form = await req.formData();
+      const payload = form.get('payload');
+      if (typeof payload !== 'string') {
+        return NextResponse.json({ error: 'Missing payload field' }, { status: 400 });
+      }
+      raw = JSON.parse(payload);
+      uploads = uploadsFromFormData(form);
+    } else {
+      raw = await req.json();
+    }
+    const body = stripTenantOwnershipFields(raw);
     const {
       enabledModules = DEFAULT_TENANT_MODULES,
       featureFlags,
@@ -106,9 +128,20 @@ async function handlePOST(req: NextRequest) {
     const flags = parseFeatureFlags(featureFlags);
     if (!flags.ok) return NextResponse.json({ error: flags.error }, { status: 400 });
 
-    return await withPlatformAdmin(prisma, async (tx) => {
+    // Attachments: every mandatory type (e.g. Trade License) must be uploaded.
+    const types = await withPlatformAdmin(prisma, (tx) => listAttachmentTypes(tx, { activeOnly: true }));
+    const attachmentProblem = await attachmentUploadProblem(uploads, types, { requireMandatory: true });
+    if (attachmentProblem) return NextResponse.json({ error: attachmentProblem }, { status: 400 });
+
+    // The id is chosen here so the files can be stored under the tenant's
+    // folder before the transaction; they are removed again if it fails.
+    const newTenantId = randomUUID();
+    stored = await storeAttachmentFiles(newTenantId, uploads);
+
+    const created = await withPlatformAdmin(prisma, async (tx) => {
       const tenant = await tx.tenant.create({
         data: {
+          id:                newTenantId,
           name:              name.trim(),
           code:              code   || undefined,
           plan:              plan   || 'STANDARD',
@@ -132,11 +165,20 @@ async function handlePOST(req: NextRequest) {
       // Every catalog flag gets an explicit value: the requested ones, the
       // defaults for the rest.
       await writeTenantFeatureFlags(tx, tenant.id, { ...defaultFeatureFlags(), ...flags.flags });
-      // New tenant means the cached tenant list is now stale.
-      await revalidateCache(CACHE_TAG);
-      return NextResponse.json(tenant, { status: 201 });
+      await insertTenantAttachments(tx, tenant.id, uploads, stored, authz.userId ?? null);
+      return tenant;
     });
+    // New tenant means the cached tenant list is now stale.
+    await revalidateCache(CACHE_TAG);
+    return NextResponse.json(created, { status: 201 });
     } catch (e) {
+    await removeStoredFiles(stored);
+    if (e instanceof AttachmentsNotMigratedError) {
+      return NextResponse.json({ error: e.message }, { status: 503 });
+    }
+    if (e instanceof SyntaxError) {
+      return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 });
+    }
     if ((e as { code?: string })?.code === 'P2002') {
       return NextResponse.json({ error: 'A tenant with this code already exists' }, { status: 409 });
     }

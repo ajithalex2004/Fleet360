@@ -19,6 +19,7 @@ import { normalizeStorageKey, readStoredFile } from '@/lib/storage';
 import { authorizeFileAccess, type FileCaller } from '@/lib/storage/file-access';
 import { requireLeasingPortal } from '@/lib/leasing-portal/auth';
 import { logAudit } from '@/lib/audit';
+import { isSuperAdmin } from '@/lib/admin-access';
 
 const CONTENT_TYPES: Record<string, string> = {
   '.png': 'image/png',
@@ -43,7 +44,9 @@ async function resolveCaller(
 ): Promise<FileCaller> {
   if (authz) {
     const userId = req.headers.get('x-user-id');
-    return authz.ok && userId ? { kind: 'staff', tenantId: authz.tenantId, userId } : { kind: 'anonymous' };
+    return authz.ok && userId
+      ? { kind: 'staff', tenantId: authz.tenantId, userId, isPlatformAdmin: isSuperAdmin(req.headers) }
+      : { kind: 'anonymous' };
   }
   if (req.cookies.get('leasing-portal-session')) {
     const ctx = await requireLeasingPortal(req);
