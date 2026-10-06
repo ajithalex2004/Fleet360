@@ -98,6 +98,7 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
       { name: 'moduleLabel', description: 'Module', sample: 'Leasing' },
       { name: 'submittedBy', description: 'Who submitted it', sample: 'Sam Sales' },
       { name: 'approvalUrl', description: 'Link to the Approvals Inbox', sample: 'https://app.example/approvals' },
+      { name: 'decisionUrl', description: 'The approver\'s own link to approve or reject from any device, without signing in (valid 7 days, for this step only)', sample: 'https://app.example/approval-link/abc123' },
     ],
     defaults: {
       en: {
@@ -106,7 +107,8 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
           'Dear {{approverName}},',
           '{{referenceNumber}} ({{referenceType}}) has been submitted for your approval.',
           '**Step:** {{stepName}}\n**Submitted by:** {{submittedBy}}',
-          '[Review & approve]({{approvalUrl}})',
+          '[Approve or reject]({{decisionUrl}})',
+          'Or open your [Approvals Inbox]({{approvalUrl}}).',
         ].join('\n\n'),
       },
       ar: {
@@ -115,7 +117,8 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
           'عزيزي/عزيزتي {{approverName}}،',
           'تم تقديم {{referenceNumber}} ({{referenceType}}) للحصول على موافقتك.',
           '**المرحلة:** {{stepName}}\n**مقدم الطلب:** {{submittedBy}}',
-          '[المراجعة والموافقة]({{approvalUrl}})',
+          '[الموافقة أو الرفض]({{decisionUrl}})',
+          'أو افتح [صندوق الموافقات]({{approvalUrl}}).',
         ].join('\n\n'),
       },
     },

@@ -860,7 +860,21 @@ interface PendingApprovalRow {
   requireAllApprovers: boolean | null;
   approverEmails: string[] | null;
   approvals: unknown;
+  /** When the level opened, its escalation (job run) and what is being approved. */
+  openedAt?: Date | null;
+  escalatedAt?: Date | null;
+  escalationHours?: number | null;
+  escalationEmail?: string | null;
+  contextJson?: unknown;
 }
+
+/** SLA / escalation columns of a pending level (activatedAt, escalatedAt: 20261021090000). */
+const LEVEL_SLA_COLUMNS = `
+      COALESCE(wsi."activatedAt", wsi."createdAt") as "openedAt",
+      wsi."escalatedAt",
+      COALESCE(NULLIF(ws."escalationHours", 0), NULLIF(wd."defaultEscalationHours", 0), 48) as "escalationHours",
+      COALESCE(NULLIF(trim(ws."escalationEmail"), ''), NULLIF(trim(wd."defaultEscalationEmail"), '')) as "escalationEmail",
+      wi."contextJson"`;
 
 /**
  * Pending steps `email` may act on in `tenantId`: assigned to that address,
@@ -888,7 +902,7 @@ export async function getMyPendingApprovals(tenantId: string, email: string, rol
       wd.procedure,
       ws."requireAllApprovers"${levels ? `,
       wsi."approverEmails",
-      wsi.approvals` : ''}
+      wsi.approvals,${LEVEL_SLA_COLUMNS}` : ''}
     FROM "WorkflowStepInstance" wsi
     JOIN "WorkflowInstance" wi ON wi.id = wsi."workflowInstanceId"
     JOIN "WorkflowDefinition" wd ON wd.id = wi."workflowId"
@@ -912,6 +926,51 @@ export async function getMyPendingApprovals(tenantId: string, email: string, rol
     // Deployed before 20261021090000 ran: the inbox as it was.
     if (!isMissingWorkflowColumn(e)) throw e;
     return query(false);
+  }
+}
+
+/**
+ * Pending levels escalated to `email` (it is their escalation contact and
+ * the workflow-escalation job has emailed it), in `tenantId`. Shown in the
+ * escalation contact's inbox; deciding them stays with the level's
+ * approvers or a tenant administrator.
+ */
+export async function getEscalatedToMe(tenantId: string, email: string) {
+  try {
+    return await prisma.$queryRawUnsafe<PendingApprovalRow[]>(`
+      SELECT
+        wsi.id as "stepInstanceId",
+        wsi."workflowInstanceId",
+        wsi."stepName",
+        wsi."dueAt",
+        wsi."createdAt" as "receivedAt",
+        wi."referenceType",
+        wi."referenceId",
+        wi."referenceNumber",
+        wi."initiatedByEmail",
+        wi."initiatedByName",
+        wi."initiatedAt",
+        wd.name as "workflowName",
+        wd.module,
+        wd.procedure,
+        ws."requireAllApprovers",
+        wsi."approverEmails",
+        wsi.approvals,${LEVEL_SLA_COLUMNS}
+      FROM "WorkflowStepInstance" wsi
+      JOIN "WorkflowInstance" wi ON wi.id = wsi."workflowInstanceId" AND wi.status = 'IN_PROGRESS'
+      JOIN "WorkflowDefinition" wd ON wd.id = wi."workflowId"
+      LEFT JOIN "WorkflowStep" ws ON ws.id = wsi."stepId"
+      WHERE wsi.status = 'PENDING'
+        AND wsi."tenantId" = $2
+        AND wsi."escalatedAt" IS NOT NULL
+        AND lower($1) = ANY(regexp_split_to_array(lower(COALESCE(
+              NULLIF(trim(ws."escalationEmail"), ''), NULLIF(trim(wd."defaultEscalationEmail"), ''), '')), '[,;[:space:]]+'))
+      ORDER BY wsi."escalatedAt"
+      LIMIT 200
+    `, email, tenantId);
+  } catch (e) {
+    if (!isMissingWorkflowColumn(e)) throw e;
+    return [];
   }
 }
 
@@ -990,6 +1049,21 @@ export async function getRoleHolders(tenantId: string, roleCode: string, limit =
       email: r.user.email.toLowerCase(),
       name: [r.user.firstName, r.user.lastName].filter(Boolean).join(' ') || undefined,
     }));
+}
+
+/**
+ * Whether `email` is a member of `tenantId`: ACTIVE, INACTIVE (every
+ * membership deactivated) or NONE (no account there, e.g. an outside
+ * approver named by email on a step).
+ */
+export async function getMembershipStatus(tenantId: string, email: string): Promise<'ACTIVE' | 'INACTIVE' | 'NONE'> {
+  const rows = await runOutsideRlsScope(() => withPlatformAdmin(prisma, (tx) => tx.userTenant.findMany({
+    where: { tenantId, user: { email: { equals: email, mode: 'insensitive' } } },
+    select: { isActive: true },
+  })));
+  if (!rows.length) return 'NONE';
+  // A deactivated membership can no longer decide anything.
+  return rows.some((r) => r.isActive !== false) ? 'ACTIVE' : 'INACTIVE';
 }
 
 /** Role codes `email` holds in `tenantId` (its membership role). */
@@ -1078,7 +1152,7 @@ const moduleLabel = (module: string) =>
 async function notifyStepApprovers(args: {
   tenantId: string; instanceId: string;
   workflow: Pick<WorkflowDefinitionRow, 'name' | 'module' | 'defaultEmailSubject' | 'defaultEmailBody'>;
-  step: WorkflowStepRow;
+  step: WorkflowStepRow & { stepInstanceId?: string };
   /** Resolved when the level opened (resolveStepApprovers). */
   approvers: Array<{ email: string; name?: string }>;
   referenceNumber: string; referenceType: string; submittedBy: string;
@@ -1092,8 +1166,8 @@ async function notifyStepApprovers(args: {
     // Loaded on use: the renderer and sender pull in branding, Sentry and env
     // validation, which modules importing this file (admin-scope, its tests)
     // shouldn't need.
-    const [{ renderEmail, tenantEmailContext }, { sendEmail }] = await Promise.all([
-      import('@/lib/email-templates'), import('@/lib/email'),
+    const [{ renderEmail, tenantEmailContext }, { sendEmail }, { signDecisionLink, decisionLinkUrl }] = await Promise.all([
+      import('@/lib/email-templates'), import('@/lib/email'), import('@/lib/workflow/decision-link'),
     ]);
     const context = await tenantEmailContext(tenantId);
     const approvalUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/approvals`;
@@ -1102,6 +1176,18 @@ async function notifyStepApprovers(args: {
       body: step.emailBody?.trim() || workflow.defaultEmailBody?.trim() || null,
     };
     for (const approver of approvers) {
+      // Each approver's own link to decide this level from their phone
+      // (decision-link.ts); the inbox link when one can't be made.
+      let decisionUrl = approvalUrl;
+      if (step.stepInstanceId && step.stepType !== 'NOTIFICATION') {
+        try {
+          decisionUrl = decisionLinkUrl(signDecisionLink({
+            tenantId, instanceId: args.instanceId, stepInstanceId: step.stepInstanceId, email: approver.email,
+          }));
+        } catch (e) {
+          console.warn('[Workflow] No email decision link (session secret not set):', e instanceof Error ? e.message : e);
+        }
+      }
       const email = await renderEmail({
         tenantId, key: 'workflow.approval_request', context, override,
         values: {
@@ -1115,6 +1201,7 @@ async function notifyStepApprovers(args: {
           moduleLabel: moduleLabel(workflow.module),
           submittedBy: args.submittedBy,
           approvalUrl,
+          decisionUrl,
         },
       });
       const result = await sendEmail({ to: approver.email, subject: email.subject, html: email.html, text: email.text });
@@ -1151,6 +1238,11 @@ interface AllPendingStepInstanceRow {
   workflowName: string;
   module: string;
   procedure: string;
+  openedAt: Date | null;
+  escalatedAt: Date | null;
+  escalationHours: number | null;
+  escalationEmail: string | null;
+  contextJson: unknown;
 }
 
 export async function getAllPendingStepInstances(tenantId: string) {
@@ -1173,10 +1265,11 @@ export async function getAllPendingStepInstances(tenantId: string) {
       wi.status as "instanceStatus",
       wd.name as "workflowName",
       wd.module,
-      wd.procedure
+      wd.procedure,${LEVEL_SLA_COLUMNS}
     FROM "WorkflowStepInstance" wsi
     JOIN "WorkflowInstance" wi ON wi.id = wsi."workflowInstanceId"
     JOIN "WorkflowDefinition" wd ON wd.id = wi."workflowId"
+    LEFT JOIN "WorkflowStep" ws ON ws.id = wsi."stepId"
     WHERE wsi.status = 'PENDING'
       AND wsi."tenantId" = $1
     ORDER BY wsi."createdAt" DESC

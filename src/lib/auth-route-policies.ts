@@ -64,6 +64,11 @@ export const PUBLIC_PREFIXES: readonly string[] = [
   // Document signing is a public, capability-token flow. The token is
   // validated by the signing API; recipients do not need operator sessions.
   '/sign/',
+  // Email approval decision links — a signed capability token per approver
+  // and level (src/lib/workflow/decision-link.ts), checked by the API on
+  // every request; opening the page changes nothing (the decision is a POST).
+  '/approval-link/',
+  '/api/approval-link/',
   '/api/admin/session',
   '/api/setup/',            // one-time setup endpoints — SETUP_SECRET, not session
   '/api/auth/invitation/',  // public lookup by token

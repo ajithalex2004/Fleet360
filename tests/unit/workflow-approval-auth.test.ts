@@ -35,6 +35,7 @@ vi.mock('@/lib/session-user', () => ({ sessionUser: async () => state.me }));
 vi.mock('@/lib/audited-action', () => ({ withAuditedAction: <T>(h: T) => h }));
 vi.mock('@/lib/workflow-db', () => ({
   getMyPendingApprovals: async (...args: unknown[]) => { state.pendingCalls.push(args); return [{ stepInstanceId: 'si1' }]; },
+  getEscalatedToMe: async () => [],
   getWorkflowInstanceWithHistory: async (...args: unknown[]) => { state.historyCalls.push(args); return state.instance; },
   advanceWorkflow: async (...args: unknown[]) => { state.advanceCalls.push(args); return state.advanceResult; },
   getUserRoleCodes: async () => state.roleCodes,
@@ -73,7 +74,9 @@ describe('my approvals', () => {
   it('uses the session user and tenant, ignoring an email parameter', async () => {
     const res = await myApprovals(new NextRequest('http://x/api/my-approvals?email=victim@b.test', { headers: headers() }));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ email: 'approver@a.test', approvals: [{ stepInstanceId: 'si1' }] });
+    const body = await res.json();
+    expect(body).toMatchObject({ email: 'approver@a.test', approvals: [{ stepInstanceId: 'si1' }], escalated: [] });
+    expect(body.approvals).toHaveLength(1);
     expect(state.pendingCalls).toEqual([[TENANT_A, 'approver@a.test', ['LEASING_OPERATOR']]]);
   });
 });
