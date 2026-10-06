@@ -118,9 +118,28 @@ export async function decideApproval(args: {
   headers: Headers; tenantId: string; instanceId: string;
   action: 'APPROVE' | 'REJECT'; comments?: string;
 }): Promise<Decision> {
-  const { headers, tenantId } = args;
-  const me = await sessionUser(headers);
+  const me = await sessionUser(args.headers);
   if (!me) return { ok: false, status: 401, error: 'Unauthorized' };
+  return decideAs({
+    ...args,
+    actor: { email: me.email, role: args.headers.get('x-user-role'), admin: isTenantAdmin(args.headers) },
+  });
+}
+
+/**
+ * decideApproval for a given approver: the signed-in user, or the approver
+ * an email decision link was sent to (decision-link.ts; never an
+ * administrator, and only for the level the link was sent for).
+ */
+export async function decideAs(args: {
+  tenantId: string; instanceId: string;
+  actor: { email: string; role?: string | null; admin: boolean };
+  /** The level the decision is for: refused once another level is waiting. */
+  stepInstanceId?: string;
+  action: 'APPROVE' | 'REJECT'; comments?: string;
+}): Promise<Decision> {
+  const { tenantId, actor } = args;
+  const me = { email: actor.email };
   return runAsTenant(tenantId, async () => {
     const instance = await getWorkflowInstanceWithHistory(args.instanceId, tenantId);
     if (!instance) return { ok: false, status: 404, error: 'Approval not found' };
@@ -129,6 +148,9 @@ export async function decideApproval(args: {
     // that is not yet (or no longer) waiting.
     const step = instance.steps.find((s) => s.stepOrder === instance.currentStepOrder && s.status === 'PENDING');
     if (!step) return { ok: false, status: 422, error: 'No level is waiting for a decision' };
+    if (args.stepInstanceId && step.id !== args.stepInstanceId) {
+      return { ok: false, status: 409, error: 'This level has already been decided' };
+    }
 
     const myEmail = me.email.toLowerCase();
     const resolved = (step.approverEmails ?? []).map((e) => e.toLowerCase());
@@ -136,11 +158,11 @@ export async function decideApproval(args: {
     const listed = resolved.includes(myEmail)
       || (step.assignedToEmail != null && step.assignedToEmail.toLowerCase() === myEmail)
       || (step.assigneeType === 'MULTI_USER' && parseEmailList(step.multiApproverEmails).includes(myEmail));
-    const holdsRole = !listed && !!roleCode && ((headers.get('x-user-role') ?? '').toUpperCase() === roleCode
+    const holdsRole = !listed && !!roleCode && ((actor.role ?? '').toUpperCase() === roleCode
       || (await getUserRoleCodes(tenantId, me.email)).some((c) => c.toUpperCase() === roleCode));
     // On an all-approvers level, the approvers are the ones it was sent to.
     const isApprover = step.requireAllApprovers && resolved.length > 0 ? resolved.includes(myEmail) : listed || holdsRole;
-    const admin = isTenantAdmin(headers);
+    const admin = actor.admin;
     if (!isApprover && !admin) return { ok: false, status: 403, error: 'You are not an approver for this level' };
 
     const comments = (args.comments ?? '').trim().slice(0, 2000);

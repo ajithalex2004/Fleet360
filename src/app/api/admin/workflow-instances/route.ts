@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAllWorkflowInstances, getAllPendingStepInstances } from '@/lib/workflow-db';
+import { byUrgency, toInboxItem } from '@/lib/workflow/inbox';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 
@@ -23,7 +24,9 @@ export async function GET(req: NextRequest) {
     const module = searchParams.get('module') ?? undefined;
 
     if (view === 'pending') {
-      const rows = await getAllPendingStepInstances(tenantId);
+      // With SLA status, most urgent first (src/lib/workflow/inbox.ts).
+      const now = Date.now();
+      const rows = (await getAllPendingStepInstances(tenantId)).map((r) => toInboxItem(r, now)).sort(byUrgency);
       return NextResponse.json(rows);
     }
 

@@ -3,7 +3,7 @@
 Generated from `src/lib/authz/policy-matrix.ts` and `SYSTEM_ROLES` by `tests/unit/authz-policy-matrix.test.ts`.
 Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-policy-matrix.test.ts`.
 
-- Policy version: `2026-09-30.2`
+- Policy version: `2026-10-06.1`
 - Permission catalogue version: `7deb1e4f` (169 permissions)
 
 ## API areas
@@ -19,6 +19,7 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `alerts` | 3 | self | self |
 | `alerts/configs` | 0 | tenant-admin | tenant-admin |
 | `ambulance` | 2 | module `incidents` | module `incidents` |
+| `approval-link` | 1 | external | external |
 | `assets` | 33 | module `assets` | module `assets` |
 | `assets/ble/ingest` | 1 | external | external |
 | `auth` | 22 | self | self |
@@ -62,10 +63,10 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `leasing/documents/upload` | 1 | module `leasing` | self |
 | `logistics` | 63 | module `logistics` | module `logistics` |
 | `logistics/rates/quote` | 0 | self | self |
-| `maintenance` | 16 | module `maintenance` | module `maintenance` |
-| `maintenance-requests` | 2 | module `maintenance` | module `maintenance` |
+| `maintenance` | 23 | module `maintenance` | module `maintenance` |
+| `maintenance-requests` | 3 | module `maintenance` | module `maintenance` |
 | `mobile` | 1 | external | external |
-| `my-approvals` | 1 | self | self |
+| `my-approvals` | 2 | self | self |
 | `notifications` | 3 | self | self |
 | `operations` | 2 | self | self |
 | `places` | 2 | self | module `dispatch` |
@@ -77,7 +78,7 @@ Do not edit by hand: run `UPDATE_AUTHZ_MATRIX=1 npx vitest run tests/unit/authz-
 | `quotations` | 2 | module `booking-portal` | module `booking-portal` |
 | `readyz` | 1 | external | external |
 | `realtime` | 1 | self | self |
-| `rental` | 52 | module `rental` | module `rental` |
+| `rental` | 53 | module `rental` | module `rental` |
 | `reports` | 5 | module `reports` | module `reports` |
 | `route-optimizer` | 2 | module `bus-ops` | module `bus-ops` |
 | `school-bus` | 35 | module `school-bus` | module `school-bus` |
