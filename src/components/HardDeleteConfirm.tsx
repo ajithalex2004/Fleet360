@@ -216,9 +216,22 @@ export function HardDeleteConfirm({ title, target, description, onDone, onCancel
                   className="w-full px-3 py-2 rounded border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-main)] text-sm focus:outline-none focus:border-rose-500"
                   value={typed}
                   onChange={e => setTyped(e.target.value)}
-                  placeholder={target.confirmText}
+                  // Not the confirm text itself: a placeholder identical to the
+                  // required value reads as already typed, while the button
+                  // stays disabled with no explanation.
+                  placeholder="Type the name shown above"
                   autoComplete="off"
+                  autoFocus
                 />
+                {typed && (
+                  <p className={`mt-1 text-xs ${typed === target.confirmText ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    {typed === target.confirmText
+                      ? '✓ Matches — the delete button is now enabled.'
+                      : typed.trim() === target.confirmText.trim()
+                        ? "Doesn't match yet — remove the extra spaces."
+                        : "Doesn't match yet — it must be identical, including capitals, spaces and punctuation."}
+                  </p>
+                )}
               </div>
             </>
           )}
