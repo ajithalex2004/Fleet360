@@ -81,11 +81,20 @@ export function HardDeleteConfirm({ title, target, description, onDone, onCancel
     return `HTTP ${status}`;
   }
 
+  /** Response JSON, or null for an empty / non-JSON body (e.g. a 405 or a proxy error page). */
+  async function readJson(r: Response): Promise<unknown> {
+    const text = await r.text();
+    if (!text) return null;
+    try { return JSON.parse(text); } catch { return null; }
+  }
+
   async function loadPreview() {
     setLoading(true); setError(null);
     try {
-      const r = await fetch(`${url}?dryRun=true`);
-      const data = await r.json();
+      // The hard-delete routes only accept POST; a GET here was answered
+      // 405 with an empty body, so the preview never loaded.
+      const r = await fetch(`${url}?dryRun=true`, { method: 'POST' });
+      const data = await readJson(r);
       if (!r.ok) {
         setError(formatApiError(data, r.status));
         return;
@@ -106,7 +115,7 @@ export function HardDeleteConfirm({ title, target, description, onDone, onCancel
     setExecuting(true); setError(null);
     try {
       const r = await fetch(`${url}?dryRun=false`, { method: 'POST' });
-      const data = await r.json();
+      const data = await readJson(r);
       if (!r.ok) {
         setError(formatApiError(data, r.status));
         return;
