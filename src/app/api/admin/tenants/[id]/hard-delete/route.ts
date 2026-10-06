@@ -86,9 +86,36 @@ async function countPerTable(tenantId: string): Promise<Map<string, number>> {
   return counts;
 }
 
+type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
 /**
- * Multi-pass delete. Returns per-table deletion counts. Throws if any
- * table is still blocked after MAX_PASSES.
+ * Run one statement behind a savepoint. In Postgres a failed statement
+ * aborts the whole transaction (every later statement fails with 25P02),
+ * so without this the first FK- or permission-blocked table made every
+ * other table "blocked" too and the delete could never succeed.
+ */
+async function guarded<T>(tx: Tx, run: () => Promise<T>): Promise<{ ok: true; value: T } | { ok: false; error: string }> {
+  await tx.$executeRawUnsafe('SAVEPOINT hard_delete_stmt');
+  try {
+    const value = await run();
+    await tx.$executeRawUnsafe('RELEASE SAVEPOINT hard_delete_stmt');
+    return { ok: true, value };
+  } catch (e) {
+    await tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT hard_delete_stmt');
+    const msg = e instanceof Error ? e.message : String(e);
+    const lines = msg.split('\n');
+    return { ok: false, error: lines.find((l) => l.includes('ERROR')) ?? lines[0] ?? msg };
+  }
+}
+
+/**
+ * Multi-pass delete. Returns per-table deletion counts. Throws if a table
+ * holding this tenant's rows is still blocked after MAX_PASSES.
+ *
+ * Only tables that hold rows for the tenant are deleted from: the app role
+ * may lack DELETE on tables it never needs to delete from (e.g. append-only
+ * history such as lease_dunning_stage_transitions), and touching those for
+ * a tenant with no rows there only produced a permission error.
  *
  * Runs inside a 60s transaction. The default 5s Prisma transaction
  * timeout is too tight for a 161-table query loop on a remote DB.
@@ -107,74 +134,67 @@ async function multiPassDelete(tenantId: string): Promise<Record<string, number>
     // Set the RLS GUC for this transaction so DELETEs see all rows.
     await tx.$executeRawUnsafe(`SELECT set_config('app.tenant_id', '*', true)`);
 
-    let remaining = [...allTables];
-    const summary: Record<string, number> = {};
-    let pass = 0;
-    // Treat an empty tenant (no rows in any tenant_id-bearing table) as
-    // a normal case. The first pass will see zero progress because every
-    // table returns 0 rows — that's not a blocker, it's just "nothing to
-    // delete here". We detect this by counting the first-pass deletes:
-    // if first pass deletes 0 rows AND no tables errored, we're done.
-    let firstPassDeleted = false;
-    let firstPassErrored = false;
+    // 1. Which tables hold rows for this tenant. A table we cannot read is
+    //    still attempted, but its failure only matters if the tenant row
+    //    itself then cannot be deleted.
+    const withRows: string[] = [];
+    const unreadable = new Set<string>();
+    for (const table of allTables) {
+      const r = await guarded(tx, () => tx.$queryRawUnsafe<{ found: boolean }[]>(
+        `SELECT EXISTS (SELECT 1 FROM "${table}" WHERE "tenant_id"::text = $1) AS found`,
+        tenantId,
+      ));
+      if (!r.ok) { unreadable.add(table); withRows.push(table); }
+      else if (r.value[0]?.found) withRows.push(table);
+    }
 
-    while (remaining.length > 0 && pass < MAX_PASSES) {
-      pass++;
+    // 2. FK-aware passes: a table blocked by a referencing table succeeds
+    //    once that table's rows are gone.
+    let remaining = withRows;
+    const summary: Record<string, number> = {};
+    const lastError: Record<string, string> = {};
+    for (let pass = 1; remaining.length > 0 && pass <= MAX_PASSES; pass++) {
       const stillBlocked: string[] = [];
       let progress = false;
       for (const table of remaining) {
-        try {
-          const r = await tx.$executeRawUnsafe(
-            `DELETE FROM "${table}" WHERE "tenant_id"::text = $1`,
-            tenantId,
-          );
-          const n = Number(r);
-          if (n > 0) {
-            summary[table] = (summary[table] ?? 0) + n;
-            progress = true;
-            if (pass === 1) firstPassDeleted = true;
-          }
-        } catch (e) {
-          // Capture the first e to surface in the response.
-          if (pass === 1 && stillBlocked.length === 0) {
-            const msg = e instanceof Error ? e.message : String(e);
-            (summary as Record<string, unknown>).__firstError = `${table}: ${msg.split('\n')[0] ?? msg}`;
-          }
+        const r = await guarded(tx, () => tx.$executeRawUnsafe(
+          `DELETE FROM "${table}" WHERE "tenant_id"::text = $1`,
+          tenantId,
+        ));
+        if (r.ok) {
+          progress = true;
+          const n = Number(r.value);
+          if (n > 0) summary[table] = (summary[table] ?? 0) + n;
+        } else {
+          lastError[table] = r.error;
           stillBlocked.push(table);
-          if (pass === 1) firstPassErrored = true;
         }
-      }
-      // Only treat "no progress" as failure if we were actually trying
-      // to do something (had errors) or if we deleted at least once and
-      // then got stuck. An empty tenant that deleted 0 rows on pass 1
-      // with no errors is just empty — exit early.
-      if (!progress) {
-        if (pass === 1 && !firstPassErrored) {
-          // Empty tenant — nothing to clean up. Set remaining to []
-          // so the post-loop "still blocked" check doesn't false-positive.
-          remaining = [];
-          break;
-        }
-        const firstErr = (summary as Record<string, unknown>).__firstError;
-        throw new Error(
-          `No progress in pass ${pass}. ${stillBlocked.length} table(s) still blocked. ` +
-          `First error: ${firstErr ?? 'unknown'}. ` +
-          `This usually means a non-tenant_id column has an FK to one of the remaining tables.`,
-        );
       }
       remaining = stillBlocked;
-    }
-    if (remaining.length > 0) {
-      const firstErr = (summary as Record<string, unknown>).__firstError;
-      throw new Error(`${remaining.length} table(s) still blocked after ${MAX_PASSES} passes. First error: ${firstErr ?? 'unknown'}`);
+      if (!progress) break;
     }
 
-    // Finally, delete the tenant row
-    const r = await tx.$executeRawUnsafe(
+    const blocking = remaining.filter((t) => !unreadable.has(t));
+    if (blocking.length > 0) {
+      throw new Error(
+        `${blocking.length} table(s) still hold this tenant's rows and could not be deleted: ` +
+        blocking.slice(0, 5).map((t) => `${t} (${lastError[t]})`).join('; '),
+      );
+    }
+
+    // 3. Finally, the tenant row. If an unreadable table still references
+    //    it, this fails with that FK error and the transaction rolls back.
+    const r = await guarded(tx, () => tx.$executeRawUnsafe(
       `DELETE FROM tenants WHERE "id"::text = $1`,
       tenantId,
-    );
-    summary['tenants'] = Number(r);
+    ));
+    if (!r.ok) {
+      const hint = remaining.length > 0
+        ? ` Tables that could not be checked or cleared: ${remaining.slice(0, 5).map((t) => `${t} (${lastError[t]})`).join('; ')}`
+        : '';
+      throw new Error(`Could not delete the tenant row: ${r.error}.${hint}`);
+    }
+    summary['tenants'] = Number(r.value);
 
     return summary;
   }, { timeout: 60_000, maxWait: 10_000 });
