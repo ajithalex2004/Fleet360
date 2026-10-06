@@ -37,14 +37,17 @@ export async function canSendRiderDelivery(tx:Prisma.TransactionClient,row:Rider
  const rule=(await loadRiderRules(tx,row.tenant_id)).find(r=>r.event_type===row.event_type);
  if (!rule?.enabled || !rule.channels.includes(row.channel)) return false;
  const schedule=await tx.tripSchedule.findFirst({where:{id:row.schedule_id,tenantId:row.tenant_id,deletedAt:null}});
- if (!schedule || (schedule.status==='CANCELLED' && row.event_type!=='trip.cancelled')) return false;
+ // On a cancelled trip only the cancellation, and the disruption's closing
+ // update (checked below), still reach riders.
+ const cancelled=schedule?.status==='CANCELLED';
+ if (!schedule || (cancelled && row.event_type!=='trip.cancelled' && row.event_type!=='trip.disruption_updated')) return false;
  if(['trip.arriving','trip.delayed','trip.departed'].includes(row.event_type)){
   const held=await tx.busTripDisruption.findFirst({where:{tenantId:row.tenant_id,scheduleId:row.schedule_id,status:'REPORTED'}});
   if(held?.status==='REPORTED')return false;
  }
  if(row.event_type==='trip.disruption_updated'){
   const current=await tx.busTripDisruption.findFirst({where:{tenantId:row.tenant_id,scheduleId:row.schedule_id,OR:[{status:'REPORTED',reportEventId:row.event_id ?? ''},{status:'RECOVERED',recoveryEventId:row.event_id ?? ''},{status:'RESOLVED',resolutionEventId:row.event_id ?? ''}]}});
-  if(!current)return false;
+  if(!current || (cancelled && current.status!=='RESOLVED'))return false;
  }
  const passenger=await tx.tripPassenger.findFirst({where:{id:row.passenger_id,tripId:row.schedule_id,tenantId:row.tenant_id,staffMemberId:row.staff_member_id,deletedAt:null}});
  if (!passenger) return false;

@@ -32,7 +32,11 @@ export async function enqueueRiderNotifications(tx: Prisma.TransactionClient, ev
  if (event.sourceModule !== 'bus-ops' || !RIDER_EVENTS.includes(event.eventType as typeof RIDER_EVENTS[number])) return 0;
  if (!event.data || typeof event.data !== 'object') throw new Error('Invalid rider event');
  const data = event.data as Record<string,unknown>;
- if (typeof data.scheduleId !== 'string' || data.scheduleId !== event.aggregateId) throw new Error('Invalid trip scope');
+ // Trip events are about the trip; a missed boarding is about one rider on it.
+ const scoped = typeof data.scheduleId === 'string' && (data.scheduleId === event.aggregateId
+  || (event.eventType === 'boarding.missed' && event.aggregateType === 'TripPassenger'
+   && typeof data.passengerId === 'string' && data.passengerId === event.aggregateId));
+ if (!scoped || typeof data.scheduleId !== 'string') throw new Error('Invalid trip scope');
  if (!await riderTenantEnabled(tx, event.tenantId)) return 0;
  const rule = (await loadRiderRules(tx,event.tenantId)).find(r => r.event_type === event.eventType && r.enabled);
  if (!rule) return 0;

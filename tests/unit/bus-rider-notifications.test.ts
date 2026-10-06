@@ -141,3 +141,25 @@ describe('disruption notification freshness',()=>{
   f.busTripDisruption.findFirst.mockResolvedValue(null);expect(await canSendRiderDelivery(asTx(f),{...row,event_type:'trip.disruption_updated',event_id:'report-event'})).toBe(false);
  });
 });
+
+describe('review fixes',()=>{
+ it('accepts a missed boarding published about the rider, as the location route publishes it',async()=>{
+  const tx=fixture();tx.$queryRaw.mockResolvedValue([{...rule,event_type:'boarding.missed'}]);
+  const missed={...event,eventType:'boarding.missed',aggregateType:'TripPassenger',aggregateId:'rider-b',data:{scheduleId:'trip-a',passengerId:'rider-b'}};
+  await enqueueRiderNotifications(asTx(tx),missed);
+  expect(tx.tripPassenger.findMany).toHaveBeenCalledWith({where:expect.objectContaining({tenantId:tenant,tripId:'trip-a',id:'rider-b',status:'ABSENT'})});
+  // A rider aggregate must name the same rider the event is about.
+  await expect(enqueueRiderNotifications(asTx(tx),{...missed,data:{scheduleId:'trip-a',passengerId:'rider-c'}})).rejects.toThrow('Invalid trip scope');
+  await expect(enqueueRiderNotifications(asTx(tx),{...missed,eventType:'trip.delayed'})).rejects.toThrow('Invalid trip scope');
+ });
+ it('still sends the closing disruption update on a cancelled trip, and nothing else',async()=>{
+  const f=fixture();f.$queryRaw.mockResolvedValue([{...defaultRules.find(r=>r.event_type==='trip.disruption_updated')!,enabled:true,channels:['EMAIL','SMS']}]);
+  f.tripSchedule.findFirst.mockResolvedValue({id:'trip-a',tripNumber:'T1',status:'CANCELLED'});
+  f.busTripDisruption.findFirst.mockResolvedValue({id:'disruption',status:'RESOLVED'});
+  expect(await canSendRiderDelivery(asTx(f),{...row,event_type:'trip.disruption_updated',event_id:'resolution-event'})).toBe(true);
+  f.busTripDisruption.findFirst.mockResolvedValue({id:'disruption',status:'REPORTED'});
+  expect(await canSendRiderDelivery(asTx(f),{...row,event_type:'trip.disruption_updated',event_id:'report-event'})).toBe(false);
+  f.$queryRaw.mockResolvedValue([rule]);
+  expect(await canSendRiderDelivery(asTx(f),row)).toBe(false);
+ });
+});

@@ -28,7 +28,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   const afterCommit: { run?: () => Promise<void> } = {};
   try {
     const response = await withTenantRls(prisma, auth.tenantId, async tx => {
-      await tx.$queryRawUnsafe(`SELECT id FROM trip_schedules WHERE id::text = $1 AND tenant_id = $2 FOR UPDATE`, id, auth.tenantId);
+      await tx.$queryRawUnsafe(`SELECT id FROM trip_schedules WHERE id::text = $1 AND tenant_id::text = $2 FOR UPDATE`, id, auth.tenantId);
       const schedule = await tx.tripSchedule.findFirst({ where: { id, tenantId: auth.tenantId, deletedAt: null } });
       if (!schedule) return NextResponse.json({ error: 'Not found' }, { status: 404 });
       if (schedule.status !== 'SCHEDULED') return NextResponse.json({ error: 'Trip is not scheduled' }, { status: 409 });

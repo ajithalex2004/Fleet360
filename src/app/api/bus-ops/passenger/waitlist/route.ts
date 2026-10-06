@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({ error: 'staffMemberId and tripId are required' }, { status: 400 });
         }
 
-        await tx.$queryRawUnsafe(`SELECT id FROM trip_schedules WHERE id::text = $1 AND tenant_id = $2 FOR UPDATE`, tripId, tenantId);
+        await tx.$queryRawUnsafe(`SELECT id FROM trip_schedules WHERE id::text = $1 AND tenant_id::text = $2 FOR UPDATE`, tripId, tenantId);
         const trip = await tx.tripSchedule.findFirst({
           where: { id: tripId, tenantId },
           select: { id: true, status: true, deletedAt: true },

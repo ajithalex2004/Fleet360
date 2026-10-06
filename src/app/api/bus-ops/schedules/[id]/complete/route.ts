@@ -8,6 +8,7 @@ import { prisma }          from '@/lib/prisma';
 import { getEventBus }     from '@/events/event-bus';
 import { TRIP_COMPLETED }  from '@/events/registry';
 import { assertTripTransition, normalizeTripStatus, TripTransitionError } from '@/lib/bus-ops/state-machines';
+import { hasUnrecoveredDisruption } from '@/lib/bus-ops/disruptions';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -36,10 +37,15 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     return await withTenantRls(prisma, tenantId, async (tx) => {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-        await tx.$queryRawUnsafe(`SELECT id FROM trip_schedules WHERE id::text = $1 AND tenant_id = $2 FOR UPDATE`, params.id, tenantId);
+        await tx.$queryRawUnsafe(`SELECT id FROM trip_schedules WHERE id::text = $1 AND tenant_id::text = $2 FOR UPDATE`, params.id, tenantId);
         const schedule = await tx.tripSchedule.findFirst({ where: { id: params.id, tenantId, deletedAt: null } });
         if (!schedule) return NextResponse.json({ error: 'Not found' }, { status: 404 });
         if (schedule.status === 'COMPLETED') return NextResponse.json({ error: 'Trip already completed' }, { status: 409 });
+        // A reported breakdown can only be closed once recovered or cancelled:
+        // completing first would leave it (and its incident) open for good.
+        if (await hasUnrecoveredDisruption(tx, tenantId, params.id)) {
+          return NextResponse.json({ error: 'This trip has a reported disruption: assign an inspected substitute or cancel the trip before completing it' }, { status: 409 });
+        }
         try {
           // State machine: only STARTED / EN_ROUTE can COMPLETE. Previously
           // allowed SCHEDULED too — that skipped no-show marking and audit

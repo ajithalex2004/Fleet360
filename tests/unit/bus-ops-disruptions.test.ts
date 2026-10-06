@@ -1,5 +1,7 @@
 import { beforeEach,describe,expect,it,vi } from 'vitest';
 import type { Prisma } from '@prisma/client';
+import { readFileSync } from 'fs';
+import { execSync } from 'child_process';
 const mocks=vi.hoisted(()=>({publish:vi.fn(),audit:vi.fn(),validate:vi.fn(),locks:vi.fn()}));
 vi.mock('@/lib/prisma',()=>({prisma:{}}));
 vi.mock('@/events/event-bus',()=>({getEventBus:()=>({publish:mocks.publish})}));
@@ -82,4 +84,37 @@ it('strict inputs deny forged status, actor, tenant, version omission and partia
  expect(disruptionCommandSchema.safeParse({...recover(),status:'RESOLVED',reportedBy:'admin'}).success).toBe(false);
  expect(disruptionCommandSchema.safeParse({...recover(),expectedVersion:undefined}).success).toBe(false);
  expect(disruptionCommandSchema.safeParse({...recover(),items:[]}).success).toBe(false);
+});
+
+describe('review fixes: disruption gates everywhere a trip moves', () => {
+  const src = (p: string) => readFileSync(p, 'utf8');
+  it('blocks completing a trip whose breakdown is still unrecovered', () => {
+    const route = src('src/app/api/bus-ops/schedules/[id]/complete/route.ts');
+    expect(route).toContain('if (await hasUnrecoveredDisruption(tx, tenantId, params.id))');
+  });
+  it('applies the disruption and inspection gates to telemetry auto-start too', () => {
+    const t = src('src/lib/bus-ops/telemetry-trip-transitions.ts');
+    const gate = t.indexOf('hasUnrecoveredDisruption(tx, schedule.tenantId, schedule.id)');
+    expect(gate).toBeGreaterThan(-1);
+    expect(t.indexOf('inspectionAllowsDeparture(latest, resources, now)')).toBeGreaterThan(gate);
+    expect(gate).toBeLessThan(t.indexOf('await applyDecision(db, decision, now, schedule.tenantId)'));
+    // Riders with a later boarding stop stay CONFIRMED, as on the depart command.
+    expect(t).toContain("status: 'CONFIRMED', deletedAt: null, boardingStopId: null");
+  });
+  it('keeps recording GPS for a broken-down bus while pausing stop automation', () => {
+    const route = src('src/app/api/bus-ops/vehicles/[id]/location/route.ts');
+    expect(route).not.toContain("return NextResponse.json({error:'Trip disruption awaiting substitute");
+    expect(route).toContain('if (!scheduleId || disrupted) {');
+    expect(route.indexOf('INSERT INTO fleet.bus_gps_pings')).toBeLessThan(route.indexOf('if (!scheduleId || disrupted) {'));
+  });
+  it('compares trip_schedules.tenant_id (uuid) as text in every raw lock', () => {
+    const hits = execSync(`grep -rnE "trip_schedules[^\\\`']*tenant_id ?= ?\\\\$[0-9]" src || true`).toString().trim();
+    expect(hits).toBe('');
+  });
+  it('tells riders plates, names and local times, not ids and UTC', () => {
+    const d = src('src/lib/bus-ops/disruptions.ts');
+    expect(d).not.toContain('${current.replacementVehicleId}');
+    expect(d).not.toContain('${eta.toISOString()}');
+    expect(d).toContain("timeZone:'Asia/Dubai'");
+  });
 });

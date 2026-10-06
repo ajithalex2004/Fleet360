@@ -8,6 +8,16 @@ import { withAssignmentLocks } from './assignment-txn';
 import { validateResourceAssignment } from './validate-assignment';
 import type { ReportDisruptionInput, DisruptionCommand } from './disruption-input';
 const OPERABLE = ['SCHEDULED','STARTED','EN_ROUTE','DEPARTED','IN_TRANSIT'];
+/** A time as riders read it (UAE local time), for the messages they receive. */
+const localTime=(d:Date)=>d.toLocaleString('en-AE',{timeZone:'Asia/Dubai',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+async function resourceLabels(tx:Prisma.TransactionClient,tenantId:string,vehicleId:string|null,driverId:string|null){
+ const vehicle=vehicleId?await tx.vehicle.findFirst({where:{id:vehicleId,tenantId}}):null;
+ const driver=driverId?await tx.driver.findFirst({where:{id:driverId,tenantId}}):null;
+ return {
+  vehicle:vehicle?.licensePlate ?? vehicle?.plateNumber ?? 'the assigned bus',
+  driver:driver?(driver.name ?? ([driver.firstName,driver.lastName].filter(Boolean).join(' ') || 'the assigned driver')):'the assigned driver',
+ };
+}
 export class DisruptionError extends Error {
  constructor(public status:number,message:string,public validation?:unknown){super(message);}
 }
@@ -16,7 +26,7 @@ export async function hasUnrecoveredDisruption(tx:Prisma.TransactionClient,tenan
  return rows.length>0;
 }
 async function lockedSchedule(tx:Prisma.TransactionClient,tenantId:string,scheduleId:string){
- await tx.$queryRawUnsafe('SELECT id FROM trip_schedules WHERE id::text=$1 AND tenant_id=$2 FOR UPDATE',scheduleId,tenantId);
+ await tx.$queryRawUnsafe('SELECT id FROM trip_schedules WHERE id::text=$1 AND tenant_id::text = $2 FOR UPDATE',scheduleId,tenantId);
  const trip=await tx.tripSchedule.findFirst({where:{id:scheduleId,tenantId,deletedAt:null}});
  if(!trip) throw new DisruptionError(404,'Trip not found');
  return trip;
@@ -54,8 +64,9 @@ export async function commandDisruption(tx:Prisma.TransactionClient,tenantId:str
   if(current.status!=='RECOVERED' && trip.status!=='CANCELLED') throw new DisruptionError(409,'Assign and inspect a substitute before closing the disruption');
   const incident=await tx.tripIncident.updateMany({where:{id:current.incidentId,tenantId,scheduleId},data:{status:'RESOLVED',resolvedAt:now,resolvedBy:actor,actionTaken:input.notes}});
   if(incident.count!==1)throw new DisruptionError(409,'Linked incident is unavailable; reconcile before closing');
+  const labels=trip.status==='CANCELLED'?null:await resourceLabels(tx,tenantId,current.replacementVehicleId,current.replacementDriverId);
   const event=await getEventBus().publish({eventType:TRIP_DISRUPTION_UPDATED,aggregateType:'TripSchedule',aggregateId:scheduleId,tenantId,actor,sourceModule:'bus-ops',
-   payload:{scheduleId,tripNumber:trip.tripNumber,disruptionId:id,stage:'RESOLVED',updateText:trip.status==='CANCELLED'?'The disrupted trip has been cancelled. Contact transport operations for assistance.':`Operations has confirmed the disruption response is complete. Replacement bus ${current.replacementVehicleId}, driver ${current.replacementDriverId}; destination arrival ${current.revisedEta?.toISOString() ?? 'see trip details'}.`}},tx);
+   payload:{scheduleId,tripNumber:trip.tripNumber,disruptionId:id,stage:'RESOLVED',updateText:!labels?'The disrupted trip has been cancelled. Contact transport operations for assistance.':`Operations has confirmed the disruption response is complete. Replacement bus ${labels.vehicle}, driver ${labels.driver}; destination arrival ${current.revisedEta ? localTime(current.revisedEta) : 'see trip details'}.`}},tx);
   await audit(tx,tenantId,actor,id,JSON.stringify({action:'resolve',notes:input.notes,tripStatus:trip.status}));
   return tx.busTripDisruption.update({where:{id},data:{status:'RESOLVED',version:{increment:1},resolutionNotes:input.notes,resolvedBy:actor,resolvedAt:now,resolutionEventId:event.eventId}});
  }
@@ -81,11 +92,11 @@ export async function commandDisruption(tx:Prisma.TransactionClient,tenantId:str
   await tx.tripSchedule.update({where:{id:scheduleId},data:{vehicleId:input.vehicleId,driverId:input.driverId,capacity:vehicle.seatingCapacity,arrivalTime:eta}});
   const incident=await tx.tripIncident.updateMany({where:{id:current.incidentId,tenantId,scheduleId},data:{status:'INVESTIGATING',actionTaken:input.notes}});
   if(incident.count!==1)throw new DisruptionError(409,'Linked incident is unavailable; reconcile before recovery');
-  const vehicleLabel=vehicle.licensePlate ?? vehicle.plateNumber ?? vehicle.id;
-  const driverLabel=driver.name ?? ([driver.firstName,driver.lastName].filter(Boolean).join(' ') || driver.id);
+  const vehicleLabel=vehicle.licensePlate ?? vehicle.plateNumber ?? 'the assigned bus';
+  const driverLabel=driver.name ?? ([driver.firstName,driver.lastName].filter(Boolean).join(' ') || 'the assigned driver');
   const event=await getEventBus().publish({eventType:TRIP_DISRUPTION_UPDATED,aggregateType:'TripSchedule',aggregateId:scheduleId,tenantId,actor,sourceModule:'bus-ops',
    payload:{scheduleId,tripNumber:trip.tripNumber,disruptionId:id,stage:'RECOVERED',vehicleId:input.vehicleId,driverId:input.driverId,revisedEta:eta.toISOString(),
-    updateText:`Replacement bus ${vehicleLabel}, driver ${driverLabel}. Revised destination arrival: ${eta.toISOString()}. Please check your trip details.`}},tx);
+    updateText:`Replacement bus ${vehicleLabel}, driver ${driverLabel}. Revised destination arrival: ${localTime(eta)}. Please check your trip details.`}},tx);
   await audit(tx,tenantId,actor,id,JSON.stringify({action:'recover',previousVehicleId:trip.vehicleId,previousDriverId:trip.driverId,vehicleId:input.vehicleId,driverId:input.driverId,
    revisedEta:eta.toISOString(),inspectionId:check.id,validation,notes:input.notes}));
   return tx.busTripDisruption.update({where:{id},data:{status:'RECOVERED',version:{increment:1},replacementVehicleId:input.vehicleId,replacementDriverId:input.driverId,

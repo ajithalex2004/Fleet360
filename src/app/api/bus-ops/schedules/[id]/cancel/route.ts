@@ -29,7 +29,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     return await withTenantRls(prisma, tenantId, async (tx) => {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-        await tx.$queryRawUnsafe(`SELECT id FROM trip_schedules WHERE id::text = $1 AND tenant_id = $2 FOR UPDATE`, params.id, tenantId);
+        await tx.$queryRawUnsafe(`SELECT id FROM trip_schedules WHERE id::text = $1 AND tenant_id::text = $2 FOR UPDATE`, params.id, tenantId);
         const schedule = await tx.tripSchedule.findFirst({ where: { id: params.id, tenantId, deletedAt: null } });
         if (!schedule) return NextResponse.json({ error: 'Not found' }, { status: 404 });
         if (schedule.status === 'CANCELLED') return NextResponse.json({ error: 'Trip already cancelled' }, { status: 409 });

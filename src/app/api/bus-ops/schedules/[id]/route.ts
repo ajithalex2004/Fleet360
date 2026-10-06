@@ -117,7 +117,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
         // Load full existing row so we can build an effective-merged
         // schedule for validation. Any assignment-affecting field NOT in
         // the patch retains its committed value.
-        await tx.$queryRawUnsafe('SELECT id FROM trip_schedules WHERE id::text = $1 AND tenant_id = $2 FOR UPDATE', params.id, tenantId);
+        await tx.$queryRawUnsafe('SELECT id FROM trip_schedules WHERE id::text = $1 AND tenant_id::text = $2 FOR UPDATE', params.id, tenantId);
         const existing = await tx.tripSchedule.findFirst({
           where: { id: params.id, tenantId, deletedAt: null },
           select: {

@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
         identifier = b.token ?? null;
       }
       if (!scheduleId) return NextResponse.json({ error: 'Trip is required' }, { status: 400 });
-      await tx.$queryRawUnsafe('SELECT id FROM trip_schedules WHERE id::text = $1 AND tenant_id = $2 FOR UPDATE', scheduleId, auth.tenantId);
+      await tx.$queryRawUnsafe('SELECT id FROM trip_schedules WHERE id::text = $1 AND tenant_id::text = $2 FOR UPDATE', scheduleId, auth.tenantId);
       const trip = await tx.tripSchedule.findFirst({ where: { id: scheduleId, tenantId: auth.tenantId, deletedAt: null, status: { in: ['SCHEDULED','STARTED','EN_ROUTE','DEPARTED','IN_TRANSIT'] } } });
       if (!trip) return NextResponse.json({ error: 'Eligible trip not found' }, { status: 404 });
       if (b.method === 'NFC') {

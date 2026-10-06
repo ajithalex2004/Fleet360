@@ -128,13 +128,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         // Serialize visit and attendance transitions for this trip. The
         // unique visit row alone does not serialize passenger state changes.
         if (scheduleId) await tx.$queryRawUnsafe(
-          'SELECT id FROM trip_schedules WHERE id::text = $1 AND tenant_id = $2 FOR UPDATE',
+          'SELECT id FROM trip_schedules WHERE id::text = $1 AND tenant_id::text = $2 FOR UPDATE',
           scheduleId, tenantId,
         );
+        // While a breakdown awaits its substitute, positions are still
+        // recorded (dispatchers need to see the bus) but stop and attendance
+        // automation is paused.
+        let disrupted = false;
         if (scheduleId) {
           const current=await tx.tripSchedule.findFirst({where:{id:scheduleId,tenantId,vehicleId,deletedAt:null,status:{in:['SCHEDULED','STARTED','EN_ROUTE','DEPARTED','IN_TRANSIT']}}});
           if(!current) return NextResponse.json({error:'Vehicle/trip assignment changed'},{status:409});
-          if(await hasUnrecoveredDisruption(tx,tenantId,scheduleId)) return NextResponse.json({error:'Trip disruption awaiting substitute; stop and attendance automation paused'},{status:409});
+          disrupted = await hasUnrecoveredDisruption(tx,tenantId,scheduleId);
         }
         // ensureBusGpsTables() removed — tables live in fleet schema now
 
@@ -158,15 +162,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         // No scheduleId → nothing to evaluate against a route, but still push the
         // vehicle onto the live-map so unattached vehicles ("garage sweep",
         // pre-trip warm-up) are visible.
-        if (!scheduleId) {
+        if (!scheduleId || disrupted) {
           await upsertFleetPosition({
             tenantId, vehicleId,
             lat: latestPingForFeed.latitude, lng: latestPingForFeed.longitude,
             speedKmh: latestPingForFeed.speedKmh ?? 0,
             headingDeg: latestPingForFeed.headingDeg ?? 0,
-            status: 'IDLE',
+            status: disrupted ? 'BREAKDOWN' : 'IDLE',
           }).catch(err => console.warn('[bus-ops/location] fleet-position upsert failed:', err));
-          return NextResponse.json({ stored: validPings.length, transitions: [], approachNotifications: 0 });
+          return NextResponse.json({
+            stored: validPings.length, transitions: [], approachNotifications: 0,
+            ...(disrupted ? { paused: 'Trip disruption awaiting substitute; stop and attendance automation paused' } : {}),
+          });
         }
 
         // Load the schedule's route stops (with GPS) and the prior visit state.

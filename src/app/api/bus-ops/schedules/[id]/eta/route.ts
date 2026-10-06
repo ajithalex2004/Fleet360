@@ -70,7 +70,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       try {
         // ensureBusGpsTables() removed — tables live in fleet schema now
 
-        await tx.$queryRawUnsafe('SELECT id FROM trip_schedules WHERE id::text=$1 AND tenant_id=$2 FOR UPDATE',scheduleId,tenantId);
+        await tx.$queryRawUnsafe('SELECT id FROM trip_schedules WHERE id::text=$1 AND tenant_id::text = $2 FOR UPDATE',scheduleId,tenantId);
         const schedule = await tx.tripSchedule.findFirst({
           where: { id: scheduleId, tenantId, deletedAt:null },
           select: {

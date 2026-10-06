@@ -42,11 +42,11 @@ export async function GET(req: NextRequest) {
           totalRoutes,
           totalStaff,
         ] = await Promise.all([
-          tx.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM trip_schedules WHERE deleted_at IS NULL AND departure_time >= $1 AND tenant_id = $2`, thirtyDaysAgo, tenantId).catch(zero),
+          tx.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM trip_schedules WHERE deleted_at IS NULL AND departure_time >= $1 AND tenant_id::text = $2`, thirtyDaysAgo, tenantId).catch(zero),
           tx.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM trip_schedules WHERE deleted_at IS NULL AND status = 'COMPLETED' AND departure_time >= $1 AND tenant_id = $2`, thirtyDaysAgo, tenantId).catch(zero),
           tx.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM trip_schedules WHERE deleted_at IS NULL AND status = 'CANCELLED' AND departure_time >= $1 AND tenant_id = $2`, thirtyDaysAgo, tenantId).catch(zero),
           tx.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM trip_schedules WHERE deleted_at IS NULL AND status IN ('STARTED','EN_ROUTE','DEPARTED','IN_TRANSIT') AND tenant_id = $1`, tenantId).catch(zero),
-          tx.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM trip_passengers tp JOIN trip_schedules ts ON ts.id = tp.trip_id WHERE ts.departure_time >= $1 AND ts.deleted_at IS NULL AND ts.tenant_id = $2`, thirtyDaysAgo, tenantId).catch(zero),
+          tx.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM trip_passengers tp JOIN trip_schedules ts ON ts.id = tp.trip_id WHERE ts.departure_time >= $1 AND ts.deleted_at IS NULL AND ts.tenant_id::text = $2`, thirtyDaysAgo, tenantId).catch(zero),
           tx.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM bus_routes WHERE deleted_at IS NULL AND is_active = true AND tenant_id = $1`, tenantId).catch(zero),
           tx.$queryRawUnsafe<[{count:bigint}]>(`SELECT COUNT(*) as count FROM workforce.employees WHERE deleted_at IS NULL AND is_active = true AND tenant_id = $1`, tenantId).catch(zero),
         ]);
@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
         const byShift = await tx.$queryRawUnsafe<Array<{ shift_type: string | null; count: bigint }>>(
           `SELECT shift_type, COUNT(*) as count
            FROM trip_schedules
-           WHERE deleted_at IS NULL AND departure_time >= $1 AND tenant_id = $2
+           WHERE deleted_at IS NULL AND departure_time >= $1 AND tenant_id::text = $2
            GROUP BY shift_type ORDER BY count DESC`,
           thirtyDaysAgo, tenantId
         ).catch(() => []);
@@ -95,7 +95,7 @@ export async function GET(req: NextRequest) {
           `SELECT r.name, COUNT(ts.id) AS count, COALESCE(SUM(ts.confirmed_count), 0) AS passengers
            FROM trip_schedules ts
            JOIN bus_routes r ON r.id = ts.route_id
-           WHERE ts.deleted_at IS NULL AND ts.departure_time >= $1 AND ts.tenant_id = $2
+           WHERE ts.deleted_at IS NULL AND ts.departure_time >= $1 AND ts.tenant_id::text = $2
            GROUP BY r.name
            ORDER BY count DESC
            LIMIT 8`,
@@ -106,7 +106,7 @@ export async function GET(req: NextRequest) {
         const occupancy = await tx.$queryRawUnsafe<Array<{ avg_rate: number }>>(
           `SELECT AVG(CASE WHEN capacity > 0 THEN confirmed_count::float / capacity * 100 ELSE 0 END) AS avg_rate
            FROM trip_schedules
-           WHERE deleted_at IS NULL AND departure_time >= $1 AND capacity > 0 AND tenant_id = $2`,
+           WHERE deleted_at IS NULL AND departure_time >= $1 AND capacity > 0 AND tenant_id::text = $2`,
           thirtyDaysAgo, tenantId
         ).catch(() => [{ avg_rate: 0 }]);
 
@@ -114,7 +114,7 @@ export async function GET(req: NextRequest) {
         const byHour = await tx.$queryRawUnsafe<Array<{ hour: number; count: bigint }>>(
           `SELECT EXTRACT(HOUR FROM departure_time)::int AS hour, COUNT(*) as count
            FROM trip_schedules
-           WHERE deleted_at IS NULL AND departure_time >= $1 AND tenant_id = $2
+           WHERE deleted_at IS NULL AND departure_time >= $1 AND tenant_id::text = $2
            GROUP BY hour ORDER BY hour ASC`,
           thirtyDaysAgo, tenantId
         ).catch(() => []);
