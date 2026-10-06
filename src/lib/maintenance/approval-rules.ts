@@ -118,3 +118,20 @@ export const statusKey = (s: unknown) => (typeof s === 'string' ? s.replace(/[_-
 export const ESTIMATION_APPROVED = 'Estimation Approved';
 export const PENDING_ESTIMATION_APPROVAL = 'Pending Estimation Approval';
 export const UNDER_ESTIMATION = 'Under Estimation';
+
+// Where a request is relative to its estimate approval (src/types/maintenance.ts
+// MaintenanceStatus). Rejections and failed inspections are neither.
+const BEFORE_APPROVAL = new Set(['Requested', 'Submitted', 'Accepted', 'Re-Assign', UNDER_ESTIMATION, PENDING_ESTIMATION_APPROVAL].map(statusKey));
+const PAST_APPROVAL = new Set([
+  ESTIMATION_APPROVED, 'Pending Operations Ack', 'Pending Maintenance Approval', 'Under Maintenance', 'Repair Completed',
+  'Quality Inspection', 'Ready For Service', 'Maintenance Completed', 'Completed', 'Pending Invoice', 'Invoice Submitted', 'Closed',
+].map(statusKey));
+
+/**
+ * Whether moving a request from `from` to `to` approves its estimate: from
+ * any status before approval to Estimation Approved or any later status
+ * (the request page's approve goes straight to Under Maintenance). Such a
+ * move needs the approval rule's role, like the estimate decision does.
+ */
+export const approvesEstimate = (from: unknown, to: unknown) =>
+  BEFORE_APPROVAL.has(statusKey(from)) && PAST_APPROVAL.has(statusKey(to));

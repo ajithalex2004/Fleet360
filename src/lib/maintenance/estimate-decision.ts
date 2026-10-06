@@ -29,6 +29,52 @@ export async function loadPendingEstimate(tx: Tx, tenantId: string, requestId: s
 export interface QuotationAmount { id: string; garageId: string | null; amount: number }
 
 /**
+ * The amount an approval of the request is for, from what is stored, never
+ * from the request body: the chosen quotation's amount when one is named
+ * (and is the request's), else the higher of the request's estimated cost
+ * and its highest quotation still in play. Null when there is no estimate.
+ */
+export async function approvalAmount(tx: Tx, tenantId: string, requestId: string, quotationId?: unknown): Promise<number | null> {
+  const rows = await tx.quotation.findMany({
+    where: { tenantId, maintenanceRequestId: requestId, deletedAt: null },
+    select: { id: true, grandTotal: true, totalCost: true, status: true },
+  });
+  const amount = (q: (typeof rows)[number]) => Number(q.grandTotal ?? q.totalCost ?? NaN);
+  const chosen = typeof quotationId === 'string' ? rows.find((q) => q.id === quotationId) : undefined;
+  if (chosen && Number.isFinite(amount(chosen))) return amount(chosen);
+  const mr = await tx.maintenanceRequest.findFirst({ where: { id: requestId, tenantId }, select: { estimatedCost: true } });
+  const amounts = [
+    mr?.estimatedCost == null ? NaN : Number(mr.estimatedCost),
+    ...rows.filter((q) => (q.status ?? '').toUpperCase() !== 'REJECTED').map(amount),
+  ].filter(Number.isFinite);
+  return amounts.length ? Math.max(...amounts) : null;
+}
+
+/** The request was decided (or moved on) by someone else meanwhile. */
+export class EstimateConflictError extends Error {
+  constructor() { super('This estimate has already been decided'); }
+}
+
+/**
+ * Moves the request from Pending Estimation Approval to `status`, in one
+ * statement: only one of two decisions made at the same moment gets it;
+ * the other throws EstimateConflictError and changes nothing.
+ */
+async function claimPending(tx: Tx, tenantId: string, requestId: string, status: string): Promise<void> {
+  const claimed = await tx.$executeRawUnsafe(
+    `UPDATE maintenance_requests SET status = $3, updated_at = NOW()
+      WHERE id::text = $1 AND tenant_id::text = $2
+        AND lower(trim(regexp_replace(coalesce(status, ''), '[_-]+', ' ', 'g'))) = $4`,
+    requestId, tenantId, status, statusKey(PENDING_ESTIMATION_APPROVAL));
+  if (!claimed) throw new EstimateConflictError();
+}
+
+/** WO-MM-YYYY-<REQUEST ID>, as the request page numbers work orders. */
+export function workOrderNumber(requestId: string, at: Date = new Date()): string {
+  return `WO-${String(at.getMonth() + 1).padStart(2, '0')}-${at.getFullYear()}-${requestId.toUpperCase()}`;
+}
+
+/**
  * The quotation an approval workflow approves: the one matching the
  * request's estimated cost, else the cheapest with an amount.
  */
@@ -57,12 +103,12 @@ export async function recordEstimateApproval(tx: Tx, args: {
   const { tenantId, requestId, quotation, actor } = args;
   const now = new Date();
   const comments = args.comments?.trim() || null;
+  await claimPending(tx, tenantId, requestId, ESTIMATION_APPROVED);
   await tx.quotation.updateMany({ where: { tenantId, maintenanceRequestId: requestId, deletedAt: null, id: { not: quotation.id } }, data: { status: 'REJECTED' } });
   await tx.quotation.updateMany({ where: { tenantId, id: quotation.id }, data: { status: 'APPROVED' } });
   await tx.maintenanceRequest.updateMany({
     where: { id: requestId, tenantId },
     data: {
-      status: ESTIMATION_APPROVED,
       estimatedCost: quotation.amount,
       ...(quotation.garageId ? { garageId: quotation.garageId } : {}),
       estimateApproval: JSON.stringify({
@@ -70,6 +116,11 @@ export async function recordEstimateApproval(tx: Tx, args: {
         approvedAt: now.toISOString(), rule: args.basis.rule ?? null, workflow: args.basis.workflow ?? null, comments,
       }),
     },
+  });
+  // The work order the garage works to, as approving on the request page numbers it.
+  await tx.maintenanceRequest.updateMany({
+    where: { id: requestId, tenantId, OR: [{ workOrderNo: null }, { workOrderNo: '' }] },
+    data: { workOrderNo: workOrderNumber(requestId, now) },
   });
   const basis = args.basis.workflow
     ? ` through the "${args.basis.workflow}" approval workflow`
@@ -95,8 +146,8 @@ export async function recordEstimateRejection(tx: Tx, args: {
   tenantId: string; requestId: string; actor: string; reason: string;
 }) {
   const { tenantId, requestId } = args;
+  await claimPending(tx, tenantId, requestId, UNDER_ESTIMATION);
   await tx.quotation.updateMany({ where: { tenantId, maintenanceRequestId: requestId, deletedAt: null }, data: { status: 'REJECTED' } });
-  await tx.maintenanceRequest.updateMany({ where: { id: requestId, tenantId }, data: { status: UNDER_ESTIMATION } });
   await tx.statusHistory.create({
     data: { tenantId, maintenanceRequestId: requestId, status: UNDER_ESTIMATION, date: new Date(), note: `Estimates rejected: ${args.reason}`, actor: args.actor },
   });

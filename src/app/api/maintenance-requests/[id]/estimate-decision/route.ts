@@ -8,7 +8,7 @@ import { withAuditedAction } from '@/lib/audited-action';
 import { checkApprover, statusKey, PENDING_ESTIMATION_APPROVAL } from '@/lib/maintenance/approval-rules';
 import { callerRoleCodes, loadApprovalRules } from '@/lib/maintenance/approval-rules-db';
 import {
-    loadPendingEstimate, recordEstimateApproval, recordEstimateRejection, type EstimationApprovedPayload,
+    EstimateConflictError, loadPendingEstimate, recordEstimateApproval, recordEstimateRejection, type EstimationApprovedPayload,
 } from '@/lib/maintenance/estimate-decision';
 import { publishEstimationApproved } from '@/lib/maintenance/publish-event';
 import { runAsTenant } from '@/lib/rls-scope';
@@ -91,6 +91,8 @@ async function handlePOST(request: NextRequest, props: { params: Promise<{ id: s
             });
             return NextResponse.json({ ok: true, status: 'Estimation Approved', amount: chosen.amount, rule: check.rule?.name ?? null });
         } catch (e) {
+            // Decided by someone else at the same moment: theirs stands.
+            if (e instanceof EstimateConflictError) return NextResponse.json({ error: e.message }, { status: 409 });
             console.error('Failed to record estimate decision:', e);
             return NextResponse.json({ error: 'Could not record the decision' }, { status: 500 });
         }

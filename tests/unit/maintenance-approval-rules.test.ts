@@ -12,6 +12,7 @@
  *    bypassed, and auto-approves on submission
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'fs';
 
 vi.mock('next/server', async () => await import('next/server.js'));
 
@@ -37,6 +38,11 @@ const tx = vi.hoisted(() => {
     return { id: `${model}-1`, ...data };
   };
   return {
+    // The estimate decision's atomic status change (claimPending).
+    $executeRawUnsafe: async (_sql: string, id: string, tenantId: string, status: string) => {
+      rec.updates.push({ model: 'request', where: { id, tenantId }, data: { status } });
+      return 1;
+    },
     maintenanceApprovalRule: {
       findMany: async () => rec.rules,
       findFirst: async ({ where }: { where: { id: string } }) => (rec.rules as Array<{ id: string }>).find((r) => r.id === where.id) ?? null,
@@ -173,8 +179,11 @@ describe('estimate decision', () => {
     const res = await decision.POST(call('FLEET_MANAGER', 'x', 'POST', { action: 'approve', quotationId: 'q1', comments: 'Go ahead' }), params('mr1'));
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ status: 'Estimation Approved', amount: 3200, rule: 'Medium repairs' });
-    const mrUpdate = rec.updates.find((u) => u.model === 'request')!;
-    expect(mrUpdate.data).toMatchObject({ status: 'Estimation Approved', estimatedCost: 3200, garageId: 'g1' });
+    // The status moves first, atomically (only from Pending Estimation Approval).
+    expect(rec.updates[0]).toMatchObject({ model: 'request', data: { status: 'Estimation Approved' } });
+    const mrUpdate = rec.updates.find((u) => u.model === 'request' && u.data.estimatedCost !== undefined)!;
+    expect(mrUpdate.data).toMatchObject({ estimatedCost: 3200, garageId: 'g1' });
+    expect(rec.updates.find((u) => u.model === 'request' && u.data.workOrderNo)?.data.workOrderNo).toMatch(/^WO-\d{2}-\d{4}-MR1$/);
     expect(JSON.parse(mrUpdate.data.estimateApproval as string)).toMatchObject({ quotationId: 'q1', approvedBy: 'u1', rule: { name: 'Medium repairs' } });
     expect(rec.updates.filter((u) => u.model === 'quotation').map((u) => u.data.status)).toEqual(['REJECTED', 'APPROVED']);
     expect(rec.creates.find((c) => c.model === 'history')?.data.note).toContain('under rule "Medium repairs"');
@@ -201,7 +210,7 @@ describe('estimate decision', () => {
   it('rejects all quotations and sends the request back with the reason', async () => {
     const res = await decision.POST(call('FLEET_MANAGER', 'x', 'POST', { action: 'reject', reason: 'Too expensive' }), params('mr1'));
     expect(res.status).toBe(200);
-    expect(rec.updates.map((u) => [u.model, u.data.status])).toEqual([['quotation', 'REJECTED'], ['request', 'Under Estimation']]);
+    expect(rec.updates.map((u) => [u.model, u.data.status])).toEqual([['request', 'Under Estimation'], ['quotation', 'REJECTED']]);
     expect(rec.creates.find((c) => c.model === 'history')?.data.note).toBe('Estimates rejected: Too expensive');
   });
 });
@@ -218,6 +227,7 @@ describe('request update route applies the same rules', () => {
   it('auto-approves an estimate submitted inside an auto-approve band', async () => {
     rec.rules = RULES;
     rec.mr = { status: 'Under Estimation', estimatedCost: null };
+    rec.quotations = []; // an estimate typed in, no garage quotations
     const res = await request.PATCH(call('FLEET_MANAGER', 'x', 'PATCH', { status: 'Pending Estimation Approval', estimatedCost: 800 }), params('mr1'));
     expect(res.status).toBe(200);
     expect(rec.updates[0].data.status).toBe('Estimation Approved');
@@ -258,5 +268,43 @@ describe('before the rules table exists', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     await expect(loadApprovalRules(missing as never, 'tenant-a')).resolves.toEqual([]);
     warn.mockRestore();
+  });
+});
+
+describe('what counts as approving an estimate', () => {
+  it('is any move from before approval to approved or later', async () => {
+    const { approvesEstimate } = await import('@/lib/maintenance/approval-rules');
+    expect(approvesEstimate('Pending Estimation Approval', 'Estimation Approved')).toBe(true);
+    // The request page's approve goes straight to Under Maintenance.
+    expect(approvesEstimate('Pending Estimation Approval', 'UNDER_MAINTENANCE')).toBe(true);
+    expect(approvesEstimate('Under Estimation', 'Closed')).toBe(true);
+    expect(approvesEstimate('Pending Estimation Approval', 'Under Estimation')).toBe(false);
+    expect(approvesEstimate('Pending Estimation Approval', 'Rejected')).toBe(false);
+    expect(approvesEstimate('Under Maintenance', 'Repair Completed')).toBe(false);
+  });
+
+  it('uses the stored amount, not the request body, and records a work order', () => {
+    const route = readFileSync('src/app/api/maintenance-requests/[id]/route.ts', 'utf8');
+    expect(route).toContain('const stored = await approvalAmount(tx, tenantId, params.id, body.selectedQuotationId);');
+    expect(route).toContain('Math.max(sent, stored ?? sent)');
+    const decision = readFileSync('src/lib/maintenance/estimate-decision.ts', 'utf8');
+    expect(decision).toContain('await claimPending(tx, tenantId, requestId, ESTIMATION_APPROVED);');
+    expect(decision).toContain('workOrderNo: workOrderNumber(requestId, now)');
+  });
+});
+
+describe('the request update route cannot skip or shrink the approval', () => {
+  it('checks the rule when the approve goes straight to Under Maintenance', async () => {
+    const { RULES_FOR_SKIP } = { RULES_FOR_SKIP: [{ id: 'r', name: 'Big', minCost: 1000, maxCost: null, requiredRoles: ['FLEET_DIRECTOR'], autoApprove: false, isActive: true }] };
+    rec.rules = RULES_FOR_SKIP;
+    rec.mr = { status: 'Pending Estimation Approval', estimatedCost: null };
+    const { PATCH } = await import('@/app/api/maintenance-requests/[id]/route');
+    const res = await PATCH(new NextRequest('http://x/api/maintenance-requests/mr1', {
+      method: 'PATCH', headers: { 'x-tenant-id': TENANT, 'x-user-id': 'u1', 'x-user-role': 'DRIVER', 'content-type': 'application/json' },
+      body: JSON.stringify({ status: 'Under Maintenance', estimatedCost: 1, actualCost: 1 }),
+    }), { params: Promise.resolve({ id: 'mr1' }) });
+    // The quotations (3,200 and 4,100) set the amount, not the body's 1.
+    expect(res.status).toBe(403);
+    expect(rec.updates).toHaveLength(0);
   });
 });
