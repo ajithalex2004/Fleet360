@@ -120,80 +120,13 @@ everywhere, including the current browser.
 `/api/users` now lists and reads only members of the caller's tenant; it no
 longer creates, edits or deletes users (use `/api/admin/users`).
 
-## Passkey step-up for high-impact actions
+## No passkey step-up
 
-High-impact admin actions need a passkey check, on top of the session and
-the role policy. The check must come from the person behind the session,
-within the last 5 minutes. High-impact means:
-- changes to who can do what;
-- removing people or tenants;
-- handing out credentials;
-- platform-wide operations.
-
-The list is `STEP_UP_ROUTES` in `src/lib/auth/step-up-policy.ts`. It is
-enforced in `src/middleware.ts` (step 4b'), so a handler cannot forget it.
-A test fails if the list names a route or method that does not exist.
-Protective actions are left out so they stay one click away in an incident:
-revoking sessions, an API key or an invitation.
-
-| Area | Actions needing a passkey |
-|---|---|
-| Users | create, edit, deactivate, delete, hard-delete, set password, reset passkeys |
-| Access | tenant memberships (add/remove), invitations, roles (create/edit/delete), role permissions, role overrides, nav permissions |
-| Tenants | create, edit (plan, residency, …), deactivate, hard-delete, modules, SSO, API keys |
-| Platform | impersonation, platform settings, migrations, seeds, outbox replay, Exchange partner users |
-
-How it works:
-
-- **Challenge.** Without a check, the API answers
-  `403 { error: 'step_up_required' }`.
-- **Prompt and retry.** `StepUpProvider`, mounted in the root layout, asks
-  for the passkey (fingerprint, face, device PIN or a security key), then
-  retries the request once. Pages need no changes.
-- **Step-up token.** A passed check sets the httpOnly `xl-step-up` cookie
-  (path `/api`, SameSite strict). The token is signed with a key derived
-  from `SESSION_SECRET` and bound to the session: user, tenant, issue time,
-  and who checked. Signing in again, switching tenant or starting an
-  impersonation needs a new check.
-- **Impersonation.** The impersonating platform admin checks *their own*
-  passkey. Passkeys cannot be added or removed while impersonating.
-- **Replay protection.** Challenges are single-use, consumed atomically,
-  and expire after 2 minutes. User verification is required. Signature
-  counters are enforced.
-- **Audit.** Step-ups (passed and failed), and passkeys added, removed and
-  reset, are audited (entities `StepUp` and `Passkey`).
-
-Enrolment (Admin → Passkeys, or offered in the prompt):
-
-- **First passkey.** The user re-enters their password, plus the
-  authenticator code or a recovery code when MFA is on. A user without a
-  password (SSO) must have signed in within the last 10 minutes. Adding a
-  passkey counts as a step-up.
-- **Further passkeys, and removing one.** These need a step-up with an
-  existing passkey, so a stolen session cannot add its own.
-- **Lost every passkey.** A platform admin resets them with
-  `DELETE /api/admin/users/[id]/passkeys` (itself step-up protected). The
-  user then adds a new one with their password.
-
-Configuration:
-
-- **Relying party.** Set `WEBAUTHN_RP_ID` (e.g. `app.example.com`) and
-  `WEBAUTHN_ORIGINS` (comma-separated, e.g. `https://app.example.com`).
-  Otherwise the value comes from `NEXT_PUBLIC_APP_URL`, and localhost is
-  used in development. It is never taken from request headers.
-- **Missing configuration.** Without a relying party in production,
-  passkeys answer 503, so high-impact actions are blocked while in enforce
-  mode.
-- **Domain changes.** Passkeys belong to the RP ID they were registered
-  under, so they must be reset after a domain change.
-- **`STEP_UP_MODE`.** `enforce` is the default. `report` logs `would-require`
-  and lets the request through. `off` is an emergency switch, for example
-  when the only platform admin has lost every passkey.
-
-The Go backend's own admin endpoints cannot see the step-up cookie: in
-enforce mode it refuses the step-up actions with `step_up_required`, and
-they are performed in the admin console. Those are the actions above plus
-the Go-only tenant suspend and offboard (`GO_STEP_UP_ROUTES`). See below.
+High-impact admin actions are decided by the session and the role policy
+alone. The passkey step-up (the `xl-step-up` cookie, `STEP_UP_MODE`, the
+`/api/auth/step-up/*` and `/api/auth/passkeys/*` routes and Admin →
+Passkeys) has been removed from both backends. The `staff_passkeys` and
+`step_up_challenges` tables are kept, unused, so no rows are dropped.
 
 ## The Go backend enforces the same policy
 
@@ -205,8 +138,7 @@ and revocation checks (`auth.Middleware`).
   policy by `src/lib/authz/go-policy.ts`, and embedded in Go. It carries:
   - the matrix and the admin route levels;
   - the permission catalogue and its version;
-  - module aliases and the trial rules;
-  - the step-up actions.
+  - module aliases and the trial rules.
 
   `Decide` is a port of `decide()`.
 - **Proof they agree.** `backend/authz/testdata/vectors.json` holds
@@ -214,7 +146,7 @@ and revocation checks (`auth.Middleware`).
   thirteen subjects (system roles, custom and legacy permissions, no claim,
   trial plan, the shipper portal, no role) and every decision reason. The
   Go tests require the same decision, reason, area and required permission
-  for each one, and the same step-up answer.
+  for each one.
   `tests/unit/authz-go-policy.test.ts` fails when either file is out of
   date. Regenerate them with
   `UPDATE_AUTHZ_GO_POLICY=1 npx vitest run tests/unit/authz-go-policy.test.ts`.
@@ -225,8 +157,7 @@ and revocation checks (`auth.Middleware`).
   (24 h), and enforce mode denies them.
 - **Same modes.** `AUTHZ_MODE`: `report` is the default and logs
   `{"authz":"would-deny","backend":"go",…}`; `enforce` answers 403; `off`
-  does not evaluate. `STEP_UP_MODE` is the same as in Next.js, `enforce` by
-  default. Set both on the Go service too.
+  does not evaluate. Set it on the Go service too.
 - **Go-only paths** are part of the matrix (`GO_ONLY_AREAS`):
   - `service` → maintenance;
   - `alerts/configs` → tenant admin;
@@ -253,7 +184,7 @@ from both backends, with the same shape:
 | Outcome | Action |
 |---|---|
 | Succeeded (2xx/3xx) | `CREATE` / `UPDATE` / `DELETE` by method |
-| Refused (401/403, including a step-up refusal in Go) | `DENIED` |
+| Refused (401/403) | `DENIED` |
 | Server error, or the handler threw | `FAILED` |
 | Invalid request (other 4xx) | not recorded: nothing changed |
 

@@ -661,524 +661,437 @@
   {
    "method": "GET",
    "pathname": "/api/fleet/vehicles",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/fleet/vehicles/v1",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/fleet/vehicles",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "PATCH",
    "pathname": "/api/fleet/vehicles/v1",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "DELETE",
    "pathname": "/api/fleet/vehicles/v1",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/fleet/drivers",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/fleet/drivers/d1",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/fleet/garages",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/fleet/garages",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "PUT",
    "pathname": "/api/fleet/garages/g1",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/maintenance/requests",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/maintenance/requests/m1",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/maintenance/requests",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "PATCH",
    "pathname": "/api/maintenance/requests/m1",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/maintenance/predictive",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/service/requests",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/service/requests",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "PATCH",
    "pathname": "/api/service/requests/s1",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/quotations",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "PUT",
    "pathname": "/api/quotations/q1",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "PATCH",
    "pathname": "/api/quotations/q1",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/alerts",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/alerts/configs",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/alerts/configs",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "PATCH",
    "pathname": "/api/alerts/configs/c1",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "DELETE",
    "pathname": "/api/alerts/configs/c1",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/files/upload",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/files/sign",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "DELETE",
    "pathname": "/api/files",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/logistics/shipments",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/logistics/shipments/s1",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/logistics/shipments",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/logistics/stats",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/logistics/analytics",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/logistics/sla",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/logistics/carriers",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/logistics/carriers",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/logistics/rate-contracts",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/logistics/rates/quote",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/logistics/rfqs",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/logistics/bids",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/logistics/shipments/s1/tracking",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/logistics/finance/reconciliation",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/logistics/planner/optimize",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/logistics/planner/plans/p1/commit",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/admin/tenants",
-   "requestedTenantId": null,
-   "stepUp": true
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/admin/tenants/11111111-1111-4111-8111-111111111111",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "PATCH",
    "pathname": "/api/admin/tenants/11111111-1111-4111-8111-111111111111",
-   "requestedTenantId": null,
-   "stepUp": true
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/admin/tenants/11111111-1111-4111-8111-111111111111/suspend",
-   "requestedTenantId": null,
-   "stepUp": true
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/admin/tenants/11111111-1111-4111-8111-111111111111/offboard",
-   "requestedTenantId": null,
-   "stepUp": true
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/admin/tenants/11111111-1111-4111-8111-111111111111/audit",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/admin/tenants/11111111-1111-4111-8111-111111111111/plan",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/admin/tenants/11111111-1111-4111-8111-111111111111/invitations",
-   "requestedTenantId": null,
-   "stepUp": true
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/admin/audit/verify",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/dispatch/trips",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/dispatch/trips",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "DELETE",
    "pathname": "/api/dispatch/trips/t1",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/dispatch/incidents",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/dispatch/incidents",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/dispatch/ambulance-calls",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/dispatch/ambulance-calls",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "PATCH",
    "pathname": "/api/dispatch/ambulance-calls/a1",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/dispatch/routes",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/dispatch/trips/t1/passengers",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/logistics/export",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/logistics/shipments/s1/approve",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "HEAD",
    "pathname": "/api/admin/tenants/11111111-1111-4111-8111-111111111111",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "OPTIONS",
    "pathname": "/api/admin/tenants",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/leasing/contracts",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/rental/bookings",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/reports/export.csv",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "PUT",
    "pathname": "/api/billing/plan",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/debug/info",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/auth/me",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/exchange/jobs",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/webhooks/stripe",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/nothing-here",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/fleet/",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/users",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/users/u1",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/admin/users/set-password",
-   "requestedTenantId": null,
-   "stepUp": true
+   "requestedTenantId": null
   },
   {
    "method": "PUT",
    "pathname": "/api/admin/roles/r1/permissions",
-   "requestedTenantId": null,
-   "stepUp": true
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/admin/roles/override",
-   "requestedTenantId": null,
-   "stepUp": true
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/admin/roles/r1/permissions",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "POST",
    "pathname": "/api/admin/users/u1/revoke-sessions",
-   "requestedTenantId": null,
-   "stepUp": false
+   "requestedTenantId": null
   },
   {
    "method": "GET",
    "pathname": "/api/fleet/vehicles",
-   "requestedTenantId": "22222222-2222-4222-8222-222222222222",
-   "stepUp": false
+   "requestedTenantId": "22222222-2222-4222-8222-222222222222"
   },
   {
    "method": "GET",
    "pathname": "/api/fleet/vehicles",
-   "requestedTenantId": "11111111-1111-4111-8111-111111111111",
-   "stepUp": false
+   "requestedTenantId": "11111111-1111-4111-8111-111111111111"
   }
  ],
  "cases": [

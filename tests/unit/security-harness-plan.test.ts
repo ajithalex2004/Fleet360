@@ -65,7 +65,6 @@ describe('security harness plan', () => {
     expect(plan.probes.length).toBeGreaterThan(300);
     expect(plan.probes.some((p) => p.backend === 'go')).toBe(true);
     expect(plan.probes.some((p) => p.path.startsWith('/api/admin/'))).toBe(true);
-    expect(plan.stepUp.split('').filter((c) => c === '1').length).toBeGreaterThan(10);
     expect(plan.resources.length).toBeGreaterThan(20);
     // Every probe id is unique, and each role has an answer for each probe.
     expect(new Set(plan.probes.map((p) => p.id)).size).toBe(plan.probes.length);

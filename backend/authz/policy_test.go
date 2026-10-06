@@ -22,7 +22,6 @@ type vectorFile struct {
 		Method            string  `json:"method"`
 		Pathname          string  `json:"pathname"`
 		RequestedTenantID *string `json:"requestedTenantId"`
-		StepUp            bool    `json:"stepUp"`
 	} `json:"requests"`
 	// [request index, subject index, allow, reason, area|null, required|null]
 	Cases [][]any `json:"cases"`
@@ -72,25 +71,6 @@ func TestDecideMatchesNextJS(t *testing.T) {
 				got.Allow, got.Reason, got.Area, got.Required,
 				wantAllow, wantReason, wantArea, wantRequired)
 		}
-	}
-}
-
-// Go needs a passkey step-up for exactly the actions Next.js does (and the
-// Go-only admin actions).
-func TestStepUpMatchesNextJS(t *testing.T) {
-	v := loadVectors(t)
-	p := Default()
-	steps := 0
-	for _, r := range v.Requests {
-		if got := p.StepUpRequired(r.Pathname, r.Method); got != r.StepUp {
-			t.Errorf("%s %s: step-up %v, next %v", r.Method, r.Pathname, got, r.StepUp)
-		}
-		if r.StepUp {
-			steps++
-		}
-	}
-	if steps < 5 {
-		t.Fatalf("only %d step-up vectors", steps)
 	}
 }
 

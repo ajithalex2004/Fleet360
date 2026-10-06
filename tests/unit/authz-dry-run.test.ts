@@ -1,6 +1,6 @@
 /**
  * Authorization dry run (src/lib/authz/dry-run.ts): the middleware answers
- * the admin gate, step-up and policy decision in headers, 204, and nothing
+ * the admin gate and policy decision in headers, 204, and nothing
  * else runs.
  */
 import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
@@ -11,14 +11,11 @@ import { NextRequest } from 'next/server';
 
 let middleware: typeof import('@/middleware').middleware;
 let signSession: typeof import('@/lib/tenant-session').signSession;
-let verifySession: typeof import('@/lib/tenant-session').verifySession;
-let signStepUp: typeof import('@/lib/auth/step-up-token').signStepUp;
 let POLICY_VERSION: string;
 
 beforeAll(async () => {
   ({ middleware } = await import('@/middleware'));
-  ({ signSession, verifySession } = await import('@/lib/tenant-session'));
-  ({ signStepUp } = await import('@/lib/auth/step-up-token'));
+  ({ signSession } = await import('@/lib/tenant-session'));
   ({ POLICY_VERSION } = await import('@/lib/authz/policy'));
 });
 afterEach(() => { vi.unstubAllEnvs(); });
@@ -44,7 +41,7 @@ describe('dry run', () => {
     expect(headersOf(res)).toMatchObject({
       'x-authz-backend': 'next', 'x-authz-policy': POLICY_VERSION, 'x-authz-mode': 'report',
       'x-authz-decision': 'deny', 'x-authz-reason': 'missing-permission', 'x-authz-area': 'fleet',
-      'x-authz-required': 'fleet:create:vehicles', 'x-authz-outcome': 'allowed', 'x-step-up': 'none',
+      'x-authz-required': 'fleet:create:vehicles', 'x-authz-outcome': 'allowed',
     });
     expect((await dry('GET', '/api/fleet/vehicles', 'VIEWER', ['fleet:view:*'])).headers.get('x-authz-decision')).toBe('allow');
   });
@@ -56,18 +53,10 @@ describe('dry run', () => {
     expect(headersOf(gate)).toMatchObject({ 'x-authz-decision': 'deny', 'x-authz-reason': 'admin-gate:platform', 'x-authz-outcome': 'refused' });
   });
 
-  it('reports the passkey step-up, satisfied only by a step-up for this session', async () => {
-    const needs = await dry('POST', '/api/admin/users/set-password', 'SUPER_ADMIN', ['*:*:*']);
-    expect(headersOf(needs)).toMatchObject({ 'x-authz-decision': 'allow', 'x-step-up': 'required', 'x-step-up-mode': 'enforce', 'x-authz-outcome': 'refused' });
-
-    const token = await signSession({ userId: 'u1', tenantId: TENANT, plan: 'PRO', role: 'SUPER_ADMIN', permissions: ['*:*:*'] });
-    const session = (await verifySession(token))!;
-    const stepUp = await signStepUp({ userId: 'u1', tenantId: TENANT, issuedAt: session.issuedAt });
-    const res = await middleware(new NextRequest('http://localhost/api/admin/users/set-password', {
-      method: 'POST',
-      headers: { cookie: `xl-session=${token}; xl-step-up=${stepUp}`, 'x-authz-dry-run': '1' },
-    }));
-    expect(headersOf(res)).toMatchObject({ 'x-step-up': 'satisfied', 'x-authz-outcome': 'allowed' });
+  it('decides admin actions by role alone: no passkey step-up', async () => {
+    const res = await dry('POST', '/api/admin/users/set-password', 'SUPER_ADMIN', ['*:*:*']);
+    expect(headersOf(res)).toMatchObject({ 'x-authz-decision': 'allow', 'x-authz-outcome': 'allowed' });
+    expect(res.headers.get('x-step-up')).toBeNull();
   });
 
   it('needs a session, like any API request', async () => {

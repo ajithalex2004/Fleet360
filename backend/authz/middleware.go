@@ -40,18 +40,6 @@ func ModeFrom(v string) Mode {
 	return ModeReport
 }
 
-// StepUpModeFrom parses STEP_UP_MODE the way src/lib/auth/step-up-policy.ts
-// does: enforce by default.
-func StepUpModeFrom(v string) Mode {
-	switch strings.ToLower(strings.TrimSpace(v)) {
-	case "report":
-		return ModeReport
-	case "off":
-		return ModeOff
-	}
-	return ModeEnforce
-}
-
 // PublicPath maps the Go route (/api/v1/<path>) to the policy's /api/<path>.
 func PublicPath(p string) string {
 	if strings.HasPrefix(p, "/api/v1/") {
@@ -64,15 +52,10 @@ func PublicPath(p string) string {
 // (src/lib/authz/dry-run.ts): answered 204 with the decision in headers.
 const DryRunHeader = "x-authz-dry-run"
 
-// writeDryRun answers a dry run with the same headers as Next.js. Go cannot
-// see the step-up cookie, so a step-up action is always "required" here.
-func writeDryRun(c *gin.Context, p *Policy, d Decision, m, sm Mode, stepUp bool) {
-	step := "none"
-	if stepUp {
-		step = "required"
-	}
+// writeDryRun answers a dry run with the same headers as Next.js.
+func writeDryRun(c *gin.Context, p *Policy, d Decision, m Mode) {
 	outcome := "allowed"
-	if (!d.Allow && m == ModeEnforce) || (stepUp && sm == ModeEnforce) {
+	if !d.Allow && m == ModeEnforce {
 		outcome = "refused"
 	}
 	decision := "deny"
@@ -88,8 +71,6 @@ func writeDryRun(c *gin.Context, p *Policy, d Decision, m, sm Mode, stepUp bool)
 	h.Set("X-Authz-Area", d.Area)
 	h.Set("X-Authz-Required", d.Required)
 	h.Set("X-Authz-Outcome", outcome)
-	h.Set("X-Step-Up", step)
-	h.Set("X-Step-Up-Mode", string(sm))
 	c.AbortWithStatus(http.StatusNoContent)
 }
 
@@ -142,22 +123,16 @@ func recordsStatus(status int) bool {
 // Middleware decides every request under it (after auth.Middleware) with
 // the shared policy, logs denials, answers 403 in enforce mode, and records
 // privileged requests in the audit log (audit_logs, Admin → Audit log).
-//
-// Passkey step-up (STEP_UP_MODE, enforce by default): the backend cannot see
-// the step-up cookie, so the admin actions that need one are refused here
-// with step_up_required and performed in the admin console instead.
 func Middleware() gin.HandlerFunc {
-	return MiddlewareWith(Default(),
-		func() Mode { return ModeFrom(os.Getenv("AUTHZ_MODE")) },
-		func() Mode { return StepUpModeFrom(os.Getenv("STEP_UP_MODE")) })
+	return MiddlewareWith(Default(), func() Mode { return ModeFrom(os.Getenv("AUTHZ_MODE")) })
 }
 
-// MiddlewareWith is Middleware with an explicit policy and mode sources (tests).
-func MiddlewareWith(p *Policy, mode func() Mode, stepUpMode func() Mode) gin.HandlerFunc {
+// MiddlewareWith is Middleware with an explicit policy and mode source (tests).
+func MiddlewareWith(p *Policy, mode func() Mode) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		m := mode()
 		dryRun := c.GetHeader(DryRunHeader) == "1"
-		if m == ModeOff && stepUpMode() == ModeOff && !dryRun {
+		if m == ModeOff && !dryRun {
 			c.Next()
 			return
 		}
@@ -176,7 +151,7 @@ func MiddlewareWith(p *Policy, mode func() Mode, stepUpMode func() Mode) gin.Han
 		d := p.Decide(req, subject)
 
 		if dryRun {
-			writeDryRun(c, p, d, m, stepUpMode(), p.StepUpRequired(req.Pathname, req.Method))
+			writeDryRun(c, p, d, m)
 			return
 		}
 
@@ -234,25 +209,6 @@ func MiddlewareWith(p *Policy, mode func() Mode, stepUpMode func() Mode) gin.Han
 				"required": d.Required,
 			})
 			return
-		}
-		if sm := stepUpMode(); sm != ModeOff && p.StepUpRequired(req.Pathname, req.Method) {
-			logging.L().Warn("step-up decision",
-				zap.String("stepUp", map[Mode]string{ModeEnforce: "required", ModeReport: "would-require"}[sm]),
-				zap.String("backend", "go"),
-				zap.String("method", req.Method),
-				zap.String("path", c.Request.URL.Path),
-				zap.String("userId", claims.Subject),
-				zap.String("tenantId", claims.TenantID),
-			)
-			if sm == ModeEnforce {
-				d = Decision{Allow: false, Reason: "step-up-required", Area: d.Area, Rule: d.Rule, Required: d.Required}
-				record(http.StatusForbidden)
-				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
-					"error":   "step_up_required",
-					"message": "This action needs a passkey check: perform it in the admin console.",
-				})
-				return
-			}
 		}
 		c.Next()
 		record(c.Writer.Status())

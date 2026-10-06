@@ -108,8 +108,6 @@ export function parseDryRun(res) {
     area: h('x-authz-area'),
     required: h('x-authz-required'),
     outcome: h('x-authz-outcome'),
-    stepUp: h('x-step-up'),
-    stepUpMode: h('x-step-up-mode'),
   };
 }
 
@@ -197,7 +195,7 @@ export function renderMarkdown(meta, results) {
     `- **Target:** ${meta.base}${meta.go ? ` (Go: ${meta.go})` : ''}`,
     `- **Deployed commit:** ${meta.deployedSha ?? 'unknown'}`,
     `- **Policy version:** harness ${meta.planPolicy}, deployed ${meta.deployedPolicy ?? 'unknown'}`,
-    `- **Modes:** AUTHZ_MODE ${meta.authzMode ?? 'unknown'}, STEP_UP_MODE ${meta.stepUpMode ?? 'unknown'}`,
+    `- **Mode:** AUTHZ_MODE ${meta.authzMode ?? 'unknown'}`,
     `- **Harness commit:** ${meta.harnessSha ?? 'unknown'}`,
     `- **Accounts:** ${meta.accounts.join('; ')}`,
     '',

@@ -24,7 +24,7 @@ func TestDBRecorderWritesAuditLogs(t *testing.T) {
 	a := Action{
 		TenantID: tenant, UserID: "user-db-test", Role: "SUPER_ADMIN", Method: "POST",
 		Path: "/api/v1/admin/tenants/" + tenant + "/suspend", Route: "/api/v1/admin/tenants/:tenantId/suspend",
-		TargetID: tenant, Status: 403, Decision: Decision{Reason: "step-up-required"}, Mode: ModeEnforce,
+		TargetID: tenant, Status: 403, Decision: Decision{Reason: "missing-permission"}, Mode: ModeEnforce,
 	}
 	if err := NewDBRecorder(db).Record(context.Background(), a); err != nil {
 		t.Fatal(err)

@@ -23,9 +23,6 @@ func (f *fakeRecorder) Record(_ context.Context, a Action) error {
 
 const tenant = "11111111-1111-4111-8111-111111111111"
 
-// stepUp is the STEP_UP_MODE the test routers use (off unless a test sets it).
-var stepUp = ModeOff
-
 // claimFor builds a permission claim the way Next.js does, from the vectors.
 func claimFor(t *testing.T, subjectID string) json.RawMessage {
 	t.Helper()
@@ -47,7 +44,7 @@ func router(claims *auth.Claims, mode Mode) *gin.Engine {
 			c.Set(auth.CtxClaims, claims)
 		}
 		c.Next()
-	}, MiddlewareWith(Default(), func() Mode { return mode }, func() Mode { return stepUp }))
+	}, MiddlewareWith(Default(), func() Mode { return mode }))
 	ok := func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) }
 	v1.GET("/fleet/vehicles", ok)
 	v1.POST("/fleet/vehicles", ok)
@@ -189,7 +186,7 @@ func TestInvalidPrivilegedRequestsAreNotRecorded(t *testing.T) {
 	r := gin.New()
 	claims := staff("SUPER_ADMIN", "super-admin", t)
 	v1 := r.Group("/api/v1", func(c *gin.Context) { c.Set(auth.CtxClaims, claims); c.Next() },
-		MiddlewareWith(Default(), func() Mode { return ModeEnforce }, func() Mode { return ModeOff }))
+		MiddlewareWith(Default(), func() Mode { return ModeEnforce }))
 	status := http.StatusBadRequest
 	v1.POST("/admin/tenants", func(c *gin.Context) { c.JSON(status, gin.H{}) })
 	for _, s := range []int{400, 404, 409} {
@@ -206,48 +203,13 @@ func TestInvalidPrivilegedRequestsAreNotRecorded(t *testing.T) {
 	}
 }
 
-func TestStepUpActionsAreRefusedInGo(t *testing.T) {
-	rec := &fakeRecorder{}
-	SetRecorder(rec)
-	defer func() { SetRecorder(nil); stepUp = ModeOff }()
-
-	stepUp = ModeEnforce
-	admin := router(staff("TENANT_ADMIN", "tenant-admin", t), ModeEnforce)
-	w := call(admin, "POST", "/api/v1/admin/tenants/"+tenant+"/invitations")
-	if w.Code != 403 || !strings.Contains(w.Body.String(), "step_up_required") {
-		t.Fatalf("invitation without step-up: %d %s", w.Code, w.Body)
-	}
-	if len(rec.actions) != 1 || AuditRow(rec.actions[0]).Action != "DENIED" || !strings.Contains(AuditRow(rec.actions[0]).Details, "step-up-required") {
-		t.Fatalf("step-up refusal not recorded: %+v", rec.actions)
-	}
-	// Reads and actions outside the list are unaffected.
-	if w := call(router(staff("FLEET_MANAGER", "fleet-manager", t), ModeEnforce), "POST", "/api/v1/fleet/vehicles"); w.Code != 200 {
-		t.Fatalf("fleet write with step-up enforce: %d", w.Code)
-	}
-	stepUp = ModeReport
-	if w := call(admin, "POST", "/api/v1/admin/tenants/"+tenant+"/invitations"); w.Code != 201 {
-		t.Fatalf("report mode: %d", w.Code)
-	}
-	if StepUpModeFrom("") != ModeEnforce || StepUpModeFrom("report") != ModeReport || StepUpModeFrom("OFF") != ModeOff {
-		t.Error("StepUpModeFrom")
-	}
-}
-
-func TestAuthzOffStillRefusesStepUpActions(t *testing.T) {
-	defer func() { stepUp = ModeOff }()
-	stepUp = ModeEnforce
-	if w := call(router(staff("SUPER_ADMIN", "super-admin", t), ModeOff), "POST", "/api/v1/admin/tenants/"+tenant+"/suspend"); w.Code != 403 {
-		t.Fatalf("suspend with AUTHZ_MODE=off, STEP_UP_MODE=enforce: %d", w.Code)
-	}
-}
-
 func TestDryRunAnswersTheDecisionWithoutRunningTheHandler(t *testing.T) {
 	ran := false
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	claims := staff("VIEWER", "viewer", t)
 	v1 := r.Group("/api/v1", func(c *gin.Context) { c.Set(auth.CtxClaims, claims); c.Next() },
-		MiddlewareWith(Default(), func() Mode { return ModeOff }, func() Mode { return ModeEnforce }))
+		MiddlewareWith(Default(), func() Mode { return ModeOff }))
 	v1.POST("/fleet/vehicles", func(c *gin.Context) { ran = true; c.JSON(200, gin.H{}) })
 	v1.POST("/admin/tenants/:tenantId/suspend", func(c *gin.Context) { ran = true; c.JSON(200, gin.H{}) })
 
@@ -265,11 +227,12 @@ func TestDryRunAnswersTheDecisionWithoutRunningTheHandler(t *testing.T) {
 	h := w.Header()
 	if h.Get("X-Authz-Decision") != "deny" || h.Get("X-Authz-Reason") != "missing-permission" || h.Get("X-Authz-Mode") != "off" ||
 		h.Get("X-Authz-Outcome") != "allowed" || h.Get("X-Authz-Backend") != "go" || h.Get("X-Authz-Policy") != Default().PolicyVersion ||
-		h.Get("X-Authz-Required") != "fleet:create:vehicles" || h.Get("X-Step-Up") != "none" {
+		h.Get("X-Authz-Required") != "fleet:create:vehicles" || h.Get("X-Step-Up") != "" {
 		t.Errorf("headers: %v", h)
 	}
+	// No passkey step-up: an admin action is decided by the policy alone.
 	w = dry("/api/v1/admin/tenants/" + tenant + "/suspend")
-	if w.Code != 204 || ran || w.Header().Get("X-Step-Up") != "required" || w.Header().Get("X-Authz-Outcome") != "refused" {
-		t.Errorf("step-up dry run: %d %v", w.Code, w.Header())
+	if w.Code != 204 || ran || w.Header().Get("X-Step-Up") != "" || w.Header().Get("X-Authz-Outcome") != "allowed" {
+		t.Errorf("admin dry run: %d %v", w.Code, w.Header())
 	}
 }
