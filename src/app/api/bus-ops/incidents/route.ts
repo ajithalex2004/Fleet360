@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -33,6 +34,8 @@ const getIncidents = cacheRead(
 );
 
 export async function GET(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   try {
     const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
@@ -61,6 +64,8 @@ const SEV_TO_ALERT: Record<string, string> = {
 };
 
 export async function POST(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   try {
     const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });

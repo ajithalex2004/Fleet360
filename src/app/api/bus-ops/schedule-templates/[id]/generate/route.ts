@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -21,6 +22,8 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 interface GenBody { from?: string; to?: string }
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {

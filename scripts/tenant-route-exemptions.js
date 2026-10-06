@@ -12,6 +12,14 @@
 
 const RULE_EXEMPTIONS = [
   {
+    file: 'src/app/api/bus-ops/schedules/[id]/en-route/route.ts', method: 'POST', type: 'missing_sanitization',
+    reason: 'This command accepts only an empty object through a strict Zod schema. Every body field, including tenant ownership and direct status fields, is rejected before any database transaction; no body data reaches a write.',
+    authMechanism: 'requireBusOpsRequest + requireAuthorizedTenant',
+    dataScope: 'Locked trip in the authorized tenant through withTenantRls and explicit tenant filters',
+    owner: 'Bus Ops Engineering',
+    test: 'tests/unit/bus-ops-en-route-command.test.ts',
+  },
+  {
     file: 'src/app/api/approval-link/[token]/route.ts', method: 'GET', type: 'missing_auth',
     reason: 'Email approval decision link: shows the approver what they are deciding without a staff session. Read only; refuses inactive members.',
     authMechanism: 'HMAC-SHA256 signed decision-link token (src/lib/workflow/decision-link.ts, own domain prefix, 7-day expiry) naming tenant, approval, level and approver',

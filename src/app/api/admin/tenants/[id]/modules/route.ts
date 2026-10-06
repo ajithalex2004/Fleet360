@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 
+import { resolveModuleKey } from '@/lib/modules';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
@@ -40,15 +41,12 @@ async function handlePUT(req: NextRequest, props: { params: Promise<{ id: string
       const bodyRaw = await req.json();
     const body = stripTenantOwnershipFields(bodyRaw) as { enabledModules: string[] };
     const { enabledModules } = body;
-      // TxClient's public type doesn't expose $transaction; use the
-      // savepoint cast pattern (runtime supports it; same GUC on the
-      // inner connection).
-      await (tx as any).$transaction([
-        tx.tenantModule.deleteMany({ where: { tenantId: params.id } }),
-        tx.tenantModule.createMany({
-          data: enabledModules.map(m => ({ tenantId: params.id, module: m, isEnabled: true })),
-        }),
-      ]);
+      if (!Array.isArray(enabledModules) || enabledModules.some(m => typeof m !== 'string' || !resolveModuleKey(m))) {
+        return NextResponse.json({ error: 'Invalid enabledModules' }, { status: 400 });
+      }
+      const canonical = [...new Set(enabledModules.map(m => resolveModuleKey(m)!))];
+      await tx.tenantModule.deleteMany({ where: { tenantId: params.id } });
+      await tx.tenantModule.createMany({ data: canonical.map(module => ({ tenantId: params.id, module, isEnabled: true })) });
       const modules = await tx.tenantModule.findMany({ where: { tenantId: params.id } });
       return NextResponse.json(modules);
     });

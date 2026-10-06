@@ -2226,6 +2226,7 @@ model TripStopVisit {
   leftAt             DateTime? @map("left_at") @db.Timestamptz(6)
   // Whether the approach notification was successfully queued (best-effort).
   approachNotifiedAt DateTime? @map("approach_notified_at") @db.Timestamptz(6)
+  delayNotifiedAt    DateTime? @map("delay_notified_at") @db.Timestamptz(6)
 
   @@unique([scheduleId, stopId], map: "uniq_trip_stop_visit")
   @@map("trip_stop_visits")
@@ -2241,7 +2242,7 @@ model TripSchedule {
   /// ops script; declared here so the Prisma client exposes `tenantId` and
   /// future migrations track it. Nullable until `phase0_backfill_safety.sql`
   /// is run on the target environment.
-  tenantId              String                 @map("tenant_id")
+  tenantId              String                 @map("tenant_id") @db.Uuid
   tripNumber            String?                 @map("trip_number")
   // Back-reference to the recurring template this instance was generated
   // from (null = ad-hoc one-off trip created directly, not from a template).
@@ -2284,11 +2285,52 @@ model TripSchedule {
   passengers            TripPassenger[]
   tripLogs              TripLog[]
   headwayRules          HeadwayRule[]
+  disruptions           BusTripDisruption[]
 
   @@index([routeVariantVersionId], map: "idx_trip_schedules_variant_version")
   @@map("trip_schedules")
   @@schema("public")
   @@unique([tenantId, tripNumber])
+  @@unique([tenantId, id], map: "trip_schedules_tenant_id_id_key")
+}
+
+/// Dispatcher disruption response. Original resources and timestamps remain immutable.
+model BusTripDisruption {
+  id                    String @id @default(uuid())
+  tenantId              String @map("tenant_id") @db.Uuid
+  scheduleId            String @map("schedule_id")
+  requestKey            String @map("request_key")
+  requestHash           String @map("request_hash")
+  incidentId            String @map("incident_id") @db.Uuid
+  reason                String
+  location              String?
+  severity              String
+  status                String @default("REPORTED")
+  version               Int @default(1)
+  originalVehicleId     String? @map("original_vehicle_id")
+  originalDriverId      String? @map("original_driver_id")
+  originalArrivalTime   DateTime? @map("original_arrival_time") @db.Timestamptz(6)
+  replacementVehicleId  String? @map("replacement_vehicle_id")
+  replacementDriverId   String? @map("replacement_driver_id")
+  revisedEta            DateTime? @map("revised_eta") @db.Timestamptz(6)
+  inspectionId          String? @map("inspection_id")
+  recoveryNotes         String? @map("recovery_notes")
+  resolutionNotes       String? @map("resolution_notes")
+  reportedBy            String @map("reported_by")
+  recoveredBy           String? @map("recovered_by")
+  resolvedBy            String? @map("resolved_by")
+  reportedAt            DateTime @default(now()) @map("reported_at") @db.Timestamptz(6)
+  recoveredAt           DateTime? @map("recovered_at") @db.Timestamptz(6)
+  resolvedAt            DateTime? @map("resolved_at") @db.Timestamptz(6)
+  reportEventId         String? @map("report_event_id")
+  recoveryEventId       String? @map("recovery_event_id")
+  resolutionEventId     String? @map("resolution_event_id")
+  schedule              TripSchedule @relation(fields: [tenantId, scheduleId], references: [tenantId, id], onDelete: NoAction, onUpdate: NoAction, map: "bus_trip_disruptions_schedule_fkey")
+
+  @@unique([tenantId, requestKey])
+  @@index([tenantId, scheduleId, reportedAt], map: "bus_trip_disruptions_tenant_schedule_reported_idx")
+  @@map("bus_trip_disruptions")
+  @@schema("public")
 }
 
 // ── Headway rules (per route + direction) ──────────────────────────────────
@@ -2646,6 +2688,8 @@ model BleGatewayPresence {
 }
 
 model VehicleBeacon {
+  tenantId String @map("tenant_id")
+  @@index([tenantId])
   id        String    @id @default(uuid())
   createdAt DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   vehicleId String    @unique @map("vehicle_id")
@@ -2661,6 +2705,8 @@ model VehicleBeacon {
 }
 
 model StaffRfidTag {
+  tenantId String @map("tenant_id")
+  @@index([tenantId])
   id            String    @id @default(uuid())
   createdAt     DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   staffMemberId String    @unique @map("staff_member_id")
@@ -7406,4 +7452,46 @@ model StepUpChallenge {
   @@index([userId, kind], map: "idx_step_up_challenges_user")
   @@map("step_up_challenges")
   @@schema("public")
+}
+
+/// Tenant-owned opt-in rider event rules; legacy global notification rules are not used.
+model BusRiderNotificationRule {
+ tenantId String @map("tenant_id")
+ eventType String @map("event_type")
+ enabled Boolean @default(false)
+ channels String[] @default(["EMAIL"])
+ subject String
+ body String
+ updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+ @@id([tenantId,eventType])
+ @@map("bus_rider_notification_rules")
+ @@schema("public")
+}
+/// Durable per-event / passenger / channel delivery evidence, with exclusive sender claims.
+model BusRiderDelivery {
+ id String @id
+ tenantId String @map("tenant_id")
+ eventId String @map("event_id")
+ eventType String @map("event_type")
+ scheduleId String @map("schedule_id")
+ passengerId String @map("passenger_id")
+ staffMemberId String @map("staff_member_id")
+ channel String
+ recipient String
+ subject String
+ body String
+ status String @default("PENDING")
+ attempts Int @default(0)
+ nextAttemptAt DateTime @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+ expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+ claimToken String? @map("claim_token")
+ claimedAt DateTime? @map("claimed_at") @db.Timestamptz(6)
+ providerId String? @map("provider_id")
+ lastError String? @map("last_error")
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+ updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+ @@unique([tenantId,eventId,passengerId,channel])
+ @@index([tenantId,status,nextAttemptAt],map:"bus_rider_deliveries_due")
+ @@map("bus_rider_deliveries")
+ @@schema("public")
 }

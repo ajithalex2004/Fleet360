@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -60,13 +61,15 @@ const getPlanList = cacheRead(
 );
 
 export async function GET(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const permError = requireBusOpsAdminAccess(req, 'planning-core');
+  const permError = await requireBusOpsAdminAccess(req, 'planning-core');
   if (permError) return permError;
   try {
     const plans = await getPlanList(tenantId);
@@ -101,13 +104,15 @@ export async function GET(req: NextRequest) {
  * client-side and persists the result without re-running the planner.
  */
 export async function POST(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const permError = requireBusOpsAdminAccess(req, 'planning-core');
+  const permError = await requireBusOpsAdminAccess(req, 'planning-core');
   if (permError) return permError;
   try {
     const bodyRaw = await req.json() as { name?: string; description?: string;
@@ -167,13 +172,15 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const permError = requireBusOpsAdminAccess(req, 'planning-core');
+  const permError = await requireBusOpsAdminAccess(req, 'planning-core');
   if (permError) return permError;
   try {
     const { searchParams } = new URL(req.url);

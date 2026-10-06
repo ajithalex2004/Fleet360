@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -27,6 +28,8 @@ import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function POST(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
   if (!authz.ok) {
@@ -36,7 +39,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { tenantId } = authz;
-  const permError = requireBusOpsAdminAccess(req, 'route-consolidation');
+  const permError = await requireBusOpsAdminAccess(req, 'route-consolidation');
   if (permError) return permError;
   const userId = req.headers.get('x-user-id');
   if (!userId) return NextResponse.json({ error: 'x-user-id required for apply' }, { status: 401 });

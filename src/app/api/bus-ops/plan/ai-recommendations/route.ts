@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -10,13 +11,15 @@ import { requireBusOpsAdminAccess } from '@/lib/bus-ops/require-admin-access';
 import { revalidateCache } from '@/lib/server-cache';
 
 export async function GET(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const permError = requireBusOpsAdminAccess(req, 'planning-core');
+  const permError = await requireBusOpsAdminAccess(req, 'planning-core');
   if (permError) return permError;
 
   return withTenantRls(prisma, tenantId, async (tx) => {
@@ -77,13 +80,15 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
 
-  const permError = requireBusOpsAdminAccess(req, 'planning-core');
+  const permError = await requireBusOpsAdminAccess(req, 'planning-core');
   if (permError) return permError;
 
   return withTenantRls(prisma, tenantId, async (tx) => {

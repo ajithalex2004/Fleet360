@@ -57,14 +57,12 @@
  *
  * ── Feature flag ─────────────────────────────────────────────────────
  *
- * If RESOURCE_VALIDATION_ENABLED === 'false' the caller-side wiring
- * bypasses this helper entirely. The lock is only useful in
- * conjunction with validation; skipping both preserves the pre-
- * feature behaviour exactly.
+ * Safety validation and locking are mandatory regardless of feature flags.
  */
 
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '@/lib/prisma';
+import { withTenantRls } from '@/lib/rls';
 
 export interface AssignmentLockKey {
   tenantId:  string;
@@ -84,13 +82,13 @@ export interface AssignmentLockKey {
 export async function withAssignmentLocks<T>(
   key: AssignmentLockKey,
   fn:  (tx: Prisma.TransactionClient) => Promise<T>,
-  prisma: PrismaClient = defaultPrisma,
+  prisma: PrismaClient | Prisma.TransactionClient = defaultPrisma,
 ): Promise<T> {
   if (!key.tenantId) {
     throw new Error('withAssignmentLocks: tenantId is required');
   }
 
-  return prisma.$transaction(async (tx) => {
+  const run = async (tx: Prisma.TransactionClient) => {
     // Vehicle before driver — see deadlock-avoidance note above.
     if (key.vehicleId) {
       const k = `bus-ops:vehicle:${key.tenantId}:${key.vehicleId}`;
@@ -103,18 +101,10 @@ export async function withAssignmentLocks<T>(
       await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(hashtext($1))`, k);
     }
     return fn(tx);
-  }, {
-    // Advisory locks + reads-see-committed. Serializable isn't needed
-    // because the lock itself provides the mutual exclusion we care
-    // about; the reads inside the transaction still need to see
-    // committed prior writes (Read Committed default is fine).
-    isolationLevel: 'ReadCommitted',
-    // Larger timeout than the default so long-running validations
-    // (cold Neon) still complete. Overlap queries under load can hit
-    // Neon's warmup budget.
-    timeout: 15_000,
-    maxWait: 5_000,
-  });
+  };
+  return '$transaction' in prisma
+    ? withTenantRls(prisma as PrismaClient, key.tenantId, run)
+    : run(prisma as Prisma.TransactionClient);
 }
 
 /**
@@ -151,7 +141,7 @@ export async function estimateRosterCountForTrip(
   });
 }
 
-/** True when the feature flag says the engine is on. Default: on. */
+/** Assignment ownership and safety invariants cannot be disabled by a rollout flag. */
 export function isValidationEnabled(): boolean {
-  return process.env.RESOURCE_VALIDATION_ENABLED !== 'false';
+  return true;
 }

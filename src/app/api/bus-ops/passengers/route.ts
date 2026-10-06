@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -7,6 +8,8 @@ import { prisma } from '@/lib/prisma';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import type { Prisma } from '@prisma/client';
 export async function GET(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   try {
     const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -38,6 +41,8 @@ export async function GET(req: NextRequest) {
 
 
 export async function POST(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   try {
     const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });

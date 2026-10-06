@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -35,6 +36,8 @@ const VENDOR = {
 };
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
@@ -130,7 +133,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         };
 
         const filename = `manifest-${data.manifestNo}.pdf`;
-        return new Response(buffer, {
+        return new Response(new Uint8Array(buffer), {
           headers: {
             'Content-Type': 'application/pdf',
             'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename="${filename}"`,

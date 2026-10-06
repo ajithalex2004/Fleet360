@@ -19,6 +19,8 @@
 
 import type { PrismaClient, Prisma } from '@prisma/client';
 import { haversineM, DEFAULT_ARRIVAL_RADIUS_M } from '@/lib/bus-gps';
+import { hasUnrecoveredDisruption } from '@/lib/bus-ops/disruptions';
+import { inspectionAllowsDeparture } from '@/lib/bus-ops/safety';
 import {
   assertTripTransition,
   normalizeTripStatus,
@@ -816,9 +818,11 @@ async function applyDecision(
         },
       })
       .catch(() => undefined);
+    // As the depart command: riders with a later boarding stop stay
+    // CONFIRMED until that stop is passed.
     await db.tripPassenger
       .updateMany({
-        where: { tripId: scheduleId, status: 'CONFIRMED', deletedAt: null },
+        where: { tenantId, tripId: scheduleId, status: 'CONFIRMED', deletedAt: null, boardingStopId: null },
         data: { status: 'NO_SHOW', updatedAt: now },
       })
       .catch(() => undefined);
@@ -864,6 +868,26 @@ export async function evaluateTelemetryTripTransitions(
 
   if (decision.action === 'NONE') {
     return { ...decision, mode, applied: false };
+  }
+
+  // The same safety gates as the depart and en-route commands: no automatic
+  // start or resume while a breakdown awaits its substitute, and no start
+  // without a current passing inspection of this bus and driver.
+  if (decision.action === 'STARTED' || decision.action === 'EN_ROUTE') {
+    const tx = db as Prisma.TransactionClient;
+    if (await hasUnrecoveredDisruption(tx, schedule.tenantId, schedule.id)) {
+      return { action: 'NONE', reason: 'trip disruption awaiting substitute', mode, applied: false };
+    }
+    if (decision.action === 'STARTED') {
+      const latest = await db.busPreTripCheck.findFirst({
+        where: { tenantId: schedule.tenantId, scheduleId: schedule.id, deletedAt: null },
+        orderBy: [{ performedAt: 'desc' }, { id: 'desc' }],
+      });
+      const resources = await db.tripSchedule.findFirst({ where: { id: schedule.id, tenantId: schedule.tenantId }, select: { vehicleId: true, driverId: true } });
+      if (!resources || !inspectionAllowsDeparture(latest, resources, now)) {
+        return { action: 'NONE', reason: 'no current passing inspection for this bus and driver', mode, applied: false };
+      }
+    }
   }
 
   if (mode === 'shadow') {

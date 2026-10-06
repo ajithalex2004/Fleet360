@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -25,6 +26,8 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 const ACTIONS = new Set(['BLOCK', 'WARN', 'PENALTY']);
 
 export async function GET(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
@@ -38,7 +41,7 @@ export async function GET(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
 
-      const permError = requireBusOpsAdminAccess(req, 'planning-constraints');
+      const permError = await requireBusOpsAdminAccess(req, 'planning-constraints');
       if (permError) return permError;
 
       const sp = req.nextUrl.searchParams;
@@ -65,6 +68,8 @@ export async function GET(req: NextRequest) {
 
 
 export async function POST(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
@@ -78,7 +83,7 @@ export async function POST(req: NextRequest) {
 
   return withTenantRls(prisma, tenantId, async (tx) => {
 
-      const permError = requireBusOpsAdminAccess(req, 'planning-constraints');
+      const permError = await requireBusOpsAdminAccess(req, 'planning-constraints');
       if (permError) return permError;
       const createdBy = req.headers.get('x-user-id') ?? null;
 

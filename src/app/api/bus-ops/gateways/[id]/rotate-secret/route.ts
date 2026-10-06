@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -14,6 +15,7 @@ export const dynamic = 'force-dynamic';
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
+import { writeRequiredAudit } from '@/lib/audit';
 import { randomBytes } from 'crypto';
 import { prisma } from '@/lib/prisma';
 
@@ -21,6 +23,8 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
@@ -51,6 +55,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         data: { secret: newSecret, secretRotatedAt: new Date() },
       });
 
+      await writeRequiredAudit({ tenantId, userId: authz.userId ?? undefined, entityType: 'BleGateway', entityId: id, action: 'ROTATE_SECRET', details: 'Gateway signing key rotated' }, tx);
       // ONE-TIME REVEAL: response includes the plaintext. Do NOT log this
       // or persist it anywhere else — the row-level column stores it
       // canonically and is what the ingest verifier reads.
@@ -60,7 +65,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         secret: newSecret,
         rotatedAt: new Date().toISOString(),
         warning: 'This secret is shown once. Update the gateway hardware now — future rotations require re-running this endpoint.',
-      });
+      }, { headers: { 'Cache-Control': 'no-store, max-age=0', 'Pragma': 'no-cache' } });
   });
 }
 

@@ -42,8 +42,21 @@ export interface ChecklistAssessment {
  * returns assessment otherwise. The API uses blockingFailures.length to
  * decide whether DEPART is allowed.
  */
+export class ChecklistValidationError extends Error {}
+
 export function assessChecklist(items: ChecklistResultItem[]): ChecklistAssessment {
   const itemMap = new Map(PRETRIP_CHECKLIST.map(i => [i.key, i]));
+  if (!Array.isArray(items) || items.length != PRETRIP_CHECKLIST.length) {
+    throw new ChecklistValidationError('Every checklist item must be submitted exactly once');
+  }
+  const seen = new Set<string>();
+  for (const r of items) {
+    if (!r || typeof r.key !== 'string' || !itemMap.has(r.key) || seen.has(r.key)
+        || typeof r.ok !== 'boolean' || (r.note !== undefined && typeof r.note !== 'string')) {
+      throw new ChecklistValidationError('Invalid, unknown or duplicate checklist item');
+    }
+    seen.add(r.key);
+  }
   const blockingFailures: { key: string; label: string }[] = [];
   let failCount = 0;
 

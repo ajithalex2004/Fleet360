@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -38,6 +39,8 @@ import { logAudit } from '@/lib/audit';
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
 
 export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -46,7 +49,7 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
   }
   const { tenantId } = authz;
 
-  const permError = requireBusOpsAdminAccess(req, 'route-consolidation');
+  const permError = await requireBusOpsAdminAccess(req, 'route-consolidation');
   if (permError) return permError;
 
   const userId = req.headers.get('x-user-id');

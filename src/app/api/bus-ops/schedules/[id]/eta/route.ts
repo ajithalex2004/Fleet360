@@ -1,3 +1,5 @@
+import { hasUnrecoveredDisruption } from '@/lib/bus-ops/disruptions';
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -30,6 +32,7 @@ import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 import { predictEta, type TrackingPoint } from '@/lib/logistics/eta-predictor';
 import { raiseAlert } from '@/lib/alerts/raise';
+import { queueStopEventOnce } from '@/lib/bus-ops/trip-notification-events';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
@@ -47,6 +50,8 @@ interface StopRow { id: string; sequence: number; stop_name: string; gps_lat: nu
 interface VisitRow { stop_id: string; entered_at: Date | null }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   const { id: scheduleId } = await params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -59,21 +64,25 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  try {
+    return await withTenantRls(prisma, tenantId, async (tx) => {
 
       try {
         // ensureBusGpsTables() removed — tables live in fleet schema now
 
+        await tx.$queryRawUnsafe('SELECT id FROM trip_schedules WHERE id::text=$1 AND tenant_id::text = $2 FOR UPDATE',scheduleId,tenantId);
         const schedule = await tx.tripSchedule.findFirst({
-          where: { id: scheduleId, tenantId },
+          where: { id: scheduleId, tenantId, deletedAt:null },
           select: {
             id: true, routeId: true, departureTime: true, status: true,
+            tripNumber: true, vehicleId: true, driverId: true,
             // Route versioning Phase 2 — snapshotted variant version wins.
             routeVariantVersionId: true,
           },
         });
         if (!schedule) return NextResponse.json({ error: 'Schedule not found' }, { status: 404 });
 
+        if(await hasUnrecoveredDisruption(tx,tenantId,scheduleId)) return NextResponse.json({stopId:null,stopName:null,etaAt:null,method:'disrupted',confidence:'low',remainingKm:null,reason:'Awaiting inspected substitute assignment'},{headers:{'Cache-Control':'private, no-store'}});
         // Prefer the trip's snapshotted variant version so a route edit
         // published *after* this trip started can't change the ETA target.
         // Falls back to the flat routeId list (pre-version rows have
@@ -108,10 +117,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           tx.$queryRawUnsafe<PingRow[]>(
             `SELECT latitude, longitude, occurred_at
                FROM fleet.bus_gps_pings
-              WHERE schedule_id = $1
+              WHERE schedule_id = $1 AND vehicle_id = $2 AND tenant_id = $3
               ORDER BY occurred_at DESC
               LIMIT 10`,
-            scheduleId,
+            scheduleId, schedule.vehicleId, tenantId,
           ),
         ]);
 
@@ -151,6 +160,41 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           now: new Date().toISOString(),
           plannedArrivalAt,
         });
+
+        // Predictions based only on a timetable must never become a live
+        // approaching/delay notice. The stop markers and outbox are atomic.
+        const lastPing = pingRows[0]?.occurred_at;
+        const live = ['STARTED', 'EN_ROUTE'].includes(schedule.status ?? '') &&
+          lastPing && Date.now() - new Date(lastPing).getTime() <= 2 * 60_000 &&
+          prediction.etaAt && prediction.method !== 'planned';
+        if (live && prediction.etaAt) {
+          const minutes = (new Date(prediction.etaAt).getTime() - Date.now()) / 60_000;
+          if (minutes >= 0 && minutes <= 5) {
+            await queueStopEventOnce(tx, tenantId, schedule.id, nextStop.id, {
+              kind: 'arriving', payload: {
+                scheduleId: schedule.id, tripNumber: schedule.tripNumber,
+                vehicleId: schedule.vehicleId, driverId: schedule.driverId,
+                routeId: schedule.routeId, stopId: nextStop.id, stopName: nextStop.stop_name,
+                etaAt: prediction.etaAt, distanceM: prediction.remainingKm == null ? null : prediction.remainingKm * 1000,
+                minutesToArrival: Math.ceil(minutes),
+              },
+            });
+          }
+          if (plannedArrivalAt) {
+            const delayMinutes = (new Date(prediction.etaAt).getTime() - new Date(plannedArrivalAt).getTime()) / 60_000;
+            if (delayMinutes > LATE_ARRIVAL_TOLERANCE_MIN) {
+              await queueStopEventOnce(tx, tenantId, schedule.id, nextStop.id, {
+                kind: 'delayed', payload: {
+                  scheduleId: schedule.id, tripNumber: schedule.tripNumber,
+                  vehicleId: schedule.vehicleId, driverId: schedule.driverId,
+                  routeId: schedule.routeId, stopId: nextStop.id, stopName: nextStop.stop_name,
+                  scheduledAt: plannedArrivalAt, predictedAt: prediction.etaAt,
+                  delayMinutes: Math.ceil(delayMinutes), reason: 'unknown',
+                },
+              });
+            }
+          }
+        }
 
         // Alert Engine — LATE_ARRIVAL. Dedup key includes the stop id so
         // the passenger sees one alert per stop, not per ETA poll (this
@@ -197,9 +241,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           reason: prediction.reason,
         }, { headers: { 'Cache-Control': 'no-store' } });
         } catch (e) {
-        console.error('[bus-ops/schedules/:id/eta GET]', e);
-        return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to compute ETA' }, { status: 500 });
-      }
-  });
+          throw e;
+        }
+    });
+  } catch (e) {
+    console.error('[bus-ops/schedules/:id/eta GET]', e);
+    return NextResponse.json({ error: 'Failed to compute ETA' }, { status: 500 });
+  }
 }
-

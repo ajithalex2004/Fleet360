@@ -1,3 +1,4 @@
+import { ownsBusOpsEmployee, requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -15,6 +16,8 @@ export const runtime = 'nodejs';
  * and optionally mark it as their permanent default stop point.
  */
 export async function POST(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
@@ -43,6 +46,9 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      if (!staffMemberId && !employeeId) return NextResponse.json({ error: 'Employee identity is required' }, { status: 400 });
+      if (!markAsPermanentNewStop && !tripPassengerId) return NextResponse.json({ error: 'A trip or permanent change is required' }, { status: 400 });
+      if (effectiveDate) return NextResponse.json({ error: 'Future pickup changes require an approved transport request' }, { status: 400 });
       // 1. Locate the staff member
       const staff = await tx.staffMember.findFirst({
         where: {
@@ -56,6 +62,12 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Staff member record not found' }, { status: 404 });
       }
 
+      if (!await ownsBusOpsEmployee(req, staff.employeeId)) return NextResponse.json({ error: 'Employee is not owned by this account' }, { status: 403 });
+
+      if (tripPassengerId) {
+        const target = await tx.tripPassenger.findFirst({ where: { id: tripPassengerId, tenantId, staffMemberId: staff.id, deletedAt: null, trip: { status: 'SCHEDULED', deletedAt: null } } });
+        if (!target) return NextResponse.json({ error: 'Eligible trip passenger not found' }, { status: 404 });
+      }
       const oldStopName = staff.defaultStopName;
 
       // 2. If marked as permanent new stop, update the employee record.
@@ -78,6 +90,7 @@ export async function POST(req: NextRequest) {
         await tx.tripPassenger.updateMany({
           where: {
             id: tripPassengerId,
+            tenantId,
             staffMemberId: staff.id,
           },
           data: {

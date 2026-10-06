@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -39,6 +40,8 @@ interface StopInput {
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ variantId: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
@@ -71,6 +74,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ vari
 
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ variantId: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 

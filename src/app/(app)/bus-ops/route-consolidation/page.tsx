@@ -193,9 +193,12 @@ function RouteConsolidationPageInner() {
   const [showSkipped, setShowSkipped] = useState(false);
   const [applyingRec, setApplyingRec] = useState<{ rec: Recommendation; recommendationId: string } | null>(null);
   const [appliedFlash, setAppliedFlash] = useState<string | null>(null);
+  const [evidence, setEvidence] = useState<Record<string, unknown> | null>(null);
+  const [evidenceError, setEvidenceError] = useState<string | null>(null);
+  const [checkingEvidence, setCheckingEvidence] = useState(false);
 
   const analyse = useCallback(async () => {
-    setAnalysing(true); setError(null); setResult(null); setAnalysisRunId(id => id + 1);
+    setAnalysing(true); setError(null); setResult(null); setEvidence(null); setEvidenceError(null); setAnalysisRunId(id => id + 1);
     try {
       const res = await fetch('/api/bus-ops/route-consolidation/analyze', {
         method: 'POST',
@@ -213,6 +216,20 @@ function RouteConsolidationPageInner() {
   }, [objective]);
 
   const winner = result?.recommendations.find((r) => r.feasible) ?? null;
+
+  const checkEvidence = async (rec: Recommendation) => {
+    setCheckingEvidence(true); setEvidence(null); setEvidenceError(null);
+    try {
+      const response = await fetch('/api/bus-ops/route-consolidation/evidence', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ routeIds: [rec.routeA.id, rec.routeB.id], days: 30 }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? `HTTP ${response.status}`);
+      setEvidence(data);
+    } catch (e) { setEvidenceError(e instanceof Error ? e.message : 'Evidence unavailable'); }
+    finally { setCheckingEvidence(false); }
+  };
 
   return (
     <div className="space-y-8">
@@ -406,6 +423,22 @@ function RouteConsolidationPageInner() {
                     totalPenalty: r.components.pcePenalty,
                   }} />
                   <RecMetadata rec={r} />
+                  <button type="button" onClick={() => checkEvidence(r)} disabled={checkingEvidence}
+                    className="rounded-lg border border-[var(--border-subtle)] px-3 py-2 text-xs text-[var(--text-main)] disabled:opacity-50">
+                    {checkingEvidence ? 'Checking…' : 'Check 30-day attendance and cost evidence'}
+                  </button>
+                  {evidenceError && <p role="alert" className="text-xs text-rose-500">{evidenceError}</p>}
+                  {evidence && Array.isArray(evidence.routes) &&
+                    (evidence.routes as Array<{id:string}>).some(route => route.id === r.routeA.id) &&
+                    (evidence.routes as Array<{id:string}>).some(route => route.id === r.routeB.id) && (
+                      <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface)] p-3 text-xs text-[var(--text-main)] space-y-1">
+                        <p className="font-semibold">Historical check: {String(evidence.assessment).replaceAll('_', ' ')}</p>
+                        <p>{String(evidence.completedTrips)} completed trips · {String(evidence.pairedServices)} paired services · {String(evidence.attendanceTrips)} trips with attendance</p>
+                        <p>Peak reserved {String(evidence.peakReserved)} / assumed capacity {evidence.capacityAssumption == null ? 'unknown' : String(evidence.capacityAssumption)} · {String(evidence.overCapacityServices)} capacity conflicts · {String(evidence.ambiguousServices)} ambiguous service days</p>
+                        <p>Cost logs complete for {String(evidence.completeCostTrips)} trips; observed cost on those trips: {evidence.observedCostAED == null ? 'unavailable' : `AED ${String(evidence.observedCostAED)}`}.</p>
+                        <p className="text-[var(--text-muted)]">{String(evidence.caveat)}</p>
+                      </div>
+                  )}
                   {r.feasible && (
                     <div className="pt-3 border-t border-[var(--border-subtle)] flex items-center justify-end">
                       <button

@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -36,6 +37,8 @@ export const runtime = 'nodejs';
 type IdCtx = { params: Promise<{ id: string }> };
 
 export async function POST(req: NextRequest, { params }: IdCtx) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   const { id } = await params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });

@@ -8,8 +8,9 @@
  * (src/lib/jobs/dunning-reconciliation.ts) jobs against real PostgreSQL with
  * active RLS — including the five decisive tests named in the design plan.
  *
- * The only mocked boundary is the outermost transport call (sendEmail) —
- * everything else (schema, RLS, advisory locks, guarded conditional
+ * The transport call (sendEmail) is mocked, and synthetic outbox events are
+ * retired atomically so CI's shared publisher cannot consume them. The
+ * schema, RLS, advisory locks, guarded conditional
  * updates, the real job/consumer code) runs against a real database. No
  * real SMTP call is ever made. DUNNING_DISPATCH_ENABLED is flipped on
  * only inside this test process for synthetic data, restored after each
@@ -41,13 +42,53 @@ import { DunningNoticeConsumer } from '@/events/consumers/dunning-notice.consume
 
 const hasDb = Boolean(process.env.DATABASE_URL);
 
-// The only mocked boundary — the real transport (nodemailer/SMTP) is never
-// contacted. Real gate logic (isTransportAvailable, the dispatch switch,
-// the staging recipient override) all runs for real.
+// The transport is mocked; the dispatch logic, gates and database writes run
+// for real. The outbox wrappers below only keep synthetic events away from
+// other publishers sharing CI's database.
 const sendEmailMock = vi.hoisted(() => vi.fn());
+const deliveredEventIds = vi.hoisted(() => new Set<string>());
 vi.mock('@/lib/email', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/email')>();
   return { ...actual, sendEmail: sendEmailMock };
+});
+
+vi.mock('@/lib/finance/dunning-dispatch', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/finance/dunning-dispatch')>();
+  const retireEvent = async (tx: TxClient, tenantId: string, noticeId: string, token: string) => {
+    await tx.$executeRawUnsafe(
+      `UPDATE event_outbox SET published_at = NOW()
+        WHERE tenant_id = $1::uuid AND event_type = $2 AND aggregate_id = $3
+          AND payload->>'attemptToken' = $4 AND published_at IS NULL`,
+      tenantId, actual.DUNNING_NOTICE_QUEUED_EVENT, noticeId, token,
+    );
+  };
+  return {
+    ...actual,
+    createNoticeWithFirstAttempt: async (...args: Parameters<typeof actual.createNoticeWithFirstAttempt>) => {
+      const result = await actual.createNoticeWithFirstAttempt(...args);
+      await retireEvent(args[0], args[1], result.noticeId, result.attemptToken);
+      return result;
+    },
+    reserveNextAttempt: async (...args: Parameters<typeof actual.reserveNextAttempt>) => {
+      const result = await actual.reserveNextAttempt(...args);
+      if (!result.noOp && result.enqueuedImmediately) {
+        await retireEvent(args[0], args[1], args[2], result.attemptToken);
+      }
+      return result;
+    },
+    enqueueDueAttempt: async (...args: Parameters<typeof actual.enqueueDueAttempt>) => {
+      const enqueued = await actual.enqueueDueAttempt(...args);
+      if (enqueued) {
+        const [attempt] = await args[0].$queryRawUnsafe<Array<{ notice_id: string; attempt_token: string }>>(
+          `SELECT notice_id, attempt_token FROM lease_dunning_dispatch_attempts
+            WHERE id = $1 AND tenant_id = $2`,
+          args[2], args[1],
+        );
+        await retireEvent(args[0], args[1], attempt.notice_id, attempt.attempt_token);
+      }
+      return enqueued;
+    },
+  };
 });
 
 const suffix = Date.now().toString();
@@ -143,11 +184,11 @@ interface OutboxRow {
   occurred_at: Date;
 }
 
-/** Simulates one outbox-publisher delivery cycle for the oldest unpublished
+/** Simulates one outbox-publisher delivery cycle for the oldest undelivered
  *  dunning event belonging to a SPECIFIC notice — real DB read, real
  *  consumer.process(). Scoped to aggregate_id (= noticeId), not just the
  *  tenant: several tests (notably #3, which only counts outbox rows and
- *  never delivers them) deliberately leave unpublished events behind, and
+ *  never delivers them) deliberately leave events behind, and
  *  an unscoped "oldest for tenant" query would pick those up instead of
  *  the caller's own event when tests run in sequence within one process.
  *  Raw SQL against event_outbox, matching src/lib/jobs/outbox-publisher.ts's
@@ -155,18 +196,18 @@ interface OutboxRow {
  *  comment on enqueueOutboxEvent in dunning-dispatch.ts). */
 async function deliverNextDunningEvent(tenantId: string, noticeId: string): Promise<boolean> {
   const consumer = new DunningNoticeConsumer();
-  const [row] = await withTenantRls(basePrisma, tenantId, (tx) =>
+  const rows = await withTenantRls(basePrisma, tenantId, (tx) =>
     tx.$queryRawUnsafe<OutboxRow[]>(
       `SELECT id, event_id::text, event_type, event_version, aggregate_type, aggregate_id,
               source_module, tenant_id::text, correlation_id::text, causation_id::text, actor,
               payload, occurred_at
          FROM event_outbox
-        WHERE tenant_id = $1::uuid AND event_type = $2 AND aggregate_id = $3 AND published_at IS NULL
-        ORDER BY occurred_at ASC
-        LIMIT 1`,
+        WHERE tenant_id = $1::uuid AND event_type = $2 AND aggregate_id = $3
+        ORDER BY occurred_at ASC`,
       tenantId, DUNNING_NOTICE_QUEUED_EVENT, noticeId,
     ),
   );
+  const row = rows.find((candidate) => !deliveredEventIds.has(candidate.event_id));
   if (!row) return false;
 
   const envelope: DomainEventEnvelope<{ noticeId: string; attemptToken: string }> = {
@@ -179,9 +220,7 @@ async function deliverNextDunningEvent(tenantId: string, noticeId: string): Prom
 
   const ok = await consumer.process(envelope);
   if (ok) {
-    await withTenantRls(basePrisma, tenantId, (tx) =>
-      tx.$executeRawUnsafe(`UPDATE event_outbox SET published_at = NOW() WHERE id = $1::uuid`, row.id),
-    );
+    deliveredEventIds.add(row.event_id);
   }
   return ok;
 }
@@ -305,7 +344,16 @@ describe.skipIf(!hasDb)('Dunning & Collections — PostgreSQL Integration', () =
     expect(sendEmailMock).toHaveBeenCalledTimes(1);
 
     const finalNotice = await withTenantRls(basePrisma, tenantA, (tx) => tx.leaseDunningNotice.findFirst({ where: { id: noticeId } }));
-    expect(finalNotice?.dispatchStatus).toBe('SUBMITTED');
+    const finalAttempt = await withTenantRls(basePrisma, tenantA, (tx) =>
+      tx.leaseDunningDispatchAttempt.findFirst({ where: { id: attempt2?.id } }),
+    );
+    expect(finalNotice?.dispatchStatus, JSON.stringify({
+      currentToken: finalNotice?.currentAttemptToken,
+      expectedToken: attempt2?.attemptToken,
+      attemptOutcome: finalAttempt?.outcome,
+      attemptResolution: finalAttempt?.resolution,
+      sendCalls: sendEmailMock.mock.calls.length,
+    })).toBe('SUBMITTED');
     expect(finalNotice?.sendAttemptCount).toBe(1);
   });
 
@@ -391,7 +439,7 @@ describe.skipIf(!hasDb)('Dunning & Collections — PostgreSQL Integration', () =
         // the test doesn't need to wait — the eligibility/cap mechanism
         // under test is identical either way.
         const reserved = await withTenantRls(basePrisma, tenantA, (tx) => reserveNextAttempt(tx, tenantA, noticeId, 'FAILED', { immediate: true }));
-        expect(reserved.noOp).toBe(false);
+        expect(reserved.noOp, reserved.noOp ? reserved.reason : undefined).toBe(false);
       }
     }
 

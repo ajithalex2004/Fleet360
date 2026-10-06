@@ -16,6 +16,7 @@
  *
  * Edge-runtime safe (no Node APIs).
  */
+import { busOpsCapability } from '@/lib/authz/bus-ops-routes';
 import { ALL_PERMISSIONS, hasPermission } from '@/lib/permissions';
 import { requiredAdminLevel, roleSatisfies, SUPER_ADMIN } from '@/lib/admin-access';
 import { TRIAL_FREE_MODULES } from '@/lib/access-control';
@@ -127,6 +128,14 @@ export function decide(req: PolicyRequest, subject: PolicySubject): Decision {
         : { allow: false, reason: `admin-level:${level}`, ...base };
     }
     case 'module': {
+      if (rule.module === 'bus-ops' && req.pathname.startsWith('/api/bus-ops/')) {
+        const capability = busOpsCapability(req.pathname, req.method);
+        if (!capability) return { allow: false, reason: 'unmapped-route', ...base };
+        if (capability.action === 'external') return { allow: true, reason: 'delegated', ...base };
+        const required = `bus-ops:${capability.action}:${capability.resource}`;
+        if (subject.plan === 'TRIAL' && capability.action !== 'view') return { allow: false, reason: 'trial-read-only', required, ...base };
+        return { allow: role === SUPER_ADMIN || hasPermission([...(subject.permissions ?? [])], 'bus-ops', capability.action, capability.resource), reason: 'bus-ops-capability', required, ...base };
+      }
       const segments = req.pathname.slice('/api/'.length).split('/').slice(area.split('/').length);
       const action = rule.action ?? actionFor(req.method, segments);
       const resource = resourceFor(rule.module, segments);

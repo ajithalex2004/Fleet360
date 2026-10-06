@@ -123,3 +123,9 @@ export async function logAuditInTx(payload: AuditPayload, tx: AuditDb): Promise<
     console.error('[audit] logAuditInTx failed:', err);
   }
 }
+
+/** Security-critical intent: caller must await in its business transaction; failure aborts it. */
+export async function writeRequiredAudit(payload: AuditPayload, tx: AuditDb): Promise<void> {
+  markAudited();
+  await writeAuditRow(tx, payload);
+}

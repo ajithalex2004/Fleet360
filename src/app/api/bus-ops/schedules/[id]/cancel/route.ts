@@ -1,3 +1,5 @@
+import { writeRequiredAudit } from '@/lib/audit';
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -9,6 +11,8 @@ import { assertTripTransition, normalizeTripStatus, TripTransitionError } from '
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -21,13 +25,14 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
 
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
-
-      try {
+  try {
+    return await withTenantRls(prisma, tenantId, async (tx) => {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
-        const schedule = await tx.tripSchedule.findFirst({ where: { id: params.id, tenantId } });
+        await tx.$queryRawUnsafe(`SELECT id FROM trip_schedules WHERE id::text = $1 AND tenant_id::text = $2 FOR UPDATE`, params.id, tenantId);
+        const schedule = await tx.tripSchedule.findFirst({ where: { id: params.id, tenantId, deletedAt: null } });
         if (!schedule) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+        if (schedule.status === 'CANCELLED') return NextResponse.json({ error: 'Trip already cancelled' }, { status: 409 });
         try {
           assertTripTransition(normalizeTripStatus(schedule.status), 'CANCELLED');
         } catch (e) {
@@ -44,8 +49,8 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         });
 
         // Publish to outbox — downstream consumers (notifications, reporting) pick
-        // this up asynchronously. Best-effort: never fails the HTTP response.
-        getEventBus().publish({
+        // this up asynchronously after the command and outbox commit together.
+        await getEventBus().publish({
           eventType:     TRIP_CANCELLED,
           aggregateType: 'TripSchedule',
           aggregateId:   schedule.id,
@@ -59,12 +64,13 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
             reason:      body.reason          ?? null,
             cancelledAt: new Date().toISOString(),
           },
-        }).catch(err => console.warn('[bus-ops cancel] outbox publish failed:', err));
+        }, tx);
 
+        await writeRequiredAudit({ tenantId, userId: authz.userId ?? undefined, entityType: 'TripSchedule', entityId: params.id, action: 'CANCEL', details: 'Trip cancel command committed' }, tx);
         return NextResponse.json(updated);
-      } catch (e) {
-        return NextResponse.json({ error: 'Failed to cancel' }, { status: 500 });
-      }
-  });
+    });
+  } catch (e) {
+    return NextResponse.json({ error: 'Failed to cancel' }, { status: 500 });
+  }
 }
 

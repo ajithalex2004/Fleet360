@@ -219,8 +219,8 @@ function TripCard({ schedule, onTransition, onAssign, isMoving }: {
             onClick={() => onTransition(schedule.id, 'CANCELLED')}
             className="text-xs text-[var(--text-faint)] hover:text-red-400 px-1.5 transition-colors">✕</button>
         )}
-        <Link href={`/bus-ops/schedules`}
-          className="text-xs text-[var(--text-faint)] hover:text-[var(--text-muted)] px-1.5 transition-colors" title="View details">⏱</Link>
+        <Link href={`/bus-ops/trips/${encodeURIComponent(schedule.id)}`}
+          className="text-xs text-[var(--text-faint)] hover:text-[var(--text-muted)] px-1.5 transition-colors" title="Trip details and disruption response">Details & recovery</Link>
       </div>
     </div>
   );
@@ -229,6 +229,7 @@ function TripCard({ schedule, onTransition, onAssign, isMoving }: {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function BusOpsDispatchPage() {
+  const [actionError, setActionError] = useState('');
   const [schedules,   setSchedules]   = useState<Schedule[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [transitioning, setTransitioning] = useState<string | null>(null);
@@ -282,32 +283,21 @@ export default function BusOpsDispatchPage() {
   }, [load]);
 
   const handleTransition = async (id: string, status: string) => {
-    setTransitioning(id);
+    setTransitioning(id); setActionError('');
     try {
-      // Route each action through its dedicated endpoint so domain events are
-      // published server-side via the outbox — no client-side notifications needed.
-      if (status === 'STARTED') {
-        await fetch(`/api/bus-ops/schedules/${id}/depart`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
-        });
-      } else if (status === 'COMPLETED') {
-        await fetch(`/api/bus-ops/schedules/${id}/complete`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
-        });
-      } else if (status === 'CANCELLED') {
-        await fetch(`/api/bus-ops/schedules/${id}/cancel`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reason: 'Cancelled via Trip Monitor' }),
-        });
-      } else {
-        // EN_ROUTE — no dedicated endpoint yet; generic PATCH.
-        await fetch(`/api/bus-ops/schedules/${id}`, {
-          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status }),
-        });
+      const commands: Record<string,string> = {STARTED:'depart',EN_ROUTE:'en-route',COMPLETED:'complete',CANCELLED:'cancel'};
+      const command = commands[status];
+      if (!command) throw new Error('Unsupported trip action');
+      const res = await fetch(`/api/bus-ops/schedules/${encodeURIComponent(id)}/${command}`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(status==='CANCELLED'?{reason:'Cancelled via Trip Monitor'}:{}),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(()=>({}));
+        throw new Error(body.error ?? `Trip action failed (HTTP ${res.status})`);
       }
       await load();
-    } catch { /* silent */ }
+    } catch (error) { setActionError(error instanceof Error ? error.message : 'Trip action failed'); }
     finally { setTransitioning(null); }
   };
 
@@ -349,6 +339,7 @@ export default function BusOpsDispatchPage() {
       )}
 
       <div className="space-y-5">
+        {actionError && <p role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-300">{actionError}</p>}
         {/* Header */}
         <PageHeader
           title="Trip Monitor"
@@ -464,7 +455,7 @@ export default function BusOpsDispatchPage() {
             ))}
           </div>
         ) : (
-          <div className="flex gap-4 overflow-x-auto pb-4" style={{ minWidth: `${visibleStages.length * 220}px` }}>
+          <div className="flex gap-4 overflow-x-auto pb-4">
             {cols.map(col => (
               <div key={col.status} className="flex-shrink-0 w-52 space-y-3">
                 {/* Column header */}

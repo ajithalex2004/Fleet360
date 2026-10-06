@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -10,6 +11,7 @@ export const dynamic = 'force-dynamic';
  *   - configured (= shared secret present in env)
  */
 
+import { gatewayView } from '@/lib/bus-ops/gateway-view';
 import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
@@ -21,6 +23,8 @@ export const runtime = 'nodejs';
 const OFFLINE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes without heartbeat → offline
 
 export async function GET(req: NextRequest) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
@@ -45,7 +49,7 @@ export async function GET(req: NextRequest) {
         const lastSeenMs = g.lastSeenAt ? now - g.lastSeenAt.getTime() : null;
         const lastEventMs = g.lastEventAt ? now - g.lastEventAt.getTime() : null;
         return {
-          ...g,
+          ...gatewayView(g),
           health:
             g.isActive === false ? 'DISABLED'
             : lastSeenMs == null ? 'NEVER_SEEN'

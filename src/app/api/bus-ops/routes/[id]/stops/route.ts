@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -32,6 +33,8 @@ import { syncStopPlace, syncStopPlaces } from '@/lib/places/sync-stop';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 export async function GET(_req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(_req);
+  if (policyError) return policyError;
   const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: _req.headers, nextUrl: _req.nextUrl });
@@ -59,6 +62,8 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ id: stri
 // failure never rolls back the RouteStop write (the source model is
 // authoritative, Place is a mirror).
 export async function PUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -123,6 +128,8 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
 
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
   const params = await props.params;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });

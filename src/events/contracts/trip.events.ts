@@ -14,8 +14,8 @@
  *   boarding.missed      — Passenger's stop passed without a BOARDED event
  *
  * The Notification Engine (src/events/consumers/trip-notification.consumer.ts)
- * turns these into Push / SMS / WhatsApp / Email / In-app messages via the
- * NotificationRule table.
+ * queues tenant-specific rider email / SMS / WhatsApp deliveries via
+ * bus_rider_notification_rules. Rules are opt-in; the sender worker records outcomes.
  */
 
 export const TRIP_COMPLETED  = 'trip.completed'  as const;
@@ -158,3 +158,14 @@ export interface BoardingMissedPayload {
   /** When the bus left the stop without boarding this passenger. */
   missedAt:    string;    // ISO 8601
 }
+
+/** Dispatcher report, inspected recovery and closure share one recipient-scoped update. */
+export const TRIP_DISRUPTION_UPDATED = 'trip.disruption_updated' as const;
+export interface TripDisruptionUpdatedPayload {
+ scheduleId:string; tripNumber:string|null; disruptionId:string;
+ stage:'REPORTED'|'RECOVERED'|'RESOLVED'; updateText:string;
+ vehicleId?:string; driverId?:string; revisedEta?:string;
+}
+
+/** Started bus is moving between stops; no extra rider message is required. */
+export const TRIP_EN_ROUTE = 'trip.en_route' as const;

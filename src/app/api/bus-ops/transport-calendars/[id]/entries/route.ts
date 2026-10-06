@@ -1,3 +1,4 @@
+import { requireBusOpsRequest } from '@/lib/bus-ops/access';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -16,6 +17,8 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 const VALID_KINDS = new Set(['HOLIDAY', 'WORKING_OVERRIDE', 'HALF_DAY', 'REDUCED_SERVICE']);
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const policyError = await requireBusOpsRequest(req);
+  if (policyError) return policyError;
 
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
 
