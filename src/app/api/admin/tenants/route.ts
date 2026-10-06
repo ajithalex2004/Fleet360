@@ -8,15 +8,19 @@ import { cacheRead, revalidateCache } from '@/lib/server-cache';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { isSuperAdmin } from '@/lib/admin-access';
 import { withAuditedAction } from '@/lib/audited-action';
+import { normalizeTenantModules } from '@/lib/modules';
+import { defaultFeatureFlags, parseFeatureFlags } from '@/lib/module-features';
+import { writeTenantFeatureFlags } from '@/lib/tenant-features';
 
 /**
  * Modules a tenant created here gets when the request names none. Pinned:
  * the permission module list (MODULES in @/lib/permissions) grew with the
  * authorization policy, and that must not change what new tenants get.
+ * normalizeTenantModules adds the always-on modules and the system keys.
  */
 const DEFAULT_TENANT_MODULES = [
   'leasing', 'rental', 'bus-ops', 'fleet', 'maintenance', 'finance',
-  'driver-mgmt', 'compliance', 'reports', 'admin',
+  'driver-mgmt', 'compliance', 'reports',
 ];
 const CACHE_TAG = 'tenants:list';
 
@@ -81,20 +85,31 @@ async function handlePOST(req: NextRequest) {
   const { tenantId } = authz;
 
   try {
-    return await withPlatformAdmin(prisma, async (tx) => {
-      const bodyRaw = await req.json();
-  const body = stripTenantOwnershipFields(bodyRaw);
-      const {
-        enabledModules = DEFAULT_TENANT_MODULES,
-        localizedName, localizedDesc, bookingTypes,
-        supportedLanguages, defaultLanguage,
-        domain, address, contactName, contactEmail, contactPhone,
-        plan, industry, code, name,
-      } = body;
+    const body = stripTenantOwnershipFields(await req.json());
+    const {
+      enabledModules = DEFAULT_TENANT_MODULES,
+      featureFlags,
+      localizedName, localizedDesc, bookingTypes,
+      supportedLanguages, defaultLanguage,
+      domain, address, contactName, contactEmail, contactPhone,
+      plan, industry, code, name,
+    } = body;
 
+    if (typeof name !== 'string' || !name.trim()) {
+      return NextResponse.json({ error: 'Tenant name is required' }, { status: 400 });
+    }
+    if (!Array.isArray(enabledModules)) {
+      return NextResponse.json({ error: 'enabledModules must be an array' }, { status: 400 });
+    }
+    const modules = normalizeTenantModules(enabledModules);
+    if (!modules.ok) return NextResponse.json({ error: modules.error }, { status: 400 });
+    const flags = parseFeatureFlags(featureFlags);
+    if (!flags.ok) return NextResponse.json({ error: flags.error }, { status: 400 });
+
+    return await withPlatformAdmin(prisma, async (tx) => {
       const tenant = await tx.tenant.create({
         data: {
-          name:              name,
+          name:              name.trim(),
           code:              code   || undefined,
           plan:              plan   || 'STANDARD',
           industry:          industry || undefined,
@@ -109,16 +124,22 @@ async function handlePOST(req: NextRequest) {
           localizedDesc:     localizedDesc  || undefined,
           bookingTypes:      bookingTypes   || undefined,
           modules: {
-            create: (enabledModules as string[]).map((m: string) => ({ module: m, isEnabled: true })),
+            create: modules.modules.map((m) => ({ module: m, isEnabled: true })),
           },
         },
         include: { modules: true },
       });
+      // Every catalog flag gets an explicit value: the requested ones, the
+      // defaults for the rest.
+      await writeTenantFeatureFlags(tx, tenant.id, { ...defaultFeatureFlags(), ...flags.flags });
       // New tenant means the cached tenant list is now stale.
       await revalidateCache(CACHE_TAG);
       return NextResponse.json(tenant, { status: 201 });
     });
     } catch (e) {
+    if ((e as { code?: string })?.code === 'P2002') {
+      return NextResponse.json({ error: 'A tenant with this code already exists' }, { status: 409 });
+    }
     console.error('[CREATE TENANT]', e);
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }

@@ -4,40 +4,29 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import PasswordInput from '@/components/ui/PasswordInput';
+import { MODULES, resolveModuleKey } from '@/lib/modules';
+import { MODULE_FEATURES, defaultFeatureFlags, type FeatureFlagMap } from '@/lib/module-features';
+import { ModuleFeaturePicker, TenantModuleFeatureSummary } from '@/components/ModuleFeaturePicker';
 
 /* ─────────────────────────────────────────────────────────
-   Module config — IDs must match platform/page.tsx mod.id exactly
+   Modules & feature flags — every registry module (src/lib/modules.ts)
+   and the flags mapped to it (src/lib/module-features.ts).
 ───────────────────────────────────────────────────────── */
-const ALL_MODULES = [
-  'fleet', 'driver-mgmt', 'maintenance',
-  'leasing', 'rental', 'bus-ops',
-  'school-bus', 'logistics', 'incidents',
-  'dispatch', 'finance', 'compliance',
-  'booking-portal', 'customer-mgmt', 'customer',
-  'reports', 'agents', 'sustainability', 'assets',
-];
+const MODULE_LABELS: Record<string, string> = Object.fromEntries(MODULES.map(m => [m.key, m.name]));
 
-const MODULE_LABELS: Record<string, string> = {
-  'fleet':          '🚘 Fleet Management',
-  'driver-mgmt':    '👤 Driver Management',
-  'maintenance':    '🔧 Vehicle Maintenance',
-  'leasing':        '📋 Vehicle Leasing',
-  'rental':         '🚗 Rent-a-Car',
-  'bus-ops':        '🚌 Staff Transportation',
-  'school-bus':     '🏫 School Bus',
-  'logistics':      '🚛 Logistics Management',
-  'incidents':      '🚨 Incident & Ambulance',
-  'dispatch':       '🚦 Dispatch Control',
-  'finance':        '💰 Finance & Billing',
-  'compliance':     '⚖️ Compliance & Regulatory',
-  'booking-portal': '📲 Booking Portal',
-  'customer-mgmt':  '🏢 Customer Management',
-  'customer':       '📱 Customer App',
-  'reports':        '📊 Reports & Analytics',
-  'agents':         '🤖 AI Agent Ecosystem',
-  'sustainability':  '🌱 Sustainability & ESG',
-  'assets':         '🏗️ Assets & Inventory',
-};
+/** Canonical module keys from a tenant's tenant_modules rows (legacy aliases resolved, system keys dropped). */
+function moduleKeysOf(rows: { module: string; isEnabled?: boolean | null }[] | undefined): string[] {
+  const out = new Set<string>();
+  for (const r of rows ?? []) {
+    if (r.isEnabled === false) continue;
+    const key = resolveModuleKey(r.module);
+    if (key) out.add(key);
+  }
+  return [...out];
+}
+
+/** Feature flags stored in tenant_settings, i.e. edited on both tabs. */
+const SETTINGS_FLAGS = MODULE_FEATURES.filter(d => d.settingsField);
 
 /* ─────────────────────────────────────────────────────────
    Tenant settings type
@@ -268,7 +257,7 @@ function FeatureCard({ icon, gradient, title, desc, enabled, onToggle, children,
                 onClick={() => onUnlock?.()}
                 className="text-blue-400 hover:underline"
               >
-                Module Access
+                Modules &amp; Feature Flags
               </button>{' '}
               tab to unlock this feature:
             </p>
@@ -875,6 +864,9 @@ export default function TenantDetailPage() {
   const [loading, setLoading]       = useState(true);
   const [saving, setSaving]         = useState(false);
   const [enabledModules, setEnabledModules] = useState<string[]>([]);
+  const [featureFlags, setFeatureFlags]     = useState<FeatureFlagMap>(defaultFeatureFlags);
+  const [modulesError, setModulesError]     = useState('');
+  const [modulesSaved, setModulesSaved]     = useState(false);
 
   // Feature settings
   const [ts, setTs]                 = useState<TSettings>(TSETTINGS_DEFAULT);
@@ -898,7 +890,8 @@ export default function TenantDetailPage() {
   const applyData = useCallback((tData: any, rData: any, uData: any, arData: any,
     sData: any, wData: any, bData: any, npData: any) => {
     setTenant(tData);
-    setEnabledModules((tData.modules ?? []).filter((m: any) => m.isEnabled).map((m: any) => m.module));
+    setEnabledModules(moduleKeysOf(tData.modules));
+    setFeatureFlags({ ...defaultFeatureFlags(), ...(tData.featureFlags ?? {}) });
     setRoles(Array.isArray(rData) ? rData : []);
     setUsers(Array.isArray(uData) ? uData : []);
     setAllRoles(Array.isArray(arData) ? arData : []);
@@ -1000,15 +993,22 @@ export default function TenantDetailPage() {
   useEffect(() => { load(); }, [load]);
 
   const saveModules = async () => {
-    setSaving(true);
+    setSaving(true); setModulesError(''); setModulesSaved(false);
     try {
-      await fetch(`/api/admin/tenants/${id}/modules`, {
+      const res = await fetch(`/api/admin/tenants/${id}/modules`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabledModules }),
+        body: JSON.stringify({ enabledModules, featureFlags }),
       });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setModulesError(d.error ?? `Save failed (${res.status})`);
+        return;
+      }
       _detailCache.delete(id); // modules changed — invalidate cache
-      load(true);
-    } finally { setSaving(false); }
+      await load(true);
+      setModulesSaved(true); setTimeout(() => setModulesSaved(false), 3000);
+    } catch { setModulesError('Network error — please try again'); }
+    finally { setSaving(false); }
   };
 
   const saveFeatures = async () => {
@@ -1023,6 +1023,13 @@ export default function TenantDetailPage() {
         setTsError(d.error ?? 'Save failed');
       } else {
         setTsSaved(true); setTimeout(() => setTsSaved(false), 3000);
+        // Trip merging, auto-merge, auto dispatch and route optimisation are
+        // also Dispatch feature flags; keep the Modules tab in step.
+        setFeatureFlags(p => ({
+          ...p,
+          ...Object.fromEntries(SETTINGS_FLAGS.map(d => [d.key, Boolean(ts[d.settingsField!])])),
+        }));
+        _detailCache.delete(id);
       }
     } catch { setTsError('Network error — please try again'); }
     finally { setTsSaving(false); }
@@ -1076,8 +1083,8 @@ export default function TenantDetailPage() {
       {/* Tabs */}
       <div className="flex gap-2 border-b border-[var(--border-subtle)] overflow-x-auto">
         {([
-          ['modules',      'Module Access'],
-          ['features',     '⚡ Feature Flags'],
+          ['modules',      '🧩 Modules & Feature Flags'],
+          ['features',     '⚙️ Feature Settings'],
           ['admin-access', '🔐 Admin Access'],
           ['users',        `Users (${users.length})`],
           ['roles',        `Roles (${roles.length})`],
@@ -1090,37 +1097,57 @@ export default function TenantDetailPage() {
         ))}
       </div>
 
-      {/* ── MODULE ACCESS ── */}
+      {/* ── MODULES & FEATURE FLAGS ── */}
       {tab === 'modules' && (
         <div className="space-y-6">
-          <p className="text-[var(--text-muted)] text-sm">Control which modules this tenant can access. Disabled modules will be hidden from their navigation.</p>
-          <div className="grid grid-cols-3 gap-3">
-            {ALL_MODULES.map(m => (
-              <label key={m} className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer transition-all ${enabledModules.includes(m) ? 'border-emerald-500/50 bg-emerald-500/10' : 'border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 hover:border-[var(--border-strong)]'}`}>
-                <input type="checkbox" checked={enabledModules.includes(m)}
-                  onChange={() => setEnabledModules(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m])}
-                  className="w-4 h-4 accent-emerald-500"/>
-                <div>
-                  <div className="text-sm font-medium text-[var(--text-main)]">{MODULE_LABELS[m]}</div>
-                  <div className={`text-xs mt-0.5 ${enabledModules.includes(m) ? 'text-emerald-400' : 'text-[var(--text-faint)]'}`}>{enabledModules.includes(m) ? 'Enabled' : 'Disabled'}</div>
-                </div>
-              </label>
-            ))}
-          </div>
-          <button onClick={saveModules} disabled={saving}
-            className="px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-medium hover:opacity-90 disabled:opacity-50">
-            {saving ? 'Saving...' : 'Save Module Access'}
-          </button>
+          <section className="space-y-3">
+            <div>
+              <h2 className="text-lg font-bold text-[var(--text-main)]">Active configuration</h2>
+              <p className="text-[var(--text-muted)] text-sm">
+                Modules currently enabled for <strong className="text-[var(--text-main)]">{tenant.name}</strong> and the feature flags active in each.
+              </p>
+            </div>
+            <TenantModuleFeatureSummary
+              enabledModules={moduleKeysOf(tenant.modules)}
+              featureFlags={{ ...defaultFeatureFlags(), ...(tenant.featureFlags ?? {}) }}
+            />
+          </section>
+
+          <section className="space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-bold text-[var(--text-main)]">Edit modules &amp; feature flags</h2>
+                <p className="text-[var(--text-muted)] text-sm">
+                  Disabled modules are hidden from the tenant&apos;s navigation. A module&apos;s feature flags only take effect while the module is enabled.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 flex-shrink-0">
+                {modulesError && <span className="text-rose-400 text-sm">{modulesError}</span>}
+                {modulesSaved && <span className="text-emerald-400 text-sm">✓ Saved!</span>}
+                <button onClick={saveModules} disabled={saving}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-medium hover:opacity-90 disabled:opacity-50">
+                  {saving ? 'Saving...' : 'Save Modules & Flags'}
+                </button>
+              </div>
+            </div>
+            <ModuleFeaturePicker
+              enabledModules={enabledModules}
+              featureFlags={featureFlags}
+              plan={tenant.plan}
+              onModulesChange={setEnabledModules}
+              onFlagsChange={setFeatureFlags}
+            />
+          </section>
         </div>
       )}
 
-      {/* ── FEATURE FLAGS ── */}
+      {/* ── FEATURE SETTINGS ── */}
       {tab === 'features' && (
         <div className="space-y-5">
           {/* Header row */}
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-xl font-bold text-[var(--text-main)]">Feature Flags</h2>
+              <h2 className="text-xl font-bold text-[var(--text-main)]">Feature Settings</h2>
               <p className="text-[var(--text-muted)] text-sm mt-1">
                 Enable advanced operational features and configure their parameters for <strong className="text-[var(--text-main)]">{tenant.name}</strong>.
                 All changes are tenant-specific and do not affect other clients.
