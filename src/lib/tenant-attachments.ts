@@ -86,6 +86,14 @@ export async function listTenantAttachments(tx: TxClient, tenantId: string): Pro
   ));
 }
 
+/** Size and real content (not just the extension) of one attachment file, or null when acceptable. */
+export async function attachmentFileProblem(file: File): Promise<string | null> {
+  if (file.size === 0) return 'the file is empty';
+  if (file.size > ATTACHMENT_MAX_BYTES) return 'files can be at most 10 MB';
+  const problem = fileContentProblem(file.name, new Uint8Array(await file.arrayBuffer()), ALLOWED_KINDS);
+  return problem ? `${problem} Upload a PDF, PNG, JPEG or WebP file.` : null;
+}
+
 /** An attachment chosen for upload: the file plus its optional details. */
 export interface AttachmentUpload {
   attachmentTypeId: string;
@@ -109,10 +117,8 @@ export async function attachmentUploadProblem(
   for (const u of uploads) {
     const type = byId.get(u.attachmentTypeId);
     if (!type) return 'Unknown or inactive attachment type';
-    if (u.file.size === 0) return `${type.name}: the file is empty`;
-    if (u.file.size > ATTACHMENT_MAX_BYTES) return `${type.name}: files can be at most 10 MB`;
-    const problem = fileContentProblem(u.file.name, new Uint8Array(await u.file.arrayBuffer()), ALLOWED_KINDS);
-    if (problem) return `${type.name}: ${problem} Upload a PDF, PNG, JPEG or WebP file.`;
+    const problem = await attachmentFileProblem(u.file);
+    if (problem) return `${type.name}: ${problem}`;
     if (u.expiryDate && !/^\d{4}-\d{2}-\d{2}$/.test(u.expiryDate)) return `${type.name}: expiry date must be YYYY-MM-DD`;
     if (type.requiresExpiry && !u.expiryDate) return `${type.name}: expiry date is required`;
   }

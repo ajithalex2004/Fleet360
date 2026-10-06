@@ -160,7 +160,7 @@ export function TenantAttachmentsPanel({ tenantId, tenantName }: { tenantId: str
             {busy ? 'Uploading…' : draftCount > 0 ? `Upload ${draftCount} document${draftCount > 1 ? 's' : ''}` : 'Upload'}
           </button>
         </div>
-        <TenantAttachmentFields types={data.types} drafts={drafts} onChange={setDrafts} alreadyUploaded={uploadedTypes} />
+        <TenantAttachmentFields types={data.types} drafts={drafts} onChange={setDrafts} alreadyUploaded={uploadedTypes} tenantId={tenantId} />
       </section>
     </div>
   );

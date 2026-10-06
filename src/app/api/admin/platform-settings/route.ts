@@ -25,6 +25,8 @@ async function seedDefaultSettings() {
     ff_ai_dispatch:     'false',
     ff_customer_portal: 'true',
     ff_mobile_app:      'false',
+    // AI reads Document Number / Expiry Date from tenant attachments (src/lib/tenant-attachments-autofill.ts)
+    ff_attachment_autofill: 'true',
     // Security
     password_min_length:'8',
     session_timeout_minutes: '480',

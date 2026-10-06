@@ -852,7 +852,7 @@ export default function TenantsPage() {
                       <TenantAttachmentFields
                         types={attachmentTypes}
                         drafts={attachmentDrafts}
-                        onChange={(next) => { setAttachmentDrafts(next); if (error) setError(''); }}
+                        onChange={(update) => { setAttachmentDrafts(update); if (error) setError(''); }}
                         showErrors={showAttachmentErrors}
                       />
                     )}
