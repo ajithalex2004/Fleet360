@@ -13,6 +13,7 @@ import {
   ExtractedSupplierInfo,
 } from '../types';
 import { aiGateway } from '../gateway';
+import { documentDataUrl } from './pipeline/router';
 
 export interface ExtractionInput {
   fileName: string;
@@ -288,18 +289,19 @@ export async function extractDocumentIntelligence(input: ExtractionInput): Promi
   // If base64 image or text is provided, attempt AI Vision / LLM extraction
   if (input.imageBase64 || input.documentText) {
     try {
-      const userPrompt = input.documentText
-        ? `Document Content / Text:\n${input.documentText}\nFile Name: ${input.fileName}`
-        : `Extract structured data from this document image. File Name: ${input.fileName}`;
-
-      const aiRes = await aiGateway.chat([
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userPrompt },
-      ], {
-        capabilityAlias: 'STRUCTURED_EXTRACTION',
-        maxTokens: 800,
-        temperature: 0.1,
-      });
+      // Text when there is a text layer; otherwise the document itself goes
+      // to the vision model (this used to send only the file name).
+      const aiRes = input.documentText
+        ? await aiGateway.chat([
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: `Document Content / Text:\n${input.documentText}\nFile Name: ${input.fileName}` },
+          ], { capabilityAlias: 'STRUCTURED_EXTRACTION', maxTokens: 800, temperature: 0.1 })
+        : await aiGateway.vision(
+            [documentDataUrl(input.imageBase64!, input.mimeType)],
+            `Extract structured data from this document. File Name: ${input.fileName}`,
+            { systemPrompt: SYSTEM_PROMPT, capabilityAlias: 'VISION_HIGH_ACCURACY', maxTokens: 800, temperature: 0.1 },
+          );
+      if (aiRes.fromFallback) throw new Error('no AI provider available');
 
       // Clean JSON
       const cleaned = aiRes.content.replace(/^```json/m, '').replace(/```$/m, '').trim();

@@ -89,6 +89,7 @@ const SECTIONS: Section[] = [
       { key: 'ff_ai_dispatch',     label: 'AI Dispatch Optimizer', description: 'Machine learning dispatch routing',         type: 'toggle' },
       { key: 'ff_customer_portal', label: 'Customer Portal',       description: 'Self-service customer tracking portal',     type: 'toggle' },
       { key: 'ff_mobile_app',      label: 'Mobile App Access',     description: 'Allow mobile app logins',                   type: 'toggle' },
+      { key: 'ff_attachment_autofill', label: 'Attachment Autofill (AI)', description: 'Read document number and expiry date from tenant attachments (sends the document to OpenAI; never for UAE/EU-resident tenants)', type: 'toggle' },
     ],
   },
   {

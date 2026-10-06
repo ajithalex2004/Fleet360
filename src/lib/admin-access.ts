@@ -42,6 +42,8 @@ export const ADMIN_ROUTE_POLICY: Record<string, Partial<Record<Method, AdminLeve
   // Attachment Type master: the Create Tenant modal reads it; only platform admins edit it.
   'attachment-types':                            { GET: 'admin', POST: 'platform' },
   'attachment-types/[id]':                       { PATCH: 'platform' },
+  // Reads document number / expiry date from a file; sends it to the AI provider.
+  'attachment-types/[id]/autofill':              { POST: 'platform' },
   'billing':                                     { GET: 'member' },   // SubscriptionBanner
   'billing/checkout':                            { POST: 'admin' },
   'billing/portal':                              { POST: 'admin' },

@@ -28,6 +28,16 @@ export interface ExtractionInput {
   tierOverride?: 'TIER_0' | 'TIER_1' | 'TIER_2' | 'TIER_3';
 }
 
+/** Data URL for a base64 document; the MIME type decides image vs PDF handling. */
+export function documentDataUrl(base64: string, mimeType = 'application/pdf'): string {
+  return base64.startsWith('data:') ? base64 : `data:${mimeType};base64,${base64}`;
+}
+
+function confidenceBand(score: unknown): 'HIGH' | 'MEDIUM' | 'LOW' {
+  if (typeof score !== 'number') return 'LOW';
+  return score >= 0.85 ? 'HIGH' : score >= 0.6 ? 'MEDIUM' : 'LOW';
+}
+
 export async function processDocumentWithRouter(
   input: ExtractionInput
 ): Promise<DocumentExtractionResult> {
@@ -64,15 +74,25 @@ Return ONLY valid JSON adhering to:
   "financials": { "subtotal": 0, "taxAmount": 0, "totalAmount": 0, "currency": "AED" }
 }`;
 
-      const userContent = input.documentText || `Analyze document scan: ${input.fileName}`;
-      const aiRes = await aiGateway.chat([
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userContent },
-      ], {
-        capabilityAlias: selectedTier === 'TIER_3' ? 'ADVANCED_REASONING' : 'VISION_FAST',
-        maxTokens: 1000,
-        temperature: 0.1,
-      });
+      // A scan must reach the model as the document itself. This used to send
+      // only "Analyze document scan: <file name>" to a text model, so scans
+      // were "extracted" from the file name and still marked HIGH confidence.
+      const aiRes = isImageOrScan
+        ? await aiGateway.vision(
+            [documentDataUrl(input.imageBase64!, input.mimeType)],
+            `Extract the fields from this document. File name: ${input.fileName}`,
+            { systemPrompt, capabilityAlias: 'VISION_HIGH_ACCURACY', maxTokens: 1000, temperature: 0.1 },
+          )
+        : await aiGateway.chat([
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: input.documentText ?? '' },
+          ], {
+            capabilityAlias: selectedTier === 'TIER_3' ? 'ADVANCED_REASONING' : 'STRUCTURED_EXTRACTION',
+            maxTokens: 1000,
+            temperature: 0.1,
+          });
+      // The deterministic fallback returns canned text, not an extraction.
+      if (aiRes.fromFallback) throw new Error('no AI provider available');
 
       const cleaned = aiRes.content.replace(/^```json/m, '').replace(/```$/m, '').trim();
       const parsed = JSON.parse(cleaned);
@@ -90,8 +110,8 @@ Return ONLY valid JSON adhering to:
       return {
         docCategory: parsed.docCategory || 'REGISTRATION_CARD',
         suggestedTitle: parsed.suggestedTitle || parsed.docCategory,
-        confidence: 'HIGH',
-        confidenceScore: parsed.confidenceScore || 0.96,
+        confidence: confidenceBand(parsed.confidenceScore),
+        confidenceScore: typeof parsed.confidenceScore === 'number' ? parsed.confidenceScore : 0.5,
         referenceNumber: parsed.referenceNumber,
         issueDate: normalizeIsoDate(parsed.issueDate),
         expiryDate: normalizeIsoDate(parsed.expiryDate),
@@ -121,7 +141,8 @@ function executeTier0Extraction(input: ExtractionInput): DocumentExtractionResul
   let docCategory: DocIntelligenceCategory = 'REGISTRATION_CARD';
   let title = 'Vehicle Document';
   let refNum: string | undefined;
-  let issueDate: string | undefined = '2026-09-01';
+  // Only what the text states: a default date here was reported as extracted.
+  let issueDate: string | undefined;
   let expiryDate: string | undefined;
 
   let totalAmount: number | undefined;

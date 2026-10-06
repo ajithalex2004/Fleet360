@@ -42,6 +42,10 @@ export interface GatewayOptions {
 
 export interface GatewayVisionOptions extends GatewayOptions {
   detail?: 'low' | 'high' | 'auto';
+  /** Instructions sent as a system message ahead of the documents. */
+  systemPrompt?: string;
+  /** Abort the provider call after this long (default 45 s). */
+  timeoutMs?: number;
 }
 
 export interface GatewayResponse {
@@ -370,7 +374,15 @@ export class AIGatewayService {
   }
 
   /**
-   * 4. Multi-Image Vision Inspection
+   * 4. Vision over images and PDFs.
+   *
+   * Each entry is a data URL (data:image/png;base64,… or
+   * data:application/pdf;base64,…), an http(s) image URL, or bare base64
+   * (treated as JPEG). PDFs are sent as file parts, which the vision models
+   * read page by page (text layer and scanned pages alike).
+   *
+   * Throws when no vision provider is configured: a text-only model never
+   * sees the document, so falling back to one would only produce guesses.
    */
   async vision(
     images: string[],
@@ -381,32 +393,31 @@ export class AIGatewayService {
     const openAiKey = process.env.OPENAI_API_KEY;
 
     if (!openAiKey) {
-      return this.chat(
-        [
-          { role: 'system', content: 'Vision inspection assistant.' },
-          { role: 'user', content: prompt },
-        ],
-        { ...options, capabilityAlias: alias },
-      );
+      throw new Error('Vision is unavailable: OPENAI_API_KEY is not set');
     }
 
     const model = options.modelOverride ?? ALIAS_MODEL_MAP[alias].openai;
-    const imagePayloads = images.map(img => ({
-      type: 'image_url',
-      image_url: {
-        url: img.startsWith('data:') || img.startsWith('http') ? img : `data:image/jpeg;base64,${img}`,
-        detail: options.detail ?? 'auto',
-      },
-    }));
+    const documentParts = images.map((img, i) => (
+      img.startsWith('data:application/pdf')
+        ? { type: 'file', file: { filename: `document-${i + 1}.pdf`, file_data: img } }
+        : {
+            type: 'image_url',
+            image_url: {
+              url: img.startsWith('data:') || img.startsWith('http') ? img : `data:image/jpeg;base64,${img}`,
+              detail: options.detail ?? 'auto',
+            },
+          }
+    ));
 
     const body = {
       model,
       messages: [
+        ...(options.systemPrompt ? [{ role: 'system', content: options.systemPrompt }] : []),
         {
           role: 'user',
           content: [
             { type: 'text', text: prompt },
-            ...imagePayloads,
+            ...documentParts,
           ],
         },
       ],
@@ -421,6 +432,7 @@ export class AIGatewayService {
         Authorization: `Bearer ${openAiKey}`,
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(options.timeoutMs ?? 45_000),
     });
 
     if (!res.ok) {
