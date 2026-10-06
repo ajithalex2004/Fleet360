@@ -4,9 +4,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { withTenantRls } from '@/lib/rls';
 import { prisma }       from '@/lib/prisma';
 import {
-    autoApproveRule, checkApprover, statusKey, ESTIMATION_APPROVED, PENDING_ESTIMATION_APPROVAL,
+    approvesEstimate, autoApproveRule, checkApprover, statusKey, ESTIMATION_APPROVED, PENDING_ESTIMATION_APPROVAL,
 } from '@/lib/maintenance/approval-rules';
 import { callerRoleCodes, loadApprovalRules } from '@/lib/maintenance/approval-rules-db';
+import { approvalAmount } from '@/lib/maintenance/estimate-decision';
 import { approvalInProgress, withApprovalStart } from '@/lib/workflow/approvals';
 import { hasTenantWorkflow } from '@/lib/workflow-db';
 import { runAsTenant } from '@/lib/rls-scope';
@@ -124,13 +125,27 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
             if (body.candidateGarageIds !== undefined) data.candidateGarageIds = body.candidateGarageIds;
 
             // ── Estimate approval rules (src/lib/maintenance/approval-rules.ts) ──
-            // Approving an estimate needs a role the tenant's rule for its
-            // amount names; submitting one inside an auto-approve band
-            // approves it straight away. No rule for the amount: unchanged.
+            // Approving an estimate (moving from before approval to
+            // Estimation Approved or any later status) needs a role the
+            // tenant's rule for its amount names; submitting one inside an
+            // auto-approve band approves it straight away. The amount is
+            // the stored one (approvalAmount), which the body can raise but
+            // not lower. No rule for the amount: unchanged.
             let ruleNote: string | null = null;
             if (typeof data.status === 'string' && statusKey(data.status) !== statusKey(before.status)) {
-                const cost = body.estimatedCost !== undefined ? Number(body.estimatedCost) : before.estimatedCost == null ? null : Number(before.estimatedCost);
-                if (statusKey(data.status) === statusKey(ESTIMATION_APPROVED)) {
+                // A cost sent with the change can only raise it (an estimate
+                // being submitted), never lower what is stored.
+                const stored = await approvalAmount(tx, tenantId, params.id, body.selectedQuotationId);
+                const sent = body.estimatedCost == null || body.estimatedCost === '' ? NaN : Number(body.estimatedCost);
+                const cost = Number.isFinite(sent) ? Math.max(sent, stored ?? sent) : stored;
+                if (approvesEstimate(before.status, data.status)) {
+                    // A company with an approval workflow approves estimates
+                    // through it (submit for approval, then the Approvals Inbox).
+                    if (workflowDefined && cost != null) {
+                        return NextResponse.json({
+                            error: 'This estimate needs approval through the company\'s approval workflow: submit it for approval and decide it from the Approvals Inbox',
+                        }, { status: 409 });
+                    }
                     const rules = await loadApprovalRules(tx, tenantId);
                     const check = checkApprover(rules, cost, await callerRoleCodes(tx, tenantId, authz.userId, authz.role));
                     if (!check.ok) return NextResponse.json({ error: check.error, rule: check.rule.name }, { status: 403 });
