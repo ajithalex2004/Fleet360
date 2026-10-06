@@ -8,6 +8,7 @@ import { revalidateCache } from '@/lib/server-cache';
 
 import { requireAuthorizedTenant, requireSuperAdminForTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { withAuditedAction } from '@/lib/audited-action';
+import { readTenantFeatureFlags } from '@/lib/tenant-features';
 const CACHE_TAG = 'tenants:list';
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -32,7 +33,9 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
         },
       });
       if (!tenant) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-      return NextResponse.json(tenant, {
+      // Stored value of every catalog flag (see @/lib/module-features).
+      const featureFlags = await readTenantFeatureFlags(tx, params.id);
+      return NextResponse.json({ ...tenant, featureFlags }, {
         headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' },
       });
     });
@@ -53,7 +56,8 @@ async function handlePATCH(req: NextRequest, props: { params: Promise<{ id: stri
   try {
     const bodyRaw = await req.json();
     const body = stripTenantOwnershipFields(bodyRaw);
-    const { modules, userTenants, roles, ...data } = body;
+    // featureFlags is read-only here (GET derives it); modules are saved via /modules.
+    const { modules, userTenants, roles, featureFlags, ...data } = body;
     const tenant = await withTenantRls(prisma, params.id, (tx) =>
       tx.tenant.update({
         where: { id: params.id },

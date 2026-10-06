@@ -463,6 +463,36 @@ export function resolveModuleKey(s: string): ModuleKey | null {
   return null;
 }
 
+/**
+ * tenant_modules keys that are not product modules but gate platform
+ * surfaces: 'admin' is the ModuleGuard id of the /admin console and
+ * 'platform' the platform home (both added by /api/tenants/provision).
+ * tenant_modules is a whitelist, so a tenant without 'admin' locks its own
+ * tenant admins out of /admin. Kept on every tenant; never a module toggle.
+ */
+export const SYSTEM_MODULE_KEYS = ['admin', 'platform'] as const;
+
+/**
+ * The tenant_modules rows a tenant should hold for a requested module list:
+ * canonical keys (legacy aliases resolved), plus every always-on module and
+ * the system keys, de-duplicated. Unknown keys are an error rather than
+ * being stored, since nothing would ever match them.
+ */
+export function normalizeTenantModules(
+  requested: readonly unknown[],
+): { ok: true; modules: string[] } | { ok: false; error: string } {
+  const out = new Set<string>(SYSTEM_MODULE_KEYS);
+  for (const m of MODULES) if (m.subscription === 'always-on') out.add(m.key);
+  for (const raw of requested) {
+    if (typeof raw !== 'string') return { ok: false, error: 'Module keys must be strings' };
+    if ((SYSTEM_MODULE_KEYS as readonly string[]).includes(raw)) continue;
+    const key = resolveModuleKey(raw);
+    if (!key) return { ok: false, error: `Unknown module: ${raw}` };
+    out.add(key);
+  }
+  return { ok: true, modules: [...out] };
+}
+
 /** All modules with `subscription === 'toggleable'`. */
 export const TOGGLEABLE_MODULES: readonly ModuleDef[] = MODULES.filter(
   (m) => m.subscription === 'toggleable',

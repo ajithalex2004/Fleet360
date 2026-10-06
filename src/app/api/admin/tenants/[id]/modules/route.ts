@@ -1,6 +1,9 @@
 export const dynamic = 'force-dynamic';
 
-import { resolveModuleKey } from '@/lib/modules';
+import { normalizeTenantModules } from '@/lib/modules';
+import { parseFeatureFlags } from '@/lib/module-features';
+import { writeTenantFeatureFlags } from '@/lib/tenant-features';
+import { revalidateCache } from '@/lib/server-cache';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
@@ -24,7 +27,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
   });
 }
 
-// PUT: replace all module assignments
+// PUT: replace all module assignments, and store any feature flags sent with them
 async function handlePUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -37,19 +40,26 @@ async function handlePUT(req: NextRequest, props: { params: Promise<{ id: string
   }
 
   try {
-    return await withTenantRls(prisma, params.id, async (tx) => {
-      const bodyRaw = await req.json();
-    const body = stripTenantOwnershipFields(bodyRaw) as { enabledModules: string[] };
-    const { enabledModules } = body;
-      if (!Array.isArray(enabledModules) || enabledModules.some(m => typeof m !== 'string' || !resolveModuleKey(m))) {
-        return NextResponse.json({ error: 'Invalid enabledModules' }, { status: 400 });
-      }
-      const canonical = [...new Set(enabledModules.map(m => resolveModuleKey(m)!))];
+    const body = stripTenantOwnershipFields(await req.json()) as { enabledModules?: unknown; featureFlags?: unknown };
+    if (!Array.isArray(body.enabledModules)) {
+      return NextResponse.json({ error: 'Invalid enabledModules' }, { status: 400 });
+    }
+    // Keeps the always-on modules and the 'admin' / 'platform' system keys,
+    // which the module picker never sends.
+    const modules = normalizeTenantModules(body.enabledModules);
+    if (!modules.ok) return NextResponse.json({ error: modules.error }, { status: 400 });
+    const flags = parseFeatureFlags(body.featureFlags);
+    if (!flags.ok) return NextResponse.json({ error: flags.error }, { status: 400 });
+
+    const saved = await withTenantRls(prisma, params.id, async (tx) => {
       await tx.tenantModule.deleteMany({ where: { tenantId: params.id } });
-      await tx.tenantModule.createMany({ data: canonical.map(module => ({ tenantId: params.id, module, isEnabled: true })) });
-      const modules = await tx.tenantModule.findMany({ where: { tenantId: params.id } });
-      return NextResponse.json(modules);
+      await tx.tenantModule.createMany({ data: modules.modules.map(module => ({ tenantId: params.id, module, isEnabled: true })) });
+      await writeTenantFeatureFlags(tx, params.id, flags.flags);
+      return tx.tenantModule.findMany({ where: { tenantId: params.id } });
     });
+    // The tenants list shows each tenant's modules.
+    await revalidateCache('tenants:list');
+    return NextResponse.json(saved);
     } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }
 

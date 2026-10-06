@@ -1,12 +1,9 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import {
-  MODULE_BY_KEY,
-  resolveModuleKey,
-  type ModuleKey,
-  type ModuleDef,
-} from '@/lib/modules';
+import { MODULE_BY_KEY, MODULES, resolveModuleKey } from '@/lib/modules';
+import { defaultFeatureFlags, activeFeatureKeys, type FeatureFlagMap } from '@/lib/module-features';
+import { ModuleFeaturePicker, ALL_MODULE_KEYS } from '@/components/ModuleFeaturePicker';
 import { EditTenantModal, type TenantForEdit } from '@/components/EditTenantModal';
 import { HardDeleteConfirm } from '@/components/HardDeleteConfirm';
 import { useFetchedData, invalidate, invalidatePrefix } from '@/hooks/useFetchedData';
@@ -23,82 +20,18 @@ const PLAN_COLORS: Record<string, string> = {
   ENTERPRISE:   'bg-amber-500/20 text-amber-400 border-amber-500/30',
 };
 
-// ── Module groups (Tab 2) ─────────────────────────────────────────────────────
-//
-// Groups are visual buckets tuned for the tenant-admin audience. The list of
-// modules in each group is derived from the canonical registry, so adding or
-// renaming a module only requires editing `src/lib/modules.ts`.
-//
-// Each group has an explicit `keys` array (canonical kebab-case ModuleKey) so
-// we keep the curated visual order even when the registry's order changes.
-// The `modules` field is built below from this curated list.
+// ── Modules (Tab 2) ───────────────────────────────────────────────────────────
+// Every registry module (src/lib/modules.ts) and the feature flags mapped to
+// it (src/lib/module-features.ts), shown by <ModuleFeaturePicker>.
 
-interface ModuleGroupSpec {
-  label: string;
-  icon: string;
-  color: string;        // key into BORDER_BG / ICON_BG / ACCENT / BADGE maps
-  description: string;  // group-level description
-  keys: readonly ModuleKey[];
-}
-
-const MODULE_GROUP_SPECS: readonly ModuleGroupSpec[] = [
-  {
-    label: 'Booking & Transport',
-    icon: '🚗',
-    color: 'blue',
-    description: 'Customer-facing transport services — rentals, leases, shuttles, freight',
-    keys: ['leasing', 'rental', 'bus-ops', 'school-bus', 'logistics'],
-  },
-  {
-    label: 'Fleet Management',
-    icon: '🚌',
-    color: 'emerald',
-    description: 'Vehicles, drivers, and the work that keeps them moving',
-    keys: ['fleet', 'maintenance', 'driver-mgmt'],
-  },
-  {
-    label: 'Emergency & Safety',
-    icon: '🚨',
-    color: 'rose',
-    description: 'Real-time incident response and emergency dispatch',
-    keys: ['incidents'],
-  },
-  {
-    label: 'Finance & Compliance',
-    icon: '💼',
-    color: 'violet',
-    description: 'Invoicing, regulatory tracking, and audit trail',
-    keys: ['finance', 'compliance'],
-  },
-  {
-    label: 'Analytics & Reports',
-    icon: '📊',
-    color: 'amber',
-    description: 'Cross-module BI and scheduled report exports',
-    keys: ['reports'],
-  },
-];
-
-interface ModuleGroupEntry {
-  spec: ModuleGroupSpec;
-  modules: ModuleDef[];
-}
-
-const MODULE_GROUPS: readonly ModuleGroupEntry[] = MODULE_GROUP_SPECS.map((spec) => ({
-  spec,
-  modules: spec.keys
-    .map((k) => MODULE_BY_KEY[k])
-    .filter((m): m is ModuleDef => Boolean(m)),
-}));
-
-/** All toggleable module keys, in the order shown on screen. */
-const ALL_MODULE_KEYS: readonly ModuleKey[] = MODULE_GROUPS.flatMap((g) =>
-  g.modules.map((m) => m.key),
-);
+/** Modules a new tenant starts with: everything except enterprise-only add-ons. */
+const DEFAULT_NEW_TENANT_MODULES: readonly string[] = MODULES
+  .filter((m) => m.subscription !== 'enterprise-only')
+  .map((m) => m.key);
 
 /** Lookup from canonical key → admin display label (uses shortName, falls back to name). */
 const MODULE_LABELS: Readonly<Record<string, string>> = Object.fromEntries(
-  MODULE_GROUPS.flatMap((g) => g.modules.map((m) => [m.key, m.shortName ?? m.name])),
+  MODULES.map((m) => [m.key, m.shortName ?? m.name]),
 );
 
 /**
@@ -110,6 +43,7 @@ const MODULE_LABELS: Readonly<Record<string, string>> = Object.fromEntries(
 function enabledSet(t: TenantRow): Set<string> {
   const out = new Set<string>();
   for (const tm of t.modules ?? []) {
+    if (tm.isEnabled === false) continue;
     const canonical = resolveModuleKey(tm.module);
     if (canonical) out.add(canonical);
     else if (tm.module in MODULE_BY_KEY) out.add(tm.module);
@@ -327,7 +261,8 @@ const emptyForm = () => ({
   defaultLanguage: 'en',
   localizedName_en: '', localizedName_ar: '',
   localizedDesc_en: '', localizedDesc_ar: '',
-  enabledModules: [...ALL_MODULE_KEYS] as string[],
+  enabledModules: [...DEFAULT_NEW_TENANT_MODULES] as string[],
+  featureFlags: defaultFeatureFlags() as FeatureFlagMap,
   bookingTypes: {} as BookingTypes,
 });
 
@@ -386,14 +321,6 @@ export default function TenantsPage() {
         defaultLanguage: updated.includes(p.defaultLanguage) ? p.defaultLanguage : updated[0] ?? 'en' };
     });
 
-  const toggleModule = (key: string) =>
-    setForm(p => ({
-      ...p,
-      enabledModules: p.enabledModules.includes(key)
-        ? p.enabledModules.filter(m => m !== key)
-        : [...p.enabledModules, key],
-    }));
-
   const toggleRequestType = (serviceKey: string, typeKey: string) =>
     setForm(p => {
       const current = p.bookingTypes[serviceKey] ?? [];
@@ -441,6 +368,7 @@ export default function TenantsPage() {
         localizedDesc: JSON.stringify({ en: form.localizedDesc_en, ar: form.localizedDesc_ar }),
         bookingTypes:  JSON.stringify(form.bookingTypes),
         enabledModules: form.enabledModules,
+        featureFlags:   form.featureFlags,
       };
       const res = await fetch('/api/admin/tenants', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -489,6 +417,14 @@ export default function TenantsPage() {
 
   // ── tab nav ───────────────────────────────────────────────────────────────
   const tabIndex = TABS.findIndex(t => t.key === activeTab);
+
+  // Always-on modules are included by the picker and the API whether or not listed.
+  const selectedModules = new Set([
+    ...form.enabledModules,
+    ...MODULES.filter(m => m.subscription === 'always-on').map(m => m.key),
+  ]);
+  const selectedModuleCount = ALL_MODULE_KEYS.filter(k => selectedModules.has(k)).length;
+  const activeFlagCount = activeFeatureKeys(selectedModules, form.featureFlags).length;
 
   // total selected booking types across all service types
   const totalBookingSelected = Object.values(form.bookingTypes).reduce((s, a) => s + a.length, 0);
@@ -654,7 +590,7 @@ export default function TenantsPage() {
             Key fix: use h-[90vh] (not max-h) so flex children get a defined
             height, enabling flex-1 + overflow-y-auto to scroll properly.
           */}
-          <div className="w-full max-w-2xl h-[90vh] bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl
+          <div className="w-full max-w-3xl h-[90vh] bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl
                           flex flex-col shadow-2xl overflow-hidden">
 
             {/* ── Modal header (never scrolls) ─────────────────────────────── */}
@@ -770,57 +706,14 @@ export default function TenantsPage() {
               {activeTab === 'modules' && (
                 <div className="space-y-4">
                   <Section icon="⚙️" iconBg="bg-emerald-500/20" title="Module Configuration"
-                    desc="Enable and configure system modules and features for this tenant">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {MODULE_GROUPS.map(group => {
-                        const allSel = group.modules.every(m => form.enabledModules.includes(m.key));
-                        return (
-                          <div key={group.spec.label} className={`rounded-xl border p-4 ${BORDER_BG[group.spec.color]}`}>
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center gap-2">
-                                <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-sm ${ICON_BG[group.spec.color]}`}>
-                                  {group.spec.icon}
-                                </span>
-                                <div>
-                                  <div className="text-sm font-semibold text-[var(--text-main)]">{group.spec.label}</div>
-                                  <div className="text-[10px] text-[var(--text-faint)] leading-tight">{group.spec.description}</div>
-                                </div>
-                              </div>
-                              <button onClick={() => {
-                                const keys: readonly string[] = group.modules.map(m => m.key);
-                                setForm(p => ({
-                                  ...p,
-                                  enabledModules: allSel
-                                    ? p.enabledModules.filter(k => !keys.includes(k))
-                                    : [...new Set([...p.enabledModules, ...keys])],
-                                }));
-                              }} className="text-xs text-blue-400 hover:text-blue-300">
-                                {allSel ? 'Deselect All' : 'Select All'}
-                              </button>
-                            </div>
-                            <div className="space-y-2">
-                              {group.modules.map(m => (
-                                <label key={m.key}
-                                  className={`flex items-start gap-3 p-2.5 rounded-lg cursor-pointer transition-all
-                                    ${form.enabledModules.includes(m.key) ? 'bg-[var(--bg-surface-hover)]' : 'hover:bg-[var(--bg-surface-hover)]'}`}>
-                                  <input type="checkbox"
-                                    checked={form.enabledModules.includes(m.key)}
-                                    onChange={() => toggleModule(m.key)}
-                                    className={`mt-0.5 w-4 h-4 flex-shrink-0 ${ACCENT[group.spec.color]}`} />
-                                  <div>
-                                    <div className="text-sm font-medium text-[var(--text-main)]">{m.shortName ?? m.name}</div>
-                                    <div className="text-xs text-[var(--text-muted)] mt-0.5">{m.description}</div>
-                                  </div>
-                                </label>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <p className="text-xs text-[var(--text-faint)] mt-1">
-                      {form.enabledModules.length} of {ALL_MODULE_KEYS.length} modules selected
-                    </p>
+                    desc="Choose the modules this tenant can access and the feature flags enabled within each module">
+                    <ModuleFeaturePicker
+                      enabledModules={form.enabledModules}
+                      featureFlags={form.featureFlags}
+                      plan={form.plan}
+                      onModulesChange={(next) => set('enabledModules', next)}
+                      onFlagsChange={(next) => set('featureFlags', next)}
+                    />
                   </Section>
                 </div>
               )}
@@ -943,7 +836,9 @@ export default function TenantsPage() {
                       <span>Languages</span>
                       <span className="text-[var(--text-main)]">{form.supportedLanguages.map(l => l === 'en' ? 'English' : 'Arabic').join(', ')}</span>
                       <span>Modules</span>
-                      <span className="text-[var(--text-main)]">{form.enabledModules.length} selected</span>
+                      <span className="text-[var(--text-main)]">{selectedModuleCount} of {ALL_MODULE_KEYS.length} enabled</span>
+                      <span>Feature Flags</span>
+                      <span className="text-[var(--text-main)]">{activeFlagCount} active</span>
                       <span>Booking Types</span>
                       <span className="text-[var(--text-main)]">{totalBookingSelected} request types across {Object.keys(form.bookingTypes).filter(k => (form.bookingTypes[k]?.length ?? 0) > 0).length} services</span>
                     </div>

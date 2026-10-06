@@ -181,10 +181,8 @@ test.describe('Tenant Management API & Functionalities', () => {
 
     test('TS_TM_008: Module Configuration Select All logic', async ({ page }) => {
       await page.click('button:has-text("Next →")');
-      await expect(
-        page.locator('p').filter({ hasText: '53 of 53 modules selected' })
-          .or(page.locator('p:has-text("modules selected")')),
-      ).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByText(/\d+ of \d+ modules enabled/)).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByText(/feature flags active/)).toBeVisible();
       const fleetGroup = page.locator('div.border').filter({ hasText: 'Fleet Management' });
       await fleetGroup.getByRole('button').filter({ hasText: 'Deselect All' }).first().click();
       await expect(fleetGroup.getByRole('button').filter({ hasText: 'Select All' }).first()).toBeVisible();
