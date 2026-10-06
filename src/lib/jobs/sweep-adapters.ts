@@ -92,3 +92,13 @@ export async function runPushScheduler(ctx: JobContext): Promise<JobResult> {
   }
   return forwardToRoute('/api/push/run-scheduler', ctx, { secretEnvVar: 'PUSH_CRON_SECRET' });
 }
+
+export async function runServiceTicketSlaSweep(ctx: JobContext): Promise<JobResult> {
+  // No tenant on a scheduled run: the route sweeps every tenant with open tickets.
+  return forwardToRoute('/api/service-tickets/sla/sweep', ctx);
+}
+
+export async function runDocumentLifecycleSweep(ctx: JobContext): Promise<JobResult> {
+  // No tenant on a scheduled run: the route sweeps every tenant's documents.
+  return forwardToRoute('/api/documents/intelligence/cron/lifecycle-sweep', ctx);
+}

@@ -15,6 +15,8 @@ import { revalidateCache } from '@/lib/server-cache';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { withAuditedAction } from '@/lib/audited-action';
+import { isSuperAdmin } from '@/lib/admin-access';
+import { reportingLineValue, userScopeDenied } from '@/lib/admin/user-scope';
 const CACHE_TAG = 'users:list';
 
 type Params = { params: Promise<{ id: string }> };
@@ -39,13 +41,22 @@ export async function GET(req: NextRequest, { params }: Params) {
     return await withPlatformAdmin(prisma, async (tx) => {
       const user = await tx.user.findUnique({ where: { id } });
       if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      const denied = await userScopeDenied(tx, req.headers, tenantId, id, 'member');
+      if (denied) return denied;
 
+      // A company administrator sees the user's membership in their company only.
       const tenants = await tx.userTenant.findMany({
-        where: { userId: id },
+        where: { userId: id, ...(isSuperAdmin(req.headers) ? {} : { tenantId }) },
         include: { tenant: true, role: true },
       });
 
-      return NextResponse.json({ ...user, tenants });
+      // Reporting lines in the caller's company (Direct Manager / Department
+      // Head approvers in Admin > Workflows).
+      const here = tenants.find((t) => t.tenantId === tenantId);
+      return NextResponse.json({
+        ...user, tenants,
+        reportingLines: { managerUserId: here?.managerUserId ?? null, departmentHeadUserId: here?.departmentHeadUserId ?? null },
+      });
     });
     } catch (e) {
     console.error('[Admin Hub] GET /api/admin/users/[id]:', e);
@@ -70,6 +81,7 @@ async function handlePATCH(req: NextRequest, { params }: Params) {
       department, position, mobileNumber, hierarchy,
       userType, employeeId,
       isActive, moduleAccess,
+      managerUserId, departmentHeadUserId,
     } = body;
 
     // Validate moduleAccess keys
@@ -100,9 +112,30 @@ async function handlePATCH(req: NextRequest, { params }: Params) {
     if (isActive     !== undefined) data.isActive     = isActive;
     if (moduleAccess !== undefined) data.moduleAccess = moduleAccess;
 
-    const user = await withPlatformAdmin(prisma, (tx) =>
-      tx.user.update({ where: { id }, data })
-    );
+    // Reporting lines are per company: set on the user's membership in the
+    // caller's company (Direct Manager / Department Head approvers).
+    const lines: { managerUserId?: string | null; departmentHeadUserId?: string | null } = {};
+    const accountChange = [username, email, isActive, moduleAccess, userType].some((v) => v !== undefined);
+    const result = await withPlatformAdmin(prisma, async (tx) => {
+      const denied = await userScopeDenied(tx, req.headers, tenantId, id, accountChange ? 'account' : 'member');
+      if (denied) return { denied };
+      for (const [key, value, label] of [
+        ['managerUserId', managerUserId, 'Manager'],
+        ['departmentHeadUserId', departmentHeadUserId, 'Department head'],
+      ] as const) {
+        if (value === undefined) continue;
+        const checked = await reportingLineValue(tx, tenantId, id, value, label);
+        if (!checked.ok) return { denied: NextResponse.json({ error: checked.error }, { status: 400 }) };
+        lines[key] = checked.value;
+      }
+      const user = await tx.user.update({ where: { id }, data });
+      if (Object.keys(lines).length) {
+        await tx.userTenant.updateMany({ where: { userId: id, tenantId }, data: lines });
+      }
+      return { user };
+    });
+    if (result.denied) return result.denied;
+    const { user } = result;
     // Deactivated, or module access changed: current sessions end within 60 s.
     if (isActive === false || moduleAccess !== undefined) {
       await revokeSessionsSafely({
@@ -131,12 +164,18 @@ async function handleDELETE(_req: NextRequest, { params }: Params) {
   try {
     const { id } = await params;
     // Soft-delete: deactivate rather than hard-delete
-    const user = await withPlatformAdmin(prisma, (tx) =>
-      tx.user.update({
-        where: { id },
-        data:  { isActive: false, updatedAt: new Date() },
-      })
-    );
+    const result = await withPlatformAdmin(prisma, async (tx) => {
+      const denied = await userScopeDenied(tx, _req.headers, tenantId, id, 'account');
+      if (denied) return { denied };
+      return {
+        user: await tx.user.update({
+          where: { id },
+          data:  { isActive: false, updatedAt: new Date() },
+        }),
+      };
+    });
+    if (result.denied) return result.denied;
+    const { user } = result;
     await revokeSessionsSafely({ userId: id, reason: 'user-deactivated', revokedBy: authz.userId });
     revalidateCache([CACHE_TAG]);
     return NextResponse.json({ success: true, message: 'User deactivated', user });

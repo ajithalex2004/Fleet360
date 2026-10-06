@@ -9,6 +9,7 @@ import { useSearchParams } from 'next/navigation';
 import { Plus, Eye, Check, Send, FileText, X, ArrowRight, Mail, History, MessageSquare, Workflow } from 'lucide-react';
 import WorkflowModal from '@/components/leasing/WorkflowModal';
 import { getQuotationAction, getQuotationStatusStyles } from '@/services/leasingWorkflow';
+import { nextQuotationStatus } from '@/lib/leasing/quotation-stages';
 
 interface Vehicle {
   vehicleType: string;
@@ -159,7 +160,6 @@ export default function LeaseQuotationsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [prefilling, setPrefilling]     = useState(false);
   const [viewQuotation, setViewQuotation] = useState<LeaseQuotation | null>(null);
-  const [updatingStatus, setUpdatingStatus] = useState(false);
   const [saving, setSaving]             = useState(false);
   const [submitMode, setSubmitMode]     = useState<'draft'|'submit'>('draft');
   const [submitResult, setSubmitResult] = useState<{success:boolean;message:string}|null>(null);
@@ -671,48 +671,20 @@ export default function LeaseQuotationsPage() {
 
   //  Workflow Engine Integration 
   // Maps status transitions to workflow procedures
-  const WORKFLOW_TRIGGER_MAP: Record<string, { procedure: string; label: string }> = {
-    PENDING_APPROVAL:        { procedure: 'QUOTATION_APPROVAL',  label: 'Internal Approval' },
-    PENDING_CREDIT_APPROVAL: { procedure: 'CREDIT_APPROVAL',     label: 'Credit Approval' },
-    PO_PREPARATION:          { procedure: 'PO_REQUEST',          label: 'PO Request' },
-  };
 
   const showWfToast = (type: 'success'|'warn'|'error', msg: string) => {
     setWfToast({ type, msg });
     setTimeout(() => setWfToast(null), 5000);
   };
 
-  const triggerWorkflowIfNeeded = async (quotationId: string, newStatus: string, quotationNumber: string) => {
-    const trigger = WORKFLOW_TRIGGER_MAP[newStatus];
-    if (!trigger) return;
-    try {
-      const res = await fetch('/api/workflow/trigger', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          module: 'LEASING',
-          procedure: trigger.procedure,
-          referenceType: 'LEASE_QUOTATION',
-          referenceId: quotationId,
-          referenceNumber: quotationNumber,
-        }),
-      });
-      const wf = await res.json();
-      if (res.ok) {
-        if (wf.reused) {
-          showWfToast('warn', `Workflow already in progress for ${quotationNumber}. Check Approvals Inbox.`);
-        } else {
-          showWfToast('success', `Workflow started: "${wf.workflowName}"  sent to Approvals Inbox.`);
-        }
-      } else {
-        const errMsg = wf?.error ?? 'Workflow trigger failed';
-        showWfToast('warn', errMsg);
-        console.warn('[Workflow]', errMsg);
-      }
-    } catch (e) {
-      showWfToast('error', 'Could not trigger workflow  check console for details.');
-      console.warn('Workflow trigger failed:', e);
-    }
+  // The server starts the company's approval workflow when a quotation
+  // enters an approval stage (src/app/api/leasing/quotations/[id]/approve),
+  // and decides its levels through the same Approve / Reject.
+  const showWorkflowOutcome = (res: { message?: string; workflow?: { name?: string; status?: string; level?: string | null } }) => {
+    if (!res.workflow) return;
+    if (res.message) showWfToast('success', res.message);
+    else if (res.workflow.status === 'IN_PROGRESS') showWfToast('success', `Sent for approval: "${res.workflow.name}"${res.workflow.level ? `, waiting for "${res.workflow.level}"` : ''}. See the Approvals Inbox.`);
+    else showWfToast('success', `Approval "${res.workflow.name}": ${res.workflow.status}`);
   };
 
   const handleWorkflowAction = async (quotationId: string, actionLabel: string, targetStatus?: string, comment?: string, email?: string) => {
@@ -740,13 +712,13 @@ export default function LeaseQuotationsPage() {
             setQuotationHistory(hData.history || []);
           }
         }
-        // Trigger workflow engine for approval-gated transitions
-        await triggerWorkflowIfNeeded(quotationId, updated.status, updated.quotationNumber ?? quotationId);
+        showWorkflowOutcome(updated);
         setShowCommentModal(false);
         setWorkflowComment('');
         setRecipientEmail('');
       } else {
-        alert('Failed to process workflow action');
+        const err = await res.json().catch(() => null);
+        alert(err?.error ?? 'Failed to process workflow action');
       }
     } catch (err) {
       console.error(err);
@@ -985,33 +957,37 @@ export default function LeaseQuotationsPage() {
                       {quotation.currency}
                     </td>
                     <td className="px-3 py-3 text-sm whitespace-nowrap">
-                      <select
-                        value={quotation.status}
-                        disabled={updatingStatus}
-                        onChange={async (e) => {
-                          const newStatus = e.target.value as LeaseQuotation['status'];
-                          setUpdatingStatus(true);
-                          try {
-                            const res = await fetch(`/api/leasing/quotations/${quotation.id}`, {
-                              method: 'PATCH',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ status: newStatus }),
-                            });
-                            if (res.ok) {
-                              setQuotations(prev => prev.map(q => q.id === quotation.id ? { ...q, status: newStatus } : q));
-                              await triggerWorkflowIfNeeded(quotation.id, newStatus, quotation.quotationNumber ?? quotation.id);
-                            }
-                          } catch {} finally {
-                            setUpdatingStatus(false);
-                          }
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                        className={`text-xs px-2 py-1.5 rounded-lg border font-medium cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-wait ${getStatusColor(quotation.status)} bg-[var(--bg-surface)]`}
-                      >
-                        {STATUS_PIPELINE.map(s => (
-                          <option key={s} value={s} className="bg-[var(--bg-surface)] text-[var(--text-main)]">{s.replace(/_/g, ' ')}</option>
-                        ))}
-                      </select>
+                      {(() => {
+                        // Only the next stage: the move goes through the approve
+                        // endpoint like the detail view's actions (stage emails,
+                        // approval workflows), so no stage can be skipped. This used
+                        // to PATCH a route that doesn't exist, failing silently.
+                        const next = nextQuotationStatus(quotation.status);
+                        const busy = processingActionId === quotation.id;
+                        if (!next) {
+                          return (
+                            <span className={`text-xs px-2 py-1.5 rounded-lg border font-medium ${getStatusColor(quotation.status)}`}>
+                              {String(quotation.status ?? '').replace(/_/g, ' ')}
+                            </span>
+                          );
+                        }
+                        return (
+                          <select
+                            value={quotation.status}
+                            disabled={busy}
+                            title={busy ? 'Updating…' : `Move to ${next.replace(/_/g, ' ')}`}
+                            onChange={async (e) => {
+                              if (e.target.value !== next) return;
+                              await handleWorkflowAction(quotation.id, `Moved to ${next.replace(/_/g, ' ')}`);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className={`text-xs px-2 py-1.5 rounded-lg border font-medium cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-wait ${getStatusColor(quotation.status)} bg-[var(--bg-surface)]`}
+                          >
+                            <option value={quotation.status} className="bg-[var(--bg-surface)] text-[var(--text-main)]">{String(quotation.status ?? '').replace(/_/g, ' ')}</option>
+                            <option value={next} className="bg-[var(--bg-surface)] text-[var(--text-main)]">→ {next.replace(/_/g, ' ')}</option>
+                          </select>
+                        );
+                      })()}
                     </td>
                     <td className="px-3 py-3 text-sm text-[var(--text-main)]">
                       {quotation.validUntil}

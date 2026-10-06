@@ -65,6 +65,16 @@ vi.mock('@/lib/prisma', () => ({ prisma: tx }));
 vi.mock('@/lib/rls', () => ({ withTenantRls: async (_p: unknown, _t: string, fn: (t: unknown) => unknown) => fn(tx) }));
 vi.mock('@/lib/rls-scope', () => ({ runAsTenant: async <T>(_t: string, fn: () => Promise<T>) => fn() }));
 vi.mock('@/lib/audited-action', () => ({ withAuditedAction: <T>(h: T) => h }));
+
+// No approval workflow configured: the module decides approvals itself (the
+// workflow path is covered by tests/unit/workflow-*.test.ts).
+vi.mock('@/lib/workflow/approvals', () => ({
+  approvalGate: async () => null,
+  approvalInProgress: async () => null,
+  withApprovalStart: async (res: unknown) => res,
+  withdrawApproval: async () => {},
+}));
+vi.mock('@/lib/workflow-db', async (orig) => ({ ...(await orig<Record<string, unknown>>()), hasTenantWorkflow: async () => false }));
 vi.mock('@/lib/sentry', () => ({ captureException: () => {}, captureMessage: () => {} }));
 vi.mock('@/lib/maintenance/publish-event', async (orig) => {
   const actual = await orig<Record<string, unknown>>();

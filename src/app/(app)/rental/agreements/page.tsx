@@ -56,6 +56,7 @@ const STATUS_CONFIG = {
 const DEPOSIT_STATUS = {
   PENDING:  'bg-amber-500/20 text-amber-400 border-amber-500/30',
   PAID:     'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+  REFUND_REQUESTED: 'bg-violet-500/20 text-violet-400 border-violet-500/30',
   REFUNDED: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
 };
 
@@ -89,6 +90,9 @@ function TransitionModal({ agreement, onClose, onDone }: {
   const [fuelIn,    setFuelIn]    = useState(String(agreement.fuelIn ?? ''));
   const [mileageOut,setMileageOut]= useState(String(agreement.mileageOut ?? ''));
   const [fuelOut,   setFuelOut]   = useState(String(agreement.fuelOut ?? ''));
+  const [refundAmount, setRefundAmount] = useState(String(agreement.securityDeposit ?? ''));
+  const [refundMethod, setRefundMethod] = useState('BANK_TRANSFER');
+  const [refundRef,    setRefundRef]    = useState('');
   const [saving,    setSaving]    = useState(false);
   const [error,     setError]     = useState('');
 
@@ -110,7 +114,25 @@ function TransitionModal({ agreement, onClose, onDone }: {
       if (action === 'sign')           { payload.signedAt = new Date().toISOString(); payload.signedBy = signedBy || 'Customer'; }
       if (action === 'complete')       { payload.status = 'COMPLETED'; if (mileageOut) payload.mileageOut = Number(mileageOut); if (fuelOut) payload.fuelOut = Number(fuelOut); }
       if (action === 'cancel')         { payload.status = 'CANCELLED'; }
-      if (action === 'refund_deposit') { payload.depositStatus = 'REFUNDED'; }
+      if (action === 'refund_deposit') {
+        // A refund request through Finance > Security Deposits: it waits for the
+        // company's Refund Approval workflow when there is one, else is paid at once.
+        const res = await fetch(`/api/rental/agreements/${agreement.id}/refund-deposit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refund_amount: refundAmount, refund_method: refundMethod, refund_reference: refundRef || undefined }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error ?? 'Refund request failed');
+        const wf = data.workflow;
+        alert(wf?.status === 'IN_PROGRESS'
+          ? `Refund requested (${data.deposit?.deposit_no ?? 'deposit'}) and sent for approval through "${wf.name}"${wf.level ? `, waiting for "${wf.level}"` : ''}.`
+          : data.agreement?.depositStatus === 'REFUNDED'
+            ? 'Deposit refunded.'
+            : `Refund requested (${data.deposit?.deposit_no ?? 'deposit'}): Finance pays it from Security Deposits.`);
+        onDone();
+        return;
+      }
 
       const res = await fetch(`/api/rental/agreements/${agreement.id}`, {
         method: 'PATCH',
@@ -173,6 +195,21 @@ function TransitionModal({ agreement, onClose, onDone }: {
             </div>
           )}
 
+          {action === 'refund_deposit' && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <input type="number" value={refundAmount} onChange={e => setRefundAmount(e.target.value)} placeholder="Refund amount" min={0} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-amber-500/40" />
+                <select value={refundMethod} onChange={e => setRefundMethod(e.target.value)} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] focus:outline-none focus:border-amber-500/40">
+                  <option value="BANK_TRANSFER">Bank transfer</option>
+                  <option value="CARD">Card reversal</option>
+                  <option value="CHEQUE">Cheque</option>
+                  <option value="CASH">Cash</option>
+                </select>
+              </div>
+              <input value={refundRef} onChange={e => setRefundRef(e.target.value)} placeholder="Reference (optional)" className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-xl px-3 py-2 text-sm text-[var(--text-main)] placeholder-[var(--text-faint)] focus:outline-none focus:border-amber-500/40" />
+              <p className="text-xs text-[var(--text-faint)]">Raises a refund request in Finance › Security Deposits; it goes through the Refund Approval workflow when one is set up.</p>
+            </div>
+          )}
           {error && <p className="text-red-400 text-xs">{error}</p>}
 
           <button onClick={handle} disabled={saving || actions.length === 0}

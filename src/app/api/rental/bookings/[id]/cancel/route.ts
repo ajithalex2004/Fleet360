@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls, runSequential } from '@/lib/rls';
+import { withdrawApproval } from '@/lib/workflow/approvals';
 
 // POST /api/rental/bookings/[id]/cancel
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -15,7 +16,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
     try {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
@@ -54,5 +55,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         return NextResponse.json({ error: 'Failed to cancel booking' }, { status: 500 });
       }
   });
+  if (response.ok) await withdrawApproval(tenantId, 'rental_booking', params.id, 'Booking cancelled');
+  return response;
 }
 

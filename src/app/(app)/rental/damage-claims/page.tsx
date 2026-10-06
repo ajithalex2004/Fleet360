@@ -17,6 +17,8 @@ interface DamageClaim {
 const STATUS_COLORS: Record<string, string> = {
   OPEN:     'bg-amber-500/20 text-amber-400 border-amber-500/30',
   ASSESSED: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  PENDING_APPROVAL: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+  APPROVED: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
   BILLED:   'bg-purple-500/20 text-purple-400 border-purple-500/30',
   CLOSED:   'bg-slate-500/20 text-[var(--text-muted)] border-slate-500/30',
 };
@@ -44,8 +46,9 @@ export default function DamageClaimsPage() {
         fetch('/api/rental/bookings'),
       ]);
       const [cData, bData] = await Promise.all([cRes.json(), bRes.json()]);
-      setClaims(Array.isArray(cData) ? cData : []);
-      setBookings(Array.isArray(bData) ? bData : []);
+      // Both lists come paginated ({ data, total, … }).
+      setClaims(Array.isArray(cData) ? cData : Array.isArray(cData?.data) ? cData.data : []);
+      setBookings(Array.isArray(bData) ? bData : Array.isArray(bData?.data) ? bData.data : []);
     } catch {
       setError('Failed to load damage claims');
     } finally {
@@ -79,17 +82,48 @@ export default function DamageClaimsPage() {
     }
   };
 
-  const updateStatus = async (id: string, status: string) => {
+  // Assess / submit / approve / return / bill / close. With a Damage Claim
+  // workflow, approve and return act on its waiting level; the reply says where it is.
+  const claimAction = async (c: DamageClaim, action: string) => {
+    const payload: Record<string, unknown> = { action };
+    if (action === 'assess') {
+      const v = prompt('Actual repair cost (AED)', c.actualCost != null ? String(c.actualCost) : String(c.estimatedCost ?? ''));
+      if (v === null) return;
+      if (!(Number(v) >= 0) || v.trim() === '') return setError('Enter the actual cost as a number');
+      payload.actualCost = Number(v);
+    }
+    if (action === 'reject') {
+      const r = prompt('Why is this claim being returned for re-assessment?');
+      if (r === null) return;
+      payload.reason = r.trim() || 'Review required';
+    }
+    setError('');
     try {
-      await fetch(`/api/rental/damage-claims/${id}`, {
+      const res = await fetch(`/api/rental/damage-claims/${c.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify(payload),
       });
+      const d = await res.json().catch(() => null);
+      if (!res.ok) { setError(d?.error ?? 'Action failed'); return; }
+      const wf = d?.workflow;
+      const note = d?.message
+        ?? (wf?.status === 'IN_PROGRESS' ? `Sent for approval through "${wf.name}"${wf.level ? `, waiting for "${wf.level}"` : ''}.` : null)
+        ?? (wf?.status === 'APPROVED' ? `"${wf.name}": no approval level applies, so the claim is approved.` : null);
+      if (note) alert(note);
       loadData();
     } catch {
-      setError('Failed to update status');
+      setError('Failed to update the claim');
     }
+  };
+
+  // The actions each status offers.
+  const ACTIONS: Record<string, { action: string; label: string; tone: string }[]> = {
+    OPEN:             [{ action: 'assess', label: 'Assess', tone: 'text-blue-400' }, { action: 'submit', label: 'Submit', tone: 'text-orange-400' }],
+    ASSESSED:         [{ action: 'assess', label: 'Edit cost', tone: 'text-blue-400' }, { action: 'submit', label: 'Submit for approval', tone: 'text-orange-400' }, { action: 'bill', label: 'Bill', tone: 'text-purple-400' }, { action: 'close', label: 'Close', tone: 'text-[var(--text-muted)]' }],
+    PENDING_APPROVAL: [{ action: 'approve', label: 'Approve', tone: 'text-emerald-400' }, { action: 'reject', label: 'Return', tone: 'text-rose-400' }],
+    APPROVED:         [{ action: 'bill', label: 'Bill customer', tone: 'text-purple-400' }, { action: 'close', label: 'Close (no charge)', tone: 'text-[var(--text-muted)]' }],
+    BILLED:           [{ action: 'close', label: 'Close', tone: 'text-[var(--text-muted)]' }],
   };
 
   const filtered = statusFilter === 'All' ? claims : claims.filter(c => c.status === statusFilter);
@@ -113,12 +147,12 @@ export default function DamageClaimsPage() {
       {error && <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl px-4 py-3 text-rose-400 text-sm">{error}</div>}
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {['All','OPEN','ASSESSED','BILLED','CLOSED'].slice(0,4).map(s => (
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+        {['All','OPEN','ASSESSED','PENDING_APPROVAL','APPROVED','BILLED','CLOSED'].map(s => (
           <button key={s} onClick={() => setStatus(s)}
             className={`p-4 rounded-xl border text-left transition-all ${statusFilter === s ? 'border-rose-500 bg-rose-500/10' : 'border-[var(--border-subtle)] bg-[var(--bg-surface)]/50 hover:border-[var(--border-strong)]'}`}>
             <div className="text-2xl font-bold text-[var(--text-main)]">{s === 'All' ? claims.length : claims.filter(c => c.status === s).length}</div>
-            <div className="text-xs text-[var(--text-muted)] mt-1">{s}</div>
+            <div className="text-xs text-[var(--text-muted)] mt-1">{s.replace('_', ' ')}</div>
           </button>
         ))}
       </div>
@@ -147,7 +181,7 @@ export default function DamageClaimsPage() {
                   <td className="px-4 py-4 text-sm text-[var(--text-main)]">{c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '-'}</td>
                   <td className="px-4 py-4 text-sm font-medium text-[var(--text-main)]">{c.booking?.bookingRef ?? c.bookingId.slice(0,8)}</td>
                   <td className="px-4 py-4 text-sm text-[var(--text-main)]">{c.booking?.customer?.fullName ?? '-'}</td>
-                  <td className="px-4 py-4 text-sm text-[var(--text-main)] max-w-xs truncate">{c.description ?? '-'}</td>
+                  <td className="px-4 py-4 text-sm text-[var(--text-main)] max-w-xs whitespace-pre-wrap" title={c.description}>{c.description ?? '-'}</td>
                   <td className="px-4 py-4 text-sm text-amber-400 font-medium">
                     {c.estimatedCost ? `AED ${Number(c.estimatedCost).toLocaleString()}` : '-'}
                   </td>
@@ -159,20 +193,15 @@ export default function DamageClaimsPage() {
                   </td>
                   <td className="px-4 py-4">
                     <span className={`px-3 py-1 rounded-full text-xs font-medium border ${STATUS_COLORS[c.status ?? 'OPEN']}`}>
-                      {c.status ?? 'OPEN'}
+                      {(c.status ?? 'OPEN').replace('_', ' ')}
                     </span>
                   </td>
                   <td className="px-4 py-4">
-                    <select
-                      value={c.status ?? 'OPEN'}
-                      onChange={e => updateStatus(c.id, e.target.value)}
-                      className="text-xs px-2 py-1 rounded bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none"
-                    >
-                      <option value="OPEN">OPEN</option>
-                      <option value="ASSESSED">ASSESSED</option>
-                      <option value="BILLED">BILLED</option>
-                      <option value="CLOSED">CLOSED</option>
-                    </select>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1">
+                      {(ACTIONS[c.status ?? 'OPEN'] ?? []).map(a => (
+                        <button key={a.action} onClick={() => claimAction(c, a.action)} className={`text-xs hover:underline ${a.tone}`}>{a.label}</button>
+                      ))}
+                    </div>
                   </td>
                 </tr>
               ))}

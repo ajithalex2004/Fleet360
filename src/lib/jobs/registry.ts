@@ -66,6 +66,7 @@ import { runBusRiderNotifications } from '@/lib/jobs/bus-rider-notifications';
 import { runOutboxPublisher }        from '@/lib/jobs/outbox-publisher';
 import { runBusOpsGenerateScheduleTemplates } from '@/lib/jobs/bus-ops-generate-schedule-templates';
 import { runAlertTripOverdue }       from '@/lib/jobs/alert-trip-overdue';
+import { runWorkflowEscalation }     from '@/lib/jobs/workflow-escalation';
 import {
   runFuelSweepBill,
   runTrafficFinesSweepBill,
@@ -76,6 +77,8 @@ import {
   runBookingsSweepPenalties,
   runAttendanceSweepNoShow,
   runPushScheduler,
+  runServiceTicketSlaSweep,
+  runDocumentLifecycleSweep,
 } from '@/lib/jobs/sweep-adapters';
 
 // ── Registry ──────────────────────────────────────────────────────────────────
@@ -193,6 +196,27 @@ export const JOB_REGISTRY: JobDef[] = [
     handler:        runBusOpsGenerateScheduleTemplates,
     maxDurationSec: 300,
     allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN', 'OPERATIONS', 'DISPATCHER'],
+  },
+  {
+    name:           'workflow-escalation',
+    description:    'Emails the escalation contact of approval levels waiting longer than their escalation time (Admin > Workflows)',
+    handler:        runWorkflowEscalation,
+    maxDurationSec: 120,
+    allowedRoles:   ['SUPER_ADMIN'],
+  },
+  {
+    name:           'service-tickets-sla-sweep',
+    description:    'Escalates open service tickets past their SLA (all tenants on a scheduled run)',
+    handler:        runServiceTicketSlaSweep,
+    maxDurationSec: 120,
+    allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN', 'OPERATIONS'],
+  },
+  {
+    name:           'document-lifecycle-sweep',
+    description:    'Marks extracted documents EXPIRING / EXPIRED by their expiry date (Document Intelligence)',
+    handler:        runDocumentLifecycleSweep,
+    maxDurationSec: 120,
+    allowedRoles:   ['SUPER_ADMIN', 'TENANT_ADMIN'],
   },
 ];
 

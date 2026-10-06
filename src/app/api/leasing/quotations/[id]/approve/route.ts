@@ -17,6 +17,9 @@ import { sendQuotationEmail, type QuotationForEmail } from '@/lib/leasing/quotat
 import { staffRecipients } from '@/lib/leasing/staff-recipients';
 import { parseEmailList } from '@/lib/workflow-db';
 import { sessionUser } from '@/lib/session-user';
+import { approvalGate, withApprovalStart } from '@/lib/workflow/approvals';
+import { quotationApprovalStage } from '@/lib/workflow/subjects';
+import { nextQuotationStatus } from '@/lib/leasing/quotation-stages';
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -30,6 +33,16 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     const body = stripTenantOwnershipFields(bodyRaw);
     const { action = 'APPROVE', approverName, comments, targetStatus: requestedTarget, recipientEmail: customRecipient } = body;
     // action: 'APPROVE' | 'REJECT'
+
+    // While the company's workflow for the quotation's approval stage
+    // (Admin > Workflows: Quotation / Credit Approval, PO Request) decides
+    // it, approve / reject go to the level that is waiting; the quotation
+    // moves on when the last level approves, or is rejected.
+    const gated = await approvalGate({
+      headers: req.headers, tenantId, referenceType: 'LEASE_QUOTATION', referenceId: params.id,
+      action: action === 'REJECT' ? 'REJECT' : 'APPROVE', comments: typeof comments === 'string' ? comments : '',
+    });
+    if (gated) return gated;
 
     const { updated, quotation, nextStatus } = await withTenantRls(prisma, tenantId, async (tx) => {
       const quotation = await tx.leaseQuotation.findFirst({
@@ -69,20 +82,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         if (requestedTarget) {
           nextStatus = requestedTarget;
         } else {
-          const statusMap: Record<string, string> = {
-            DRAFT:                   'APPROVED',
-            NEW:                     'PENDING_APPROVAL',
-            PENDING_APPROVAL:        'DRAFT_APPROVED',
-            DRAFT_APPROVED:          'SENT_TO_CUSTOMER',
-            SENT_TO_CUSTOMER:        'CUSTOMER_APPROVED',
-            CUSTOMER_APPROVED:       'PENDING_CREDIT_APPROVAL',
-            PENDING_CREDIT_APPROVAL: 'CREDIT_APPROVED',
-            CREDIT_APPROVED:         'PO_PREPARATION',
-            PO_PREPARATION:          'PO_PREPARED',
-            PO_PREPARED:             'DELIVERY_IN_PROGRESS',
-            DELIVERY_IN_PROGRESS:    'DELIVERED',
-          };
-          nextStatus = statusMap[nextStatus] ?? nextStatus;
+          nextStatus = nextQuotationStatus(nextStatus) ?? nextStatus;
         }
       } else {
         nextStatus = 'REJECTED';
@@ -157,7 +157,11 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       console.error('Quotation notification failed:', emailErr instanceof Error ? emailErr.message : emailErr);
     }
 
-    return NextResponse.json(updated);
+    // Entering an approval stage: the company's workflow for it, if any, starts.
+    const response = NextResponse.json(updated);
+    return quotationApprovalStage(nextStatus)
+      ? withApprovalStart(response, { headers: req.headers, tenantId, referenceType: 'LEASE_QUOTATION', referenceId: params.id })
+      : response;
   } catch (e: any) {
     console.error(e);
     const status = e?.status || 500;

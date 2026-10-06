@@ -9,8 +9,8 @@
     "*:*:*"
    ],
    "claim": {
-    "v": "7deb1e4f",
-    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "v": "83f16c6e",
+    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "w": 1
    }
   },
@@ -70,6 +70,61 @@
     "rental:approve:damage",
     "rental:edit:pricing",
     "rental:export:*",
+    "bus-ops:admin:device-credentials",
+    "bus-ops:admin:finance-recharge",
+    "bus-ops:admin:jobs",
+    "bus-ops:approve:planning-core",
+    "bus-ops:approve:requests",
+    "bus-ops:approve:route-consolidation",
+    "bus-ops:approve:vehicle-resource-optimization",
+    "bus-ops:create:calendars",
+    "bus-ops:create:drivers",
+    "bus-ops:create:geofences",
+    "bus-ops:create:outsource",
+    "bus-ops:create:passengers",
+    "bus-ops:create:requests",
+    "bus-ops:create:self-service",
+    "bus-ops:create:telemetry",
+    "bus-ops:delete:calendars",
+    "bus-ops:delete:devices",
+    "bus-ops:delete:geofences",
+    "bus-ops:delete:incidents",
+    "bus-ops:delete:passengers",
+    "bus-ops:delete:requests",
+    "bus-ops:delete:route-consolidation",
+    "bus-ops:delete:staff",
+    "bus-ops:delete:trips",
+    "bus-ops:edit:calendars",
+    "bus-ops:edit:devices",
+    "bus-ops:edit:geofences",
+    "bus-ops:edit:passengers",
+    "bus-ops:edit:requests",
+    "bus-ops:edit:trips",
+    "bus-ops:export:trips",
+    "bus-ops:view:analytics",
+    "bus-ops:view:calendars",
+    "bus-ops:view:cba-rules",
+    "bus-ops:view:cost-allocation",
+    "bus-ops:view:devices",
+    "bus-ops:view:driver-performance",
+    "bus-ops:view:drivers",
+    "bus-ops:view:esg",
+    "bus-ops:view:geofences",
+    "bus-ops:view:headway",
+    "bus-ops:view:incidents",
+    "bus-ops:view:outsource",
+    "bus-ops:view:passengers",
+    "bus-ops:view:planning-constraints",
+    "bus-ops:view:planning-core",
+    "bus-ops:view:requests",
+    "bus-ops:view:route-consolidation",
+    "bus-ops:view:routes",
+    "bus-ops:view:self-service",
+    "bus-ops:view:sla-monitor",
+    "bus-ops:view:staff",
+    "bus-ops:view:telemetry",
+    "bus-ops:view:trips",
+    "bus-ops:view:vehicle-resource-optimization",
     "bus-ops:view:*",
     "bus-ops:create:routes",
     "bus-ops:edit:routes",
@@ -185,8 +240,8 @@
     "reports:create:*"
    ],
    "claim": {
-    "v": "7deb1e4f",
-    "b": "______________8HgP__________AQ"
+    "v": "83f16c6e",
+    "b": "________________________A8D__________w"
    }
   },
   {
@@ -238,6 +293,61 @@
     "rental:approve:damage",
     "rental:edit:pricing",
     "rental:export:*",
+    "bus-ops:admin:device-credentials",
+    "bus-ops:admin:finance-recharge",
+    "bus-ops:admin:jobs",
+    "bus-ops:approve:planning-core",
+    "bus-ops:approve:requests",
+    "bus-ops:approve:route-consolidation",
+    "bus-ops:approve:vehicle-resource-optimization",
+    "bus-ops:create:calendars",
+    "bus-ops:create:drivers",
+    "bus-ops:create:geofences",
+    "bus-ops:create:outsource",
+    "bus-ops:create:passengers",
+    "bus-ops:create:requests",
+    "bus-ops:create:self-service",
+    "bus-ops:create:telemetry",
+    "bus-ops:delete:calendars",
+    "bus-ops:delete:devices",
+    "bus-ops:delete:geofences",
+    "bus-ops:delete:incidents",
+    "bus-ops:delete:passengers",
+    "bus-ops:delete:requests",
+    "bus-ops:delete:route-consolidation",
+    "bus-ops:delete:staff",
+    "bus-ops:delete:trips",
+    "bus-ops:edit:calendars",
+    "bus-ops:edit:devices",
+    "bus-ops:edit:geofences",
+    "bus-ops:edit:passengers",
+    "bus-ops:edit:requests",
+    "bus-ops:edit:trips",
+    "bus-ops:export:trips",
+    "bus-ops:view:analytics",
+    "bus-ops:view:calendars",
+    "bus-ops:view:cba-rules",
+    "bus-ops:view:cost-allocation",
+    "bus-ops:view:devices",
+    "bus-ops:view:driver-performance",
+    "bus-ops:view:drivers",
+    "bus-ops:view:esg",
+    "bus-ops:view:geofences",
+    "bus-ops:view:headway",
+    "bus-ops:view:incidents",
+    "bus-ops:view:outsource",
+    "bus-ops:view:passengers",
+    "bus-ops:view:planning-constraints",
+    "bus-ops:view:planning-core",
+    "bus-ops:view:requests",
+    "bus-ops:view:route-consolidation",
+    "bus-ops:view:routes",
+    "bus-ops:view:self-service",
+    "bus-ops:view:sla-monitor",
+    "bus-ops:view:staff",
+    "bus-ops:view:telemetry",
+    "bus-ops:view:trips",
+    "bus-ops:view:vehicle-resource-optimization",
     "bus-ops:view:*",
     "bus-ops:create:routes",
     "bus-ops:edit:routes",
@@ -353,8 +463,8 @@
     "reports:create:*"
    ],
    "claim": {
-    "v": "7deb1e4f",
-    "b": "______________8HgP__________AQ"
+    "v": "83f16c6e",
+    "b": "________________________A8D__________w"
    }
   },
   {
@@ -393,8 +503,8 @@
     "reports:create:*"
    ],
    "claim": {
-    "v": "7deb1e4f",
-    "b": "AAAAAAAAAMD_B38GAAAAAAAAfgAAAQ"
+    "v": "83f16c6e",
+    "b": "AAAAAAAAAAAAAAAAAADg_4M_AwAAAAAAAD8AgA"
    }
   },
   {
@@ -411,8 +521,8 @@
     "rental:edit:pricing"
    ],
    "claim": {
-    "v": "7deb1e4f",
-    "b": "AAAAAM4FAAAAAAAAAAAAAAAAAAAAAA"
+    "v": "83f16c6e",
+    "b": "AAAAAM4FAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
    }
   },
   {
@@ -422,6 +532,30 @@
    "permissions": [
     "leasing:view:*",
     "rental:view:*",
+    "bus-ops:view:analytics",
+    "bus-ops:view:calendars",
+    "bus-ops:view:cba-rules",
+    "bus-ops:view:cost-allocation",
+    "bus-ops:view:devices",
+    "bus-ops:view:driver-performance",
+    "bus-ops:view:drivers",
+    "bus-ops:view:esg",
+    "bus-ops:view:geofences",
+    "bus-ops:view:headway",
+    "bus-ops:view:incidents",
+    "bus-ops:view:outsource",
+    "bus-ops:view:passengers",
+    "bus-ops:view:planning-constraints",
+    "bus-ops:view:planning-core",
+    "bus-ops:view:requests",
+    "bus-ops:view:route-consolidation",
+    "bus-ops:view:routes",
+    "bus-ops:view:self-service",
+    "bus-ops:view:sla-monitor",
+    "bus-ops:view:staff",
+    "bus-ops:view:telemetry",
+    "bus-ops:view:trips",
+    "bus-ops:view:vehicle-resource-optimization",
     "bus-ops:view:*",
     "fleet:view:*",
     "maintenance:view:*",
@@ -445,8 +579,8 @@
     "agents:view:*"
    ],
    "claim": {
-    "v": "7deb1e4f",
-    "b": "AQAAAAIQAEAQSCGKiCAIgiAIgiAAAA"
+    "v": "83f16c6e",
+    "b": "AQAAAAIAAAAA-P__DwAgCKQQRUQQBEEQBEEQAA"
    }
   },
   {
@@ -459,8 +593,8 @@
     "custom:thing:x"
    ],
    "claim": {
-    "v": "7deb1e4f",
-    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "v": "83f16c6e",
+    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "x": [
      "custom:thing:x",
      "fleet:view:vehicles",
@@ -478,8 +612,8 @@
     "maintenance:view:*"
    ],
    "claim": {
-    "v": "7deb1e4f",
-    "b": "AAAAAAAAAAARAAAAAAAAAAAAAAAAAA",
+    "v": "83f16c6e",
+    "b": "AAAAAAAAAAAAAAAAAACACAAAAAAAAAAAAAAAAA",
     "x": [
      "logistics:create:shipments"
     ]
@@ -491,8 +625,8 @@
    "plan": "PRO",
    "permissions": [],
    "claim": {
-    "v": "7deb1e4f",
-    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "v": "83f16c6e",
+    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
    }
   },
   {
@@ -517,8 +651,8 @@
     "*:*:*"
    ],
    "claim": {
-    "v": "7deb1e4f",
-    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "v": "83f16c6e",
+    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "w": 1
    }
   }

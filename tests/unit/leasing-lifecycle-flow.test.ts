@@ -96,6 +96,16 @@ function resetStore() {
 }
 
 // Mock @/lib/prisma
+// No approval workflow configured: the module decides approvals itself (the
+// workflow path is covered by tests/unit/workflow-*.test.ts).
+vi.mock('@/lib/workflow/approvals', () => ({
+  approvalGate: async () => null,
+  approvalInProgress: async () => null,
+  approvalRequired: async () => false,
+  withApprovalStart: async (res: unknown) => res,
+  withdrawApproval: async () => {},
+}));
+
 vi.mock('@/lib/prisma', () => {
   return {
     prisma: {
@@ -250,13 +260,20 @@ vi.mock('@/lib/prisma', () => {
               if (c) Object.assign(c, data);
               return c;
             }),
+            updateMany: vi.fn().mockImplementation(async ({ where, data }) => {
+              const c = store.contracts.get(where.id);
+              if (!c || c.tenantId !== where.tenantId || (where.status && c.status !== where.status)) return { count: 0 };
+              Object.assign(c, data);
+              return { count: 1 };
+            }),
           },
           leaseContractVehicle: {
             findFirst: vi.fn().mockImplementation(async ({ where }) => {
               for (const v of store.contractVehicles.values()) {
                 if (v.tenantId !== where.tenantId) continue;
                 if (where.vehicleId && v.vehicleId !== where.vehicleId) continue;
-                if (where.status && v.status !== where.status) continue;
+                if (typeof where.status === 'string' && v.status !== where.status) continue;
+                if (where.status?.in && !where.status.in.includes(v.status)) continue;
                 return v;
               }
               return null;

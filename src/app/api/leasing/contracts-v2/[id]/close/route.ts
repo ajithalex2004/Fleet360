@@ -28,6 +28,7 @@ import { evaluateContractSettlementLiabilities, findDepositForContract } from '@
 import { lockDepositRow, requestRefund, SecurityDepositError } from '@/lib/finance/security-deposit';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
+import { startApproval } from '@/lib/workflow/approvals';
 
 export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
   const { tenantId } = authz;
   const actor = req.headers.get('x-user-id') ?? 'staff';
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
     try {
       const contract = await tx.leaseContract2.findFirst({ where: { id: params.id, tenantId } });
       if (!contract) return NextResponse.json({ error: 'Contract not found' }, { status: 404 });
@@ -132,4 +133,15 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
       return NextResponse.json({ error: 'Failed to close contract' }, { status: 500 });
     }
   });
+
+  // The deposit refund the closure requested goes through the company's
+  // Refund Approval workflow, if it has one (best-effort: the closure stands).
+  if (response.status === 201) {
+    const closure = await response.clone().json().catch(() => null) as { depositId?: string | null; refundRequestedAmount?: unknown } | null;
+    if (closure?.depositId && closure.refundRequestedAmount != null) {
+      await startApproval({ tenantId, referenceType: 'finance_deposit_refund', referenceId: closure.depositId, initiator: null })
+        .catch((e) => console.warn('[contracts-v2 close] refund approval not started:', e instanceof Error ? e.message : e));
+    }
+  }
+  return response;
 }

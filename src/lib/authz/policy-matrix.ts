@@ -33,7 +33,7 @@
  */
 import type { ModuleKey } from '@/lib/modules';
 
-export const POLICY_VERSION = '2026-09-30.2';
+export const POLICY_VERSION = '2026-10-06.2';
 
 export type Rule =
   | { kind: 'module'; module: ModuleKey; action?: 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'export' }
@@ -94,6 +94,9 @@ export const AREAS: Readonly<Record<string, AreaRule>> = {
   'shipper-portal': EXTERNAL,
   public: EXTERNAL,
   track: EXTERNAL,
+  // Email approval decision links: a signed token per approver and level
+  // (src/lib/workflow/decision-link.ts), checked by the handler.
+  'approval-link': EXTERNAL,
   webhooks: EXTERNAL,
   stripe: EXTERNAL,
   cron: EXTERNAL,

@@ -6,6 +6,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls, runSequential } from '@/lib/rls';
 import { sendBookingActivatedWhatsApp } from '@/lib/whatsapp';
+import { requireApproved } from '@/lib/workflow/approvals';
 
 // POST /api/rental/bookings/[id]/activate
 // Activates booking (vehicle handed over to customer), records checkout inspection
@@ -17,6 +18,14 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
   const { tenantId } = authz;
+
+  // A pending booking handed over directly needs its approval, like confirming it.
+  const current = await withTenantRls(prisma, tenantId, (tx) =>
+    tx.rentalBooking.findFirst({ where: { id: params.id, tenantId }, select: { status: true } }));
+  if (current?.status === 'PENDING') {
+    const gate = await requireApproved({ headers: req.headers, tenantId, referenceType: 'rental_booking', referenceId: params.id });
+    if (gate) return gate;
+  }
 
   return withTenantRls(prisma, tenantId, async (tx) => {
     try {

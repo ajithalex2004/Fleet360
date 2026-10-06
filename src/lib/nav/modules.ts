@@ -608,6 +608,7 @@ export const MODULES: ModuleDef[] = [
       { label: 'VAT by branch',        href: '/finance/vat-branch',          icon: MapPin },
       { label: 'Branch P&L',           href: '/finance/branch-pl',           icon: PieChart },
       { label: 'Security deposits',    href: '/finance/deposits',            icon: Wallet },
+      { label: 'Accounts payable',     href: '/finance/payables',            icon: FileText },
       { label: 'Expense management',   href: '/finance/expenses',            icon: DollarSign },
       { label: 'Bank reconciliation',  href: '/finance/bank-reconciliation', icon: Banknote },
       { label: 'Budget vs actual',     href: '/finance/budgets',             icon: Target },

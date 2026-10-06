@@ -6,6 +6,14 @@ export const dynamic = 'force-dynamic';
  * Tenant scoping: requires x-tenant-id. The contract must belong to the
  * caller's tenant; every created LeaseContractVehicle row is stamped with
  * the same tenantId.
+ *
+ * Adding a vehicle to a running contract (active, extended or suspended)
+ * goes through the company's Vehicle Addition workflow when it has one
+ * (Admin > Workflows): the vehicle is added as PENDING_APPROVAL, holds the
+ * fleet vehicle against double-booking, and is allocated (ACTIVE) only when
+ * the workflow approves it (src/lib/workflow/subjects.ts). Without a
+ * workflow, or while the contract is still being set up, it is allocated at
+ * once as before.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -13,6 +21,10 @@ import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenan
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import { withContractAndVehicleLock } from '@/lib/leasing/contract-lock';
+import { approvalRequired, withApprovalStart } from '@/lib/workflow/approvals';
+
+// Contract statuses whose added vehicles need approval, when the company has a workflow.
+const RUNNING = ['ACTIVE', 'EXTENDED', 'SUSPENDED'];
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -63,7 +75,10 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  const needsApproval = await approvalRequired(tenantId, 'leasing_vehicle_addition').catch(() => false);
+  let pendingId: string | null = null;
+
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
     try {
       const raw = await request.json().catch(() => ({}));
       const body = stripTenantOwnershipFields(
@@ -136,6 +151,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         finalMonthlyRate = contract.monthlyRate != null ? Number(contract.monthlyRate) : 0;
       }
 
+      const pending = needsApproval && RUNNING.includes(contractStatus);
       const vehicleTypeVal = realVehicle?.type ?? type;
       if (!vehicleTypeVal) {
         return NextResponse.json({ error: 'Vehicle type is required' }, { status: 400 });
@@ -159,8 +175,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
               where: {
                 tenantId,
                 vehicleId: realVehicle.id,
-                status: 'ACTIVE',
-                contract: { status: { in: ['ACTIVE', 'APPROVED', 'DRAFT'] }, deletedAt: null },
+                // A vehicle waiting for its addition to be approved is held too.
+                status: { in: ['ACTIVE', 'PENDING_APPROVAL'] },
+                contract: { status: { in: [...RUNNING, 'APPROVED', 'DRAFT', 'PENDING_APPROVAL'] }, deletedAt: null },
               },
             });
             if (activeAllocation) {
@@ -181,12 +198,14 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
               driverId: driverId ? String(driverId) : (driver ? String(driver) : null),
               monthlyRate: finalMonthlyRate,
               mileageStart: mileageStart != null ? Number(mileageStart) : (realVehicle?.currentMileage != null ? Number(realVehicle.currentMileage) : null),
-              status: status ? String(status) : 'ACTIVE',
+              status: pending ? 'PENDING_APPROVAL' : status ? String(status) : 'ACTIVE',
               tenantId,
             },
           });
+          if (pending) pendingId = vehicle.id;
 
-          if (realVehicle) {
+          // Allocated now, or when the workflow approves the addition.
+          if (realVehicle && !pending) {
             await tx.vehicle.update({
               where: { id: realVehicle.id },
               data: {
@@ -229,5 +248,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       return NextResponse.json({ error: e?.message ?? 'Failed to add vehicle' }, { status: 500 });
     }
   });
+  return pendingId
+    ? withApprovalStart(response, { headers: request.headers, tenantId, referenceType: 'leasing_vehicle_addition', referenceId: pendingId })
+    : response;
 }
 

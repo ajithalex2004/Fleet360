@@ -10,22 +10,38 @@ const MODULES = [
   { key: 'LOGISTICS',      label: 'Logistics',            icon: 'G', color: 'from-rose-500 to-pink-600',      light: 'bg-rose-500/20 text-rose-300 border-rose-500/30' },
   { key: 'INCIDENT',       label: 'Incident / Ambulance', icon: 'I', color: 'from-red-500 to-rose-600',       light: 'bg-red-500/20 text-red-300 border-red-500/30' },
   { key: 'BOOKING',        label: 'Booking & Dispatch',   icon: 'D', color: 'from-cyan-500 to-sky-600',       light: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' },
+  { key: 'MAINTENANCE',    label: 'Maintenance',          icon: 'M', color: 'from-slate-500 to-zinc-600',     light: 'bg-slate-500/20 text-slate-300 border-slate-500/30' },
+  { key: 'FINANCE',        label: 'Finance',              icon: 'F', color: 'from-lime-500 to-green-600',     light: 'bg-lime-500/20 text-lime-300 border-lime-500/30' },
 ];
+
+// Procedures a module starts by itself when the record is submitted, once the
+// company has an active workflow for it (src/lib/workflow/subjects.ts). The
+// module's own Approve / Reject then decides the level that is waiting, and
+// the record changes when the last level passes or one rejects.
+const CONNECTED = new Set([
+  'MAINTENANCE.ESTIMATE_APPROVAL', 'FINANCE.EXPENSE_APPROVAL', 'FINANCE.PAYABLE_APPROVAL', 'FINANCE.JOURNAL_APPROVAL',
+  'LEASING.QUOTATION_APPROVAL', 'LEASING.CREDIT_APPROVAL', 'LEASING.PO_REQUEST', 'LEASING.AMENDMENT_APPROVAL',
+  'LEASING.CONTRACT_APPROVAL', 'LEASING.EARLY_TERMINATION', 'LEASING.VEHICLE_ADDITION',
+  'RAC.TRANSFER_APPROVAL', 'RAC.RENEWAL_APPROVAL', 'RAC.REFUND_APPROVAL', 'RAC.DAMAGE_CLAIM', 'RAC.BOOKING_APPROVAL', 'BOOKING.BOOKING_APPROVAL',
+]);
 
 const PROCEDURES: Record<string, { key: string; label: string; description: string }[]> = {
   LEASING: [
     { key: 'QUOTATION_APPROVAL',    label: 'Quotation Approval',      description: 'Internal sign-off on lease quotations before sending to customer' },
-    { key: 'CONTRACT_APPROVAL',     label: 'Contract Approval',       description: 'Approval of final lease contract before execution' },
+    { key: 'CONTRACT_APPROVAL',     label: 'Contract Approval',       description: 'Lease contracts submitted for approval, before they can be activated' },
     { key: 'CREDIT_APPROVAL',       label: 'Credit Approval',         description: 'Credit risk assessment and approval workflow' },
     { key: 'PO_REQUEST',            label: 'Purchase Order Request',  description: 'Internal PO creation and procurement workflow' },
-    { key: 'EARLY_TERMINATION',     label: 'Early Termination',       description: 'Approval for early contract termination requests' },
-    { key: 'VEHICLE_ADDITION',      label: 'Vehicle Addition',        description: 'Approval to add vehicles to an active lease contract' },
+    { key: 'EARLY_TERMINATION',     label: 'Early Termination',       description: 'Submitted early termination requests, by settlement and penalty' },
+    { key: 'VEHICLE_ADDITION',      label: 'Vehicle Addition',        description: 'Vehicles added to a running lease contract, before they are allocated' },
+    { key: 'AMENDMENT_APPROVAL',    label: 'Contract Amendment',      description: 'Submitted lease amendments, by their financial impact' },
   ],
   RAC: [
-    { key: 'BOOKING_APPROVAL',      label: 'Booking Approval',        description: 'Approval for new rental bookings above threshold' },
-    { key: 'DAMAGE_CLAIM',          label: 'Damage Claim',            description: 'Assessment and approval of vehicle damage claims' },
-    { key: 'REFUND_APPROVAL',       label: 'Refund Approval',         description: 'Customer refund request approval workflow' },
+    { key: 'BOOKING_APPROVAL',      label: 'Booking Approval',        description: 'New rental bookings, before they are confirmed or handed over' },
+    { key: 'DAMAGE_CLAIM',          label: 'Damage Claim',            description: 'Assessed damage claims, before they are billed or closed' },
+    { key: 'REFUND_APPROVAL',       label: 'Refund Approval',         description: 'Security deposit refunds (rental and leasing), before they are recorded and paid' },
     { key: 'RATE_OVERRIDE',         label: 'Rate Override',           description: 'Approval when rates are discounted below standard' },
+    { key: 'TRANSFER_APPROVAL',     label: 'Vehicle Transfer',        description: 'Requested vehicle transfers between branches' },
+    { key: 'RENEWAL_APPROVAL',      label: 'Rental Renewal',          description: 'Rental agreement extensions, by their amount' },
   ],
   STAFF_TRANSPORT: [
     { key: 'ROUTE_APPROVAL',        label: 'Route Approval',          description: 'New route creation or change approval' },
@@ -56,6 +72,14 @@ const PROCEDURES: Record<string, { key: string; label: string; description: stri
     { key: 'DRIVER_DISPATCH',       label: 'Driver Dispatch',         description: 'Driver dispatch authorization workflow' },
     { key: 'JOURNEY_COMPLETION',    label: 'Journey Completion',      description: 'Journey sign-off and billing trigger' },
   ],
+  MAINTENANCE: [
+    { key: 'ESTIMATE_APPROVAL',     label: 'Estimate Approval',       description: 'Repair estimates submitted for approval, by amount. Without a workflow, Maintenance > Approval Rules apply' },
+  ],
+  FINANCE: [
+    { key: 'EXPENSE_APPROVAL',      label: 'Expense Approval',        description: 'Submitted operational expenses, by amount' },
+    { key: 'PAYABLE_APPROVAL',      label: 'Purchase / Payable Approval', description: 'Submitted vendor bills and purchases, by amount' },
+    { key: 'JOURNAL_APPROVAL',      label: 'Journal Entry Approval',  description: 'Submitted manual journal entries, by amount' },
+  ],
 };
 
 const STEP_TYPES = [
@@ -67,8 +91,8 @@ const STEP_TYPES = [
 const ASSIGNEE_TYPES = [
   { value: 'SPECIFIC_USER',    label: 'Specific User',     desc: 'Route to a named email address' },
   { value: 'ROLE',             label: 'By Role',           desc: 'Any user with the specified role' },
-  { value: 'DIRECT_MANAGER',   label: 'Direct Manager',    desc: "Route to submitter's direct manager" },
-  { value: 'DEPARTMENT_HEAD',  label: 'Department Head',   desc: "Route to submitter's department head" },
+  { value: 'DIRECT_MANAGER',   label: 'Direct Manager',    desc: "Submitter's manager (Admin > Users); else the assignee email" },
+  { value: 'DEPARTMENT_HEAD',  label: 'Department Head',   desc: "Submitter's department head (Admin > Users); else the assignee email" },
   { value: 'MULTI_USER',       label: 'Multiple Users',    desc: 'Send to multiple approvers' },
 ];
 
@@ -82,12 +106,196 @@ const CONDITION_OPERATORS = [
 ];
 
 const CONDITION_FIELDS = [
+  { value: 'amount',         label: 'Amount (AED)' },
   { value: 'totalValue',     label: 'Total Contract Value (AED)' },
   { value: 'monthlyRate',    label: 'Monthly Rate (AED)' },
   { value: 'vehicleCount',   label: 'Number of Vehicles' },
   { value: 'duration',       label: 'Lease Duration (months)' },
   { value: 'creditScore',    label: 'Credit Score' },
+  { value: 'serviceType',    label: 'Booking Service Type' },
 ];
+
+// Text fields compare by value (equal / not equal), from a fixed list.
+// Booking service types as bookings store them: the booking portal's
+// four services and the mobile booking app's logistics jobs.
+const CONDITION_CHOICES: Record<string, { value: string; label: string }[]> = {
+  serviceType: [
+    { value: 'RENTAL',          label: 'Rental' },
+    { value: 'LEASING',         label: 'Leasing' },
+    { value: 'STAFF_TRANSPORT', label: 'Staff Transport' },
+    { value: 'EXECUTIVE',       label: 'Executive' },
+    { value: 'LOGISTICS',       label: 'Logistics' },
+  ],
+};
+const TEXT_OPERATORS = new Set(['EQ', 'NEQ']);
+
+// A record's request type (context.requestType in src/lib/workflow/subjects.ts),
+// for the procedures that have one: its label and values as the module stores them.
+const opts = (values: string[], label = (v: string) => v) => values.map(v => ({ value: v, label: label(v) }));
+const titleCase = (v: string) => v.toLowerCase().split('_').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+const REQUEST_TYPES: Record<string, { label: string; choices: { value: string; label: string }[] }> = {
+  'MAINTENANCE.ESTIMATE_APPROVAL': {
+    label: 'Maintenance Request Type',
+    choices: opts(['PREVENTIVE', 'CORRECTIVE', 'EMERGENCY', 'INSPECTION', 'BREAKDOWN'], titleCase),
+  },
+  'FINANCE.EXPENSE_APPROVAL': {
+    label: 'Expense Category',
+    choices: opts(['FUEL', 'TOLL', 'MAINTENANCE', 'INSURANCE', 'DRIVER_ALLOWANCE', 'OFFICE', 'REPAIRS', 'OTHER'], titleCase),
+  },
+  'LEASING.AMENDMENT_APPROVAL': {
+    label: 'Amendment Type',
+    choices: opts(['MILEAGE_UPGRADE', 'VEHICLE_SWAP', 'TERM_EXTENSION', 'RATE_CHANGE', 'ADDITIONAL_SERVICE', 'OTHER'], titleCase),
+  },
+  // The booking portal stores the option text itself.
+  'BOOKING.BOOKING_APPROVAL': {
+    label: 'Booking Trip / Request Type',
+    choices: [
+      ...opts(['Airport Transfer (Arrival)', 'Airport Transfer (Departure)', 'City Transfer', 'Event / Function', 'Road Show', 'Full Day', 'Multi-Day'], v => `Executive · ${v}`),
+      ...opts(['Morning (06:00–14:00)', 'Afternoon (14:00–22:00)', 'Night (22:00–06:00)', 'Standard (09:00–18:00)', 'Split Shift'], v => `Staff Transport · ${v}`),
+      ...opts(['FTL – Full Truck Load', 'LTL – Less than Truck Load', 'FCL – Full Container Load', 'LCL – Less than Container Load', 'REEFER – Temperature Controlled', 'SPECIAL – Oversized / Project Cargo'], v => `Logistics · ${v}`),
+    ],
+  },
+};
+const requestTypeFor = (wf: { module: string; procedure: string } | null) =>
+  wf ? REQUEST_TYPES[`${wf.module}.${wf.procedure}`] : undefined;
+
+// Fields only some procedures have (src/lib/workflow/subjects.ts): a vehicle
+// transfer's branches and emirates (branch names are compared as entered on
+// the transfer, ignoring case); a rental renewal's extension and rates; a
+// payable's source, vendor and cost centre (Finance > Accounts Payable); a
+// journal entry's source (journal-service sourceType values).
+type ProcedureField = { value: string; label: string; choices?: { value: string; label: string }[]; text?: boolean };
+const EMIRATE_CHOICES = opts(['ABU_DHABI', 'DUBAI', 'SHARJAH', 'AJMAN', 'UMM_AL_QUWAIN', 'RAS_AL_KHAIMAH', 'FUJAIRAH'], titleCase);
+// As Finance > Accounts Payable records them.
+const PAYABLE_MODULES = opts(['MAINTENANCE', 'LOGISTICS', 'LEASING', 'GENERAL'], titleCase);
+// A lease quotation at each of its approval stages (amount, rate, duration,
+// vehicles and credit score are general fields): its lease type, markup and
+// deposit, the customer's type and their current credit assessment's risk.
+const QUOTATION_FIELDS: ProcedureField[] = [
+  { value: 'leaseType',       label: 'Lease Type', choices: opts(['LONG_TERM', 'SHORT_TERM', 'MONTHLY', 'DAILY'], titleCase) },
+  { value: 'markupPct',       label: 'Markup (%)' },
+  { value: 'securityDeposit', label: 'Security Deposit (AED)' },
+  { value: 'customerType',    label: 'Customer Type', choices: opts(['CORPORATE', 'INDIVIDUAL'], titleCase) },
+  { value: 'riskRating',      label: 'Credit Risk Rating', choices: opts(['LOW', 'MEDIUM', 'HIGH'], titleCase) },
+];
+const PROCEDURE_FIELDS: Record<string, ProcedureField[]> = {
+  'RAC.TRANSFER_APPROVAL': [
+    { value: 'fromBranch',   label: 'From Branch', text: true },
+    { value: 'toBranch',     label: 'To Branch',   text: true },
+    { value: 'fromEmirate',  label: 'From Emirate', choices: EMIRATE_CHOICES },
+    { value: 'toEmirate',    label: 'To Emirate',   choices: EMIRATE_CHOICES },
+    { value: 'emirateScope', label: 'Transfer Scope', choices: [
+      { value: 'SAME_EMIRATE',  label: 'Within one emirate' },
+      { value: 'CROSS_EMIRATE', label: 'Between emirates' },
+    ] },
+  ],
+  'LEASING.QUOTATION_APPROVAL': QUOTATION_FIELDS,
+  'LEASING.CREDIT_APPROVAL':    QUOTATION_FIELDS,
+  'LEASING.PO_REQUEST':         QUOTATION_FIELDS,
+  // Amount is the added vehicle's rate for the rest of the term; Number of
+  // Vehicles is the contract's fleet including it.
+  'LEASING.VEHICLE_ADDITION':   [
+    { value: 'remainingMonths', label: 'Remaining Months' },
+    { value: 'rateDiscountPct', label: 'Rate Below Contract Rate (%)' },
+    { value: 'vehicleType',     label: 'Vehicle Type', text: true },
+    { value: 'agreementType',   label: 'Agreement Type', choices: opts(['MASTER', 'INDIVIDUAL'], titleCase) },
+    ...QUOTATION_FIELDS.filter(f => ['leaseType', 'customerType', 'riskRating'].includes(f.value)),
+  ],
+  // Amount is the customer's total settlement.
+  'LEASING.EARLY_TERMINATION':  [
+    { value: 'penaltyPct',          label: 'Penalty (%)' },
+    { value: 'penaltyAmount',       label: 'Penalty (AED)' },
+    { value: 'remainingMonths',     label: 'Remaining Months' },
+    { value: 'outstandingPayments', label: 'Outstanding Payments (AED)' },
+    { value: 'depositRefund',       label: 'Deposit Refund (AED)' },
+    { value: 'agreementType',       label: 'Agreement Type', choices: opts(['MASTER', 'INDIVIDUAL'], titleCase) },
+    ...QUOTATION_FIELDS.filter(f => f.value === 'leaseType' || f.value === 'customerType'),
+  ],
+  'LEASING.CONTRACT_APPROVAL':  [
+    { value: 'agreementType', label: 'Agreement Type', choices: opts(['MASTER', 'INDIVIDUAL'], titleCase) },
+    ...QUOTATION_FIELDS.filter(f => f.value !== 'markupPct'),
+  ],
+  'FINANCE.PAYABLE_APPROVAL': [
+    { value: 'sourceModule', label: 'Source Module', choices: PAYABLE_MODULES },
+    { value: 'sourceType',   label: 'Source Type', choices: [
+      { value: 'MAINTENANCE_REQUEST',  label: 'Maintenance Request' },
+      { value: 'MAINTENANCE_ESTIMATE', label: 'Maintenance Estimate' },
+      { value: 'QUOTATION_APPROVAL',   label: 'Garage Quotation' },
+      { value: 'VENDOR_INVOICE',       label: 'Vendor Invoice' },
+      { value: 'MANUAL',               label: 'Manual Entry' },
+    ] },
+    { value: 'vendor',     label: 'Vendor',      text: true },
+    { value: 'costCentre', label: 'Cost Centre', text: true },
+  ],
+  'FINANCE.JOURNAL_APPROVAL': [
+    { value: 'sourceType', label: 'Source Type', choices: [
+      { value: 'MANUAL',                  label: 'Manual entry' },
+      { value: 'AP_PAYABLE',              label: 'Accounts payable' },
+      { value: 'MAINTENANCE_REQUEST',     label: 'Maintenance request' },
+      { value: 'MAINTENANCE_ESTIMATE',    label: 'Maintenance estimate' },
+      { value: 'QUOTATION_APPROVAL',      label: 'Garage quotation' },
+      { value: 'LOGISTICS_SETTLEMENT',    label: 'Logistics settlement' },
+      { value: 'LOGISTICS_DRIVER_PAYOUT', label: 'Logistics driver payout' },
+      { value: 'BUS_TRIP_COMPLETION',     label: 'School bus trip' },
+      { value: 'BUS_OPS_RECHARGE',        label: 'Bus operations recharge' },
+    ] },
+  ],
+  // Amount is the booking's total.
+  'RAC.BOOKING_APPROVAL': [
+    { value: 'dailyRate',       label: 'Daily Rate (AED)' },
+    { value: 'rentalDays',      label: 'Rental Days' },
+    { value: 'channel',         label: 'Channel', choices: opts(['DIRECT', 'CORPORATE', 'AGENCY', 'ONLINE'], titleCase) },
+    { value: 'customerType',    label: 'Customer Type', choices: opts(['INDIVIDUAL', 'CORPORATE', 'AIRLINE', 'INSURANCE'], titleCase) },
+    { value: 'vehicleCategory', label: 'Vehicle Category', text: true },
+    { value: 'oneWay',          label: 'One-way Rental', choices: [{ value: 'YES', label: 'Yes' }, { value: 'NO', label: 'No' }] },
+  ],
+  // Amount is the claim's actual cost (else its estimate).
+  'RAC.DAMAGE_CLAIM': [
+    { value: 'estimatedCost',       label: 'Estimated Cost (AED)' },
+    { value: 'actualCost',          label: 'Actual Cost (AED)' },
+    { value: 'costOverEstimatePct', label: 'Actual Over Estimate (%)' },
+    { value: 'chargeCustomer',      label: 'Charged to Customer', choices: [{ value: 'YES', label: 'Yes' }, { value: 'NO', label: 'No (written off)' }] },
+    { value: 'insuranceClaim',      label: 'Insurance Claim', choices: [{ value: 'YES', label: 'Yes' }, { value: 'NO', label: 'No' }] },
+    { value: 'customerType',        label: 'Customer Type', choices: opts(['INDIVIDUAL', 'CORPORATE', 'AIRLINE', 'INSURANCE'], titleCase) },
+    { value: 'vehicleCategory',     label: 'Vehicle Category', text: true },
+  ],
+  // Amount is the refund requested.
+  'RAC.REFUND_APPROVAL': [
+    { value: 'contractType',  label: 'Contract Type', choices: [{ value: 'RENTAL', label: 'Rental' }, { value: 'LEASE', label: 'Lease' }] },
+    { value: 'depositAmount', label: 'Deposit Collected (AED)' },
+    { value: 'deductions',    label: 'Deductions (AED)' },
+    { value: 'deductionPct',  label: 'Deducted (% of deposit)' },
+    { value: 'refundMethod',  label: 'Refund Method', choices: opts(['BANK_TRANSFER', 'CHEQUE', 'CASH'], titleCase) },
+    { value: 'branch',        label: 'Branch', text: true },
+  ],
+  'RAC.RENEWAL_APPROVAL': [
+    { value: 'extensionDays', label: 'Extension (days)' },
+    { value: 'dailyRate',     label: 'Daily Rate (AED)' },
+    { value: 'depositTopUp',  label: 'Deposit Top-up (AED)' },
+  ],
+};
+const procedureFieldsFor = (wf: { module: string; procedure: string } | null) =>
+  wf ? PROCEDURE_FIELDS[`${wf.module}.${wf.procedure}`] ?? [] : [];
+
+/** The condition fields for a workflow: Request Type and the procedure's own fields where it has them. */
+function conditionFields(wf: { module: string; procedure: string } | null) {
+  const rt = requestTypeFor(wf);
+  return [
+    ...CONDITION_FIELDS,
+    ...(rt ? [{ value: 'requestType', label: rt.label }] : []),
+    ...procedureFieldsFor(wf).map(f => ({ value: f.value, label: f.label })),
+  ];
+}
+
+/** A text field's values, or undefined for a number field or free text. */
+function conditionChoices(field: string, wf: { module: string; procedure: string } | null) {
+  if (field === 'requestType') return requestTypeFor(wf)?.choices;
+  return procedureFieldsFor(wf).find(f => f.value === field)?.choices ?? CONDITION_CHOICES[field];
+}
+
+/** Whether a field compares text (equal / not equal only). */
+const isTextField = (field: string, wf: { module: string; procedure: string } | null) =>
+  !!conditionChoices(field, wf) || !!procedureFieldsFor(wf).find(f => f.value === field)?.text;
 
 //  Interfaces 
 interface Workflow {
@@ -435,7 +643,12 @@ export default function WorkflowsPage() {
                 return (
                   <div key={proc.key} className="px-3 py-2 rounded-xl flex items-center justify-between gap-2 hover:bg-[var(--bg-surface-hover)] transition-all">
                     <div className="flex-1 min-w-0">
-                      <p className="text-[var(--text-muted)] text-xs font-semibold">{proc.label}</p>
+                      <p className="text-[var(--text-muted)] text-xs font-semibold">
+                        {proc.label}
+                        {CONNECTED.has(`${activeModule}.${proc.key}`) && (
+                          <span title="Started automatically when a record is submitted" className="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/15 text-blue-400 border border-blue-500/20">Auto-start</span>
+                        )}
+                      </p>
                       <p className="text-[var(--text-faint)] text-xs truncate">{proc.description}</p>
                     </div>
                     {hasWf
@@ -615,7 +828,7 @@ export default function WorkflowsPage() {
                                     {step.isOptional && <span className="text-xs text-[var(--text-faint)] italic">optional</span>}
                                     {cond && (
                                       <span className="px-2 py-0.5 rounded-full text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                                        IF {cond.field} {cond.operator} {cond.value}
+                                        IF {conditionFields(selectedWf).find(f => f.value === cond.field)?.label ?? (cond.field === 'requestType' ? 'Request Type' : cond.field)} {CONDITION_OPERATORS.find(o => o.value === cond.operator)?.label.toLowerCase() ?? cond.operator} {conditionChoices(cond.field, selectedWf)?.find(c => c.value === cond.value)?.label ?? cond.value}
                                       </span>
                                     )}
                                   </div>
@@ -838,6 +1051,14 @@ export default function WorkflowsPage() {
                         onChange={e => setEditingStep(p => ({ ...p!, assigneeRoleCode: e.target.value }))}
                         placeholder="e.g. LEASE_MANAGER, CREDIT_OFFICER, FINANCE_HEAD"
                         className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-violet-500/50" />
+                      <label className="flex items-center gap-3 cursor-pointer mt-3">
+                        <input type="checkbox" checked={editingStep.requireAllApprovers ?? false}
+                          onChange={e => setEditingStep(p => ({ ...p!, requireAllApprovers: e.target.checked }))} className="w-4 h-4 accent-violet-500" />
+                        <div>
+                          <span className="text-[var(--text-muted)] text-sm">Require ALL holders of this role</span>
+                          <p className="text-[var(--text-faint)] text-xs">If unchecked, any one holder of the role can approve</p>
+                        </div>
+                      </label>
                     </div>
                   )}
                   {editingStep.assigneeType === 'MULTI_USER' && (
@@ -902,7 +1123,7 @@ export default function WorkflowsPage() {
                       <input type="number" min="1" value={editingStep.escalationHours ?? 48}
                         onChange={e => setEditingStep(p => ({ ...p!, escalationHours: parseInt(e.target.value) || 48 }))}
                         className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-violet-500/50" />
-                      <p className="text-[var(--text-faint)] text-xs mt-1">Hours before escalating to backup approver</p>
+                      <p className="text-[var(--text-faint)] text-xs mt-1">Hours this level waits, from when it opens, before its escalation contact is emailed (once)</p>
                     </div>
                   </div>
                   <div>
@@ -932,29 +1153,46 @@ export default function WorkflowsPage() {
                         <div className="grid grid-cols-3 gap-3">
                           <div>
                             <label className="block text-xs text-[var(--text-faint)] mb-1">Field</label>
-                            <select value={condField} onChange={e => setCondField(e.target.value)}
+                            <select value={condField} onChange={e => {
+                                const field = e.target.value;
+                                setCondField(field);
+                                // A text field takes a value from its list and compares by equality.
+                                const choices = conditionChoices(field, selectedWf);
+                                if (isTextField(field, selectedWf) && !TEXT_OPERATORS.has(condOp)) setCondOp('EQ');
+                                if (choices && !choices.some(c => c.value === condVal)) setCondVal('');
+                              }}
                               className="w-full px-3 py-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-amber-500/50">
                               <option value="">Select field...</option>
-                              {CONDITION_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                              {conditionFields(selectedWf).map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                             </select>
                           </div>
                           <div>
                             <label className="block text-xs text-[var(--text-faint)] mb-1">Operator</label>
                             <select value={condOp} onChange={e => setCondOp(e.target.value)}
                               className="w-full px-3 py-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-amber-500/50">
-                              {CONDITION_OPERATORS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                              {CONDITION_OPERATORS
+                                .filter(o => !isTextField(condField, selectedWf) || TEXT_OPERATORS.has(o.value))
+                                .map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                             </select>
                           </div>
                           <div>
                             <label className="block text-xs text-[var(--text-faint)] mb-1">Value</label>
-                            <input value={condVal} onChange={e => setCondVal(e.target.value)} placeholder="e.g. 100000"
-                              className="w-full px-3 py-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-amber-500/50" />
+                            {conditionChoices(condField, selectedWf) ? (
+                              <select value={condVal} onChange={e => setCondVal(e.target.value)}
+                                className="w-full px-3 py-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-amber-500/50">
+                                <option value="">Select...</option>
+                                {conditionChoices(condField, selectedWf)!.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                              </select>
+                            ) : (
+                              <input value={condVal} onChange={e => setCondVal(e.target.value)} placeholder={isTextField(condField, selectedWf) ? 'Name, exactly as entered on the record' : 'e.g. 100000'}
+                                className="w-full px-3 py-2 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] placeholder-[var(--text-faint)] text-sm focus:outline-none focus:border-amber-500/50" />
+                            )}
                           </div>
                         </div>
                         {condField && condVal && (
                           <p className="text-amber-400/80 text-xs">
-                            This step will only be activated if <strong>{CONDITION_FIELDS.find(f => f.value === condField)?.label}</strong> is <strong>{CONDITION_OPERATORS.find(o => o.value === condOp)?.label.toLowerCase()}</strong> <strong>{condVal}</strong>.
-                            Otherwise the step is automatically skipped.
+                            This step will only be activated if <strong>{conditionFields(selectedWf).find(f => f.value === condField)?.label}</strong> is <strong>{CONDITION_OPERATORS.find(o => o.value === condOp)?.label.toLowerCase()}</strong> <strong>{conditionChoices(condField, selectedWf)?.find(c => c.value === condVal)?.label ?? condVal}</strong>.
+                            Otherwise the step is automatically skipped. If no step applies, the record is approved automatically.
                           </p>
                         )}
                       </div>
@@ -1164,11 +1402,11 @@ export default function WorkflowsPage() {
                       <p className="text-[var(--text-faint)] text-xs mt-1">Steps become overdue after this many hours</p>
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Default Escalation (hours after SLA)</label>
+                      <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1.5">Default Escalation (hours after a level opens)</label>
                       <input type="number" min="1" value={editWfForm.defaultEscalationHours}
                         onChange={e => setEditWfForm(p => ({ ...p, defaultEscalationHours: parseInt(e.target.value) || 48 }))}
                         className="w-full px-3 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-main)] text-sm focus:outline-none focus:border-amber-500/50" />
-                      <p className="text-[var(--text-faint)] text-xs mt-1">Hours before escalating to the backup approver</p>
+                      <p className="text-[var(--text-faint)] text-xs mt-1">For levels without their own: the escalation contact is emailed once a level has waited this long (counted from when it opened)</p>
                     </div>
                   </div>
                   <div>
@@ -1184,7 +1422,9 @@ export default function WorkflowsPage() {
                       {[
                         { label: 'Pending', hours: editWfForm.defaultSlaHours, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20' },
                         { label: 'Overdue', hours: editWfForm.defaultSlaHours, color: 'text-rose-400', bg: 'bg-rose-500/10 border-rose-500/20' },
-                        { label: 'Escalated', hours: editWfForm.defaultSlaHours + editWfForm.defaultEscalationHours, color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/20' },
+                        // Escalation counts from when the level opens, like the SLA
+                        // (src/lib/jobs/workflow-escalation.ts), not from the end of the SLA.
+                        { label: 'Escalated', hours: editWfForm.defaultEscalationHours, color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/20' },
                       ].map(s => (
                         <div key={s.label} className={`rounded-xl p-3 border ${s.bg}`}>
                           <p className={`text-lg font-bold ${s.color}`}>{s.hours}h</p>

@@ -14,12 +14,21 @@ const DEFAULT_SCHEDULES: Record<string, string> = {
   'auto-close-trips': '*/15 * * * *',
   'alert-trip-overdue': '*/15 * * * *',
   'push-scheduler': '*/5 * * * *',
+  'workflow-escalation': '*/15 * * * *',
+  'service-tickets-sla-sweep': '*/5 * * * *',
+  // Recovers stale dispatch claims and re-queues due retries; its retry
+  // backoff is 15 minutes.
+  'dunning-reconciliation': '*/15 * * * *',
   // Daily batch sweeps
   'document-expiry-sweep': '0 1 * * *',
+  'document-lifecycle-sweep': '45 1 * * *',
   'insurance-expiry-sweep': '15 1 * * *',
   'bookings-sweep-penalties': '30 1 * * *',
   'dunning-sweep': '0 2 * * *',
   'bus-ops-generate-schedule-templates': '30 2 * * *',
+  // Auto-grounds vehicles with expired documents. 07:00 Dubai = 03:00 UTC,
+  // the time the GitHub Actions workflow used to run it.
+  'fleet-documents-sweep': '0 7 * * *',
   'inquiries-sweep-followups': '0 9 * * *',
   'attendance-sweep-no-show': '0 17 * * *',
   // Weekly / monthly.

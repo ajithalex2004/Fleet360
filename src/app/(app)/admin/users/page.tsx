@@ -60,6 +60,7 @@ export default function UsersPage() {
   const [moduleFilter, setModuleFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
+  const [lines, setLines]     = useState<{ managerUserId: string; departmentHeadUserId: string } | null>(null);
   const [error, setError]     = useState('');
   const [formError, setFormError] = useState('');
 
@@ -166,6 +167,16 @@ export default function UsersPage() {
       newPassword: '',
     });
     setFormError('');
+    setLines(null);
+    // Reporting lines in this company, for the Direct Manager / Department
+    // Head approvers (Admin > Workflows).
+    fetch(`/api/admin/users/${u.id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setLines({
+        managerUserId: d?.reportingLines?.managerUserId ?? '',
+        departmentHeadUserId: d?.reportingLines?.departmentHeadUserId ?? '',
+      }))
+      .catch(() => setLines({ managerUserId: '', departmentHeadUserId: '' }));
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
@@ -182,6 +193,8 @@ export default function UsersPage() {
         department: editForm.department,
         position:   editForm.position,
         userType:   editForm.userType,
+        // Sent once loaded: '' clears a line.
+        ...(lines ? { managerUserId: lines.managerUserId, departmentHeadUserId: lines.departmentHeadUserId } : {}),
       };
       const res = await fetch(`/api/admin/users/${showEdit.id}`, {
         method: 'PATCH',
@@ -537,6 +550,23 @@ export default function UsersPage() {
                     className="w-full px-3 py-2.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-blue-500 focus:outline-none placeholder-[var(--text-faint)]"
                     placeholder="Fleet Manager" />
                 </div>
+              </div>
+              {/* Reporting lines (this company): the Direct Manager / Department Head workflow approvers */}
+              <div className="grid grid-cols-2 gap-4">
+                {([['managerUserId', 'Reports to (manager)'], ['departmentHeadUserId', 'Department head']] as const).map(([key, label]) => (
+                  <div key={key}>
+                    <label className="block text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-1.5">{label}</label>
+                    <select value={lines?.[key] ?? ''} disabled={!lines}
+                      onChange={e => setLines(p => (p ? { ...p, [key]: e.target.value } : p))}
+                      className="w-full px-3 py-2.5 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] text-sm focus:border-blue-500 focus:outline-none disabled:opacity-60">
+                      <option value="">{lines ? '— None —' : 'Loading…'}</option>
+                      {users.filter(o => o.id !== showEdit.id && o.isActive).map(o => (
+                        <option key={o.id} value={o.id}>{[o.firstName, o.lastName].filter(Boolean).join(' ') || o.username} ({o.email})</option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+                <p className="col-span-2 text-xs text-[var(--text-faint)] -mt-2">Used by approval workflows whose approver is the submitter&apos;s Direct Manager or Department Head.</p>
               </div>
               {/* User Type */}
               <div>

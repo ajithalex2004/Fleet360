@@ -98,6 +98,7 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
       { name: 'moduleLabel', description: 'Module', sample: 'Leasing' },
       { name: 'submittedBy', description: 'Who submitted it', sample: 'Sam Sales' },
       { name: 'approvalUrl', description: 'Link to the Approvals Inbox', sample: 'https://app.example/approvals' },
+      { name: 'decisionUrl', description: 'The approver\'s own link to approve or reject from any device, without signing in (valid 7 days, for this step only)', sample: 'https://app.example/approval-link/abc123' },
     ],
     defaults: {
       en: {
@@ -106,7 +107,8 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
           'Dear {{approverName}},',
           '{{referenceNumber}} ({{referenceType}}) has been submitted for your approval.',
           '**Step:** {{stepName}}\n**Submitted by:** {{submittedBy}}',
-          '[Review & approve]({{approvalUrl}})',
+          '[Approve or reject]({{decisionUrl}})',
+          'Or open your [Approvals Inbox]({{approvalUrl}}).',
         ].join('\n\n'),
       },
       ar: {
@@ -115,7 +117,45 @@ export const EMAIL_TEMPLATES: EmailTemplateDef[] = [
           'عزيزي/عزيزتي {{approverName}}،',
           'تم تقديم {{referenceNumber}} ({{referenceType}}) للحصول على موافقتك.',
           '**المرحلة:** {{stepName}}\n**مقدم الطلب:** {{submittedBy}}',
-          '[المراجعة والموافقة]({{approvalUrl}})',
+          '[الموافقة أو الرفض]({{decisionUrl}})',
+          'أو افتح [صندوق الموافقات]({{approvalUrl}}).',
+        ].join('\n\n'),
+      },
+    },
+  },
+  {
+    key: 'workflow.escalation',
+    module: 'Approvals',
+    name: 'Approval escalation',
+    description: 'Sent to a level\'s escalation contact (Admin > Workflows) when an approval has waited on that level longer than its escalation time. Sent once per level.',
+    variables: [
+      { name: 'referenceNumber', description: 'Reference being approved', sample: 'EXP-2026-0108' },
+      { name: 'referenceType', description: 'Kind of record', sample: 'finance_expense' },
+      { name: 'stepName', description: 'Approval level waiting', sample: 'Finance Director approval' },
+      { name: 'workflowName', description: 'Workflow', sample: 'Expense approval' },
+      { name: 'moduleLabel', description: 'Module', sample: 'Finance' },
+      { name: 'submittedBy', description: 'Who submitted it', sample: 'Sam Sales' },
+      { name: 'waitingWith', description: 'Approvers it is waiting with', sample: 'fatima@acme.example' },
+      { name: 'hoursWaiting', description: 'Hours it has waited on this level', sample: '52' },
+      { name: 'approvalUrl', description: 'Link to the Approvals Inbox', sample: 'https://app.example/approvals' },
+    ],
+    defaults: {
+      en: {
+        subject: 'Escalation: {{referenceNumber}} has waited {{hoursWaiting}} hours for approval',
+        body: [
+          '{{referenceNumber}} ({{referenceType}}) has been waiting {{hoursWaiting}} hours at **{{stepName}}** in the {{workflowName}} workflow ({{moduleLabel}}).',
+          '**Waiting with:** {{waitingWith}}\n**Submitted by:** {{submittedBy}}',
+          'You are receiving this as the escalation contact for this approval level.',
+          '[Open the Approvals Inbox]({{approvalUrl}})',
+        ].join('\n\n'),
+      },
+      ar: {
+        subject: 'تصعيد: {{referenceNumber}} بانتظار الموافقة منذ {{hoursWaiting}} ساعة',
+        body: [
+          '{{referenceNumber}} ({{referenceType}}) بانتظار الموافقة منذ {{hoursWaiting}} ساعة في مرحلة **{{stepName}}** ضمن سير العمل {{workflowName}} ({{moduleLabel}}).',
+          '**بانتظار:** {{waitingWith}}\n**مقدم الطلب:** {{submittedBy}}',
+          'تصلك هذه الرسالة بصفتك جهة التصعيد لهذه المرحلة.',
+          '[فتح صندوق الموافقات]({{approvalUrl}})',
         ].join('\n\n'),
       },
     },

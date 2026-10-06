@@ -16,6 +16,9 @@ import { prisma } from '@/lib/prisma';
 import { createDraftJournalEntry } from '@/lib/finance/journal-service';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { approvalGate, approvalInProgress, withApprovalStart } from '@/lib/workflow/approvals';
+import { sessionUser } from '@/lib/session-user';
+import { payableTotals } from '@/lib/finance/payable-totals';
 type Row = Record<string, unknown>;
 
 
@@ -78,11 +81,24 @@ export async function PATCH(
   }
   const { tenantId } = authz;
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  const body = stripTenantOwnershipFields(await req.json());
+  const action = body.action as string | undefined; // submit | approve | reject | post | void
+  // A company's purchase / payable approval workflow (Admin > Workflows)
+  // decides submitted payables: approve / reject go to the level that is
+  // waiting, and the payable can't be voided until the workflow has decided.
+  if (action === 'approve' || action === 'reject') {
+    const gated = await approvalGate({
+      headers: req.headers, tenantId, referenceType: 'finance_payable', referenceId: params.id,
+      action: action === 'reject' ? 'REJECT' : 'APPROVE',
+      comments: String((action === 'reject' ? body.reason : body.notes) ?? ''),
+    });
+    if (gated) return gated;
+  } else if (action === 'post' || action === 'void') {
+    const busy = await approvalInProgress(tenantId, 'finance_payable', params.id);
+    if (busy) return busy;
+  }
 
-      const bodyRaw = await req.json();
-      const body = stripTenantOwnershipFields(bodyRaw);
-      const action = body.action as string | undefined; // submit | approve | post | void
+  const response = await withTenantRls(prisma, tenantId, async (tx) => {
       const now    = new Date().toISOString();
 
       // Fetch current row
@@ -123,6 +139,25 @@ export async function PATCH(
               SET status='APPROVED', approved_by=$1, approved_at=$2::timestamptz, updated_at=$2::timestamptz
             WHERE id::text=$3 AND tenant_id=$4`,
           approvedBy, now, params.id, tenantId,
+        );
+        const [updated] = await tx.$queryRawUnsafe<Row[]>(
+          `SELECT * FROM finance_payables WHERE id::text=$1 AND tenant_id=$2`, params.id, tenantId,
+        ).catch(() => []);
+        return NextResponse.json(updated);
+      }
+
+      if (action === 'reject') {
+        // Payables have no rejected state: back to draft for correction.
+        if (current.status !== 'SUBMITTED') {
+          return NextResponse.json({ error: 'Only SUBMITTED payables can be returned' }, { status: 400 });
+        }
+        const by = (await sessionUser(req.headers))?.email ?? 'Finance Manager';
+        const reason = String(body.reason ?? '').trim() || 'No reason given';
+        await tx.$executeRawUnsafe(
+          `UPDATE finance_payables SET status='DRAFT', updated_at=$1::timestamptz,
+                  notes = concat_ws(E'\n', NULLIF(notes, ''), $2::text)
+            WHERE id::text=$3 AND tenant_id=$4`,
+          now, `Returned by ${by}: ${reason}`, params.id, tenantId,
         );
         const [updated] = await tx.$queryRawUnsafe<Row[]>(
           `SELECT * FROM finance_payables WHERE id::text=$1 AND tenant_id=$2`, params.id, tenantId,
@@ -189,8 +224,14 @@ export async function PATCH(
         return NextResponse.json(updated);
       }
 
+      if (action) return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
+
       // ── Field update (no action — patch fields directly) ──────────────────────
-      const allowed = ['vendorName','vendorEmail','vendorPhone','description','dueDate',
+      // Only a draft can change: a submitted payable is what its approvers see.
+      if (current.status !== 'DRAFT') {
+        return NextResponse.json({ error: 'Only DRAFT payables can be edited' }, { status: 400 });
+      }
+      const allowed = ['vendorName','vendorEmail','vendorPhone','module','description','issueDate','dueDate',
                        'costCentre','profitCentre','notes','lineItems'];
       const sets: string[] = [];
       const vals: unknown[] = [];
@@ -200,11 +241,18 @@ export async function PATCH(
         if (!(key in body)) continue;
         const col = key.replace(/[A-Z]/g, c => `_${c.toLowerCase()}`);
         if (key === 'lineItems') {
+          // New lines set the payable's amounts, VAT 5% unless given.
+          const totals = payableTotals(body.lineItems, body.vatAmount);
+          if (!totals) return NextResponse.json({ error: 'Add at least one line with an amount' }, { status: 400 });
           sets.push(`${col} = $${pi++}::jsonb`);
-          vals.push(JSON.stringify(body[key]));
+          vals.push(JSON.stringify(totals.lineItems));
+          sets.push(`subtotal = $${pi++}::numeric`, `vat_amount = $${pi++}::numeric`, `total_amount = $${pi++}::numeric`);
+          vals.push(totals.subtotal, totals.vatAmount, totals.total);
+        } else if (key === 'vendorName' && !String(body[key] ?? '').trim()) {
+          return NextResponse.json({ error: 'Vendor name is required' }, { status: 400 });
         } else {
-          sets.push(`${col} = $${pi++}`);
-          vals.push(body[key]);
+          sets.push(`${col} = $${pi++}${key.endsWith('Date') ? '::date' : ''}`);
+          vals.push(body[key] === '' ? null : body[key]);
         }
       }
       if (!sets.length) return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
@@ -221,6 +269,9 @@ export async function PATCH(
       ).catch(() => []);
       return NextResponse.json(updated);
   });
+  return action === 'submit'
+    ? withApprovalStart(response, { headers: req.headers, tenantId, referenceType: 'finance_payable', referenceId: params.id })
+    : response;
 }
 
 

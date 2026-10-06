@@ -35,6 +35,7 @@ vi.mock('@/lib/session-user', () => ({ sessionUser: async () => state.me }));
 vi.mock('@/lib/audited-action', () => ({ withAuditedAction: <T>(h: T) => h }));
 vi.mock('@/lib/workflow-db', () => ({
   getMyPendingApprovals: async (...args: unknown[]) => { state.pendingCalls.push(args); return [{ stepInstanceId: 'si1' }]; },
+  getEscalatedToMe: async () => [],
   getWorkflowInstanceWithHistory: async (...args: unknown[]) => { state.historyCalls.push(args); return state.instance; },
   advanceWorkflow: async (...args: unknown[]) => { state.advanceCalls.push(args); return state.advanceResult; },
   getUserRoleCodes: async () => state.roleCodes,
@@ -73,7 +74,9 @@ describe('my approvals', () => {
   it('uses the session user and tenant, ignoring an email parameter', async () => {
     const res = await myApprovals(new NextRequest('http://x/api/my-approvals?email=victim@b.test', { headers: headers() }));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ email: 'approver@a.test', approvals: [{ stepInstanceId: 'si1' }] });
+    const body = await res.json();
+    expect(body).toMatchObject({ email: 'approver@a.test', approvals: [{ stepInstanceId: 'si1' }], escalated: [] });
+    expect(body.approvals).toHaveLength(1);
     expect(state.pendingCalls).toEqual([[TENANT_A, 'approver@a.test', ['LEASING_OPERATOR']]]);
   });
 });
@@ -83,7 +86,7 @@ describe('approve / reject', () => {
     const res = await post({ action: 'APPROVE', comments: 'ok', actionedByEmail: 'someone@else', currentStepOrder: 1 });
     expect(res.status).toBe(200);
     expect(state.historyCalls[0]).toEqual(['inst-1', TENANT_A]);
-    expect(state.advanceCalls).toEqual([[TENANT_A, 'inst-1', 2, 'APPROVE', 'ok', 'approver@a.test']]);
+    expect(state.advanceCalls).toEqual([[TENANT_A, 'inst-1', 2, 'APPROVE', 'ok', 'approver@a.test', { override: false }]]);
   });
 
   it('lets a holder of the step role act, by session role or tenant membership', async () => {
@@ -109,6 +112,23 @@ describe('approve / reject', () => {
     expect(state.advanceCalls).toHaveLength(0);
     expect((await post({ action: 'APPROVE' }, 'TENANT_ADMIN')).status).toBe(200);
     expect(state.advanceCalls[0][5]).toBe('other@a.test');
+    // An administrator who is not the level's approver decides it for them.
+    expect(state.advanceCalls[0][6]).toEqual({ override: true });
+  });
+
+  it('on an all-approvers level, counts only the approvers it was sent to', async () => {
+    const steps = (state.instance as { steps: Array<Record<string, unknown>> }).steps;
+    Object.assign(steps[1], { requireAllApprovers: true, approverEmails: ['fm1@a.test', 'fm2@a.test'], assignedToEmail: 'fm1@a.test' });
+    state.me = { email: 'fm3@a.test' };
+    expect((await post({ action: 'APPROVE' }, 'FINANCE_MANAGER')).status).toBe(403);
+    state.me = { email: 'FM2@a.test' };
+    expect((await post({ action: 'APPROVE' })).status).toBe(200);
+    expect(state.advanceCalls[0][6]).toEqual({ override: false });
+  });
+
+  it('answers 409 when the approver already decided a level still waiting for others', async () => {
+    state.advanceResult = { status: 'ALREADY_DECIDED' };
+    expect((await post({ action: 'APPROVE' })).status).toBe(409);
   });
 
   it('answers 404 for an instance the tenant cannot see', async () => {

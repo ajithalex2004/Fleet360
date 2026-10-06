@@ -20,6 +20,22 @@ const RULE_EXEMPTIONS = [
     test: 'tests/unit/bus-ops-en-route-command.test.ts',
   },
   {
+    file: 'src/app/api/approval-link/[token]/route.ts', method: 'GET', type: 'missing_auth',
+    reason: 'Email approval decision link: shows the approver what they are deciding without a staff session. Read only; refuses inactive members.',
+    authMechanism: 'HMAC-SHA256 signed decision-link token (src/lib/workflow/decision-link.ts, own domain prefix, 7-day expiry) naming tenant, approval, level and approver',
+    dataScope: 'The one approval and level named in the token, in its tenant (runAsTenant); decided only as the named approver, never as an administrator',
+    owner: 'Identity & Security Engineering',
+    test: 'tests/unit/approvals-inbox.test.ts',
+  },
+  {
+    file: 'src/app/api/approval-link/[token]/route.ts', method: 'POST', type: 'missing_auth',
+    reason: 'Email approval decision link: records the named approver decision on the named level via decideAs, which re-checks they are still its approver and it is still waiting. Audited.',
+    authMechanism: 'HMAC-SHA256 signed decision-link token (src/lib/workflow/decision-link.ts, own domain prefix, 7-day expiry) naming tenant, approval, level and approver',
+    dataScope: 'The one approval and level named in the token, in its tenant (runAsTenant); decided only as the named approver, never as an administrator',
+    owner: 'Identity & Security Engineering',
+    test: 'tests/unit/approvals-inbox.test.ts',
+  },
+  {
     file: 'src/app/api/push/subscribe/route.ts', method: 'POST', type: 'missing_auth',
     reason: 'Verifies xl-session and resolves active tenant membership and account-linked staff under RLS.',
     authMechanism: 'getVerifiedRequestSession + resolvePushStaff',
