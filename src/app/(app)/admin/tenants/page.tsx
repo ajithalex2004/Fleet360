@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { MODULE_BY_KEY, MODULES, resolveModuleKey } from '@/lib/modules';
 import { defaultFeatureFlags, activeFeatureKeys, type FeatureFlagMap } from '@/lib/module-features';
@@ -280,7 +280,6 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
 export default function TenantsPage() {
   const [showModal, setShowModal] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('basic');
-  const [loading,   setLoading]   = useState(true);
   const [saving,    setSaving]    = useState(false);
   const [error,     setError]     = useState('');
 
@@ -297,14 +296,16 @@ export default function TenantsPage() {
   // Session-scoped fetch cache — 1st visit hits the cached server endpoint
   // (Data Cache + s-maxage), 2nd visit within the same tab is instant from
   // the in-memory Map. `refresh` busts the session cache after writes.
-  const { data: tenantsRaw, loading: tenantsLoading, refresh: refreshTenants } =
+  const { data: tenantsRaw, refresh: refreshTenants } =
     useFetchedData<TenantRow[]>('/api/admin/tenants');
-  const tenants = tenantsRaw ?? [];
-
-  useEffect(() => {
-    if (tenantsLoading) setLoading(true);
-    else setLoading(false);
-  }, [tenantsLoading]);
+  // A refresh drops the cached list, so data is briefly undefined again.
+  // Keep showing the last list meanwhile: swapping the page for the loader
+  // would unmount an open Create Tenant modal and lose its local state
+  // (e.g. which module feature-flag panels are expanded).
+  const lastTenants = useRef<TenantRow[] | undefined>(undefined);
+  if (tenantsRaw) lastTenants.current = tenantsRaw;
+  const tenants = tenantsRaw ?? lastTenants.current ?? [];
+  const loading = !tenantsRaw && !lastTenants.current;
 
   const load = useCallback(async () => {
     refreshTenants();

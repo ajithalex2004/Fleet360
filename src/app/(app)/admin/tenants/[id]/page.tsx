@@ -1063,7 +1063,9 @@ export default function TenantDetailPage() {
     }
   };
 
-  if (loading) return <div className="flex items-center justify-center h-full"><div className="text-[var(--text-muted)] animate-pulse">Loading...</div></div>;
+  // Full-page loader only for the first load: a reload after a save keeps the
+  // page mounted, so expanded module panels and the active tab stay as they were.
+  if (loading && tenant?.id !== id) return <div className="flex items-center justify-center h-full"><div className="text-[var(--text-muted)] animate-pulse">Loading...</div></div>;
   if (!tenant) return <div className="text-rose-400 p-8">Tenant not found</div>;
 
   return (
