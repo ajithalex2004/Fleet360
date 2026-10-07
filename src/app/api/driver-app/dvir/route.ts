@@ -65,7 +65,6 @@ const DvirSchema = z.object({
 const BodySchema = z.object({
   tripId: z.string().uuid(),
   driverId: z.string().uuid(),
-  tenantId: z.string().uuid(),
   dvir: DvirSchema,
   // Inline photos (base64). Production: switch to presigned upload.
   photos: z.array(z.object({
@@ -113,7 +112,9 @@ export async function POST(req: NextRequest) {
       if (body.driverId !== ctx.userId) {
         return NextResponse.json({ error: 'driverId mismatch' }, { status: 403 });
       }
-      if (body.tenantId !== ctx.tenantId) {
+      // tenantId is stripped from the parsed body; check the claimed one
+      // against the session.
+      if ((jsonRaw as { tenantId?: unknown } | null)?.tenantId !== ctx.tenantId) {
         return NextResponse.json({ error: 'tenantId mismatch' }, { status: 403 });
       }
 
