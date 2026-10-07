@@ -9,8 +9,8 @@
     "*:*:*"
    ],
    "claim": {
-    "v": "83f16c6e",
-    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "v": "c9977e3a",
+    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "w": 1
    }
   },
@@ -237,11 +237,35 @@
     "leasing:edit:renewals",
     "bus-ops:create:route-consolidation",
     "bus-ops:edit:incidents",
-    "reports:create:*"
+    "reports:create:*",
+    "customer:view:*",
+    "customer:create:*",
+    "customer:edit:*",
+    "customer:delete:*",
+    "customer:approve:*",
+    "customer:export:*",
+    "mobile-apps:view:*",
+    "mobile-apps:create:*",
+    "mobile-apps:edit:*",
+    "mobile-apps:delete:*",
+    "mobile-apps:approve:*",
+    "mobile-apps:export:*",
+    "ai-platform:view:*",
+    "ai-platform:create:*",
+    "ai-platform:edit:*",
+    "ai-platform:delete:*",
+    "ai-platform:approve:*",
+    "ai-platform:export:*",
+    "vendors:view:*",
+    "vendors:create:*",
+    "vendors:edit:*",
+    "vendors:delete:*",
+    "vendors:approve:*",
+    "vendors:export:*"
    ],
    "claim": {
-    "v": "83f16c6e",
-    "b": "________________________A8D__________w"
+    "v": "c9977e3a",
+    "b": "________________________A8D______________w"
    }
   },
   {
@@ -460,11 +484,35 @@
     "leasing:edit:renewals",
     "bus-ops:create:route-consolidation",
     "bus-ops:edit:incidents",
-    "reports:create:*"
+    "reports:create:*",
+    "customer:view:*",
+    "customer:create:*",
+    "customer:edit:*",
+    "customer:delete:*",
+    "customer:approve:*",
+    "customer:export:*",
+    "mobile-apps:view:*",
+    "mobile-apps:create:*",
+    "mobile-apps:edit:*",
+    "mobile-apps:delete:*",
+    "mobile-apps:approve:*",
+    "mobile-apps:export:*",
+    "ai-platform:view:*",
+    "ai-platform:create:*",
+    "ai-platform:edit:*",
+    "ai-platform:delete:*",
+    "ai-platform:approve:*",
+    "ai-platform:export:*",
+    "vendors:view:*",
+    "vendors:create:*",
+    "vendors:edit:*",
+    "vendors:delete:*",
+    "vendors:approve:*",
+    "vendors:export:*"
    ],
    "claim": {
-    "v": "83f16c6e",
-    "b": "________________________A8D__________w"
+    "v": "c9977e3a",
+    "b": "________________________A8D______________w"
    }
   },
   {
@@ -503,8 +551,8 @@
     "reports:create:*"
    ],
    "claim": {
-    "v": "83f16c6e",
-    "b": "AAAAAAAAAAAAAAAAAADg_4M_AwAAAAAAAD8AgA"
+    "v": "c9977e3a",
+    "b": "AAAAAAAAAAAAAAAAAADg_4M_AwAAAAAAAD8AgAAAAA"
    }
   },
   {
@@ -521,8 +569,8 @@
     "rental:edit:pricing"
    ],
    "claim": {
-    "v": "83f16c6e",
-    "b": "AAAAAM4FAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "v": "c9977e3a",
+    "b": "AAAAAM4FAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
    }
   },
   {
@@ -576,11 +624,15 @@
     "booking-portal:view:*",
     "assets:view:*",
     "sustainability:view:*",
-    "agents:view:*"
+    "agents:view:*",
+    "customer:view:*",
+    "mobile-apps:view:*",
+    "ai-platform:view:*",
+    "vendors:view:*"
    ],
    "claim": {
-    "v": "83f16c6e",
-    "b": "AQAAAAIAAAAA-P__DwAgCKQQRUQQBEEQBEEQAA"
+    "v": "c9977e3a",
+    "b": "AQAAAAIAAAAA-P__DwAgCKQQRUQQBEEQBEEQAEEQBA"
    }
   },
   {
@@ -593,8 +645,8 @@
     "custom:thing:x"
    ],
    "claim": {
-    "v": "83f16c6e",
-    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "v": "c9977e3a",
+    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "x": [
      "custom:thing:x",
      "fleet:view:vehicles",
@@ -612,8 +664,8 @@
     "maintenance:view:*"
    ],
    "claim": {
-    "v": "83f16c6e",
-    "b": "AAAAAAAAAAAAAAAAAACACAAAAAAAAAAAAAAAAA",
+    "v": "c9977e3a",
+    "b": "AAAAAAAAAAAAAAAAAACACAAAAAAAAAAAAAAAAAAAAA",
     "x": [
      "logistics:create:shipments"
     ]
@@ -625,8 +677,8 @@
    "plan": "PRO",
    "permissions": [],
    "claim": {
-    "v": "83f16c6e",
-    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "v": "c9977e3a",
+    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
    }
   },
   {
@@ -651,8 +703,8 @@
     "*:*:*"
    ],
    "claim": {
-    "v": "83f16c6e",
-    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "v": "c9977e3a",
+    "b": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
     "w": 1
    }
   }

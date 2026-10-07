@@ -34,6 +34,7 @@ const headersOf = (res: Response) => Object.fromEntries([...res.headers].filter(
 
 describe('dry run', () => {
   it('answers the policy decision without running the request', async () => {
+    vi.stubEnv('AUTHZ_MODE', 'report');
     const res = await dry('POST', '/api/fleet/vehicles', 'VIEWER', ['fleet:view:*']);
     expect(res.status).toBe(204);
     // Not NextResponse.next(): the request goes no further.

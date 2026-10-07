@@ -8,9 +8,11 @@
  * versioned catalogue ALL_PERMISSIONS, plus any permission outside it
  * (custom rows) spelled out, plus a flag for the platform wildcard.
  *
- * A claim signed against a different catalogue (catalogue version mismatch)
- * decodes to null: the policy treats that like a missing claim, and the
- * session is refreshed at the next sign-in.
+ * The catalogue is append-only, so a claim signed against an earlier
+ * catalogue (a prefix of this one) still decodes: its bits name the same
+ * permissions, and it simply holds none of the entries added since. A claim
+ * from any other catalogue decodes to null: the policy treats that like a
+ * missing claim, and the session is refreshed at the next sign-in.
  *
  * Edge-runtime safe (no Node APIs): middleware decodes it.
  */
@@ -41,6 +43,16 @@ function fnv1a(text: string): string {
 }
 
 export const CATALOGUE_VERSION = fnv1a(CATALOGUE.join('|'));
+
+/** Version of every catalogue prefix → its length, for claims signed before entries were appended. */
+const PREFIX_LENGTHS = new Map<string, number>();
+{
+  let joined = '';
+  CATALOGUE.forEach((key, i) => {
+    joined = i === 0 ? key : `${joined}|${key}`;
+    PREFIX_LENGTHS.set(fnv1a(joined), i + 1);
+  });
+}
 
 function toBase64Url(bytes: Uint8Array): string {
   let bin = '';
@@ -78,17 +90,18 @@ export function encodePermissionClaim(permissions: readonly string[]): Permissio
   };
 }
 
-/** The permission strings in `claim`, or null when it is absent, malformed or from another catalogue version. */
+/** The permission strings in `claim`, or null when it is absent, malformed or from a catalogue that is not a prefix of this one. */
 export function decodePermissionClaim(claim: unknown): string[] | null {
   if (!claim || typeof claim !== 'object') return null;
   const c = claim as Partial<PermissionClaim>;
-  if (c.v !== CATALOGUE_VERSION || typeof c.b !== 'string') return null;
+  const length = typeof c.v === 'string' ? PREFIX_LENGTHS.get(c.v) : undefined;
+  if (length === undefined || typeof c.b !== 'string') return null;
   const bits = fromBase64Url(c.b);
   if (!bits) return null;
   const out: string[] = [];
-  CATALOGUE.forEach((key, i) => {
-    if ((bits[i >> 3] ?? 0) & (1 << (i & 7))) out.push(key);
-  });
+  for (let i = 0; i < length; i++) {
+    if ((bits[i >> 3] ?? 0) & (1 << (i & 7))) out.push(CATALOGUE[i]);
+  }
   if (Array.isArray(c.x)) for (const p of c.x) if (typeof p === 'string') out.push(p);
   if (c.w === 1) out.push('*:*:*');
   return out;

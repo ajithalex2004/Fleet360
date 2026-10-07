@@ -303,14 +303,16 @@ describe('middleware', () => {
     expect((await call('/api/bus-ops/schedules/x/depart', 'POST', 'VIEWER', systemRolePermissions('VIEWER'))).status).toBe(403);
   });
 
-  it('defaults to report mode', () => {
-    expect(authzMode(undefined)).toBe('report');
+  it('defaults to enforce mode; report and off are explicit opt-outs', () => {
+    expect(authzMode(undefined)).toBe('enforce');
     expect(authzMode('ENFORCE')).toBe('enforce');
-    expect(authzMode('nonsense')).toBe('report');
+    expect(authzMode('nonsense')).toBe('enforce');
+    expect(authzMode(' Report ')).toBe('report');
+    expect(authzMode('off')).toBe('off');
   });
 
   it('report mode logs a would-be denial and lets the request through', async () => {
-    delete process.env.AUTHZ_MODE;
+    process.env.AUTHZ_MODE = 'report';
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const res = await call('/api/finance/invoices', 'POST', 'VIEWER', systemRolePermissions('VIEWER'));
     expect(res.status).toBe(200);
@@ -319,7 +321,7 @@ describe('middleware', () => {
   });
 
   it('report mode stays quiet for sessions issued before the claim existed', async () => {
-    delete process.env.AUTHZ_MODE;
+    process.env.AUTHZ_MODE = 'report';
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     expect((await call('/api/fleet/vehicles', 'POST', 'TENANT_ADMIN')).status).toBe(200);
     expect(warn.mock.calls.some((c) => String(c[0]).includes('"authz"'))).toBe(false);

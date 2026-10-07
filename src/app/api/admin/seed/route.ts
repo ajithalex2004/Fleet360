@@ -1,10 +1,9 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
-import { ALL_PERMISSIONS, SYSTEM_ROLES } from '@/lib/permissions';
+import { syncPermissionCatalog } from '@/lib/authz/permission-catalog-sync';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { withAuditedAction } from '@/lib/audited-action';
@@ -40,69 +39,7 @@ async function handlePOST(_req: NextRequest) {
 
   try {
     return await withPlatformAdmin(prisma, async (tx) => {
-      // ── 1. All permissions in ONE SQL query (INSERT … ON CONFLICT DO UPDATE) ──
-      // This is a single round-trip, no connection-pool pressure, no transactions.
-      const permValues = ALL_PERMISSIONS.map(p =>
-        Prisma.sql`(gen_random_uuid()::text, ${p.module}::text, ${p.action}::text, ${p.resource ?? '*'}::text, ${p.label}::text)`
-      );
-
-      await tx.$executeRaw`
-        INSERT INTO permissions (id, module, action, resource, label)
-        VALUES ${Prisma.join(permValues)}
-        ON CONFLICT (module, action, resource)
-        DO UPDATE SET label = EXCLUDED.label
-      `;
-
-      // ── 2. Load all permissions into an in-memory map (1 query) ──────────────
-      const allPerms = await tx.permission.findMany({
-        select: { id: true, module: true, action: true, resource: true },
-      });
-      const permMap = new Map<string, string>(
-        allPerms.map(p => [`${p.module}:${p.action}:${p.resource ?? '*'}`, p.id])
-      );
-
-      // ── 3. Upsert each system role + its permissions (sequential, no txns) ────
-      for (const sr of SYSTEM_ROLES) {
-        // Find-or-create the platform-wide role (tenantId IS NULL)
-        let role = await tx.role.findFirst({
-          where: { code: sr.code, tenantId: null },
-        });
-        if (!role) {
-          role = await tx.role.create({
-            data: {
-              name:        sr.name,
-              code:        sr.code,
-              description: sr.description,
-              isSystem:    true,
-              tenantId:    null,
-            },
-          });
-        } else {
-          await tx.role.update({
-            where: { id: role.id },
-            data:  { name: sr.name, description: sr.description },
-          });
-        }
-
-        // Deduplicate + resolve permission ids
-        const permIds = [
-          ...new Set(
-            sr.permissions
-              .map(p => permMap.get(`${p.module}:${p.action}:${p.resource ?? '*'}`))
-              .filter((id): id is string => Boolean(id))
-          ),
-        ];
-
-        // Replace role permissions: delete first, then bulk-insert (no transaction)
-        await tx.rolePermission.deleteMany({ where: { roleId: role.id } });
-
-        if (permIds.length > 0) {
-          await tx.rolePermission.createMany({
-            data: permIds.map(permissionId => ({ roleId: role!.id, permissionId })),
-            skipDuplicates: true,
-          });
-        }
-      }
+      await syncPermissionCatalog(tx);
 
       // ── 4. Return final counts ────────────────────────────────────────────────
       const [permCount, roleCount] = await Promise.all([

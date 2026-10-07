@@ -5,6 +5,7 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import { cacheRead, revalidateCache } from '@/lib/server-cache';
+import { ensurePermissionCatalogSynced } from '@/lib/authz/permission-catalog-sync';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { isSuperAdmin } from '@/lib/admin-access';
@@ -54,6 +55,9 @@ export async function GET(req: NextRequest) {
       : authz.tenantId;
     const lite = searchParams.get('lite') === 'true';
 
+    // Bring the database copy of the system roles up to the code catalogue
+    // (once per catalogue version) before listing them.
+    if (await ensurePermissionCatalogSynced()) await revalidateCache([CACHE_TAG, 'permissions:all']);
     const roles = await getRoles(tenantId, lite);
     return NextResponse.json(roles, {
       // private: the list depends on the caller, so shared caches must not reuse it.

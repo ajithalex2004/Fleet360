@@ -168,7 +168,7 @@ func TestPrivilegedActionsAreRecorded(t *testing.T) {
 }
 
 func TestModeAndPath(t *testing.T) {
-	for in, want := range map[string]Mode{"": ModeReport, "ENFORCE": ModeEnforce, " off ": ModeOff, "x": ModeReport} {
+	for in, want := range map[string]Mode{"": ModeEnforce, "ENFORCE": ModeEnforce, " off ": ModeOff, "x": ModeEnforce, " Report ": ModeReport} {
 		if got := ModeFrom(in); got != want {
 			t.Errorf("ModeFrom(%q) = %s", in, got)
 		}

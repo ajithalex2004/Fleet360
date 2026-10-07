@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Search, 
@@ -14,6 +14,9 @@ import {
   X
 } from 'lucide-react';
 import { useTheme } from '@/components/ThemeProvider';
+import { usePermissions } from '@/contexts/PermissionContext';
+import { moduleFromPathname } from '@/lib/nav/modules';
+import { canOpenModule } from '@/lib/nav/module-visibility';
 
 interface SearchResultItem {
   id: string;
@@ -44,6 +47,13 @@ export default function CommandPalette() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const { theme, setTheme } = useTheme();
+  // Module shortcuts the user may open (the sidebar's rule).
+  const { user, tenant, permissions } = usePermissions();
+  const modulePages = useMemo(() => MODULE_PAGES.filter((m) => {
+    if (!user) return false;
+    const mod = moduleFromPathname(m.href);
+    return !mod || canOpenModule(mod.id, { roleCode: user.roleCode, enabledModules: tenant?.enabledModules, permissions });
+  }), [user, tenant, permissions]);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -86,7 +96,7 @@ export default function CommandPalette() {
     if (!trimmed) {
       // Show default quick actions & modules
       const defaultItems: SearchResultItem[] = [
-        ...MODULE_PAGES,
+        ...modulePages,
         {
           id: 'action-theme',
           type: 'action',
@@ -113,7 +123,7 @@ export default function CommandPalette() {
     const fetchResults = async () => {
       try {
         // Filter static modules
-        const matchedModules = MODULE_PAGES.filter(m => 
+        const matchedModules = modulePages.filter(m => 
           m.title.toLowerCase().includes(trimmed.toLowerCase()) || 
           m.subtitle.toLowerCase().includes(trimmed.toLowerCase()) ||
           m.badge?.toLowerCase().includes(trimmed.toLowerCase())
@@ -153,7 +163,7 @@ export default function CommandPalette() {
       clearTimeout(debounceTimer);
       controller.abort();
     };
-  }, [query, open, theme, setTheme]);
+  }, [query, open, theme, setTheme, modulePages]);
 
   // Execute selection
   const handleSelect = useCallback((item: SearchResultItem) => {

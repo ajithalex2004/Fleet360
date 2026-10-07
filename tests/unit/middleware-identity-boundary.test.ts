@@ -29,6 +29,9 @@ function request(path: string, headers: Record<string, string> = {}, method = 'P
 }
 function forwarded(): Headers { return mocks.next.mock.calls.at(-1)![0].request.headers; }
 beforeEach(() => {
+  // These sessions carry no permission claim; this file tests identity
+  // headers, not the authorization policy (which defaults to enforce).
+  vi.stubEnv('AUTHZ_MODE', 'report');
   vi.clearAllMocks(); vi.stubEnv('CRON_SECRET', 'scheduler-secret');
   mocks.verify.mockResolvedValue(null);
   mocks.proxy.mockResolvedValue({ proxied: false });
