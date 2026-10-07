@@ -21,8 +21,7 @@ vi.mock('@prisma/client', async importOriginal => ({
   PrismaClient: class { constructor() { db.connect(); } $disconnect = db.disconnect; },
 }));
 vi.mock('@/lib/session-blocklist', () => ({ isSessionRevoked: async () => false }));
-vi.mock('@/lib/outbox/publisher', () => ({ tick: db.tick }));
-vi.mock('@/lib/finance/consumers', () => ({}));
+vi.mock('@/lib/jobs/outbox-publisher', () => ({ runOutboxPublisher: db.tick }));
 vi.mock('@/lib/push/scheduler', () => ({ runTripReminders: db.reminders }));
 vi.mock('@/lib/push/server', () => ({ sendPush: db.sendPush, getPublicVapidKey: () => 'public-vapid-key' }));
 
@@ -55,7 +54,7 @@ beforeEach(() => {
   db.upsert.mockResolvedValue({ id: 'sub-a' });
   db.revoke.mockResolvedValue({ count: 0 });
   db.subscriptions.mockResolvedValue([]);
-  db.tick.mockResolvedValue({ failed: 0 });
+  db.tick.mockResolvedValue({ status: 'ok', summary: 'No unpublished events' });
   db.reminders.mockResolvedValue({ sent: 0 });
 });
 afterEach(() => { vi.unstubAllEnvs(); });

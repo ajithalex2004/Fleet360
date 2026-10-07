@@ -121,9 +121,6 @@
     "scripts/test-maintenance-creation.ts": {
       "@typescript-eslint/no-explicit-any": 4
     },
-    "scripts/test-outbox-flow.ts": {
-      "@typescript-eslint/no-unused-vars": 1
-    },
     "scripts/test-whatsapp.js": {
       "@typescript-eslint/no-unused-vars": 1
     },

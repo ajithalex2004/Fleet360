@@ -6029,6 +6029,10 @@ model EventOutbox {
   /// retryCount >= maxRetries (publisher config).
   retryCount    Int       @default(0)
   createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  /// Owner token of the publisher run delivering this row; with
+  /// claimExpiresAt, an exclusive lease (see src/lib/jobs/outbox-publisher.ts).
+  claimedBy      String?   @map("claimed_by")
+  claimExpiresAt DateTime? @map("claim_expires_at") @db.Timestamptz(6)
 
   @@index([createdAt], map: "idx_event_outbox_unpublished")
   @@index([tenantId, eventType], map: "idx_event_outbox_tenant")
