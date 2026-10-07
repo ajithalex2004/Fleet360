@@ -15,6 +15,7 @@ import { withTenantRls } from '@/lib/rls';
 import { runAsTenant } from '@/lib/rls-scope';
 import { getTenantAccessMatrix, replaceTenantAccessMatrix } from '@/lib/service-tickets/access';
 import { loadServiceConfig } from '@/lib/service-config/load';
+import { ensureSeededForTenant } from '@/lib/service-config/schema';
 import { TICKET_TYPES_ORDER } from '@/types/service-tickets';
 import type { TicketType } from '@/types/service-tickets';
 import type { ServiceTone } from '@/types/service-config';
@@ -47,27 +48,36 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   const auth = authorize(req, tenantId);
   if (!auth.ok) return auth.res;
 
-  const matrix = await getTenantAccessMatrix(tenantId);
+  try {
+    const matrix = await getTenantAccessMatrix(tenantId);
+    // Seed a new tenant's service catalogue once, before the per-type reads
+    // below run in parallel.
+    await runAsTenant(tenantId, () => ensureSeededForTenant(tenantId));
 
-  // Enrich each row with presentation metadata sourced from the Service
-  // Configuration Engine. The matrix UI uses this to render the type
-  // label, icon, tone, prefix and default SLA without depending on the
-  // legacy TICKET_TYPE_CONFIG file. Read as the authorized tenant: the
-  // service_* tables are under RLS and a SUPER_ADMIN's own tenant differs.
-  const enriched = await Promise.all(matrix.map(async (row) => {
-    const cfg = await runAsTenant(tenantId, () => loadServiceConfig(tenantId, row.ticketType));
-    const meta = cfg ? {
-      label: cfg.type.name,
-      description: cfg.type.description ?? '',
-      iconName: cfg.type.icon,
-      tone: cfg.type.tone as ServiceTone,
-      prefix: cfg.rules.ticketing.ticketPrefix || '',
-      defaultSlaHours: cfg.rules.ticketing.priorityMatrix.Medium,
-    } : null;
-    return { ...row, meta };
-  }));
+    // Enrich each row with presentation metadata sourced from the Service
+    // Configuration Engine. The matrix UI uses this to render the type
+    // label, icon, tone, prefix and default SLA without depending on the
+    // legacy TICKET_TYPE_CONFIG file. Read as the authorized tenant: the
+    // service_* tables are under RLS and a SUPER_ADMIN's own tenant differs.
+    const enriched = await Promise.all(matrix.map(async (row) => {
+      const cfg = await runAsTenant(tenantId, () => loadServiceConfig(tenantId, row.ticketType));
+      const meta = cfg ? {
+        label: cfg.type.name,
+        description: cfg.type.description ?? '',
+        iconName: cfg.type.icon,
+        tone: cfg.type.tone as ServiceTone,
+        prefix: cfg.rules.ticketing.ticketPrefix || '',
+        defaultSlaHours: cfg.rules.ticketing.priorityMatrix.Medium,
+      } : null;
+      return { ...row, meta };
+    }));
 
-  return NextResponse.json({ ok: true, matrix: enriched });
+    return NextResponse.json({ ok: true, matrix: enriched });
+  } catch (err) {
+    captureException(err, { context: 'admin.tenant-ticket-types.get' });
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ ok: false, error: `Could not load ticket types: ${message}` }, { status: 500 });
+  }
 }
 
 async function handlePUT(req: NextRequest, { params }: RouteParams) {

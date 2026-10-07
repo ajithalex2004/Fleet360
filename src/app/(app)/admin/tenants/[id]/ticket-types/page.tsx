@@ -52,16 +52,17 @@ export default function TicketTypesAccessPage() {
         fetch(`/api/admin/tenants/${tenantId}/ticket-types`),
         fetch(`/api/admin/tenants/${tenantId}`),
       ]);
+      // Name the tenant even when the matrix fails, so the error has context.
+      if (tenantRes.ok) {
+        const t = await tenantRes.json().catch(() => null);
+        setTenantName(t?.name ?? t?.tenant?.name ?? '');
+      }
       if (!matrixRes.ok) {
         const d = await matrixRes.json().catch(() => ({}));
-        throw new Error(d?.error ?? 'Failed to load matrix');
+        throw new Error(d?.error ?? `Failed to load ticket types (HTTP ${matrixRes.status})`);
       }
       const data = await matrixRes.json();
       setRows(data.matrix ?? []);
-      if (tenantRes.ok) {
-        const t = await tenantRes.json();
-        setTenantName(t?.name ?? '');
-      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {

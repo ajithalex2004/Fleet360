@@ -168,13 +168,15 @@ export async function seedRulesIfAbsent(
   ).catch(() => []);
   if (existing.length > 0) return false;
 
-  await prisma.$executeRawUnsafe(
+  const inserted = await prisma.$executeRawUnsafe(
     `INSERT INTO service_rules
        (service_type_id, category, scope_id, rules, effective_from, effective_to, updated_at, updated_by)
-     VALUES ($1::uuid, $2, $3::uuid, $4::jsonb, NOW(), NULL, NOW(), 'system-seed')`,
+     VALUES ($1::uuid, $2, $3::uuid, $4::jsonb, NOW(), NULL, NOW(), 'system-seed')
+     ON CONFLICT DO NOTHING`,
     serviceTypeId, category, scopeId, JSON.stringify(rules),
   );
-  return true;
+  // 0 rows: another request seeded the same rule first — fine.
+  return inserted > 0;
 }
 
 /**

@@ -283,6 +283,7 @@ async function seedRulesFromTicketingConfig(
  *  hot-path resolver call. Tenants seeded earlier in the lifetime of
  *  this Node process skip the check entirely. */
 const _seededTenants = new Set<string>();
+const _seedingTenants = new Map<string, Promise<void>>();
 
 /**
  * Used by every entry point that reads from the engine — admin GETs,
@@ -292,11 +293,20 @@ const _seededTenants = new Set<string>();
  */
 export async function ensureSeededForTenant(tenantId: string): Promise<void> {
   if (_seededTenants.has(tenantId)) return;
-  const rows = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
-    `SELECT COUNT(*)::bigint AS count FROM service_categories WHERE tenant_id = $1`,
-    tenantId,
-  ).catch(() => [{ count: BigInt(0) }]);
-  const count = Number(rows[0]?.count ?? BigInt(0));
-  if (count === 0) await seedServiceConfigForTenant(tenantId);
-  _seededTenants.add(tenantId);
+  // Concurrent first calls (e.g. the ticket-types matrix loads every type
+  // in parallel) share one seeding run instead of racing each other.
+  let pending = _seedingTenants.get(tenantId);
+  if (!pending) {
+    pending = (async () => {
+      const rows = await prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+        `SELECT COUNT(*)::bigint AS count FROM service_categories WHERE tenant_id = $1`,
+        tenantId,
+      ).catch(() => [{ count: BigInt(0) }]);
+      const count = Number(rows[0]?.count ?? BigInt(0));
+      if (count === 0) await seedServiceConfigForTenant(tenantId);
+      _seededTenants.add(tenantId);
+    })().finally(() => _seedingTenants.delete(tenantId));
+    _seedingTenants.set(tenantId, pending);
+  }
+  return pending;
 }
