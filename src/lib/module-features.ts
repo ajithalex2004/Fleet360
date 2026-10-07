@@ -149,6 +149,16 @@ export const MODULE_FEATURES: readonly ModuleFeatureDef[] = [
   f('sustainability', 'sustainability.scope3', 'Scope 3 Emissions', 'Value-chain (Scope 3) emissions accounting', false),
   f('sustainability', 'sustainability.esg-reports', 'ESG Reports', 'GHG Protocol / ISO 14064 report packs', true),
 
+  // ── AI Platform ──
+  f('ai-platform', 'ai-platform.governance-policies', 'Governance Policies', 'AI autonomy levels and policy guardrails', true),
+  f('ai-platform', 'ai-platform.spend-budgets', 'AI Spend Budgets', 'Token spend budgets and cost tracking per tenant', true),
+  f('ai-platform', 'ai-platform.predictive-models', 'Predictive Models', 'Predictive maintenance models', true),
+
+  // ── Vendors & Partners ──
+  f('vendors', 'vendors.transport-outsourcing', 'Transport Outsourcing', 'Outsource jobs to partners, marketplace and settlements', true),
+  f('vendors', 'vendors.partner-scorecards', 'Partner Scorecards', 'Performance scorecards for partners', true),
+  f('vendors', 'vendors.garage-management', 'Garage Management', 'Garages and the garage portal', true),
+
   // ── Assets ──
   f('assets', 'assets.ble-tracking', 'BLE Tracking', 'Bluetooth tag and gateway tracking of assets', false),
   f('assets', 'assets.calibration', 'Calibration & Insurance', 'Calibration schedules and insurance on high-value assets', true),

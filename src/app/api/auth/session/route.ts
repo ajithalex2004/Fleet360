@@ -13,6 +13,7 @@ import { withPlatformAdmin } from '@/lib/rls';
 import { signSession } from '@/lib/tenant-session';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { tenantModulesFor } from '@/lib/module-policies';
 // ── Cookie helpers ────────────────────────────────────────────────────────────
 
 const COOKIE_NAME = 'xl-session';
@@ -116,9 +117,11 @@ export async function POST(request: NextRequest) {
     });
 
     // Build response payload
-    const enabledModules = userTenant.tenant.modules
-      .filter(m => m.isEnabled)
-      .map(m => m.module);
+    // Module policies (default / per tenant / tier) applied to the stored switches.
+    const enabledModules = await tenantModulesFor(
+      userTenant.tenant.modules.filter(m => m.isEnabled).map(m => m.module),
+      plan,
+    );
 
     const responseBody = {
       ok: true,

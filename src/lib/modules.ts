@@ -51,7 +51,9 @@ export type ModuleKey =
   | 'reports'
   | 'dispatch'
   | 'sustainability'
-  | 'assets';
+  | 'assets'
+  | 'ai-platform'
+  | 'vendors';
 
 /** CoA account-code group. Each module that posts financial entries belongs to one. */
 export type AccountPrefixGroup =
@@ -431,6 +433,38 @@ export const MODULES: readonly ModuleDef[] = [
     border: 'border-cyan-500/30',
     tags: ['HVA', 'BLE Tracking', 'Medical', 'Stock Ops'],
     subscription: 'always-on',
+    status: 'live',
+  },
+  {
+    // The /ai-platform area (ModuleGuard id 'ai-platform'). Before it was a
+    // registry module no tenant could have it, so only platform admins (who
+    // bypass ModuleGuard) could open it.
+    key: 'ai-platform',
+    name: 'AI Platform & Governance',
+    shortName: 'AI Platform',
+    description: 'AI policy guardrails, model spend budgets, provider gateway and predictive models across the platform',
+    href: '/ai-platform',
+    iconName: 'Brain',
+    gradient: 'from-violet-600 to-indigo-600',
+    glow: 'shadow-violet-500/20',
+    border: 'border-violet-500/30',
+    tags: ['Governance', 'Spend Budgets', 'AI Gateway', 'Predictive'],
+    subscription: 'toggleable',
+    status: 'live',
+  },
+  {
+    // The /vendors area (ModuleGuard id 'vendors'); same history as 'ai-platform'.
+    key: 'vendors',
+    name: 'Vendors & Partners',
+    shortName: 'Vendors',
+    description: 'Transport outsourcing to partners, partner marketplace and scorecards, settlements, and garage management',
+    href: '/vendors',
+    iconName: 'Building2',
+    gradient: 'from-slate-600 to-zinc-600',
+    glow: 'shadow-slate-500/20',
+    border: 'border-slate-500/30',
+    tags: ['Outsourcing', 'Marketplace', 'Scorecards', 'Garages'],
+    subscription: 'toggleable',
     status: 'live',
   },
 ];

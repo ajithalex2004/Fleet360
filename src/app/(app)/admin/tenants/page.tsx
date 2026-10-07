@@ -1,9 +1,12 @@
 'use client';
 import React, { useState, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { MODULE_BY_KEY, MODULES, resolveModuleKey } from '@/lib/modules';
+import { MODULES } from '@/lib/modules';
 import { defaultFeatureFlags, activeFeatureKeys, type FeatureFlagMap } from '@/lib/module-features';
 import { ModuleFeaturePicker, ALL_MODULE_KEYS } from '@/components/ModuleFeaturePicker';
+import { effectiveTenantModules, resolvePolicies, type ModulePolicies } from '@/lib/module-policy-rules';
+
+interface PolicyResponse { policies: ModulePolicies; plans: { code: string; name: string }[] }
 import { EditTenantModal, type TenantForEdit } from '@/components/EditTenantModal';
 import { HardDeleteConfirm } from '@/components/HardDeleteConfirm';
 import {
@@ -39,20 +42,13 @@ const MODULE_LABELS: Readonly<Record<string, string>> = Object.fromEntries(
 );
 
 /**
- * Resolve a tenant row's stored `enabledModules` list into a Set of canonical
- * kebab-case ModuleKeys. The DB may contain legacy snake_case values
- * (`rac`, `bus_ops`, `drivers`, `staff`, `ambulance`, `school_bus`) — these are
- * resolved via `resolveModuleKey()`. Unknown values are dropped silently.
+ * The modules a tenant actually has: its stored switches (legacy snake_case
+ * aliases resolved) under the module availability policies and its plan
+ * (src/lib/module-policy-rules.ts).
  */
-function enabledSet(t: TenantRow): Set<string> {
-  const out = new Set<string>();
-  for (const tm of t.modules ?? []) {
-    if (tm.isEnabled === false) continue;
-    const canonical = resolveModuleKey(tm.module);
-    if (canonical) out.add(canonical);
-    else if (tm.module in MODULE_BY_KEY) out.add(tm.module);
-  }
-  return out;
+function enabledSet(t: TenantRow, policies: ModulePolicies): Set<string> {
+  const stored = (t.modules ?? []).filter((tm) => tm.isEnabled !== false).map((tm) => tm.module);
+  return new Set(effectiveTenantModules(stored, t.plan, policies));
 }
 
 // ── Service types & request types (Tab 3) ─────────────────────────────────────
@@ -308,6 +304,11 @@ export default function TenantsPage() {
   // the in-memory Map. `refresh` busts the session cache after writes.
   const { data: tenantsRaw, refresh: refreshTenants } =
     useFetchedData<TenantRow[]>('/api/admin/tenants');
+  // Module availability policies (Admin > Module Policies): which modules are
+  // default, per tenant or tier-gated.
+  const { data: policyData } = useFetchedData<PolicyResponse>('/api/admin/module-policies');
+  const policies = policyData?.policies ?? resolvePolicies(null);
+  const planNames = Object.fromEntries((policyData?.plans ?? []).map((p) => [p.code, p.name]));
   // A refresh drops the cached list, so data is briefly undefined again.
   // Keep showing the last list meanwhile: swapping the page for the loader
   // would unmount an open Create Tenant modal and lose its local state
@@ -447,11 +448,8 @@ export default function TenantsPage() {
   // ── tab nav ───────────────────────────────────────────────────────────────
   const tabIndex = TABS.findIndex(t => t.key === activeTab);
 
-  // Always-on modules are included by the picker and the API whether or not listed.
-  const selectedModules = new Set([
-    ...form.enabledModules,
-    ...MODULES.filter(m => m.subscription === 'always-on').map(m => m.key),
-  ]);
+  // Default and tier-gated modules follow their policy, whatever is switched on.
+  const selectedModules = new Set(effectiveTenantModules(form.enabledModules, form.plan, policies));
   const selectedModuleCount = ALL_MODULE_KEYS.filter(k => selectedModules.has(k)).length;
   const activeFlagCount = activeFeatureKeys(selectedModules, form.featureFlags).length;
 
@@ -512,7 +510,7 @@ export default function TenantsPage() {
             </div>
             <div className="flex flex-wrap gap-2 mb-4">
               {(() => {
-                const enabledSetForTenant = enabledSet(t);
+                const enabledSetForTenant = enabledSet(t, policies);
                 return ALL_MODULE_KEYS.map(m => {
                   const enabled = enabledSetForTenant.has(m);
                   return (
@@ -740,6 +738,8 @@ export default function TenantsPage() {
                       enabledModules={form.enabledModules}
                       featureFlags={form.featureFlags}
                       plan={form.plan}
+                      policies={policies}
+                      planNames={planNames}
                       onModulesChange={(next) => set('enabledModules', next)}
                       onFlagsChange={(next) => set('featureFlags', next)}
                     />

@@ -8,6 +8,8 @@ import { MODULES, resolveModuleKey } from '@/lib/modules';
 import { MODULE_FEATURES, defaultFeatureFlags, type FeatureFlagMap } from '@/lib/module-features';
 import { ModuleFeaturePicker, TenantModuleFeatureSummary } from '@/components/ModuleFeaturePicker';
 import { TenantAttachmentsPanel } from '@/components/TenantAttachmentsPanel';
+import { useFetchedData } from '@/hooks/useFetchedData';
+import type { ModulePolicies } from '@/lib/module-policy-rules';
 
 /* ─────────────────────────────────────────────────────────
    Modules & feature flags — every registry module (src/lib/modules.ts)
@@ -866,6 +868,10 @@ export default function TenantDetailPage() {
   const [saving, setSaving]         = useState(false);
   const [enabledModules, setEnabledModules] = useState<string[]>([]);
   const [featureFlags, setFeatureFlags]     = useState<FeatureFlagMap>(defaultFeatureFlags);
+  // Module availability policies (Admin > Module Policies).
+  const { data: policyData } = useFetchedData<{ policies: ModulePolicies; plans: { code: string; name: string }[] }>('/api/admin/module-policies');
+  const modulePolicies = policyData?.policies;
+  const planNames = Object.fromEntries((policyData?.plans ?? []).map((p) => [p.code, p.name]));
   const [modulesError, setModulesError]     = useState('');
   const [modulesSaved, setModulesSaved]     = useState(false);
 
@@ -1114,6 +1120,9 @@ export default function TenantDetailPage() {
             <TenantModuleFeatureSummary
               enabledModules={moduleKeysOf(tenant.modules)}
               featureFlags={{ ...defaultFeatureFlags(), ...(tenant.featureFlags ?? {}) }}
+              plan={tenant.plan}
+              policies={modulePolicies}
+              planNames={planNames}
             />
           </section>
 
@@ -1138,6 +1147,8 @@ export default function TenantDetailPage() {
               enabledModules={enabledModules}
               featureFlags={featureFlags}
               plan={tenant.plan}
+              policies={modulePolicies}
+              planNames={planNames}
               onModulesChange={setEnabledModules}
               onFlagsChange={setFeatureFlags}
             />
