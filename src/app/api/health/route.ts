@@ -7,11 +7,16 @@
  *   200 { status: 'degraded', db, integrations, release }   — DB ok, optional service missing
  *   503 { status: 'unhealthy', db, release }                — DB unreachable
  *
+ * `schema` reports whether every table/column the app checks at runtime
+ * exists (src/lib/db/schema-registry.ts); a missing one makes the status
+ * "degraded". Names are on Admin > Schema status, not here (public probe).
+ *
  * Hit this once after `npm run dev` to warm the Neon pool.
  */
 
 import { NextResponse } from 'next/server';
 import { ensureDbConnected, prisma } from '@/lib/prisma';
+import { schemaReport } from '@/lib/db/schema-registry';
 
 export const dynamic = 'force-dynamic'; // never cache
 
@@ -58,7 +63,8 @@ export async function GET() {
     sessionSecret: !!process.env.SESSION_SECRET,
   };
   const missing = Object.entries(integrations).filter(([, v]) => !v).map(([k]) => k);
-  const status  = missing.length > 0 ? 'degraded' : 'ok';
+  const schema  = await schemaReport();
+  const status  = missing.length > 0 || schema.status === 'incomplete' ? 'degraded' : 'ok';
 
   // Optional Go backend readiness probe
   let backendInfo: { status: string; version?: string; error?: string } | undefined;
@@ -88,6 +94,7 @@ export async function GET() {
     db: { status: dbStatus, latencyMs: dbLatencyMs },
     integrations,
     missingConfig: missing,
+    schema: { status: schema.status, missing: schema.missingCount },
     release: RELEASE,
     backend: backendInfo,
     timestamp: new Date().toISOString(),

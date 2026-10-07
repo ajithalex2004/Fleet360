@@ -37,6 +37,17 @@
  *   node scripts/check-no-runtime-ddl.mjs
  * to confirm the count drops.
  *
+ * SECOND CHECK: EXECUTABLE DDL (2026-10-07, architecture audit A9)
+ * ────────────────────────────────────────────────────────────────
+ * The name patterns above passed with "0 violations" while nine modules
+ * still created tables at request time through provisionSchemaOnce(), whose
+ * functions are named ensureXxxSchema. So the guard also looks for the DDL
+ * itself — CREATE/ALTER/DROP TABLE, INDEX, SCHEMA, TYPE, … — on non-comment
+ * lines of src/. Every file that has it today is listed in REVIEWED_DDL_FILES
+ * with the reason it may; any other file fails. Comments are skipped; a DDL
+ * string that is never executed still counts (review it and list it, or
+ * reword it).
+ *
  * NOTE: Uses only Node.js built-in fs APIs — no grep, fully cross-platform.
  */
 
@@ -110,6 +121,45 @@ import { exit } from 'node:process';
 // time has been migrated.
 const KNOWN_VIOLATIONS = new Set([]);
 
+// ── Files reviewed to contain executable DDL (second check) ─────────────────
+// Production never runs the provisionSchemaOnce DDL (src/lib/db/schema-init.ts:
+// runtimeDdlAllowed); it serves fresh local databases, and readiness reports
+// any missing object. The rest are follow-ups to move into migrations.
+const REVIEWED_DDL_FILES = new Map([
+  // provisionSchemaOnce modules (checked by src/lib/db/schema-registry.ts)
+  ['src/lib/agents/schema.ts', 'provisionSchemaOnce: local-only DDL'],
+  ['src/lib/assets/ble-hw-schema.ts', 'provisionSchemaOnce: local-only DDL'],
+  ['src/lib/assets/schema.ts', 'provisionSchemaOnce: local-only DDL'],
+  ['src/lib/assets/spm-schema.ts', 'provisionSchemaOnce: local-only DDL'],
+  ['src/lib/dispatch/schema.ts', 'provisionSchemaOnce: local-only DDL'],
+  ['src/lib/fleet/hos-schema.ts', 'provisionSchemaOnce: local-only DDL'],
+  ['src/lib/fleet/schema.ts', 'provisionSchemaOnce: local-only DDL'],
+  ['src/lib/logistics/geofence-schema.ts', 'provisionSchemaOnce: local-only DDL'],
+  ['src/lib/logistics/route-optimizer-schema.ts', 'provisionSchemaOnce: local-only DDL'],
+  // Follow-ups: move into migrations, then delete the DDL and the entry.
+  ['src/lib/ensure-columns.ts', 'FOLLOW-UP: addMissingColumns helper (billing, MFA, tenant provisioning)'],
+  ['src/lib/billing.ts', 'FOLLOW-UP: ensureBillingColumns adds Stripe columns/indexes'],
+  ['src/app/api/setup/super-admin/route.ts', 'FOLLOW-UP: one-time setup adds User.password_hash'],
+  ['src/app/api/admin/migrate/fleet-phase1/route.ts', 'FOLLOW-UP: platform-admin manual migration endpoint'],
+  ['src/app/api/admin/migrate/indexes/route.ts', 'FOLLOW-UP: platform-admin manual index endpoint'],
+  ['src/app/api/admin/migrate/rac-phase1/route.ts', 'FOLLOW-UP: platform-admin manual migration endpoint'],
+]);
+
+const DDL = /\b(CREATE\s+(?:UNIQUE\s+)?(?:TABLE|INDEX|SCHEMA|TYPE|SEQUENCE|EXTENSION|(?:OR\s+REPLACE\s+)?(?:FUNCTION|VIEW|TRIGGER))|ALTER\s+(?:TABLE|TYPE|SCHEMA)|DROP\s+(?:TABLE|INDEX|SCHEMA|TYPE))\b/;
+
+/** Whether `content` has a DDL statement on a line that is not a comment. */
+function hasExecutableDdl(content) {
+  let inBlock = false;
+  for (const line of content.split('\n')) {
+    const t = line.trim();
+    if (t.startsWith('/*')) inBlock = true;
+    const comment = inBlock || t.startsWith('//') || t.startsWith('*');
+    if (t.includes('*/')) inBlock = false;
+    if (!comment && DDL.test(line)) return true;
+  }
+  return false;
+}
+
 // ── Detection patterns ────────────────────────────────────────────────────────
 // Matches lines declaring runtime-DDL functions anywhere in src/.
 // bootstrap is only checked inside src/app/api/ to avoid false positives.
@@ -153,6 +203,7 @@ function toRel(abs) {
 }
 
 const foundFiles = new Set();
+const ddlFiles = new Set();
 
 for (const abs of walk(srcDir)) {
   const content = readFileSync(abs, 'utf8');
@@ -163,6 +214,22 @@ for (const abs of walk(srcDir)) {
     (isInApi && hasPattern(content, API_ONLY_PATTERNS));
 
   if (matched) foundFiles.add(toRel(abs));
+  if (hasExecutableDdl(content)) ddlFiles.add(toRel(abs));
+}
+
+// ── Evaluate the DDL check ──────────────────────────────────────────────────
+const unreviewedDdl = [...ddlFiles].filter((f) => !REVIEWED_DDL_FILES.has(f)).sort();
+const staleDdl = [...REVIEWED_DDL_FILES.keys()].filter((f) => !ddlFiles.has(f));
+if (unreviewedDdl.length > 0) {
+  console.error('\n✗  runtime-DDL guard FAILED — DDL in file(s) not reviewed for it:\n');
+  for (const f of unreviewedDdl) {
+    console.error(`   ${f}`);
+    console.error('   ↳ Put CREATE/ALTER/DROP in a Prisma migration (prisma/migrations/), not application code.\n');
+  }
+}
+if (staleDdl.length > 0) {
+  console.log('\n  These files no longer contain DDL — remove them from REVIEWED_DDL_FILES:');
+  for (const f of staleDdl) console.log(`    - '${f}'`);
 }
 
 // ── Evaluate ──────────────────────────────────────────────────────────────────
@@ -197,6 +264,8 @@ if (staleEntries.size > 0) {
 // ── Summary ───────────────────────────────────────────────────────────────────
 const remaining = foundFiles.size;
 
+if (unreviewedDdl.length > 0) exit(1);
+
 if (hasNewViolation) {
   console.error(
     `\n  ${remaining} runtime-DDL function(s) found; ${KNOWN_VIOLATIONS.size} are allowed.`
@@ -215,3 +284,4 @@ if (staleEntries.size > 0) {
 } else {
   console.log(`✓  runtime-DDL guard passed — ${remaining} known violation(s) remain.`);
 }
+console.log(`   executable DDL: ${ddlFiles.size} reviewed file(s) (${[...REVIEWED_DDL_FILES.values()].filter((r) => r.startsWith('FOLLOW-UP')).length} follow-ups to move into migrations).`);

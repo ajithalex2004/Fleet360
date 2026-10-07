@@ -4,7 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { provisionSchemaOnce } from '@/lib/db/schema-init';
+import { provisionSchemaOnce, type SchemaSpec } from '@/lib/db/schema-init';
 import type { DispatchWeights, ServiceType, DispatchPriority } from './types';
 
 /* ─────────────────────────────────────────────────────────────
@@ -47,8 +47,8 @@ export const DEFAULT_WEIGHTS: Record<string, Record<string, DispatchWeights>> = 
    a single round-trip to Neon instead of 23 sequential awaits.
 ───────────────────────────────────────────────────────────── */
 // Runs no DDL where these tables exist; see provisionSchemaOnce.
-export function ensureDispatchSchema(): Promise<void> {
-  return provisionSchemaOnce('dispatch', { tables: [
+/** Tables/columns this module needs; checked by the schema readiness report. */
+export const DISPATCH_SCHEMA: SchemaSpec = { tables: [
     'dispatch_jobs',
     'dispatch_attempts',
     'dispatch_weights',
@@ -57,7 +57,10 @@ export function ensureDispatchSchema(): Promise<void> {
     'ambulance_capabilities',
     'school_bus_routes',
     'dispatch_merge_suggestions',
-  ] }, _doInit);
+  ] };
+
+export function ensureDispatchSchema(): Promise<void> {
+  return provisionSchemaOnce('dispatch', DISPATCH_SCHEMA, _doInit);
 }
 
 async function _doInit(): Promise<void> {

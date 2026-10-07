@@ -1532,6 +1532,12 @@
    }
   },
   {
+   "template": "schema-status",
+   "methods": {
+    "GET": "platform"
+   }
+  },
+  {
    "template": "seed",
    "methods": {
     "GET": "platform",

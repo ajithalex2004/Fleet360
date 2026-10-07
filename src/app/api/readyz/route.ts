@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { schemaReport } from '@/lib/db/schema-registry';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,6 +39,18 @@ export async function GET() {
     // Strictly allowlist fields returned to public callers — never reflect arbitrary upstream JSON
     const payload = data as Record<string, unknown> | null;
     const version = typeof payload?.version === 'string' ? payload.version : undefined;
+
+    // Every table/column the app checks at runtime must exist (audit A9):
+    // a deploy whose migrations were not applied is not ready. Only the count
+    // is public; Admin > Schema status lists the objects.
+    const schema = await schemaReport({ fresh: true });
+    if (schema.status === 'incomplete') {
+      console.error('[api/readyz] schema incomplete:', JSON.stringify(schema.missing));
+      return NextResponse.json(
+        { status: 'not_ready', error: 'database schema incomplete — apply pending migrations', missingObjects: schema.missingCount },
+        { status: 503 },
+      );
+    }
 
     return NextResponse.json(
       {

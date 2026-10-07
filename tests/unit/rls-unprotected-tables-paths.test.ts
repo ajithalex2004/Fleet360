@@ -34,7 +34,9 @@ const rec = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    $queryRawUnsafe: vi.fn(async () => []),
+    // The consumer's inbox claim (INSERT … RETURNING) wins; other reads are empty.
+    $queryRawUnsafe: vi.fn(async (sql: string) =>
+      sql.includes('INSERT INTO event_consumer_inbox') ? [{ status: 'PROCESSING' }] : []),
     $executeRawUnsafe: vi.fn(async () => 1),
   },
 }));

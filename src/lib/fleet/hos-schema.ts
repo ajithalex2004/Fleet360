@@ -1,12 +1,15 @@
 import { prisma } from '@/lib/prisma';
-import { provisionSchemaOnce } from '@/lib/db/schema-init';
+import { provisionSchemaOnce, type SchemaSpec } from '@/lib/db/schema-init';
 
 // Runs no DDL where these tables exist; see provisionSchemaOnce.
-export function ensureHosSchema(): Promise<void> {
-  return provisionSchemaOnce('hos', { tables: [
+/** Tables/columns this module needs; checked by the schema readiness report. */
+export const HOS_SCHEMA: SchemaSpec = { tables: [
     'hos_logs',
     'hos_violations',
-  ] }, _doInit);
+  ] };
+
+export function ensureHosSchema(): Promise<void> {
+  return provisionSchemaOnce('hos', HOS_SCHEMA, _doInit);
 }
 
 async function _doInit(): Promise<void> {
