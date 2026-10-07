@@ -1540,7 +1540,9 @@ export default function TenantDetailPage() {
                     <select value={newUser.roleId} onChange={e => setNewUser(p => ({ ...p, roleId: e.target.value }))} required
                       className="w-full px-4 py-2 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:outline-none">
                       <option value="">Select role</option>
-                      {allRoles.map(r => <option key={r.id} value={r.id}>{r.name} {r.isSystem ? '(System)' : ''}</option>)}
+                      {/* Platform roles plus this tenant's own — not other tenants' roles. */}
+                      {allRoles.filter(r => !r.tenantId || r.tenantId === id)
+                        .map(r => <option key={r.id} value={r.id}>{r.name} {r.isSystem ? '(System)' : ''}</option>)}
                     </select>
                   </div>
                   <div className="flex gap-3 justify-end pt-2">
