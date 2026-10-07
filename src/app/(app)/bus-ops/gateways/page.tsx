@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { Bluetooth, RefreshCw, Key, Copy, Check, X } from 'lucide-react';
 import { PageHeader } from '@/components/bus-ops/theme';
 import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
+import { VehicleRef } from '@/components/ui/EntityRef';
 
 interface Gateway {
   id: string;
@@ -108,7 +109,7 @@ export default function GatewaysAdminPage() {
     { key: 'gatewayId', header: 'Gateway ID', accessor: g => g.gatewayId,
       render: g => <span className="font-mono text-[var(--text-main)]">{g.gatewayId}</span> },
     { key: 'vehicleId', header: 'Vehicle', accessor: g => g.vehicleId,
-      render: g => <span className="font-mono text-[var(--text-main)]">{g.vehicleId.slice(0, 8)}</span> },
+      render: g => <span className="font-mono text-[var(--text-main)]"><VehicleRef id={g.vehicleId} /></span> },
     { key: 'model', header: 'Model', accessor: g => g.model },
     { key: 'rssi', header: 'RSSI / Grace', accessor: g => g.rssiThresholdDbm, filter: false,
       render: g => <span className="text-[var(--text-main)]">{g.rssiThresholdDbm} dBm · {g.presenceGraceSeconds}s</span> },

@@ -19,6 +19,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import PlatformHomeBar from '@/components/PlatformHomeBar';
+import { shortId } from '@/lib/ui/display-id';
 
 interface AmbCall {
   id: string;
@@ -121,7 +122,7 @@ function CallCard({ call, onDispatch }: { call: AmbCall; onDispatch: (id: string
           isActive                      ? 'bg-blue-500/20 text-blue-300 animate-pulse' :
           'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'
         }`}>{call.status}</span>
-        <span className="text-[var(--text-faint)] text-xs font-mono">{call.id.slice(0,10)}…</span>
+        <span className="text-[var(--text-faint)] text-xs font-mono">{shortId(call.id)}</span>
         {call.attempt_count > 0 && (
           <span className="text-orange-400 text-xs">
             ↩ {call.attempt_count} attempt{call.attempt_count > 1 ? 's' : ''}

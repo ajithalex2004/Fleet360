@@ -16,6 +16,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { History, RefreshCw, Undo2, CheckCircle2, XCircle, Trash2 } from 'lucide-react';
 import RouteConsolidationRevertModal, { type ConsolidationForRevert } from '@/components/bus-ops/RouteConsolidationRevertModal';
 import FleetDataGrid, { type DataGridColumn } from '@/components/ui/FleetDataGrid';
+import { shortId } from '@/lib/ui/display-id';
 
 interface HistoryRow {
   id: string;
@@ -115,7 +116,7 @@ export default function RouteConsolidationHistoryPanel() {
       render: r => (
         <div>
           <div className="font-medium">{r.mergedRoute?.name ?? '(no merged route)'}</div>
-          <div className="font-mono text-[10px] text-[var(--text-faint)]">{r.mergedRoute?.id.slice(0, 8) ?? '—'}</div>
+          <div className="font-mono text-[10px] text-[var(--text-faint)]">{shortId(r.mergedRoute?.id)}</div>
         </div>
       ) },
     { key: 'sources', header: 'Sources', accessor: r => r.sources.map(s => s.name ?? s.id).join(' + '),
@@ -272,7 +273,7 @@ export default function RouteConsolidationHistoryPanel() {
             <ul className="mt-3 max-h-40 space-y-1 overflow-y-auto rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-canvas)]/60 p-2 text-xs text-[var(--text-muted)]">
               {deleting.map(r => (
                 <li key={r.id} className="truncate">
-                  <span className="font-mono text-[var(--text-faint)]">{r.id.slice(0, 8)}</span>
+                  <span className="font-mono text-[var(--text-faint)]">{shortId(r.id)}</span>
                   {' · '}
                   {r.mergedRoute?.name ?? '(merged route removed)'}
                 </li>

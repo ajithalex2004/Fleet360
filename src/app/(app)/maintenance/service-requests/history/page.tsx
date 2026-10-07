@@ -7,6 +7,7 @@ import { ServiceRequest, MaintenanceStatus, MaintenanceRequest, Vehicle, Driver 
 import FilterBar from '@/components/Maintenance/FilterBar';
 import TimelineModal from '@/components/Maintenance/TimelineModal';
 import { buildServiceRequestIdMap, formatServiceRequestId } from '@/lib/service-request-id';
+import { VehicleRef } from '@/components/ui/EntityRef';
 
 export default function ServiceRequestHistoryPage() {
     const router = useRouter();
@@ -224,8 +225,8 @@ export default function ServiceRequestHistoryPage() {
                                                 vehicle && (
                                                     <>
                                                         <div className="flex justify-between">
-                                                            <span className="text-[var(--text-faint)]">Vehicle ID:</span>
-                                                            <span className="text-[var(--text-muted)] font-mono text-[10px]">{vehicle.id}</span>
+                                                            <span className="text-[var(--text-faint)]">Vehicle:</span>
+                                                            <span className="text-[var(--text-muted)] font-mono text-[10px]"><VehicleRef id={vehicle.id} /></span>
                                                         </div>
                                                         <div className="flex justify-between">
                                                             <span className="text-[var(--text-faint)]">Vehicle:</span>

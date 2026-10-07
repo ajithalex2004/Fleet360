@@ -11,6 +11,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { shortId } from '@/lib/ui/display-id';
 
 /* ═══════════════════════════════ TYPES ════════════════════════════════════ */
 
@@ -405,7 +406,7 @@ export default function AdminDispatchPage() {
                     <tr key={row.tenantId} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                       <td className="py-3 pr-4">
                         <span className="text-[var(--text-main)] font-medium">{row.tenantName}</span>
-                        <span className="block text-[var(--text-faint)] text-xs font-mono">{row.tenantId.slice(0, 8)}…</span>
+                        {!row.tenantName && <span className="block text-[var(--text-faint)] text-xs font-mono">{shortId(row.tenantId)}</span>}
                       </td>
                       <td className="py-3 px-4 text-right text-[var(--text-muted)] tabular-nums font-semibold">{row.total}</td>
                       <td className="py-3 px-4 text-right text-blue-400 tabular-nums">{row.active}</td>
@@ -469,7 +470,7 @@ export default function AdminDispatchPage() {
                     </div>
                     <p className="text-[var(--text-faint)] text-xs mt-0.5">
                       {job.serviceType.replace(/_/g, ' ')} · {job.currentAttempt}/{job.maxAttempts} attempts ·
-                      ID: <span className="font-mono">{job.id.slice(0, 8)}</span>
+                      Job <span className="font-mono">{shortId(job.id)}</span>
                     </p>
                   </div>
                 </div>

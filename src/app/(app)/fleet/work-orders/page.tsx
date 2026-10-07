@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { VehicleRef } from '@/components/ui/EntityRef';
 
 interface WorkOrder {
   id: string;
@@ -285,7 +286,7 @@ export default function WorkOrdersPage() {
                   return (
                     <tr key={wo.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                       <td className="px-4 py-3 font-mono text-orange-400 font-medium">{wo.woNumber}</td>
-                      <td className="px-4 py-3 text-[var(--text-main)]">{wo.vehicleId}</td>
+                      <td className="px-4 py-3 text-[var(--text-main)]"><VehicleRef id={wo.vehicleId} /></td>
                       <td className="px-4 py-3 text-[var(--text-muted)]">{wo.woType}</td>
                       <td className="px-4 py-3">{badge(wo.status, statusColor[wo.status] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]')}</td>
                       <td className="px-4 py-3">{badge(wo.priority, priorityColor[wo.priority] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]')}</td>

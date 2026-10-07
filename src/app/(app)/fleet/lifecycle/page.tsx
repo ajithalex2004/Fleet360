@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { VehicleRef } from '@/components/ui/EntityRef';
 
 interface LifecycleEvent {
   id: string;
@@ -203,7 +204,7 @@ export default function LifecyclePage() {
                     <td className="px-4 py-3">
                       {badge(ev.eventType, eventTypeColor[ev.eventType] ?? 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]')}
                     </td>
-                    <td className="px-4 py-3 text-orange-400 font-medium">{ev.vehicleId}</td>
+                    <td className="px-4 py-3 text-orange-400 font-medium"><VehicleRef id={ev.vehicleId} /></td>
                     <td className="px-4 py-3 text-[var(--text-muted)]">
                       {ev.eventDate ? new Date(ev.eventDate).toLocaleDateString() : '—'}
                     </td>

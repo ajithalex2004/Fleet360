@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { VehicleRef, DriverRef } from '@/components/ui/EntityRef';
 
 // Matches the real DriverShift Prisma model (src/app/api/drivers/shifts/route.ts
 // returns raw rows, no relation include) — driverId/vehicleId are plain scalar
@@ -193,8 +194,8 @@ export default function ShiftManagement() {
               <tbody>
                 {filteredShifts.map((shift) => (
                   <tr key={shift.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
-                    <td className="px-6 py-4 text-sm text-[var(--text-main)] font-medium">{shift.driverId}</td>
-                    <td className="px-6 py-4 text-sm text-[var(--text-muted)]">{shift.vehicleId ?? '—'}</td>
+                    <td className="px-6 py-4 text-sm text-[var(--text-main)] font-medium"><DriverRef id={shift.driverId} /></td>
+                    <td className="px-6 py-4 text-sm text-[var(--text-muted)]"><VehicleRef id={shift.vehicleId} /></td>
                     <td className="px-6 py-4 text-sm text-[var(--text-muted)]">{new Date(shift.shiftDate).toLocaleDateString()}</td>
                     <td className="px-6 py-4 text-sm text-[var(--text-muted)]">{fmtTime(shift.startTime)}</td>
                     <td className="px-6 py-4 text-sm text-[var(--text-muted)]">{fmtTime(shift.endTime)}</td>

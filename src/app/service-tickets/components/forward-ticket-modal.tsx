@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { VehicleRef } from '@/components/ui/EntityRef';
 import {
   X,
   Send,
@@ -163,7 +164,7 @@ export function ForwardTicketModal({
             </div>
             {ticket.vehicleId && (
               <span className="text-[11px] text-slate-400 mt-0.5 block">
-                Vehicle: <span className="font-mono text-slate-300">{ticket.vehicleId}</span>
+                Vehicle: <span className="font-mono text-slate-300"><VehicleRef id={ticket.vehicleId} /></span>
               </span>
             )}
           </div>

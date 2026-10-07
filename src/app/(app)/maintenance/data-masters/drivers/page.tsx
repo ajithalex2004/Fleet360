@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { getDrivers, api } from '@/services/mockData';
 import { Driver } from '@/types/maintenance';
+import { shortId } from '@/lib/ui/display-id';
 
 export default function DriversPage() {
     const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -150,7 +151,7 @@ export default function DriversPage() {
                     <tbody className="bg-[var(--bg-surface)] divide-y divide-white/10">
                         {drivers.map((driver) => (
                             <tr key={driver.id} className="hover:bg-[var(--bg-surface-hover)]">
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-[var(--text-main)]">{driver.id}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-[var(--text-main)]">{shortId(driver.id)}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--text-muted)]">{driver.name}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--text-muted)]">{driver.licenseNumber}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--text-muted)]">{driver.contactNumber}</td>

@@ -13,6 +13,7 @@
 
 import React, { useState } from 'react';
 import { X, Loader2, Undo2 } from 'lucide-react';
+import { shortId } from '@/lib/ui/display-id';
 
 interface GuardCheck {
   code: string;
@@ -75,7 +76,7 @@ export default function RouteConsolidationRevertModal({
         <div className="px-6 py-5 space-y-4">
           <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-1 text-sm">
             <div className="text-slate-400 text-xs uppercase tracking-wider">Consolidation</div>
-            <div className="font-mono text-[11px] text-slate-500">{consolidation.id}</div>
+            <div className="font-mono text-[11px] text-slate-500">{shortId(consolidation.id)}</div>
             <div className="mt-2 text-slate-300">
               <span className="text-slate-500">Merged:</span> {consolidation.mergedRoute?.name ?? '(none)'}
             </div>

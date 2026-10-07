@@ -7,6 +7,7 @@ import { MaintenanceRequest, MaintenanceStatus, ServiceRequest } from '@/types/m
 import FilterBar from '@/components/Maintenance/FilterBar';
 import TimelineModal, { TimelineItem } from '@/components/Maintenance/TimelineModal';
 import { backendFetch } from '@/lib/auth/backend-fetch';
+import { displayCode } from '@/lib/ui/display-id';
 
 // Unified type for display
 type HistoryItem = MaintenanceRequest | ServiceRequest;
@@ -206,7 +207,7 @@ export default function MaintenanceHistoryPage() {
                                     <div className="relative z-10 flex-1 flex flex-col">
                                         <div className="flex justify-between items-start mb-3">
                                             <div className="flex flex-col">
-                                                <span className="text-[10px] font-mono text-[var(--text-faint)] bg-[var(--bg-surface)] px-1.5 py-0.5 rounded border border-[var(--border-subtle)]">{request.id}</span>
+                                                <span className="text-[10px] font-mono text-[var(--text-faint)] bg-[var(--bg-surface)] px-1.5 py-0.5 rounded border border-[var(--border-subtle)]">{displayCode('workOrderNo' in request ? request.workOrderNo : undefined, request.id)}</span>
                                                 {isSR && <span className="text-[9px] text-blue-600 mt-0.5">Service Request</span>}
                                             </div>
                                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${getStatusColor(request.status)}`}>

@@ -17,6 +17,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
+import { shortId } from '@/lib/ui/display-id';
 
 /* ═══════════════════════ TYPES ═══════════════════════ */
 type JobStatus   = 'PENDING'|'SEARCHING'|'OFFERED'|'ACCEPTED'|'IN_PROGRESS'|'COMPLETED'|'RETRYING'|'ESCALATED'|'FAILED'|'CANCELLED';
@@ -269,7 +270,7 @@ function JobCard({ job, selected, onClick, onCtx }:{
       </div>
       {/* Row 3: meta */}
       <div className="flex items-center justify-between text-xs text-[var(--text-faint)]">
-        <span className="font-mono">{job.id.slice(0,8)}</span>
+        <span className="font-mono">{shortId(job.id)}</span>
         <span>{job.attempt_count} att.</span>
         {sla.risk!=='none' ? (
           <span className={`font-bold ${sla.risk==='critical'?'text-red-400 animate-pulse':sla.risk==='warn'?'text-amber-400':'text-[var(--text-muted)]'}`}>
@@ -845,7 +846,7 @@ export default function CommandCentre() {
                   {' '}· Score <strong className="text-green-400 text-lg">{suggJob.candidate.score}</strong>
                 </p>
                 <p className="text-[var(--text-faint)] text-xs mb-4">
-                  ETA {suggJob.candidate.eta_minutes} min · Job {suggJob.job.id.slice(0,8)} · {suggJob.job.service_type}
+                  ETA {suggJob.candidate.eta_minutes} min · Job {shortId(suggJob.job.id)} · {suggJob.job.service_type}
                 </p>
                 <div className="flex gap-2.5">
                   <button onClick={()=>{addLog(`✓ Suggestion accepted — ${suggJob.candidate.vehicle_reg}`,'success');setSuggJob(null);fetchAll();}}

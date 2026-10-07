@@ -1,10 +1,12 @@
 'use client';
 import React, { useEffect, useState } from 'react';
+import { displayCode } from '@/lib/ui/display-id';
 
 interface MaintenanceRequest {
   id: string; status: string; priority: string;
   description: string; dateCreated: string;
   vehicle?: { id: string; plateNumber: string };
+  workOrderNo?: string | null;
   garage?: { name: string };
   issueSettings?: { issue: { name: string } }[];
 }
@@ -91,7 +93,7 @@ export default function MaintenanceCard({ priority, status, title }: Props) {
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className={`w-2 h-2 rounded-full flex-shrink-0 ${pCfg.dot}`} />
-                    <span className="font-mono text-xs text-orange-400 flex-shrink-0">{req.id}</span>
+                    <span className="font-mono text-xs text-orange-400 flex-shrink-0">{displayCode(req.workOrderNo, req.id)}</span>
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     <span className={`text-xs px-1.5 py-0.5 rounded font-semibold ${pCfg.color}`}>{req.priority}</span>
