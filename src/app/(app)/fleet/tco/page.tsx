@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { ACTIVE_TOGGLE_BORDERED } from '@/lib/ui/toggle';
 import {
   PieChart,
   TrendingDown,
@@ -429,7 +430,7 @@ export default function TcoDashboard() {
                   onClick={() => setGroupFilter(grp)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
                     groupFilter === grp
-                      ? 'bg-[var(--bg-surface-hover)] text-[var(--text-main)] border border-slate-500'
+                      ? ACTIVE_TOGGLE_BORDERED
                       : 'bg-[var(--bg-surface)] text-[var(--text-muted)] hover:text-[var(--text-main)] border border-transparent'
                   }`}
                 >

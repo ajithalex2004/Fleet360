@@ -15,6 +15,7 @@ import {
   Calendar,
 } from 'lucide-react';
 import Link from 'next/link';
+import { ACTIVE_TOGGLE } from '@/lib/ui/toggle';
 
 interface SlaEvaluationItem {
   ticketId: string;
@@ -228,7 +229,7 @@ export default function ServiceTicketsSlaControlTower() {
               onClick={() => setFilterTier('ALL')}
               className={`px-3 py-1 rounded-lg text-xs font-semibold ${
                 filterTier === 'ALL'
-                  ? 'bg-slate-700 text-white'
+                  ? ACTIVE_TOGGLE
                   : 'bg-slate-950 text-slate-400 hover:text-white'
               }`}
             >

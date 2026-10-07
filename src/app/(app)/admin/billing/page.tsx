@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { ACTIVE_TOGGLE } from '@/lib/ui/toggle';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -737,7 +738,7 @@ export default function BillingPage() {
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors capitalize ${activeTab === tab ? 'bg-[var(--bg-surface-hover)] text-[var(--text-main)]' : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors capitalize ${activeTab === tab ? ACTIVE_TOGGLE : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'}`}
           >
             {tab}
           </button>

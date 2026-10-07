@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { ACTIVE_TOGGLE_BORDERED } from '@/lib/ui/toggle';
 
 //  Constants 
 const MODULES = [
@@ -966,7 +967,7 @@ export default function WorkflowsPage() {
             <div className="flex gap-1 px-5 pt-4 border-b border-[var(--border-subtle)]">
               {([['basic','Basic Info'],['assignee','Assignee'],['email','Email Template'],['advanced','Conditions & SLA']] as const).map(([key, label]) => (
                 <button key={key} onClick={() => setStepTab(key)}
-                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all -mb-px ${stepTab === key ? 'bg-[var(--bg-surface)] text-[var(--text-main)] border border-[var(--border-subtle)] border-b-slate-800' : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'}`}>
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all -mb-px ${stepTab === key ? ACTIVE_TOGGLE_BORDERED : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'}`}>
                   {label}
                 </button>
               ))}
@@ -1246,7 +1247,7 @@ export default function WorkflowsPage() {
                 ['conditions', 'Conditions & SLA'],
               ] as const).map(([key, label]) => (
                 <button key={key} onClick={() => setEditWfTab(key)}
-                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all -mb-px ${editWfTab === key ? 'bg-[var(--bg-surface)] text-[var(--text-main)] border border-[var(--border-subtle)] border-b-slate-900' : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'}`}>
+                  className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all -mb-px ${editWfTab === key ? ACTIVE_TOGGLE_BORDERED : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'}`}>
                   {label}
                 </button>
               ))}

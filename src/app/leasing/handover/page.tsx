@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, Search, X, AlertTriangle, Info, Star } from 'lucide-react';
+import { ACTIVE_TOGGLE } from '@/lib/ui/toggle';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -586,7 +587,7 @@ export default function HandoverPage() {
               onClick={() => setActiveStatus(s)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                 activeStatus === s
-                  ? 'bg-[var(--bg-surface-hover)] text-[var(--text-main)] shadow-sm'
+                  ? ACTIVE_TOGGLE
                   : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)]'
               }`}
             >

@@ -16,6 +16,7 @@ import {
     updateMaintenanceRequest
 } from '@/services/mockData';
 import StatusBadge from '@/components/ui/StatusBadge';
+import { ACTIVE_TOGGLE } from '@/lib/ui/toggle';
 
 export default function ApprovalDetailsPage() {
     const router = useRouter();
@@ -172,7 +173,7 @@ export default function ApprovalDetailsPage() {
                         <button
                             onClick={() => setApprovalViewMode('MAINTENANCE')}
                             className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${approvalViewMode === 'MAINTENANCE'
-                                ? 'bg-[var(--bg-surface)] text-[var(--text-main)] shadow-sm'
+                                ? ACTIVE_TOGGLE
                                 : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'
                                 }`}
                         >
