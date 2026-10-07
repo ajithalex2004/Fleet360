@@ -3,7 +3,9 @@
  *
  * Subclasses implement handle() with the actual business logic.
  * process() wraps handle() with:
- *   - duplicate-delivery guard via event_consumer_inbox UNIQUE(consumer_name, event_id)
+ *   - an exclusive claim on event_consumer_inbox UNIQUE(consumer_name, event_id):
+ *     exactly one worker runs handle() for an event; a PROCESSED event is
+ *     skipped; a FAILED or abandoned (stale PROCESSING) one is taken over
  *   - structured error capture written back to the inbox row
  *   - per-consumer logging
  */
@@ -38,43 +40,55 @@ export abstract class BaseEventConsumer<T = unknown> {
     return runWithTenantContext(tenantId, () => this.processInTenant(envelope));
   }
 
-  private async processInTenant(envelope: DomainEventEnvelope<T>): Promise<boolean> {
-    // ── Idempotency check ─────────────────────────────────────────────────
-    const [existing] = await prisma.$queryRawUnsafe<Array<{ status: string }>>(
-      `SELECT status FROM event_consumer_inbox
-        WHERE consumer_name = $1 AND event_id = $2::uuid
-        LIMIT 1`,
-      this.consumerName,
-      envelope.eventId,
-    ).catch(() => []);
+  /** A PROCESSING claim older than this is treated as abandoned (crashed worker). */
+  static readonly STALE_CLAIM_MINUTES = 10;
 
-    if (existing) {
-      // Already processed (or previously failed — let publisher decide on retry)
-      if (existing.status === 'PROCESSED') {
-        console.log(
-          `[${this.consumerName}] event ${envelope.eventId} already processed — skipping`,
-        );
-        return true;
-      }
-      // FAILED entry — allow re-processing (outbox publisher controls retry count)
+  private async processInTenant(envelope: DomainEventEnvelope<T>): Promise<boolean> {
+    // ── Claim the inbox slot, exclusively ─────────────────────────────────
+    // One statement decides ownership: a new row, or taking over a FAILED
+    // row or an abandoned PROCESSING row. A row PROCESSED, or PROCESSING
+    // under a live claim, is left alone and RETURNING yields nothing.
+    // Errors propagate: a delivery whose claim could not be recorded must not
+    // run the handler (it would bypass the duplicate guard).
+    let claimed: Array<{ status: string }>;
+    try {
+      claimed = await prisma.$queryRawUnsafe<Array<{ status: string }>>(
+        `INSERT INTO event_consumer_inbox
+           (consumer_name, event_id, event_type, tenant_id, status, processed_at)
+         VALUES ($1, $2::uuid, $3, $4::uuid, 'PROCESSING', NOW())
+         ON CONFLICT (consumer_name, event_id) DO UPDATE
+           SET status = 'PROCESSING', processed_at = NOW(), error_message = NULL
+         WHERE event_consumer_inbox.status = 'FAILED'
+            OR (event_consumer_inbox.status = 'PROCESSING'
+                AND event_consumer_inbox.processed_at < NOW() - make_interval(mins => $5::int))
+         RETURNING status`,
+        this.consumerName,
+        envelope.eventId,
+        envelope.eventType,
+        envelope.tenantId,
+        BaseEventConsumer.STALE_CLAIM_MINUTES,
+      );
+    } catch (err) {
+      console.error(`[${this.consumerName}] could not claim ${envelope.eventId}; not processing:`, err);
+      return false;
     }
 
-    // ── Claim the inbox slot ──────────────────────────────────────────────
-    // INSERT ... ON CONFLICT DO NOTHING so that a concurrent worker racing on
-    // the same event is harmlessly ignored.
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO event_consumer_inbox
-         (consumer_name, event_id, event_type, tenant_id, status)
-       VALUES ($1, $2::uuid, $3, $4::uuid, 'PROCESSING')
-       ON CONFLICT (consumer_name, event_id)
-       DO UPDATE SET status = EXCLUDED.status, processed_at = NOW()`,
-      this.consumerName,
-      envelope.eventId,
-      envelope.eventType,
-      envelope.tenantId,
-    ).catch(() => {
-      // Idempotency insert conflict — another worker already claimed it
-    });
+    if (claimed.length === 0) {
+      // Someone else's row: done already, or being processed right now.
+      const [existing] = await prisma.$queryRawUnsafe<Array<{ status: string }>>(
+        `SELECT status FROM event_consumer_inbox
+          WHERE consumer_name = $1 AND event_id = $2::uuid`,
+        this.consumerName,
+        envelope.eventId,
+      );
+      if (existing?.status === 'PROCESSED') {
+        console.log(`[${this.consumerName}] event ${envelope.eventId} already processed — skipping`);
+        return true;
+      }
+      // In progress elsewhere: not delivered yet; the publisher retries later.
+      console.warn(`[${this.consumerName}] event ${envelope.eventId} is being processed by another worker`);
+      return false;
+    }
 
     // ── Execute business logic ────────────────────────────────────────────
     try {
@@ -100,7 +114,7 @@ export abstract class BaseEventConsumer<T = unknown> {
         this.consumerName,
         envelope.eventId,
         msg.slice(0, 2000),
-      );
+      ).catch((e) => console.error(`[${this.consumerName}] could not record failure:`, e));
 
       return false;
     }

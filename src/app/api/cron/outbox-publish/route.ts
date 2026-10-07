@@ -1,37 +1,21 @@
 /**
  * GET/POST /api/cron/outbox-publish
  *
- * One-shot tick of the domain event outbox. Drains event_outbox for
- * up to ?batchSize rows (default 50) and dispatches each to its
- * registered consumer. Returns the tick summary.
- *
- * Intended for external schedulers (Vercel cron, k8s CronJob, etc).
- * For a long-lived dev worker, see scripts/outbox-publisher-dev.ts.
+ * One run of THE event_outbox publisher (src/lib/jobs/outbox-publisher.ts),
+ * for external schedulers (k8s CronJob, etc). It is the same function the
+ * in-process scheduler runs as the `outbox-publisher` job, so both entry
+ * points deliver with the same consumers, claims and acknowledgement rules.
+ * (It used to run a second publisher with its own two-consumer registry,
+ * which acknowledged every other event type without running its consumers —
+ * architecture audit A3.)
  *
  * Auth: CRON_SECRET Bearer OR verified SUPER_ADMIN session (global drain).
- *       (see isJobAuthorized in @/lib/jobs/registry).
- *
- * Query params:
- *   ?batchSize=N  — override default 50 rows per tick
- *   ?maxRetries=N — override default 10 retry cap
- *
- * This route uses the new in-process outbox publisher
- * (src/lib/outbox/publisher.ts) which is decoupled from Next.js and
- * verified by scripts/test-outbox-flow.ts. The legacy
- * /api/jobs/run?job=outbox-publisher handler (EventBus + dynamic
- * consumer classes) is kept for backwards-compat — the two will be
- * merged once the legacy consumer classes are migrated.
+ * Query params: ?dryRun=true — report what would be claimed, deliver nothing.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-import { tick } from '@/lib/outbox/publisher';
-import { prisma as appPrisma } from '@/lib/prisma';
-import { runAsTenant } from '@/lib/rls-scope';
 import { authorizeJobRequest } from '@/lib/jobs/request-auth';
-// Side-effect import: registers all in-process consumers with the
-// outbox registry. Must be present for tick() to find handlers.
-import '@/lib/finance/consumers';
+import { runOutboxPublisher } from '@/lib/jobs/outbox-publisher';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -42,58 +26,27 @@ async function handle(request: NextRequest) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  const sp = request.nextUrl.searchParams;
-  const batchSizeRaw = sp.get('batchSize');
-  const maxRetriesRaw = sp.get('maxRetries');
-  const batchSize = batchSizeRaw ? Math.max(1, Math.min(500, Number(batchSizeRaw))) : undefined;
-  const maxRetries = maxRetriesRaw ? Math.max(0, Math.min(100, Number(maxRetriesRaw))) : undefined;
-
-  if (batchSizeRaw && Number.isNaN(batchSize)) {
-    return NextResponse.json({ error: 'batchSize must be a number' }, { status: 400 });
-  }
-  if (maxRetriesRaw && Number.isNaN(maxRetries)) {
-    return NextResponse.json({ error: 'maxRetries must be a number' }, { status: 400 });
-  }
-
-  // Fresh client for the queue itself: no tenant extension, so its batch
-  // transaction (platform context, row locks) is never mistaken for a
-  // consumer's tenant scope.
-  const prisma = new PrismaClient();
   const start = Date.now();
   try {
-    // The queue itself is read and updated on the fresh client, in platform
-    // context (tick). Each consumer runs as its event's tenant, on the app
-    // client, which scopes every query to that tenant: the tables consumers
-    // touch are under row level security. runAsTenant, not
-    // runWithTenantContext: it takes precedence over the x-tenant-id of an
-    // admin who triggers this route. The tenant comes from the outbox row,
-    // written by the server with the event.
-    const result = await tick(prisma, {
-      batchSize,
-      maxRetries,
-      consumer: { client: appPrisma, runForTenant: runAsTenant },
+    const result = await runOutboxPublisher({
+      tenantId: null,
+      userId: 'system:cron',
+      searchParams: request.nextUrl.searchParams,
+      request,
     });
-    const durationMs = Date.now() - start;
     return NextResponse.json({
-      ok: result.failed === 0,
+      ok: result.status === 'ok',
       runAt: new Date().toISOString(),
-      durationMs,
+      durationMs: Date.now() - start,
       ...result,
     });
-    } catch (err) {
+  } catch (err) {
     const durationMs = Date.now() - start;
-    console.error(`[outbox-publish] tick threw after ${durationMs}ms:`, err);
+    console.error(`[outbox-publish] run threw after ${durationMs}ms:`, err);
     return NextResponse.json(
-      {
-        ok: false,
-        error: err instanceof Error ? err.message : String(err),
-        runAt: new Date().toISOString(),
-        durationMs,
-      },
+      { ok: false, error: err instanceof Error ? err.message : String(err), runAt: new Date().toISOString(), durationMs },
       { status: 500 },
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }
 

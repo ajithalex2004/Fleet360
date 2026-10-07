@@ -342,3 +342,27 @@ export const FLEET360_EVENTS: EventRegistryEntry[] = [
 export const EVENT_TYPE_MAP = new Map<string, EventRegistryEntry>(
   FLEET360_EVENTS.map(e => [e.type, e]),
 );
+
+/**
+ * Event types published as recorded domain facts that no consumer needs yet.
+ * The publisher acknowledges these without a consumer. Any OTHER event type
+ * that reaches the publisher with no consumer is parked (dead letter) instead
+ * of being acknowledged (architecture audit A3). Remove a type from this list
+ * when a consumer for it is registered; tests/unit/outbox-delivery.test.ts
+ * fails if the list and the consumer wiring disagree.
+ */
+export const EVENTS_WITHOUT_CONSUMERS: ReadonlySet<string> = new Set([
+  TRIP_EN_ROUTE,
+  MAINTENANCE_REQUESTED,
+  MAINTENANCE_APPROVED,
+  MAINTENANCE_REJECTED,
+  MAINTENANCE_QUOTATION_REQUESTED,
+  MAINTENANCE_QUOTATION_RECEIVED,
+  MAINTENANCE_WORK_ORDER_CREATED,
+  MAINTENANCE_WORK_ORDER_STARTED,
+  MAINTENANCE_PM_TRIGGERED,
+  MAINTENANCE_WARRANTY_CLAIMED,
+  MAINTENANCE_BREAKDOWN_REPORTED,
+  MAINTENANCE_RECOVERY_DISPATCHED,
+  MAINTENANCE_RECOVERY_COMPLETED,
+]);
