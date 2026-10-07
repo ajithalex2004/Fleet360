@@ -55,20 +55,14 @@ export class FinanceTripConsumer extends BaseEventConsumer<TripCompletedPayload>
       throw new Error(`postTripOperatingCostsToFinance failed: ${jeResult.reason}`);
     }
     if (arResult.status === 'rejected') {
-      // AR is a separate write from the JE. Whether to retry the whole
-      // event on AR failure depends on JE-side idempotency: today
-      // createDraftJournalEntry doesn't dedupe on (sourceType, sourceId),
-      // so a full-event retry after JE success + AR failure would
-      // double-post the JE. Until JE creation is idempotent (follow-up
-      // FINANCE-JE-IDEMPOTENCE), AR failure is logged as an error (not
-      // a throw) so at least the operator sees it, but the event is
-      // treated as delivered. Consider raising a FINANCE_MIRROR_FAILED
-      // alert here once the idempotence lands.
-      console.error(
-        `[finance-trip] AR mirror failed for trip ${data.scheduleId} — ` +
-        `event will NOT retry (JE-idempotence follow-up required):`,
-        arResult.reason,
-      );
+      // Retry the whole event: both sides are idempotent now. The cost
+      // journal is keyed on its source (createDraftJournalEntry returns the
+      // existing entry on a retry), and the revenue invoice is an upsert on
+      // (BUS_OPERATIONS, BUS_TRIP, scheduleId). Logging and acknowledging,
+      // as before, lost the revenue side for good (architecture audit A5);
+      // after the publisher's retries the event is parked, visible and
+      // replayable at /admin/events/outbox.
+      throw new Error(`mirrorBusTripRevenueToFinance failed: ${arResult.reason}`);
     }
 
     console.log(
