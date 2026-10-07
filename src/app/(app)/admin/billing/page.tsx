@@ -276,7 +276,8 @@ function AddSubscriptionModal({
   onSave,
 }: {
   onClose: () => void;
-  onSave: (data: Record<string, unknown>) => Promise<void>;
+  /** Resolves to an error message to show, or null on success. */
+  onSave: (data: Record<string, unknown>) => Promise<string | null>;
 }) {
   const [form, setForm] = useState({
     tenantId:    '',
@@ -299,8 +300,9 @@ function AddSubscriptionModal({
     if (!form.tenantId) { setError('Please select a tenant first.'); return; }
     setError('');
     setSaving(true);
-    await onSave({
+    const saveError = await onSave({
       tenantId:    form.tenantId,
+      tenantName:  form.tenantName,
       moduleCode:  form.module,
       planTier:    form.planTier,
       basePrice:   parseFloat(form.basePrice)  || 0,
@@ -312,6 +314,7 @@ function AddSubscriptionModal({
       status:      'ACTIVE',
       notes:       form.notes || null,
     });
+    if (saveError) setError(saveError);
     setSaving(false);
   }
 
@@ -636,28 +639,39 @@ export default function BillingPage() {
   async function handleSubscriptionAction(id: string, action: 'SUSPEND' | 'ACTIVATE' | 'CANCEL') {
     const actionMap: Record<string, string> = { SUSPEND: 'suspend', ACTIVATE: 'activate', CANCEL: 'cancel' };
     try {
-      await fetch('/api/tenant-subscriptions', {
+      const res = await fetch('/api/tenant-subscriptions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: actionMap[action], id }),
       });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setBillingMsg({ type: 'error', text: d.error ?? `Could not ${actionMap[action]} the subscription (HTTP ${res.status}).` });
+      }
       loadData();
     } catch {
-      // ignore
+      setBillingMsg({ type: 'error', text: 'Network error — please try again.' });
     }
   }
 
-  async function handleAddSubscription(data: Record<string, unknown>) {
+  /** Returns an error message, or null when the subscription was saved. */
+  async function handleAddSubscription(data: Record<string, unknown>): Promise<string | null> {
     try {
-      await fetch('/api/tenant-subscriptions', {
+      const res = await fetch('/api/tenant-subscriptions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        return d.error ?? `Could not save the subscription (HTTP ${res.status}).`;
+      }
       setShowAddModal(false);
+      setBillingMsg({ type: 'success', text: `Subscription added for ${String(data.tenantName ?? 'the tenant')}.` });
       loadData();
+      return null;
     } catch {
-      // ignore
+      return 'Network error — please try again.';
     }
   }
 

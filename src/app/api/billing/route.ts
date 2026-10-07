@@ -1,7 +1,8 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls, type TxClient } from '@/lib/rls';
+import { isSuperAdmin } from '@/lib/admin-access';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
@@ -41,9 +42,12 @@ export async function GET(req: NextRequest) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
+  // Platform admins see every tenant's subscriptions (Admin > Billing &
+  // subscriptions); everyone else only their own tenant's.
+  const run = <T>(fn: (tx: TxClient) => Promise<T>) =>
+    isSuperAdmin(req.headers) ? withPlatformAdmin(prisma, fn) : withTenantRls(prisma, authz.tenantId, fn);
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  return run(async (tx) => {
     const { searchParams } = new URL(req.url);
       const type     = searchParams.get('type') ?? 'dashboard';
       const tenantId = searchParams.get('tenantId') ?? '';
