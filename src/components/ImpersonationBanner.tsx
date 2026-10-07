@@ -57,7 +57,6 @@ export default function ImpersonationBanner() {
         <span className="font-semibold">Impersonating</span>
         <span className="opacity-80">
           {info.tenantName ? <>tenant <strong>{info.tenantName}</strong></> : 'this tenant'}
-          {info.userId ? <> as user <code className="font-mono text-xs">{info.userId}</code></> : null}
         </span>
         <span className="ml-auto" />
         <button

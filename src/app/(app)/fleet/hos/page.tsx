@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { shortId } from '@/lib/ui/display-id';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type DutyStatus = 'DRIVING' | 'ON_DUTY' | 'OFF_DUTY' | 'SLEEPER_BERTH';
@@ -350,7 +351,7 @@ function DriverCard({ summary, onSelect, selected }: { summary: DriverSummary; o
           </div>
           <div>
             <p className="text-[var(--text-main)] text-sm font-medium">{summary.driverName}</p>
-            <p className="text-[var(--text-faint)] text-xs font-mono">{summary.driverId.slice(0, 8)}…</p>
+            {!summary.driverName && <p className="text-[var(--text-faint)] text-xs font-mono">{shortId(summary.driverId)}</p>}
           </div>
         </div>
         <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${risk.bg} ${risk.border} ${risk.color}`}>

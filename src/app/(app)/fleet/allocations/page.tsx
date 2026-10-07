@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { VehicleRef } from '@/components/ui/EntityRef';
 
 interface Allocation {
   id: string;
@@ -287,7 +288,7 @@ export default function AllocationsPage() {
                     key={alloc.id}
                     className={`transition-colors ${isOverdue(alloc) ? 'bg-red-500/5 hover:bg-red-500/10' : 'hover:bg-[var(--bg-surface-hover)]'}`}
                   >
-                    <td className="px-4 py-3 text-orange-400 font-medium">{alloc.vehicleId}</td>
+                    <td className="px-4 py-3 text-orange-400 font-medium"><VehicleRef id={alloc.vehicleId} /></td>
                     <td className="px-4 py-3">
                       <div className="text-[var(--text-main)] text-sm">{alloc.allocatedToName}</div>
                       <div className="text-[var(--text-faint)] text-xs">{alloc.allocatedToType}</div>

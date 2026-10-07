@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { VehicleRef } from '@/components/ui/EntityRef';
 
 interface Transfer {
   id: string;
@@ -208,7 +209,7 @@ export default function TransfersPage() {
                 transfers.map(tr => (
                   <tr key={tr.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
                     <td className="px-4 py-3 font-mono text-orange-400 font-medium">{tr.transferNumber}</td>
-                    <td className="px-4 py-3 text-[var(--text-main)]">{tr.vehicleId}</td>
+                    <td className="px-4 py-3 text-[var(--text-main)]"><VehicleRef id={tr.vehicleId} /></td>
                     <td className="px-4 py-3 text-[var(--text-muted)]">{tr.fromBranchName || '—'}</td>
                     <td className="px-4 py-3 text-[var(--text-muted)]">{tr.toBranchName}</td>
                     <td className="px-4 py-3 text-[var(--text-muted)]">{tr.transferDate ? new Date(tr.transferDate).toLocaleDateString() : '—'}</td>

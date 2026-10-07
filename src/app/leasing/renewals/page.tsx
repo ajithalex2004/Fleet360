@@ -1,6 +1,7 @@
 'use client';
 import { contractToRenewal, toDateInput } from '@/lib/autoFill';
 import React, { useState, useCallback, useEffect } from 'react';
+import { shortId } from '@/lib/ui/display-id';
 
 interface Renewal {
   id: string;
@@ -319,7 +320,7 @@ export default function RenewalsPage() {
                     <option value="">Select a contract</option>
                     {contracts.map((contract) => (
                       <option key={contract.id} value={contract.id}>
-                        {contract.id} - {contract.lessee}
+                        {contract.lessee} ({shortId(contract.id)})
                       </option>
                     ))}
                   </select>

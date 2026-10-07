@@ -14,6 +14,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { displayCode } from '@/lib/ui/display-id';
 
 export interface TenantForEdit {
   id: string;
@@ -94,7 +95,7 @@ export function EditTenantModal({ tenant, onDone, onCancel }: Props) {
         <div className="px-6 py-4 border-b border-[var(--border-subtle)] flex items-start justify-between flex-shrink-0">
           <div>
             <h2 className="text-lg font-bold text-[var(--text-main)]">Edit Tenant</h2>
-            <p className="text-[var(--text-muted)] text-xs mt-0.5 font-mono">{tenant.id}</p>
+            <p className="text-[var(--text-muted)] text-xs mt-0.5 font-mono">{displayCode(tenant.code, tenant.id)}</p>
           </div>
           <button onClick={onCancel} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-xl leading-none">✕</button>
         </div>

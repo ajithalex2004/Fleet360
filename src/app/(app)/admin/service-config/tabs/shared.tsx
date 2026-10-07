@@ -8,6 +8,7 @@
 import { Save, AlertCircle, CheckCircle2, X, Plus, History, RotateCcw, User } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import type { RuleCategory } from '@/types/service-rules';
+import { shortId } from '@/lib/ui/display-id';
 
 /** Props shared by every rule tab. Phase 2E threads the active scope and
  *  a name-lookup map so each tab can render its inheritance indicator. */
@@ -384,7 +385,7 @@ function VersionRow({ version, busy, onRollback }: {
                 Active
               </span>
             )}
-            <span className="text-[11px] font-mono text-slate-400">{version.id.slice(0, 8)}</span>
+            <span className="text-[11px] font-mono text-slate-400">{shortId(version.id)}</span>
           </div>
           <div className="text-[11px] text-slate-300">
             {fmt(from)} {to ? <>→ {fmt(to)}</> : <span className="text-slate-500">→ now</span>}

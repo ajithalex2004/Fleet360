@@ -26,6 +26,7 @@ import { getServiceIcon } from '@/lib/service-tickets/icons';
 import { createMaintenanceRequest } from '@/services/mockData';
 import { ContextDrawer360 } from './components/context-drawer-360';
 import { ForwardTicketModal } from './components/forward-ticket-modal';
+import { VehicleRef } from '@/components/ui/EntityRef';
 
 /** Map of ticket type → resolved form fields, sourced from
  *  /api/service-tickets/form-fields. Empty array for a type means
@@ -804,7 +805,7 @@ function TicketCard({ ticket, formFields, typeConfig, selected, onToggleSelect, 
           {ticket.vehicleId && (
             <div className="flex justify-between">
               <span className="text-slate-500">Vehicle:</span>
-              <span className="text-slate-300 font-mono text-[10px] truncate max-w-[120px]">{ticket.vehicleId}</span>
+              <span className="text-slate-300 font-mono text-[10px] truncate max-w-[120px]"><VehicleRef id={ticket.vehicleId} /></span>
             </div>
           )}
           {ticket.dueDate && (

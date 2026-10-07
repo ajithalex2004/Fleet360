@@ -36,6 +36,7 @@ import { formatCurrency } from '@/utils/currency';
 import { Permission, hasPermission, getCurrentUserRole } from '@/services/rbac';
 import { useToast } from '@/contexts/ToastContext';
 import { ACTIVE_TOGGLE } from '@/lib/ui/toggle';
+import { displayCode } from '@/lib/ui/display-id';
 
 export default function WorkOrderPage() {
     const params = useParams();
@@ -184,6 +185,7 @@ export default function WorkOrderPage() {
                     // Here we mock it based on the request
                     const generatedWorkOrder: WorkOrder = {
                         id: foundRequest.workOrderNo || `WO-${foundRequest.id.toUpperCase()}`,
+                        workOrderNo: foundRequest.workOrderNo,
                         requestId: foundRequest.id,
                         garageId: foundRequest.garageId || '',
                         quotationId: foundRequest.selectedQuotationId,
@@ -948,7 +950,7 @@ export default function WorkOrderPage() {
                 <div className="flex justify-between items-start">
                     <div>
                         <h1 className="text-2xl font-bold text-[var(--text-main)] uppercase tracking-wider">Work Order Details</h1>
-                        <p className="text-xs text-[var(--text-faint)] mt-1">ID: <span className="font-mono font-bold">{workOrder.id.toUpperCase()}</span></p>
+                        <p className="text-xs text-[var(--text-faint)] mt-1">Work order <span className="font-mono font-bold">{displayCode(workOrder.workOrderNo, workOrder.requestId)}</span></p>
                     </div>
                     <div className="text-right">
                         <p className="text-sm font-bold text-[var(--text-main)]">{garage?.name}</p>
@@ -966,7 +968,7 @@ export default function WorkOrderPage() {
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
                             </svg>
                         </Link>
-                        <h1 className="text-lg font-bold text-[var(--text-main)]">Work Order #{workOrder.id.toUpperCase()}</h1>
+                        <h1 className="text-lg font-bold text-[var(--text-main)]">Work Order {displayCode(workOrder.workOrderNo, workOrder.requestId)}</h1>
                         <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium border ${getStatusColor(workOrder.status)}`}>
                             {workOrder.status}
                         </span>
@@ -1189,7 +1191,7 @@ export default function WorkOrderPage() {
                     <div className="space-y-4">
                         <div>
                             <label className="block text-xs text-[var(--text-faint)]">Work Order Number</label>
-                            <p className="text-sm font-medium text-[var(--text-main)]">{workOrder.id.toUpperCase()}</p>
+                            <p className="text-sm font-medium text-[var(--text-main)]">{displayCode(workOrder.workOrderNo, workOrder.requestId)}</p>
                         </div>
                         <div>
                             <label className="block text-xs text-[var(--text-faint)]">Vehicle</label>

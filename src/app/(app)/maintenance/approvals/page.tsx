@@ -27,6 +27,7 @@ import { formatCurrency } from '@/utils/currency';
 import { Permission, hasPermission, getCurrentUserRole } from '@/services/rbac';
 import { UserRole } from '@/types/maintenance';
 import FilterBar from '@/components/Maintenance/FilterBar';
+import { displayCode } from '@/lib/ui/display-id';
 
 export default function ApprovalsPage() {
     const [requests, setRequests] = useState<EnhancedMaintenanceRequest[]>([]);
@@ -383,7 +384,7 @@ export default function ApprovalsPage() {
                                     <tr key={request.id} className="hover:bg-[var(--bg-surface-hover)]">
                                         <td className="px-6 py-4 font-medium text-[var(--text-main)]">
                                             <Link href={`/maintenance/requests/${encodeURIComponent(request.id)}`} className="hover:text-blue-600 hover:underline">
-                                                {request.id}
+                                                {displayCode(request.workOrderNo, request.id)}
                                             </Link>
                                         </td>
                                         <td className="px-6 py-4 text-[var(--text-muted)]">
@@ -520,8 +521,8 @@ export default function ApprovalsPage() {
                         <div className="space-y-4">
                             <div className="grid grid-cols-2 gap-4 text-sm">
                                 <div>
-                                    <span className="block text-[var(--text-faint)]">Request ID</span>
-                                    <span className="font-medium text-[var(--text-main)]">{selectedRequest.id}</span>
+                                    <span className="block text-[var(--text-faint)]">Request</span>
+                                    <span className="font-medium text-[var(--text-main)]">{displayCode(selectedRequest.workOrderNo, selectedRequest.id)}</span>
                                 </div>
                                 <div>
                                     <span className="block text-[var(--text-faint)]">Vehicle</span>
