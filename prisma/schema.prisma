@@ -5524,6 +5524,10 @@ model FinanceJournalEntry {
   notes        String?
   currency     String    @default("AED")
   tenantId     String?   @map("tenant_id")
+  /// Business occurrence of a generated entry (createDraftJournalEntry);
+  /// unique per tenant among live, non-reversed entries via the partial
+  /// index uq_finance_journal_entries_idempotency (migration-managed).
+  idempotencyKey String? @map("idempotency_key")
 
   lines FinanceJournalLine[]
 
