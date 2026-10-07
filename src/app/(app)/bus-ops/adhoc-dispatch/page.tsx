@@ -22,6 +22,7 @@ import {
   Calendar,
 } from 'lucide-react';
 import type { FulfillmentCandidate } from '@/lib/bus-ops/adhoc-dispatch';
+import { ACTIVE_TOGGLE } from '@/lib/ui/toggle';
 
 interface AdhocRequestItem {
   id: string;
@@ -284,7 +285,7 @@ export default function AdhocDispatchPage() {
               onClick={() => setStatusFilter(tab)}
               className={`px-3 py-1 rounded-md font-medium transition ${
                 statusFilter === tab
-                  ? 'bg-[var(--bg-surface)] text-[var(--text-main)] shadow-sm'
+                  ? ACTIVE_TOGGLE
                   : 'text-[var(--text-muted)] hover:text-[var(--text-main)]'
               }`}
             >

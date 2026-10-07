@@ -35,6 +35,7 @@ import type {
   DocumentLifecycleStatus,
 } from '@/lib/agents/types';
 import type { BatchJobSummary } from '@/lib/agents/document-intelligence/pipeline/batch-worker';
+import { ACTIVE_TOGGLE_BORDERED } from '@/lib/ui/toggle';
 
 // Shape of one row returned by GET /api/documents/intelligence/extractions
 // (a flattened SQL projection of document_intelligence_extractions).
@@ -1188,7 +1189,7 @@ export default function DocumentIntelligencePage() {
                 onClick={() => setActiveCategory(cat.key)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition ${
                   activeCategory === cat.key
-                    ? 'bg-slate-800 text-white border border-slate-700'
+                    ? ACTIVE_TOGGLE_BORDERED
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-950'
                 }`}
               >
@@ -1234,7 +1235,7 @@ export default function DocumentIntelligencePage() {
                 onClick={() => setStatusFilter(st)}
                 className={`px-2 py-1 rounded-md text-[11px] font-medium border transition ${
                   statusFilter === st
-                    ? 'bg-slate-800 text-white border-slate-600'
+                    ? 'bg-blue-600 text-white shadow-sm border-blue-600'
                     : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
                 }`}
               >

@@ -18,6 +18,7 @@ import {
   Filter,
 } from 'lucide-react';
 import type { SlaMonitorSummary, TripSlaEvaluation, SlaStatus } from '@/lib/bus-ops/sla-monitor';
+import { ACTIVE_TOGGLE } from '@/lib/ui/toggle';
 
 function formatTime(iso: string | null | undefined): string {
   if (!iso) return '—';
@@ -270,7 +271,7 @@ export default function ShiftSlaMonitorPage() {
             onClick={() => setSelectedFilter('ALL')}
             className={`px-3 py-1.5 text-xs font-medium rounded-lg transition whitespace-nowrap ${
               selectedFilter === 'ALL'
-                ? 'bg-[var(--bg-surface)] text-[var(--text-main)] shadow'
+                ? ACTIVE_TOGGLE
                 : 'text-[var(--text-muted)] hover:text-[var(--text-main)] hover:bg-[var(--bg-surface)]/50'
             }`}
           >

@@ -9,6 +9,7 @@
  */
 import { Moon, Sun } from 'lucide-react';
 import { useTheme, type ThemeChoice } from './ThemeProvider';
+import { ACTIVE_TOGGLE_BORDERED } from '@/lib/ui/toggle';
 
 const OPTIONS: Array<{ key: Exclude<ThemeChoice, 'auto'>; label: string; fullLabel: string; icon: typeof Sun }> = [
   { key: 'dark', label: 'Dark', fullLabel: 'Refined Dark', icon: Moon },
@@ -31,7 +32,7 @@ export default function ThemeToggle() {
             aria-pressed={active}
             className={`inline-flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-all ${
               active
-                ? 'bg-[var(--bg-surface-elevated)] text-[var(--text-main)] shadow-sm border border-[var(--border-subtle)] font-semibold'
+                ? `${ACTIVE_TOGGLE_BORDERED} font-semibold`
                 : 'text-[var(--text-faint)] hover:text-[var(--text-main)]'
             }`}
           >

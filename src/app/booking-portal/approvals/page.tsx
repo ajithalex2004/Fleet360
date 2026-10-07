@@ -16,6 +16,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { PolicyEvaluationResult } from '@/lib/booking-approval-policy';
+import { ACTIVE_TOGGLE } from '@/lib/ui/toggle';
 
 const SERVICE_STYLE: Record<string, { label: string; icon: string; color: string }> = {
   RENTAL:          { label: 'Rent-a-Car',     icon: '🚗', color: 'text-emerald-400' },
@@ -273,7 +274,7 @@ export default function MultiLevelApprovalsPage() {
           onClick={() => setActiveTab('RESOLVED')}
           className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
             activeTab === 'RESOLVED'
-              ? 'bg-slate-700 text-white'
+              ? ACTIVE_TOGGLE
               : 'text-slate-400 hover:text-white hover:bg-slate-800'
           }`}
         >

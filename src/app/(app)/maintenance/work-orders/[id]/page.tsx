@@ -35,6 +35,7 @@ import {
 import { formatCurrency } from '@/utils/currency';
 import { Permission, hasPermission, getCurrentUserRole } from '@/services/rbac';
 import { useToast } from '@/contexts/ToastContext';
+import { ACTIVE_TOGGLE } from '@/lib/ui/toggle';
 
 export default function WorkOrderPage() {
     const params = useParams();
@@ -1010,14 +1011,14 @@ export default function WorkOrderPage() {
                     <div className="flex items-center bg-[var(--bg-surface-hover)]/40 rounded-lg p-1 mr-2">
                         <button
                             onClick={() => setViewMode('MAINTENANCE')}
-                            className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'MAINTENANCE' ? 'bg-[var(--bg-surface)] shadow text-[var(--text-main)]' : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'
+                            className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'MAINTENANCE' ? ACTIVE_TOGGLE : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'
                                 }`}
                         >
                             Maintenance
                         </button>
                         <button
                             onClick={() => setViewMode('GARAGE')}
-                            className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'GARAGE' ? 'bg-[var(--bg-surface)] shadow text-[var(--text-main)]' : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'
+                            className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${viewMode === 'GARAGE' ? ACTIVE_TOGGLE : 'text-[var(--text-faint)] hover:text-[var(--text-muted)]'
                                 }`}
                         >
                             Garage

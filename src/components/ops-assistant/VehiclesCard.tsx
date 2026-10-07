@@ -73,7 +73,7 @@ export default function VehiclesCard({ status, usage, segment, title }: Props) {
       <div className="flex gap-1.5 flex-wrap">
         {['', 'AVAILABLE', 'RENTED', 'MAINTENANCE', 'RESERVED'].map(s => (
           <button key={s} onClick={() => setFilter(s)}
-            className={`px-3 py-1 text-xs rounded-lg font-medium transition-all border ${filter === s ? 'bg-slate-600 border-white/20 text-white' : 'bg-slate-800/60 border-white/5 text-slate-400 hover:text-slate-200'}`}>
+            className={`px-3 py-1 text-xs rounded-lg font-medium transition-all border ${filter === s ? 'bg-blue-600 border-blue-600 text-white shadow-sm' : 'bg-slate-800/60 border-white/5 text-slate-400 hover:text-slate-200'}`}>
             {s ? `${statusIcon[s]} ${s}` : 'All'}
           </button>
         ))}
