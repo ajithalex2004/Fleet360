@@ -25,7 +25,7 @@ interface Invitation {
   status: 'pending' | 'accepted' | 'revoked' | 'expired';
 }
 
-interface Role { id: string; name: string; code: string; }
+interface Role { id: string; name: string; code: string; scope?: 'tenant' | 'platform'; permissionCount?: number; }
 
 const STATUS_BADGE: Record<Invitation['status'], string> = {
   pending:  'bg-blue-500/20 text-blue-300 border-blue-500/40',
@@ -65,17 +65,18 @@ export default function TenantInvitationsPage() {
       const invData = await invRes.json();
       setInvitations(invData.invitations ?? []);
 
+      // Grantable roles: the tenant's own plus the platform roles.
+      const list: Role[] = invData.roles ?? [];
+      setRoles(list);
+      if (!roleId && list.length > 0) {
+        const adminRole = list.find(x => x.code === 'TENANT_ADMIN' && x.scope === 'platform')
+          ?? list.find(x => x.code === 'TENANT_ADMIN') ?? list[0];
+        setRoleId(adminRole.id);
+      }
+
       if (tenantRes.ok) {
         const t = await tenantRes.json();
         setTenantName(t?.name ?? '');
-        const list: Role[] = (t?.roles ?? []).map((r: { id: string; name: string; code: string }) => ({
-          id: r.id, name: r.name, code: r.code,
-        }));
-        setRoles(list);
-        if (!roleId && list.length > 0) {
-          const adminRole = list.find(x => x.code === 'TENANT_ADMIN') ?? list[0];
-          setRoleId(adminRole.id);
-        }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
@@ -184,7 +185,19 @@ export default function TenantInvitationsPage() {
             <select value={roleId} onChange={e => setRoleId(e.target.value)} required
               className="w-full bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg px-3 py-2.5 text-[var(--text-main)] text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
               {roles.length === 0 && <option value="">No roles found</option>}
-              {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+              {(['tenant', 'platform'] as const).map(scope => {
+                const group = roles.filter(r => (r.scope ?? 'tenant') === scope);
+                if (group.length === 0) return null;
+                return (
+                  <optgroup key={scope} label={scope === 'tenant' ? `${tenantName || 'Tenant'} roles` : 'Platform roles'}>
+                    {group.map(r => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}{r.permissionCount !== undefined ? ` (${r.permissionCount} permissions)` : ''}
+                      </option>
+                    ))}
+                  </optgroup>
+                );
+              })}
             </select>
           </div>
           <button type="submit" disabled={sending || !roleId}

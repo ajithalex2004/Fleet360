@@ -3,7 +3,9 @@ export const dynamic = 'force-dynamic';
 /**
  * /api/admin/tenants/[id]/invitations
  *
- * GET   — list invitations for a tenant (active + used + revoked)
+ * GET   — list invitations for a tenant (active + used + revoked), plus the
+ *         roles an invitation can grant: the tenant's own roles and the
+ *         platform roles (Tenant Administrator, Fleet Manager, …).
  * POST  — invite a user. Body: { email, roleId }
  *
  * Authorization:
@@ -13,7 +15,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { withTenantRls } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
 import {
   generateInvitationToken, INVITATION_TTL_DAYS,
 } from '@/lib/invitations';
@@ -76,9 +78,22 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     )
   );
 
+  // Platform roles have no tenant_id, so a new tenant owns no roles of its
+  // own; list both. SUPER_ADMIN is never granted through a tenant invite.
+  const roleRows = await withPlatformAdmin(prisma, (tx) => tx.role.findMany({
+    where: { OR: [{ tenantId }, { tenantId: null }], NOT: { code: 'SUPER_ADMIN' } },
+    select: { id: true, name: true, code: true, tenantId: true, _count: { select: { permissions: true } } },
+    orderBy: { name: 'asc' },
+  }));
+
   const now = new Date();
   return NextResponse.json({
     ok: true,
+    roles: roleRows.map(r => ({
+      id: r.id, name: r.name, code: r.code,
+      scope: r.tenantId ? 'tenant' : 'platform',
+      permissionCount: r._count.permissions,
+    })),
     invitations: rows.map(r => ({
       id: r.id,
       email: r.email,
