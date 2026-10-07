@@ -1,16 +1,19 @@
 import { prisma } from '@/lib/prisma';
-import { provisionSchemaOnce } from '@/lib/db/schema-init';
+import { provisionSchemaOnce, type SchemaSpec } from '@/lib/db/schema-init';
 
 // Runs no DDL where these tables exist; see provisionSchemaOnce.
-export function ensureSpmSchema(): Promise<void> {
-  return provisionSchemaOnce('spm', { tables: [
+/** Tables/columns this module needs; checked by the schema readiness report. */
+export const SPM_SCHEMA: SchemaSpec = { tables: [
     'spm_cycles',
     'spm_tickets',
     'spm_checklist_templates',
     'spm_ticket_checks',
     'spm_audit_logs',
     'spm_notifications',
-  ] }, _doInit);
+  ] };
+
+export function ensureSpmSchema(): Promise<void> {
+  return provisionSchemaOnce('spm', SPM_SCHEMA, _doInit);
 }
 
 async function _doInit(): Promise<void> {

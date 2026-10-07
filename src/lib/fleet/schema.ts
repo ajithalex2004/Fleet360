@@ -1,16 +1,19 @@
 import { prisma } from '@/lib/prisma';
-import { provisionSchemaOnce } from '@/lib/db/schema-init';
+import { provisionSchemaOnce, type SchemaSpec } from '@/lib/db/schema-init';
 
 // Runs no DDL where these tables exist; see provisionSchemaOnce.
-export function ensureFleetSchema(): Promise<void> {
-  return provisionSchemaOnce('fleet', { tables: [
+/** Tables/columns this module needs; checked by the schema readiness report. */
+export const FLEET_SCHEMA: SchemaSpec = { tables: [
     'vehicle_types',
     'fleet_work_orders',
     'fleet_lifecycle_events',
     'fleet_allocations',
     'fleet_transfers',
     'fleet_vehicle_insurance',
-  ] }, _runDdl);
+  ] };
+
+export function ensureFleetSchema(): Promise<void> {
+  return provisionSchemaOnce('fleet', FLEET_SCHEMA, _runDdl);
 }
 
 async function _runDdl(): Promise<void> {

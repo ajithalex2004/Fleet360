@@ -16,11 +16,11 @@
  *   demand_forecasts             — predictive fleet demand
  */
 import { prisma } from '@/lib/prisma';
-import { provisionSchemaOnce } from '@/lib/db/schema-init';
+import { provisionSchemaOnce, type SchemaSpec } from '@/lib/db/schema-init';
 
 // Runs no DDL where these tables exist; see provisionSchemaOnce.
-export function ensureAgentSchema(): Promise<void> {
-  return provisionSchemaOnce('agents', { tables: [
+/** Tables/columns this module needs; checked by the schema readiness report. */
+export const AGENTS_SCHEMA: SchemaSpec = { tables: [
     'agent_runs',
     'agent_evaluation_metrics',
     'agent_roi_metrics',
@@ -38,7 +38,10 @@ export function ensureAgentSchema(): Promise<void> {
     'whatsapp_messages',
     'whatsapp_templates',
     'preventive_maintenance_forecasts',
-  ] }, _doInit);
+  ] };
+
+export function ensureAgentSchema(): Promise<void> {
+  return provisionSchemaOnce('agents', AGENTS_SCHEMA, _doInit);
 }
 
 async function _doInit(): Promise<void> {

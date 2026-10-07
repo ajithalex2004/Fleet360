@@ -10,14 +10,17 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { provisionSchemaOnce } from '@/lib/db/schema-init';
+import { provisionSchemaOnce, type SchemaSpec } from '@/lib/db/schema-init';
 
 // Runs no DDL where the column exists; see provisionSchemaOnce.
-export function ensureGeofenceSchema(): Promise<void> {
-  return provisionSchemaOnce('geofence', {
+/** Tables/columns this module needs; checked by the schema readiness report. */
+export const GEOFENCE_SCHEMA: SchemaSpec = {
     tables: [],
     columns: [['logistics_shipment_stops', 'geofence_radius_m']],
-  }, run);
+  };
+
+export function ensureGeofenceSchema(): Promise<void> {
+  return provisionSchemaOnce('geofence', GEOFENCE_SCHEMA, run);
 }
 
 async function run(): Promise<void> {

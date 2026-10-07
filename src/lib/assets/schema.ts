@@ -1,9 +1,9 @@
 import { prisma } from '@/lib/prisma';
-import { provisionSchemaOnce } from '@/lib/db/schema-init';
+import { provisionSchemaOnce, type SchemaSpec } from '@/lib/db/schema-init';
 
 // Runs no DDL where these tables exist; see provisionSchemaOnce.
-export function ensureAssetsSchema(): Promise<void> {
-  return provisionSchemaOnce('assets', { tables: [
+/** Tables/columns this module needs; checked by the schema readiness report. */
+export const ASSETS_SCHEMA: SchemaSpec = { tables: [
     'asset_categories',
     'asset_registry',
     'hva_assets',
@@ -18,7 +18,10 @@ export function ensureAssetsSchema(): Promise<void> {
     'personnel_stock',
     'return_requests',
     'return_request_items',
-  ] }, _runDdl);
+  ] };
+
+export function ensureAssetsSchema(): Promise<void> {
+  return provisionSchemaOnce('assets', ASSETS_SCHEMA, _runDdl);
 }
 
 async function _runDdl(): Promise<void> {

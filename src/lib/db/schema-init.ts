@@ -16,9 +16,16 @@
  *   - first checks, with a read any role may make, whether the tables (and
  *     columns) exist, and runs no DDL at all when they do: the normal case,
  *     since migrations create them;
- *   - otherwise attempts the DDL (fresh local databases connected as the
- *     owner) and, when the role may not run it, logs what is missing
- *     instead of failing every request.
+ *   - otherwise, outside production, attempts the DDL (fresh local databases
+ *     connected as the owner). Production never runs it: migrations own the
+ *     schema there (ALLOW_RUNTIME_DDL=true overrides, for a one-off repair);
+ *   - when objects are still missing, throws MissingSchemaError naming them
+ *     and the fix, instead of letting the request fail later with "relation
+ *     does not exist". That result is cached for a short while only, so the
+ *     app recovers by itself once the migrations are applied.
+ *
+ * Every module's SchemaSpec is listed in src/lib/db/schema-registry.ts; the
+ * readiness and health checks report anything missing (architecture audit A9).
  */
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
@@ -38,12 +45,35 @@ export interface SchemaSpec {
   columns?: Array<[string, string]>;
 }
 
+/** A module's tables or columns are missing from the database. */
+export class MissingSchemaError extends Error {
+  readonly code = 'MISSING_SCHEMA';
+  constructor(readonly module: string, readonly missing: string[]) {
+    super(
+      `Database schema for "${module}" is incomplete: missing ${missing.join(', ')}. ` +
+      `Apply the pending migrations (prisma migrate deploy).`,
+    );
+    this.name = 'MissingSchemaError';
+  }
+}
+
+/** Runtime DDL is for fresh local databases; production schema comes from migrations. */
+export function runtimeDdlAllowed(): boolean {
+  if (process.env.ALLOW_RUNTIME_DDL === 'true') return true;
+  return process.env.NODE_ENV !== 'production';
+}
+
+/** How long a "schema incomplete" result is reused before checking again. */
+const MISSING_RECHECK_MS = 30_000;
+
 const _g = globalThis as { _schemaInit?: Map<string, Promise<void>> };
 
 /**
- * Runs `ddl` at most once per process, and only where the tables or columns
- * in `spec` are missing. Concurrent callers share the same run; a failed run
- * is retried by the next caller.
+ * Ensures the tables and columns in `spec` exist: once per process when they
+ * do (the normal case: no DDL). Where they are missing, runs `ddl` outside
+ * production, and throws MissingSchemaError if anything is still missing.
+ * Concurrent callers share the same run; a failure is retried by later
+ * callers (after MISSING_RECHECK_MS for a missing schema).
  */
 export function provisionSchemaOnce(
   name: string,
@@ -55,25 +85,35 @@ export function provisionSchemaOnce(
   if (existing) return existing;
 
   const run = runOutsideRlsScope(async () => {
-    const missing = await missingObjects(spec);
+    const missing = await findMissingObjects(spec);
     if (missing.length === 0) return;
-    try {
-      await ddl();
-    } catch (e) {
-      if (!isInsufficientPrivilege(e)) throw e;
-      console.warn(
-        `[schema:${name}] missing ${missing.join(', ')}; the runtime role may not create them. Apply the pending migrations.`,
-      );
+    if (runtimeDdlAllowed()) {
+      try {
+        await ddl();
+      } catch (e) {
+        if (!isInsufficientPrivilege(e)) throw e;
+      }
+      const still = await findMissingObjects(spec);
+      if (still.length === 0) return;
+      throw new MissingSchemaError(name, still);
     }
+    throw new MissingSchemaError(name, missing);
   }).catch((e) => {
-    runs.delete(name);
+    if (e instanceof MissingSchemaError) {
+      console.error(`[schema:${name}] ${e.message}`);
+      // Keep answering from this result briefly, then check again.
+      setTimeout(() => { if (runs.get(name) === run) runs.delete(name); }, MISSING_RECHECK_MS).unref?.();
+    } else {
+      runs.delete(name);
+    }
     throw e;
   });
   runs.set(name, run);
   return run;
 }
 
-async function missingObjects(spec: SchemaSpec): Promise<string[]> {
+/** The tables, and table.column pairs, in `spec` that do not exist. A read any role may make. */
+export async function findMissingObjects(spec: SchemaSpec): Promise<string[]> {
   const tables = spec.tables;
   const colTables = (spec.columns ?? []).map(([t]) => t);
   const colNames = (spec.columns ?? []).map(([, c]) => c);

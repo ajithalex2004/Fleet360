@@ -19,14 +19,17 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { provisionSchemaOnce } from '@/lib/db/schema-init';
+import { provisionSchemaOnce, type SchemaSpec } from '@/lib/db/schema-init';
 
 // Runs no DDL where these tables and columns exist; see provisionSchemaOnce.
-export function ensureRouteOptimizerSchema(): Promise<void> {
-  return provisionSchemaOnce('route-optimizer', {
+/** Tables/columns this module needs; checked by the schema readiness report. */
+export const ROUTE_OPTIMIZER_SCHEMA: SchemaSpec = {
     tables: ['logistics_route_plans', 'logistics_geocode_cache'],
     columns: [['logistics_route_plans', 'committed_by']],
-  }, run);
+  };
+
+export function ensureRouteOptimizerSchema(): Promise<void> {
+  return provisionSchemaOnce('route-optimizer', ROUTE_OPTIMIZER_SCHEMA, run);
 }
 
 async function run(): Promise<void> {
