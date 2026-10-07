@@ -18,7 +18,7 @@ import { resolveSessionPermissions } from '@/lib/authz/session-permissions';
 import { NextRequest, NextResponse } from 'next/server';
 import { residencyClaimForTenant } from '@/lib/db-router';
 import { prisma } from '@/lib/prisma';
-import { withPlatformAdmin, withTenantRls } from '@/lib/rls';
+import { withPlatformAdmin } from '@/lib/rls';
 import { signSession } from '@/lib/tenant-session';
 import { logAudit } from '@/lib/audit';
 import { captureException } from '@/lib/sentry';
@@ -36,7 +36,6 @@ async function handlePOST(req: NextRequest) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
 
   try {
     const role = req.headers.get('x-user-role');
@@ -49,8 +48,10 @@ async function handlePOST(req: NextRequest) {
     }
 
     const bodyRaw = await req.json().catch(() => ({}));
+    // The tenant to impersonate is the point of this request, so read it
+    // before stripTenantOwnershipFields() removes tenantId from the body.
+    const tenantId     = String(bodyRaw?.tenantId ?? '').trim();
     const body = stripTenantOwnershipFields(bodyRaw);
-    const tenantId    = String(body?.tenantId ?? '').trim();
     const targetUserId = body?.userId ? String(body.userId).trim() : null;
     if (!tenantId) {
       return NextResponse.json({ ok: false, error: 'tenantId is required' }, { status: 400 });
@@ -85,7 +86,10 @@ async function handlePOST(req: NextRequest) {
       });
       const usable = memberships.filter(m => m.user.isActive);
       if (usable.length === 0) {
-        return NextResponse.json({ ok: false, error: 'No active user found for this tenant' }, { status: 404 });
+        return NextResponse.json({
+          ok: false,
+          error: `${tenant.name} has no active users yet, so there is no one to sign in as. Invite a tenant admin first (Invitations).`,
+        }, { status: 404 });
       }
       const target = usable.find(m => m.role.code === 'TENANT_ADMIN') ?? usable[0];
 
