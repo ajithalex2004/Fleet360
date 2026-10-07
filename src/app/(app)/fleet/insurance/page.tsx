@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { VehicleRef } from '@/components/ui/EntityRef';
 
 interface InsurancePolicy {
   id: string;
@@ -284,7 +285,7 @@ export default function InsurancePage() {
               ) : (
                 policies.map(policy => (
                   <tr key={policy.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
-                    <td className="px-4 py-3 text-orange-400 font-medium">{policy.vehicleId}</td>
+                    <td className="px-4 py-3 text-orange-400 font-medium"><VehicleRef id={policy.vehicleId} /></td>
                     <td className="px-4 py-3 font-mono text-[var(--text-muted)] text-xs">{policy.policyNumber}</td>
                     <td className="px-4 py-3 text-[var(--text-main)]">{policy.insurer}</td>
                     <td className="px-4 py-3">{badge(policy.policyType, 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]')}</td>

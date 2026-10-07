@@ -5,6 +5,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { shortId } from '@/lib/ui/display-id';
 
 /* ── Types ─────────────────────────────────────────────────────────────────── */
 interface MergePair {
@@ -114,7 +115,7 @@ function MergeCard({ pair, onMerge, onSkip, merging }: {
               <span className="text-[var(--text-faint)] text-xs font-bold mt-0.5 w-4">{i === 0 ? 'A' : 'B'}</span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-0.5">
-                  <span className="font-mono text-[10px] text-[var(--text-faint)]">{job.id.slice(0,12)}…</span>
+                  <span className="font-mono text-[10px] text-[var(--text-faint)]">{shortId(job.id)}</span>
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--bg-surface-hover)] text-[var(--text-muted)]">{job.priority}</span>
                   {job.passenger_count && <span className="text-[10px] text-[var(--text-faint)]">👥 {job.passenger_count}</span>}
                 </div>

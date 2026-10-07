@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { VehicleRef, DriverRef } from '@/components/ui/EntityRef';
 
 interface FuelLog {
   id: string;
@@ -238,8 +239,8 @@ export default function FuelManagement() {
                   <tbody>
                     {fuelLogs.map((log) => (
                       <tr key={log.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
-                        <td className="px-6 py-4 text-sm text-[var(--text-main)] font-medium font-mono">{log.vehicleId?.slice(0, 8)}…</td>
-                        <td className="px-6 py-4 text-sm text-[var(--text-main)]">{log.driverId ? log.driverId.slice(0, 8) + '…' : '—'}</td>
+                        <td className="px-6 py-4 text-sm text-[var(--text-main)] font-medium font-mono"><VehicleRef id={log.vehicleId} /></td>
+                        <td className="px-6 py-4 text-sm text-[var(--text-main)]"><DriverRef id={log.driverId} /></td>
                         <td className="px-6 py-4 text-sm text-[var(--text-main)]">{new Date(log.fuelDate).toLocaleDateString()}</td>
                         <td className="px-6 py-4 text-sm text-[var(--text-main)]">{(log.liters ?? 0).toFixed(2)} L</td>
                         <td className="px-6 py-4 text-sm text-[var(--text-main)]">AED {(log.costPerLiter ?? 0).toFixed(2)}</td>
@@ -292,8 +293,8 @@ export default function FuelManagement() {
                     {fuelCards.map((card) => (
                       <tr key={card.id} className="border-b border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)] transition-colors">
                         <td className="px-6 py-4 text-sm font-mono text-[var(--text-main)]">•••• {card.cardNumber.slice(-4)}</td>
-                        <td className="px-6 py-4 text-sm text-[var(--text-main)] font-mono">{card.vehicleId ? card.vehicleId.slice(0, 8) + '…' : '—'}</td>
-                        <td className="px-6 py-4 text-sm text-[var(--text-main)] font-mono">{card.driverId ? card.driverId.slice(0, 8) + '…' : '—'}</td>
+                        <td className="px-6 py-4 text-sm text-[var(--text-main)] font-mono"><VehicleRef id={card.vehicleId} /></td>
+                        <td className="px-6 py-4 text-sm text-[var(--text-main)] font-mono"><DriverRef id={card.driverId} /></td>
                         <td className="px-6 py-4 text-sm text-[var(--text-main)]">AED {(card.monthlyLimit ?? 0).toFixed(2)}</td>
                         <td className="px-6 py-4 text-sm text-[var(--text-main)] font-medium">AED {(card.currentBalance ?? 0).toFixed(2)}</td>
                         <td className="px-6 py-4 text-sm text-[var(--text-main)]">{card.expiryDate ? new Date(card.expiryDate).toLocaleDateString() : '—'}</td>

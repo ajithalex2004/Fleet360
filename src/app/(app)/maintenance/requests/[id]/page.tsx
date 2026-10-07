@@ -32,6 +32,7 @@ import { getNextStatuses } from '@/services/workflowStateMachine-client';
 import { matchGarages } from '@/services/garageMatching';
 import { EnhancedGarage } from '@/types/maintenance';
 import { useToast } from '@/contexts/ToastContext';
+import { DriverRef } from '@/components/ui/EntityRef';
 
 // Comprehensive Maintenance Jobs Database
 const MAINTENANCE_JOBS_DATABASE = {
@@ -1049,8 +1050,7 @@ export default function RequestDetailsPage() {
                                             </svg>
                                         </div>
                                         <div>
-                                            <p className="text-sm font-medium text-[var(--text-main)]">{request.driverId}</p>
-                                            <p className="text-xs text-[var(--text-faint)]">ID: {request.driverId}</p>
+                                            <p className="text-sm font-medium text-[var(--text-main)]"><DriverRef id={request.driverId} /></p>
                                         </div>
                                     </div>
                                 </div>

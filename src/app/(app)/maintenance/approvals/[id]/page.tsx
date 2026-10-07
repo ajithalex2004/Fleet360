@@ -17,6 +17,7 @@ import {
 } from '@/services/mockData';
 import StatusBadge from '@/components/ui/StatusBadge';
 import { ACTIVE_TOGGLE } from '@/lib/ui/toggle';
+import { DriverRef } from '@/components/ui/EntityRef';
 
 export default function ApprovalDetailsPage() {
     const router = useRouter();
@@ -358,8 +359,7 @@ export default function ApprovalDetailsPage() {
                                             </svg>
                                         </div>
                                         <div>
-                                            <p className="text-sm font-medium text-[var(--text-main)]">{request.driverId}</p>
-                                            <p className="text-xs text-[var(--text-faint)]">ID: {request.driverId}</p>
+                                            <p className="text-sm font-medium text-[var(--text-main)]"><DriverRef id={request.driverId} /></p>
                                         </div>
                                     </div>
                                 </div>

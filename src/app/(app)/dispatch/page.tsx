@@ -10,6 +10,7 @@ import {
   Shuffle, Siren, Bus, ArrowRight, ListChecks,
 } from 'lucide-react';
 import { PageHeader, Panel, StatusPill } from '@/components/ui/page-theme';
+import { shortId } from '@/lib/ui/display-id';
 
 interface DispatchJob {
   id: string;
@@ -151,7 +152,7 @@ export default function DispatchOverview() {
               <tbody className="divide-y divide-[var(--border-subtle)]">
                 {recentJobs.map(j => (
                   <tr key={j.id} className="hover:bg-[var(--bg-surface-hover)] transition-colors">
-                    <td className="py-3 font-mono text-xs text-[var(--text-muted)]">{j.id.slice(0, 12)}…</td>
+                    <td className="py-3 font-mono text-xs text-[var(--text-muted)]">{shortId(j.id)}</td>
                     <td className="py-3 text-[var(--text-muted)]">{SVC_LABEL[j.service_type] ?? j.service_type}</td>
                     <td className="py-3">
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${

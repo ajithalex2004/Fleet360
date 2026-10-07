@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { ACTIVE_TOGGLE } from '@/lib/ui/toggle';
+import { displayCode, shortId } from '@/lib/ui/display-id';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -209,7 +210,7 @@ function TenantAutocomplete({
           <div className="flex-1 min-w-0">
             <p className="text-[var(--text-main)] text-sm font-medium truncate">{selected.name}</p>
             <p className="text-xs text-[var(--text-muted)] truncate font-mono">
-              {selected.code ? `${selected.code} · ` : ''}{selected.id.slice(0, 16)}…
+              {displayCode(selected.code, selected.id)}
             </p>
           </div>
           <button type="button" onClick={clear} title="Change tenant"
@@ -249,7 +250,7 @@ function TenantAutocomplete({
                 <p className="text-[var(--text-main)] text-sm font-medium truncate">{t.name}</p>
                 <p className="text-xs text-[var(--text-muted)] truncate">
                   {t.code ? <span className="font-mono bg-[var(--bg-surface-hover)]/60 px-1 rounded mr-1">{t.code}</span> : null}
-                  {t.id.slice(0, 12)}…
+                  {t.code ? null : shortId(t.id)}
                   {t.contactEmail ? ` · ${t.contactEmail}` : ''}
                 </p>
               </div>
@@ -504,7 +505,7 @@ function PreviewRunModal({
               <div className="flex items-center justify-between mb-2">
                 <div>
                   <span className="text-[var(--text-main)] font-medium text-sm">{inv.tenant_name}</span>
-                  <span className="ml-2 text-xs text-[var(--text-muted)]">{inv.tenant_id}</span>
+                  {!inv.tenant_name && <span className="ml-2 text-xs text-[var(--text-muted)]">{shortId(inv.tenant_id)}</span>}
                 </div>
                 <span className="text-sm font-semibold text-emerald-400">{fmt(inv.total_amount)}</span>
               </div>
@@ -979,7 +980,7 @@ export default function BillingPage() {
                             <div className="text-xs text-[var(--text-faint)] flex items-center gap-1 mt-0.5">
                               {sub.tenant_code
                                 ? <span className="font-mono bg-[var(--bg-surface)] border border-[var(--border-subtle)] px-1.5 py-0.5 rounded text-[var(--text-muted)]">{sub.tenant_code}</span>
-                                : <span className="font-mono text-[var(--text-faint)]">{sub.tenant_id.slice(0, 8)}…</span>
+                                : <span className="font-mono text-[var(--text-faint)]">{shortId(sub.tenant_id)}</span>
                               }
                             </div>
                           </div>

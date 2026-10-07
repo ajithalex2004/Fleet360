@@ -22,6 +22,7 @@ import { PageHeader } from '@/components/ui/page-theme';
 import { CostLedgerCard } from '../components/cost-ledger-card';
 import { ContextDrawer360 } from '../components/context-drawer-360';
 import type { ServiceTicket } from '@/types/service-tickets';
+import { VehicleRef } from '@/components/ui/EntityRef';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -253,8 +254,8 @@ export default function ServiceTicketDetailsPage({ params }: PageProps) {
 
                 {ticket.vehicleId && (
                   <div className="flex items-center justify-between p-2 rounded-lg bg-slate-950 border border-slate-800">
-                    <span className="text-slate-400">Linked Vehicle ID</span>
-                    <span className="font-mono text-emerald-400">{ticket.vehicleId.slice(0, 12)}...</span>
+                    <span className="text-slate-400">Linked vehicle</span>
+                    <span className="font-mono text-emerald-400"><VehicleRef id={ticket.vehicleId} /></span>
                   </div>
                 )}
               </div>

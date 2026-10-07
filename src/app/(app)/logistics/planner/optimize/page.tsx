@@ -19,6 +19,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Route as RouteIcon, Truck, Package, Play, Check, AlertTriangle, RefreshCw, GripVertical, X } from 'lucide-react';
 import { PageHeader, Panel } from '@/components/ui/page-theme';
+import { VehicleRef } from '@/components/ui/EntityRef';
 
 // ── Types mirror the API response (RouteOptimizerResult) ───────────────────
 
@@ -359,7 +360,7 @@ export default function VrpPlannerPage() {
                   style={{ borderLeftWidth: 3, borderLeftColor: hasViolations ? '#BA7517' : '#1D9E75' }}>
                   <div className="flex items-center justify-between mb-2">
                     <div className="font-semibold text-sm text-[var(--text-main)]">
-                      Vehicle {idx + 1} <span className="font-mono text-xs text-[var(--text-faint)]">{route.vehicleId.slice(0, 8)}</span>
+                      Vehicle {idx + 1} <span className="font-mono text-xs text-[var(--text-faint)]"><VehicleRef id={route.vehicleId} /></span>
                     </div>
                     {hasViolations ? (
                       <span className="inline-flex items-center gap-1 text-xs bg-amber-500/15 text-amber-300 px-2 py-0.5 rounded-full">

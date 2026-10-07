@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { getVehicles, api } from '@/services/mockData';
 import { Vehicle } from '@/types/maintenance';
+import { displayCode } from '@/lib/ui/display-id';
 
 export default function VehiclesPage() {
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -221,7 +222,7 @@ export default function VehiclesPage() {
                     <tbody className="bg-[var(--bg-surface)] divide-y divide-white/10">
                         {vehicles.map((vehicle) => (
                             <tr key={vehicle.id} className="hover:bg-[var(--bg-surface-hover)]">
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-[var(--text-main)]">{vehicle.id}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-[var(--text-main)]">{displayCode(vehicle.licensePlate, vehicle.id)}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--text-muted)]">{vehicle.make} {vehicle.model}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-[var(--text-muted)]">{vehicle.licensePlate}</td>
                                 <td className="px-6 py-4 whitespace-nowrap">

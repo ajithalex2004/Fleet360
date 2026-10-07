@@ -5,6 +5,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { shortId } from '@/lib/ui/display-id';
 
 /* ── Types ─────────────────────────────────────────────────────────────────── */
 interface DispatchJob {
@@ -350,7 +351,7 @@ export default function DispatchJobsPage() {
                         onChange={() => toggleSelect(j.id)} className="rounded accent-blue-500" />
                     </td>
                     <td className="px-4 py-3">
-                      <span className="font-mono text-xs text-[var(--text-muted)] select-all">{j.id.slice(0,12)}…</span>
+                      <span className="font-mono text-xs text-[var(--text-muted)] select-all">{shortId(j.id)}</span>
                       {j.meta && (j.meta as any).multiStop && (
                         <span className="ml-1 px-1 py-0.5 rounded text-[9px] bg-violet-500/20 text-violet-400 font-bold">MERGED</span>
                       )}
