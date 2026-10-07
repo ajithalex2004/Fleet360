@@ -1,11 +1,37 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
+import { withPlatformAdmin, withTenantRls, type TxClient } from '@/lib/rls';
 import { prisma } from '@/lib/prisma';
 
 import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
 import { withAuditedAction } from '@/lib/audited-action';
+import { isSuperAdmin } from '@/lib/admin-access';
+
+/**
+ * Subscriptions are what the platform charges each tenant for, so:
+ *  - a platform admin (SUPER_ADMIN) reads and manages every tenant's
+ *    subscriptions; writes name the tenant in the body (`tenantId`);
+ *  - anyone else only reads their own tenant's subscriptions and cannot
+ *    change them (no self-service pricing).
+ * Before, every call ran under the caller's own tenant, so a platform admin
+ * saw only their own tenant's rows, and create always failed: `tenantId` was
+ * stripped from the body and then required.
+ */
+function scopeFor(req: NextRequest, ownTenantId: string) {
+  const platform = isSuperAdmin(req.headers);
+  return {
+    platform,
+    run: <T>(fn: (tx: TxClient) => Promise<T>) =>
+      platform ? withPlatformAdmin(prisma, fn) : withTenantRls(prisma, ownTenantId, fn),
+  };
+}
+
+const platformOnly = () =>
+  NextResponse.json({ error: 'Only platform administrators can change subscriptions' }, { status: 403 });
+
+/** Billable module codes (finance account groups; the Billing page offers these). */
+const BILLABLE_MODULES = new Set(['RAC', 'SCHOOL_BUS', 'LOGISTICS', 'LEASING', 'STAFF_TRANSPORT', 'AMBULANCE']);
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -74,9 +100,9 @@ export async function GET(req: NextRequest) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
+  const scope = scopeFor(req, authz.tenantId);
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  return scope.run(async (tx) => {
       const { searchParams } = new URL(req.url);
       const tenantId   = searchParams.get('tenantId')   ?? '';
       const status     = searchParams.get('status')     ?? '';
@@ -127,10 +153,12 @@ export async function GET(req: NextRequest) {
         ...values
       ).catch((err) => { console.error('[tenant-subscriptions GET]', err); return [] as Row[]; });
 
-      // Summary counts by status
+      // Summary counts by status (same tenant filter as the list)
       type StatusCount = { status: string; cnt: bigint };
       const summary = await tx.$queryRawUnsafe<StatusCount[]>(
-        `SELECT status, COUNT(*) AS cnt FROM tenant_module_subscriptions GROUP BY status`
+        `SELECT status, COUNT(*) AS cnt FROM tenant_module_subscriptions
+          ${tenantId ? 'WHERE tenant_id = $1' : ''} GROUP BY status`,
+        ...(tenantId ? [tenantId] : []),
       ).catch(() => [] as StatusCount[]);
 
       const counts: Record<string, number> = {};
@@ -155,11 +183,22 @@ async function handlePOST(req: NextRequest) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
+  const scope = scopeFor(req, authz.tenantId);
+  if (!scope.platform) return platformOnly();
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  let bodyRaw: Record<string, unknown>;
+  try {
+    bodyRaw = await req.json();
+    if (!bodyRaw || typeof bodyRaw !== 'object') throw new Error('not an object');
+  } catch {
+    return NextResponse.json({ error: 'Expected a JSON object' }, { status: 400 });
+  }
+  // The tenant a new subscription is for. Platform admins name it explicitly;
+  // it is read before stripTenantOwnershipFields() removes it from the body.
+  const targetTenantId = typeof bodyRaw.tenantId === 'string' ? bodyRaw.tenantId.trim() : '';
+
+  return scope.run(async (tx) => {
       try {
-        const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
         const { action } = body;
 
@@ -195,12 +234,13 @@ async function handlePOST(req: NextRequest) {
           const { id } = body;
           if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
 
-          await tx.$executeRawUnsafe(
+          const updated = await tx.$queryRawUnsafe<{ id: string }[]>(
             `UPDATE tenant_module_subscriptions
                 SET status = 'SUSPENDED', updated_at = NOW()
-              WHERE id = $1`,
-            id
+              WHERE id::text = $1 RETURNING id::text`,
+            String(id)
           );
+          if (updated.length === 0) return NextResponse.json({ error: 'Subscription not found' }, { status: 404 });
 
           return NextResponse.json({ success: true, action: 'suspended', id });
         }
@@ -210,30 +250,42 @@ async function handlePOST(req: NextRequest) {
           const { id } = body;
           if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
 
-          await tx.$executeRawUnsafe(
+          const updated = await tx.$queryRawUnsafe<{ id: string }[]>(
             `UPDATE tenant_module_subscriptions
                 SET status = 'CANCELLED', updated_at = NOW()
-              WHERE id = $1`,
-            id
+              WHERE id::text = $1 RETURNING id::text`,
+            String(id)
           );
+          if (updated.length === 0) return NextResponse.json({ error: 'Subscription not found' }, { status: 404 });
 
           return NextResponse.json({ success: true, action: 'cancelled', id });
         }
 
         // ── create (default) ────────────────────────────────────────────────────
         const {
-          tenantId, moduleCode, planTier = 'STANDARD', billingCycle = 'MONTHLY',
+          moduleCode, planTier = 'STANDARD', billingCycle = 'MONTHLY',
           basePrice, currency = 'AED',
           maxVehicles = 50, maxUsers = 5, maxStudents = 0,
           setupFee = 0, setupFeePaid = false,
           status = 'ACTIVE', trialEndDate = null,
           startDate, notes = null,
-        } = body;
+        } = body as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any -- checked below
+        const tenantId = targetTenantId;
 
         if (!tenantId)   return NextResponse.json({ error: 'tenantId is required' },   { status: 400 });
         if (!moduleCode) return NextResponse.json({ error: 'moduleCode is required' }, { status: 400 });
-        if (basePrice === undefined || basePrice === null)
-          return NextResponse.json({ error: 'basePrice is required' }, { status: 400 });
+        if (!BILLABLE_MODULES.has(String(moduleCode))) {
+          return NextResponse.json({ error: `Unknown billable module: ${moduleCode}` }, { status: 400 });
+        }
+        if (basePrice === undefined || basePrice === null || !Number.isFinite(Number(basePrice)) || Number(basePrice) < 0)
+          return NextResponse.json({ error: 'basePrice is required and must be 0 or more' }, { status: 400 });
+        if (billingCycle !== 'MONTHLY' && billingCycle !== 'ANNUAL')
+          return NextResponse.json({ error: 'billingCycle must be MONTHLY or ANNUAL' }, { status: 400 });
+
+        const tenantRows = await tx.$queryRawUnsafe<{ id: string }[]>(
+          `SELECT id FROM tenants WHERE id = $1`, tenantId,
+        );
+        if (tenantRows.length === 0) return NextResponse.json({ error: 'Tenant not found' }, { status: 404 });
 
         const sd  = startDate ?? new Date().toISOString().split('T')[0];
         const nbd = billingCycle === 'ANNUAL' ? addYear(sd) : addMonth(sd);
@@ -290,9 +342,10 @@ async function handlePATCH(req: NextRequest) {
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
-  const { tenantId } = authz;
+  const scope = scopeFor(req, authz.tenantId);
+  if (!scope.platform) return platformOnly();
 
-  return withTenantRls(prisma, tenantId, async (tx) => {
+  return scope.run(async (tx) => {
       try {
         const bodyRaw = await req.json();
       const body = stripTenantOwnershipFields(bodyRaw);
