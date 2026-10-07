@@ -22,6 +22,7 @@ import { PageHeader } from '@/components/ui/page-theme';
 import { CostLedgerCard } from '../components/cost-ledger-card';
 import { ContextDrawer360 } from '../components/context-drawer-360';
 import type { ServiceTicket } from '@/types/service-tickets';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 import { VehicleRef } from '@/components/ui/EntityRef';
 
 interface PageProps {
@@ -94,7 +95,7 @@ export default function ServiceTicketDetailsPage({ params }: PageProps) {
       <div className="min-h-screen bg-slate-950 text-white p-6 max-w-4xl mx-auto space-y-6">
         <Link
           href="/service-tickets"
-          className="inline-flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors"
+          className={BACK_BUTTON}
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Tickets</span>

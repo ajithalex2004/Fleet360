@@ -17,6 +17,7 @@ import {
   Globe2, ShieldAlert,
 } from 'lucide-react';
 import Link from 'next/link';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 // Customs section — only collected for cross-border haulage. HS Code, net/gross
 // weights, INCOTERMS, customs value etc. let the operator file customs entry
@@ -324,7 +325,7 @@ export default function NewShipmentPage() {
               Track shipment
             </Link>
           ) : (
-            <Link href="/shipper-portal/shipments" className="rounded-xl bg-emerald-600 text-white font-medium px-4 py-2.5 text-sm hover:bg-emerald-500">
+            <Link href="/shipper-portal/shipments" className={BACK_BUTTON}>
               Back to shipments
             </Link>
           )}

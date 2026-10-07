@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams, usePathname } from 'next/navigation';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 /* ─────────────────────────── Types ─────────────────────────── */
 interface TenantModule {
@@ -192,7 +193,7 @@ function Sidebar({ tenant, slug }: { tenant: TenantData | null; slug: string }) 
         </div>
         <Link
           href="/platform"
-          className="mt-2 flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-400 transition-colors"
+          className={`${BACK_BUTTON} mt-2`}
         >
           <span>←</span>
           <span>Back to Platform</span>

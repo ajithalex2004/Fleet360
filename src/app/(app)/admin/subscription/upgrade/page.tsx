@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Sparkles, ArrowLeft, Check, AlertCircle, ExternalLink } from 'lucide-react';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 interface BillingResp {
   billing: { plan: string; stripeCustomerId: string | null };
@@ -120,7 +121,7 @@ export default function UpgradePage() {
   return (
     <div className="space-y-8 max-w-6xl">
       <div>
-        <Link href="/admin/subscription" className="text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] inline-flex items-center gap-1 mb-2">
+        <Link href="/admin/subscription" className={`${BACK_BUTTON} mb-2`}>
           <ArrowLeft className="w-3 h-3" /> Back to subscription
         </Link>
         <h1 className="text-2xl font-bold text-[var(--text-main)] inline-flex items-center gap-2">

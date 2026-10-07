@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts';
@@ -159,7 +160,7 @@ export default function DriverPerformancePage() {
       <div className="text-center py-20 space-y-3">
         <div className="text-5xl">👤</div>
         <p className="text-[var(--text-muted)]">Driver not found or no data available.</p>
-        <Link href="/logistics/drivers" className="text-amber-400 text-sm hover:text-amber-300">← Back to Drivers</Link>
+        <Link href="/logistics/drivers" className={BACK_BUTTON}>← Back to Drivers</Link>
       </div>
     );
   }

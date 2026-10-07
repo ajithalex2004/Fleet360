@@ -11,6 +11,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Sparkles, Send, ChevronLeft, MessageSquare, Wrench } from 'lucide-react';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 interface Contract {
   id: string;
@@ -121,7 +122,7 @@ export default function ContractQAPage() {
       <div>
         <Link
           href="/leasing/contracts-v2"
-          className="inline-flex items-center gap-1 text-xs text-[var(--text-faint)] hover:text-cyan-400"
+          className={BACK_BUTTON}
         >
           <ChevronLeft className="h-3 w-3" /> Back to contracts
         </Link>

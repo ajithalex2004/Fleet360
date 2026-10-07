@@ -6,6 +6,7 @@ import { MaintenanceRequest, Vehicle, MaintenanceStatus, Garage, AttachmentType,
 import { getMaintenanceRequests, getVehicleById, updateMaintenanceRequest, getGarages, getDriverById } from '@/services/mockData';
 import WorkflowStepper from '@/components/ui/WorkflowStepper';
 import StatusBadge from '@/components/ui/StatusBadge';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 export default function RequestDetailsPage({ params }: { params: Promise<{ id: string }> }) {
     const router = useRouter();
@@ -87,7 +88,7 @@ export default function RequestDetailsPage({ params }: { params: Promise<{ id: s
                 </div>
                 <button
                     onClick={() => router.back()}
-                    className="text-sm font-medium text-[var(--text-faint)] hover:text-[var(--text-main)]"
+                    className={BACK_BUTTON}
                 >
                     ← Back to Requests
                 </button>

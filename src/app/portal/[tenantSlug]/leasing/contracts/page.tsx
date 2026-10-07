@@ -9,6 +9,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 interface Lessee { id: string; name: string; type: string; }
 interface Contract {
@@ -73,7 +74,7 @@ export default function PortalContractsPage() {
     return (
       <div className="p-6">
         <p className="text-slate-400 text-sm">Pick a lessee first.</p>
-        <Link href={`/portal/${tenantSlug}/leasing`} className="text-cyan-400 underline text-sm">
+        <Link href={`/portal/${tenantSlug}/leasing`} className={BACK_BUTTON}>
           ← Back to lessee picker
         </Link>
       </div>
@@ -87,7 +88,7 @@ export default function PortalContractsPage() {
       <div>
         <Link
           href={`/portal/${tenantSlug}/leasing?lesseeId=${lesseeId}`}
-          className="text-xs text-slate-500 hover:text-cyan-400"
+          className={BACK_BUTTON}
         >
           ← Back to dashboard
         </Link>

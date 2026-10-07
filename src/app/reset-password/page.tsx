@@ -2,6 +2,7 @@
 
 import { Suspense, useState, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 const RULES = [
   { test: (p: string) => p.length >= 10,           label: 'At least 10 characters' },
@@ -145,7 +146,7 @@ function ResetPasswordInner() {
           )}
 
           <div className="text-center">
-            <a href="/login" className="text-xs text-slate-400 hover:text-white">&larr; Back to sign in</a>
+            <a href="/login" className={BACK_BUTTON}>&larr; Back to sign in</a>
           </div>
         </div>
       </div>

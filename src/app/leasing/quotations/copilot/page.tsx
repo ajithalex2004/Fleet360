@@ -9,6 +9,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Sparkles, ChevronLeft, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 interface SuggestedVehicle {
   vehicleType: string;
@@ -138,7 +139,7 @@ export default function QuotationCopilotPage() {
       <div>
         <Link
           href="/leasing/quotations"
-          className="inline-flex items-center gap-1 text-xs text-[var(--text-faint)] hover:text-cyan-400"
+          className={BACK_BUTTON}
         >
           <ChevronLeft className="h-3 w-3" /> Back to quotations
         </Link>

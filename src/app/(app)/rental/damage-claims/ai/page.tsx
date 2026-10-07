@@ -11,6 +11,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 import {
   Sparkles, ChevronLeft, AlertTriangle, CheckCircle2,
   ArrowRight, Image as ImageIcon, Camera,
@@ -112,7 +113,7 @@ export default function DamageAIPage() {
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
       <div>
-        <Link href="/rental/damage-claims" className="inline-flex items-center gap-1 text-xs text-[var(--text-faint)] hover:text-cyan-400">
+        <Link href="/rental/damage-claims" className={BACK_BUTTON}>
           <ChevronLeft className="h-3 w-3" /> Back to damage claims
         </Link>
         <h1 className="text-2xl font-bold text-[var(--text-main)] mt-2 flex items-center gap-2">

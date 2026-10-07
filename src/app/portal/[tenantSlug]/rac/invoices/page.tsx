@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 interface Invoice {
   id: string;
@@ -59,7 +60,7 @@ export default function PortalRacInvoicesPage() {
     return (
       <div className="p-6">
         <p className="text-slate-400 text-sm">Pick a customer first.</p>
-        <Link href={`/portal/${tenantSlug}/rac`} className="text-cyan-400 underline text-sm">
+        <Link href={`/portal/${tenantSlug}/rac`} className={BACK_BUTTON}>
           ← Back to customer picker
         </Link>
       </div>
@@ -69,7 +70,7 @@ export default function PortalRacInvoicesPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <Link href={`/portal/${tenantSlug}/rac/customers?customerId=${customerId}`} className="text-xs text-slate-500 hover:text-cyan-400">
+        <Link href={`/portal/${tenantSlug}/rac/customers?customerId=${customerId}`} className={BACK_BUTTON}>
           ← Back to dashboard
         </Link>
         <h1 className="text-2xl font-bold mt-1">Invoices & Payments</h1>

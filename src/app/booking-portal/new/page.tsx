@@ -25,6 +25,7 @@ import { RecurringSchedulePicker } from '@/components/booking/RecurringScheduleP
 import { DriverHandoverEpod } from '@/components/booking/DriverHandoverEpod';
 import { ColdChainTelemetryGraph } from '@/components/booking/ColdChainTelemetryGraph';
 import { BulkConsignmentUploader } from '@/components/booking/BulkConsignmentUploader';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 function getServiceVectorIcon(type: string, className = 'w-5 h-5 text-cyan-400') {
   switch (type) {
@@ -1508,7 +1509,7 @@ function NewBookingInner() {
                       <button
                         type="button"
                         onClick={resetForm}
-                        className="w-full mt-3 py-2 text-center text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                        className={`${BACK_BUTTON} w-full mt-3`}
                       >
                         ← Back to Categories
                       </button>

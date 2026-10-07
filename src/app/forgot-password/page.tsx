@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail]     = useState('');
@@ -85,7 +86,7 @@ export default function ForgotPasswordPage() {
           )}
 
           <div className="text-center">
-            <a href="/login" className="text-xs text-slate-400 hover:text-white">&larr; Back to sign in</a>
+            <a href="/login" className={BACK_BUTTON}>&larr; Back to sign in</a>
           </div>
         </div>
       </div>
