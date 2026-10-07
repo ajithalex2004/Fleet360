@@ -57,10 +57,8 @@ import { LEGACY_MODULE_ALIASES } from '@/lib/modules';
 export type Module = ModuleKey | 'admin';
 
 /**
- * Modules with explicit permission matrix entries. A subset of `Module`
- * — always-on platform modules (service-tickets, agents, assets, …) and
- * the customer/portal modules (customer-mgmt, booking-portal, customer)
- * are intentionally absent because they don't have per-action gating.
+ * Modules with explicit permission matrix entries: every registry module
+ * plus 'admin'.
  *
  * Typed `as const satisfies readonly Module[]` so:
  *   - each entry is verified to be a real `Module` at compile time
@@ -73,6 +71,7 @@ export const MODULES = [
   // Modules the authorization policy maps API areas to (policy v1).
   'school-bus', 'logistics', 'incidents', 'dispatch', 'service-tickets',
   'customer-mgmt', 'booking-portal', 'assets', 'sustainability', 'agents',
+  'customer', 'mobile-apps', 'ai-platform', 'vendors',
 ] as const satisfies readonly Module[];
 
 export const ACTIONS = [
@@ -369,6 +368,32 @@ export const ALL_PERMISSIONS: readonly AppPermission[] = [
   { module: 'bus-ops', action: 'create', resource: 'route-consolidation', label: 'Run Route Consolidation' },
   { module: 'bus-ops', action: 'edit', resource: 'incidents', label: 'Update Incidents' },
   { module: 'reports', action: 'create', resource: '*', label: 'Schedule Reports' },
+  // Appended 2026-10-07: the registry modules that had no permissions, so a
+  // role could not be granted (or refused) them on Admin > Roles.
+  { module: 'customer', action: 'view', resource: '*', label: 'View Customer Portal' },
+  { module: 'customer', action: 'create', resource: '*', label: 'Create Customer Portal' },
+  { module: 'customer', action: 'edit', resource: '*', label: 'Edit Customer Portal' },
+  { module: 'customer', action: 'delete', resource: '*', label: 'Delete Customer Portal' },
+  { module: 'customer', action: 'approve', resource: '*', label: 'Approve Customer Portal' },
+  { module: 'customer', action: 'export', resource: '*', label: 'Export Customer Portal' },
+  { module: 'mobile-apps', action: 'view', resource: '*', label: 'View Mobile Apps' },
+  { module: 'mobile-apps', action: 'create', resource: '*', label: 'Create Mobile Apps' },
+  { module: 'mobile-apps', action: 'edit', resource: '*', label: 'Edit Mobile Apps' },
+  { module: 'mobile-apps', action: 'delete', resource: '*', label: 'Delete Mobile Apps' },
+  { module: 'mobile-apps', action: 'approve', resource: '*', label: 'Approve Mobile Apps' },
+  { module: 'mobile-apps', action: 'export', resource: '*', label: 'Export Mobile Apps' },
+  { module: 'ai-platform', action: 'view', resource: '*', label: 'View AI Platform' },
+  { module: 'ai-platform', action: 'create', resource: '*', label: 'Create AI Platform' },
+  { module: 'ai-platform', action: 'edit', resource: '*', label: 'Edit AI Platform' },
+  { module: 'ai-platform', action: 'delete', resource: '*', label: 'Delete AI Platform' },
+  { module: 'ai-platform', action: 'approve', resource: '*', label: 'Approve AI Platform' },
+  { module: 'ai-platform', action: 'export', resource: '*', label: 'Export AI Platform' },
+  { module: 'vendors', action: 'view', resource: '*', label: 'View Vendors & Partners' },
+  { module: 'vendors', action: 'create', resource: '*', label: 'Create Vendors & Partners' },
+  { module: 'vendors', action: 'edit', resource: '*', label: 'Edit Vendors & Partners' },
+  { module: 'vendors', action: 'delete', resource: '*', label: 'Delete Vendors & Partners' },
+  { module: 'vendors', action: 'approve', resource: '*', label: 'Approve Vendors & Partners' },
+  { module: 'vendors', action: 'export', resource: '*', label: 'Export Vendors & Partners' },
 ];
 
 // Helper: all modules view only permissions

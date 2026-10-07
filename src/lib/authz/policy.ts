@@ -5,9 +5,9 @@
  *
  * Middleware calls decide() for every /api request that carries a verified
  * staff session. AUTHZ_MODE picks what happens to a denial:
- *   report   (default) log it as {"authz":"would-deny",…} and let it through,
- *            so the matrix can be checked against real traffic first
- *   enforce  answer 403
+ *   enforce  (default) answer 403
+ *   report   log it as {"authz":"would-deny",…} and let it through (for
+ *            checking a matrix change against real traffic first)
  *   off      don't evaluate
  *
  * Denials are fail-closed: a missing or unknown role, a session without a
@@ -161,5 +161,7 @@ export type AuthzMode = 'report' | 'enforce' | 'off';
 
 export function authzMode(value: string | undefined = process.env.AUTHZ_MODE): AuthzMode {
   const v = (value ?? '').trim().toLowerCase();
-  return v === 'enforce' || v === 'off' ? v : 'report';
+  // Unset or unrecognised enforces: role permissions are the access model,
+  // and an operator must opt out explicitly (report / off).
+  return v === 'report' || v === 'off' ? v : 'enforce';
 }

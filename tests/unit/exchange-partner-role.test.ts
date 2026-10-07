@@ -5,7 +5,7 @@
  * confines a PARTNER session: other APIs answer 403 and other pages redirect
  * to the partner dashboard.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('next/server', async () => await import('next/server.js'));
 
@@ -56,6 +56,11 @@ describe('partnerRoleAllows', () => {
 });
 
 describe('middleware with a PARTNER session', () => {
+  // Sessions here carry no permission claim: this tests partner confinement,
+  // not the authorization policy (which defaults to enforce).
+  beforeEach(() => { vi.stubEnv('AUTHZ_MODE', 'report'); });
+  afterEach(() => { vi.unstubAllEnvs(); });
+
   it('refuses the tenant\'s own APIs with 403', async () => {
     for (const p of ['/api/fleet/vehicles', '/api/finance/payables', '/api/bus-ops/outsource/settlements']) {
       const res = await request(p, PARTNER_TENANT_ROLE);

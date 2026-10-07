@@ -343,8 +343,8 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 
   // 4c. The authorization policy (src/lib/authz/policy.ts): one decision
   // per staff API request from the versioned matrix and the session's
-  // permission claim. AUTHZ_MODE=report (default) logs would-be denials;
-  // enforce answers 403. Runs before the Go shim, so proxied routes are
+  // permission claim. AUTHZ_MODE=enforce (default) answers 403; report
+  // logs would-be denials and lets the request through. Runs before the Go shim, so proxied routes are
   // decided the same way.
   if (pathname.startsWith('/api/')) {
     const mode = pathname.startsWith('/api/bus-ops/') ? 'enforce' : authzMode();

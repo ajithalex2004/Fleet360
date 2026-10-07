@@ -33,6 +33,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Pin, Settings, Eye, EyeOff, type LucideIcon } from 'lucide-react';
 import { MODULES, NAV_CATEGORIES, moduleFromPathname, type ModuleDef, type SubPage, type NavCategory } from '@/lib/nav/modules';
 import { openTab, WorkspaceTabsFullError } from './workspace-tabs-store';
+import { canOpenModule } from '@/lib/nav/module-visibility';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -55,8 +56,12 @@ export default function Sidebar({ onTabsFull }: Props) {
 
   // Hide superOnly sub-pages from non-SUPER_ADMIN users. Page-level access is
   // still enforced by the API; this keeps the sidebar uncluttered.
-  const { user } = usePermissions();
+  const { user, tenant, permissions } = usePermissions();
   const isSuperAdmin = user?.roleCode === 'SUPER_ADMIN';
+  // Only modules the tenant has and the user's role may use (same rule as
+  // ModuleGuard). Nothing is listed until the session has loaded.
+  const canOpen = (id: string) =>
+    !!user && canOpenModule(id, { roleCode: user.roleCode, enabledModules: tenant?.enabledModules, permissions });
   const visibleSubPages = (subs?: SubPage[]) =>
     subs ? subs.filter(sp => !sp.superOnly || isSuperAdmin) : undefined;
 
@@ -190,7 +195,7 @@ export default function Sidebar({ onTabsFull }: Props) {
 
       <nav ref={navRef} className="flex-1 overflow-y-auto overflow-x-visible p-2">
         {NAV_CATEGORIES.map((cat, catIdx) => {
-          const catModules = MODULES.filter(m => m.category === cat.id && !hiddenModules.has(m.id));
+          const catModules = MODULES.filter(m => m.category === cat.id && !hiddenModules.has(m.id) && canOpen(m.id));
           if (catModules.length === 0) return null;
           const isCatCollapsed = collapsedCats.has(cat.id);
           const CatIcon = cat.icon;
@@ -323,7 +328,7 @@ export default function Sidebar({ onTabsFull }: Props) {
             {tLabel('Hidden Modules')}
           </div>
           <ul className="space-y-1">
-            {MODULES.filter(m => hiddenModules.has(m.id)).map(m => {
+            {MODULES.filter(m => hiddenModules.has(m.id) && canOpen(m.id)).map(m => {
               const Icon = m.icon;
               return (
                 <li key={m.id}>

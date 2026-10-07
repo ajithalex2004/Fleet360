@@ -18,8 +18,8 @@ import (
 
 // Mode is AUTHZ_MODE, shared with the Next.js middleware:
 //
-//	report  (default) log denials as {"authz":"would-deny",…} and let the request through
-//	enforce answer 403
+//	enforce (default) answer 403
+//	report  log denials as {"authz":"would-deny",…} and let the request through
 //	off     don't evaluate
 type Mode string
 
@@ -32,12 +32,13 @@ const (
 // ModeFrom parses AUTHZ_MODE the way src/lib/authz/policy.ts does.
 func ModeFrom(v string) Mode {
 	switch strings.ToLower(strings.TrimSpace(v)) {
-	case "enforce":
-		return ModeEnforce
+	case "report":
+		return ModeReport
 	case "off":
 		return ModeOff
 	}
-	return ModeReport
+	// Unset or unrecognised enforces; operators opt out explicitly.
+	return ModeEnforce
 }
 
 // PublicPath maps the Go route (/api/v1/<path>) to the policy's /api/<path>.

@@ -1,6 +1,9 @@
 'use client';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useFetchedData, fetchOnce, invalidate, invalidatePrefix } from '@/hooks/useFetchedData';
+import { usePermissions } from '@/contexts/PermissionContext';
+import { MODULES as PERMISSION_MODULES, SYSTEM_ROLES } from '@/lib/permissions';
+import { MODULE_BY_KEY } from '@/lib/modules';
 
 interface Role {
   id: string; name: string; code: string; description?: string;
@@ -9,16 +12,22 @@ interface Role {
 }
 interface Permission { id: string; module: string; action: string; resource: string; label?: string; }
 
-// ── Module keys must match src/lib/permissions.ts#MODULES exactly so that
-//    p.module === mod filters the permission matrix UI against the seeded
-//    canonical-keyed DB rows.
-const MODULES = ['leasing','rental','bus-ops','fleet','maintenance','finance','driver-mgmt','compliance','reports','admin'];
-const ACTIONS = ['view','create','edit','delete','approve','export'];
-const MODULE_LABELS: Record<string,string> = {
+// Every module with permissions (src/lib/permissions.ts), labelled with the
+// registry's module names. A tenant's own roles list only the modules that
+// tenant has.
+const MODULES: readonly string[] = PERMISSION_MODULES;
+const SHORT_LABELS: Record<string, string> = {
   leasing:'Leasing', rental:'Rent-a-Car', 'bus-ops':'Staff Transport', fleet:'Fleet',
   maintenance:'Maintenance', finance:'Finance', 'driver-mgmt':'Drivers',
   compliance:'Compliance', reports:'Reports', admin:'Admin',
 };
+const MODULE_LABELS: Record<string, string> = Object.fromEntries(
+  PERMISSION_MODULES.map(m => [m, SHORT_LABELS[m] ?? MODULE_BY_KEY[m as keyof typeof MODULE_BY_KEY]?.name ?? m]),
+);
+// Platform roles whose permissions come from the code catalogue: sessions
+// ignore edits to their database copy, so they are read-only here.
+const CODE_DEFINED_ROLES = new Set(SYSTEM_ROLES.map(r => r.code));
+const ACTIONS = ['view','create','edit','delete','approve','export'];
 const ACTION_COLORS: Record<string,string> = {
   view:'text-blue-400', create:'text-emerald-400', edit:'text-amber-400',
   delete:'text-rose-400', approve:'text-violet-400', export:'text-cyan-400',
@@ -78,7 +87,21 @@ export default function RolesPage() {
   // context), a platform role (read-only in tenant context), or neither?
   const isPlatformRole = !!selectedRole && selectedRole.tenantId == null;
   const isTenantOverride = !!selectedRole && selectedRole.tenantId === myTenantId;
-  const readOnly = isPlatformRole && !isSuperAdmin;
+  const isCodeDefined = isPlatformRole && CODE_DEFINED_ROLES.has(selectedRole!.code);
+  const readOnly = isPlatformRole && (!isSuperAdmin || isCodeDefined);
+
+  // Platform roles span every tenant, so they list every module. A tenant's
+  // own role lists only the modules that tenant has (never Admin, which is
+  // governed by the role code, not by permissions).
+  const { tenant: sessionTenant } = usePermissions();
+  const roleModules = useMemo<readonly string[]>(() => {
+    if (!selectedRole?.tenantId) return MODULES;
+    const enabled = sessionTenant?.enabledModules ?? [];
+    return MODULES.filter(m => m !== 'admin' && (enabled.length === 0 || enabled.includes(m)));
+  }, [selectedRole, sessionTenant]);
+  useEffect(() => {
+    if (filterModule !== 'all' && !roleModules.includes(filterModule)) setFilterModule('all');
+  }, [roleModules, filterModule]);
 
   // Bust the session cache after any write that changes roles or
   // permissions. The server-side unstable_cache is also invalidated
@@ -362,11 +385,14 @@ export default function RolesPage() {
                         Customize for {myTenantName || 'tenant'} →
                       </button>
                     )}
-                    <button
-                      onClick={e => { e.stopPropagation(); deleteRole(role); }}
-                      className="mt-2 text-xs text-rose-400 hover:text-rose-300 transition-colors block">
-                      Delete
-                    </button>
+                    {/* Standard platform roles cannot be deleted. */}
+                    {!(isPlatform && role.isSystem) && (
+                      <button
+                        onClick={e => { e.stopPropagation(); deleteRole(role); }}
+                        className="mt-2 text-xs text-rose-400 hover:text-rose-300 transition-colors block">
+                        Delete
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -463,7 +489,9 @@ export default function RolesPage() {
                     {selectedRole.description ?? selectedRole.code} &mdash; {rolePermIds.size} permissions granted
                     {readOnly && (
                       <span className="ml-2 text-amber-400">
-                        · read-only — use the "Customize" button on the left to create an editable copy
+                        {isSuperAdmin && isCodeDefined
+                          ? '· read-only — a standard platform role, defined in the platform code and the same for every tenant. A tenant changes it by customizing its own copy.'
+                          : '· read-only — use the "Customize" button on the left to create an editable copy'}
                       </span>
                     )}
                   </p>
@@ -509,7 +537,7 @@ export default function RolesPage() {
                   className={`px-3 py-1 rounded text-xs border transition-all ${filterModule === 'all' ? 'border-blue-500 bg-blue-500/10 text-white' : 'border-[var(--border-subtle)] text-[var(--text-muted)] hover:border-[var(--border-strong)]'}`}>
                   All Modules
                 </button>
-                {MODULES.map(m => (
+                {roleModules.map(m => (
                   <button key={m} onClick={() => setFilterModule(m)}
                     className={`px-3 py-1 rounded text-xs border transition-all ${filterModule === m ? 'border-blue-500 bg-blue-500/10 text-white' : 'border-[var(--border-subtle)] text-[var(--text-muted)] hover:border-[var(--border-strong)]'}`}>
                     {MODULE_LABELS[m]}
@@ -526,7 +554,7 @@ export default function RolesPage() {
                   className="flex-1 overflow-y-auto overflow-x-auto p-2"
                   style={{ minHeight: '320px' }}
                 >
-                  {(filterModule === 'all' ? MODULES : [filterModule]).map(mod => {
+                  {(filterModule === 'all' ? roleModules : [filterModule]).map(mod => {
                     const modPerms     = permissions.filter(p => p.module === mod);
                     const grantedInMod = modPerms.filter(p => rolePermIds.has(p.id)).length;
                     const allGranted   = grantedInMod === modPerms.length && modPerms.length > 0;

@@ -209,6 +209,10 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
         return;
       }
       localStorage.removeItem(SESSION_KEY); localStorage.removeItem('xl_backend_token'); clearCache(); clearPersistedSnapshot();
+      // Also drop what was painted from the snapshot: it belongs to a
+      // session the server no longer accepts (e.g. another user signed in
+      // in this browser), and must not keep showing that user's menus.
+      setUser(null); setTenant(null); setPermissions([]);
       return;
     }
     const data = await res.json();
@@ -303,6 +307,21 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
   // we don't toggle isLoading=true while a snapshot is already on screen.
   useEffect(() => {
     void loadSession(false, true);
+  }, [loadSession]);
+
+  // Re-check the session when the tab comes back into view: signing in as
+  // someone else in another tab (e.g. accepting an invitation) replaces the
+  // shared cookie, and this tab must not keep showing the previous user.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let last = Date.now();
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible' || Date.now() - last < 15_000) return;
+      last = Date.now();
+      void loadSession(true, true);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, [loadSession]);
 
   // setCurrentUser / switchTenant / refreshPermissions are exposed via the

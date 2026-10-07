@@ -6,6 +6,7 @@ import ThemeToggle from '@/components/ThemeToggle';
 import PlatformSessionSlot from './PlatformSessionSlot';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { usePermissions } from '@/contexts/PermissionContext';
+import { canOpenModule } from '@/lib/nav/module-visibility';
 import { 
   Car, 
   Bot, 
@@ -494,7 +495,10 @@ const CATEGORIES = [
 
 export default function PlatformPage() {
   const { setLanguage, tLabel, isRTL } = useLanguage();
-  const { tenant, isAuthenticated, isLoading } = usePermissions();
+  const { user, tenant, permissions, isAuthenticated, isLoading } = usePermissions();
+  // Only modules the tenant has and the user's role may use (the sidebar's rule).
+  const canOpen = (id: string) =>
+    !user || canOpenModule(id, { roleCode: user.roleCode, enabledModules: tenant?.enabledModules, permissions });
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -521,6 +525,7 @@ export default function PlatformPage() {
   const getFilteredModulesForCategory = (categoryId: string) => {
     return MODULES.filter(mod => {
       if (mod.category !== categoryId) return false;
+      if (!canOpen(mod.id)) return false;
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
       return (
@@ -639,7 +644,7 @@ export default function PlatformPage() {
               >
                 <span>{tLabel(cat.label)}</span>
                 <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-[var(--bg-surface-hover)] text-[var(--text-muted)]'}`}>
-                  {cat.count}
+                  {MODULES.filter(m => (cat.id === 'all' || m.category === cat.id) && canOpen(m.id)).length}
                 </span>
               </button>
             );

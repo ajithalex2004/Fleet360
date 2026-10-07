@@ -1,6 +1,6 @@
 {
  "policyVersion": "2026-10-06.3",
- "catalogueVersion": "83f16c6e",
+ "catalogueVersion": "c9977e3a",
  "catalogue": [
   "leasing:view:*",
   "leasing:create:inquiries",
@@ -225,7 +225,31 @@
   "leasing:edit:renewals",
   "bus-ops:create:route-consolidation",
   "bus-ops:edit:incidents",
-  "reports:create:*"
+  "reports:create:*",
+  "customer:view:*",
+  "customer:create:*",
+  "customer:edit:*",
+  "customer:delete:*",
+  "customer:approve:*",
+  "customer:export:*",
+  "mobile-apps:view:*",
+  "mobile-apps:create:*",
+  "mobile-apps:edit:*",
+  "mobile-apps:delete:*",
+  "mobile-apps:approve:*",
+  "mobile-apps:export:*",
+  "ai-platform:view:*",
+  "ai-platform:create:*",
+  "ai-platform:edit:*",
+  "ai-platform:delete:*",
+  "ai-platform:approve:*",
+  "ai-platform:export:*",
+  "vendors:view:*",
+  "vendors:create:*",
+  "vendors:edit:*",
+  "vendors:delete:*",
+  "vendors:approve:*",
+  "vendors:export:*"
  ],
  "moduleAliases": {
   "rental": [
@@ -1189,6 +1213,25 @@
    }
   },
   {
+   "template": "attachment-types",
+   "methods": {
+    "GET": "admin",
+    "POST": "platform"
+   }
+  },
+  {
+   "template": "attachment-types/[id]",
+   "methods": {
+    "PATCH": "platform"
+   }
+  },
+  {
+   "template": "attachment-types/[id]/autofill",
+   "methods": {
+    "POST": "platform"
+   }
+  },
+  {
    "template": "billing",
    "methods": {
     "GET": "member"
@@ -1369,6 +1412,13 @@
    "template": "impersonate",
    "methods": {
     "POST": "platform"
+   }
+  },
+  {
+   "template": "module-policies",
+   "methods": {
+    "GET": "admin",
+    "PUT": "platform"
    }
   },
   {
@@ -1589,6 +1639,19 @@
    "methods": {
     "GET": "admin",
     "POST": "admin"
+   }
+  },
+  {
+   "template": "tenants/[id]/attachments",
+   "methods": {
+    "GET": "admin",
+    "POST": "platform"
+   }
+  },
+  {
+   "template": "tenants/[id]/attachments/[id]",
+   "methods": {
+    "DELETE": "platform"
    }
   },
   {

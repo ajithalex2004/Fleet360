@@ -29,6 +29,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePermissions } from '@/contexts/PermissionContext';
 import { BACK_BUTTON_LG } from '@/lib/ui/toggle';
+import { canOpenModule } from '@/lib/nav/module-visibility';
 
 interface Props {
   /** Must match the module ID in ALL_MODULES (platform/page.tsx) and tenant.enabledModules */
@@ -41,7 +42,7 @@ interface Props {
 }
 
 export default function ModuleGuard({ moduleId, moduleName, moduleIcon = '🔒', children }: Props) {
-  const { user, tenant, isLoading, isAuthenticated } = usePermissions();
+  const { user, tenant, permissions, isLoading, isAuthenticated } = usePermissions();
   // Derive super-admin from user.roleCode — no extra API fetch needed
   const isSuperAdmin = user?.roleCode === 'SUPER_ADMIN';
 
@@ -87,14 +88,39 @@ export default function ModuleGuard({ moduleId, moduleName, moduleIcon = '🔒',
   // Super admin always bypasses module restrictions
   if (isSuperAdmin) return <>{children}</>;
 
-  // No modules configured yet → no restriction applied
-  if (!tenant || tenant.enabledModules.length === 0) return <>{children}</>;
+  // The tenant has the module and the user's role may use it (the same rule
+  // as the sidebar, src/lib/nav/module-visibility.ts).
+  const viewer = { roleCode: user?.roleCode, enabledModules: tenant?.enabledModules, permissions };
+  if (canOpenModule(moduleId, viewer)) return <>{children}</>;
 
-  // Module is in the tenant's enabled list → allow
-  if (tenant.enabledModules.includes(moduleId)) return <>{children}</>;
-
-  // ── ACCESS DENIED WALL ─────────────────────────────────────────────────────
   const displayName = moduleName ?? moduleId;
+
+  // The tenant has the module, but this user's role does not include it.
+  if (moduleId === 'admin' || canOpenModule(moduleId, { ...viewer, roleCode: 'TENANT_ADMIN', permissions: ['*:*:*'] })) {
+    return (
+      <div className="min-h-screen bg-[var(--bg-canvas)] flex items-center justify-center px-6">
+        <div className="max-w-md w-full text-center">
+          <div className="w-20 h-20 rounded-2xl bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] flex items-center justify-center text-4xl mx-auto mb-6 grayscale">
+            {moduleIcon}
+          </div>
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-strong)] bg-[var(--bg-surface-hover)] px-3 py-1 mb-4">
+            <span className="text-[var(--text-faint)] text-xs">🔒</span>
+            <span className="text-[var(--text-faint)] text-xs font-semibold uppercase tracking-wide">No access</span>
+          </div>
+          <h1 className="text-2xl font-bold text-[var(--text-main)] mb-3">
+            Your role does not include {displayName}
+          </h1>
+          <p className="text-[var(--text-muted)] text-sm leading-relaxed mb-8">
+            {user?.roleName ? <>You are signed in as <strong className="text-[var(--text-main)]">{user.roleName}</strong>{tenant ? <> in <strong className="text-[var(--text-main)]">{tenant.name}</strong></> : null}. </> : null}
+            Ask your organisation&apos;s administrator for access.
+          </p>
+          <Link href="/platform" className={BACK_BUTTON_LG}>← Back to Platform</Link>
+        </div>
+      </div>
+    );
+  }
+
+  // ── NOT SUBSCRIBED WALL ────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-[var(--bg-canvas)] flex items-center justify-center px-6">

@@ -59,6 +59,17 @@ type Policy struct {
 	AdminRoutes      []adminRoute        `json:"adminRoutes"`
 
 	resources map[string]map[string]bool // module → catalogue resources (not '*')
+	prefixes  map[string]int             // catalogue-prefix version → prefix length
+}
+
+// fnv1a mirrors src/lib/authz/permission-claim.ts (the catalogue is ASCII).
+func fnv1a(text string) string {
+	h := uint32(0x811c9dc5)
+	for i := 0; i < len(text); i++ {
+		h ^= uint32(text[i])
+		h *= 0x01000193
+	}
+	return fmt.Sprintf("%08x", h)
 }
 
 // Parse decodes a policy document.
@@ -74,6 +85,22 @@ func Parse(data []byte) (*Policy, error) {
 	sort.SliceStable(p.Areas, func(i, j int) bool { return len(p.Areas[i].Prefix) > len(p.Areas[j].Prefix) })
 	for i := range p.AdminRoutes {
 		p.AdminRoutes[i].re = templateToRegexp(p.AdminRoutes[i].Template)
+	}
+	// The catalogue is append-only: a claim signed against an earlier
+	// catalogue (a prefix of this one) still decodes, holding none of the
+	// entries appended since.
+	p.prefixes = map[string]int{}
+	joined := ""
+	for i, key := range p.Catalogue {
+		if i == 0 {
+			joined = key
+		} else {
+			joined += "|" + key
+		}
+		p.prefixes[fnv1a(joined)] = i + 1
+	}
+	if p.prefixes[p.CatalogueVersion] != len(p.Catalogue) {
+		return nil, fmt.Errorf("authz: catalogueVersion does not match the catalogue")
 	}
 	p.resources = map[string]map[string]bool{}
 	for _, key := range p.Catalogue {
@@ -381,13 +408,18 @@ type PermissionClaim struct {
 }
 
 // DecodeClaim returns the permissions in a token's claim, or nil when it is
-// absent, malformed or signed against another catalogue version.
+// absent, malformed or signed against a catalogue that is not a prefix of
+// this one.
 func (p *Policy) DecodeClaim(raw json.RawMessage) []string {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil
 	}
 	var c PermissionClaim
-	if err := json.Unmarshal(raw, &c); err != nil || c.V != p.CatalogueVersion {
+	if err := json.Unmarshal(raw, &c); err != nil {
+		return nil
+	}
+	length, ok := p.prefixes[c.V]
+	if !ok {
 		return nil
 	}
 	bits, err := base64.RawURLEncoding.DecodeString(strings.TrimRight(c.B, "="))
@@ -395,7 +427,7 @@ func (p *Policy) DecodeClaim(raw json.RawMessage) []string {
 		return nil
 	}
 	out := []string{}
-	for i, key := range p.Catalogue {
+	for i, key := range p.Catalogue[:length] {
 		if i>>3 < len(bits) && bits[i>>3]&(1<<(uint(i)&7)) != 0 {
 			out = append(out, key)
 		}
