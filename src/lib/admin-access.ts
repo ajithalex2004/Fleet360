@@ -81,6 +81,8 @@ export const ADMIN_ROUTE_POLICY: Record<string, Partial<Record<Method, AdminLeve
   'exchange/onboarding/[id]/documents/[id]/file': { GET: 'admin' },
   'events/outbox/replay':                        { POST: 'platform' },
   'impersonate':                                 { POST: 'platform' },
+  // Module availability policies: the module picker reads them; only platform admins change them.
+  'module-policies':                             { GET: 'admin', PUT: 'platform' },
   // Called while impersonating, when the session carries the target's role.
   'impersonate/stop':                            { POST: 'member' },
   'info':                                        { GET: 'platform' },

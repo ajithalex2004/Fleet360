@@ -20,6 +20,7 @@ import { withTenantRls } from '@/lib/rls';
 import { getBranding } from '@/lib/branding';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { tenantModulesFor } from '@/lib/module-policies';
 type PermRow   = { nav_key: string; enabled: boolean };
 type ModuleRow = { module: string };
 
@@ -69,7 +70,8 @@ export async function GET(request: NextRequest) {
       : tx.$queryRawUnsafe<ModuleRow[]>(
           `SELECT module FROM tenant_modules WHERE tenant_id = $1 AND is_enabled = true`,
           tenantId,
-        ).then(rows => rows.map(r => r.module))
+        // Module policies (default / per tenant / tier) applied to the stored switches.
+        ).then(rows => tenantModulesFor(rows.map(r => r.module), plan))
         .catch(() => [] as string[]),
 
     // 3. Tenant display name & default language

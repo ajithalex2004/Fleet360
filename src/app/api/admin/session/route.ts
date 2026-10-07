@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isDbConnectionError, prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { verifySession } from '@/lib/tenant-session';
+import { tenantModulesFor } from '@/lib/module-policies';
 
 let lastDbUnavailableWarnAt = 0;
 const DB_UNAVAILABLE_WARN_INTERVAL_MS = 30_000;
@@ -106,7 +107,11 @@ export async function GET(req: NextRequest) {
             code: userTenant.tenant.code,
             plan: userTenant.tenant.plan,
             defaultLanguage: userTenant.tenant.defaultLanguage ?? 'en',
-            enabledModules: userTenant.tenant.modules.map(m => m.module),
+            // Module policies (default / per tenant / tier) applied to the stored switches.
+            enabledModules: await tenantModulesFor(
+              userTenant.tenant.modules.filter(m => (m as { isEnabled?: boolean | null }).isEnabled !== false).map(m => m.module),
+              userTenant.tenant.plan,
+            ),
           },
           permissions: [...new Set(permStrings)],
         },

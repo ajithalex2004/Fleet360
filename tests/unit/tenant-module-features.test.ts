@@ -111,7 +111,7 @@ describe('ModuleFeaturePicker rendering', () => {
     for (const m of MODULES) expect(picker).toContain(m.name.replace('&', '&amp;'));
     const enabledCount = 1 + MODULES.filter((m) => m.subscription === 'always-on').length;
     expect(picker).toContain(`${enabledCount} of ${MODULES.length} modules enabled`);
-    expect(picker).toContain('Always on');
+    expect(picker).toContain('>Default<'); // always-on modules carry the "Default" policy badge
 
     const summary = renderToStaticMarkup(React.createElement(TenantModuleFeatureSummary, {
       enabledModules: ['rental'], featureFlags: { ...flags, 'rental.dynamic-pricing': true },

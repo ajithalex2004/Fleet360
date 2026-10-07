@@ -5,13 +5,19 @@
  * registry (@/lib/modules) with the flags mapped to it
  * (@/lib/module-features).
  *
- * Always-on modules are shown ticked and cannot be cleared (the API adds
- * them anyway). A module's flags can be set while it is off; they only take
- * effect once the module is enabled.
+ * Each module follows its availability policy (Admin > Module Policies,
+ * @/lib/module-policy-rules): "Default" modules are ticked and locked,
+ * "Per tenant" modules are switched here, and tier-gated modules ("Professional+")
+ * are locked and follow the tenant's plan. Only per-tenant switches are
+ * reported through onModulesChange. A module's flags can be set while it is
+ * off; they only take effect once the module is enabled.
  */
 import React, { useState } from 'react';
 import { MODULES, MODULE_BY_KEY, type ModuleDef, type ModuleKey } from '@/lib/modules';
 import { FEATURES_BY_MODULE, activeFeatureKeys, type FeatureFlagMap } from '@/lib/module-features';
+import {
+  moduleEnabledFor, policyLabel, resolvePolicies, type ModulePolicies, type ModulePolicy,
+} from '@/lib/module-policy-rules';
 
 interface ModuleGroupSpec {
   label: string;
@@ -41,7 +47,7 @@ const MODULE_GROUP_SPECS: readonly ModuleGroupSpec[] = [
     keys: ['fleet', 'maintenance', 'driver-mgmt', 'assets'] },
   { label: 'Operations & Emergency', icon: '🚨', color: 'rose',
     description: 'Dispatch control, incidents, ambulance and service tickets',
-    keys: ['dispatch', 'incidents', 'service-tickets'] },
+    keys: ['dispatch', 'incidents', 'service-tickets', 'vendors'] },
   { label: 'Customers & Apps', icon: '📱', color: 'teal',
     description: 'Customer master data, the customer app and the mobile PWAs',
     keys: ['customer-mgmt', 'customer', 'mobile-apps'] },
@@ -49,8 +55,8 @@ const MODULE_GROUP_SPECS: readonly ModuleGroupSpec[] = [
     description: 'Invoicing, regulatory tracking and ESG reporting',
     keys: ['finance', 'compliance', 'sustainability'] },
   { label: 'Analytics & AI', icon: '📊', color: 'amber',
-    description: 'Cross-module reporting and the AI agent ecosystem',
-    keys: ['reports', 'agents'] },
+    description: 'Cross-module reporting, the AI agent ecosystem and AI governance',
+    keys: ['reports', 'agents', 'ai-platform'] },
 ];
 
 export interface ModuleGroup {
@@ -77,38 +83,49 @@ export const MODULE_GROUPS: readonly ModuleGroup[] = (() => {
 /** Every registry module key, in the order the picker shows them. */
 export const ALL_MODULE_KEYS: readonly ModuleKey[] = MODULE_GROUPS.flatMap((g) => g.modules.map((m) => m.key));
 
-const isAlwaysOn = (m: ModuleDef) => m.subscription === 'always-on';
+const REGISTRY_POLICIES: ModulePolicies = resolvePolicies(null);
+
+/** Effective on/off of every module for these switches, policies and plan. */
+function effectiveSet(switchedOn: ReadonlySet<string>, policies: ModulePolicies, plan?: string): Set<string> {
+  return new Set(MODULES.filter((m) => moduleEnabledFor(m.key, policies[m.key], switchedOn, plan)).map((m) => m.key));
+}
 
 interface Props {
-  /** Canonical module keys; non-module keys such as 'admin' are ignored. */
+  /** The tenant's per-tenant switches (canonical keys); others are ignored. */
   enabledModules: readonly string[];
   featureFlags: FeatureFlagMap;
   onModulesChange: (next: string[]) => void;
   onFlagsChange: (next: FeatureFlagMap) => void;
-  /** Tenant plan, used to mark enterprise-only modules as add-ons. */
+  /** Tenant plan: decides tier-gated modules. */
   plan?: string;
+  /** Module availability policies (GET /api/admin/module-policies); registry defaults until loaded. */
+  policies?: ModulePolicies;
+  /** Plan code -> display name, for "Professional+" badges. */
+  planNames?: Record<string, string>;
 }
 
-export function ModuleFeaturePicker({ enabledModules, featureFlags, onModulesChange, onFlagsChange, plan }: Props) {
+export function ModuleFeaturePicker({
+  enabledModules, featureFlags, onModulesChange, onFlagsChange, plan, policies = REGISTRY_POLICIES, planNames,
+}: Props) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  const enabled = new Set(enabledModules);
-  // Always-on modules count as enabled whether or not the caller lists them.
-  for (const m of MODULES) if (isAlwaysOn(m)) enabled.add(m.key);
+  const switchedOn = new Set(enabledModules);
+  const enabled = effectiveSet(switchedOn, policies, plan);
+  const isPerTenant = (m: ModuleDef) => policies[m.key].availability === 'PER_TENANT';
 
   const enabledCount = ALL_MODULE_KEYS.filter((k) => enabled.has(k)).length;
   const activeFlagCount = activeFeatureKeys(enabled, featureFlags).length;
 
   const setModules = (keys: Set<string>) => onModulesChange([...keys]);
   const toggleModule = (key: ModuleKey) => {
-    const next = new Set(enabled);
+    const next = new Set(switchedOn);
     if (next.has(key)) next.delete(key); else next.add(key);
     setModules(next);
   };
   const toggleGroup = (group: ModuleGroup, on: boolean) => {
-    const next = new Set(enabled);
+    const next = new Set(switchedOn);
     for (const m of group.modules) {
-      if (isAlwaysOn(m)) continue;
+      if (!isPerTenant(m)) continue;
       if (on) next.add(m.key); else next.delete(m.key);
     }
     setModules(next);
@@ -131,7 +148,7 @@ export function ModuleFeaturePicker({ enabledModules, featureFlags, onModulesCha
 
       {MODULE_GROUPS.map((group) => {
         const style = GROUP_STYLE[group.spec.color];
-        const toggleable = group.modules.filter((m) => !isAlwaysOn(m));
+        const toggleable = group.modules.filter(isPerTenant);
         const allOn = toggleable.length > 0 && toggleable.every((m) => enabled.has(m.key));
         return (
           <div key={group.spec.label} className={`rounded-xl border p-4 ${style.card}`}>
@@ -156,7 +173,8 @@ export function ModuleFeaturePicker({ enabledModules, featureFlags, onModulesCha
             <div className="space-y-2">
               {group.modules.map((m) => {
                 const on = enabled.has(m.key);
-                const locked = isAlwaysOn(m);
+                const policy: ModulePolicy = policies[m.key];
+                const locked = policy.availability !== 'PER_TENANT';
                 const flags = FEATURES_BY_MODULE[m.key];
                 const flagsOn = flags.filter((d) => featureFlags[d.key]).length;
                 const open = !!expanded[m.key];
@@ -174,10 +192,12 @@ export function ModuleFeaturePicker({ enabledModules, featureFlags, onModulesCha
                         className="flex-1 min-w-0 text-left">
                         <div className="flex flex-wrap items-center gap-1.5">
                           <span className="text-sm font-medium text-[var(--text-main)]">{m.name}</span>
-                          {locked && <Badge className="bg-slate-500/20 text-slate-300 border-slate-500/30">Always on</Badge>}
-                          {m.subscription === 'enterprise-only' && (
+                          {policy.availability === 'ALWAYS_ON' && (
+                            <Badge className="bg-slate-500/20 text-slate-300 border-slate-500/30">Default</Badge>
+                          )}
+                          {policy.availability === 'TIER' && (
                             <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30">
-                              {plan === 'ENTERPRISE' ? 'Enterprise' : 'Enterprise add-on'}
+                              {policyLabel(policy, planNames)}{on ? '' : ' plan required'}
                             </Badge>
                           )}
                           {m.status !== 'live' && <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30">{m.status.toUpperCase()}</Badge>}
@@ -232,12 +252,15 @@ export function ModuleFeaturePicker({ enabledModules, featureFlags, onModulesCha
  * Read-only view of a tenant's enabled modules and the feature flags active
  * on each (Manage page summary).
  */
-export function TenantModuleFeatureSummary({ enabledModules, featureFlags }: {
+export function TenantModuleFeatureSummary({ enabledModules, featureFlags, plan, policies = REGISTRY_POLICIES, planNames }: {
+  /** The tenant's stored per-tenant switches. */
   enabledModules: readonly string[];
   featureFlags: FeatureFlagMap;
+  plan?: string;
+  policies?: ModulePolicies;
+  planNames?: Record<string, string>;
 }) {
-  const enabled = new Set(enabledModules);
-  for (const m of MODULES) if (isAlwaysOn(m)) enabled.add(m.key);
+  const enabled = effectiveSet(new Set(enabledModules), policies, plan);
   const mods = ALL_MODULE_KEYS.filter((k) => enabled.has(k)).map((k) => MODULE_BY_KEY[k]);
   if (mods.length === 0) {
     return <p className="text-sm text-[var(--text-muted)]">No modules enabled.</p>;
@@ -251,7 +274,8 @@ export function TenantModuleFeatureSummary({ enabledModules, featureFlags }: {
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-semibold text-[var(--text-main)]">{m.name}</span>
               <span className="text-[10px] text-emerald-400 flex-shrink-0">
-                {isAlwaysOn(m) ? 'ALWAYS ON' : 'ENABLED'}
+                {policies[m.key].availability === 'ALWAYS_ON' ? 'DEFAULT'
+                  : policies[m.key].availability === 'TIER' ? policyLabel(policies[m.key], planNames).toUpperCase() : 'ENABLED'}
               </span>
             </div>
             <div className="flex flex-wrap gap-1 mt-2">

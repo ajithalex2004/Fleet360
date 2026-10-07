@@ -639,6 +639,7 @@ export const MODULES: ModuleDef[] = [
       { label: 'Branches & regions',      href: '/admin/branches',              icon: Building2 },
       { label: 'Billing & subscriptions', href: '/admin/billing',               icon: CreditCard },
       { label: 'Tenants',                 href: '/admin/tenants',               icon: Building2, superOnly: true },
+      { label: 'Module policies',         href: '/admin/module-policies',       icon: Sliders, superOnly: true },
       { label: 'Attachment types',        href: '/admin/attachment-types',      icon: Paperclip, superOnly: true },
       { label: 'Exchange partners',       href: '/admin/exchange-partners',     icon: ArrowLeftRight, superOnly: true },
       { label: 'Partner onboarding',      href: '/admin/partner-onboarding',    icon: ShieldCheck },

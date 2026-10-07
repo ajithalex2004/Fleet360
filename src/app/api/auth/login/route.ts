@@ -20,6 +20,7 @@ import { getEffectiveRole } from '@/lib/permissions/effective-role';
 import { permissionsForEffectiveRole } from '@/lib/authz/session-permissions';
 
 import { requireAuthorizedTenant } from '@/lib/tenant-context';
+import { tenantModulesFor } from '@/lib/module-policies';
 // ── Password verification (matches the PBKDF2 format used in /api/tenants/provision) ──
 
 function verifyPassword(plaintext: string, stored: string): boolean {
@@ -267,7 +268,11 @@ export async function POST(request: NextRequest) {
         code: userTenant.tenant.code,
         plan,
         defaultLanguage: userTenant.tenant.defaultLanguage ?? 'en',
-        enabledModules: userTenant.tenant.modules.map(m => m.module),
+        // Module policies (default / per tenant / tier) applied to the stored switches.
+        enabledModules: await tenantModulesFor(
+          userTenant.tenant.modules.filter(m => (m as { isEnabled?: boolean | null }).isEnabled !== false).map(m => m.module),
+          plan,
+        ),
       },
       permissions: [...new Set(permissions)],
       // Return all tenants so the client can show a tenant-switcher if needed
