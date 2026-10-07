@@ -9,6 +9,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, Plus, Trash2 } from 'lucide-react';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 interface RateEvent {
   id: string;
@@ -114,7 +115,7 @@ export default function RateEventsPage() {
     <div className="max-w-5xl mx-auto p-6 space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <Link href="/rental/rates" className="inline-flex items-center gap-1 text-xs text-[var(--text-faint)] hover:text-cyan-400">
+          <Link href="/rental/rates" className={BACK_BUTTON}>
             <ChevronLeft className="h-3 w-3" /> Back to rates
           </Link>
           <h1 className="text-2xl font-bold text-[var(--text-main)] mt-2">Rate Events</h1>

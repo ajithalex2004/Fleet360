@@ -9,6 +9,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Sparkles, ChevronLeft, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 interface Ancillary {
   code: string;
@@ -149,7 +150,7 @@ export default function RentalCopilotPage() {
       <div>
         <Link
           href="/rental/bookings"
-          className="inline-flex items-center gap-1 text-xs text-[var(--text-faint)] hover:text-cyan-400"
+          className={BACK_BUTTON}
         >
           <ChevronLeft className="h-3 w-3" /> Back to bookings
         </Link>

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import type { CsatAnalyticsSummary } from '@/lib/service-tickets/csat-analytics-engine';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 export default function ServiceTicketsCsatPage() {
   const [loading, setLoading] = useState(true);
@@ -61,7 +62,7 @@ export default function ServiceTicketsCsatPage() {
         <div className="flex items-center gap-3">
           <Link
             href="/service-tickets"
-            className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors"
+            className={BACK_BUTTON}
           >
             ← Back to Tickets
           </Link>

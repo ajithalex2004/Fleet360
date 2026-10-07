@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { Camera, CheckCircle2, Crosshair, PenLine, RefreshCw, Truck } from 'lucide-react';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 interface PodRecord {
   id: string;
@@ -202,7 +203,7 @@ export default function ShipmentPodPage() {
           <h1 className="flex items-center gap-2 text-2xl font-bold text-[var(--text-main)]"><PenLine className="h-6 w-6 text-emerald-300" /> Electronic POD</h1>
           <p className="mt-1 text-xs text-[var(--text-muted)]">{shipment?.cargo_owner_name ?? 'Customer'} - {shipment?.origin_name ?? shipment?.origin_address ?? '-'} to {shipment?.destination_name ?? shipment?.destination_address ?? '-'}</p>
         </div>
-        <button type="button" onClick={() => router.push('/logistics/dispatch')} className="rounded-xl border border-[var(--border-subtle)] px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--bg-surface-hover)]">Back to dispatch</button>
+        <button type="button" onClick={() => router.push('/logistics/dispatch')} className={BACK_BUTTON}>Back to dispatch</button>
       </div>
 
       {pod ? (

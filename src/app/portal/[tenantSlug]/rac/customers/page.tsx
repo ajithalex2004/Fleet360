@@ -9,6 +9,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Calendar, FileText, Receipt, Car } from 'lucide-react';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 interface Customer {
   id: string;
@@ -119,7 +120,7 @@ export default function RacCustomerPortalPage() {
     return (
       <div className="p-6 max-w-3xl mx-auto space-y-6">
         <div>
-          <Link href={`/portal/${tenantSlug}/rac`} className="text-xs text-slate-500 hover:text-cyan-400">
+          <Link href={`/portal/${tenantSlug}/rac`} className={BACK_BUTTON}>
             ← Back to fleet view
           </Link>
           <h1 className="text-2xl font-bold mt-1">RAC Customer Portal</h1>

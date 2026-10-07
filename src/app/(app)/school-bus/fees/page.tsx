@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 /**
  * School Bus Fees has moved to the Finance Module.
@@ -90,7 +91,7 @@ export default function SchoolBusFeesRedirect() {
           Go to Finance → School Bus Fees
           <span className="text-emerald-200 font-normal">({countdown}s)</span>
         </Link>
-        <Link href="/school-bus" className="text-xs text-[var(--text-faint)] hover:text-[var(--text-muted)] transition-colors">
+        <Link href="/school-bus" className={BACK_BUTTON}>
           ← Back to School Bus Dashboard
         </Link>
       </div>

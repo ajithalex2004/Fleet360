@@ -20,6 +20,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 import {
   ArrowLeft, MapPin, ArrowRight, Clock, Truck, Phone, User, Calendar,
   Package, CheckCircle2, Circle, Activity, Lock, RefreshCw, AlertCircle,
@@ -133,7 +134,7 @@ export default function ShipmentDetailPage() {
         <AlertCircle className="w-10 h-10 mx-auto mb-3 text-rose-400" />
         <h2 className="text-base font-bold text-white">{error ?? 'Not found'}</h2>
         <Link href="/shipper-portal/shipments"
-          className="mt-4 inline-flex items-center gap-1.5 text-sm text-emerald-300 hover:text-emerald-200">
+          className={`${BACK_BUTTON} mt-4`}>
           <ArrowLeft className="w-3.5 h-3.5" /> Back to shipments
         </Link>
       </div>

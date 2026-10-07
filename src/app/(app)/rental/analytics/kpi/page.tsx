@@ -10,6 +10,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, RefreshCw, TrendingUp, Car, Sparkles } from 'lucide-react';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 interface CategoryKpis {
   category: string;
@@ -117,7 +118,7 @@ export default function RevpacDashboardPage() {
     <div className="max-w-7xl mx-auto p-6 space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <Link href="/rental" className="inline-flex items-center gap-1 text-xs text-[var(--text-faint)] hover:text-cyan-400">
+          <Link href="/rental" className={BACK_BUTTON}>
             <ChevronLeft className="h-3 w-3" /> Back to dashboard
           </Link>
           <h1 className="text-2xl font-bold text-[var(--text-main)] mt-2 flex items-center gap-2">

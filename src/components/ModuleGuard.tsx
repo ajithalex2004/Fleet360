@@ -28,6 +28,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePermissions } from '@/contexts/PermissionContext';
+import { BACK_BUTTON_LG } from '@/lib/ui/toggle';
 
 interface Props {
   /** Must match the module ID in ALL_MODULES (platform/page.tsx) and tenant.enabledModules */
@@ -73,7 +74,7 @@ export default function ModuleGuard({ moduleId, moduleName, moduleIcon = '🔒',
             </Link>
             <Link
               href="/platform"
-              className="px-6 py-2.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] text-[var(--text-muted)] text-sm font-medium hover:border-[var(--border-strong)] hover:text-[var(--text-main)] transition-all"
+              className={BACK_BUTTON_LG}
             >
               Back to Platform
             </Link>
@@ -133,7 +134,7 @@ export default function ModuleGuard({ moduleId, moduleName, moduleIcon = '🔒',
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Link
             href="/platform"
-            className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-medium hover:opacity-90 transition-all"
+            className={BACK_BUTTON_LG}
           >
             ← Back to Platform
           </Link>

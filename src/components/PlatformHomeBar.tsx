@@ -42,6 +42,7 @@ function AuthSlot() {
 }
 
 import { ArrowLeft, Search } from 'lucide-react';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 export default function PlatformHomeBar({
   moduleName,
@@ -63,7 +64,7 @@ export default function PlatformHomeBar({
       <div className="flex items-center gap-2">
         <Link
           href="/platform"
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-surface-hover)] border border-[var(--border-subtle)] text-[var(--text-main)] hover:border-[var(--border-strong)] text-xs font-medium tracking-wide transition-all group min-w-0"
+          className={`${BACK_BUTTON} group min-w-0 tracking-wide`}
         >
           <ArrowLeft className="w-3.5 h-3.5 flex-shrink-0 group-hover:-translate-x-0.5 rtl:group-hover:translate-x-0.5 rtl:rotate-180 transition-transform" />
           <span className="hidden lg:inline whitespace-nowrap">FLEET360</span>

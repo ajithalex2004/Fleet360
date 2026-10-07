@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 interface ImportSummary {
   detectedFormat: string;
@@ -60,7 +61,7 @@ export default function FuelImportPage() {
           <h1 className="text-2xl font-bold text-[var(--text-main)]">Fuel CSV Import</h1>
           <p className="text-xs text-[var(--text-muted)] mt-1">Bulk-load fuel-card transactions. ENOC SmartTAG, ADNOC Voyager, EMARAT FleetCard, and generic CSVs auto-detected.</p>
         </div>
-        <Link href="/fleet/fuel" className="text-sm text-emerald-400 hover:underline">Back to Fleet Fuel</Link>
+        <Link href="/fleet/fuel" className={BACK_BUTTON}>Back to Fleet Fuel</Link>
       </div>
 
       <div className="bg-[var(--bg-surface)]/50 border border-[var(--border-subtle)] rounded-2xl p-6 space-y-4">

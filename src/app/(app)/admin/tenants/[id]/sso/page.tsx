@@ -10,6 +10,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ShieldCheck, Plus, X, Save, AlertCircle, ArrowLeft, Trash2, Eye, EyeOff } from 'lucide-react';
+import { BACK_BUTTON } from '@/lib/ui/toggle';
 
 interface SsoConfig {
   id: string;
@@ -154,7 +155,7 @@ export default function SsoConfigPage() {
           </p>
         </div>
         <Link href="/admin/tenants"
-          className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)] hover:border-[var(--border-strong)] hover:bg-[var(--bg-surface-hover)] px-3 py-1.5 text-xs text-[var(--text-muted)] hover:text-[var(--text-main)] transition-colors">
+          className={`${BACK_BUTTON} shrink-0`}>
           <ArrowLeft className="w-3.5 h-3.5" /> Back to Tenants
         </Link>
       </div>
