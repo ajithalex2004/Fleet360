@@ -37,7 +37,12 @@ const TOGGLEABLE_NAV_KEYS = [
 // ── GET — fetch enabled nav keys ───────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
-  const authz = requireAuthorizedTenant({ headers: request.headers, nextUrl: request.nextUrl });
+  const authz = requireAuthorizedTenant(
+    { headers: request.headers, nextUrl: request.nextUrl },
+    // A platform admin reads another tenant's records via ?tenantId=
+    // (Admin > Tenants > Manage); anyone else still gets 403.
+    { allowPlatformSwitch: true },
+  );
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }

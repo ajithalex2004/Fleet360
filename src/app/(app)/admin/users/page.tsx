@@ -40,7 +40,7 @@ interface User {
   createdAt: string;
 }
 
-interface Role   { id: string; name: string; code: string; isSystem?: boolean }
+interface Role   { id: string; name: string; code: string; isSystem?: boolean; tenantId?: string | null }
 interface Tenant { id: string; name: string; code?: string }
 
 const USER_TYPES = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'STAFF', 'DRIVER', 'CUSTOMER', 'VIEWER'];
@@ -629,7 +629,7 @@ export default function UsersPage() {
             <form onSubmit={handleAssign} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Tenant *</label>
-                <select value={assignForm.tenantId} onChange={e => setAssignForm(p => ({ ...p, tenantId: e.target.value }))} required
+                <select value={assignForm.tenantId} onChange={e => setAssignForm(p => ({ ...p, tenantId: e.target.value, roleId: '' }))} required
                   className="w-full px-4 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none text-sm">
                   <option value="">Select tenant</option>
                   {tenants.map(t => <option key={t.id} value={t.id}>{t.name} {t.code ? `(${t.code})` : ''}</option>)}
@@ -640,7 +640,9 @@ export default function UsersPage() {
                 <select value={assignForm.roleId} onChange={e => setAssignForm(p => ({ ...p, roleId: e.target.value }))} required
                   className="w-full px-4 py-2 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-subtle)] text-[var(--text-main)] focus:border-violet-500 focus:outline-none text-sm">
                   <option value="">Select role</option>
-                  {roles.map(r => <option key={r.id} value={r.id}>{r.name} {r.isSystem ? '(System)' : ''}</option>)}
+                  {/* Platform roles, plus the chosen tenant's own roles (not other tenants'). */}
+                  {roles.filter(r => !r.tenantId || r.tenantId === assignForm.tenantId)
+                    .map(r => <option key={r.id} value={r.id}>{r.name} {r.isSystem ? '(System)' : ''}</option>)}
                 </select>
               </div>
               <div className="flex gap-4 justify-end pt-4">

@@ -30,7 +30,12 @@ function serialize(row: Row): Row {
 
 export async function GET(req: NextRequest) {
 
-  const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
+  const authz = requireAuthorizedTenant(
+    { headers: req.headers, nextUrl: req.nextUrl },
+    // A platform admin reads another tenant's records via ?tenantId=
+    // (Admin > Tenants > Manage); anyone else still gets 403.
+    { allowPlatformSwitch: true },
+  );
   if (!authz.ok) {
     return NextResponse.json({ error: authz.error }, { status: authz.status });
   }
