@@ -214,7 +214,12 @@ func registerV1Routes(r *gin.Engine) {
 	// recorded in the audit log.
 	v1 := r.Group("/api/v1", auth.Middleware(), authz.Middleware(), ratelimit.PerTenant())
 
-	fleet := v1.Group("/fleet")
+	// TenantTx (auth/tenant_tx.go): one transaction per request with
+	// app.tenant_id set, so row-level security sees the caller's tenant on
+	// reads AND writes; handlers use auth.TenantDB(c), never the bare pool
+	// (architecture audit A6: CreateVehicle wrote through database.DB, which
+	// RLS refuses under the restricted application role).
+	fleet := v1.Group("/fleet", auth.TenantTx())
 	{
 		fleet.GET("/vehicles", handlers.GetVehicles)
 		fleet.GET("/vehicles/:id", handlers.GetVehicle)
@@ -228,7 +233,7 @@ func registerV1Routes(r *gin.Engine) {
 		fleet.PUT("/garages/:id", handlers.UpdateGarage)
 	}
 
-	maint := v1.Group("/maintenance")
+	maint := v1.Group("/maintenance", auth.TenantTx())
 	{
 		maint.GET("/requests", handlers.GetMaintenanceRequests)
 		maint.GET("/requests/:id", handlers.GetMaintenanceRequest)
@@ -237,21 +242,21 @@ func registerV1Routes(r *gin.Engine) {
 		maint.GET("/predictive", handlers.GetPredictiveMaintenance)
 	}
 
-	service := v1.Group("/service")
+	service := v1.Group("/service", auth.TenantTx())
 	{
 		service.GET("/requests", handlers.GetServiceRequests)
 		service.POST("/requests", handlers.CreateServiceRequest)
 		service.PATCH("/requests/:id", handlers.UpdateServiceRequest)
 	}
 
-	quotations := v1.Group("/quotations")
+	quotations := v1.Group("/quotations", auth.TenantTx())
 	{
 		quotations.POST("", handlers.CreateQuotation)
 		quotations.PUT("/:id", handlers.UpdateQuotation)
 		quotations.PATCH("/:id", handlers.PatchQuotation)
 	}
 
-	alerts := v1.Group("/alerts")
+	alerts := v1.Group("/alerts", auth.TenantTx())
 	{
 		alerts.POST("", handlers.CreateAlert)
 		alerts.GET("/configs", handlers.GetAlertConfigs)
