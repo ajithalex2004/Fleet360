@@ -5,7 +5,7 @@
  * Node & Edge compiler passes.
  */
 
-import { scheduledOccurrence } from '@/lib/jobs/job-runs';
+import { scheduledOccurrence } from '@/lib/jobs/occurrence';
 
 const TIMEZONE = 'Asia/Dubai';
 

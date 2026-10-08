@@ -53,10 +53,7 @@ export function leaseSecondsFor(maxDurationSec: number | undefined): number {
   return Math.max((maxDurationSec ?? 300) * 2, 600);
 }
 
-/** The scheduler's occurrence key: the UTC minute it fired for. */
-export function scheduledOccurrence(at: Date): string {
-  return at.toISOString().slice(0, 16) + 'Z';
-}
+export { scheduledOccurrence } from '@/lib/jobs/occurrence';
 
 export async function claimRun(input: ClaimInput): Promise<ClaimResult> {
   return runOutsideRlsScope(() => prisma.$transaction(async (raw) => {
