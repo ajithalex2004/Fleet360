@@ -10,6 +10,8 @@
  * `schema` reports whether every table/column the app checks at runtime
  * exists (src/lib/db/schema-registry.ts); a missing one makes the status
  * "degraded". Names are on Admin > Schema status, not here (public probe).
+ * `storage` reports whether uploads are durable and working; local disk in
+ * production (lost on every redeploy) makes the status "degraded".
  *
  * Hit this once after `npm run dev` to warm the Neon pool.
  */
@@ -17,6 +19,7 @@
 import { NextResponse } from 'next/server';
 import { ensureDbConnected, prisma } from '@/lib/prisma';
 import { schemaReport } from '@/lib/db/schema-registry';
+import { storageStatus } from '@/lib/storage/health';
 
 export const dynamic = 'force-dynamic'; // never cache
 
@@ -64,7 +67,9 @@ export async function GET() {
   };
   const missing = Object.entries(integrations).filter(([, v]) => !v).map(([k]) => k);
   const schema  = await schemaReport();
-  const status  = missing.length > 0 || schema.status === 'incomplete' ? 'degraded' : 'ok';
+  const storage = await storageStatus();
+  const status  = missing.length > 0 || schema.status === 'incomplete' || !storage.durable || !storage.ok
+    ? 'degraded' : 'ok';
 
   // Optional Go backend readiness probe
   let backendInfo: { status: string; version?: string; error?: string } | undefined;
@@ -95,6 +100,9 @@ export async function GET() {
     integrations,
     missingConfig: missing,
     schema: { status: schema.status, missing: schema.missingCount },
+    // Uploads: durable (object store or mounted volume) and working. The
+    // error detail stays in the server log (public probe).
+    storage: { backend: storage.backend, durable: storage.durable, ok: storage.ok },
     release: RELEASE,
     backend: backendInfo,
     timestamp: new Date().toISOString(),

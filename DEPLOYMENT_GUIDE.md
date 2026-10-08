@@ -74,6 +74,26 @@ each service.
 - `DISABLE_JOB_SCHEDULER=true` stops the in-process scheduler on a replica
   (not needed for safety with several replicas: runs are claimed in `job_runs`).
 
+## File storage
+
+Uploads (tenant attachments, documents, logos, …) must go to durable
+storage: the container's own disk is wiped on every redeploy.
+
+- `fleet360-backend` (Go) stores files in Cloudflare R2, bucket
+  `fleet360-uploads`, folder `production` (`S3_*` variables).
+- `fleet360-app` (Next.js) uses the same bucket in its own folder,
+  `production/web`: `STORAGE_BACKEND=s3`, `S3_REGION=auto`,
+  `S3_KEY_PREFIX=production/web`, and `S3_ENDPOINT`, `S3_BUCKET`,
+  `S3_ACCESS_KEY`, `S3_SECRET_KEY` as Railway references to the backend's
+  variables (`${{fleet360-backend.S3_ACCESS_KEY}}` …), so the keys live in one
+  place.
+- `/api/health` → `storage: { backend, durable, ok }`: `durable: false` means
+  uploads are on the container disk; `ok` is a write/read/delete round trip
+  against the bucket every 10 minutes (the error is in the server log).
+- Files uploaded to local disk before the switch: copy them with
+  `scripts/migrate-uploads-to-s3.mjs` from the running container; the app
+  reads local files as a fallback until then.
+
 ## Scheduled jobs
 
 Jobs run in the web process (`src/lib/jobs/scheduler.ts`, Asia/Dubai time),
