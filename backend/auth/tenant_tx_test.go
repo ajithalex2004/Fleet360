@@ -1,11 +1,13 @@
 package auth
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/driver/postgres"
@@ -134,6 +136,46 @@ func TestTenantTx(t *testing.T) {
 		}
 	})
 
+	t.Run("Try runs on the request transaction: no second connection", func(t *testing.T) {
+		// One pool connection, held by the request transaction once it begins.
+		// Try (a savepoint on that transaction) still works; AsTenant, which
+		// opens its own transaction, would need a second connection and wait.
+		sqlDB, err := app.DB()
+		if err != nil {
+			t.Fatal(err)
+		}
+		sqlDB.SetMaxOpenConns(1)
+		defer sqlDB.SetMaxOpenConns(0)
+		var seen []string
+		var asTenantErr error
+		w := serve(tenantRouter(app, "A", func(c *gin.Context) {
+			if err := TenantDB(c).Exec(`INSERT INTO tenant_tx_probe (tenant_id, note) VALUES ('A', 'a-one-conn')`).Error; err != nil {
+				c.JSON(500, gin.H{"error": err.Error()})
+				return
+			}
+			if err := Try(c, func(tx *gorm.DB) error {
+				return tx.Raw(`SELECT note FROM tenant_tx_probe ORDER BY note`).Scan(&seen).Error
+			}); err != nil {
+				c.JSON(500, gin.H{"error": err.Error()})
+				return
+			}
+			// The old pattern: a second transaction on the pool cannot get a
+			// connection while the request holds the only one.
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			asTenantErr = AsTenant(c, app.WithContext(ctx), func(tx *gorm.DB) error { return nil })
+			c.JSON(201, gin.H{})
+		}))
+		if asTenantErr == nil {
+			t.Fatal("AsTenant got a second connection; expected it to wait for the request's")
+		}
+		// The savepoint sees the request's own uncommitted insert, only tenant
+		// A's rows, and the write is committed with the response.
+		if w.Code != 201 || !contains(seen, "a-one-conn") || contains(seen, "b-seed") || countNotes(owner, "a-one-conn") != 1 {
+			t.Fatalf("status %d, seen %v, committed %d", w.Code, seen, countNotes(owner, "a-one-conn"))
+		}
+	})
+
 	t.Run("Try keeps the transaction usable after a failed statement", func(t *testing.T) {
 		w := serve(tenantRouter(app, "A", func(c *gin.Context) {
 			// Duplicate note: fails, rolled back to the savepoint.
@@ -173,4 +215,13 @@ func TestTenantTx(t *testing.T) {
 			t.Fatal("query without a tenant ran")
 		}
 	})
+}
+
+func contains(xs []string, x string) bool {
+	for _, v := range xs {
+		if v == x {
+			return true
+		}
+	}
+	return false
 }

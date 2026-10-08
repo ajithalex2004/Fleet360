@@ -24,7 +24,6 @@ import (
 	"strings"
 
 	"fleet360-backend/auth"
-	"fleet360-backend/database"
 	"fleet360-backend/models"
 
 	"github.com/gin-gonic/gin"
@@ -71,7 +70,7 @@ func GetLogisticsShipments(c *gin.Context) {
 
 	var total int64
 	var shipments []models.LogisticsShipmentOrder
-	if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+	if err := auth.Try(c, func(tx *gorm.DB) error {
 		q := tx.Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentOrder{})
 
 		if s := strings.TrimSpace(c.Query("status")); s != "" {
@@ -111,7 +110,7 @@ func GetLogisticsShipment(c *gin.Context) {
 	id := c.Param("id")
 
 	var shipment models.LogisticsShipmentOrder
-	err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+	err := auth.Try(c, func(tx *gorm.DB) error {
 		return tx.Scopes(auth.WithTenant(c)).Where("id = ?", id).First(&shipment).Error
 	})
 	if err != nil {
@@ -168,7 +167,7 @@ func CreateLogisticsShipment(c *gin.Context) {
 		input.Currency = "AED"
 	}
 
-	if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+	if err := auth.Try(c, func(tx *gorm.DB) error {
 		return tx.Create(&input).Error
 	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

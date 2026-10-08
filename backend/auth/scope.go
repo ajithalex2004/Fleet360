@@ -47,6 +47,13 @@ func WithTenant(c *gin.Context) func(*gorm.DB) *gorm.DB {
 	}
 }
 
+// AsTenant opens its OWN transaction on db with app.tenant_id set. HTTP
+// handlers on a route with TenantTx must not use it: it takes a second pool
+// connection beside the request transaction, and its writes would commit
+// even when the request fails. Use TenantDB(c), or Try(c, fn) for a
+// statement whose failure the handler tolerates. AsTenant is for code
+// outside a request transaction.
+//
 // AsTenant executes fn inside a transaction where PostgreSQL session setting
 // `app.tenant_id` is set to the request's tenant via set_config(..., true).
 // This guarantees full compatibility with PostgreSQL Row-Level Security (RLS)

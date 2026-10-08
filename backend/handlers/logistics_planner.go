@@ -39,7 +39,6 @@ import (
 	"time"
 
 	"fleet360-backend/auth"
-	"fleet360-backend/database"
 	"fleet360-backend/distmatrix"
 	"fleet360-backend/geo"
 	"fleet360-backend/models"
@@ -205,7 +204,7 @@ func GetLogisticsPlannerInputs(c *gin.Context) {
 			PayloadCapacityKg *float64 `gorm:"column:payload_capacity_kg"`
 		}
 		var rows []vrow
-		if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+		if err := auth.Try(c, func(tx *gorm.DB) error {
 			return tx.Scopes(auth.WithTenant(c)).Table("vehicles").
 				Select("id, license_plate, payload_capacity_kg").
 				Where("deleted_at IS NULL AND (vehicle_usage = 'LOGISTICS' OR vehicle_usage IS NULL) AND payload_capacity_kg IS NOT NULL AND depot_latitude IS NOT NULL").
@@ -233,13 +232,18 @@ func GetLogisticsPlannerInputs(c *gin.Context) {
 			TotalWeightKg *float64 `gorm:"column:total_weight_kg"`
 		}
 		var rows []srow
-		auth.TenantDB(c).Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentOrder{}).
-			Select("id, shipment_no, total_weight_kg").
-			Where("status IN ?", []string{"PENDING", "CONFIRMED"}).
-			Where("EXISTS (SELECT 1 FROM logistics_shipment_stops st WHERE st.shipment_order_id = logistics_shipment_orders.id AND st.stop_type = ?)", "PICKUP").
-			Where("EXISTS (SELECT 1 FROM logistics_shipment_stops st WHERE st.shipment_order_id = logistics_shipment_orders.id AND st.stop_type = ?)", "DELIVERY").
-			Order("created_at DESC").
-			Limit(200).Find(&rows)
+		// Errors are swallowed to an empty list (see above): in a savepoint, so
+		// a failure cannot abort the request transaction and turn the empty
+		// picker into a failed commit.
+		_ = auth.Try(c, func(tx *gorm.DB) error {
+			return tx.Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentOrder{}).
+				Select("id, shipment_no, total_weight_kg").
+				Where("status IN ?", []string{"PENDING", "CONFIRMED"}).
+				Where("EXISTS (SELECT 1 FROM logistics_shipment_stops st WHERE st.shipment_order_id = logistics_shipment_orders.id AND st.stop_type = ?)", "PICKUP").
+				Where("EXISTS (SELECT 1 FROM logistics_shipment_stops st WHERE st.shipment_order_id = logistics_shipment_orders.id AND st.stop_type = ?)", "DELIVERY").
+				Order("created_at DESC").
+				Limit(200).Find(&rows).Error
+		})
 		out := make([]plannerInputShipment, 0, len(rows))
 		for _, r := range rows {
 			out = append(out, plannerInputShipment{
@@ -407,7 +411,7 @@ func runOptimization(c *gin.Context, tid string, req optimizeRequest) (optimizeR
 // freshly-geocoded coordinates already applied.
 func loadAndGeocode(c *gin.Context, tid string, vehicleIDs, shipmentIDs []string) (loadedData, error) {
 	var vehicles []plannerVehicleRow
-	if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+	if err := auth.Try(c, func(tx *gorm.DB) error {
 		return tx.Scopes(auth.WithTenant(c)).Table("vehicles").
 			Select("id, license_plate, payload_capacity_kg, payload_capacity_cbm, depot_latitude, depot_longitude, cost_per_km").
 			Where("id IN ? AND deleted_at IS NULL", vehicleIDs).

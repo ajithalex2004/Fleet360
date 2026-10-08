@@ -47,7 +47,6 @@ import (
 	"net/http"
 
 	"fleet360-backend/auth"
-	"fleet360-backend/database"
 	"fleet360-backend/models"
 
 	"github.com/gin-gonic/gin"
@@ -140,7 +139,7 @@ func GetLogisticsAnalytics(c *gin.Context) {
 	var onTimeCount, deadlineCount int64
 	var resp logisticsAnalyticsResponse
 
-	if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+	if err := auth.Try(c, func(tx *gorm.DB) error {
 		shipments := func() *gorm.DB {
 			return tx.Scopes(auth.WithTenant(c)).Model(&models.LogisticsShipmentOrder{})
 		}
