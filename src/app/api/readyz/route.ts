@@ -1,11 +1,21 @@
 import { NextResponse } from 'next/server';
 import { schemaReport } from '@/lib/db/schema-registry';
+import { goBackendConfigured } from '@/lib/go-routes';
 
 export const dynamic = 'force-dynamic';
 
 const GO_BACKEND_URL = process.env.GO_BACKEND_URL ?? 'http://localhost:8080';
 
 export async function GET() {
+  // Forwarding to Go (src/lib/go-routes.ts) needs a configured backend: in
+  // production a missing GO_BACKEND_URL would only surface per request.
+  if (!goBackendConfigured()) {
+    console.error('[api/readyz] Go forwarding is on but GO_BACKEND_URL is not set');
+    return NextResponse.json(
+      { status: 'not_ready', error: 'Go backend forwarding is on but GO_BACKEND_URL is not set' },
+      { status: 503 },
+    );
+  }
   try {
     const upstreamUrl = new URL('/readyz', GO_BACKEND_URL);
     const res = await fetch(upstreamUrl, {

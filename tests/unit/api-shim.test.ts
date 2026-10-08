@@ -98,11 +98,11 @@ describe('proxyToGoBackend — fail-closed JWT signing', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('does not attempt to sign (and is unaffected by JWT_SECRET) when the request carries no operator session — e.g. carrier-portal/driver-app', async () => {
+  it('does not attempt to sign (and is unaffected by JWT_SECRET) when the request carries no operator session', async () => {
     delete process.env.JWT_SECRET;
 
     const result = await proxyToGoBackend(
-      new NextRequest('http://localhost:3000/api/driver-app/whatever', { method: 'GET' }),
+      new NextRequest('http://localhost:3000/api/logistics/sla', { method: 'GET' }),
     );
 
     expect(result.proxied).toBe(true);
@@ -156,7 +156,10 @@ describe('proxyToGoBackend — routes with a confirmed, live Go handler are prox
     ['GET', '/api/logistics/freight-charges'],
     ['GET', '/api/logistics/analytics'],
     ['GET', '/api/logistics/driver-stats'],
-    ['GET', '/api/logistics/rates/quote'],
+    ['POST', '/api/logistics/rates/quote'],
+    ['GET', '/api/logistics/rate-contracts'],
+    ['POST', '/api/files/upload'],
+    ['HEAD', '/api/logistics/shipments/abc-123'],
     ['GET', '/api/logistics/sla'],
   ])('%s %s is proxied to the Go backend', async (method, path) => {
     const result = await proxyToGoBackend(
@@ -171,10 +174,20 @@ describe('proxyToGoBackend — routes with a confirmed, live Go handler are prox
     expect(result.response?.headers.get('x-backend')).toBe('go');
   });
 
-  it('a path with no Go handler at all is left unproxied (falls through to Next.js)', async () => {
+  // Method and path must both match a Go route (src/lib/go-routes.ts). These
+  // used to be forwarded by prefix and answered with a Go 404.
+  it.each([
+    ['GET', '/api/logistics/control-tower'],          // no Go handler at all
+    ['GET', '/api/files/tenant-a/logo.png'],          // file download: Next.js only
+    ['PATCH', '/api/logistics/shipments/abc-123'],    // Go serves GET only
+    ['GET', '/api/logistics/shipments/abc-123/pod'],  // sub-path Go does not serve
+    ['GET', '/api/logistics/rates/quote'],            // Go serves POST only
+    ['GET', '/api/driver-app/trips'],                 // area Go does not implement
+    ['GET', '/api/carrier-portal/app/loads'],
+  ])('%s %s stays on Next.js', async (method, path) => {
     const result = await proxyToGoBackend(
-      new NextRequest('http://localhost:3000/api/logistics/rate-contracts', {
-        method: 'GET',
+      new NextRequest(`http://localhost:3000${path}`, {
+        method,
         headers: { 'x-user-id': 'user-1', 'x-tenant-id': 'tenant-1', 'x-user-role': 'DISPATCHER' },
       }),
     );
