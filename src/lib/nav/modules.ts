@@ -656,6 +656,7 @@ export const MODULES: ModuleDef[] = [
       { label: 'Shipper portal config',   href: '/admin/shipper-portal-config', icon: Sliders },
       { label: 'Platform info',           href: '/admin/info',                  icon: Info, superOnly: true },
       { label: 'Schema status',           href: '/admin/schema-status',         icon: Info, superOnly: true },
+      { label: 'Job runs',                href: '/admin/job-runs',              icon: Info, superOnly: true },
       { label: 'Workflow management',     href: '/admin/workflows',             icon: Workflow, superOnly: true },
       { label: 'Subscription',            href: '/admin/subscription',          icon: CreditCard },
       { label: 'Brand preview',           href: '/admin/brand-preview',         icon: Eye, superOnly: true },

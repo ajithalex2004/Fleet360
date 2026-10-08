@@ -27,7 +27,9 @@ import { ROUTE_OPTIMIZER_SCHEMA } from '@/lib/logistics/route-optimizer-schema';
  * rental close or billing page.
  */
 const MIGRATED_COLUMNS: SchemaSpec = {
-  tables: [],
+  // job_runs (migration 20261025090000): without it no background job runs —
+  // POST /api/jobs/run refuses to run a job it cannot claim.
+  tables: ['job_runs'],
   columns: [
     ['vehicles', 'year_of_manufacture'],
     ['vehicles', 'stop_mode_comm_frequency'],

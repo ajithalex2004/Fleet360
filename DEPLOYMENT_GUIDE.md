@@ -63,14 +63,21 @@ each service.
 
 - `AUTHZ_MODE`: unset means **enforce** (role permissions answer 403). Set
   `report` only as a temporary rollback (denials are then logged and allowed).
-- `DISABLE_JOB_SCHEDULER=true` stops the in-process scheduler on a replica.
+- `DISABLE_JOB_SCHEDULER=true` stops the in-process scheduler on a replica
+  (not needed for safety with several replicas: runs are claimed in `job_runs`).
 
 ## Scheduled jobs
 
 Jobs run in the web process (`src/lib/jobs/scheduler.ts`, Asia/Dubai time),
-each by POSTing `/api/jobs/run?job=<name>` with `CRON_SECRET`. There is no
-external cron. With more than one web replica, every replica would run every
-job (architecture audit A8) — set `DISABLE_JOB_SCHEDULER=true` on all but one.
+each by POSTing `/api/jobs/run?job=<name>&occurrence=<minute>` with
+`CRON_SECRET`. There is no external cron.
+
+Every run is claimed first in the `job_runs` table (`src/lib/jobs/job-runs.ts`):
+one run per scheduled minute across all web replicas, never two runs of the
+same job at once, and an abandoned run (process stopped mid-run) is closed when
+its lease expires. Adding web replicas is therefore safe. **Admin → Job runs**
+shows the history (30 days). A tick missed while no process was running is not
+replayed; the job runs at its next scheduled time.
 
 ## Rolling back
 

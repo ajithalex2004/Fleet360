@@ -5,6 +5,8 @@
  * Node & Edge compiler passes.
  */
 
+import { scheduledOccurrence } from '@/lib/jobs/job-runs';
+
 const TIMEZONE = 'Asia/Dubai';
 
 const DEFAULT_SCHEDULES: Record<string, string> = {
@@ -123,15 +125,18 @@ export function startJobScheduler(): void {
       if (!expr) continue;
 
       if (isCronDue(expr, now)) {
-        void runScheduled(name);
+        void runScheduled(name, now);
       }
     }
   }, 15000); // Check every 15s to never miss a minute boundary
 }
 
-async function runScheduled(jobName: string): Promise<void> {
+async function runScheduled(jobName: string, firedAt: Date): Promise<void> {
   const base = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-  const url = `${base}/api/jobs/run?job=${encodeURIComponent(jobName)}`;
+  // The occurrence (the minute this tick is for) makes the run claim unique
+  // across replicas: every replica fires the same tick, one runs it
+  // (src/lib/jobs/job-runs.ts).
+  const url = `${base}/api/jobs/run?job=${encodeURIComponent(jobName)}&occurrence=${encodeURIComponent(scheduledOccurrence(firedAt))}`;
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (process.env.CRON_SECRET) {
     headers['Authorization'] = `Bearer ${process.env.CRON_SECRET}`;
@@ -144,6 +149,10 @@ async function runScheduled(jobName: string): Promise<void> {
     const durationMs = Date.now() - start;
     if (!res.ok) {
       console.error(`[job-scheduler] ${jobName} -> HTTP ${res.status} in ${durationMs}ms -`, body);
+      return;
+    }
+    if (body.status === 'skipped') {
+      console.info(`[job-scheduler] ${jobName} -> ${body.summary}`);
       return;
     }
     console.info(`[job-scheduler] ${jobName} -> ${body.status ?? 'ok'} in ${durationMs}ms - ${body.summary ?? ''}`);
