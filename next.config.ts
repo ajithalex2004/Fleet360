@@ -1,32 +1,6 @@
 import type { NextConfig } from "next";
 import path from "path";
 
-// Routes handled by the Go backend on :8080
-// Everything else is handled by Next.js API routes directly
-const GO_BACKEND_ROUTES = [
-  "vehicles",
-  "maintenance-requests",
-  "maintenance",
-  "service-requests",
-  "drivers",
-  "quotations",
-  "garages",
-  "alert-configs",
-  "alerts",
-  "upload",
-].join("|");
-
-// Single source of truth for the Go backend's base URL, shared with
-// src/lib/api-shim.ts (which reads the same env var the same way). This
-// used to be a second, independently hard-coded "http://localhost:8080"
-// here, which stayed correct for local dev but silently diverged from
-// api-shim.ts in any environment where GO_BACKEND_URL is set to something
-// else (e.g. production's Railway-internal hostname) — these rewrites
-// would keep trying to reach localhost:8080 while api-shim.ts correctly
-// used the configured URL. See docs/LOGISTICS_GO_MIGRATION_STATUS.md for
-// the concrete incident this class of bug already caused once.
-const GO_BACKEND_URL = process.env.GO_BACKEND_URL ?? "http://localhost:8080";
-
 const nextConfig: NextConfig = {
   // Fix workspace root tracing
   outputFileTracingRoot: path.join(__dirname),
@@ -147,11 +121,9 @@ const nextConfig: NextConfig = {
         source:      '/api/v1/:path*',
         destination: '/api/:path*',
       },
-      {
-        // Only proxy routes that belong to the Go backend
-        source: `/api/:path((?:${GO_BACKEND_ROUTES}).*)`,
-        destination: `${GO_BACKEND_URL}/api/:path*`,
-      },
+      // Requests for the Go backend are not rewritten here: the middleware
+      // shim forwards exactly the routes in src/lib/go-routes.ts, with a
+      // backend token (architecture audit A10).
     ];
   },
 

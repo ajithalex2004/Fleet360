@@ -1,5 +1,13 @@
 # Logistics Go Backend Migration (L0–L4c) — Completion Record
 
+> **2026-10-08 — route ownership is now one map:** `src/lib/go-routes.ts`
+> lists every route (method + path) the shim forwards, and
+> `tests/unit/go-route-map.test.ts` keeps it identical to the logistics and
+> files routes in `backend/main.go`. The prefix allowlists in `api-shim.ts`
+> and the legacy `next.config.ts` rewrite to Go are gone. Sections below that
+> describe those lists are historical.
+
+
 Compiled 2026-09-12 by direct inspection of git history, the live Railway
 deployment, and CI run history — not from prior documentation. Where
 evidence is incomplete, that is stated explicitly rather than inferred.

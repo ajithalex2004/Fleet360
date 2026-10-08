@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { signJwtForBackend } from '@/lib/auth/jwt';
+import { goProxyEnabled, goRouteFor, goUpstreamPath } from '@/lib/go-routes';
 
 interface ProxyResult {
   proxied: boolean;
@@ -8,58 +9,9 @@ interface ProxyResult {
 
 const GO_BACKEND_URL = process.env.GO_BACKEND_URL ?? 'http://localhost:8080';
 
-// 2026-09-12: no Go backend is currently deployed/reachable anywhere in
-// this account (GO_BACKEND_URL is unset in production, defaulting to an
-// unreachable localhost:8080 — see docs/LOGISTICS_GO_MIGRATION_STATUS.md).
-// analytics/driver-stats/rates/quote/sla have NO Next.js fallback (deleted
-// when ported) and stay listed here — they're already broken either way,
-// and re-adding them costs nothing. tracking DOES have a working Next.js
-// fallback and was removed below so it stops 502ing for real users; add it
-// back once a live Go backend is actually reachable.
-const MIGRATED_EXACT_PATHS = new Set([
-  '/api/logistics/analytics',
-  '/api/logistics/driver-stats',
-  '/api/logistics/rates/quote',
-  '/api/logistics/sla',
-  '/api/logistics/tracking',
-]);
-
-// ── Bus-ops shim: intentionally empty ────────────────────────────────────
-//
-// Architectural risk #8 from the Staff Transportation audit:
-// `/api/bus-ops/*` is Next-only. If a bus-ops handler is ever ported to
-// the Go backend (e.g. `/api/v1/bus-ops/schedules`), this shim WILL NOT
-// route to it — you must:
-//   1. Add the path here (MIGRATED_EXACT_PATHS or MIGRATED_PREFIXES)
-//   2. Verify the Go handler returns the same response contract
-//   3. Add an integration test that shows the shimmed path returns
-//      an `X-Backend: go` header
-// Without steps 1-3 a "silent migration" (Go route deployed, but Next
-// still serving here) leaves the two implementations drifting.
-
-const MIGRATED_PREFIXES = [
-  // Only list paths the Go backend ACTUALLY implements under /api/v1/logistics.
-  // The following were NOT ported to Go — they have working Next.js routes, and
-  // proxying them returns a Go 404 that breaks the screen, so they must stay on
-  // Next.js: control-tower, settlements, rates/contracts, master-data.
-  '/api/logistics/rfqs',
-  '/api/logistics/shipments',
-  '/api/logistics/carriers',
-  '/api/logistics/planner',
-  '/api/logistics/stops',
-  '/api/logistics/route-legs',
-  '/api/logistics/assignments',
-  '/api/logistics/tracking-events',
-  '/api/logistics/pod-events',
-  '/api/logistics/telematics-events',
-  '/api/logistics/exceptions',
-  '/api/logistics/bids',
-  '/api/logistics/carrier-scorecards',
-  '/api/logistics/freight-charges',
-  '/api/carrier-portal/app',
-  '/api/driver-app',
-  '/api/files',
-];
+// Which requests go to Go is decided by the route map, src/lib/go-routes.ts:
+// method AND path must match a route the Go backend registers. Everything
+// else stays on Next.js. Rollout (kill switch, canary tenants) is below.
 
 /**
  * `permissions`: the verified session's permission claim, signed into the
@@ -71,12 +23,12 @@ export async function proxyToGoBackend(
   permissions?: readonly string[] | null,
 ): Promise<ProxyResult> {
   // 1. Kill switch: immediate toggle to fall through to existing Next.js handlers.
-  if (process.env.LOGISTICS_GO_PROXY_ENABLED === 'false') {
+  if (!goProxyEnabled()) {
     return { proxied: false };
   }
 
-  // 2. Route allowlist check: only migrated paths are candidates for Go proxying.
-  if (!shouldProxy(request)) return { proxied: false };
+  // 2. Route map: only a method + path the Go backend serves is forwarded.
+  if (!goRouteFor(request.method, request.nextUrl.pathname)) return { proxied: false };
 
   const source = headersOverride ?? request.headers;
 
@@ -99,7 +51,7 @@ export async function proxyToGoBackend(
   const { pathname, search } = request.nextUrl;
 
   try {
-    const upstream = new URL(pathname.replace(/^\/api/, '/api/v1') + search, GO_BACKEND_URL);
+    const upstream = new URL(goUpstreamPath(pathname) + search, GO_BACKEND_URL);
     const headers = buildProxyHeaders(source);
 
     // Go's /api/v1/* surface sits behind Bearer-JWT auth (backend/auth/jwt.go).
@@ -181,16 +133,6 @@ export async function proxyToGoBackend(
       ),
     };
   }
-}
-
-function shouldProxy(request: NextRequest): boolean {
-  const { pathname } = request.nextUrl;
-
-  if (MIGRATED_EXACT_PATHS.has(pathname)) {
-    return true;
-  }
-
-  return MIGRATED_PREFIXES.some(prefix => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
 function hasRequestBody(method: string): boolean {

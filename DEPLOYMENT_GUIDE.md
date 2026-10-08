@@ -63,6 +63,12 @@ each service.
 
 - `AUTHZ_MODE`: unset means **enforce** (role permissions answer 403). Set
   `report` only as a temporary rollback (denials are then logged and allowed).
+- Go forwarding: the web app forwards exactly the routes in
+  `src/lib/go-routes.ts` (method + path) to the Go backend. `LOGISTICS_GO_PROXY_ENABLED=false`
+  turns forwarding off; `LOGISTICS_GO_CANARY_TENANT_IDS` limits it to listed
+  tenants (production lists canary tenants only); `GO_BACKEND_URL` must be set
+  while forwarding is on (`/api/readyz` fails otherwise). Routes Go serves
+  without a Next.js fallback answer 404 for tenants not forwarded.
 - `DISABLE_JOB_SCHEDULER=true` stops the in-process scheduler on a replica
   (not needed for safety with several replicas: runs are claimed in `job_runs`).
 
