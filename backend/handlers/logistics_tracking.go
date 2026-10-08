@@ -58,7 +58,6 @@ import (
 	"time"
 
 	"fleet360-backend/auth"
-	"fleet360-backend/database"
 	"fleet360-backend/models"
 
 	"github.com/gin-gonic/gin"
@@ -224,7 +223,7 @@ func GetLogisticsTracking(c *gin.Context) {
 			Name      *string `gorm:"column:name"`
 		}
 		var rows []drvRow
-		if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+		if err := auth.Try(c, func(tx *gorm.DB) error {
 			return tx.Table("drivers").Scopes(auth.WithTenant(c)).
 				Select("id, first_name, last_name, name").
 				Where("id IN ?", ids).
@@ -254,7 +253,7 @@ func GetLogisticsTracking(c *gin.Context) {
 			Plate *string `gorm:"column:plate"`
 		}
 		var rows []vehRow
-		if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+		if err := auth.Try(c, func(tx *gorm.DB) error {
 			return tx.Table("vehicles").Scopes(auth.WithTenant(c)).
 				Select("id, COALESCE(plate_number, license_plate) AS plate").
 				Where("id IN ?", ids).

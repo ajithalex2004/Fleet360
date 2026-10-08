@@ -5,7 +5,8 @@ package handlers
 // Forward-geocodes a free-text address to lat/lng, tenant-scoped through a
 // persistent cache (logistics_geocode_cache) so each address costs at most one
 // Mapbox call per tenant. Lives in the handlers package — not a pure package —
-// because it needs database.DB and auth.WithTenant(c); the planner service
+// because it needs the request transaction (auth.TenantDB) and
+// auth.WithTenant(c); the planner service
 // (logistics_planner.go) calls geocodeAddress for any stop missing coordinates.
 //
 // Production reality (verbatim from the TS): with MAPBOX_TOKEN unset, a

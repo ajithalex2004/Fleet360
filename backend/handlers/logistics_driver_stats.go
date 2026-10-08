@@ -72,7 +72,6 @@ import (
 	"time"
 
 	"fleet360-backend/auth"
-	"fleet360-backend/database"
 	"fleet360-backend/models"
 
 	"github.com/gin-gonic/gin"
@@ -177,7 +176,7 @@ func GetLogisticsDriverStats(c *gin.Context) {
 
 	// ── 1. Resolve the target drivers (tenant-scoped, not soft-deleted) ──────
 	var drivers []driverIdentity
-	if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+	if err := auth.Try(c, func(tx *gorm.DB) error {
 		q := tx.Table("drivers").
 			Scopes(auth.WithTenant(c)).
 			Select("id, first_name, last_name, contact_number AS phone, license_number").
@@ -211,7 +210,7 @@ func GetLogisticsDriverStats(c *gin.Context) {
 	// ── 2. Gather trips from both link sources, deduped by shipment ──────────
 	var rowsA []driverTrip
 	var rowsB []driverTrip
-	if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+	if err := auth.Try(c, func(tx *gorm.DB) error {
 		// Source A: shipments whose denormalised assigned_driver_id is the driver.
 		if err := tx.Model(&models.LogisticsShipmentOrder{}).
 			Scopes(auth.WithTenant(c)).

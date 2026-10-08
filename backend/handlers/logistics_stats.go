@@ -46,7 +46,6 @@ import (
 	"net/http"
 
 	"fleet360-backend/auth"
-	"fleet360-backend/database"
 	"fleet360-backend/models"
 
 	"github.com/gin-gonic/gin"
@@ -98,7 +97,7 @@ func GetLogisticsStats(c *gin.Context) {
 	resp := logisticsStatsResponse{RecentTrips: make([]logisticsStatsRecentTrip, 0, 10)}
 
 	// ── Vehicles (this tenant's LOGISTICS fleet) ─────────────────────────────
-	if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+	if err := auth.Try(c, func(tx *gorm.DB) error {
 		v := func() *gorm.DB {
 			return tx.Scopes(auth.WithTenant(c)).Model(&models.Vehicle{}).
 				Where("vehicle_usage = ?", "LOGISTICS")
@@ -131,7 +130,7 @@ func GetLogisticsStats(c *gin.Context) {
 	}
 
 	// ── Drivers (all of the tenant's drivers — see header note) ──────────────
-	if err := auth.AsTenant(c, database.DB, func(tx *gorm.DB) error {
+	if err := auth.Try(c, func(tx *gorm.DB) error {
 		return tx.Scopes(auth.WithTenant(c)).Model(&models.Driver{}).
 			Count(&resp.Drivers).Error
 	}); err != nil {
