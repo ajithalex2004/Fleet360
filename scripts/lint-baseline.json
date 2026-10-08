@@ -641,18 +641,6 @@
     "src/app/api/admin/info/route.ts": {
       "@typescript-eslint/no-unused-vars": 3
     },
-    "src/app/api/admin/migrate/fleet-phase1/route.ts": {
-      "@typescript-eslint/no-unused-vars": 4,
-      "@typescript-eslint/no-explicit-any": 1
-    },
-    "src/app/api/admin/migrate/indexes/route.ts": {
-      "@typescript-eslint/no-unused-vars": 4,
-      "@typescript-eslint/no-explicit-any": 1
-    },
-    "src/app/api/admin/migrate/rac-phase1/route.ts": {
-      "@typescript-eslint/no-unused-vars": 3,
-      "@typescript-eslint/no-explicit-any": 1
-    },
     "src/app/api/admin/nav-permissions/route.ts": {
       "@typescript-eslint/no-unused-vars": 3
     },

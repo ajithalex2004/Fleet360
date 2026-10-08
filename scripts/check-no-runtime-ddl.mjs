@@ -124,7 +124,7 @@ const KNOWN_VIOLATIONS = new Set([]);
 // ── Files reviewed to contain executable DDL (second check) ─────────────────
 // Production never runs the provisionSchemaOnce DDL (src/lib/db/schema-init.ts:
 // runtimeDdlAllowed); it serves fresh local databases, and readiness reports
-// any missing object. The rest are follow-ups to move into migrations.
+// any missing object. Nothing else in src/ may run DDL.
 const REVIEWED_DDL_FILES = new Map([
   // provisionSchemaOnce modules (checked by src/lib/db/schema-registry.ts)
   ['src/lib/agents/schema.ts', 'provisionSchemaOnce: local-only DDL'],
@@ -136,13 +136,6 @@ const REVIEWED_DDL_FILES = new Map([
   ['src/lib/fleet/schema.ts', 'provisionSchemaOnce: local-only DDL'],
   ['src/lib/logistics/geofence-schema.ts', 'provisionSchemaOnce: local-only DDL'],
   ['src/lib/logistics/route-optimizer-schema.ts', 'provisionSchemaOnce: local-only DDL'],
-  // Follow-ups: move into migrations, then delete the DDL and the entry.
-  ['src/lib/ensure-columns.ts', 'FOLLOW-UP: addMissingColumns helper (billing, MFA, tenant provisioning)'],
-  ['src/lib/billing.ts', 'FOLLOW-UP: ensureBillingColumns adds Stripe columns/indexes'],
-  ['src/app/api/setup/super-admin/route.ts', 'FOLLOW-UP: one-time setup adds User.password_hash'],
-  ['src/app/api/admin/migrate/fleet-phase1/route.ts', 'FOLLOW-UP: platform-admin manual migration endpoint'],
-  ['src/app/api/admin/migrate/indexes/route.ts', 'FOLLOW-UP: platform-admin manual index endpoint'],
-  ['src/app/api/admin/migrate/rac-phase1/route.ts', 'FOLLOW-UP: platform-admin manual migration endpoint'],
 ]);
 
 const DDL = /\b(CREATE\s+(?:UNIQUE\s+)?(?:TABLE|INDEX|SCHEMA|TYPE|SEQUENCE|EXTENSION|(?:OR\s+REPLACE\s+)?(?:FUNCTION|VIEW|TRIGGER))|ALTER\s+(?:TABLE|TYPE|SCHEMA)|DROP\s+(?:TABLE|INDEX|SCHEMA|TYPE))\b/;

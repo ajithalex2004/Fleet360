@@ -190,11 +190,6 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    // 6. Ensure password_hash column exists
-    try {
-      await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS password_hash TEXT`);
-    } catch { try { await prisma.$executeRawUnsafe(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT`); } catch { /* */ } }
-
     return NextResponse.json({
       ok:       true,
       message:  'Super Admin account created successfully.',

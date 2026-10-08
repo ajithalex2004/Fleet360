@@ -14,7 +14,6 @@ import { isDbConnectionError, prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
 import { signSession } from '@/lib/tenant-session';
 import { signJwtForBackend } from '@/lib/auth/jwt';
-import { ensureMfaColumns } from '@/lib/auth-mfa-schema';
 import { verifyTotp, verifyRecoveryCode } from '@/lib/totp';
 import { getEffectiveRole } from '@/lib/permissions/effective-role';
 import { permissionsForEffectiveRole } from '@/lib/authz/session-permissions';
@@ -100,7 +99,6 @@ export async function POST(request: NextRequest) {
     }
 
     // 2.5 MFA gate (after password verification)
-    await ensureMfaColumns();
     const mfaRows = await prisma.$queryRawUnsafe<{
       mfa_enabled: boolean; mfa_secret: string | null; mfa_recovery_codes: string[] | null;
     }[]>(

@@ -15,7 +15,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
 import {
-  ensureBrandingColumns, getBranding, normalizeHexColor, normalizeUrl,
+  getBranding, normalizeHexColor, normalizeUrl,
 } from '@/lib/branding';
 import { requirePlan } from '@/lib/plan-limits';
 import { logAudit } from '@/lib/audit';
@@ -100,7 +100,6 @@ async function handlePUT(req: NextRequest, { params }: RouteParams) {
 
   try {
     const response = await withTenantRls(prisma, tenantId, async (tx) => {
-      await ensureBrandingColumns();
       const tenant = await tx.tenant.findUnique({
         where: { id: tenantId },
         select: { id: true, name: true },

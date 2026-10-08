@@ -8,46 +8,10 @@
  * The colour fields drive runtime CSS variables — see BrandingProvider.
  */
 
-import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { addMissingColumns } from '@/lib/ensure-columns';
 
-let _ensured = false;
 
-// The production runtime role (fleet360_app) has no ALTER privilege on the
-// public schema, so this DDL always fails with 42501 there. The columns it
-// adds already exist in every live environment - this block only matters
-// for fresh/local databases connecting as an owner-equivalent role. Every
-// caller of getBranding() already wraps it in .catch(() => null), so a
-// failure here never crashed a response - but without catching it, _ensured
-// was never set, so this failing DDL re-ran (and re-failed) on every single
-// call, forever. Treat insufficient_privilege as "already provisioned".
-function isInsufficientPrivilege(e: unknown): boolean {
-  return (
-    e instanceof Prisma.PrismaClientKnownRequestError &&
-    (e.meta as { code?: string } | undefined)?.code === '42501'
-  );
-}
 
-export async function ensureBrandingColumns(): Promise<void> {
-  if (_ensured) return;
-  // Only missing columns are added (no DDL, and no privilege error, where the
-  // schema is up to date: see src/lib/ensure-columns.ts).
-  try {
-    await addMissingColumns('tenants', {
-      brand_product_name:  'TEXT',
-      brand_tagline:       'TEXT',
-      brand_logo_url:      'TEXT',
-      brand_favicon_url:   'TEXT',
-      brand_primary_color: 'TEXT',
-      brand_accent_color:  'TEXT',
-    });
-  } catch (e) {
-    if (!isInsufficientPrivilege(e)) throw e;
-    console.warn('[ensureBrandingColumns] DDL skipped: runtime role lacks ALTER privilege on public schema (assuming columns already exist)');
-  }
-  _ensured = true;
-}
 
 export interface Branding {
   productName:     string | null;
@@ -82,7 +46,6 @@ function rowToBranding(r: BrandingRow): Branding {
 }
 
 export async function getBranding(tenantId: string): Promise<Branding | null> {
-  await ensureBrandingColumns();
   const rows = await prisma.$queryRawUnsafe<BrandingRow[]>(
     `SELECT brand_product_name, brand_tagline, brand_logo_url, brand_favicon_url,
             brand_primary_color, brand_accent_color, default_language
@@ -98,7 +61,6 @@ export async function getBranding(tenantId: string): Promise<Branding | null> {
  * fields — no secrets exposed.
  */
 export async function getBrandingByCode(code: string): Promise<(Branding & { tenantId: string; tenantName: string }) | null> {
-  await ensureBrandingColumns();
   const rows = await prisma.$queryRawUnsafe<(BrandingRow & { id: string; name: string })[]>(
     `SELECT id, name, brand_product_name, brand_tagline, brand_logo_url, brand_favicon_url,
             brand_primary_color, brand_accent_color, default_language
@@ -115,7 +77,6 @@ export async function getBrandingByCode(code: string): Promise<(Branding & { ten
 /** Public lookup by tenant domain (login page sniffs from email). */
 export async function getBrandingByDomain(domain: string): Promise<(Branding & { tenantId: string; tenantName: string }) | null> {
   if (!domain || !/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain.toLowerCase())) return null;
-  await ensureBrandingColumns();
   const rows = await prisma.$queryRawUnsafe<(BrandingRow & { id: string; name: string })[]>(
     `SELECT id, name, brand_product_name, brand_tagline, brand_logo_url, brand_favicon_url,
             brand_primary_color, brand_accent_color, default_language

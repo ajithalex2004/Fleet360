@@ -90,7 +90,9 @@ describe('schema registry', () => {
     };
     walk(join(process.cwd(), 'src'));
     expect(names.length).toBeGreaterThan(0);
-    expect(new Set(names)).toEqual(new Set(Object.keys(REQUIRED_SCHEMAS)));
+    // Every provisionSchemaOnce module is listed; 'migrated-columns' is the
+    // one entry that is not a module (columns migrations now own).
+    expect(new Set(names)).toEqual(new Set(Object.keys(REQUIRED_SCHEMAS).filter((k) => k !== 'migrated-columns')));
   });
 
   it('reports missing objects per module with a count', async () => {

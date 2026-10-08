@@ -15,7 +15,6 @@ import { z } from 'zod';
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { appUrl, sendTemplatedEmail } from '@/lib/email-templates';
-import { addMissingColumns } from '@/lib/ensure-columns';
 import { signSession } from '@/lib/tenant-session';
 // ── Free email domains blocklist ─────────────────────────────────────────────
 const FREE_EMAIL_DOMAINS = new Set([
@@ -85,41 +84,6 @@ async function sendVerificationEmail(opts: {
   if (!sent.sent) console.warn(`[provision] domain verification email for tenant ${opts.tenantId} not sent (${sent.reason ?? 'unknown'})`);
 }
 
-// ── Ensure schema columns exist (run BEFORE transactions — DDL can't be in tx) ─
-
-// Each adds only missing columns (src/lib/ensure-columns.ts): where the schema
-// is up to date they issue no DDL, so the runtime role, which cannot ALTER
-// tables, no longer fails here. A column that is genuinely missing needs the
-// table owner; that failure is logged and provisioning carries on.
-
-async function ensurePasswordHashColumn(): Promise<void> {
-  // Table is "User" (capital U — no @@map on the Prisma model)
-  try {
-    await addMissingColumns('User', { password_hash: 'TEXT' });
-  } catch (e) {
-    console.warn('[provision] ensurePasswordHashColumn could not add the column:', e);
-  }
-}
-
-async function ensureTrnColumn(): Promise<void> {
-  try {
-    await addMissingColumns('tenants', { trn: 'TEXT' });
-  } catch (e) {
-    console.warn('[provision] ensureTrnColumn could not add the column:', e);
-  }
-}
-
-async function ensureDomainVerificationColumns(): Promise<void> {
-  try {
-    await addMissingColumns('tenants', {
-      domain_verification_token: 'TEXT',
-      domain_verification_method: 'TEXT',
-      domain_verified_at: 'TIMESTAMPTZ',
-    });
-  } catch (e) {
-    console.warn('[provision] ensureDomainVerificationColumns could not add the columns:', e);
-  }
-}
 
 // ── Detect the actual User table name ONCE before the transaction ─────────────
 // Prisma maps model "User" → table "User" (capital U, no @@map).
@@ -162,23 +126,8 @@ async function detectDomainVerifColumnsExist(): Promise<boolean> {
 // ── POST handler ──────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
-  // Genuinely BEFORE any transaction/RLS scope exists - not just before the
-  // rest of this handler's own code, but before tenantBootstrapHandler opens
-  // its transaction at all. These used to run from inside that callback,
-  // which is already inside withBootstrap's runWithRlsScope: the prisma
-  // client's raw-method routing sees an active scope and redirects these
-  // "plain client" calls onto the SAME transaction connection instead of an
-  // independent one. ensureTrnColumn's ALTER TABLE then fails (fleet360_app
-  // has no DDL privileges), silently caught by its own try/catch - but the
-  // failure had already aborted the Postgres transaction at the database
-  // level. Every statement after it on that connection, including
-  // tenant.create() further down, failed with 25P02 "current transaction is
-  // aborted" regardless of what it was actually trying to do. Confirmed via
-  // pg_stat_activity mid-request: the transaction showed
-  // "idle in transaction (aborted)" while running detectUserTableName()'s
-  // query, one step after ensureTrnColumn's ALTER TABLE - before
-  // tenant.create() ever ran.
-  await Promise.all([ensurePasswordHashColumn(), ensureTrnColumn(), ensureDomainVerificationColumns()]);
+  // The columns this handler uses (User.password_hash, tenants.trn and the
+  // domain-verification columns) come from migrations; it runs no DDL.
   const [userTable, domainVerifColumnsExist] = await Promise.all([
     detectUserTableName(),
     detectDomainVerifColumnsExist(),
@@ -429,8 +378,9 @@ export async function POST(request: NextRequest) {
         // returns, below). Both are fire-and-forget, but firing them from inside
         // this callback would inherit the active RLS scope via AsyncLocalStorage
         // and route their prisma.$executeRawUnsafe calls onto THIS transaction's
-        // pinned connection. startTrialForTenant → ensureBillingColumns() runs
-        // unguarded ALTER TABLEs with no per-statement try/catch; fleet360_app
+        // pinned connection. startTrialForTenant then ran ensureBillingColumns()
+        // (since removed: billing columns come from migrations) — unguarded
+        // ALTER TABLEs with no per-statement try/catch; fleet360_app
         // has no DDL grant, so the first ALTER throws and aborts the transaction
         // — right as (or just before) the real COMMIT, which Postgres then
         // treats as a no-op rollback on an aborted transaction. The route still
