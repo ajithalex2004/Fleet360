@@ -108,7 +108,7 @@ export const PUBLIC_PREFIXES: readonly string[] = [
   // scheduling. Only the VAPID public key is anonymous.
   '/api/push/',
   // System cron jobs (auto-close stale trips, etc.) — protected by
-  // CRON_SECRET inside the handler (Vercel Cron sends it as a
+  // CRON_SECRET inside the handler (a scheduler sends it as a
   // Bearer token). Listed as public so the middleware doesn't
   // require an operator session.
   '/api/cron/',

@@ -5,7 +5,7 @@
  * Single secured entry point for all background sweep / cron jobs.
  * Auth: CRON_SECRET Bearer OR authenticated operator session.
  *
- * Vercel cron entries in vercel.json should point here:
+ * The in-process scheduler (src/lib/jobs/scheduler.ts) POSTs here:
  *   { "path": "/api/jobs/run?job=dunning-sweep", "schedule": "0 2 * * *" }
  */
 
@@ -13,7 +13,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { JOB_MAP, JOB_REGISTRY, isJobAuthorized, verifyJobAuthorization, type JobContext } from '@/lib/jobs/registry';
 
 export const dynamic     = 'force-dynamic';
-export const maxDuration = 300; // seconds — Vercel Pro plan max
+export const maxDuration = 300; // seconds
 
 // ── GET /api/jobs — list registered jobs (authenticated) ─────────────────────
 //
@@ -24,7 +24,7 @@ export const maxDuration = 300; // seconds — Vercel Pro plan max
 // (its resolved tenantId was never even used afterward), which meant this
 // endpoint was never actually reachable by CRON_SECRET alone despite the
 // docstring above promising exactly that — including the one real cron
-// entry vercel.json ever pointed here.
+// entry an external cron (formerly vercel.json, removed) ever pointed here.
 
 export async function GET(request: NextRequest) {
   if (!await isJobAuthorized(request)) {

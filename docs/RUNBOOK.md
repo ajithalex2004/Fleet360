@@ -49,16 +49,10 @@ production will throw immediately on first request — fail-fast.
 
 ## Deployment
 
-(Deployment target TBD — Vercel, AWS, or self-hosted Docker. Update once
-chosen.)
-
-For now, the recommended path is **Vercel**:
-- Connect the GitHub repo → Vercel project
-- Set env vars in Vercel dashboard
-- Production deploys auto-trigger on `main` push
-- Preview deploys auto-trigger on PRs
-
-If self-hosted, see `Dockerfile` + `docker-compose.yml`.
+Railway (`fleet360-app` = Next.js, `fleet360-backend` = Go) with Neon
+PostgreSQL. Merging to `main` deploys both services; **migrations are not
+applied on deploy** — run them right after the merge. See
+`DEPLOYMENT_GUIDE.md` for the steps, configuration and rollback.
 
 ## Database operations
 
@@ -74,7 +68,8 @@ If self-hosted, see `Dockerfile` + `docker-compose.yml`.
 npx prisma migrate dev --name describe_change   # creates + applies migration
 git add prisma/migrations/* prisma/schema.prisma
 git commit
-# Production: deploy applies via `npx prisma migrate deploy` in build step
+# Production: NOT applied on deploy. After the merge, from an up-to-date main:
+#   railway run --service fleet360-app --environment production npx prisma migrate deploy
 ```
 
 **Never run `prisma db push` or `migrate dev` against production.**

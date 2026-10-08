@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
  * Query params:
  *   ?dryRun=1 — preview without writing
  *
- * Designed to be cron-triggered (Vercel Cron / GitHub Actions / external):
+ * Designed to be cron-triggered (the in-process scheduler or an external one):
  *   POST /api/leasing/documents/sweep-expiry
  *   Authorization: Bearer <CRON_SECRET>   (when CRON_SECRET is set)
  */

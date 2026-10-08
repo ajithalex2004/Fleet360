@@ -11,7 +11,7 @@
  *
  * Trigger options:
  *   1. POST /api/leasing/documents/sweep-expiry  (manual or external cron)
- *   2. Vercel Cron / GitHub Actions schedule
+ *   2. The in-process scheduler (src/lib/jobs/scheduler.ts)
  */
 
 import { captureException, captureMessage } from '@/lib/sentry';
