@@ -7881,21 +7881,127 @@ export interface ShipperOnboardingListFilter {
   limit: number;
 }
 
-export async function listShipperOnboarding(
-  _filter: ShipperOnboardingListFilter,
-): Promise<{ data: unknown[] }> {
-  void _filter;
-  throw new LogisticsValidationError(['listShipperOnboarding is not yet implemented — track Layer 2.5 follow-up.']);
+// ── Shipper onboarding (model A: a shipper is a tenant customer) ────────────
+//
+// A customer is a shipper once it has a freight profile row
+// (logistics_customer_marketplace_settings, created by onboardShipperCustomer)
+// or appears in freight activity: a shipping request, a shipment order it owns,
+// or a portal user. Onboarding and compliance status live on the customer
+// (customers.logistics_onboarding_status / logistics_compliance_status,
+// migration 20261026090000_shipper_onboarding_columns); portal access is
+// granted through /api/admin/customers/[id]/portal-invitations.
+
+export const SHIPPER_ONBOARDING_STATES = ['DRAFT', 'IN_REVIEW', 'APPROVED', 'SUSPENDED'] as const;
+export const SHIPPER_COMPLIANCE_STATES = ['PENDING', 'VERIFIED', 'REJECTED'] as const;
+const OPEN_REQUEST_STATES = ['SUBMITTED', 'UNDER_REVIEW'];
+
+export interface ShipperOnboardingRecord {
+  id: string;
+  name: string;
+  customerCode: string | null;
+  email: string | null;
+  phone: string | null;
+  tradeLicense: string | null;
+  taxRegistrationNumber: string | null;
+  creditLimit: number | null;
+  onboardingStatus: string;
+  complianceStatus: string;
+  trackingLevel: string | null;
+  activePortalUsers: number;
+  pendingPortalUsers: number;
+  portalEnabled: boolean;
+  shipmentOrderCount: number;
+  openRequestCount: number;
 }
 
-export async function getShipperOnboarding(
-  _args: { tenantId: string; customerId: string },
-): Promise<JsonRecord | null> {
-  void _args;
-  throw new LogisticsValidationError(['getShipperOnboarding is not yet implemented — track Layer 2.5 follow-up.']);
+function checkState(value: string | null | undefined, allowed: readonly string[], label: string): string | null {
+  if (value == null || value === '') return null;
+  const v = value.trim().toUpperCase();
+  if (!allowed.includes(v)) {
+    throw new LogisticsValidationError([`${label} must be one of ${allowed.join(', ')}`]);
+  }
+  return v;
 }
 
-export async function onboardShipperCustomer(_input: {
+const SHIPPER_SELECT = `
+  SELECT c.id,
+         c.name_en                              AS name,
+         c.customer_code                        AS "customerCode",
+         c.email,
+         c.mobile_number                        AS phone,
+         c.trade_license                        AS "tradeLicense",
+         c.tax_registration_number              AS "taxRegistrationNumber",
+         c.credit_limit::float8                 AS "creditLimit",
+         c.logistics_onboarding_status          AS "onboardingStatus",
+         c.logistics_compliance_status          AS "complianceStatus",
+         c.portal_tracking_level                AS "trackingLevel",
+         (SELECT COUNT(*) FROM customer_portal_users u
+           WHERE u.tenant_id = c.tenant_id AND u.customer_id = c.id AND u.deleted_at IS NULL
+             AND u.is_active AND u.password_hash IS NOT NULL)::int                     AS "activePortalUsers",
+         (SELECT COUNT(*) FROM customer_portal_invitations i
+            JOIN customer_portal_users u ON u.id = i.portal_user_id
+           WHERE i.tenant_id = c.tenant_id AND u.customer_id = c.id
+             AND i.accepted_at IS NULL AND i.expires_at > NOW())::int                  AS "pendingPortalUsers",
+         (SELECT COUNT(*) FROM logistics_shipment_orders o
+           WHERE o.tenant_id = c.tenant_id AND o.cargo_owner_customer_id = c.id
+             AND o.deleted_at IS NULL)::int                                            AS "shipmentOrderCount",
+         (SELECT COUNT(*) FROM logistics_shipping_requests r
+           WHERE r.tenant_id = c.tenant_id AND r.shipper_id = c.id AND r.deleted_at IS NULL
+             AND r.status = ANY($2::text[]))::int                                      AS "openRequestCount"
+    FROM customers c
+   WHERE c.tenant_id = $1 AND c.deleted_at IS NULL`;
+
+const IS_SHIPPER = `(
+  EXISTS (SELECT 1 FROM logistics_customer_marketplace_settings s WHERE s.tenant_id = c.tenant_id AND s.customer_id = c.id)
+  OR EXISTS (SELECT 1 FROM logistics_shipping_requests r WHERE r.tenant_id = c.tenant_id AND r.shipper_id = c.id AND r.deleted_at IS NULL)
+  OR EXISTS (SELECT 1 FROM logistics_shipment_orders o WHERE o.tenant_id = c.tenant_id AND o.cargo_owner_customer_id = c.id AND o.deleted_at IS NULL)
+  OR EXISTS (SELECT 1 FROM customer_portal_users u WHERE u.tenant_id = c.tenant_id AND u.customer_id = c.id AND u.deleted_at IS NULL)
+)`;
+
+type ShipperRow = Omit<ShipperOnboardingRecord, 'portalEnabled'>;
+const toShipper = (r: ShipperRow): ShipperOnboardingRecord => ({
+  ...r,
+  portalEnabled: r.activePortalUsers + r.pendingPortalUsers > 0,
+});
+
+export async function listShipperOnboarding(filter: ShipperOnboardingListFilter): Promise<ShipperOnboardingRecord[]> {
+  const params: unknown[] = [filter.tenantId, OPEN_REQUEST_STATES];
+  let where = ` AND ${IS_SHIPPER}`;
+  const onboarding = checkState(filter.onboardingStatus, SHIPPER_ONBOARDING_STATES, 'onboardingStatus');
+  if (onboarding) { params.push(onboarding); where += ` AND c.logistics_onboarding_status = $${params.length}`; }
+  const compliance = checkState(filter.complianceStatus, SHIPPER_COMPLIANCE_STATES, 'complianceStatus');
+  if (compliance) { params.push(compliance); where += ` AND c.logistics_compliance_status = $${params.length}`; }
+  const search = filter.search?.trim();
+  if (search) {
+    params.push(`%${search.replace(/[\\%_]/g, (m) => `\\${m}`)}%`);
+    const p = `$${params.length}`;
+    where += ` AND (c.name_en ILIKE ${p} OR c.customer_code ILIKE ${p} OR c.email ILIKE ${p} OR c.trade_license ILIKE ${p})`;
+  }
+  params.push(Math.min(Math.max(filter.limit, 1), 500));
+  const rows = await prisma.$queryRawUnsafe<ShipperRow[]>(
+    `${SHIPPER_SELECT}${where} ORDER BY c.name_en ASC LIMIT $${params.length}`,
+    ...params,
+  );
+  return rows.map(toShipper);
+}
+
+export async function getShipperOnboarding(args: { tenantId: string; customerId: string }): Promise<ShipperOnboardingRecord | null> {
+  const [row] = await prisma.$queryRawUnsafe<ShipperRow[]>(
+    `${SHIPPER_SELECT} AND c.id = $3 LIMIT 1`,
+    args.tenantId, OPEN_REQUEST_STATES, args.customerId,
+  );
+  return row ? toShipper(row) : null;
+}
+
+/** A customer code unique across tenants (customer_code is globally unique). */
+function shipperCustomerCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let suffix = '';
+  for (const b of randomBytes(6)) suffix += chars[b % chars.length];
+  return `SHP-${suffix}`;
+}
+
+export async function onboardShipperCustomer(input: {
   tenantId: string;
   nameEn?: string;
   name?: string;
@@ -7910,12 +8016,43 @@ export async function onboardShipperCustomer(_input: {
   billingCycle?: string | null;
   metadata?: JsonRecord | null;
   actorUserId?: string | null;
-}): Promise<{ customerId: string }> {
-  void _input;
-  throw new LogisticsValidationError(['onboardShipperCustomer is not yet implemented — track Layer 2.5 follow-up.']);
+}): Promise<ShipperOnboardingRecord> {
+  const name = (input.nameEn ?? input.name ?? '').trim();
+  if (!name) throw new LogisticsValidationError(['Shipper name is required']);
+  const onboarding = checkState(input.onboardingStatus, SHIPPER_ONBOARDING_STATES, 'onboardingStatus') ?? 'DRAFT';
+  const compliance = checkState(input.complianceStatus, SHIPPER_COMPLIANCE_STATES, 'complianceStatus') ?? 'PENDING';
+  if (input.creditLimit != null && (!Number.isFinite(input.creditLimit) || input.creditLimit < 0)) {
+    throw new LogisticsValidationError(['Credit limit must be a non-negative number']);
+  }
+
+  const customerId = crypto.randomUUID();
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe(
+      `INSERT INTO customers (
+         id, tenant_id, customer_code, customer_type, name_en, email, mobile_number,
+         trade_license, tax_registration_number, credit_limit, billing_cycle, status,
+         logistics_onboarding_status, logistics_compliance_status, created_at, updated_at
+       ) VALUES ($1, $2, $3, 'CORPORATE', $4, $5, $6, $7, $8, $9, $10, 'ACTIVE', $11, $12, NOW(), NOW())`,
+      customerId, input.tenantId, shipperCustomerCode(), name,
+      input.email?.trim() || null, (input.mobileNumber ?? input.phone)?.trim() || null,
+      input.tradeLicense?.trim() || null, input.taxRegistrationNumber?.trim() || null,
+      input.creditLimit ?? null, input.billingCycle ?? null, onboarding, compliance,
+    );
+    // The freight profile row marks the customer as a shipper.
+    await tx.$executeRawUnsafe(
+      `INSERT INTO logistics_customer_marketplace_settings (tenant_id, customer_id, customer_name, metadata, updated_by)
+       VALUES ($1, $2, $3, $4::jsonb, $5)
+       ON CONFLICT (tenant_id, customer_id) DO NOTHING`,
+      input.tenantId, customerId, name, input.metadata ? JSON.stringify(input.metadata) : null, input.actorUserId ?? null,
+    );
+  });
+
+  const created = await getShipperOnboarding({ tenantId: input.tenantId, customerId });
+  if (!created) throw new Error('onboardShipperCustomer: the new shipper could not be read back');
+  return created;
 }
 
-export async function updateShipperOnboarding(_args: {
+export async function updateShipperOnboarding(args: {
   tenantId: string;
   customerId: string;
   onboardingStatus?: string | null;
@@ -7926,9 +8063,31 @@ export async function updateShipperOnboarding(_args: {
   billingCycle?: string | null;
   metadata?: JsonRecord | null;
   actorUserId?: string | null;
-}): Promise<{ ok: true }> {
-  void _args;
-  throw new LogisticsValidationError(['updateShipperOnboarding is not yet implemented — track Layer 2.5 follow-up.']);
+}): Promise<ShipperOnboardingRecord> {
+  const onboarding = checkState(args.onboardingStatus, SHIPPER_ONBOARDING_STATES, 'onboardingStatus');
+  const compliance = checkState(args.complianceStatus, SHIPPER_COMPLIANCE_STATES, 'complianceStatus');
+  if (args.creditLimit != null && (!Number.isFinite(args.creditLimit) || args.creditLimit < 0)) {
+    throw new LogisticsValidationError(['Credit limit must be a non-negative number']);
+  }
+  // A null field means "leave as is" (the PATCH route sends null for absent fields).
+  const updated = await prisma.$executeRawUnsafe(
+    `UPDATE customers
+        SET logistics_onboarding_status = COALESCE($3, logistics_onboarding_status),
+            logistics_compliance_status = COALESCE($4, logistics_compliance_status),
+            trade_license               = COALESCE($5, trade_license),
+            tax_registration_number     = COALESCE($6, tax_registration_number),
+            credit_limit                = COALESCE($7, credit_limit),
+            billing_cycle               = COALESCE($8, billing_cycle),
+            updated_at                  = NOW()
+      WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL`,
+    args.tenantId, args.customerId, onboarding, compliance,
+    args.tradeLicense?.trim() || null, args.taxRegistrationNumber?.trim() || null,
+    args.creditLimit ?? null, args.billingCycle ?? null,
+  );
+  if (updated === 0) throw new LogisticsValidationError(['Shipper not found']);
+  const shipper = await getShipperOnboarding({ tenantId: args.tenantId, customerId: args.customerId });
+  if (!shipper) throw new LogisticsValidationError(['Shipper not found']);
+  return shipper;
 }
 
 // ── Shipping requests (demand intake) ───────────────────────────────────────

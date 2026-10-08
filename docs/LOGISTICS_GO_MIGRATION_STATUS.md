@@ -6,6 +6,11 @@
 > files routes in `backend/main.go`. The prefix allowlists in `api-shim.ts`
 > and the legacy `next.config.ts` rewrite to Go are gone. Sections below that
 > describe those lists are historical.
+>
+> **2026-10-08 — all tenants:** `LOGISTICS_GO_CANARY_TENANT_IDS` was removed in
+> production, so every tenant's logistics requests in the map go to Go
+> (verified: every logistics screen and the 25 Go GET routes answer 200 via Go).
+> Rollback: `LOGISTICS_GO_PROXY_ENABLED=false` and a redeploy.
 
 
 Compiled 2026-09-12 by direct inspection of git history, the live Railway
