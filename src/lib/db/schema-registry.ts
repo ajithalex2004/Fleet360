@@ -99,6 +99,9 @@ const MIGRATED_COLUMNS: SchemaSpec = {
     ['tenants', 'brand_favicon_url'],
     ['tenants', 'brand_primary_color'],
     ['tenants', 'brand_accent_color'],
+    // Shipper onboarding (migration 20261026090000_shipper_onboarding_columns)
+    ['customers', 'logistics_onboarding_status'],
+    ['customers', 'logistics_compliance_status'],
   ],
 };
 

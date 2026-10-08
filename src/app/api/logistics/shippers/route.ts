@@ -14,10 +14,9 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
 import { listShipperOnboarding, onboardShipperCustomer, LogisticsValidationError } from '@/lib/logistics/domain';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest) {
@@ -40,6 +39,9 @@ export async function GET(req: NextRequest) {
     const data = await listShipperOnboarding({ tenantId, onboardingStatus, search, limit });
     return NextResponse.json({ data }, { headers: { 'Cache-Control': 'private, max-age=15' } });
     } catch (e) {
+    if (e instanceof LogisticsValidationError) {
+      return NextResponse.json({ error: e.message, issues: e.issues }, { status: 400 });
+    }
     console.error('[logistics/shippers GET]', e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'failed to list shippers' },

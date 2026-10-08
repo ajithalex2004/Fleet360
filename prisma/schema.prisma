@@ -4790,6 +4790,11 @@ model Customer {
   // Status
   status String? @default("ACTIVE") // ACTIVE|INACTIVE
 
+  // Freight shipper onboarding (Logistics > Shippers)
+  logisticsOnboardingStatus String @default("DRAFT") @map("logistics_onboarding_status") // DRAFT|IN_REVIEW|APPROVED|SUSPENDED
+  logisticsComplianceStatus String @default("PENDING") @map("logistics_compliance_status") // PENDING|VERIFIED|REJECTED
+  portalTrackingLevel       String @default("STATUS_ONLY") @map("portal_tracking_level")
+
   region       CustomerHierarchy?    @relation("CustomerRegion", fields: [regionId], references: [id])
   department   CustomerHierarchy?    @relation("CustomerDepartment", fields: [departmentId], references: [id])
   unit         CustomerHierarchy?    @relation("CustomerUnit", fields: [unitId], references: [id])

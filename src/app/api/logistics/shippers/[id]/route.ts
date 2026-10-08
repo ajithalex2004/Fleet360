@@ -14,10 +14,9 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withTenantRls } from '@/lib/rls';
-import { getShipperOnboarding, updateShipperOnboarding } from '@/lib/logistics/domain';
+import { getShipperOnboarding, updateShipperOnboarding, LogisticsValidationError } from '@/lib/logistics/domain';
 
-import { requireAuthorizedTenant, stripTenantOwnershipFields } from '@/lib/tenant-context';
+import { requireAuthorizedTenant } from '@/lib/tenant-context';
 export const runtime = 'nodejs';
 
 export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -89,7 +88,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     return NextResponse.json({ data: shipper });
     } catch (e) {
     const msg = e instanceof Error ? e.message : 'failed to update shipper';
-    const status = msg.includes('not found') ? 404 : 500;
+    const status = msg.includes('not found') ? 404 : e instanceof LogisticsValidationError ? 422 : 500;
     if (status === 500) console.error('[logistics/shippers/:id PATCH]', e);
     return NextResponse.json({ error: msg }, { status });
   }
