@@ -9,7 +9,9 @@
  *   { "path": "/api/jobs/run?job=dunning-sweep", "schedule": "0 2 * * *" }
  */
 
+import { randomUUID } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
+import { claimRun, finishRun, leaseSecondsFor } from '@/lib/jobs/job-runs';
 import { JOB_MAP, JOB_REGISTRY, isJobAuthorized, verifyJobAuthorization, type JobContext } from '@/lib/jobs/registry';
 
 export const dynamic     = 'force-dynamic';
@@ -83,14 +85,51 @@ export async function POST(request: NextRequest) {
     request,
   };
 
+  // Claim the run (src/lib/jobs/job-runs.ts): one run per scheduled
+  // occurrence across every web replica, and never two of the same job at
+  // once. The scheduler names the minute it fired for; any other caller's
+  // run is its own occurrence.
+  // If the claim cannot be recorded, the job does not run: an unrecorded run
+  // is exactly what could overlap or double up.
+  const scheduled = request.nextUrl.searchParams.get('occurrence');
+  let claim: Awaited<ReturnType<typeof claimRun>>;
+  try {
+    claim = await claimRun({
+      jobName,
+      scope:        auth.tenantId ?? '*',
+      occurrence:   scheduled ?? `manual:${randomUUID()}`,
+      trigger:      scheduled ? 'scheduler' : 'manual',
+      leaseSeconds: leaseSecondsFor(jobDef.maxDurationSec),
+    });
+  } catch (err) {
+    console.error(`[jobs] ${jobName} not run: could not claim the run:`, err);
+    return NextResponse.json(
+      { job: jobName, status: 'error', summary: 'could not claim the run (database unavailable?); not run' },
+      { status: 503 },
+    );
+  }
+  if (!claim.claimed) {
+    const summary = claim.reason === 'running'
+      ? `skipped: a run of ${jobName} is still in progress${claim.runId ? ` (run ${claim.runId})` : ''}`
+      : `skipped: occurrence ${scheduled} already ran`;
+    console.info(`[jobs] ${jobName} ${summary}`);
+    return NextResponse.json({ job: jobName, runAt: new Date().toISOString(), durationMs: Date.now() - start, status: 'skipped', summary });
+  }
+
   try {
     const result = await jobDef.handler(ctx);
 
     const durationMs = Date.now() - start;
     console.info(`[jobs] ${jobName} → ${result.status} in ${durationMs}ms — ${result.summary}`);
+    await finishRun(claim.runId, {
+      status: result.status === 'error' ? 'FAILED' : 'SUCCEEDED',
+      durationMs,
+      summary: result.summary,
+    });
 
     return NextResponse.json({
       job:        jobName,
+      runId:      claim.runId,
       runAt:      new Date().toISOString(),
       durationMs,
       ...result,
@@ -98,6 +137,11 @@ export async function POST(request: NextRequest) {
     } catch (err) {
     const durationMs = Date.now() - start;
     console.error(`[jobs] ${jobName} threw after ${durationMs}ms:`, err);
+    await finishRun(claim.runId, {
+      status: 'FAILED',
+      durationMs,
+      error: err instanceof Error ? (err.stack ?? err.message) : String(err),
+    });
 
     return NextResponse.json(
       {

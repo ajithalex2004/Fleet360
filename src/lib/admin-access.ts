@@ -99,6 +99,7 @@ export const ADMIN_ROUTE_POLICY: Record<string, Partial<Record<Method, AdminLeve
   'roles/[id]':                                  { GET: 'admin', PATCH: 'admin', DELETE: 'admin' },
   'roles/[id]/permissions':                      { GET: 'admin', PUT: 'admin' },
   'roles/override':                              { POST: 'admin' },
+  'job-runs':                                    { GET: 'platform' },
   'schema-status':                               { GET: 'platform' },
   'seed':                                        { GET: 'platform', POST: 'platform' },
   'seed/leasing':                                { POST: 'platform' },

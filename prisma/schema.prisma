@@ -5197,6 +5197,30 @@ model TenantFeatureOverride {
 
 // --- Tenant attachments (20261022090000_tenant_attachments) ---
 
+/// One run of a background job: claim, lease and outcome (architecture audit
+/// A8). Written by POST /api/jobs/run (src/lib/jobs/job-runs.ts); unique per
+/// (jobName, scope, occurrence). Platform table, no RLS.
+model JobRun {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  jobName        String    @map("job_name")
+  scope          String    @default("*")
+  occurrence     String
+  trigger        String
+  owner          String
+  status         String
+  startedAt      DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  leaseExpiresAt DateTime  @map("lease_expires_at") @db.Timestamptz(6)
+  finishedAt     DateTime? @map("finished_at") @db.Timestamptz(6)
+  durationMs     Int?      @map("duration_ms")
+  summary        String?
+  error          String?
+
+  @@unique([jobName, scope, occurrence], map: "uq_job_runs_occurrence")
+  @@index([startedAt(sort: Desc)], map: "idx_job_runs_started")
+  @@map("job_runs")
+  @@schema("public")
+}
+
 /// Attachment Type master (Admin > Attachment Types): the documents a tenant
 /// can be asked for. Platform-wide, not tenant-scoped.
 model TenantAttachmentType {
