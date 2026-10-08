@@ -14,7 +14,6 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getTenantContext } from '@/lib/tenant-session';
-import { ensureMfaColumns } from '@/lib/auth-mfa-schema';
 import { verifyTotp, verifyRecoveryCode } from '@/lib/totp';
 import { verifyPassword } from '@/lib/password-policy';
 import { logAudit } from '@/lib/audit';
@@ -26,7 +25,6 @@ export const runtime = 'nodejs';
 export async function POST(req: NextRequest) {
   try {
     const ctx = getTenantContext(req);
-    await ensureMfaColumns();
 
     const body = await req.json().catch(() => ({}));
     const password     = String(body?.password ?? '');

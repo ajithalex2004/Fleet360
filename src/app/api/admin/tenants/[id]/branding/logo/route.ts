@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { withTenantRls } from '@/lib/rls';
-import { ensureBrandingColumns, getBranding } from '@/lib/branding';
+import { getBranding } from '@/lib/branding';
 import { getStorage } from '@/lib/storage';
 import { fileContentProblem } from '@/lib/storage/file-type';
 import { requirePlan } from '@/lib/plan-limits';
@@ -69,7 +69,6 @@ async function handlePOST(req: NextRequest, { params }: RouteParams) {
   }
 
   try {
-    await ensureBrandingColumns();
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const contentProblem = fileContentProblem(file.name, buffer, ['png', 'jpeg', 'webp']);

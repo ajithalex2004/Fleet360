@@ -1434,26 +1434,6 @@
    }
   },
   {
-   "template": "migrate/fleet-phase1",
-   "methods": {
-    "GET": "platform",
-    "POST": "platform"
-   }
-  },
-  {
-   "template": "migrate/indexes",
-   "methods": {
-    "GET": "platform",
-    "POST": "platform"
-   }
-  },
-  {
-   "template": "migrate/rac-phase1",
-   "methods": {
-    "POST": "platform"
-   }
-  },
-  {
    "template": "nav-permissions",
    "methods": {
     "GET": "admin",

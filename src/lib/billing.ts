@@ -12,9 +12,7 @@
  */
 
 import Stripe from 'stripe';
-import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { addMissingColumns, relationExists } from '@/lib/ensure-columns';
 import { withWebhookTenant } from '@/lib/rls';
 
 let _stripe: Stripe | null = null;
@@ -57,48 +55,8 @@ export function priceIdToPlan(priceId: string): PlanCode | null {
 
 // ── Tenant billing columns (lazy ALTER) ─────────────────────────────────────
 
-let _ensured = false;
 
-// The production runtime role (fleet360_app) has no ALTER privilege on the
-// public schema, so this DDL always fails with 42501 there. The columns it
-// adds already exist in every live environment - this block only matters
-// for fresh/local databases connecting as an owner-equivalent role. Treat
-// insufficient_privilege as "already provisioned" instead of crashing
-// every request that calls getTenantBilling() (GET /api/admin/billing had
-// no try/catch anywhere in its chain, so this previously 500'd on every
-// authenticated page load platform-wide).
-function isInsufficientPrivilege(e: unknown): boolean {
-  return (
-    e instanceof Prisma.PrismaClientKnownRequestError &&
-    (e.meta as { code?: string } | undefined)?.code === '42501'
-  );
-}
 
-export async function ensureBillingColumns(): Promise<void> {
-  if (_ensured) return;
-  // Only missing columns and indexes are created (no DDL, and no privilege
-  // error, where the schema is up to date: see src/lib/ensure-columns.ts).
-  try {
-    await addMissingColumns('tenants', {
-      stripe_customer_id:     'TEXT',
-      stripe_subscription_id: 'TEXT',
-      subscription_status:    'TEXT',
-      current_period_end:     'TIMESTAMPTZ',
-      trial_ends_at:          'TIMESTAMPTZ',
-      billing_email:          'TEXT',
-    });
-    if (!(await relationExists('idx_tenants_stripe_customer'))) {
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_tenants_stripe_customer ON tenants (stripe_customer_id) WHERE stripe_customer_id IS NOT NULL`);
-    }
-    if (!(await relationExists('idx_tenants_stripe_sub'))) {
-      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_tenants_stripe_sub      ON tenants (stripe_subscription_id) WHERE stripe_subscription_id IS NOT NULL`);
-    }
-  } catch (e) {
-    if (!isInsufficientPrivilege(e)) throw e;
-    console.warn('[ensureBillingColumns] DDL skipped: runtime role lacks ALTER privilege on public schema (assuming columns already exist)');
-  }
-  _ensured = true;
-}
 
 export interface TenantBilling {
   tenantId: string;
@@ -124,7 +82,6 @@ interface BillingRow {
 }
 
 export async function getTenantBilling(tenantId: string): Promise<TenantBilling | null> {
-  await ensureBillingColumns();
   const rows = await prisma.$queryRawUnsafe<BillingRow[]>(
     `SELECT id, name, plan, stripe_customer_id, stripe_subscription_id,
             subscription_status, current_period_end::text, trial_ends_at::text,
@@ -199,7 +156,6 @@ export async function syncSubscriptionToTenant(sub: Stripe.Subscription): Promis
       ? 'TRIAL'
       : plan;
 
-  await ensureBillingColumns();
 
   await withWebhookTenant(
     prisma,
@@ -246,7 +202,6 @@ async function tenantIdForCustomer(tx: { $queryRawUnsafe: <T>(sql: string, ...ar
  * Idempotent: a tenant that already has a stripe_customer_id is skipped.
  */
 export async function startTrialForTenant(tenantId: string, currency: 'usd' | 'aed' = 'usd'): Promise<void> {
-  await ensureBillingColumns();
   const billing = await getTenantBilling(tenantId);
   if (!billing) return;
   if (billing.stripeCustomerId || billing.subscriptionStatus === 'trialing') return;

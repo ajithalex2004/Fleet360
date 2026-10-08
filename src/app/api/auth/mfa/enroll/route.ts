@@ -14,7 +14,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import QRCode from 'qrcode';
 import { prisma } from '@/lib/prisma';
 import { getTenantContext } from '@/lib/tenant-session';
-import { ensureMfaColumns } from '@/lib/auth-mfa-schema';
 import { generateTotpSecret, provisioningUri } from '@/lib/totp';
 import { captureException } from '@/lib/sentry';
 
@@ -24,7 +23,6 @@ export const runtime = 'nodejs';
 export async function POST(req: NextRequest) {
   try {
     const ctx = getTenantContext(req);
-    await ensureMfaColumns();
 
     const rows = await prisma.$queryRawUnsafe<Array<{ email: string; username: string; mfa_enabled: boolean }>>(
       `SELECT email, username, mfa_enabled FROM "User" WHERE id = $1 LIMIT 1`,
