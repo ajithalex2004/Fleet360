@@ -9,7 +9,7 @@
  * Adding a new job:
  *  1. Write the business logic as a plain async function in src/lib/jobs/<name>.ts
  *  2. Import it here and add an entry to JOB_REGISTRY.
- *  3. Add a Vercel cron entry in vercel.json pointing to /api/jobs/run?job=<name>.
+ *  3. Schedule it in src/lib/jobs/scheduler.ts (DEFAULT_SCHEDULES).
  *
  * No HTTP call is made to the job's original route — those routes delegate here
  * via `runJob()` so they remain available for manual/ad-hoc invocation.
@@ -44,13 +44,13 @@ export interface JobResult {
 export type JobHandler = (ctx: JobContext) => Promise<JobResult>;
 
 export interface JobDef {
-  /** Unique machine name — used in ?job= query param and vercel.json. */
+  /** Unique machine name — used in the ?job= query param and the scheduler. */
   name: string;
   /** Human-readable description shown in job list endpoint. */
   description: string;
   /** Handler function. */
   handler: JobHandler;
-  /** Estimated max duration in seconds (for Vercel maxDuration). */
+  /** Estimated max duration in seconds. */
   maxDurationSec?: number;
   /** Specific operator roles authorized to run this job (SUPER_ADMIN always permitted). */
   allowedRoles?: string[];

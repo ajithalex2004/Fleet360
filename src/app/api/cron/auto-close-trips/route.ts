@@ -1,8 +1,8 @@
 /**
  * GET /api/cron/auto-close-trips
  *
- * Legacy entry point kept for backwards-compat with any existing Vercel cron
- * config or external schedulers that hit this path. All logic now lives in
+ * Legacy entry point kept for backwards-compat with any external cron
+ * or scheduler that hits this path. All logic now lives in
  * the centralized job dispatcher — this route simply delegates.
  *
  * New cron entries should point to: POST /api/jobs/run?job=auto-close-trips
