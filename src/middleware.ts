@@ -166,6 +166,9 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // from a verified session, never the client's copies. See
   // src/lib/identity-headers.ts.
   const sanitizedHeaders = stripIdentityHeaders(request.headers);
+  // Lets the server layout choose the public shell without booting the
+  // authenticated application provider tree on marketing routes.
+  sanitizedHeaders.set('x-fleet-path', pathname);
 
   // Scheduler credentials authorize only exact POST sweep targets, never
   // arbitrary APIs or caller-controlled user/role impersonation.
@@ -385,6 +388,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   // doesn't set them. Only sessions whose residency this deployment serves
   // get here (step 3b).
   const requestHeaders = withVerifiedIdentity(request.headers, session);
+  requestHeaders.set('x-fleet-path', pathname);
 
   // 5b. Backwards-compat shim — proxy /api/<migrated-module>/* to the
   // Go backend (/api/v1/<migrated-module>/*). See src/lib/api-shim.ts

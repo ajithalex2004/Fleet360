@@ -20,6 +20,10 @@ export const PUBLIC_EXACT: readonly string[] = [
   '/',
   '/login',
   '/platform',
+  // Public marketing conversion flow. The API validates, rate-limits, and
+  // sends the request to the configured operations inbox; it has no session.
+  '/operations-review',
+  '/api/public/operations-review',
   '/onboarding',
   '/api/auth/session',
   '/api/auth/login',

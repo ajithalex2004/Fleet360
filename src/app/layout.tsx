@@ -1,15 +1,27 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import "./globals.css";
-import ToastProvider from "@/components/providers/ToastProvider";
-import ClientProviders from "@/components/ClientProviders";
-import GlobalDeferredWidgets from "@/components/GlobalDeferredWidgets";
-import { ThemeProvider } from "@/components/ThemeProvider";
-import CommandPalette from "@/components/navigation/CommandPalette";
-import ChunkErrorReloader from "@/components/ChunkErrorReloader";
+import AppRuntime from "@/components/AppRuntime";
+
+const PUBLIC_MARKETING_PATHS = new Set(["/", "/operations-review"]);
 
 export const metadata: Metadata = {
-  title: "Fleet360",
-  description: "Unified Transport Management Platform",
+  title: {
+    default: "Fleet360 | AI-Orchestrated Fleet Intelligence",
+    template: "%s | Fleet360",
+  },
+  description: "Fleet intelligence for vehicles, people, routes, maintenance, finance, and compliance.",
+  openGraph: {
+    type: "website",
+    siteName: "Fleet360",
+    title: "Fleet360 | AI-Orchestrated Fleet Intelligence",
+    description: "One intelligent command layer for fleet operations.",
+  },
+  twitter: {
+    card: "summary",
+    title: "Fleet360 | AI-Orchestrated Fleet Intelligence",
+    description: "One intelligent command layer for fleet operations.",
+  },
 };
 
 // Applies the saved theme class to <html> before paint, so there is no flash of
@@ -46,7 +58,10 @@ const SW_SCOPE_CLEANUP = `(function(){if(!('serviceWorker' in navigator))return;
 
 const LANG_NO_FLASH = `(function(){try{var l=localStorage.getItem('xlai_language')||'en';document.documentElement.lang=l;document.documentElement.dir=l==='ar'?'rtl':'ltr';}catch(_){document.documentElement.lang='en';document.documentElement.dir='ltr';}})();`;
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const pathname = (await headers()).get("x-fleet-path");
+  const content = PUBLIC_MARKETING_PATHS.has(pathname ?? "") ? children : <AppRuntime>{children}</AppRuntime>;
+
   return (
     <html lang="en" dir="ltr" suppressHydrationWarning>
       <head>
@@ -56,16 +71,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: THEME_NO_FLASH }} />
       </head>
       <body className="antialiased min-h-screen bg-[var(--bg-canvas)] text-[var(--text-main)] transition-colors duration-150">
-        <ChunkErrorReloader />
-        <ThemeProvider>
-          <ClientProviders>
-            <ToastProvider>
-              {children}
-              <CommandPalette />
-              <GlobalDeferredWidgets />
-            </ToastProvider>
-          </ClientProviders>
-        </ThemeProvider>
+        {content}
       </body>
     </html>
   );
