@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import PasswordInput from '@/components/ui/PasswordInput';
 import { HardDeleteConfirm } from '@/components/HardDeleteConfirm';
+import { SWITCH_OFF } from '@/lib/ui/toggle';
 
 const ALL_MODULES = [
   'fleet', 'driver', 'rental', 'leasing', 'maintenance',
@@ -38,7 +39,11 @@ interface User {
   moduleAccess: Partial<Record<ModuleKey, { role: string }>> | null;
   lastLoginAt?: string | null;
   createdAt: string;
+  /** The companies the user belongs to, with the role in each. */
+  memberships?: Membership[];
 }
+
+interface Membership { tenantId: string; tenantName: string; roleId: string; roleName: string; roleCode: string; isActive: boolean }
 
 interface Role   { id: string; name: string; code: string; isSystem?: boolean; tenantId?: string | null }
 interface Tenant { id: string; name: string; code?: string }
@@ -128,13 +133,33 @@ export default function UsersPage() {
     } finally { setSaving(false); }
   };
 
+  // Disabling blocks sign-in and ends the user's open sessions; enabling lets them sign in again.
   const handleToggleActive = async (u: User) => {
-    await fetch(`/api/admin/users/${u.id}`, {
+    const name = `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim() || u.username;
+    const ask = u.isActive
+      ? `Disable ${name}? They will be signed out and unable to sign in until enabled again.`
+      : `Enable ${name}? They will be able to sign in again.`;
+    if (!confirm(ask)) return;
+    const res = await fetch(`/api/admin/users/${u.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ isActive: !u.isActive }),
     });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      setError(d.error ?? `Failed to ${u.isActive ? 'disable' : 'enable'} the user (${res.status})`);
+      return;
+    }
+    setError('');
     load();
+  };
+
+  // The Tenant dialog opens on the user's current companies and roles;
+  // picking one of them pre-fills the form to change that role.
+  const openAssign = (u: User) => {
+    setShowAssign(u); setFormError('');
+    const only = u.memberships?.length === 1 ? u.memberships[0] : null;
+    setAssignForm(only ? { tenantId: only.tenantId, roleId: only.roleId } : { tenantId: '', roleId: '' });
   };
 
   const handleAssign = async (e: React.FormEvent) => {
@@ -300,7 +325,7 @@ export default function UsersPage() {
             <table className="w-full text-sm">
               <thead className="bg-[var(--bg-surface)]/60 border-b border-[var(--border-subtle)]">
                 <tr>
-                  {['Name', 'Username', 'Email', 'Dept / Type', 'Status', 'Module Access', 'Last Login', 'Actions'].map(h => (
+                  {['Name', 'Username', 'Email', 'Company & Role', 'Dept / Type', 'Status', 'Module Access', 'Last Login', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -316,6 +341,17 @@ export default function UsersPage() {
                       </td>
                       <td className="px-4 py-3 font-mono text-[var(--text-muted)] text-xs">{u.username}</td>
                       <td className="px-4 py-3 text-[var(--text-muted)] text-xs">{u.email}</td>
+                      <td className="px-4 py-3 max-w-[260px]">
+                        <div className="flex flex-col gap-1">
+                          {(u.memberships ?? []).map(m => (
+                            <span key={m.tenantId} title={m.isActive ? undefined : 'Membership inactive'}
+                              className={`px-2 py-0.5 rounded text-xs border border-[var(--border-subtle)] bg-[var(--bg-surface-hover)] text-[var(--text-main)] ${m.isActive ? '' : 'line-through opacity-60'}`}>
+                              {m.tenantName} · <span className="text-[var(--text-muted)]">{m.roleName}</span>
+                            </span>
+                          ))}
+                          {(u.memberships ?? []).length === 0 && <span className="text-xs text-amber-500">No company</span>}
+                        </div>
+                      </td>
                       <td className="px-4 py-3">
                         <div className="text-xs text-[var(--text-muted)]">{u.department ?? '—'}</div>
                         <span className="mt-0.5 px-2 py-0.5 rounded text-xs bg-[var(--bg-surface-hover)] text-[var(--text-muted)]">{u.userType ?? 'STAFF'}</span>
@@ -323,12 +359,12 @@ export default function UsersPage() {
                       <td className="px-4 py-3">
                         <button
                           onClick={() => handleToggleActive(u)}
-                          className={`relative w-10 h-5 rounded-full transition-colors ${u.isActive ? 'bg-green-500' : 'bg-[var(--bg-surface-hover)]'}`}
-                          title={u.isActive ? 'Click to deactivate' : 'Click to activate'}
+                          className={`relative w-10 h-5 rounded-full transition-colors ${u.isActive ? 'bg-green-500' : SWITCH_OFF}`}
+                          title={u.isActive ? 'Click to disable' : 'Click to enable'}
                         >
                           <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${u.isActive ? 'translate-x-5' : ''}`} />
                         </button>
-                        <div className="text-xs text-[var(--text-faint)] mt-1">{u.isActive ? 'Active' : 'Inactive'}</div>
+                        <div className="text-xs text-[var(--text-faint)] mt-1">{u.isActive ? 'Enabled' : 'Disabled'}</div>
                       </td>
                       <td className="px-4 py-3 max-w-[200px]">
                         <div className="flex flex-wrap gap-1">
@@ -359,16 +395,22 @@ export default function UsersPage() {
                             className="px-2.5 py-1.5 text-xs bg-violet-500/20 hover:bg-violet-500/30 text-violet-400 border border-violet-500/30 rounded-lg transition-colors whitespace-nowrap">
                             Modules
                           </button>
-                          <button onClick={() => setShowAssign(u)}
+                          <button onClick={() => openAssign(u)}
                             className="px-2.5 py-1.5 text-xs bg-[var(--bg-surface-hover)] hover:bg-[var(--bg-surface-hover)] text-[var(--text-main)] rounded-lg transition-colors whitespace-nowrap">
                             Tenant
+                          </button>
+                          <button onClick={() => handleToggleActive(u)}
+                            className={`px-2.5 py-1.5 text-xs border rounded-lg transition-colors whitespace-nowrap ${u.isActive
+                              ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border-amber-500/30'
+                              : 'bg-green-500/10 hover:bg-green-500/20 text-green-500 border-green-500/30'}`}>
+                            {u.isActive ? 'Disable' : 'Enable'}
                           </button>
                           {/* Hard delete — hidden for protected accounts. The server enforces the same whitelist. */}
                           {u.email !== 'admin@xl-mobility.com' && (
                             <button
                               onClick={() => setHardDeleteTarget(u)}
                               className="px-2.5 py-1.5 text-xs bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-lg transition-colors whitespace-nowrap">
-                              Hard Delete
+                              Delete
                             </button>
                           )}
                         </div>
@@ -453,19 +495,19 @@ export default function UsersPage() {
                 const enabled = current !== null && current !== undefined;
                 return (
                   <div key={mod} className={`flex items-center gap-4 p-4 rounded-xl border transition-all ${
-                    enabled ? 'bg-[var(--bg-surface)]/60 border-[var(--border-subtle)]' : 'bg-[var(--bg-surface)]/40 border-[var(--border-subtle)] opacity-60'
+                    enabled ? 'bg-[var(--bg-surface)]/60 border-[var(--border-subtle)]' : 'bg-[var(--bg-surface)]/40 border-[var(--border-subtle)]'
                   }`}>
                     <button
                       onClick={() => setModuleEdits(p => ({
                         ...p,
                         [mod]: enabled ? null : { role: 'viewer' },
                       }))}
-                      className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${enabled ? 'bg-violet-500' : 'bg-[var(--bg-surface-hover)]'}`}
+                      className={`relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ${enabled ? 'bg-violet-500' : SWITCH_OFF}`}
                     >
                       <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${enabled ? 'translate-x-5' : ''}`} />
                     </button>
                     <span className="text-lg flex-shrink-0">{meta.icon}</span>
-                    <span className="text-sm font-medium text-[var(--text-main)] flex-1">{meta.label}</span>
+                    <span className={`text-sm font-medium flex-1 ${enabled ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)]'}`}>{meta.label}</span>
                     {enabled && (
                       <select
                         value={current?.role ?? 'viewer'}
@@ -602,7 +644,7 @@ export default function UsersPage() {
       {/* Hard Delete User dialog */}
       {hardDeleteTarget && (
         <HardDeleteConfirm
-          title="Hard delete user"
+          title="Delete user"
           target={{
             kind:        'user',
             id:          hardDeleteTarget.id,
@@ -619,12 +661,33 @@ export default function UsersPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="w-full max-w-md bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-2xl p-8">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-[var(--text-main)]">Assign to Tenant</h2>
+              <h2 className="text-xl font-bold text-[var(--text-main)]">Tenant &amp; Role</h2>
               <button onClick={() => setShowAssign(null)} className="text-[var(--text-muted)] hover:text-[var(--text-main)] text-2xl">×</button>
             </div>
-            <p className="text-[var(--text-muted)] text-sm mb-5">
-              Assigning <span className="text-[var(--text-main)] font-medium">{showAssign.username}</span> to a tenant with a specific role.
-            </p>
+            <div className="mb-5">
+              <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-2">
+                {showAssign.username} currently belongs to
+              </p>
+              {(showAssign.memberships ?? []).length === 0 ? (
+                <p className="text-sm text-amber-500">No company yet: choose a tenant and role below.</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {(showAssign.memberships ?? []).map(m => (
+                    <li key={m.tenantId}>
+                      <button type="button" onClick={() => setAssignForm({ tenantId: m.tenantId, roleId: m.roleId })}
+                        className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-xl border text-left text-sm transition-colors ${
+                          assignForm.tenantId === m.tenantId ? 'border-violet-500 bg-violet-500/10' : 'border-[var(--border-subtle)] hover:bg-[var(--bg-surface-hover)]'}`}>
+                        <span className="text-[var(--text-main)] font-medium">{m.tenantName}</span>
+                        <span className="text-[var(--text-muted)]">{m.roleName}{m.isActive ? '' : ' (inactive)'}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-xs text-[var(--text-faint)] mt-3">
+                Choose a company above to change the role there, or pick another tenant to add the user to it.
+              </p>
+            </div>
             {formError && <div className="mb-4 bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-xl text-sm">{formError}</div>}
             <form onSubmit={handleAssign} className="space-y-4">
               <div>
@@ -650,7 +713,7 @@ export default function UsersPage() {
                   className="px-6 py-2.5 rounded-xl border border-[var(--border-subtle)] text-[var(--text-main)] hover:bg-[var(--bg-surface-hover)] text-sm">Cancel</button>
                 <button type="submit" disabled={saving}
                   className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:opacity-90 disabled:opacity-50 text-sm font-semibold">
-                  {saving ? 'Assigning…' : 'Assign'}
+                  {saving ? 'Saving…' : (showAssign.memberships ?? []).some(m => m.tenantId === assignForm.tenantId) ? 'Change role' : 'Add to tenant'}
                 </button>
               </div>
             </form>

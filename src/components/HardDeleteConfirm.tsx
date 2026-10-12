@@ -40,7 +40,7 @@ interface ResultState {
 }
 
 interface Props {
-  /** Title of the modal. e.g. "Hard delete tenant" */
+  /** Title of the modal. e.g. "Delete tenant" */
   title: string;
   /** What the user is being asked to delete. */
   target: {
@@ -245,7 +245,7 @@ export function HardDeleteConfirm({ title, target, description, onDone, onCancel
           {step === 'done' && result && (
             <div className="text-sm space-y-2">
               <div className="text-emerald-300 font-medium">
-                ✓ Hard delete complete.
+                ✓ Delete complete.
               </div>
               {result.tenant && (
                 <div>Tenant: <span className="font-mono">{result.tenant.name}</span></div>
@@ -284,7 +284,7 @@ export function HardDeleteConfirm({ title, target, description, onDone, onCancel
                 disabled={executing || typed !== target.confirmText || !preview}
                 className="px-4 py-2 text-sm rounded bg-rose-600 hover:bg-rose-500 text-white font-medium disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {executing ? 'Deleting…' : 'Hard delete (irreversible)'}
+                {executing ? 'Deleting…' : 'Delete (irreversible)'}
               </button>
             </>
           )}

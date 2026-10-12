@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { SWITCH_OFF } from '@/lib/ui/toggle';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -538,7 +539,7 @@ export default function ManagementAccountsPage() {
           <div className="flex items-center gap-2 ml-2">
             <label className="flex items-center gap-2 cursor-pointer">
               <div onClick={handleCompareToggle}
-                className={`w-10 h-5 rounded-full transition-colors relative ${compare ? 'bg-purple-600' : 'bg-[var(--bg-surface-hover)]'}`}>
+                className={`w-10 h-5 rounded-full transition-colors relative ${compare ? 'bg-purple-600' : SWITCH_OFF}`}>
                 <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${compare ? 'left-5' : 'left-0.5'}`} />
               </div>
               <span className="text-xs text-[var(--text-muted)]">Compare</span>
