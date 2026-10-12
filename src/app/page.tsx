@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import MarketingHero from '@/components/marketing/MarketingHero';
 import AgentOrchestration from '@/components/marketing/AgentOrchestration';
+import UnifiedPlatform from '@/components/marketing/UnifiedPlatform';
 
 export const metadata: Metadata = {
   title: 'Fleet360 | AI-Orchestrated Fleet Intelligence',
@@ -13,6 +14,7 @@ export default function Home() {
     <>
       <MarketingHero />
       <AgentOrchestration />
+      <UnifiedPlatform />
     </>
   );
 }
