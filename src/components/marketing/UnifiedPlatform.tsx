@@ -13,7 +13,7 @@ const domains = [
 
 export default function UnifiedPlatform() {
   return (
-    <section className={styles.section} aria-labelledby="platform-title">
+    <section className={styles.section} aria-labelledby="platform-title" data-analytics-section="unified-platform">
       <div className={styles.gridTexture} aria-hidden="true" />
       <div className={styles.inner}>
         <div className={styles.copy}>

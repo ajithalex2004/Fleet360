@@ -8,7 +8,7 @@ const signals = [
 
 export default function GccIntelligence() {
   return (
-    <section className={styles.section} aria-labelledby="gcc-title">
+    <section className={styles.section} aria-labelledby="gcc-title" data-analytics-section="gcc-intelligence">
       <div className={styles.map} aria-hidden="true"><div className={styles.gulf} /><span className={styles.markerDubai}>DXB</span><span className={styles.markerRiyadh}>RUH</span><span className={styles.markerDoha}>DOH</span><span className={styles.markerMuscat}>MCT</span><i className={styles.arcOne} /><i className={styles.arcTwo} /></div>
       <div className={styles.inner}>
         <div className={styles.copy}>

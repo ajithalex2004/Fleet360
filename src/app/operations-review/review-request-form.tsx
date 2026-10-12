@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from 'react';
 import styles from './review-request.module.css';
+import { trackReviewRequestSubmitted } from '@/components/marketing/HomepageAnalytics';
 
 type FormStatus = 'idle' | 'submitting' | 'success' | 'error';
 
@@ -35,6 +36,7 @@ export default function ReviewRequestForm() {
       if (!response.ok) throw new Error(body.error || 'We could not send your request. Please try again.');
 
       setStatus('success');
+      trackReviewRequestSubmitted();
       setMessage('Your review request is with the Fleet360 operations team. We will be in touch using your work email.');
       setValues(initialValues);
     } catch (error) {

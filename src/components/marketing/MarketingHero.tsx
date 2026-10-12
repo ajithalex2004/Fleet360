@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import type { HomepageSnapshot } from '@/lib/public-homepage';
 import styles from './MarketingHero.module.css';
 
 const Arrow = () => (
@@ -115,7 +116,7 @@ function MetricIcon({ type }: { type: string }) {
   return <path d="M4 6c0-2 3.6-4 8-4s8 2 8 4-3.6 4-8 4-8-2-8-4Zm0 0v6c0 2 3.6 4 8 4s8-2 8-4V6M4 12v6c0 2 3.6 4 8 4s8-2 8-4v-6" />;
 }
 
-export default function MarketingHero() {
+export default function MarketingHero({ snapshot }: { snapshot: HomepageSnapshot }) {
   return (
     <main className={styles.page}>
       <section className={styles.hero} aria-labelledby="hero-title">
@@ -158,10 +159,10 @@ export default function MarketingHero() {
               Unify your entire fleet, drivers, routes, maintenance, finance, and compliance in one intelligent platform—where specialized AI agents orchestrate operational intelligence and complete control.
             </p>
             <div className={styles.actions}>
-              <Link className={styles.primaryAction} href="/operations-review">
+              <Link className={styles.primaryAction} href="/operations-review" data-analytics-cta="hero_operations_review">
                 Book an operations review <Arrow />
               </Link>
-              <Link className={styles.secondaryAction} href="/platform">
+              <Link className={styles.secondaryAction} href="/platform" data-analytics-cta="hero_platform">
                 Explore the platform <Arrow />
               </Link>
             </div>
@@ -170,14 +171,17 @@ export default function MarketingHero() {
           <div className={styles.scrollCue} aria-hidden="true"><span /> Scroll to explore</div>
         </div>
 
-        <div className={styles.metrics} aria-label="Illustrative operations snapshot">
-          <span className={styles.metricsLabel}>Illustrative command view</span>
-          {metrics.map((metric) => (
+        <div className={styles.metrics} aria-label={`${snapshot.source === 'configured' ? 'Live' : 'Illustrative'} operations snapshot`}>
+          <span className={styles.metricsLabel}>{snapshot.source === 'configured' ? 'Live command view' : 'Illustrative command view'}</span>
+          {metrics.map((metric) => {
+            const value = metric.icon === 'vehicle' ? snapshot.vehiclesLive.toLocaleString() : metric.icon === 'signal' ? `${snapshot.fleetUtilization}%` : metric.icon === 'shield' ? `${snapshot.uptime}%` : `${snapshot.lowerOperatingCosts}%`;
+            return (
             <div className={styles.metric} key={metric.label}>
               <svg viewBox="0 0 24 24" aria-hidden="true"><MetricIcon type={metric.icon} /></svg>
-              <div><strong>{metric.value}</strong><span>{metric.label}</span></div>
+              <div><strong>{value}</strong><span>{metric.label}</span></div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </section>
     </main>

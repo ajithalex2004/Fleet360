@@ -9,7 +9,7 @@ const outcomes = [
 
 export default function OperationalOutcomes() {
   return (
-    <section className={styles.section} aria-labelledby="outcomes-title">
+    <section className={styles.section} aria-labelledby="outcomes-title" data-analytics-section="operational-outcomes">
       <div className={styles.dusk} aria-hidden="true"><div className={styles.sun} /><div className={styles.mountains} /><div className={styles.route} /></div>
       <div className={styles.inner}>
         <div className={styles.heading}>

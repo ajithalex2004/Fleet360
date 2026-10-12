@@ -11,7 +11,7 @@ const agents = [
 
 export default function AgentOrchestration() {
   return (
-    <section className={styles.section} aria-labelledby="agents-title">
+    <section className={styles.section} aria-labelledby="agents-title" data-analytics-section="ai-orchestration">
       <div className={styles.ambient} aria-hidden="true" />
       <div className={styles.inner}>
         <div className={styles.copy}>

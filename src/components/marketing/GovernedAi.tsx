@@ -8,7 +8,7 @@ const controls = [
 
 export default function GovernedAi() {
   return (
-    <section className={styles.section} aria-labelledby="governed-title">
+    <section className={styles.section} aria-labelledby="governed-title" data-analytics-section="governed-ai">
       <div className={styles.scanlines} aria-hidden="true" />
       <div className={styles.inner}>
         <div className={styles.heading}>

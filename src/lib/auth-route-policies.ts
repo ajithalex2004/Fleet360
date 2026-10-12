@@ -24,6 +24,9 @@ export const PUBLIC_EXACT: readonly string[] = [
   // sends the request to the configured operations inbox; it has no session.
   '/operations-review',
   '/api/public/operations-review',
+  // First-party, rate-limited marketing funnel events. Payloads are limited
+  // to non-sensitive event dimensions and are emitted to deployment logs.
+  '/api/public/analytics',
   '/onboarding',
   '/api/auth/session',
   '/api/auth/login',
