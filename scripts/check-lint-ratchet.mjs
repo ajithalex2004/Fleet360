@@ -32,35 +32,30 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { resolve, join, relative } from 'node:path';
 import { exit, argv } from 'node:process';
+import { ESLint } from 'eslint';
 
 const root = resolve(fileURLToPath(new URL('.', import.meta.url)), '..');
 const BASELINE_PATH = join(root, 'scripts', 'lint-baseline.json');
-const ESLINT_BIN = join(root, 'node_modules', '.bin', 'eslint');
-
-function runEslintJson() {
-  let stdout;
+async function runEslint() {
   try {
-    stdout = execFileSync(ESLINT_BIN, ['.', '--format', 'json', '--max-warnings', '999999'], {
+    const trackedFiles = execFileSync('git', ['ls-files', '-z'], {
       cwd: root,
       encoding: 'utf8',
-      maxBuffer: 1024 * 1024 * 200,
+      maxBuffer: 64 * 1024 * 1024,
+    })
+      .split('\0')
+      .filter((file) => /\.(?:[cm]?[jt]sx?)$/.test(file));
+    const eslint = new ESLint({
+      cwd: root,
+      errorOnUnmatchedPattern: false,
+      cache: true,
+      cacheLocation: join(root, 'node_modules', '.cache', 'eslint', 'ratchet-cache'),
+      cacheStrategy: 'content',
     });
+    return await eslint.lintFiles(trackedFiles);
   } catch (err) {
-    // ESLint exits non-zero when there are lint errors — that's expected
-    // and the JSON is still on stdout. A missing stdout means eslint
-    // itself crashed (config error, parser crash, OOM, etc.) — that's a
-    // hard failure, not something the ratchet can meaningfully compare.
-    if (typeof err.stdout !== 'string' || err.stdout.trim() === '') {
-      console.error('eslint failed to produce output (crash, not a lint failure):');
-      console.error(err.stderr || err.message);
-      exit(1);
-    }
-    stdout = err.stdout;
-  }
-  try {
-    return JSON.parse(stdout);
-  } catch {
-    console.error('Could not parse eslint JSON output — eslint likely crashed mid-run.');
+    console.error('eslint failed to produce results (crash, not a lint failure):');
+    console.error(err instanceof Error ? err.message : err);
     exit(1);
   }
 }
@@ -90,7 +85,7 @@ function totalErrors(counts) {
   return total;
 }
 
-const results = runEslintJson();
+const results = await runEslint();
 const current = buildCounts(results);
 
 if (argv.includes('--update-baseline')) {

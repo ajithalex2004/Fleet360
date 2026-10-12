@@ -149,7 +149,7 @@ describe('matrix document', () => {
   it('matches the policy (regenerate with UPDATE_AUTHZ_MATRIX=1)', () => {
     const rendered = renderMatrix();
     if (process.env.UPDATE_AUTHZ_MATRIX === '1') fs.writeFileSync(MATRIX_DOC, rendered);
-    expect(fs.readFileSync(MATRIX_DOC, 'utf8')).toBe(rendered);
+    expect(fs.readFileSync(MATRIX_DOC, 'utf8').replace(/\r\n/g, '\n')).toBe(rendered);
   });
 });
 

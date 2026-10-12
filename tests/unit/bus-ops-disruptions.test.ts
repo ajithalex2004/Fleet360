@@ -1,7 +1,7 @@
 import { beforeEach,describe,expect,it,vi } from 'vitest';
 import type { Prisma } from '@prisma/client';
 import { readFileSync } from 'fs';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 const mocks=vi.hoisted(()=>({publish:vi.fn(),audit:vi.fn(),validate:vi.fn(),locks:vi.fn()}));
 vi.mock('@/lib/prisma',()=>({prisma:{}}));
 vi.mock('@/events/event-bus',()=>({getEventBus:()=>({publish:mocks.publish})}));
@@ -108,8 +108,16 @@ describe('review fixes: disruption gates everywhere a trip moves', () => {
     expect(route.indexOf('INSERT INTO fleet.bus_gps_pings')).toBeLessThan(route.indexOf('if (!scheduleId || disrupted) {'));
   });
   it('compares trip_schedules.tenant_id (uuid) as text in every raw lock', () => {
-    const hits = execSync(`grep -rnE "trip_schedules[^\\\`']*tenant_id ?= ?\\\\$[0-9]" src || true`).toString().trim();
-    expect(hits).toBe('');
+    const files = execFileSync('git', ['ls-files', '-z', 'src'], { encoding: 'utf8' })
+      .split('\0')
+      .filter((file) => /\.tsx?$/.test(file));
+    const unsafeLock = /trip_schedules[^`']*tenant_id ?= ?\$[0-9]/;
+    const hits = files.flatMap((file) =>
+      readFileSync(file, 'utf8')
+        .split(/\r?\n/)
+        .flatMap((line, index) => (unsafeLock.test(line) ? [`${file}:${index + 1}`] : []))
+    );
+    expect(hits).toEqual([]);
   });
   it('tells riders plates, names and local times, not ids and UTC', () => {
     const d = src('src/lib/bus-ops/disruptions.ts');

@@ -86,7 +86,8 @@ function checkOrWrite(file: string, content: string) {
     fs.writeFileSync(file, content);
   }
   expect(fs.existsSync(file), `${file} missing: regenerate with UPDATE_AUTHZ_GO_POLICY=1`).toBe(true);
-  expect(fs.readFileSync(file, 'utf8') === content, `${path.basename(file)} is out of date: regenerate with UPDATE_AUTHZ_GO_POLICY=1`).toBe(true);
+  const actual = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+  expect(actual === content, `${path.basename(file)} is out of date: regenerate with UPDATE_AUTHZ_GO_POLICY=1`).toBe(true);
 }
 
 describe('Go policy', () => {

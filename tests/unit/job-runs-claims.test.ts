@@ -16,7 +16,7 @@ const url = process.env.JOB_RUNS_TEST_DATABASE_URL;
 // Only ever the test database — never the .env DATABASE_URL.
 vi.mock('@/lib/prisma', async () => {
   const { PrismaClient } = await import('@prisma/client');
-  return { prisma: new PrismaClient({ datasourceUrl: process.env.JOB_RUNS_TEST_DATABASE_URL ?? 'postgresql://unused:unused@127.0.0.1:1/unused' }) };
+  return { prisma: new PrismaClient({ datasourceUrl: process.env.JOB_RUNS_TEST_DATABASE_URL ?? 'postgresql://test:test@127.0.0.1:1/unused' }) };
 });
 vi.mock('@/lib/rls-scope', () => ({ runOutsideRlsScope: (fn: () => unknown) => fn() }));
 

@@ -95,6 +95,7 @@ describe('security harness plan', () => {
     const content = `${JSON.stringify(plan, null, 1)}\n`;
     if (process.env.UPDATE_SECURITY_HARNESS) fs.writeFileSync(PLAN_FILE, content);
     expect(fs.existsSync(PLAN_FILE), 'plan.json missing: UPDATE_SECURITY_HARNESS=1').toBe(true);
-    expect(fs.readFileSync(PLAN_FILE, 'utf8') === content, 'plan.json is out of date: regenerate with UPDATE_SECURITY_HARNESS=1').toBe(true);
+    const actual = fs.readFileSync(PLAN_FILE, 'utf8').replace(/\r\n/g, '\n');
+    expect(actual === content, 'plan.json is out of date: regenerate with UPDATE_SECURITY_HARNESS=1').toBe(true);
   });
 });

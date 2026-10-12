@@ -39,7 +39,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
         headers: { 'Cache-Control': 'private, max-age=30, stale-while-revalidate=60' },
       });
     });
-    } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+    } catch { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }
 
 async function handlePATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -57,7 +57,11 @@ async function handlePATCH(req: NextRequest, props: { params: Promise<{ id: stri
     const bodyRaw = await req.json();
     const body = stripTenantOwnershipFields(bodyRaw);
     // featureFlags is read-only here (GET derives it); modules are saved via /modules.
-    const { modules, userTenants, roles, featureFlags, ...data } = body;
+    const data = { ...body };
+    delete data.modules;
+    delete data.userTenants;
+    delete data.roles;
+    delete data.featureFlags;
     const tenant = await withTenantRls(prisma, params.id, (tx) =>
       tx.tenant.update({
         where: { id: params.id },
@@ -77,7 +81,7 @@ async function handlePATCH(req: NextRequest, props: { params: Promise<{ id: stri
     // dashboard's stat card see the change on the next render.
     revalidateCache([CACHE_TAG]);
     return NextResponse.json(tenant);
-    } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+    } catch { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }
 
 async function handleDELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -98,7 +102,7 @@ async function handleDELETE(req: NextRequest, props: { params: Promise<{ id: str
     await revokeSessionsSafely({ tenantId: params.id, reason: 'tenant-deactivated', revokedBy: authz.userId });
     revalidateCache([CACHE_TAG]);
     return NextResponse.json({ success: true });
-    } catch (e) { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
+    } catch { return NextResponse.json({ error: 'Failed' }, { status: 500 }); }
 }
 
 // Privileged writes are always audited (src/lib/audited-action.ts).
