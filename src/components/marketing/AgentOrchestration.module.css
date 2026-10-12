@@ -3,8 +3,8 @@
 .inner { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(280px, .8fr) minmax(500px, 1.2fr); gap: clamp(30px, 7vw, 120px); max-width: 1500px; margin: 0 auto; align-items: center; }
 .copy { max-width: 580px; }
 .eyebrow { margin: 0 0 25px; color: #e7ba6c; font: 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .28em; text-transform: uppercase; }
-h2 { margin: 0; max-width: 620px; font: 560 clamp(43px, 5vw, 78px)/.95 Arial, sans-serif; letter-spacing: -.065em; }
-h2 span { color: rgba(244, 244, 237, .58); }
+.copy h2 { margin: 0; max-width: 620px; font: 560 clamp(43px, 5vw, 78px)/.95 Arial, sans-serif; letter-spacing: -.065em; }
+.copy h2 span { color: rgba(244, 244, 237, .58); }
 .lede { max-width: 470px; margin: 30px 0 0; color: rgba(244, 244, 237, .66); font: 16px/1.65 Arial, sans-serif; }
 .governance { display: flex; gap: 14px; max-width: 430px; margin-top: 42px; padding-top: 22px; border-top: 1px solid rgba(244, 244, 237, .15); }
 .governanceIcon { color: #b7ff57; font-size: 22px; filter: drop-shadow(0 0 12px rgba(183, 255, 87, .55)); }
