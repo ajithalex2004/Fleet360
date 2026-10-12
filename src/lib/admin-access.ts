@@ -50,6 +50,9 @@ export const ADMIN_ROUTE_POLICY: Record<string, Partial<Record<Method, AdminLeve
   'change-password':                             { POST: 'member' },  // caller's own password
   // Caller's own company identity (TRN, address) — read by invoice screens.
   'company-profile':                             { GET: 'member', PATCH: 'admin' },
+  // Department master; any member reads it (department pickers), admins edit.
+  'departments':                                 { GET: 'member', POST: 'admin' },
+  'departments/[id]':                            { PATCH: 'admin', DELETE: 'admin' },
   'corporate-clients':                           { GET: 'admin', POST: 'admin' },
   // logistics/shippers page (operations users) invites shippers to the portal
   'customers/[id]/portal-invitations':           { GET: 'member', POST: 'member' },
@@ -134,6 +137,8 @@ export const ADMIN_ROUTE_POLICY: Record<string, Partial<Record<Method, AdminLeve
   'tenants/[id]/sso':                            { GET: 'admin', PUT: 'admin', DELETE: 'admin' },
   'tenants/[id]/ticket-types':                   { GET: 'member', PUT: 'admin' },  // service-tickets page
   'tenants/[id]/users':                          { GET: 'admin', POST: 'admin', DELETE: 'admin' },
+  // A member's department and module access in this company.
+  'tenants/[id]/users/[id]/access':              { GET: 'admin', PUT: 'admin' },
   // Sends a test message through caller-supplied SMTP/SMS settings.
   'test-channel':                                { POST: 'platform' },
   // Platform-wide user directory: GET is scoped to the caller's tenant for

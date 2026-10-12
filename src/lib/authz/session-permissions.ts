@@ -13,11 +13,16 @@
  *     that role's grants in role_permissions.
  *   - platform SUPER_ADMIN additionally holds the wildcard '*:*:*'.
  *   - no active membership, or a role belonging to another tenant: nothing.
+ *
+ * The membership's module access (user_tenants.module_access) then narrows
+ * the role's permissions in that company, never widening them
+ * (src/lib/authz/access-mask.ts). Platform administrators are not narrowed.
  */
 import { getEffectiveRole, type EffectiveRoleShape } from '@/lib/permissions/effective-role';
 import { SYSTEM_ROLES } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import { withPlatformAdmin } from '@/lib/rls';
+import { applyAccessMask, storedAccessMask, type AccessMask } from '@/lib/authz/access-mask';
 
 type Tx = Parameters<typeof getEffectiveRole>[0];
 
@@ -39,8 +44,27 @@ export function permissionsForEffectiveRole(role: EffectiveRoleShape | null): st
   return [...permissions];
 }
 
+/** The module access saved on the user's membership in `tenantId`, if any. */
+export async function membershipAccessMask(tx: Tx, userId: string, tenantId: string): Promise<AccessMask | null> {
+  const row = await (tx as unknown as typeof prisma).userTenant.findUnique({
+    where: { userId_tenantId: { userId, tenantId } },
+    select: { moduleAccess: true },
+  });
+  return storedAccessMask(row?.moduleAccess ?? null);
+}
+
+/** The role's permissions narrowed by the membership's module access. */
+export async function effectivePermissions(
+  tx: Tx, userId: string, tenantId: string, role: EffectiveRoleShape | null,
+): Promise<string[]> {
+  const permissions = permissionsForEffectiveRole(role);
+  if (!role) return permissions;
+  const platformAdmin = role.code === 'SUPER_ADMIN' && role.isPlatform && !role.isOverride;
+  return applyAccessMask(permissions, await membershipAccessMask(tx, userId, tenantId), platformAdmin ? 'SUPER_ADMIN' : null);
+}
+
 export async function resolveSessionPermissions(tx: Tx, userId: string, tenantId: string): Promise<string[]> {
-  return permissionsForEffectiveRole(await getEffectiveRole(tx, userId, tenantId));
+  return effectivePermissions(tx, userId, tenantId, await getEffectiveRole(tx, userId, tenantId));
 }
 
 /**
