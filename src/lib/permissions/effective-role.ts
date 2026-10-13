@@ -80,9 +80,36 @@ export async function getEffectiveRole(
     },
   });
   if (!ut || !ut.isActive) return null;
+  if (!ut.role) return null;
+  return resolveAssignedRole(tx, tenantId, ut.role);
+}
 
-  const assigned = ut.role;
-  if (!assigned) return null;
+/**
+ * The effective role a membership in `tenantId` with role `roleId` would
+ * have, before any user holds it — what the New User form previews. Same
+ * rules as getEffectiveRole. Null when the role is unknown or belongs to
+ * another tenant.
+ */
+export async function getEffectiveRoleById(
+  tx: TxClient,
+  tenantId: string,
+  roleId: string,
+): Promise<EffectiveRoleShape | null> {
+  const role = await tx.role.findUnique({
+    where: { id: roleId },
+    include: { permissions: { include: { permission: true } } },
+  });
+  if (!role) return null;
+  return resolveAssignedRole(tx, tenantId, role);
+}
+
+type RoleWithPermissions = Parameters<typeof shapeRole>[0];
+
+async function resolveAssignedRole(
+  tx: TxClient,
+  tenantId: string,
+  assigned: RoleWithPermissions,
+): Promise<EffectiveRoleShape | null> {
 
   // Case 1: the assigned role is already tenant-scoped (override or
   // tenant-only role). Use it directly.

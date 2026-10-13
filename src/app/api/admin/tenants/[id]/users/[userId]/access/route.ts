@@ -27,13 +27,11 @@ import { permissionsForEffectiveRole } from '@/lib/authz/session-permissions';
 import {
   ACCESS_LEVELS, parseAccessMask, roleAccessByModule, storedAccessMask, type AccessMask,
 } from '@/lib/authz/access-mask';
-import { MODULES as MODULE_DEFS, resolveModuleKey } from '@/lib/modules';
+import { accessModuleRows, narrowToRole } from '@/lib/admin/member-access';
 
 type Params = { params: Promise<{ id: string; userId: string }> };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const MODULE_LABEL = new Map(MODULE_DEFS.map((m) => [m.key as string, m.shortName ?? m.name]));
 
 function guard(req: NextRequest, tenantId: string) {
   const authz = requireAuthorizedTenant({ headers: req.headers, nextUrl: req.nextUrl });
@@ -71,22 +69,7 @@ export async function GET(req: NextRequest, { params }: Params) {
 
     const { membership, role, departments } = data;
     const roleAccess = roleAccessByModule(permissionsForEffectiveRole(role));
-    const tenantModules = new Set(
-      membership.tenant.modules.map((m) => resolveModuleKey(m.module) ?? m.module),
-    );
-    // The company's modules plus any the role holds; Admin access follows
-    // the role (Tenant Administrator), not module access.
-    const keys = new Set([...tenantModules, ...Object.keys(roleAccess)]);
-    keys.delete('admin');
-    const modules = [...keys]
-      .filter((k) => MODULE_LABEL.has(k))
-      .map((key) => ({
-        key,
-        label: MODULE_LABEL.get(key)!,
-        enabledForTenant: tenantModules.has(key),
-        roleAccess: roleAccess[key] ?? [],
-      }))
-      .sort((a, b) => a.label.localeCompare(b.label));
+    const modules = accessModuleRows(membership.tenant.modules.map((m) => m.module), roleAccess);
 
     return NextResponse.json({
       tenant: { id: membership.tenant.id, name: membership.tenant.name },
@@ -142,17 +125,9 @@ async function handlePUT(req: NextRequest, { params }: Params) {
       // Store only what narrows the role: levels the role does not grant are
       // dropped, and a module left with all of the role's access is not
       // stored (it follows the role). Nothing narrowed: no mask.
-      let mask: AccessMask | null = null;
-      if (requested) {
-        const roleAccess = roleAccessByModule(permissionsForEffectiveRole(await getEffectiveRole(tx as never, userId, tenantId)));
-        for (const [module, levels] of Object.entries(requested)) {
-          if (module === 'admin') continue;
-          const granted = roleAccess[module] ?? [];
-          if (granted.length === 0) continue; // nothing to narrow
-          const kept = levels.filter((l) => granted.includes(l));
-          if (kept.length < granted.length) (mask ??= {})[module] = kept;
-        }
-      }
+      const mask: AccessMask | null = requested
+        ? narrowToRole(requested, roleAccessByModule(permissionsForEffectiveRole(await getEffectiveRole(tx as never, userId, tenantId))))
+        : null;
 
       await tx.userTenant.update({
         where: { id: membership.id },

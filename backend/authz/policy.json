@@ -1,5 +1,5 @@
 {
- "policyVersion": "2026-10-12.1",
+ "policyVersion": "2026-10-13.1",
  "catalogueVersion": "c9977e3a",
  "catalogue": [
   "leasing:view:*",
@@ -1687,6 +1687,13 @@
   },
   {
    "template": "tenants/[id]/invitations",
+   "methods": {
+    "GET": "admin",
+    "POST": "admin"
+   }
+  },
+  {
+   "template": "tenants/[id]/members",
    "methods": {
     "GET": "admin",
     "POST": "admin"

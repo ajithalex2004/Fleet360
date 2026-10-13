@@ -37,13 +37,15 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
     tenant_name: string; tenant_active: boolean;
     expires_at: string; used_at: string | null; revoked: boolean;
     existing_user_id: string | null; partner_name: string | null;
+    first_name: string | null; last_name: string | null;
   }>>(
     `SELECT i.id::text, i.tenant_id, i.email, i.role_id,
             r.name AS role_name,
             t.name AS tenant_name, t.is_active AS tenant_active,
             i.expires_at::text, i.used_at::text, i.revoked,
             u.id AS existing_user_id,
-            p.legal_name AS partner_name
+            p.legal_name AS partner_name,
+            to_jsonb(i) ->> 'first_name' AS first_name, to_jsonb(i) ->> 'last_name' AS last_name
      FROM tenant_invitations i
      LEFT JOIN roles   r ON r.id = i.role_id
      LEFT JOIN tenants t ON t.id = i.tenant_id
@@ -77,6 +79,9 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
       expiresAt:  r.expires_at,
       // Set when the invitation also makes the user a transport partner's user.
       partnerName: r.partner_name,
+      // As entered by the admin in the New User form; the invitee may change them.
+      firstName: r.first_name ?? '',
+      lastName:  r.last_name ?? '',
     },
     existingUser: !!r.existing_user_id,
   });

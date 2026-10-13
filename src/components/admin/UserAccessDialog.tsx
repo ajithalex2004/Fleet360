@@ -11,16 +11,9 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-
-type Level = 'view' | 'create' | 'edit' | 'delete';
-const LEVELS: { key: Level; label: string }[] = [
-  { key: 'view', label: 'View' },
-  { key: 'create', label: 'Create / Add' },
-  { key: 'edit', label: 'Update / Edit' },
-  { key: 'delete', label: 'Remove / Delete' },
-];
-
-interface ModuleRow { key: string; label: string; enabledForTenant: boolean; roleAccess: Level[] }
+import ModuleAccessGrid, {
+  maskFromSelection, toggleLevel, type AccessLevel as Level, type AccessModuleRow as ModuleRow,
+} from '@/components/admin/ModuleAccessGrid';
 interface AccessData {
   tenant: { id: string; name: string };
   role: { id: string; code: string; name: string } | null;
@@ -81,15 +74,7 @@ export default function UserAccessDialog({ user, memberships, onClose, onSaved }
 
   const toggle = (row: ModuleRow, level: Level) => {
     if (!data) return;
-    const current = new Set(selectionFor(data, edits, row.key, resetToRole));
-    if (current.has(level)) {
-      current.delete(level);
-      if (level === 'view') current.clear(); // nothing works without view
-    } else {
-      current.add(level);
-      current.add('view'); // create, edit and delete need view
-    }
-    setEdits((p) => ({ ...p, [row.key]: LEVELS.map((l) => l.key).filter((l) => current.has(l) && row.roleAccess.includes(l)) }));
+    setEdits((p) => ({ ...p, [row.key]: toggleLevel(selectionFor(data, edits, row.key, resetToRole), level, row) }));
   };
 
   const narrowed = useMemo(() => {
@@ -102,11 +87,7 @@ export default function UserAccessDialog({ user, memberships, onClose, onSaved }
     setSaving(true); setError('');
     // Only the modules narrowed below the role are stored; the others follow
     // the role, including later changes to it. None narrowed: no mask.
-    let moduleAccess: Record<string, Level[]> | null = null;
-    for (const m of data.modules) {
-      const selected = selectionFor(data, edits, m.key, resetToRole);
-      if (selected.length !== m.roleAccess.length) (moduleAccess ??= {})[m.key] = selected;
-    }
+    const moduleAccess = maskFromSelection(data.modules, (key) => selectionFor(data, edits, key, resetToRole));
     try {
       const res = await fetch(`/api/admin/tenants/${tenantId}/users/${user.id}/access`, {
         method: 'PUT',
@@ -188,52 +169,13 @@ export default function UserAccessDialog({ user, memberships, onClose, onSaved }
                     Module access can only narrow what the role allows. To give access the role does not include, choose another role
                     or create a custom role in <Link href="/admin/roles" className="text-blue-500 hover:underline">Roles &amp; Permissions</Link>.
                   </p>
-                  <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
-                    <table className="w-full text-sm">
-                      <thead className="bg-[var(--bg-surface-hover)]">
-                        <tr>
-                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide">Module</th>
-                          {LEVELS.map((l) => (
-                            <th key={l.key} className="px-3 py-2.5 text-center text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide whitespace-nowrap">{l.label}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[var(--border-subtle)]">
-                        {data.modules.map((m) => {
-                          const selected = selectionFor(data, edits, m.key, resetToRole);
-                          const why = !m.enabledForTenant
-                            ? `${data.tenant.name} does not have this module`
-                            : m.roleAccess.length === 0
-                              ? `The ${data.role?.name ?? ''} role does not include ${m.label}`
-                              : null;
-                          return (
-                            <tr key={m.key}>
-                              <td className="px-4 py-2.5">
-                                <div className={`font-medium ${m.roleAccess.length && m.enabledForTenant ? 'text-[var(--text-main)]' : 'text-[var(--text-muted)]'}`}>{m.label}</div>
-                                {why && <div className="text-xs text-amber-500 mt-0.5">{why}</div>}
-                              </td>
-                              {LEVELS.map((l) => {
-                                const granted = m.enabledForTenant && m.roleAccess.includes(l.key);
-                                return (
-                                  <td key={l.key} className="px-3 py-2.5 text-center">
-                                    <input
-                                      type="checkbox"
-                                      aria-label={`${m.label}: ${l.label}`}
-                                      className="w-4 h-4 accent-violet-600 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
-                                      disabled={!granted}
-                                      checked={granted && selected.includes(l.key)}
-                                      onChange={() => toggle(m, l.key)}
-                                      title={granted ? undefined : (why ?? `The role does not allow ${l.label.toLowerCase()} in ${m.label}`)}
-                                    />
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                  <ModuleAccessGrid
+                    rows={data.modules}
+                    tenantName={data.tenant.name}
+                    roleName={data.role?.name ?? ''}
+                    selectionOf={(key) => selectionFor(data, edits, key, resetToRole)}
+                    onToggle={toggle}
+                  />
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-[var(--text-muted)]">
                       {narrowed ? 'Narrowed below the role for some modules.' : 'Same as the role (no restriction).'}
