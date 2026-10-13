@@ -4,6 +4,13 @@ import {
   haversineKm,
   type LatLng,
 } from '@/lib/logistics/distance-matrix';
+import { hasTestDatabase } from '../db-guard';
+
+// These tests use a real database. Without one (no TEST_DATABASE_URL to a
+// local database) they are skipped — they used to run against whatever
+// .env pointed at, which on a developer machine is production.
+const NO_TEST_DB = !hasTestDatabase();
+
 
 // Sample GCC points used across tests
 const DUBAI_MALL:   LatLng = { latitude: 25.197, longitude: 55.279 };
@@ -45,7 +52,7 @@ describe('computeDistanceMatrix · haversine', () => {
     expect(m.durations).toEqual([[0]]);
   });
 
-  it('builds a symmetric NxN matrix with 0 diagonal', async () => {
+  it.skipIf(NO_TEST_DB)('builds a symmetric NxN matrix with 0 diagonal', async () => {
     const m = await computeDistanceMatrix([DUBAI_MALL, ABU_DHABI, SHARJAH], { provider: 'haversine' });
     expect(m.provider).toBe('haversine');
     expect(m.distances.length).toBe(3);
@@ -58,13 +65,13 @@ describe('computeDistanceMatrix · haversine', () => {
     }
   });
 
-  it('applies the detour factor (1.3× by default)', async () => {
+  it.skipIf(NO_TEST_DB)('applies the detour factor (1.3× by default)', async () => {
     const m1 = await computeDistanceMatrix([DUBAI_MALL, ABU_DHABI], { provider: 'haversine', detourFactor: 1.0 });
     const m2 = await computeDistanceMatrix([DUBAI_MALL, ABU_DHABI], { provider: 'haversine', detourFactor: 1.3 });
     expect(m2.distances[0][1]).toBeCloseTo(m1.distances[0][1] * 1.3, 1);
   });
 
-  it('computes duration from distance and avg speed', async () => {
+  it.skipIf(NO_TEST_DB)('computes duration from distance and avg speed', async () => {
     const m = await computeDistanceMatrix([DUBAI_MALL, ABU_DHABI], {
       provider: 'haversine', detourFactor: 1.0, avgSpeedKmh: 60,
     });
@@ -86,7 +93,7 @@ describe('computeDistanceMatrix · haversine', () => {
 // ── Sanity check: solver-relevant invariants ──────────────────────────────
 
 describe('matrix invariants the solver relies on', () => {
-  it('diagonal is always 0 (haversine)', async () => {
+  it.skipIf(NO_TEST_DB)('diagonal is always 0 (haversine)', async () => {
     const m = await computeDistanceMatrix([DUBAI_MALL, ABU_DHABI, SHARJAH], { provider: 'haversine' });
     for (let i = 0; i < 3; i++) {
       expect(m.distances[i][i]).toBe(0);
@@ -94,7 +101,7 @@ describe('matrix invariants the solver relies on', () => {
     }
   });
 
-  it('distances are non-negative (haversine)', async () => {
+  it.skipIf(NO_TEST_DB)('distances are non-negative (haversine)', async () => {
     const m = await computeDistanceMatrix([DUBAI_MALL, ABU_DHABI, SHARJAH], { provider: 'haversine' });
     for (const row of m.distances) {
       for (const v of row) expect(v).toBeGreaterThanOrEqual(0);
