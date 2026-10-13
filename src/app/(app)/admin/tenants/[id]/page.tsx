@@ -961,7 +961,7 @@ export default function TenantDetailPage() {
       const [tRes, rRes, uRes, arRes, sRes, wRes, bRes, npRes] = await Promise.all([
         fetch(`/api/admin/tenants/${id}`),
         fetch(`/api/admin/roles?tenantId=${id}`),
-        fetch(`/api/admin/tenants/${id}/users`),
+        fetch(`/api/admin/tenants/${id}/users`, { cache: 'no-store' }), // fresh after add / remove
         fetch('/api/admin/roles?lite=true'),              // lite — skips full permissions include
         fetch(`/api/admin/tenants/${id}/settings`),
         fetch(`/api/dispatch/weights?tenantId=${id}`),
@@ -1063,11 +1063,16 @@ export default function TenantDetailPage() {
   const removeUser = async (userId: string) => {
     if (!confirm('Remove this user from the tenant?')) return;
     const ut = users.find(u => u.userId === userId || u.id === userId);
-    if (ut?.userTenantId) {
-      await fetch(`/api/admin/users/${ut.userTenantId}`, { method:'DELETE' });
-      _detailCache.delete(id);
-      load(true);
+    if (!ut) return;
+    // Removes the membership only; the user's account and other companies are untouched.
+    const res = await fetch(`/api/admin/tenants/${id}/users?userId=${encodeURIComponent(ut.userId ?? ut.id)}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      alert(d.error ?? `Failed to remove the user (${res.status})`);
+      return;
     }
+    _detailCache.delete(id);
+    load(true);
   };
 
   // Full-page loader only for the first load: a reload after a save keeps the

@@ -22,7 +22,28 @@ export interface RlsScope {
   tx?: Prisma.TransactionClient;
 }
 
-const storage = new AsyncLocalStorage<RlsScope>();
+/**
+ * One instance of each context per process, kept on globalThis. The dev
+ * server caches a single Prisma client on globalThis (src/lib/prisma.ts)
+ * and shares it between bundles that each load their own copy of this
+ * module — the API routes and the job scheduler started by
+ * instrumentation. With a module-level instance, the client could read a
+ * different copy from the one withPlatformAdmin / withTenantRls wrote to:
+ * it then saw no scope, ran raw statements such as set_config outside the
+ * transaction, and row-level security hid everything (e.g. every sign-in
+ * failed with "No active tenant access").
+ */
+const contexts = ((globalThis as unknown as { __fleet360RlsContexts?: {
+  scope: AsyncLocalStorage<RlsScope>;
+  backgroundTenant: AsyncLocalStorage<string>;
+  actingTenant: AsyncLocalStorage<string>;
+} }).__fleet360RlsContexts ??= {
+  scope: new AsyncLocalStorage<RlsScope>(),
+  backgroundTenant: new AsyncLocalStorage<string>(),
+  actingTenant: new AsyncLocalStorage<string>(),
+});
+
+const storage = contexts.scope;
 
 export function activeRlsScope(): RlsScope | undefined {
   return storage.getStore();
@@ -76,7 +97,7 @@ export function runOutsideRlsScope<T>(fn: () => Promise<T>): Promise<T> {
  * Only pass a tenant id derived from a verified credential or record, never
  * one taken from request input.
  */
-const backgroundTenant = new AsyncLocalStorage<string>();
+const backgroundTenant = contexts.backgroundTenant;
 
 export function runWithTenantContext<T>(tenantId: string, fn: () => Promise<T>): Promise<T> {
   if (!/^[a-zA-Z0-9_-]+$/.test(tenantId)) {
@@ -110,7 +131,7 @@ export function backgroundTenantId(): string | undefined {
  * authorization check (e.g. the award or request a verified partner may act
  * on), never from request input.
  */
-const actingTenant = new AsyncLocalStorage<string>();
+const actingTenant = contexts.actingTenant;
 
 export function runAsTenant<T>(tenantId: string, fn: () => Promise<T>): Promise<T> {
   if (tenantId !== '*' && !/^[a-zA-Z0-9_-]+$/.test(tenantId)) {
